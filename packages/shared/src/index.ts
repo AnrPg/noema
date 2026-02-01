@@ -42,3 +42,15 @@ export * from "./gamification";
 // LKGC (Last Known Good Configuration), and plugin extensibility
 
 export * from "./settings";
+
+// =============================================================================
+// LKGC - LOCAL KNOWLEDGE GRAPH CORE
+// =============================================================================
+// Event ingestion, aggregation, and feature derivation pipeline.
+// NOTE: "LKGC" here means "Local Knowledge Graph Core", not "Last Known Good
+// Configuration" (which is in the settings module).
+//
+// This is the ONLY entry point for learning and interaction signals.
+// Everything else (features, mastery, decisions, AI snapshots) derives from here.
+
+export * from "./lkgc";
