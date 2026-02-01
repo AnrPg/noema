@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,16 +6,21 @@ import {
   Animated,
   Dimensions,
   ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Haptics from 'expo-haptics';
-import { useColors } from '@/theme/ThemeProvider';
-import { useStudyQueue, useSubmitReview, useEndStudySession } from '@/services/api';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { router, useLocalSearchParams } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+import { useColors } from "@/theme/ThemeProvider";
+import {
+  useStudyQueue,
+  useSubmitReview,
+  useEndStudySession,
+} from "@/services/api";
+import { useNativeDriver } from "@/utils/animation";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface Card {
   id: string;
@@ -52,12 +57,12 @@ export default function StudySessionScreen() {
 
   const frontInterpolate = flipAnimation.interpolate({
     inputRange: [0, 180],
-    outputRange: ['0deg', '180deg'],
+    outputRange: ["0deg", "180deg"],
   });
 
   const backInterpolate = flipAnimation.interpolate({
     inputRange: [0, 180],
-    outputRange: ['180deg', '360deg'],
+    outputRange: ["180deg", "360deg"],
   });
 
   const flipCard = useCallback(() => {
@@ -66,7 +71,7 @@ export default function StudySessionScreen() {
       toValue: isFlipped ? 0 : 180,
       friction: 8,
       tension: 10,
-      useNativeDriver: true,
+      useNativeDriver,
     }).start();
     setIsFlipped(!isFlipped);
   }, [isFlipped, flipAnimation]);
@@ -78,7 +83,7 @@ export default function StudySessionScreen() {
     Haptics.impactAsync(
       rating >= 3
         ? Haptics.ImpactFeedbackStyle.Medium
-        : Haptics.ImpactFeedbackStyle.Heavy
+        : Haptics.ImpactFeedbackStyle.Heavy,
     );
 
     try {
@@ -104,7 +109,7 @@ export default function StudySessionScreen() {
       Animated.timing(slideAnimation, {
         toValue: -SCREEN_WIDTH,
         duration: 200,
-        useNativeDriver: true,
+        useNativeDriver,
       }).start(() => {
         if (currentCardIndex < cards.length - 1) {
           setCurrentCardIndex((prev) => prev + 1);
@@ -114,7 +119,7 @@ export default function StudySessionScreen() {
           Animated.timing(slideAnimation, {
             toValue: 0,
             duration: 200,
-            useNativeDriver: true,
+            useNativeDriver,
           }).start();
         } else {
           setIsFinished(true);
@@ -122,7 +127,7 @@ export default function StudySessionScreen() {
         setReviewStartTime(Date.now());
       });
     } catch (error) {
-      console.error('Failed to submit review:', error);
+      console.error("Failed to submit review:", error);
     }
   };
 
@@ -131,7 +136,7 @@ export default function StudySessionScreen() {
       await endSession.mutateAsync(sessionId);
       router.back();
     } catch (error) {
-      console.error('Failed to end session:', error);
+      console.error("Failed to end session:", error);
       router.back();
     }
   };
@@ -151,20 +156,20 @@ export default function StudySessionScreen() {
       onPress={() => handleRating(rating)}
       style={{
         flex: 1,
-        backgroundColor: color + '15',
+        backgroundColor: color + "15",
         borderRadius: 16,
         paddingVertical: 16,
-        alignItems: 'center',
+        alignItems: "center",
         marginHorizontal: 4,
         borderWidth: 2,
-        borderColor: color + '30',
+        borderColor: color + "30",
       }}
     >
       <Ionicons name={icon} size={24} color={color} />
       <Text
         style={{
           color,
-          fontWeight: '600',
+          fontWeight: "600",
           marginTop: 4,
           fontSize: 12,
         }}
@@ -180,8 +185,8 @@ export default function StudySessionScreen() {
         <View
           style={{
             flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
+            justifyContent: "center",
+            alignItems: "center",
             padding: 24,
           }}
         >
@@ -191,8 +196,8 @@ export default function StudySessionScreen() {
               height: 100,
               borderRadius: 50,
               backgroundColor: colors.successLight,
-              alignItems: 'center',
-              justifyContent: 'center',
+              alignItems: "center",
+              justifyContent: "center",
               marginBottom: 24,
             }}
           >
@@ -202,7 +207,7 @@ export default function StudySessionScreen() {
             style={{
               color: colors.text,
               fontSize: 28,
-              fontWeight: 'bold',
+              fontWeight: "bold",
               marginBottom: 8,
             }}
           >
@@ -212,11 +217,11 @@ export default function StudySessionScreen() {
             style={{
               color: colors.textSecondary,
               fontSize: 16,
-              textAlign: 'center',
+              textAlign: "center",
               marginBottom: 32,
             }}
           >
-            Great job! You've completed this study session.
+            Great job! You&apos;ve completed this study session.
           </Text>
 
           {/* Stats */}
@@ -225,59 +230,61 @@ export default function StudySessionScreen() {
               backgroundColor: colors.card,
               borderRadius: 20,
               padding: 24,
-              width: '100%',
+              width: "100%",
               borderWidth: 1,
               borderColor: colors.border,
             }}
           >
-            <View style={{ flexDirection: 'row', marginBottom: 16 }}>
-              <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{ flexDirection: "row", marginBottom: 16 }}>
+              <View style={{ flex: 1, alignItems: "center" }}>
                 <Text
                   style={{
                     color: colors.text,
                     fontSize: 32,
-                    fontWeight: 'bold',
+                    fontWeight: "bold",
                   }}
                 >
                   {sessionStats.reviewed}
                 </Text>
                 <Text style={{ color: colors.textSecondary }}>Cards</Text>
               </View>
-              <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={{ flex: 1, alignItems: "center" }}>
                 <Text
                   style={{
                     color: colors.success,
                     fontSize: 32,
-                    fontWeight: 'bold',
+                    fontWeight: "bold",
                   }}
                 >
                   {sessionStats.reviewed > 0
-                    ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100)
+                    ? Math.round(
+                        (sessionStats.correct / sessionStats.reviewed) * 100,
+                      )
                     : 0}
                   %
                 </Text>
                 <Text style={{ color: colors.textSecondary }}>Accuracy</Text>
               </View>
             </View>
-            <View style={{ flexDirection: 'row' }}>
-              <View style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{ flexDirection: "row" }}>
+              <View style={{ flex: 1, alignItems: "center" }}>
                 <Text
                   style={{
                     color: colors.xpGold,
                     fontSize: 32,
-                    fontWeight: 'bold',
+                    fontWeight: "bold",
                   }}
                 >
                   +{sessionStats.xpEarned}
                 </Text>
                 <Text style={{ color: colors.textSecondary }}>XP Earned</Text>
               </View>
-              <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={{ flex: 1, alignItems: "center" }}>
                 <Text
                   style={{
                     color: colors.warning,
                     fontSize: 32,
-                    fontWeight: 'bold',
+                    fontWeight: "bold",
                   }}
                 >
                   {sessionStats.maxCombo}x
@@ -300,7 +307,7 @@ export default function StudySessionScreen() {
             <Text
               style={{
                 color: colors.onPrimary,
-                fontWeight: '600',
+                fontWeight: "600",
                 fontSize: 16,
               }}
             >
@@ -318,8 +325,8 @@ export default function StudySessionScreen() {
         style={{
           flex: 1,
           backgroundColor: colors.background,
-          justifyContent: 'center',
-          alignItems: 'center',
+          justifyContent: "center",
+          alignItems: "center",
         }}
       >
         <ActivityIndicator size="large" color={colors.primary} />
@@ -332,17 +339,14 @@ export default function StudySessionScreen() {
       {/* Header */}
       <View
         style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
           paddingHorizontal: 16,
           paddingVertical: 12,
         }}
       >
-        <TouchableOpacity
-          onPress={handleEndSession}
-          style={{ padding: 8 }}
-        >
+        <TouchableOpacity onPress={handleEndSession} style={{ padding: 8 }}>
           <Ionicons name="close" size={28} color={colors.text} />
         </TouchableOpacity>
 
@@ -357,7 +361,7 @@ export default function StudySessionScreen() {
           >
             <View
               style={{
-                height: '100%',
+                height: "100%",
                 width: `${((currentCardIndex + 1) / cards.length) * 100}%`,
                 backgroundColor: colors.primary,
                 borderRadius: 3,
@@ -368,7 +372,7 @@ export default function StudySessionScreen() {
             style={{
               color: colors.textSecondary,
               fontSize: 12,
-              textAlign: 'center',
+              textAlign: "center",
               marginTop: 4,
             }}
           >
@@ -380,19 +384,19 @@ export default function StudySessionScreen() {
         {sessionStats.combo > 0 && (
           <View
             style={{
-              backgroundColor: colors.warning + '20',
+              backgroundColor: colors.warning + "20",
               paddingHorizontal: 12,
               paddingVertical: 6,
               borderRadius: 12,
-              flexDirection: 'row',
-              alignItems: 'center',
+              flexDirection: "row",
+              alignItems: "center",
             }}
           >
             <Ionicons name="flame" size={16} color={colors.warning} />
             <Text
               style={{
                 color: colors.warning,
-                fontWeight: 'bold',
+                fontWeight: "bold",
                 marginLeft: 4,
               }}
             >
@@ -407,7 +411,7 @@ export default function StudySessionScreen() {
         style={{
           flex: 1,
           paddingHorizontal: 16,
-          justifyContent: 'center',
+          justifyContent: "center",
         }}
       >
         <Animated.View
@@ -423,10 +427,10 @@ export default function StudySessionScreen() {
             {/* Front of card */}
             <Animated.View
               style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                backfaceVisibility: 'hidden',
+                position: "absolute",
+                width: "100%",
+                height: "100%",
+                backfaceVisibility: "hidden",
                 transform: [{ rotateY: frontInterpolate }],
               }}
             >
@@ -436,8 +440,8 @@ export default function StudySessionScreen() {
                   backgroundColor: colors.card,
                   borderRadius: 24,
                   padding: 24,
-                  justifyContent: 'center',
-                  alignItems: 'center',
+                  justifyContent: "center",
+                  alignItems: "center",
                   borderWidth: 1,
                   borderColor: colors.border,
                   shadowColor: colors.shadow,
@@ -451,8 +455,8 @@ export default function StudySessionScreen() {
                   style={{
                     color: colors.text,
                     fontSize: 24,
-                    fontWeight: '600',
-                    textAlign: 'center',
+                    fontWeight: "600",
+                    textAlign: "center",
                   }}
                 >
                   {currentCard.front}
@@ -472,10 +476,10 @@ export default function StudySessionScreen() {
             {/* Back of card */}
             <Animated.View
               style={{
-                position: 'absolute',
-                width: '100%',
-                height: '100%',
-                backfaceVisibility: 'hidden',
+                position: "absolute",
+                width: "100%",
+                height: "100%",
+                backfaceVisibility: "hidden",
                 transform: [{ rotateY: backInterpolate }],
               }}
             >
@@ -485,18 +489,18 @@ export default function StudySessionScreen() {
                   backgroundColor: colors.surface,
                   borderRadius: 24,
                   padding: 24,
-                  justifyContent: 'center',
-                  alignItems: 'center',
+                  justifyContent: "center",
+                  alignItems: "center",
                   borderWidth: 2,
-                  borderColor: colors.primary + '40',
+                  borderColor: colors.primary + "40",
                 }}
               >
                 <Text
                   style={{
                     color: colors.text,
                     fontSize: 24,
-                    fontWeight: '600',
-                    textAlign: 'center',
+                    fontWeight: "600",
+                    textAlign: "center",
                   }}
                 >
                   {currentCard.back}
@@ -513,13 +517,13 @@ export default function StudySessionScreen() {
           <Text
             style={{
               color: colors.textSecondary,
-              textAlign: 'center',
+              textAlign: "center",
               marginBottom: 12,
             }}
           >
             How well did you remember?
           </Text>
-          <View style={{ flexDirection: 'row' }}>
+          <View style={{ flexDirection: "row" }}>
             <RatingButton
               rating={1}
               label="Again"
@@ -557,13 +561,13 @@ export default function StudySessionScreen() {
               backgroundColor: colors.primary,
               borderRadius: 16,
               paddingVertical: 18,
-              alignItems: 'center',
+              alignItems: "center",
             }}
           >
             <Text
               style={{
                 color: colors.onPrimary,
-                fontWeight: '600',
+                fontWeight: "600",
                 fontSize: 16,
               }}
             >
