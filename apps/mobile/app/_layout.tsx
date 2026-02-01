@@ -1,33 +1,54 @@
 import "react-native-gesture-handler";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { LogBox, Platform } from "react-native";
+import { LogBox, Platform, View, Text } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
+import * as Font from "expo-font";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "@/stores/auth.store";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import "../global.css";
 
 // Suppress deprecation warnings from libraries
-LogBox.ignoreLogs(["props.pointerEvents is deprecated"]);
+LogBox.ignoreLogs([
+  "props.pointerEvents is deprecated",
+  "Animated: `useNativeDriver`",
+]);
 
-// Suppress console warnings on web for deprecated props
+// Suppress console warnings/errors on web for known issues
 if (Platform.OS === "web") {
   const originalWarn = console.warn;
   console.warn = (...args) => {
-    if (args[0]?.includes?.("pointerEvents is deprecated")) return;
+    const msg = args[0];
+    if (typeof msg === "string") {
+      if (msg.includes("pointerEvents is deprecated")) return;
+      if (msg.includes("useNativeDriver")) return;
+    }
     originalWarn.apply(console, args);
   };
 
   const originalError = console.error;
   console.error = (...args) => {
-    if (args[0]?.includes?.("pointerEvents is deprecated")) return;
+    const msg = args[0];
+    if (typeof msg === "string") {
+      if (msg.includes("pointerEvents is deprecated")) return;
+      if (msg.includes("useNativeDriver")) return;
+      if (msg.includes("timeout exceeded")) return; // Font loading timeout
+    }
     originalError.apply(console, args);
   };
+
+  // Suppress unhandled promise rejections for font timeouts
+  window.addEventListener("unhandledrejection", (event) => {
+    if (event.reason?.message?.includes("timeout exceeded")) {
+      event.preventDefault();
+    }
+  });
 }
 
 // Keep splash screen visible while loading resources
@@ -42,13 +63,19 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// Create React Query client
+// Create React Query client with proper error handling
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
       gcTime: 1000 * 60 * 60, // 1 hour (formerly cacheTime)
-      retry: 2,
+      retry: (failureCount, error) => {
+        // Don't retry on auth errors
+        if (error instanceof Error && error.message.includes("Unauthorized")) {
+          return false;
+        }
+        return failureCount < 2;
+      },
       refetchOnWindowFocus: false,
     },
   },
@@ -56,16 +83,39 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const { hydrate, isHydrated } = useAuthStore();
+  const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [fontError, setFontError] = useState(false);
+
+  // Load fonts with timeout and fallback
+  const loadFonts = useCallback(async () => {
+    try {
+      // Load Ionicons font with 10 second timeout
+      await Promise.race([
+        Font.loadAsync({
+          ...Ionicons.font,
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Font loading timeout")), 10000),
+        ),
+      ]);
+      setFontsLoaded(true);
+    } catch (error) {
+      console.warn("Font loading failed, using system fallbacks:", error);
+      setFontError(true);
+      // Continue anyway - system fonts will be used as fallback
+      setFontsLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     async function prepare() {
       try {
         console.log("Starting hydration...");
-        // Hydrate auth state from secure storage
-        await hydrate();
+        // Load fonts and hydrate auth in parallel
+        await Promise.all([loadFonts(), hydrate()]);
         console.log("Hydration complete");
       } catch (error) {
-        console.error("Error during hydration:", error);
+        console.error("Error during preparation:", error);
       } finally {
         // Hide splash screen
         await SplashScreen.hideAsync();
@@ -73,10 +123,10 @@ export default function RootLayout() {
     }
 
     prepare();
-  }, []);
+  }, [hydrate, loadFonts]);
 
-  if (!isHydrated) {
-    // Show a simple loading view instead of null
+  if (!isHydrated || !fontsLoaded) {
+    // Show a simple loading view while fonts and auth hydrate
     return (
       <GestureHandlerRootView
         style={{
@@ -87,6 +137,7 @@ export default function RootLayout() {
         }}
       >
         <StatusBar style="light" />
+        <Text style={{ color: "#666", fontSize: 14 }}>Loading...</Text>
       </GestureHandlerRootView>
     );
   }
