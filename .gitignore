@@ -178,3 +178,4 @@ coverage.xml
 Pipfile.lock
 poetry.lock
 .pdm.toml
+apps/ai/halflife-regression
