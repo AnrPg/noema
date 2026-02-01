@@ -4,7 +4,8 @@
 
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001";
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api/v1";
 
 // Auth handlers set by auth store to avoid circular dependency
 type RefreshTokensHandler = () => Promise<void>;
@@ -175,44 +176,67 @@ import {
   useQueryClient,
   UseQueryOptions,
 } from "@tanstack/react-query";
+import { useIsAuthenticated } from "@/stores/auth-state";
 
-// Generic fetcher
+// Generic fetcher with proper error handling
 async function fetcher<T>(url: string): Promise<T> {
-  const response = await apiClient.get<{ data: T }>(url);
-  return response.data.data;
+  try {
+    const response = await apiClient.get<{ data: T } | T>(url);
+    // Handle different response structures
+    const data = response.data;
+    if (data && typeof data === "object" && "data" in data) {
+      return (data as { data: T }).data;
+    }
+    return data as T;
+  } catch (error: any) {
+    // Extract error message from response or error object
+    const message =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      "Request failed";
+    throw new Error(message);
+  }
 }
 
 // User hooks
 export function useUser() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["user", "me"],
     queryFn: () => fetcher("/users/me"),
+    enabled: isAuthenticated,
   });
 }
 
 export function useUserStats() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["user", "stats"],
     queryFn: () => fetcher("/users/me/stats"),
+    enabled: isAuthenticated,
   });
 }
 
 // Deck hooks
 export function useDecks(params?: { parentDeckId?: string }) {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["decks", params],
     queryFn: () =>
       fetcher(
         `/decks${params?.parentDeckId ? `?parentDeckId=${params.parentDeckId}` : ""}`,
       ),
+    enabled: isAuthenticated,
   });
 }
 
 export function useDeck(deckId: string) {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["deck", deckId],
     queryFn: () => fetcher(`/decks/${deckId}`),
-    enabled: !!deckId,
+    enabled: isAuthenticated && !!deckId,
   });
 }
 
@@ -257,18 +281,20 @@ export function useDeleteDeck() {
 
 // Card hooks
 export function useCards(deckId: string) {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["cards", deckId],
     queryFn: () => fetcher(`/cards?deckId=${deckId}`),
-    enabled: !!deckId,
+    enabled: isAuthenticated && !!deckId,
   });
 }
 
 export function useCard(cardId: string) {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["card", cardId],
     queryFn: () => fetcher(`/cards/${cardId}`),
-    enabled: !!cardId,
+    enabled: isAuthenticated && !!cardId,
   });
 }
 
@@ -285,18 +311,22 @@ export function useCreateCard() {
 
 // Study hooks
 export function useStudyQueue(deckId?: string) {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["study", "queue", deckId],
     queryFn: () => fetcher(`/study/queue${deckId ? `?deckId=${deckId}` : ""}`),
     staleTime: 1000 * 60, // 1 minute
+    enabled: isAuthenticated,
   });
 }
 
 export function useTodayProgress() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["study", "today"],
     queryFn: () => fetcher("/study/today"),
     staleTime: 1000 * 30, // 30 seconds
+    enabled: isAuthenticated,
   });
 }
 
@@ -341,30 +371,38 @@ export function useSubmitReview() {
 
 // Gamification hooks
 export function useXPInfo() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["gamification", "xp"],
     queryFn: () => fetcher("/gamification/xp"),
+    enabled: isAuthenticated,
   });
 }
 
 export function useAchievements() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["gamification", "achievements"],
     queryFn: () => fetcher("/gamification/achievements"),
+    enabled: isAuthenticated,
   });
 }
 
 export function useStreak() {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["gamification", "streak"],
     queryFn: () => fetcher("/gamification/streak"),
+    enabled: isAuthenticated,
   });
 }
 
 export function useLeaderboard(type: string = "xp") {
+  const isAuthenticated = useIsAuthenticated();
   return useQuery({
     queryKey: ["gamification", "leaderboard", type],
     queryFn: () => fetcher(`/gamification/leaderboard?type=${type}`),
     staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled: isAuthenticated,
   });
 }
