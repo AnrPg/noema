@@ -1,15 +1,34 @@
-import 'react-native-gesture-handler';
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import * as SplashScreen from 'expo-splash-screen';
-import * as Notifications from 'expo-notifications';
+import "react-native-gesture-handler";
+import { useEffect } from "react";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { LogBox, Platform } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import * as SplashScreen from "expo-splash-screen";
+import * as Notifications from "expo-notifications";
 
-import { useAuthStore } from '@/stores/auth.store';
-import { ThemeProvider } from '@/theme/ThemeProvider';
-import '../global.css';
+import { useAuthStore } from "@/stores/auth.store";
+import { ThemeProvider } from "@/theme/ThemeProvider";
+import "../global.css";
+
+// Suppress deprecation warnings from libraries
+LogBox.ignoreLogs(["props.pointerEvents is deprecated"]);
+
+// Suppress console warnings on web for deprecated props
+if (Platform.OS === "web") {
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    if (args[0]?.includes?.("pointerEvents is deprecated")) return;
+    originalWarn.apply(console, args);
+  };
+
+  const originalError = console.error;
+  console.error = (...args) => {
+    if (args[0]?.includes?.("pointerEvents is deprecated")) return;
+    originalError.apply(console, args);
+  };
+}
 
 // Keep splash screen visible while loading resources
 SplashScreen.preventAutoHideAsync();
@@ -41,10 +60,12 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
+        console.log("Starting hydration...");
         // Hydrate auth state from secure storage
         await hydrate();
+        console.log("Hydration complete");
       } catch (error) {
-        console.error('Error during hydration:', error);
+        console.error("Error during hydration:", error);
       } finally {
         // Hide splash screen
         await SplashScreen.hideAsync();
@@ -55,7 +76,19 @@ export default function RootLayout() {
   }, []);
 
   if (!isHydrated) {
-    return null;
+    // Show a simple loading view instead of null
+    return (
+      <GestureHandlerRootView
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "#1a1a2e",
+        }}
+      >
+        <StatusBar style="light" />
+      </GestureHandlerRootView>
+    );
   }
 
   return (
@@ -66,31 +99,28 @@ export default function RootLayout() {
           <Stack
             screenOptions={{
               headerShown: false,
-              animation: 'slide_from_right',
-              contentStyle: { backgroundColor: 'transparent' },
+              animation: "slide_from_right",
+              contentStyle: { backgroundColor: "transparent" },
             }}
           >
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="(auth)"
-              options={{ animation: 'fade' }}
-            />
+            <Stack.Screen name="(auth)" options={{ animation: "fade" }} />
             <Stack.Screen
               name="study/[sessionId]"
               options={{
-                presentation: 'fullScreenModal',
-                animation: 'slide_from_bottom',
+                presentation: "fullScreenModal",
+                animation: "slide_from_bottom",
               }}
             />
             <Stack.Screen
               name="deck/[deckId]"
-              options={{ animation: 'slide_from_right' }}
+              options={{ animation: "slide_from_right" }}
             />
             <Stack.Screen
               name="card/[cardId]"
               options={{
-                presentation: 'modal',
-                animation: 'slide_from_bottom',
+                presentation: "modal",
+                animation: "slide_from_bottom",
               }}
             />
           </Stack>
