@@ -18,7 +18,7 @@ import {
   useSubmitReview,
   useEndStudySession,
 } from "@/services/api";
-import { useNativeDriver } from "@/utils/animation";
+import { useNativeDriver, shadows } from "@/utils/animation";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -444,11 +444,7 @@ export default function StudySessionScreen() {
                   alignItems: "center",
                   borderWidth: 1,
                   borderColor: colors.border,
-                  shadowColor: colors.shadow,
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.1,
-                  shadowRadius: 12,
-                  elevation: 5,
+                  ...shadows.medium(colors.shadow),
                 }}
               >
                 <Text
