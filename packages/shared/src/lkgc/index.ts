@@ -58,3 +58,24 @@ export * from "./impl/in-memory-graph-store";
 // SQLite implementation (schema + stubs)
 export * from "./impl/sqlite-graph-schema";
 export * from "./impl/sqlite-graph-store";
+
+// -----------------------------------------------------------------------------
+// MASTERY STATE MATERIALIZATION
+// -----------------------------------------------------------------------------
+
+// MasteryState store interface and types
+export * from "./mastery-state-store";
+
+// Update rules system
+export * from "./rule-registry";
+export * from "./default-rules";
+
+// Materializer service
+export * from "./mastery-materializer";
+
+// In-memory implementation (for testing)
+export * from "./impl/in-memory-mastery-store";
+
+// SQLite implementation (schema + stubs)
+export * from "./impl/sqlite-mastery-schema";
+export * from "./impl/sqlite-mastery-store";
