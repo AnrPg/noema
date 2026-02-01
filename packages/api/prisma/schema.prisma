@@ -221,6 +221,7 @@ model Deck {
   newCount        Int      @default(0)
   learningCount   Int      @default(0)
   reviewCount     Int      @default(0)
+  relearningCount Int      @default(0)
   masteredCount   Int      @default(0)
   
   // Metadata
