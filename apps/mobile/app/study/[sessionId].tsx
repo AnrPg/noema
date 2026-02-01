@@ -11,14 +11,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Haptics from "expo-haptics";
 import { useColors } from "@/theme/ThemeProvider";
 import {
   useStudyQueue,
   useSubmitReview,
   useEndStudySession,
 } from "@/services/api";
-import { useNativeDriver, shadows } from "@/utils/animation";
+import { useNativeDriver, shadows, haptics } from "@/utils/animation";
 import { useRequireAuth } from "@/components/AuthGuard";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -70,7 +69,7 @@ export default function StudySessionScreen() {
   });
 
   const flipCard = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    haptics.light();
     Animated.spring(flipAnimation, {
       toValue: isFlipped ? 0 : 180,
       friction: 8,
@@ -84,11 +83,11 @@ export default function StudySessionScreen() {
     if (!currentCard) return;
 
     const responseTimeMs = Date.now() - reviewStartTime;
-    Haptics.impactAsync(
-      rating >= 3
-        ? Haptics.ImpactFeedbackStyle.Medium
-        : Haptics.ImpactFeedbackStyle.Heavy,
-    );
+    if (rating >= 3) {
+      haptics.medium();
+    } else {
+      haptics.heavy();
+    }
 
     try {
       await submitReview.mutateAsync({
