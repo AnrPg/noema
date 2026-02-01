@@ -58,8 +58,17 @@ python3 --version  # Should be >= 3.11
 ### 1.1 Clone and Enter Project Directory
 
 ```bash
-git clone <your-repo-url>
+# Clone with submodules (recommended)
+git clone --recurse-submodules <your-repo-url>
 cd Manthanein
+```
+
+> **Note**: This project uses git submodules for external dependencies (e.g., Duolingo's HLR algorithm). The `--recurse-submodules` flag ensures they are cloned automatically.
+
+**If you already cloned without submodules:**
+
+```bash
+git submodule update --init
 ```
 
 ### 1.2 Install All Dependencies
@@ -728,7 +737,7 @@ docker-compose logs -f --tail=50
 ### One-Liner Setup (After Cloning)
 
 ```bash
-pnpm install && cp env.example .env && docker-compose up -d && pnpm build:shared && pnpm db:migrate && pnpm dev
+git submodule update --init && pnpm install && cp env.example .env && docker-compose up -d && pnpm build:shared && pnpm db:migrate && pnpm dev
 ```
 
 ### Daily Development Start
@@ -748,6 +757,31 @@ pnpm lint && pnpm typecheck && pnpm test
 ```bash
 docker-compose down -v && pnpm clean && pnpm install && docker-compose up -d && pnpm build:shared && pnpm db:migrate
 ```
+
+---
+
+## 📦 Git Submodules
+
+This project includes external repositories as git submodules:
+
+| Submodule           | Path                          | Source                                                                          |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| halflife-regression | `apps/ai/halflife-regression` | [duolingo/halflife-regression](https://github.com/duolingo/halflife-regression) |
+
+### Managing Submodules
+
+```bash
+# Initialize after cloning (if you didn't use --recurse-submodules)
+git submodule update --init
+
+# Update to latest upstream commit
+git submodule update --remote
+
+# Check submodule status
+git submodule status
+```
+
+> ⚠️ **Important**: Commits inside a submodule stay in your local clone. You cannot push to the original repository (e.g., Duolingo's repo) without write access. To make persistent changes, fork the submodule repo and update `.gitmodules` to point to your fork.
 
 ---
 

@@ -28,9 +28,12 @@ Make sure you have these installed:
 ### 1️⃣ Initial Setup
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
+# Clone the repository (with submodules)
+git clone --recurse-submodules <your-repo-url>
 cd Manthanein
+
+# If you already cloned without --recurse-submodules, run:
+git submodule update --init
 
 # Install all dependencies
 pnpm install
@@ -115,6 +118,7 @@ Manthanein/
 ## 📚 Tech Stack
 
 ### Frontend (Mobile)
+
 - **React Native** + **Expo** (iOS, Android, Web)
 - **Expo Router** - File-based navigation
 - **NativeWind** - Tailwind CSS for React Native
@@ -124,6 +128,7 @@ Manthanein/
 - **Reanimated** - Smooth animations
 
 ### Backend (API)
+
 - **Node.js** + **Fastify** - High-performance server
 - **Mercurius** - GraphQL for Fastify
 - **Prisma** - Type-safe database ORM
@@ -132,6 +137,7 @@ Manthanein/
 - **MinIO** - S3-compatible file storage
 
 ### AI Service
+
 - **Python** + **FastAPI** - AI microservice
 - **sentence-transformers** - Local embeddings
 - **OpenAI/Anthropic** - LLM providers
@@ -140,9 +146,12 @@ Manthanein/
 - **pytesseract** - OCR
 
 ### Algorithms
+
 - **FSRS v6.1.1** - Free Spaced Repetition Scheduler
-- **HLR** - Half-Life Regression (Duolingo)
+- **HLR** - Half-Life Regression (Duolingo) - [Git Submodule](https://github.com/duolingo/halflife-regression)
 - **SM-2** - SuperMemo algorithm
+
+> **Note**: The HLR algorithm is included as a git submodule from Duolingo's research repository. See [Submodules](#-git-submodules) section for details.
 
 ## 🛠️ Development Commands
 
@@ -199,13 +208,13 @@ docker-compose down -v
 Create custom plugins to extend functionality:
 
 ```typescript
-import { PluginManager, Plugin } from '@manthanein/shared';
+import { PluginManager, Plugin } from "@manthanein/shared";
 
 const myPlugin: Plugin = {
-  id: 'my-plugin',
-  name: 'My Plugin',
-  version: '1.0.0',
-  type: 'card-type',
+  id: "my-plugin",
+  name: "My Plugin",
+  version: "1.0.0",
+  type: "card-type",
   hooks: {
     onCardCreate: async (card) => {
       // Custom logic
@@ -220,11 +229,36 @@ PluginManager.register(myPlugin);
 ## 🎮 Gamification
 
 Built-in gamification features:
+
 - **XP System**: Earn XP for reviews, streaks, achievements
 - **Levels**: Progress through learning levels
 - **Achievements**: Unlock badges for milestones
 - **Streaks**: Daily study streak tracking
 - **Skill Trees**: Unlock advanced features
+
+## 📦 Git Submodules
+
+This project includes external repositories as git submodules:
+
+| Submodule           | Path                          | Source                                                                          | Purpose                         |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------------- | ------------------------------- |
+| halflife-regression | `apps/ai/halflife-regression` | [duolingo/halflife-regression](https://github.com/duolingo/halflife-regression) | HLR spaced repetition algorithm |
+
+### Submodule Commands
+
+```bash
+# Initialize submodules after cloning
+git submodule update --init
+
+# Update submodule to latest upstream commit
+git submodule update --remote
+
+# After updating, commit the new submodule reference
+git add apps/ai/halflife-regression
+git commit -m "chore: update halflife-regression submodule"
+```
+
+> ⚠️ **Important**: Changes made inside a submodule are committed to your local clone only. You cannot push to the original Duolingo repository unless you have write access. If you need to modify the submodule, fork it first and update `.gitmodules` to point to your fork.
 
 ## 🤝 Contributing
 
