@@ -6,6 +6,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { MMKV } from "react-native-mmkv";
+import { deepMerge } from "../utils/deepMerge";
 
 const storage = new MMKV({ id: "settings-storage" });
 
@@ -227,6 +228,9 @@ export interface SettingsState {
   // Metadata
   lastUpdated: string;
   version: number;
+
+  // Plugin settings
+  plugins: Record<string, Record<string, unknown>>; // Plugin settings by plugin ID
 }
 
 interface SettingsActions {
@@ -241,6 +245,12 @@ interface SettingsActions {
     settings: Partial<AccessibilitySettings>,
   ) => void;
   updateAdvancedSettings: (settings: Partial<AdvancedSettings>) => void;
+
+  // Plugin settings
+  updatePluginSettings: (
+    pluginId: string,
+    settings: Record<string, unknown>,
+  ) => void;
 
   // Utility methods
   resetToDefaults: () => void;
@@ -375,6 +385,8 @@ const defaultAdvancedSettings: AdvancedSettings = {
   includeMediaInExport: true,
 };
 
+const defaultPluginSettings: Record<string, Record<string, unknown>> = {};
+
 const defaultSettings: SettingsState = {
   study: defaultStudySettings,
   display: defaultDisplaySettings,
@@ -384,6 +396,7 @@ const defaultSettings: SettingsState = {
   sync: defaultSyncSettings,
   accessibility: defaultAccessibilitySettings,
   advanced: defaultAdvancedSettings,
+  plugins: defaultPluginSettings,
   lastUpdated: new Date().toISOString(),
   version: 1,
 };
@@ -444,6 +457,19 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
           advanced: { ...state.advanced, ...settings },
           lastUpdated: new Date().toISOString(),
         })),
+
+      updatePluginSettings: (pluginId, settings) => {
+        set((state) => ({
+          plugins: {
+            ...state.plugins,
+            [pluginId]: {
+              ...state.plugins[pluginId],
+              ...settings,
+            },
+          },
+          lastUpdated: new Date().toISOString(),
+        }));
+      },
 
       resetToDefaults: () =>
         set({
@@ -515,7 +541,7 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
       },
     }),
     {
-      name: "settings",
+      name: "settings-storage",
       storage: createJSONStorage(() => mmkvStorage),
     },
   ),
@@ -538,3 +564,100 @@ export const useAccessibilitySettings = () =>
   useSettingsStore((state) => state.accessibility);
 export const useAdvancedSettings = () =>
   useSettingsStore((state) => state.advanced);
+
+// =============================================================================
+// HIERARCHICAL SCOPE RESOLUTION
+// =============================================================================
+
+/**
+ * Resolve effective settings by merging values from all active scopes.
+ * Resolution order: Global → Profile → Deck → Template → Session → Device.
+ */
+function resolveEffectiveSettings(
+  globalSettings: SettingsState,
+  profileSettings?: Partial<SettingsState>,
+  deckSettings?: Partial<SettingsState>,
+  templateSettings?: Partial<SettingsState>,
+  sessionSettings?: Partial<SettingsState>,
+  deviceSettings?: Partial<SettingsState>,
+): SettingsState {
+  return {
+    study: deepMerge(
+      globalSettings.study,
+      profileSettings?.study,
+      deckSettings?.study,
+      templateSettings?.study,
+      sessionSettings?.study,
+      deviceSettings?.study,
+    ),
+    display: deepMerge(
+      globalSettings.display,
+      profileSettings?.display,
+      deckSettings?.display,
+      templateSettings?.display,
+      sessionSettings?.display,
+      deviceSettings?.display,
+    ),
+    audio: deepMerge(
+      globalSettings.audio,
+      profileSettings?.audio,
+      deckSettings?.audio,
+      templateSettings?.audio,
+      sessionSettings?.audio,
+      deviceSettings?.audio,
+    ),
+    notifications: deepMerge(
+      globalSettings.notifications,
+      profileSettings?.notifications,
+      deckSettings?.notifications,
+      templateSettings?.notifications,
+      sessionSettings?.notifications,
+      deviceSettings?.notifications,
+    ),
+    privacy: deepMerge(
+      globalSettings.privacy,
+      profileSettings?.privacy,
+      deckSettings?.privacy,
+      templateSettings?.privacy,
+      sessionSettings?.privacy,
+      deviceSettings?.privacy,
+    ),
+    sync: deepMerge(
+      globalSettings.sync,
+      profileSettings?.sync,
+      deckSettings?.sync,
+      templateSettings?.sync,
+      sessionSettings?.sync,
+      deviceSettings?.sync,
+    ),
+    accessibility: deepMerge(
+      globalSettings.accessibility,
+      profileSettings?.accessibility,
+      deckSettings?.accessibility,
+      templateSettings?.accessibility,
+      sessionSettings?.accessibility,
+      deviceSettings?.accessibility,
+    ),
+    advanced: deepMerge(
+      globalSettings.advanced,
+      profileSettings?.advanced,
+      deckSettings?.advanced,
+      templateSettings?.advanced,
+      sessionSettings?.advanced,
+      deviceSettings?.advanced,
+    ),
+    lastUpdated: new Date().toISOString(),
+    version: globalSettings.version,
+    plugins: deepMerge(
+      globalSettings.plugins,
+      profileSettings?.plugins,
+      deckSettings?.plugins,
+      templateSettings?.plugins,
+      sessionSettings?.plugins,
+      deviceSettings?.plugins,
+    ),
+  };
+}
+
+// Export the function to avoid unused warning
+export { resolveEffectiveSettings };
