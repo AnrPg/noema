@@ -157,7 +157,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="(auth)" options={{ animation: "fade" }} />
             <Stack.Screen
-              name="study/[sessionId]"
+              name="study"
               options={{
                 presentation: "fullScreenModal",
                 animation: "slide_from_bottom",
