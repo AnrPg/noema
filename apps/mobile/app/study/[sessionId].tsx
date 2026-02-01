@@ -19,6 +19,7 @@ import {
   useEndStudySession,
 } from "@/services/api";
 import { useNativeDriver, shadows } from "@/utils/animation";
+import { useRequireAuth } from "@/components/AuthGuard";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -31,6 +32,9 @@ interface Card {
 }
 
 export default function StudySessionScreen() {
+  // Auth protection - redirects to login if not authenticated
+  const { isAuthenticated, isLoading: authLoading } = useRequireAuth();
+
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const colors = useColors();
   const { data: studyQueue, refetch } = useStudyQueue();
@@ -178,6 +182,22 @@ export default function StudySessionScreen() {
       </Text>
     </TouchableOpacity>
   );
+
+  // Show loading while checking auth
+  if (authLoading || !isAuthenticated) {
+    return (
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: colors.background,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
 
   if (isFinished) {
     return (
