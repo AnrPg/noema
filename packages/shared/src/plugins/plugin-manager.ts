@@ -9,8 +9,8 @@
 // - Visualizations
 // - Meta-learning analytics
 
+import type { PluginId } from '../types/user.types';
 import type {
-  PluginId,
   PluginManifest,
   PluginCategory,
   PluginCapability,
@@ -562,8 +562,12 @@ export class PluginError extends Error {
  * Builder for creating the Plugin API
  * This API is passed to plugins for accessing platform functionality
  */
+type MutablePluginAPI = {
+  -readonly [K in keyof PluginAPI]?: PluginAPI[K];
+};
+
 export class PluginAPIBuilder {
-  private api: Partial<PluginAPI> = {};
+  private api: MutablePluginAPI = {};
   
   /**
    * Set the card API

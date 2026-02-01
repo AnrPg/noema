@@ -6,6 +6,7 @@
 
 import type { DeckId, UserId, CardId, TagId, PluginId } from './user.types';
 import type { SchedulerType, SchedulerConfig } from './scheduler.types';
+import type { Rating } from './card.types';
 
 /**
  * A deck (collection) of flashcards with shared settings.

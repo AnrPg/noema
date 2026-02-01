@@ -4,6 +4,9 @@
 // These types define user accounts, authentication, and profile information.
 // Users are the core entity that owns all learning data.
 
+// NOTE: Using inline type to avoid circular dependency with scheduler.types.ts
+type SchedulerTypeRef = 'fsrs' | 'hlr' | 'sm2' | 'leitner' | 'anki_default' | 'custom';
+
 /**
  * Unique identifier type using branded types for type safety.
  * This prevents accidentally mixing up different ID types (e.g., userId with deckId).
@@ -51,7 +54,7 @@ export interface UserPreferences {
   readonly highContrast: boolean;               // Accessibility: high contrast mode
   
   // Learning Preferences
-  readonly defaultScheduler: SchedulerType;     // Which SRS algorithm to use
+  readonly defaultScheduler: SchedulerTypeRef;  // Which SRS algorithm to use
   readonly targetRetention: number;             // 0.75 - 0.95 (default: 0.9)
   readonly maxNewCardsPerDay: number;           // Daily limit for new cards
   readonly maxReviewsPerDay: number;            // Daily limit for reviews

@@ -5,10 +5,11 @@
 from typing import List, Optional
 
 import structlog
-from app.services.embeddings import EmbeddingService
-from app.services.vector_store import vector_store
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from app.services.embedder import EmbeddingService
+from app.services.vector_store import vector_store
 
 logger = structlog.get_logger()
 router = APIRouter()

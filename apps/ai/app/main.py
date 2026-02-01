@@ -18,6 +18,7 @@ from app.routes import (
     health,
     ocr,
     parse,
+    recommend,
 )
 from app.services.redis_client import redis_client
 from app.services.vector_store import vector_store

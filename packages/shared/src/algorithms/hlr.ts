@@ -26,6 +26,7 @@ import type {
   SchedulingContext,
 } from '../types/scheduler.types';
 import { DEFAULT_HLR_CONFIG } from '../types';
+import type { IScheduler } from './scheduler';
 
 // =============================================================================
 // CONSTANTS
@@ -62,7 +63,7 @@ const LN2 = Math.LN2;  // ≈ 0.693
  * The half-life is predicted using features about the card and user:
  * h = 2^(θ·x) where θ are learned weights and x are features
  */
-export class HLRScheduler {
+export class HLRScheduler implements IScheduler {
   private readonly config: HLRConfig;
   
   /**
@@ -216,6 +217,33 @@ export class HLRScheduler {
     return -interval / Math.log2(targetRetention);
   }
   
+  /**
+   * Get current recall probability (IScheduler interface)
+   * Note: For HLR, stability maps to half-life
+   * 
+   * @param stability - Memory stability (half-life in days)
+   * @param elapsedDays - Days since last review
+   * @returns Probability of recall (0-1)
+   */
+  public getRetrievability(stability: number, elapsedDays: number): number {
+    return this.calculateRetrievability(elapsedDays, stability);
+  }
+  
+  /**
+   * Get optimal interval for target retention (IScheduler interface)
+   * 
+   * @param stability - Memory stability (half-life in days)
+   * @param targetRetention - Target recall probability (default from config)
+   * @returns Optimal interval in days
+   */
+  public getOptimalInterval(stability: number, targetRetention?: number): number {
+    const target = targetRetention ?? this.config.recallThreshold;
+    // From p = 2^(-Δ/h), solve for Δ:
+    // Δ = -h * log2(p)
+    const interval = -stability * Math.log2(target);
+    return Math.max(1, Math.round(interval));
+  }
+
   // ===========================================================================
   // SCHEDULING METHODS
   // ===========================================================================

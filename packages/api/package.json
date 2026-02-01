@@ -11,11 +11,15 @@
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
@@ -29,6 +33,7 @@
     "@manthanein/shared": "workspace:*",
     "@prisma/client": "^5.19.1",
     "@scalar/fastify-api-reference": "^1.24.57",
+    "bcryptjs": "^2.4.3",
     "bullmq": "^5.12.12",
     "fastify": "^4.28.1",
     "fastify-plugin": "^4.5.1",
@@ -41,9 +46,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.16.5",
     "prisma": "^5.19.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^1.0.0"
   }
 }

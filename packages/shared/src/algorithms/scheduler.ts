@@ -80,7 +80,7 @@ export class UnifiedScheduler implements IScheduler {
     config?: Partial<SchedulerConfig>
   ) {
     this.type = type;
-    this.config = { ...getDefaultSchedulerConfig(type), ...config };
+    this.config = { ...getDefaultSchedulerConfig(type), ...config } as SchedulerConfig;
     this.impl = this.createImplementation();
   }
   

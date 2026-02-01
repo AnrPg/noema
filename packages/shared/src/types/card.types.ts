@@ -5,7 +5,7 @@
 // card structure. Each card type has specific content schemas and
 // rendering requirements.
 
-import type { CardId, DeckId, UserId, TagId } from './user.types';
+import type { CardId, DeckId, UserId, TagId, PluginId } from './user.types';
 
 // =============================================================================
 // CARD TYPE ENUMERATION

@@ -7,29 +7,29 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./types": {
+      "types": "./dist/types/index.d.ts",
       "import": "./dist/types/index.mjs",
-      "require": "./dist/types/index.js",
-      "types": "./dist/types/index.d.ts"
+      "require": "./dist/types/index.js"
     },
     "./algorithms": {
+      "types": "./dist/algorithms/index.d.ts",
       "import": "./dist/algorithms/index.mjs",
-      "require": "./dist/algorithms/index.js",
-      "types": "./dist/algorithms/index.d.ts"
+      "require": "./dist/algorithms/index.js"
     },
     "./plugins": {
+      "types": "./dist/plugins/index.d.ts",
       "import": "./dist/plugins/index.mjs",
-      "require": "./dist/plugins/index.js",
-      "types": "./dist/plugins/index.d.ts"
+      "require": "./dist/plugins/index.js"
     },
     "./validation": {
+      "types": "./dist/validation/index.d.ts",
       "import": "./dist/validation/index.mjs",
-      "require": "./dist/validation/index.js",
-      "types": "./dist/validation/index.d.ts"
+      "require": "./dist/validation/index.js"
     }
   },
   "scripts": {

@@ -4,23 +4,21 @@
 # Runs linters on staged files before commit
 
 # TypeScript/JavaScript files
-*.{ts,tsx,js,jsx}:
+"*.{ts,tsx,js,jsx}":
   - eslint --fix
   - prettier --write
 
 # JSON files
-*.json:
+"*.json":
   - prettier --write
 
 # Markdown files
-*.md:
+"*.md":
   - prettier --write
 
 # CSS/SCSS files
-*.{css,scss}:
+"*.{css,scss}":
   - prettier --write
 
-# Python files (AI service)
-*.py:
-  - ruff check --fix
-  - ruff format
+# Python files - skipped in lint-staged due to snap confinement issues
+# Run `ruff check --fix && ruff format` manually in apps/ai/ for Python linting
