@@ -12,25 +12,33 @@
 // =============================================================================
 // All TypeScript interfaces and type definitions
 
-export * from './types';
+export * from "./types";
 
 // =============================================================================
 // ALGORITHMS
 // =============================================================================
 // Spaced repetition scheduling algorithms (FSRS, HLR, etc.)
 
-export * from './algorithms';
+export * from "./algorithms";
 
 // =============================================================================
 // PLUGINS
 // =============================================================================
 // Plugin system for extensibility
 
-export * from './plugins';
+export * from "./plugins";
 
 // =============================================================================
 // GAMIFICATION
 // =============================================================================
 // XP, achievements, streaks, skill trees, and meta-learning
 
-export * from './gamification';
+export * from "./gamification";
+
+// =============================================================================
+// SETTINGS
+// =============================================================================
+// Professional-grade settings system with hierarchical scopes, history,
+// LKGC (Last Known Good Configuration), and plugin extensibility
+
+export * from "./settings";
