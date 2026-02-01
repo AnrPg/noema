@@ -1,16 +1,64 @@
 // =============================================================================
-// ANIMATION UTILITIES
+// ANIMATION & PLATFORM UTILITIES
 // =============================================================================
 // Platform-aware animation configuration to handle web vs native differences
 
 import { Platform, ViewStyle } from "react-native";
+import * as Haptics from "expo-haptics";
+
+/**
+ * Whether the current platform is web
+ */
+export const isWeb = Platform.OS === "web";
 
 /**
  * Determines whether to use the native animation driver.
  * - On iOS/Android: uses native driver for better performance
  * - On Web: uses JS driver since native modules aren't available
  */
-export const useNativeDriver = Platform.OS !== "web";
+export const useNativeDriver = !isWeb;
+
+/**
+ * Platform-aware haptic feedback.
+ * Does nothing on web (haptics not available).
+ */
+export const haptics = {
+  light: () => {
+    if (!isWeb) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  },
+  medium: () => {
+    if (!isWeb) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+  },
+  heavy: () => {
+    if (!isWeb) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }
+  },
+  success: () => {
+    if (!isWeb) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  },
+  warning: () => {
+    if (!isWeb) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
+  },
+  error: () => {
+    if (!isWeb) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  },
+  selection: () => {
+    if (!isWeb) {
+      Haptics.selectionAsync();
+    }
+  },
+};
 
 /**
  * Creates animation config with platform-appropriate native driver setting.
