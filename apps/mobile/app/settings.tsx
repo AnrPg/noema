@@ -22,6 +22,7 @@ import { useColors, useTheme } from "@/theme/ThemeProvider";
 import { haptics } from "@/utils/animation";
 import {
   useSettingsStore,
+  useHistoryStore,
   useStudySettings,
   useDisplaySettings,
   useAudioSettings,
@@ -29,13 +30,38 @@ import {
   usePrivacySettings,
   useSyncSettings,
   useAccessibilitySettings,
+  useAISettings,
   useAdvancedSettings,
+  usePluginSettings,
+  useLKGC,
+  useLKGCSuggestion,
+  useRecentChanges,
+  useCheckpoints,
   SchedulerType,
   ThemeMode,
   FontSize,
   CardAnimation,
   ReviewOrder,
-} from "@/stores/settings.store";
+} from "@/stores";
+
+import {
+  SettingInfo,
+  LearnMore,
+  HistoryButton,
+  LKGCSection,
+} from "@/components/settings";
+
+import {
+  STUDY_METADATA,
+  DISPLAY_METADATA,
+  AUDIO_METADATA,
+  NOTIFICATION_METADATA,
+  PRIVACY_METADATA,
+  SYNC_METADATA,
+  ACCESSIBILITY_METADATA,
+  AI_METADATA,
+  ADVANCED_METADATA,
+} from "@manthanein/shared";
 
 // =============================================================================
 // COMPONENT TYPES
@@ -66,6 +92,7 @@ interface SliderSettingProps {
   step?: number;
   unit?: string;
   onValueChange: (value: number) => void;
+  rightElement?: React.ReactNode;
 }
 
 interface PickerOption<T> {
@@ -221,6 +248,7 @@ function SliderSetting({
   step = 1,
   unit = "",
   onValueChange,
+  rightElement,
 }: SliderSettingProps) {
   const colors = useColors();
 
@@ -249,24 +277,27 @@ function SliderSetting({
             </Text>
           )}
         </View>
-        <View
-          style={{
-            backgroundColor: colors.primary + "20",
-            paddingHorizontal: 12,
-            paddingVertical: 4,
-            borderRadius: 8,
-          }}
-        >
-          <Text
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View
             style={{
-              color: colors.primary,
-              fontSize: 14,
-              fontWeight: "600",
+              backgroundColor: colors.primary + "20",
+              paddingHorizontal: 12,
+              paddingVertical: 4,
+              borderRadius: 8,
             }}
           >
-            {value}
-            {unit}
-          </Text>
+            <Text
+              style={{
+                color: colors.primary,
+                fontSize: 14,
+                fontWeight: "600",
+              }}
+            >
+              {value}
+              {unit}
+            </Text>
+          </View>
+          {rightElement}
         </View>
       </View>
       <Slider
@@ -566,34 +597,52 @@ export default function SettingsScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* ============================================================= */}
+          {/* SETTINGS HISTORY & LKGC */}
+          {/* ============================================================= */}
+          <View style={{ marginHorizontal: 16, marginTop: 16 }}>
+            <HistoryButton />
+            <LKGCSection />
+          </View>
+
+          {/* ============================================================= */}
           {/* STUDY SETTINGS */}
           {/* ============================================================= */}
           <Section title="Study Goals">
             <SliderSetting
               title="Daily Card Goal"
-              subtitle="Target number of cards to study each day"
+              subtitle={STUDY_METADATA.dailyGoal.explanation.summary}
               value={studySettings.dailyGoal}
               min={10}
               max={500}
               step={10}
               unit=" cards"
               onValueChange={(v) => updateStudySettings({ dailyGoal: v })}
+              rightElement={
+                <SettingInfo
+                  explanation={STUDY_METADATA.dailyGoal.explanation}
+                />
+              }
             />
             <Divider />
             <SliderSetting
               title="New Cards Per Day"
-              subtitle="Maximum new cards to introduce daily"
+              subtitle={STUDY_METADATA.newCardsPerDay.explanation.summary}
               value={studySettings.newCardsPerDay}
               min={0}
               max={100}
               step={5}
               unit=" cards"
               onValueChange={(v) => updateStudySettings({ newCardsPerDay: v })}
+              rightElement={
+                <SettingInfo
+                  explanation={STUDY_METADATA.newCardsPerDay.explanation}
+                />
+              }
             />
             <Divider />
             <SliderSetting
               title="Max Reviews Per Day"
-              subtitle="Limit for review cards each day"
+              subtitle={STUDY_METADATA.maxReviewsPerDay.explanation.summary}
               value={studySettings.maxReviewsPerDay}
               min={50}
               max={500}
@@ -602,17 +651,27 @@ export default function SettingsScreen() {
               onValueChange={(v) =>
                 updateStudySettings({ maxReviewsPerDay: v })
               }
+              rightElement={
+                <SettingInfo
+                  explanation={STUDY_METADATA.maxReviewsPerDay.explanation}
+                />
+              }
             />
             <Divider />
             <SliderSetting
               title="Session Duration"
-              subtitle="Target length for study sessions"
+              subtitle={STUDY_METADATA.sessionDuration.explanation.summary}
               value={studySettings.sessionDuration}
               min={5}
               max={120}
               step={5}
               unit=" min"
               onValueChange={(v) => updateStudySettings({ sessionDuration: v })}
+              rightElement={
+                <SettingInfo
+                  explanation={STUDY_METADATA.sessionDuration.explanation}
+                />
+              }
             />
           </Section>
 
@@ -626,74 +685,94 @@ export default function SettingsScreen() {
                 )?.label
               }
               onPress={() => setActiveModal("reviewOrder")}
+              rightElement={
+                <SettingInfo
+                  explanation={STUDY_METADATA.reviewOrder.explanation}
+                />
+              }
             />
             <Divider />
             <SettingItem
               icon="shuffle"
               title="Mix New and Review Cards"
-              subtitle="Interleave new cards with reviews"
+              subtitle={STUDY_METADATA.mixNewAndReview.explanation.summary}
               rightElement={
-                <Switch
-                  value={studySettings.mixNewAndReview}
-                  onValueChange={(v) =>
-                    updateStudySettings({ mixNewAndReview: v })
-                  }
-                  trackColor={{
-                    false: colors.surfaceVariant,
-                    true: colors.primaryLight,
-                  }}
-                  thumbColor={
-                    studySettings.mixNewAndReview
-                      ? colors.primary
-                      : colors.textMuted
-                  }
-                />
+                <>
+                  <Switch
+                    value={studySettings.mixNewAndReview}
+                    onValueChange={(v) =>
+                      updateStudySettings({ mixNewAndReview: v })
+                    }
+                    trackColor={{
+                      false: colors.surfaceVariant,
+                      true: colors.primaryLight,
+                    }}
+                    thumbColor={
+                      studySettings.mixNewAndReview
+                        ? colors.primary
+                        : colors.textMuted
+                    }
+                  />
+                  <SettingInfo
+                    explanation={STUDY_METADATA.mixNewAndReview.explanation}
+                  />
+                </>
               }
             />
             <Divider />
             <SettingItem
               icon="timer"
               title="Show Session Timer"
-              subtitle="Display elapsed time during study"
+              subtitle={STUDY_METADATA.enableSessionTimer.explanation.summary}
               rightElement={
-                <Switch
-                  value={studySettings.enableSessionTimer}
-                  onValueChange={(v) =>
-                    updateStudySettings({ enableSessionTimer: v })
-                  }
-                  trackColor={{
-                    false: colors.surfaceVariant,
-                    true: colors.primaryLight,
-                  }}
-                  thumbColor={
-                    studySettings.enableSessionTimer
-                      ? colors.primary
-                      : colors.textMuted
-                  }
-                />
+                <>
+                  <Switch
+                    value={studySettings.enableSessionTimer}
+                    onValueChange={(v) =>
+                      updateStudySettings({ enableSessionTimer: v })
+                    }
+                    trackColor={{
+                      false: colors.surfaceVariant,
+                      true: colors.primaryLight,
+                    }}
+                    thumbColor={
+                      studySettings.enableSessionTimer
+                        ? colors.primary
+                        : colors.textMuted
+                    }
+                  />
+                  <SettingInfo
+                    explanation={STUDY_METADATA.enableSessionTimer.explanation}
+                  />
+                </>
               }
             />
             <Divider />
             <SettingItem
               icon="bar-chart"
               title="Show Session Progress"
-              subtitle="Display progress bar during study"
+              subtitle={STUDY_METADATA.showSessionProgress.explanation.summary}
               rightElement={
-                <Switch
-                  value={studySettings.showSessionProgress}
-                  onValueChange={(v) =>
-                    updateStudySettings({ showSessionProgress: v })
-                  }
-                  trackColor={{
-                    false: colors.surfaceVariant,
-                    true: colors.primaryLight,
-                  }}
-                  thumbColor={
-                    studySettings.showSessionProgress
-                      ? colors.primary
-                      : colors.textMuted
-                  }
-                />
+                <>
+                  <Switch
+                    value={studySettings.showSessionProgress}
+                    onValueChange={(v) =>
+                      updateStudySettings({ showSessionProgress: v })
+                    }
+                    trackColor={{
+                      false: colors.surfaceVariant,
+                      true: colors.primaryLight,
+                    }}
+                    thumbColor={
+                      studySettings.showSessionProgress
+                        ? colors.primary
+                        : colors.textMuted
+                    }
+                  />
+                  <SettingInfo
+                    explanation={STUDY_METADATA.showSessionProgress.explanation}
+                  />
+                </>
               }
             />
           </Section>
@@ -977,21 +1056,32 @@ export default function SettingsScreen() {
               title="Sound Effects"
               subtitle="Play sounds on actions"
               rightElement={
-                <Switch
-                  value={audioSettings.soundEnabled}
-                  onValueChange={(v) =>
-                    updateAudioSettings({ soundEnabled: v })
-                  }
-                  trackColor={{
-                    false: colors.surfaceVariant,
-                    true: colors.primaryLight,
-                  }}
-                  thumbColor={
-                    audioSettings.soundEnabled
-                      ? colors.primary
-                      : colors.textMuted
-                  }
-                />
+                <>
+                  <Switch
+                    value={audioSettings.soundEnabled}
+                    onValueChange={(v) =>
+                      updateAudioSettings({ soundEnabled: v })
+                    }
+                    trackColor={{
+                      false: colors.surfaceVariant,
+                      true: colors.primaryLight,
+                    }}
+                    thumbColor={
+                      audioSettings.soundEnabled
+                        ? colors.primary
+                        : colors.textMuted
+                    }
+                  />
+                  <SettingInfo
+                    explanation={{
+                      summary:
+                        "Enable or disable sound effects for app interactions.",
+                      detailed:
+                        "When enabled, the app will play sound effects for actions like button presses and card flips.",
+                      impact: "Provides audio feedback during interactions.",
+                    }}
+                  />
+                </>
               }
             />
             {audioSettings.soundEnabled && (
