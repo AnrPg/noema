@@ -346,7 +346,7 @@ export function useEndStudySession() {
 
   return useMutation({
     mutationFn: (sessionId: string) =>
-      apiClient.post(`/study/sessions/${sessionId}/end`),
+      apiClient.patch(`/study/sessions/${sessionId}/end`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["study"] });
       queryClient.invalidateQueries({ queryKey: ["gamification"] });
