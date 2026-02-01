@@ -89,13 +89,13 @@ export default function RootLayout() {
   // Load fonts with timeout and fallback
   const loadFonts = useCallback(async () => {
     try {
-      // Load Ionicons font with 10 second timeout
+      // Load Ionicons font with 15 second timeout (increased for slower networks)
       await Promise.race([
         Font.loadAsync({
           ...Ionicons.font,
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Font loading timeout")), 10000),
+          setTimeout(() => reject(new Error("Font loading timeout")), 15000),
         ),
       ]);
       setFontsLoaded(true);
