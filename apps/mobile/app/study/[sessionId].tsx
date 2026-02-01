@@ -36,10 +36,12 @@ export default function StudySessionScreen() {
 
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const colors = useColors();
-  const { data: studyQueue, refetch } = useStudyQueue();
+  const { data: studyQueue, isLoading: queueLoading } = useStudyQueue();
   const submitReview = useSubmitReview();
   const endSession = useEndStudySession();
 
+  // Store session cards locally to avoid issues with queue refetching
+  const [sessionCards, setSessionCards] = useState<Card[]>([]);
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [reviewStartTime, setReviewStartTime] = useState(Date.now());
@@ -52,10 +54,47 @@ export default function StudySessionScreen() {
   });
   const [isFinished, setIsFinished] = useState(false);
 
+  // Initialize session cards from queue (only once when queue loads)
+  useEffect(() => {
+    if (studyQueue && sessionCards.length === 0) {
+      const queue = (studyQueue as any)?.queue || [];
+      if (queue.length > 0) {
+        setSessionCards(
+          queue.map((card: any) => {
+            // Handle content structure: can be {front: {text: "..."}} or {front: "..."}
+            const frontContent = card.content?.front;
+            const backContent = card.content?.back;
+            const front =
+              typeof frontContent === "object" && frontContent?.text
+                ? frontContent.text
+                : typeof frontContent === "string"
+                  ? frontContent
+                  : "No front content";
+            const back =
+              typeof backContent === "object" && backContent?.text
+                ? backContent.text
+                : typeof backContent === "string"
+                  ? backContent
+                  : "No back content";
+
+            return {
+              id: card.id,
+              front,
+              back,
+              type: card.cardType || "basic",
+              deckName: card.deck?.name,
+            };
+          }),
+        );
+      }
+    }
+  }, [studyQueue, sessionCards.length]);
+
   const flipAnimation = useRef(new Animated.Value(0)).current;
   const slideAnimation = useRef(new Animated.Value(0)).current;
 
-  const cards = (studyQueue as any)?.queue || [];
+  // Use local session cards for navigation
+  const cards = sessionCards;
   const currentCard: Card | undefined = cards[currentCardIndex];
 
   const frontInterpolate = flipAnimation.interpolate({
@@ -182,7 +221,7 @@ export default function StudySessionScreen() {
     </TouchableOpacity>
   );
 
-  // Show loading while checking auth
+  // Show loading while checking auth or loading queue
   if (authLoading || !isAuthenticated) {
     return (
       <SafeAreaView
@@ -194,6 +233,78 @@ export default function StudySessionScreen() {
         }}
       >
         <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  // Show loading while queue is loading and we don't have session cards yet
+  if (queueLoading && sessionCards.length === 0) {
+    return (
+      <SafeAreaView
+        style={{
+          flex: 1,
+          backgroundColor: colors.background,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ color: colors.textSecondary, marginTop: 16 }}>
+          Loading cards...
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
+  // Show empty state if no cards to study
+  if (!queueLoading && sessionCards.length === 0) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 24,
+          }}
+        >
+          <Ionicons name="checkmark-circle" size={80} color={colors.success} />
+          <Text
+            style={{
+              color: colors.text,
+              fontSize: 24,
+              fontWeight: "bold",
+              marginTop: 24,
+              textAlign: "center",
+            }}
+          >
+            All caught up!
+          </Text>
+          <Text
+            style={{
+              color: colors.textSecondary,
+              fontSize: 16,
+              marginTop: 8,
+              textAlign: "center",
+            }}
+          >
+            No cards due for review right now.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{
+              backgroundColor: colors.primary,
+              paddingHorizontal: 32,
+              paddingVertical: 16,
+              borderRadius: 12,
+              marginTop: 32,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+              Go Back
+            </Text>
+          </TouchableOpacity>
+        </View>
       </SafeAreaView>
     );
   }
