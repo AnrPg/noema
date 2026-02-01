@@ -1,0 +1,36 @@
+{
+  // ============================================================================
+  // COMMIT MESSAGE SETTINGS
+  // ============================================================================
+  // These settings help you write professional commit messages in VS Code
+  
+  // Use VS Code as the commit message editor
+  "git.useEditorAsCommitInput": true,
+  
+  // Validate commit message length (warns when subject exceeds this)
+  "git.inputValidation": true,
+  "git.inputValidationLength": 50,
+  "git.inputValidationSubjectLength": 50,
+  
+  // Enable smart commit (auto-stage all changes when no staged changes exist)
+  "git.enableSmartCommit": true,
+  
+  // Auto-fetch to keep branches up to date
+  "git.autofetch": true,
+  
+  // ============================================================================
+  // COMMIT MESSAGE EDITOR RULERS
+  // ============================================================================
+  // Add visual rulers for commit message formatting
+  "[git-commit]": {
+    "editor.rulers": [45, 50, 72],
+    "editor.wordWrap": "off",
+    "editor.formatOnSave": false
+  },
+  
+  // Also apply to COMMIT_EDITMSG files
+  "[scminput]": {
+    "editor.rulers": [45, 50, 72],
+    "editor.wordWrap": "off"
+  }
+}

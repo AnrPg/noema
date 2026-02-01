@@ -1,0 +1,115 @@
+{
+  // ============================================================================
+  // EDITOR SETTINGS
+  // ============================================================================
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true,
+    "source.organizeImports": true
+  },
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.rulers": [100],
+  "editor.wordWrap": "on",
+  "editor.minimap.enabled": true,
+  "editor.suggestSelection": "first",
+  "editor.inlineSuggest.enabled": true,
+
+  // ============================================================================
+  // FILE SETTINGS
+  // ============================================================================
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/node_modules": true,
+    "**/.expo": true,
+    "**/.expo-shared": true,
+    "**/dist": true,
+    "**/build": true
+  },
+
+  // ============================================================================
+  // TYPESCRIPT SETTINGS
+  // ============================================================================
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "typescript.updateImportsOnFileMove.enabled": "always",
+
+  // ============================================================================
+  // SEARCH SETTINGS
+  // ============================================================================
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.expo": true,
+    "**/.turbo": true,
+    "**/coverage": true
+  },
+
+  // ============================================================================
+  // PRETTIER SETTINGS
+  // ============================================================================
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+
+  // ============================================================================
+  // ESLINT SETTINGS
+  // ============================================================================
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ],
+
+  // ============================================================================
+  // GIT SETTINGS
+  // ============================================================================
+  "git.ignoreLimitWarning": true,
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+  "git.autofetch": true,
+  "git.useEditorAsCommitInput": true,
+  "git.inputValidation": true,
+  "git.inputValidationLength": 50,
+  "git.inputValidationSubjectLength": 50,
+  
+  // Open commit message editor in VS Code
+  "git.openDiffOnClick": true,
+  "git.replaceTagsWhenPull": true,
+
+  // ============================================================================
+  // TERMINAL SETTINGS
+  // ============================================================================
+  "terminal.integrated.defaultProfile.osx": "zsh",
+  "terminal.integrated.defaultProfile.linux": "bash",
+
+  // ============================================================================
+  // PRISMA SETTINGS
+  // ============================================================================
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  }
+}

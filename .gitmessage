@@ -1,0 +1,76 @@
+# ===========================================
+# COMMIT MESSAGE TEMPLATE
+# ===========================================
+# |-------- 45 characters --------|
+# |-------------- 50 char limit -------------|
+#
+# <type>(<scope>): <subject>
+#
+# Types: feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert
+# Scope: api|mobile|ai|shared|deps|config (optional)
+#
+# Example: feat(mobile): add card creation screen
+
+# --- SUBJECT LINE (max 50 chars) ---
+# |-------- 45 characters --------|12345
+
+
+# --- BODY (wrap at 72 characters) ---
+# Explain WHAT and WHY (not HOW - the code shows that)
+# |---------------------------- 72 characters ----------------------------|
+
+
+# --- FOOTER ---
+# Reference issues: Fixes #123, Closes #456
+# Breaking changes: BREAKING CHANGE: description
+
+
+# ===========================================
+# COMMIT MESSAGE CHECKLIST
+# ===========================================
+# Before committing, verify:
+#
+# [ ] Subject is in imperative mood ("Add" not "Added")
+# [ ] Subject starts with lowercase after type
+# [ ] Subject has no period at the end
+# [ ] Subject is under 50 characters
+# [ ] Body explains motivation and context
+# [ ] Body wraps at 72 characters
+# [ ] Related issues are referenced
+# [ ] Breaking changes are documented
+#
+# ===========================================
+# GOOD COMMIT MESSAGE EXAMPLES
+# ===========================================
+#
+# feat(mobile): add spaced repetition scheduler
+# 
+# Implement FSRS algorithm for optimal card scheduling.
+# Users can now benefit from scientifically-backed
+# review intervals.
+# 
+# - Add FSRS v6.1.1 implementation
+# - Create unified scheduler interface
+# - Add card state management
+# 
+# Fixes #42
+#
+# -------------------------------------------
+#
+# fix(api): prevent duplicate study sessions
+# 
+# Users reported creating multiple sessions when
+# rapidly tapping the start button.
+# 
+# Add debounce mechanism and database constraints
+# to prevent race conditions.
+# 
+# Fixes #123
+#
+# -------------------------------------------
+#
+# docs: update API authentication guide
+# 
+# Add examples for JWT token refresh flow and
+# error handling best practices.
+#

@@ -1,0 +1,36 @@
+{
+  "recommendations": [
+    // Essential for TypeScript development
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    
+    // React Native & Expo
+    "msjsdiag.vscode-react-native",
+    "dsznajder.es7-react-js-snippets",
+    
+    // Database & Prisma
+    "Prisma.prisma",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    
+    // GraphQL
+    "GraphQL.vscode-graphql",
+    "GraphQL.vscode-graphql-syntax",
+    
+    // Docker
+    "ms-azuretools.vscode-docker",
+    
+    // Git
+    "eamodio.gitlens",
+    
+    // Markdown
+    "yzhang.markdown-all-in-one",
+    
+    // Utilities
+    "christian-kohler.path-intellisense",
+    "streetsidesoftware.code-spell-checker",
+    "wayou.vscode-todo-highlight",
+    "formulahendry.auto-rename-tag",
+    "bradlc.vscode-tailwindcss"
+  ]
+}

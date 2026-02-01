@@ -1,0 +1,9 @@
+# pnpm workspace configuration
+# This file defines which directories are part of the monorepo
+
+packages:
+  # Shared packages (types, utils, algorithms)
+  - 'packages/*'
+  
+  # Applications (mobile app, backend API, AI service)
+  - 'apps/*'

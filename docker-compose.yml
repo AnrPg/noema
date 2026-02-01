@@ -1,0 +1,206 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # POSTGRESQL - Main Database
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: flashcard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flashcard_user
+      POSTGRES_PASSWORD: flashcard_dev_password
+      POSTGRES_DB: flashcard_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashcard_user -d flashcard_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flashcard-network
+
+  # ============================================================================
+  # REDIS - Cache & Real-time
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: flashcard-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --appendfsync everysec
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - flashcard-network
+
+  # ============================================================================
+  # MINIO - S3-Compatible Storage
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: flashcard-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console UI
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - flashcard-network
+
+  # ============================================================================
+  # QDRANT - Vector Database (for AI features)
+  # ============================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: flashcard-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - flashcard-network
+
+  # ============================================================================
+  # ADMINER - Database UI (optional, for development)
+  # Access at: http://localhost:8080
+  # ============================================================================
+  adminer:
+    image: adminer:latest
+    container_name: flashcard-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: "pepa-linha"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - flashcard-network
+
+  # ============================================================================
+  # AI SERVICE - Document parsing, embeddings, card generation
+  # ============================================================================
+  ai:
+    build:
+      context: ./apps/ai
+      dockerfile: Dockerfile
+    container_name: manthanein-ai
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    environment:
+      ENV: development
+      HOST: 0.0.0.0
+      PORT: 8000
+      WORKERS: 2
+      DEBUG: "true"
+      CORS_ORIGINS: "http://localhost:3000,http://localhost:8081,http://localhost:19006"
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin123
+      S3_BUCKET: manthanein
+      EMBEDDING_MODEL: all-MiniLM-L6-v2
+      EMBEDDING_DIMENSIONS: 384
+      # Add your API keys in a .env file or pass them here
+      # OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - flashcard-network
+    volumes:
+      - ./apps/ai/app:/app/app:ro  # Mount for development
+
+# ============================================================================
+# VOLUMES - Persistent Data Storage
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  qdrant_data:
+    driver: local
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+  flashcard-network:
+    driver: bridge
+
+# ============================================================================
+# USAGE INSTRUCTIONS:
+# ============================================================================
+# Start all services:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f
+#
+# Stop all services:
+#   docker-compose down
+#
+# Stop and remove volumes (DELETES DATA):
+#   docker-compose down -v
+#
+# Restart a service:
+#   docker-compose restart postgres
+#
+# Access Adminer (Database UI):
+#   http://localhost:8080
+#   Server: postgres
+#   Username: flashcard_user
+#   Password: flashcard_dev_password
+#   Database: flashcard_db
+#
+# Access MinIO Console:
+#   http://localhost:9001
+#   Username: minioadmin
+#   Password: minioadmin123

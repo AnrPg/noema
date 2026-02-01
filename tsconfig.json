@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    // Type checking - Enable all strict type-checking options
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    
+    // Module resolution - Modern ES modules with Node compatibility
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    
+    // Interop - Ensure proper ESM/CJS compatibility
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    
+    // Emit - Generate declaration files and source maps
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "removeComments": false,
+    "skipLibCheck": true,
+    
+    // Path mapping for cleaner imports
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./packages/shared/src/*"],
+      "@api/*": ["./packages/api/src/*"]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    ".expo",
+    ".expo-shared"
+  ]
+}

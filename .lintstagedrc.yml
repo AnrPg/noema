@@ -1,0 +1,26 @@
+# =============================================================================
+# LINT-STAGED CONFIGURATION
+# =============================================================================
+# Runs linters on staged files before commit
+
+# TypeScript/JavaScript files
+*.{ts,tsx,js,jsx}:
+  - eslint --fix
+  - prettier --write
+
+# JSON files
+*.json:
+  - prettier --write
+
+# Markdown files
+*.md:
+  - prettier --write
+
+# CSS/SCSS files
+*.{css,scss}:
+  - prettier --write
+
+# Python files (AI service)
+*.py:
+  - ruff check --fix
+  - ruff format

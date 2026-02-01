@@ -1,0 +1,672 @@
+// =============================================================================
+// MANTHANEIN DATABASE SCHEMA
+// =============================================================================
+// PostgreSQL database schema for the Manthanein learning platform
+// Supports users, cards, decks, reviews, gamification, and plugins
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// USER & AUTHENTICATION
+// =============================================================================
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String?   // Null for OAuth users
+  displayName    String
+  avatarUrl      String?
+  isEmailVerified Boolean  @default(false)
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastLoginAt    DateTime?
+  
+  // Relations
+  preferences    UserPreferences?
+  learningStats  UserLearningStats?
+  cognitiveProfile CognitiveProfile?
+  oauthAccounts  OAuthAccount[]
+  sessions       Session[]
+  decks          Deck[]
+  cards          Card[]
+  reviews        ReviewRecord[]
+  xpTransactions XPTransaction[]
+  achievements   UserAchievement[]
+  streaks        Streak[]
+  skillProgress  UserSkillProgress[]
+  challenges     UserChallenge[]
+  metaLearningUnlocks UserMetaLearningUnlock[]
+  installedPlugins UserPlugin[]
+  studySessions  StudySession[]
+  notifications  Notification[]
+  
+  @@index([email])
+  @@index([createdAt])
+}
+
+model UserPreferences {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Display settings
+  theme             String   @default("system") // light, dark, system
+  language          String   @default("en")
+  timezone          String   @default("UTC")
+  
+  // Study settings
+  dailyGoal         Int      @default(50) // Cards per day
+  sessionDuration   Int      @default(20) // Minutes
+  newCardsPerDay    Int      @default(20)
+  maxReviewsPerDay  Int      @default(200)
+  
+  // Notification settings
+  enableReminders   Boolean  @default(true)
+  reminderTime      String   @default("09:00") // HH:mm format
+  emailNotifications Boolean @default(true)
+  pushNotifications Boolean  @default(true)
+  
+  // Scheduler settings
+  schedulerType     String   @default("fsrs") // fsrs, hlr, sm2
+  schedulerConfig   Json     @default("{}")
+  
+  // Audio/Visual settings
+  audioEnabled      Boolean  @default(true)
+  animationsEnabled Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model UserLearningStats {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Core metrics
+  totalReviews    Int      @default(0)
+  totalCards      Int      @default(0)
+  masteredCards   Int      @default(0)
+  totalStudyTime  Int      @default(0) // Minutes
+  totalXP         Int      @default(0)
+  level           Int      @default(1)
+  
+  // Streak info
+  currentStreak   Int      @default(0)
+  longestStreak   Int      @default(0)
+  
+  // Performance
+  averageAccuracy Float    @default(0)
+  avgResponseTime Int      @default(0) // Milliseconds
+  retentionRate   Float    @default(0)
+  
+  // Achievement tracking
+  perfectSessions Int      @default(0)
+  accuracyStreak  Int      @default(0)
+  decksCreated    Int      @default(0)
+  cardsCreated    Int      @default(0)
+  decksShared     Int      @default(0)
+  deckDownloads   Int      @default(0)
+  nightReviews    Int      @default(0)
+  morningReviews  Int      @default(0)
+  
+  // Calibration
+  calibrationScore Float   @default(0.5)
+  overconfidence   Float   @default(0)
+  underconfidence  Float   @default(0)
+  
+  // Memory integrity
+  memoryIntegrityScore Int @default(50)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CognitiveProfile {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Learning style preferences
+  preferredModality     String   @default("mixed") // visual, auditory, kinesthetic, mixed
+  optimalSessionLength  Int      @default(25) // Minutes
+  peakPerformanceHours  Json     @default("[]") // Array of hours (0-23)
+  
+  // Cognitive metrics
+  workingMemoryCapacity Float    @default(0.5) // 0-1 normalized
+  processingSpeed       Float    @default(0.5)
+  attentionSpan         Int      @default(25) // Minutes
+  
+  // Difficulty preferences
+  preferredDifficulty   Float    @default(0.5) // 0-1, determines challenge level
+  
+  // Inferred parameters (updated by ML)
+  fsrsParameters        Json     @default("[]") // Personalized FSRS weights
+  hlrParameters         Json     @default("{}")
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model OAuthAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider      String   // google, github, apple
+  providerAccountId String
+  accessToken   String?
+  refreshToken  String?
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  
+  @@index([userId])
+  @@index([token])
+}
+
+// =============================================================================
+// DECKS & CARDS
+// =============================================================================
+
+model Deck {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  coverImageUrl   String?
+  iconEmoji       String?
+  color           String?  // Hex color for theming
+  
+  // Hierarchy
+  parentDeckId    String?
+  parentDeck      Deck?    @relation("DeckHierarchy", fields: [parentDeckId], references: [id])
+  subDecks        Deck[]   @relation("DeckHierarchy")
+  
+  // Settings (JSON for flexibility)
+  settings        Json     @default("{}")
+  
+  // Sharing
+  isPublic        Boolean  @default(false)
+  isSharedToMarketplace Boolean @default(false)
+  shareCode       String?  @unique
+  downloadCount   Int      @default(0)
+  
+  // Stats (denormalized for performance)
+  cardCount       Int      @default(0)
+  newCount        Int      @default(0)
+  learningCount   Int      @default(0)
+  reviewCount     Int      @default(0)
+  masteredCount   Int      @default(0)
+  
+  // Metadata
+  tags            String[] @default([])
+  category        String?
+  language        String   @default("en")
+  
+  // Ordering
+  position        Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastStudiedAt   DateTime?
+  
+  // Relations
+  cards           Card[]
+  studySessions   StudySession[]
+  
+  @@index([userId])
+  @@index([parentDeckId])
+  @@index([isPublic])
+  @@index([shareCode])
+}
+
+model Card {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deckId          String
+  deck            Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  
+  // Card type (discriminator for content)
+  cardType        String   // atomic_text, cloze, image_occlusion, etc.
+  
+  // Content (JSON for flexibility across card types)
+  content         Json     // Front/back/options based on cardType
+  
+  // Media attachments
+  media           CardMedia[]
+  
+  // SRS State
+  state           String   @default("new") // new, learning, review, relearning, mastered
+  stability       Float    @default(0)
+  difficulty      Float    @default(0.3)
+  elapsedDays     Float    @default(0)
+  scheduledDays   Float    @default(0)
+  reps            Int      @default(0)
+  lapses          Int      @default(0)
+  lastReviewDate  DateTime?
+  nextReviewDate  DateTime?
+  
+  // HLR-specific state (if using HLR)
+  halfLife        Float?
+  theta           Json?    // HLR theta vector
+  
+  // Metadata
+  tags            String[] @default([])
+  flags           String[] @default([]) // leech, suspended, marked
+  notes           String?
+  source          String?  // Where the card came from
+  
+  // Analytics
+  averageTime     Int      @default(0) // Avg response time in ms
+  totalReviews    Int      @default(0)
+  correctReviews  Int      @default(0)
+  
+  // Position within deck
+  position        Int      @default(0)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  reviews         ReviewRecord[]
+  relatedCards    CardRelation[] @relation("SourceCard")
+  relatedTo       CardRelation[] @relation("TargetCard")
+  
+  @@index([userId])
+  @@index([deckId])
+  @@index([state])
+  @@index([nextReviewDate])
+  @@index([cardType])
+}
+
+model CardMedia {
+  id            String   @id @default(cuid())
+  cardId        String
+  card          Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  type          String   // image, audio, video
+  url           String
+  filename      String
+  mimeType      String
+  size          Int      // Bytes
+  width         Int?     // For images/videos
+  height        Int?
+  duration      Int?     // For audio/video in seconds
+  
+  // For image occlusion
+  occlusionData Json?    // Regions, masks, etc.
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([cardId])
+}
+
+model CardRelation {
+  id            String   @id @default(cuid())
+  sourceCardId  String
+  sourceCard    Card     @relation("SourceCard", fields: [sourceCardId], references: [id], onDelete: Cascade)
+  targetCardId  String
+  targetCard    Card     @relation("TargetCard", fields: [targetCardId], references: [id], onDelete: Cascade)
+  relationType  String   // prerequisite, similar, opposite, related
+  strength      Float    @default(1) // Relationship strength 0-1
+  
+  createdAt     DateTime @default(now())
+  
+  @@unique([sourceCardId, targetCardId, relationType])
+  @@index([sourceCardId])
+  @@index([targetCardId])
+}
+
+// =============================================================================
+// REVIEWS & STUDY SESSIONS
+// =============================================================================
+
+model ReviewRecord {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  studySessionId  String?
+  studySession    StudySession? @relation(fields: [studySessionId], references: [id])
+  
+  // Review details
+  rating          Int      // 1-4 (Again, Hard, Good, Easy)
+  responseTime    Int      // Milliseconds
+  
+  // State before review
+  previousState   String
+  previousStability Float?
+  previousDifficulty Float?
+  
+  // State after review
+  newState        String
+  newStability    Float?
+  newDifficulty   Float?
+  scheduledDays   Float
+  
+  // Optional confidence rating
+  confidenceBefore Float?  // 0-1, user's predicted recall
+  
+  // Context
+  reviewType      String   @default("normal") // normal, cram, filtered
+  schedulerUsed   String   @default("fsrs") // fsrs, hlr, sm2
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([cardId])
+  @@index([studySessionId])
+  @@index([createdAt])
+}
+
+model StudySession {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deckId          String?
+  deck            Deck?    @relation(fields: [deckId], references: [id])
+  
+  // Session info
+  sessionType     String   @default("normal") // normal, cram, filtered, challenge
+  
+  // Timing
+  startTime       DateTime
+  endTime         DateTime?
+  totalDuration   Int      @default(0) // Minutes
+  activeDuration  Int      @default(0) // Excluding breaks
+  
+  // Stats
+  cardsStudied    Int      @default(0)
+  cardsNew        Int      @default(0)
+  cardsLearning   Int      @default(0)
+  cardsReview     Int      @default(0)
+  correctCount    Int      @default(0)
+  
+  // Performance
+  accuracy        Float    @default(0)
+  avgResponseTime Int      @default(0)
+  
+  // XP earned
+  xpEarned        Int      @default(0)
+  
+  // Reviews in this session
+  reviews         ReviewRecord[]
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([deckId])
+  @@index([startTime])
+}
+
+// =============================================================================
+// GAMIFICATION
+// =============================================================================
+
+model XPTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount      Int
+  source      String   // card_review, achievement, challenge, streak, etc.
+  details     Json     @default("{}")
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievementId String
+  unlockedAt    DateTime @default(now())
+  xpAwarded     Int
+  
+  @@unique([userId, achievementId])
+  @@index([userId])
+}
+
+model Streak {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  streakType        String   @default("daily") // daily, weekly
+  currentCount      Int      @default(0)
+  longestStreak     Int      @default(0)
+  lastActivityDate  DateTime
+  
+  // Streak freeze
+  freezeCount       Int      @default(0)
+  lastFreezeUsed    DateTime?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([userId, streakType])
+  @@index([userId])
+}
+
+model UserSkillProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  treeId      String
+  nodeId      String
+  level       Int      @default(0)
+  xpInvested  Int      @default(0)
+  unlockedAt  DateTime?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([userId, treeId, nodeId])
+  @@index([userId])
+}
+
+model UserChallenge {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  challengeId   String
+  challengeData Json     // Snapshot of challenge details
+  
+  progress      Int      @default(0)
+  isComplete    Boolean  @default(false)
+  completedAt   DateTime?
+  xpAwarded     Int      @default(0)
+  
+  startDate     DateTime
+  endDate       DateTime
+  
+  createdAt     DateTime @default(now())
+  
+  @@index([userId])
+  @@index([endDate])
+}
+
+model UserMetaLearningUnlock {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  unlockId    String
+  unlockedAt  DateTime @default(now())
+  
+  @@unique([userId, unlockId])
+  @@index([userId])
+}
+
+// =============================================================================
+// PLUGINS
+// =============================================================================
+
+model Plugin {
+  id            String   @id @default(cuid())
+  
+  // Identity
+  name          String
+  slug          String   @unique
+  version       String
+  author        String
+  description   String?
+  
+  // Metadata
+  category      String   // card_generation, scheduling, domain_specific, etc.
+  iconUrl       String?
+  repository    String?
+  homepage      String?
+  
+  // Content
+  manifestUrl   String
+  bundleUrl     String
+  
+  // Stats
+  downloadCount Int      @default(0)
+  rating        Float    @default(0)
+  ratingCount   Int      @default(0)
+  
+  // Verification
+  isVerified    Boolean  @default(false)
+  isOfficial    Boolean  @default(false)
+  
+  // Permissions required
+  permissions   String[] @default([])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  users         UserPlugin[]
+  
+  @@index([slug])
+  @@index([category])
+}
+
+model UserPlugin {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pluginId    String
+  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  
+  isEnabled   Boolean  @default(true)
+  settings    Json     @default("{}")
+  
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@unique([userId, pluginId])
+  @@index([userId])
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type        String   // streak_reminder, achievement, challenge, system
+  title       String
+  body        String
+  data        Json     @default("{}")
+  
+  isRead      Boolean  @default(false)
+  readAt      DateTime?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// FILE UPLOADS
+// =============================================================================
+
+model Upload {
+  id          String   @id @default(cuid())
+  userId      String
+  
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int      // Bytes
+  
+  bucket      String   @default("uploads")
+  key         String   // S3/MinIO key
+  url         String
+  
+  status      String   @default("pending") // pending, processing, ready, error
+  processedAt DateTime?
+  
+  // For parsed content
+  parsedContent Json?
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([userId])
+  @@index([status])
+}
+
+// =============================================================================
+// SYNC & OFFLINE
+// =============================================================================
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  userId      String
+  deviceId    String
+  
+  entityType  String   // card, deck, review
+  entityId    String
+  operation   String   // create, update, delete
+  data        Json
+  
+  serverVersion Int
+  clientVersion Int
+  
+  syncedAt    DateTime @default(now())
+  
+  @@index([userId])
+  @@index([deviceId])
+  @@index([serverVersion])
+}

@@ -1,0 +1,58 @@
+{
+  "name": "manthanein",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-enhanced spaced repetition learning platform with gamification",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "dev:mobile": "pnpm --filter @manthanein/mobile start",
+    "dev:api": "pnpm --filter @manthanein/api dev",
+    "dev:ai": "pnpm --filter @manthanein/ai dev",
+    "build": "turbo run build",
+    "build:shared": "pnpm --filter @manthanein/shared build",
+    "build:api": "pnpm --filter @manthanein/api build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "typecheck": "turbo run typecheck",
+    "db:push": "pnpm --filter @manthanein/api db:push",
+    "db:migrate": "pnpm --filter @manthanein/api db:migrate",
+    "db:seed": "pnpm --filter @manthanein/api db:seed",
+    "db:studio": "pnpm --filter @manthanein/api db:studio",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "setup": "pnpm install && pnpm build:shared && pnpm db:push",
+    "prepare": "husky install",
+    "commit": "cz",
+    "release": "standard-version"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
+    "@types/node": "^20.10.0",
+    "commitizen": "^4.3.0",
+    "cz-conventional-changelog": "^3.3.0",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.0",
+    "standard-version": "^9.5.0",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.12.0"
+}
