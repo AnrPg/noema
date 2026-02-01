@@ -3,6 +3,8 @@
 // =============================================================================
 // Fastify-based REST + GraphQL API server
 
+import "dotenv/config";
+
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -150,6 +152,7 @@ async function buildServer() {
       prisma,
       redis,
       user: request.user,
+      app, // Pass app for JWT signing in auth mutations
     }),
   });
 

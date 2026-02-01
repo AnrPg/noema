@@ -35,6 +35,7 @@
     "@scalar/fastify-api-reference": "^1.24.57",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.12.12",
+    "dotenv": "^17.2.3",
     "fastify": "^4.28.1",
     "fastify-plugin": "^4.5.1",
     "graphql": "^16.9.0",
