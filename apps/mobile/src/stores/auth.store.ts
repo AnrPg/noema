@@ -7,6 +7,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { apiClient, setAuthHandlers } from "@/services/api";
+import { authState } from "./auth-state";
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -305,4 +306,12 @@ setAuthHandlers({
   refreshTokens: () => useAuthStore.getState().refreshTokens(),
   getTokens: () => useAuthStore.getState().tokens,
   logout: () => useAuthStore.getState().logout(),
+});
+
+// Sync authState with store changes for API hooks
+// Set initial state immediately
+authState.setAuthenticated(useAuthStore.getState().isAuthenticated);
+// Subscribe to future changes
+useAuthStore.subscribe((state) => {
+  authState.setAuthenticated(state.isAuthenticated);
 });
