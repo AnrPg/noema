@@ -333,7 +333,11 @@ export function useTodayProgress() {
 export function useStartStudySession() {
   return useMutation({
     mutationFn: (data: { deckId?: string; sessionType?: string }) =>
-      apiClient.post<{ data: { id: string } }>("/study/sessions", data),
+      // API returns session object directly: { id, userId, deckId, sessionType, ... }
+      apiClient.post<{ id: string; userId: string; deckId?: string }>(
+        "/study/sessions",
+        data,
+      ),
   });
 }
 
