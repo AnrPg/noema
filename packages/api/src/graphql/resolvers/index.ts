@@ -3,6 +3,10 @@
 // =============================================================================
 
 import { prisma } from "../../config/database.js";
+import { redis } from "../../config/redis.js";
+import { env } from "../../config/env.js";
+import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import {
   createScheduler,
   createGamificationManager,
@@ -16,6 +20,7 @@ import {
 interface Context {
   user?: { id: string; email: string };
   prisma: typeof prisma;
+  app?: any; // Fastify app for JWT signing
 }
 
 // Helper to require authentication
@@ -24,6 +29,22 @@ function requireAuth(context: Context) {
     throw new Error("Authentication required");
   }
   return context.user;
+}
+
+// Auth helpers
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 12);
+}
+
+async function verifyPassword(
+  password: string,
+  hash: string,
+): Promise<boolean> {
+  return bcrypt.compare(password, hash);
+}
+
+function generateRefreshToken(): string {
+  return randomBytes(32).toString("hex");
 }
 
 export const resolvers = {
@@ -401,15 +422,154 @@ export const resolvers = {
   // MUTATION RESOLVERS
   // ==========================================================================
   Mutation: {
-    // Placeholder mutations - would need full implementation
-    register: async () => {
-      throw new Error("Use REST API for auth");
+    // Auth mutations
+    register: async (
+      _: any,
+      args: { input: { email: string; password: string; displayName: string } },
+      context: Context,
+    ) => {
+      const { email, password, displayName } = args.input;
+
+      // Check if email exists
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing) {
+        throw new Error("Email already registered");
+      }
+
+      // Create user
+      const user = await prisma.user.create({
+        data: {
+          email,
+          passwordHash: await hashPassword(password),
+          displayName,
+          preferences: { create: {} },
+          learningStats: { create: {} },
+          cognitiveProfile: { create: {} },
+          streaks: {
+            create: {
+              streakType: "daily",
+              lastActivityDate: new Date(),
+            },
+          },
+        },
+        select: { id: true, email: true, displayName: true, avatarUrl: true },
+      });
+
+      // Generate tokens
+      const accessToken = context.app.jwt.sign(
+        { id: user.id, email: user.email },
+        { expiresIn: env.JWT_EXPIRY },
+      );
+      const refreshToken = generateRefreshToken();
+
+      // Store refresh token
+      await redis.setex(`refresh:${refreshToken}`, 30 * 24 * 60 * 60, user.id);
+
+      return { user, accessToken, refreshToken };
     },
-    login: async () => {
-      throw new Error("Use REST API for auth");
+
+    login: async (
+      _: any,
+      args: { input: { email: string; password: string } },
+      context: Context,
+    ) => {
+      const { email, password } = args.input;
+
+      // Find user
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          email: true,
+          displayName: true,
+          avatarUrl: true,
+          passwordHash: true,
+          isActive: true,
+        },
+      });
+
+      if (!user || !user.passwordHash) {
+        throw new Error("Invalid email or password");
+      }
+
+      if (!user.isActive) {
+        throw new Error("Account is deactivated");
+      }
+
+      // Verify password
+      if (!(await verifyPassword(password, user.passwordHash))) {
+        throw new Error("Invalid email or password");
+      }
+
+      // Update last login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+
+      // Generate tokens
+      const accessToken = context.app.jwt.sign(
+        { id: user.id, email: user.email },
+        { expiresIn: env.JWT_EXPIRY },
+      );
+      const refreshToken = generateRefreshToken();
+
+      // Store refresh token
+      await redis.setex(`refresh:${refreshToken}`, 30 * 24 * 60 * 60, user.id);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          avatarUrl: user.avatarUrl,
+        },
+        accessToken,
+        refreshToken,
+      };
     },
-    refreshToken: async () => {
-      throw new Error("Use REST API for auth");
+
+    refreshToken: async (
+      _: any,
+      args: { refreshToken: string },
+      context: Context,
+    ) => {
+      const { refreshToken } = args;
+
+      // Verify refresh token
+      const userId = await redis.get(`refresh:${refreshToken}`);
+      if (!userId) {
+        throw new Error("Invalid refresh token");
+      }
+
+      // Get user
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true },
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Delete old refresh token
+      await redis.del(`refresh:${refreshToken}`);
+
+      // Generate new tokens
+      const newAccessToken = context.app.jwt.sign(
+        { id: user.id, email: user.email },
+        { expiresIn: env.JWT_EXPIRY },
+      );
+      const newRefreshToken = generateRefreshToken();
+
+      // Store new refresh token
+      await redis.setex(
+        `refresh:${newRefreshToken}`,
+        30 * 24 * 60 * 60,
+        user.id,
+      );
+
+      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
     },
 
     updateProfile: async (_: any, args: { input: any }, context: Context) => {
