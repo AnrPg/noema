@@ -1,11 +1,12 @@
 // =============================================================================
-// LKGC - Local Knowledge Graph Core (Event Ingestion & Aggregation)
+// LKGC - Local Knowledge Graph Core
 // =============================================================================
 // NOTE: "LKGC" in this module refers to "Local Knowledge Graph Core",
 // NOT "Last Known Good Configuration" which exists elsewhere in the codebase.
 // =============================================================================
-// This is the ONLY entry point for learning and interaction signals.
-// Everything else (features, mastery, decisions, AI snapshots) derives from here.
+// This module provides:
+// 1. Event ingestion and aggregation (append-only, explainability-ready)
+// 2. Canonical graph store (typed property graph of learning objects)
 //
 // Design principles:
 // - Append-only auditability
@@ -13,9 +14,14 @@
 // - Replayability for debugging and ML
 // - Future meta-learning support
 // - Obsidian compatibility (via content ops)
+// - Strong invariants (no dangling edges, versioned updates)
 //
 // NO UI. NO AI. NO SCHEDULING. (Those are downstream consumers)
 // =============================================================================
+
+// -----------------------------------------------------------------------------
+// EVENT INGESTION & AGGREGATION
+// -----------------------------------------------------------------------------
 
 // Core abstractions
 export * from "./event-log";
@@ -38,3 +44,17 @@ export * from "./pipeline";
 // Helpers
 export * from "./id-generator";
 export * from "./event-factory";
+
+// -----------------------------------------------------------------------------
+// CANONICAL GRAPH STORE
+// -----------------------------------------------------------------------------
+
+// Graph store interface and types
+export * from "./graph-store";
+
+// In-memory implementation (for testing)
+export * from "./impl/in-memory-graph-store";
+
+// SQLite implementation (schema + stubs)
+export * from "./impl/sqlite-graph-schema";
+export * from "./impl/sqlite-graph-store";
