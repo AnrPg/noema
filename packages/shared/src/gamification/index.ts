@@ -13,13 +13,17 @@ export {
   LeaderboardEngine,
   MetaLearningEngine,
   GamificationManager,
-  
+
   // Factory
   createGamificationManager,
-  
+
   // Constants
   XP_CONFIG,
   ACHIEVEMENTS,
   DEFAULT_SKILL_TREES,
   META_LEARNING_UNLOCKS,
-} from './gamification-engine';
+
+  // Types
+  type AchievementProgress,
+  type CalibrationResult,
+} from "./gamification-engine";

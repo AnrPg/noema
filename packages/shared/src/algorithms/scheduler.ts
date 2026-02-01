@@ -4,21 +4,19 @@
 // This provides a common interface for all scheduling algorithms,
 // allowing easy switching between FSRS, HLR, and others.
 
-import type {
-  Rating,
-  CardSRSState,
-} from '../types/card.types';
+import type { Rating, CardSRSState } from "../types/card.types";
 import type {
   SchedulerType,
   SchedulerConfig,
   SchedulingResult,
+  SimpleSchedulingResult,
   SchedulingContext,
   FSRSConfig,
   HLRConfig,
-} from '../types/scheduler.types';
-import { getDefaultSchedulerConfig } from '../types';
-import { FSRSScheduler, createFSRSScheduler } from './fsrs';
-import { HLRScheduler, createHLRScheduler } from './hlr';
+} from "../types/scheduler.types";
+import { getDefaultSchedulerConfig } from "../types";
+import { FSRSScheduler, createFSRSScheduler } from "./fsrs";
+import { HLRScheduler, createHLRScheduler } from "./hlr";
 
 // =============================================================================
 // SCHEDULER INTERFACE
@@ -29,27 +27,36 @@ import { HLRScheduler, createHLRScheduler } from './hlr';
  */
 export interface IScheduler {
   /**
-   * Calculate scheduling options for a card
+   * Calculate scheduling options for a card (all ratings)
    */
   schedule(
     currentState: CardSRSState,
-    context?: SchedulingContext
+    context?: SchedulingContext,
   ): SchedulingResult;
-  
+
+  /**
+   * Calculate scheduling result for a specific rating
+   * This is the simpler interface for API use
+   */
+  scheduleRating(
+    currentState: CardSRSState,
+    rating: Rating,
+  ): SimpleSchedulingResult;
+
   /**
    * Update card state after a review
    */
   updateAfterReview(
     currentState: CardSRSState,
     rating: Rating,
-    responseTime: number
+    responseTime: number,
   ): CardSRSState;
-  
+
   /**
    * Get current recall probability
    */
   getRetrievability(stability: number, elapsedDays: number): number;
-  
+
   /**
    * Get optimal interval for target retention
    */
@@ -62,7 +69,7 @@ export interface IScheduler {
 
 /**
  * Unified scheduler that wraps multiple algorithm implementations
- * 
+ *
  * Usage:
  * ```typescript
  * const scheduler = new UnifiedScheduler('fsrs');
@@ -74,80 +81,90 @@ export class UnifiedScheduler implements IScheduler {
   private readonly type: SchedulerType;
   private readonly config: SchedulerConfig;
   private readonly impl: IScheduler;
-  
-  constructor(
-    type: SchedulerType = 'fsrs',
-    config?: Partial<SchedulerConfig>
-  ) {
+
+  constructor(type: SchedulerType = "fsrs", config?: Partial<SchedulerConfig>) {
     this.type = type;
-    this.config = { ...getDefaultSchedulerConfig(type), ...config } as SchedulerConfig;
+    this.config = {
+      ...getDefaultSchedulerConfig(type),
+      ...config,
+    } as SchedulerConfig;
     this.impl = this.createImplementation();
   }
-  
+
   /**
    * Create the appropriate scheduler implementation
    */
   private createImplementation(): IScheduler {
     switch (this.type) {
-      case 'fsrs':
+      case "fsrs":
         return createFSRSScheduler(this.config as Partial<FSRSConfig>);
-      
-      case 'hlr':
+
+      case "hlr":
         return createHLRScheduler(this.config as Partial<HLRConfig>);
-      
-      case 'sm2':
-      case 'anki_default':
+
+      case "sm2":
+      case "anki_default":
         // SM-2 uses FSRS with different defaults for now
         // TODO: Implement proper SM-2
         return createFSRSScheduler(this.config as Partial<FSRSConfig>);
-      
-      case 'leitner':
+
+      case "leitner":
         // Leitner uses simplified FSRS for now
         // TODO: Implement proper Leitner
         return createFSRSScheduler(this.config as Partial<FSRSConfig>);
-      
-      case 'custom':
+
+      case "custom":
         // Custom schedulers are handled via plugin system
         // Default to FSRS
         return createFSRSScheduler();
-      
+
       default:
         return createFSRSScheduler();
     }
   }
-  
+
   // Delegate all methods to implementation
-  
+
   public schedule(
     currentState: CardSRSState,
-    context?: SchedulingContext
+    context?: SchedulingContext,
   ): SchedulingResult {
     return this.impl.schedule(currentState, context);
   }
-  
+
+  public scheduleRating(
+    currentState: CardSRSState,
+    rating: Rating,
+  ): SimpleSchedulingResult {
+    return this.impl.scheduleRating(currentState, rating);
+  }
+
   public updateAfterReview(
     currentState: CardSRSState,
     rating: Rating,
-    responseTime: number
+    responseTime: number,
   ): CardSRSState {
     return this.impl.updateAfterReview(currentState, rating, responseTime);
   }
-  
+
   public getRetrievability(stability: number, elapsedDays: number): number {
     return this.impl.getRetrievability(stability, elapsedDays);
   }
-  
-  public getOptimalInterval(stability: number, targetRetention?: number): number {
+
+  public getOptimalInterval(
+    stability: number,
+    targetRetention?: number,
+  ): number {
     return this.impl.getOptimalInterval(stability, targetRetention);
   }
-  
+
   /**
    * Get the scheduler type
    */
   public getType(): SchedulerType {
     return this.type;
   }
-  
+
   /**
    * Get the current configuration
    */
@@ -164,8 +181,8 @@ export class UnifiedScheduler implements IScheduler {
  * Create a scheduler for a given type
  */
 export function createScheduler(
-  type: SchedulerType = 'fsrs',
-  config?: Partial<SchedulerConfig>
+  type: SchedulerType = "fsrs",
+  config?: Partial<SchedulerConfig>,
 ): UnifiedScheduler {
   return new UnifiedScheduler(type, config);
 }
@@ -173,7 +190,9 @@ export function createScheduler(
 /**
  * Create a scheduler from stored configuration
  */
-export function createSchedulerFromConfig(config: SchedulerConfig): UnifiedScheduler {
+export function createSchedulerFromConfig(
+  config: SchedulerConfig,
+): UnifiedScheduler {
   return new UnifiedScheduler(config.type, config);
 }
 
@@ -192,7 +211,7 @@ export function createInitialSRSState(): CardSRSState {
     scheduledDays: 0,
     retrievability: 1,
     dueDate: new Date(),
-    state: 'new',
+    state: "new",
     lastReviewDate: null,
     lastRating: null,
     halfLife: 0,
@@ -205,9 +224,13 @@ export function createInitialSRSState(): CardSRSState {
 /**
  * Check if a card is due for review
  */
-export function isCardDue(state: CardSRSState, now: Date = new Date()): boolean {
-  if (state.state === 'new') return true;
-  if (state.state === 'learning' || state.state === 'relearning') return true;
+export function isCardDue(
+  state: CardSRSState,
+  now: Date = new Date(),
+): boolean {
+  if (state.state === "new") return true;
+  if (state.state === "learning" || state.state === "relearning") return true;
+  if (!state.dueDate) return true; // No due date means it's due
   return state.dueDate <= now;
 }
 
@@ -215,13 +238,17 @@ export function isCardDue(state: CardSRSState, now: Date = new Date()): boolean 
  * Calculate days until a card is due
  * Negative means overdue
  */
-export function daysUntilDue(state: CardSRSState, now: Date = new Date()): number {
-  if (state.state === 'new') return 0;
-  
+export function daysUntilDue(
+  state: CardSRSState,
+  now: Date = new Date(),
+): number {
+  if (state.state === "new") return 0;
+  if (!state.dueDate) return 0; // No due date means due now
+
   const dueTime = state.dueDate.getTime();
   const nowTime = now.getTime();
   const diffMs = dueTime - nowTime;
-  
+
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
@@ -231,29 +258,29 @@ export function daysUntilDue(state: CardSRSState, now: Date = new Date()): numbe
  */
 export function sortCardsByPriority(
   cards: Array<{ id: string; srsState: CardSRSState }>,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Array<{ id: string; srsState: CardSRSState }> {
   return [...cards].sort((a, b) => {
     const aState = a.srsState;
     const bState = b.srsState;
-    
+
     // Learning/relearning cards first
-    if (aState.state === 'learning' || aState.state === 'relearning') {
-      if (bState.state !== 'learning' && bState.state !== 'relearning') {
+    if (aState.state === "learning" || aState.state === "relearning") {
+      if (bState.state !== "learning" && bState.state !== "relearning") {
         return -1;
       }
-    } else if (bState.state === 'learning' || bState.state === 'relearning') {
+    } else if (bState.state === "learning" || bState.state === "relearning") {
       return 1;
     }
-    
+
     // Then by due date
     const aDays = daysUntilDue(aState, now);
     const bDays = daysUntilDue(bState, now);
-    
+
     if (aDays !== bDays) {
-      return aDays - bDays;  // More overdue first
+      return aDays - bDays; // More overdue first
     }
-    
+
     // Finally by difficulty (harder cards first)
     return bState.difficulty - aState.difficulty;
   });
@@ -266,14 +293,14 @@ export function sortCardsByPriority(
  */
 export function calculateRelativeOverdueness(
   state: CardSRSState,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): number {
-  if (state.state === 'new') return 0;
+  if (state.state === "new") return 0;
   if (state.scheduledDays === 0) return 1;
-  
+
   const daysSinceDue = -daysUntilDue(state, now);
   if (daysSinceDue <= 0) return 0;
-  
+
   // Relative overdueness = days overdue / scheduled interval
   return daysSinceDue / state.scheduledDays;
 }
@@ -289,15 +316,15 @@ export function calculateRelativeOverdueness(
 export function batchSchedule(
   scheduler: IScheduler,
   cards: Array<{ id: string; srsState: CardSRSState }>,
-  context?: SchedulingContext
+  context?: SchedulingContext,
 ): Map<string, SchedulingResult> {
   const results = new Map<string, SchedulingResult>();
-  
+
   for (const card of cards) {
     const result = scheduler.schedule(card.srsState, context);
     results.set(card.id, { ...result, cardId: card.id });
   }
-  
+
   return results;
 }
 
@@ -306,7 +333,7 @@ export function batchSchedule(
  */
 export function getCardSetStatistics(
   cards: Array<{ srsState: CardSRSState }>,
-  scheduler: IScheduler
+  scheduler: IScheduler,
 ): CardSetStatistics {
   if (cards.length === 0) {
     return {
@@ -322,7 +349,7 @@ export function getCardSetStatistics(
       predictedRetention: 0,
     };
   }
-  
+
   const now = new Date();
   let newCount = 0;
   let learningCount = 0;
@@ -333,38 +360,38 @@ export function getCardSetStatistics(
   let totalDifficulty = 0;
   let totalRetrievability = 0;
   let reviewCardCount = 0;
-  
+
   for (const card of cards) {
     const state = card.srsState;
-    
+
     switch (state.state) {
-      case 'new':
+      case "new":
         newCount++;
         break;
-      case 'learning':
-      case 'relearning':
+      case "learning":
+      case "relearning":
         learningCount++;
         break;
-      case 'review':
+      case "review":
         reviewCount++;
         reviewCardCount++;
         totalStability += state.stability;
         totalDifficulty += state.difficulty;
         totalRetrievability += scheduler.getRetrievability(
           state.stability,
-          state.elapsedDays
+          state.elapsedDays,
         );
         break;
     }
-    
+
     if (isCardDue(state, now)) {
       dueCount++;
-      if (state.state === 'review' && daysUntilDue(state, now) < 0) {
+      if (state.state === "review" && daysUntilDue(state, now) < 0) {
         overdueCount++;
       }
     }
   }
-  
+
   return {
     total: cards.length,
     new: newCount,
@@ -372,10 +399,14 @@ export function getCardSetStatistics(
     review: reviewCount,
     due: dueCount,
     overdue: overdueCount,
-    averageStability: reviewCardCount > 0 ? totalStability / reviewCardCount : 0,
-    averageDifficulty: reviewCardCount > 0 ? totalDifficulty / reviewCardCount : 0,
-    averageRetrievability: reviewCardCount > 0 ? totalRetrievability / reviewCardCount : 0,
-    predictedRetention: reviewCardCount > 0 ? totalRetrievability / reviewCardCount : 0,
+    averageStability:
+      reviewCardCount > 0 ? totalStability / reviewCardCount : 0,
+    averageDifficulty:
+      reviewCardCount > 0 ? totalDifficulty / reviewCardCount : 0,
+    averageRetrievability:
+      reviewCardCount > 0 ? totalRetrievability / reviewCardCount : 0,
+    predictedRetention:
+      reviewCardCount > 0 ? totalRetrievability / reviewCardCount : 0,
   };
 }
 

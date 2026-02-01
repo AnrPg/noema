@@ -2,46 +2,37 @@
 // AUTHENTICATION MIDDLEWARE
 // =============================================================================
 
-import { FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../config/database.js';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: {
-      id: string;
-      email: string;
-    };
-  }
-}
+import { FastifyRequest, FastifyReply } from "fastify";
+import { prisma } from "../config/database.js";
 
 /**
  * Verify JWT token and attach user to request
  */
 export async function authenticate(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   try {
     const decoded = await request.jwtVerify<{ id: string; email: string }>();
-    
+
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: { id: true, email: true, isActive: true },
     });
-    
+
     if (!user || !user.isActive) {
       return reply.status(401).send({
-        error: 'Unauthorized',
-        message: 'User not found or inactive',
+        error: "Unauthorized",
+        message: "User not found or inactive",
       });
     }
-    
-    request.user = { id: user.id, email: user.email };
+
+    request.user = { id: user.id, email: user.email, role: "user" };
   } catch (error) {
     return reply.status(401).send({
-      error: 'Unauthorized',
-      message: 'Invalid or expired token',
+      error: "Unauthorized",
+      message: "Invalid or expired token",
     });
   }
 }
@@ -51,18 +42,18 @@ export async function authenticate(
  */
 export async function optionalAuth(
   request: FastifyRequest,
-  _reply: FastifyReply
+  _reply: FastifyReply,
 ) {
   try {
     const decoded = await request.jwtVerify<{ id: string; email: string }>();
-    
+
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: { id: true, email: true, isActive: true },
     });
-    
+
     if (user && user.isActive) {
-      request.user = { id: user.id, email: user.email };
+      request.user = { id: user.id, email: user.email, role: "user" };
     }
   } catch {
     // Token invalid or missing - that's okay for optional auth

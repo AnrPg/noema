@@ -18,7 +18,7 @@ export type {
   UserPreferences,
   User,
   UserLearningStats,
-} from './user.types';
+} from "./user.types";
 
 // Card types - The heart of the system
 export type {
@@ -66,11 +66,12 @@ export type {
   CardSRSState,
   CardState,
   Rating,
+  NumericRating,
   CardStats,
-} from './card.types';
+} from "./card.types";
 
-// Re-export RatingValues constant
-export { RatingValues } from './card.types';
+// Re-export RatingValues constant and utilities
+export { RatingValues, NumericToRating, toRating } from "./card.types";
 
 // Deck & Organization types
 export type {
@@ -83,9 +84,9 @@ export type {
   SessionType,
   SessionSettings,
   ReviewRecord,
-} from './deck.types';
+} from "./deck.types";
 
-export { DEFAULT_DECK_SETTINGS, SYSTEM_TAGS } from './deck.types';
+export { DEFAULT_DECK_SETTINGS, SYSTEM_TAGS } from "./deck.types";
 
 // Scheduler & Algorithm types
 export type {
@@ -99,10 +100,11 @@ export type {
   LeitnerConfig,
   SchedulerConfig,
   SchedulingResult,
+  SimpleSchedulingResult,
   IntervalPrediction,
   SchedulingContext,
   FatigueAdjustment,
-} from './scheduler.types';
+} from "./scheduler.types";
 
 export {
   DEFAULT_FSRS_WEIGHTS,
@@ -111,7 +113,7 @@ export {
   DEFAULT_SM2_CONFIG,
   DEFAULT_LEITNER_CONFIG,
   getDefaultSchedulerConfig,
-} from './scheduler.types';
+} from "./scheduler.types";
 
 // Gamification types
 export type {
@@ -142,14 +144,14 @@ export type {
   BurnoutIndicators,
   BurnoutIndicator,
   BurnoutRecommendation,
-} from './gamification.types';
+} from "./gamification.types";
 
 export {
   DEFAULT_XP_CONFIG,
   MASTERY_REQUIREMENTS,
   LEARNING_STRATEGIES,
   BURNOUT_INDICATORS,
-} from './gamification.types';
+} from "./gamification.types";
 
 // Plugin types
 export type {
@@ -201,7 +203,7 @@ export type {
   UIAPI,
   AIAPI,
   EventAPI,
-} from './plugin.types';
+} from "./plugin.types";
 
 // API types
 export type {
@@ -263,4 +265,4 @@ export type {
   HeatmapDataPoint,
   WSEventType,
   WSMessage,
-} from './api.types';
+} from "./api.types";
