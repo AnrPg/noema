@@ -79,3 +79,72 @@ export * from "./impl/in-memory-mastery-store";
 // SQLite implementation (schema + stubs)
 export * from "./impl/sqlite-mastery-schema";
 export * from "./impl/sqlite-mastery-store";
+
+// -----------------------------------------------------------------------------
+// DECISION LAYER
+// -----------------------------------------------------------------------------
+
+// Decision types and interfaces
+// Export specific types to avoid conflicts with types/lkgc/aggregation.ts
+export type {
+  ActionPlanId,
+  QueueItemId,
+  InterventionId,
+  GameHookId,
+  RationaleId,
+  DecisionRuleId,
+  DecisionConstraints,
+  RetrievabilityRange,
+  ContentFilters,
+  LearningMode,
+  DeviceType,
+  DecisionTimeOfDay,
+  DecisionContext,
+  ActionPlan,
+  ReviewQueue,
+  QueueCounts,
+  DifficultyBucket,
+  ReviewQueueItem,
+  ItemCategory,
+  PriorityScoring,
+  PriorityScoringWeights,
+  InterleavingMetadata,
+  CoachingInterventionType,
+  InterventionScope,
+  CoachingIntervention,
+  InterventionTrigger,
+  InterventionResponseSchema,
+  GameHookType,
+  GamificationHook,
+  GameHookParameters,
+  QuestParameters,
+  ChallengeParameters,
+  BossParameters,
+  StreakRuleParameters,
+  BadgeParameters,
+  RewardParameters,
+  GameReward,
+  HookProgress,
+  PlanRationale,
+  RationaleFactor,
+  AppliedRule,
+  DecisionCounterfactual,
+  ActionPlanDiagnostics,
+  DiagnosticWarning,
+  CoachingInterventionLog,
+  DecisionInterventionMetrics,
+} from "./decision-types";
+
+export { DEFAULT_CONSTRAINTS, DEFAULT_CONTEXT } from "./decision-types";
+
+// Decision rule registry and default rules
+export * from "./decision-rule-registry";
+export * from "./default-decision-rules";
+
+// Component planners
+export * from "./review-queue-builder";
+export * from "./meta-coach-planner";
+export * from "./game-hook-planner";
+
+// Decision engine orchestrator
+export * from "./decision-engine";
