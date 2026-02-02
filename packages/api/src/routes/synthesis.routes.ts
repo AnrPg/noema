@@ -11,11 +11,10 @@
  * 4. Creating bridge cards from synthesis insights
  */
 
-import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { prisma } from "../config/database.js";
+import { prisma, Prisma } from "../config/database.js";
 import { redis } from "../config/redis.js";
-import { authenticate } from "../middleware/auth.js";
 
 // ==============================================================================
 // VALIDATION SCHEMAS
@@ -710,7 +709,7 @@ const synthesisRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    const { status, dismissReason } = validation.data;
+    const { status, dismissReason: _dismissReason } = validation.data;
 
     const existing = await prisma.synthesisPrompt.findUnique({
       where: { id: params.data.promptId },
@@ -735,7 +734,7 @@ const synthesisRoutes: FastifyPluginAsync = async (fastify) => {
 
     const prompt = await prisma.synthesisPrompt.update({
       where: { id: params.data.promptId },
-      data: updateData as any,
+      data: updateData as Prisma.SynthesisPromptUpdateInput,
     });
 
     // Invalidate cache
@@ -1570,7 +1569,7 @@ const synthesisRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Calculate performance metrics per context
     // Get reviews grouped by category context
-    const reviews = await prisma.reviewRecord.findMany({
+    const _reviews = await prisma.reviewRecord.findMany({
       where: {
         cardId,
         userId,
@@ -2033,7 +2032,7 @@ const synthesisRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    const { userId, isCorrect, responseTimeMs } = validation.data;
+    const { userId: _userId, isCorrect, responseTimeMs } = validation.data;
     const selectedAnswer =
       ((validation.data as Record<string, unknown>).selectedAnswer as string) ||
       "";

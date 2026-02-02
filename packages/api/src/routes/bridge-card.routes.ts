@@ -1243,7 +1243,11 @@ const bridgeCardRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const { contextCategoryId, limit, excludeRecentHours } = validation.data;
+      const {
+        contextCategoryId,
+        limit,
+        excludeRecentHours: _excludeRecentHours,
+      } = validation.data;
 
       // Build where clause
       const where: Prisma.BridgeCardWhereInput = {

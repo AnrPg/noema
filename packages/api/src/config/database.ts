@@ -2,23 +2,28 @@
 // DATABASE CONFIGURATION
 // =============================================================================
 
-import { PrismaClient } from '@prisma/client';
-import { env } from './env.js';
+import { PrismaClient, Prisma } from "@prisma/client";
+import { env } from "./env.js";
+
+// Re-export Prisma namespace for type usage
+export { Prisma };
 
 // Create Prisma client with logging
 export const prisma = new PrismaClient({
-  log: env.NODE_ENV === 'development' 
-    ? ['query', 'info', 'warn', 'error']
-    : ['warn', 'error'],
+  log:
+    env.NODE_ENV === "development"
+      ? ["query", "info", "warn", "error"]
+      : ["warn", "error"],
 });
 
 // Test connection on startup
-prisma.$connect()
+prisma
+  .$connect()
   .then(() => {
-    console.log('✅ Database connected');
+    console.log("✅ Database connected");
   })
   .catch((error) => {
-    console.error('❌ Database connection failed:', error);
+    console.error("❌ Database connection failed:", error);
     process.exit(1);
   });
 

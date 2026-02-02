@@ -14,7 +14,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
-import { prisma } from "../config/database.js";
+import { prisma, Prisma } from "../config/database.js";
 import { authenticate } from "../middleware/auth.js";
 
 // =============================================================================
@@ -806,7 +806,7 @@ export async function participationRoutes(app: FastifyInstance) {
       const userId = request.user!.id;
 
       // Build where clause
-      const where: any = {
+      const where: Prisma.CardCategoryParticipationWhereInput = {
         card: { userId },
       };
 
@@ -825,7 +825,8 @@ export async function participationRoutes(app: FastifyInstance) {
       }
 
       // Build order by
-      const orderBy: any = {};
+      const orderBy: Prisma.CardCategoryParticipationOrderByWithRelationInput =
+        {};
       switch (query.sortBy) {
         case "mastery":
           orderBy.contextMasteryScore = query.sortOrder;
@@ -898,9 +899,14 @@ export async function participationRoutes(app: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const minCount = parseInt((request.query as any).minCount || "2");
-      const limit = parseInt((request.query as any).limit || "50");
-      const offset = parseInt((request.query as any).offset || "0");
+      const queryParams = request.query as {
+        minCount?: string;
+        limit?: string;
+        offset?: string;
+      };
+      const minCount = parseInt(queryParams.minCount || "2");
+      const limit = parseInt(queryParams.limit || "50");
+      const offset = parseInt(queryParams.offset || "0");
       const userId = request.user!.id;
 
       // Group by cardId and filter by count
@@ -1035,7 +1041,7 @@ export async function participationRoutes(app: FastifyInstance) {
       }
 
       // Get applied emphasis rules if requested
-      let appliedEmphasis: any[] = [];
+      let appliedEmphasis: Prisma.EmphasisRuleGetPayload<object>[] = [];
       if (query.includeEmphasis) {
         appliedEmphasis = await prisma.emphasisRule.findMany({
           where: {
@@ -1455,7 +1461,7 @@ export async function participationRoutes(app: FastifyInstance) {
       }
 
       // Update participation
-      const updated = await prisma.cardCategoryParticipation.update({
+      await prisma.cardCategoryParticipation.update({
         where: { id: participationId },
         data: {
           reviewCountInContext: newReviewCount,
@@ -1504,7 +1510,7 @@ export async function participationRoutes(app: FastifyInstance) {
       const query = divergenceQuerySchema.parse(request.query);
       const userId = request.user!.id;
 
-      const where: any = {
+      const where: Prisma.PerformanceDivergenceWhereInput = {
         userId,
         performanceSpread: { gte: query.minSpread },
       };
