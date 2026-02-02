@@ -240,6 +240,9 @@ export function generateOperations(
   const warnings: string[] = [];
   const timestamp = now();
 
+  // Track processed wikilink targets to deduplicate edges
+  const processedWikilinkTargets = new Set<string>();
+
   const provenance: ImportProvenance = {
     action: "user_action",
     source: "obsidian",
@@ -284,6 +287,13 @@ export function generateOperations(
 
       case "wikilink_added": {
         if (change.wikilink) {
+          // Deduplicate: skip if we've already processed this target
+          const targetKey = change.wikilink.target.toLowerCase();
+          if (processedWikilinkTargets.has(targetKey)) {
+            continue;
+          }
+          processedWikilinkTargets.add(targetKey);
+
           const linkResult = handleNewWikilink(
             nodeId,
             change.wikilink,
@@ -406,6 +416,14 @@ function handleNewWikilink(
   const targetNode = nodeByTitle(wikilink.target);
 
   if (targetNode) {
+    // Block self-referential edges
+    if (targetNode.id === sourceNodeId) {
+      warnings.push(
+        `Skipping self-referential wikilink to "${wikilink.target}"`,
+      );
+      return { operations, warnings };
+    }
+
     // Create edge if allowed
     const edgeType = determineEdgeType(config);
 

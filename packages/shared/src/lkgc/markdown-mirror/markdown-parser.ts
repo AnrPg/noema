@@ -281,9 +281,24 @@ export function extractWikilinks(
   const lines = body.split("\n");
 
   let charOffset = 0;
+  let inCodeBlock = false;
+
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
     const lineNumber = lineIdx + 1;
+
+    // Track code block state (fenced code blocks with ```)
+    if (line.trim().startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      charOffset += line.length + 1;
+      continue;
+    }
+
+    // Skip wikilinks inside code blocks
+    if (inCodeBlock) {
+      charOffset += line.length + 1;
+      continue;
+    }
 
     let match: RegExpExecArray | null;
     WIKILINK_REGEX.lastIndex = 0;
@@ -292,6 +307,11 @@ export function extractWikilinks(
       const target = match[1].trim();
       const displayAlias = match[2]?.trim();
       const position = charOffset + match.index;
+
+      // Skip empty or whitespace-only targets
+      if (!target) {
+        continue;
+      }
 
       // Get surrounding context (up to 50 chars each side)
       const contextStart = Math.max(0, match.index - 50);
