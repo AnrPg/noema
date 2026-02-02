@@ -469,9 +469,6 @@ import type {
   CreateCategoryRelationInput,
   AddCardToCategoryInput,
   BulkAddCardsToCategoryInput,
-  SplitCategoryInput,
-  MergeCategoriesInput,
-  MoveCategoryInput,
   LearningMode,
   ViewLens,
   CategoryId,
@@ -572,42 +569,8 @@ export function useDeleteCategory() {
   });
 }
 
-export function useSplitCategory() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: SplitCategoryInput }) =>
-      apiClient.post<Category[]>(`/categories/${id}/split`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-    },
-  });
-}
-
-export function useMergeCategories() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: MergeCategoriesInput) =>
-      apiClient.post<Category>("/categories/merge", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-    },
-  });
-}
-
-export function useMoveCategory() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: MoveCategoryInput }) =>
-      apiClient.post<Category>(`/categories/${id}/reparent`, data),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["categories"] });
-      queryClient.invalidateQueries({ queryKey: ["category", variables.id] });
-    },
-  });
-}
+// Note: Split, Merge, Move operations use comprehensive implementations
+// defined at the end of this file in "STRUCTURAL REFACTORING API" section
 
 // Category relations
 export function useCategoryRelations(categoryId: string) {
@@ -1802,5 +1765,556 @@ export function useEmphasisRulesForCard(cardId: string) {
     queryKey: ["emphasis-rules", "card", cardId],
     queryFn: () => fetcher(`/emphasis/rules/card/${cardId}`),
     enabled: isAuthenticated && !!cardId,
+  });
+}
+
+// =============================================================================
+// STRUCTURAL REFACTORING API - Split, Merge, Move Operations
+// =============================================================================
+
+// ----- Types for Refactoring -----
+
+export interface SplitChildDefinition {
+  tempId: string;
+  name: string;
+  description?: string;
+  framingQuestion?: string;
+  iconEmoji?: string;
+  color?: string;
+  cardIds: string[];
+  learningIntent?: "foundational" | "contextual" | "reference";
+  depthGoal?: "recognition" | "recall" | "application" | "synthesis";
+}
+
+export interface SplitDistinction {
+  distinctionStatement: string;
+  exemplarCardIds?: { childTempId: string; cardId: string }[];
+  aiConfidence?: number;
+}
+
+export interface SplitCategoryInput {
+  categoryId: string;
+  children: SplitChildDefinition[];
+  distinctions?: SplitDistinction[];
+  parentDisposition: "keep_as_container" | "archive" | "convert_to_first_child";
+  reason?: string;
+  requestAIAnalysis?: boolean;
+  idempotencyKey?: string;
+}
+
+export interface MergeCategoriesInput {
+  sourceCategoryIds: string[];
+  target: {
+    existingCategoryId?: string;
+    name?: string;
+    description?: string;
+    framingQuestion?: string;
+    iconEmoji?: string;
+    color?: string;
+    parentId?: string;
+  };
+  duplicateHandling:
+    | "keep_highest_mastery"
+    | "keep_all_participations"
+    | "merge_participations";
+  annotationHandling: "keep_all" | "keep_most_recent" | "merge_by_type";
+  emphasisHandling: "keep_all" | "keep_from_primary" | "disable_all";
+  rationale?: string;
+  requestAIValidation?: boolean;
+  idempotencyKey?: string;
+}
+
+export interface MoveCategoryInput {
+  categoryId: string;
+  newParentId: string | null;
+  position?: number;
+  reason?: string;
+  idempotencyKey?: string;
+}
+
+export interface RefactorTimelineEntry {
+  id: string;
+  timestamp: string;
+  eventType: string;
+  summary: string;
+  description?: string;
+  primaryCategoryName: string;
+  affectedCategoryCount: number;
+  affectedCardCount: number;
+  userReason?: string;
+  isRollbackable: boolean;
+  wasRolledBack: boolean;
+  snapshotId?: string;
+  icon: string;
+  color: string;
+}
+
+export interface StructuralSnapshot {
+  id: string;
+  name?: string;
+  isAutomatic: boolean;
+  refactorEventId?: string;
+  stats: {
+    totalCategories: number;
+    totalCards: number;
+    totalRelations: number;
+    maxDepth: number;
+  };
+  createdAt: string;
+  expiresAt?: string;
+}
+
+export interface StructuralDiff {
+  fromSnapshotId: string;
+  toSnapshotId: string;
+  addedCategories: any[];
+  removedCategories: any[];
+  modifiedCategories: any[];
+  addedRelations: any[];
+  removedRelations: any[];
+  cardMovements: any[];
+  summary: {
+    categoriesAdded: number;
+    categoriesRemoved: number;
+    categoriesModified: number;
+    relationsAdded: number;
+    relationsRemoved: number;
+    cardsMoved: number;
+  };
+}
+
+export interface AISplitSuggestion {
+  id: string;
+  confidence: number;
+  reasoning: string;
+  expectedBenefit: string;
+  suggestedChildren: Array<{
+    name: string;
+    description?: string;
+    cardIds: string[];
+    distinctionFromSiblings: string;
+  }>;
+}
+
+export interface AIMergeSuggestion {
+  id: string;
+  sourceCategoryIds: string[];
+  confidence: number;
+  suggestedName: string;
+  suggestedFramingQuestion?: string;
+  rationale: string;
+  overlapAnalysis: {
+    sharedCardCount: number;
+    sharedThemes: string[];
+    contentSimilarity: number;
+  };
+}
+
+// ----- Split Category -----
+
+export function useSplitCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: SplitCategoryInput) =>
+      apiClient.post<{
+        success: boolean;
+        data: {
+          eventId: string;
+          operationId: string;
+          originalCategoryId: string;
+          childCategories: Array<{
+            categoryId: string;
+            tempId: string;
+            name: string;
+          }>;
+          cardReassignments: number;
+        };
+      }>("/refactor/split", input),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({
+        queryKey: ["category", variables.categoryId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["refactor-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["structural-snapshots"] });
+    },
+  });
+}
+
+export function useAISplitSuggestions(categoryId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<{
+    categoryId: string;
+    suggestions: AISplitSuggestion[];
+    analyzedAt: string;
+  }>({
+    queryKey: ["ai-split-suggestions", categoryId],
+    queryFn: () => fetcher(`/refactor/split/suggestions/${categoryId}`),
+    enabled: isAuthenticated && !!categoryId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+}
+
+export function useValidateSplit() {
+  return useMutation({
+    mutationFn: (input: Omit<SplitCategoryInput, "idempotencyKey">) =>
+      apiClient.post<{
+        isValid: boolean;
+        warnings: Array<{
+          code: string;
+          message: string;
+          severity: "low" | "medium" | "high";
+        }>;
+        errors: Array<{
+          code: string;
+          message: string;
+          field?: string;
+        }>;
+        aiAnalysis?: {
+          qualityScore: number;
+          potentialMisassignments: Array<{
+            cardId: string;
+            currentTempId: string;
+            suggestedTempId: string;
+            reason: string;
+          }>;
+        };
+      }>("/refactor/split/validate", input),
+  });
+}
+
+// ----- Merge Categories -----
+
+export function useMergeCategories() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: MergeCategoriesInput) =>
+      apiClient.post<{
+        success: boolean;
+        data: {
+          eventId: string;
+          operationId: string;
+          mergedCategoryId: string;
+          archivedSourceIds: string[];
+          cardsMigrated: number;
+          annotationsMigrated: number;
+        };
+      }>("/refactor/merge", input),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      variables.sourceCategoryIds.forEach((id) => {
+        queryClient.invalidateQueries({ queryKey: ["category", id] });
+      });
+      queryClient.invalidateQueries({ queryKey: ["refactor-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["structural-snapshots"] });
+    },
+  });
+}
+
+export function useAIMergeSuggestions(categoryIds: string[]) {
+  const isAuthenticated = useIsAuthenticated();
+  const key = categoryIds.sort().join(",");
+
+  return useQuery<{
+    suggestions: AIMergeSuggestion[];
+    analyzedAt: string;
+  }>({
+    queryKey: ["ai-merge-suggestions", key],
+    queryFn: () => fetcher(`/refactor/merge/suggestions?categoryIds=${key}`),
+    enabled: isAuthenticated && categoryIds.length >= 2,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useValidateMerge() {
+  return useMutation({
+    mutationFn: (input: Omit<MergeCategoriesInput, "idempotencyKey">) =>
+      apiClient.post<{
+        isValid: boolean;
+        warnings: Array<{
+          code: string;
+          message: string;
+          severity: "low" | "medium" | "high";
+        }>;
+        errors: Array<{
+          code: string;
+          message: string;
+          field?: string;
+        }>;
+        aiValidation?: {
+          coherenceScore: number;
+          isRecommended: boolean;
+          potentialIssues: Array<{
+            severity: "low" | "medium" | "high";
+            description: string;
+          }>;
+        };
+      }>("/refactor/merge/validate", input),
+  });
+}
+
+// ----- Move/Re-parent Category -----
+
+export function useMoveCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: MoveCategoryInput) =>
+      apiClient.post<{
+        success: boolean;
+        data: {
+          eventId: string;
+          operationId: string;
+          movedCategoryId: string;
+          previousParentId: string | null;
+          newParentId: string | null;
+          updatedDescendantCount: number;
+        };
+      }>("/refactor/move", input),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({
+        queryKey: ["category", variables.categoryId],
+      });
+      if (variables.newParentId) {
+        queryClient.invalidateQueries({
+          queryKey: ["category", variables.newParentId],
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["refactor-timeline"] });
+    },
+  });
+}
+
+export function useValidateMove() {
+  return useMutation({
+    mutationFn: (input: Omit<MoveCategoryInput, "idempotencyKey">) =>
+      apiClient.post<{
+        isValid: boolean;
+        warnings: Array<{
+          code: string;
+          message: string;
+          severity: "low" | "medium" | "high";
+        }>;
+        errors: Array<{
+          code: string;
+          message: string;
+          field?: string;
+        }>;
+      }>("/refactor/move/validate", input),
+  });
+}
+
+// ----- Structural Timeline -----
+
+export function useRefactorTimeline(options?: {
+  categoryId?: string;
+  operationTypes?: string[];
+  includeRolledBack?: boolean;
+  fromDate?: string;
+  toDate?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+
+  if (options?.categoryId) params.append("categoryId", options.categoryId);
+  if (options?.operationTypes)
+    params.append("operationTypes", options.operationTypes.join(","));
+  if (options?.includeRolledBack !== undefined)
+    params.append("includeRolledBack", String(options.includeRolledBack));
+  if (options?.fromDate) params.append("fromDate", options.fromDate);
+  if (options?.toDate) params.append("toDate", options.toDate);
+  if (options?.limit) params.append("limit", String(options.limit));
+  if (options?.offset) params.append("offset", String(options.offset));
+
+  const queryString = params.toString();
+
+  return useQuery<{
+    entries: RefactorTimelineEntry[];
+    totalCount: number;
+    hasMore: boolean;
+  }>({
+    queryKey: ["refactor-timeline", options],
+    queryFn: () =>
+      fetcher(`/refactor/timeline${queryString ? `?${queryString}` : ""}`),
+    enabled: isAuthenticated,
+  });
+}
+
+export function useRefactorEvent(eventId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<{
+    id: string;
+    operationType: string;
+    status: string;
+    primaryCategoryId: string;
+    affectedCategoryIds: string[];
+    affectedCardIds: string[];
+    operationInput: Record<string, unknown>;
+    operationResult?: Record<string, unknown>;
+    userReason?: string;
+    aiSummary?: string;
+    beforeSnapshotId?: string;
+    afterSnapshotId?: string;
+    isRollbackable: boolean;
+    wasRolledBack: boolean;
+    createdAt: string;
+  }>({
+    queryKey: ["refactor-event", eventId],
+    queryFn: () => fetcher(`/refactor/events/${eventId}`),
+    enabled: isAuthenticated && !!eventId,
+  });
+}
+
+// ----- Structural Snapshots -----
+
+export function useStructuralSnapshots(options?: {
+  includeAutomatic?: boolean;
+  limit?: number;
+}) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+
+  if (options?.includeAutomatic !== undefined)
+    params.append("includeAutomatic", String(options.includeAutomatic));
+  if (options?.limit) params.append("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery<{
+    snapshots: StructuralSnapshot[];
+    totalCount: number;
+  }>({
+    queryKey: ["structural-snapshots", options],
+    queryFn: () =>
+      fetcher(`/refactor/snapshots${queryString ? `?${queryString}` : ""}`),
+    enabled: isAuthenticated,
+  });
+}
+
+export function useStructuralSnapshot(snapshotId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<
+    StructuralSnapshot & {
+      categoryTree: any[];
+      relations: any[];
+      participations: any[];
+    }
+  >({
+    queryKey: ["structural-snapshot", snapshotId],
+    queryFn: () => fetcher(`/refactor/snapshots/${snapshotId}`),
+    enabled: isAuthenticated && !!snapshotId,
+  });
+}
+
+export function useCreateSnapshot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { name?: string }) =>
+      apiClient.post<{
+        success: boolean;
+        data: StructuralSnapshot;
+      }>("/refactor/snapshots", input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["structural-snapshots"] });
+    },
+  });
+}
+
+export function useCompareSnapshots(
+  fromSnapshotId: string,
+  toSnapshotId: string,
+) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<StructuralDiff>({
+    queryKey: ["snapshot-diff", fromSnapshotId, toSnapshotId],
+    queryFn: () =>
+      fetcher(
+        `/refactor/snapshots/compare?from=${fromSnapshotId}&to=${toSnapshotId}`,
+      ),
+    enabled: isAuthenticated && !!fromSnapshotId && !!toSnapshotId,
+  });
+}
+
+// ----- Rollback Operations -----
+
+export function useRollbackRefactor() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { eventId: string; reason?: string }) =>
+      apiClient.post<{
+        success: boolean;
+        data: {
+          rollbackEventId: string;
+          restoredCategories: string[];
+          restoredCards: string[];
+        };
+      }>(`/refactor/events/${input.eventId}/rollback`, {
+        reason: input.reason,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["refactor-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["structural-snapshots"] });
+    },
+  });
+}
+
+export function useRestoreFromSnapshot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { snapshotId: string; reason?: string }) =>
+      apiClient.post<{
+        success: boolean;
+        data: {
+          restoreEventId: string;
+          categoriesRestored: number;
+          cardsReassigned: number;
+          relationsRestored: number;
+        };
+      }>(`/refactor/snapshots/${input.snapshotId}/restore`, {
+        reason: input.reason,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      queryClient.invalidateQueries({ queryKey: ["refactor-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["structural-snapshots"] });
+    },
+  });
+}
+
+// ----- Category Cards Helper (for refactoring wizards) -----
+
+export function useCategoryCardsForRefactor(categoryId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<
+    Array<{
+      id: string;
+      content: {
+        front?: string;
+        back?: string;
+        question?: string;
+        answer?: string;
+      };
+      semanticRole?: string;
+      isPrimary?: boolean;
+      contextMastery?: number;
+    }>
+  >({
+    queryKey: ["category-cards-refactor", categoryId],
+    queryFn: () => fetcher(`/categories/${categoryId}/cards`),
+    enabled: isAuthenticated && !!categoryId,
   });
 }

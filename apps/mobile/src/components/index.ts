@@ -32,3 +32,11 @@ export {
   LearningModeSelector,
   CategoryForm,
 } from "./ecosystem";
+
+// Structural Refactoring Components
+export {
+  SplitWizard,
+  MergeWizard,
+  MoveCategorySheet,
+  StructuralTimeline,
+} from "./refactoring";
