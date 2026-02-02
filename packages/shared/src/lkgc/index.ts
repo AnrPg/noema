@@ -148,3 +148,16 @@ export * from "./game-hook-planner";
 
 // Decision engine orchestrator
 export * from "./decision-engine";
+
+// -----------------------------------------------------------------------------
+// AI INTEGRATION BOUNDARY
+// -----------------------------------------------------------------------------
+// NOTE: The ai-boundary module is NOT re-exported from here to avoid
+// naming conflicts with types in types/lkgc/aggregation.ts (AISnapshot,
+// AIProposal, etc.). Import directly from "./ai-boundary" when needed:
+//
+//   import { SnapshotBuilder, ProposalValidator } from "./lkgc/ai-boundary";
+//
+// This keeps the ai-boundary as a distinct integration point with its own
+// namespace, which aligns with its role as a boundary layer.
+// -----------------------------------------------------------------------------
