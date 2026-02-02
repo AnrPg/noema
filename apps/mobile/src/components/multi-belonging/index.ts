@@ -7,11 +7,18 @@
  * - Participation management (card ↔ category relationships)
  * - Synthesis prompt display and response capture
  * - Bridge card creation and visualization
+ * - Active lens indicator for study context
  *
  * The multi-belonging system allows learning artifacts to exist once
  * canonically while participating in many contexts with context-specific
  * behavior and analytics.
  */
+
+// Active lens indicator for study sessions
+export {
+  ActiveLensIndicator,
+  type ActiveLensIndicatorProps,
+} from "./ActiveLensIndicator";
 
 // Participation management
 export {

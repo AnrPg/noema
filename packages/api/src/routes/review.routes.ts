@@ -25,6 +25,9 @@ const reviewCardSchema = z.object({
   responseTimeMs: z.number().int().min(0),
   confidenceBefore: z.number().min(0).max(1).optional(),
   studySessionId: z.string().optional(),
+  // Context-aware review tracking (Multi-Belonging integration)
+  categoryId: z.string().optional(), // The active category lens during review
+  contextConfidence: z.number().min(0).max(1).optional(), // Confidence in this context
 });
 
 const previewIntervalsSchema = z.object({
@@ -152,6 +155,79 @@ export async function reviewRoutes(app: FastifyInstance) {
           schedulerUsed: schedulerType,
         },
       });
+
+      // =======================================================================
+      // MULTI-BELONGING: Update context-specific participation metrics
+      // =======================================================================
+      if (body.categoryId) {
+        const isCorrect = body.rating >= 3;
+
+        // Update the participation's context-specific metrics
+        const participation = await prisma.cardCategoryParticipation.findUnique(
+          {
+            where: {
+              cardId_categoryId: {
+                cardId: body.cardId,
+                categoryId: body.categoryId,
+              },
+            },
+          },
+        );
+
+        if (participation) {
+          const newReviewCount = participation.reviewCountInContext + 1;
+          const correctInContext = isCorrect ? 1 : 0;
+
+          // Calculate new running averages
+          const oldSuccessRate = participation.contextSuccessRate || 0;
+          const newSuccessRate =
+            (oldSuccessRate * participation.reviewCountInContext +
+              correctInContext) /
+            newReviewCount;
+
+          const oldAvgTime =
+            participation.avgResponseTimeMs || body.responseTimeMs;
+          const newAvgTime = Math.round(
+            (oldAvgTime * participation.reviewCountInContext +
+              body.responseTimeMs) /
+              newReviewCount,
+          );
+
+          // Update lapse rate if this was a lapse
+          const wasLapse = body.rating === 1;
+          const oldLapseRate = participation.contextLapseRate || 0;
+          const newLapseRate = wasLapse
+            ? (oldLapseRate * participation.reviewCountInContext + 1) /
+              newReviewCount
+            : oldLapseRate;
+
+          // Calculate context mastery score (weighted combination)
+          const contextMasteryScore =
+            newSuccessRate * 0.6 +
+            (1 - newLapseRate) * 0.3 +
+            Math.min(newReviewCount / 10, 1) * 0.1;
+
+          await prisma.cardCategoryParticipation.update({
+            where: { id: participation.id },
+            data: {
+              reviewCountInContext: newReviewCount,
+              lastReviewedInContext: new Date(),
+              contextSuccessRate: newSuccessRate,
+              contextLapseRate: newLapseRate,
+              avgResponseTimeMs: newAvgTime,
+              contextMasteryScore,
+              confidenceRating:
+                body.contextConfidence ?? participation.confidenceRating,
+            },
+          });
+
+          // Check for performance divergence after update
+          await checkAndRecordDivergence(userId, body.cardId);
+
+          // Check synthesis triggers
+          await checkSynthesisTriggers(userId, body.cardId, body.categoryId);
+        }
+      }
 
       // Update deck counts if state changed
       if (card.state !== newState) {
@@ -431,4 +507,191 @@ function formatInterval(days: number): string {
   }
   const years = Math.round((days / 365) * 10) / 10;
   return `${years}y`;
+}
+
+// =============================================================================
+// MULTI-BELONGING INTEGRATION HELPERS
+// =============================================================================
+
+/**
+ * Check for performance divergence across contexts and record if significant
+ */
+async function checkAndRecordDivergence(
+  userId: string,
+  cardId: string,
+): Promise<void> {
+  // Get all participations with their context performance
+  const participations = await prisma.cardCategoryParticipation.findMany({
+    where: { cardId },
+    include: {
+      category: { select: { id: true, name: true } },
+    },
+  });
+
+  // Need at least 2 contexts with sufficient reviews to detect divergence
+  const significantContexts = participations.filter(
+    (p) => p.reviewCountInContext >= 3,
+  );
+
+  if (significantContexts.length < 2) return;
+
+  // Find best and worst performing contexts
+  const sorted = [...significantContexts].sort(
+    (a, b) => (b.contextSuccessRate || 0) - (a.contextSuccessRate || 0),
+  );
+
+  const best = sorted[0];
+  const worst = sorted[sorted.length - 1];
+  const spread =
+    (best.contextSuccessRate || 0) - (worst.contextSuccessRate || 0);
+
+  // Only record if spread is significant (> 20%)
+  if (spread < 0.2) return;
+
+  // Check if we already have an active divergence for this card
+  const existingDivergence = await prisma.performanceDivergence.findFirst({
+    where: { userId, cardId, status: "active" },
+  });
+
+  const severity =
+    spread >= 0.5 ? "severe" : spread >= 0.35 ? "moderate" : "mild";
+
+  const contextRankings = sorted.map((p, i) => ({
+    categoryId: p.categoryId,
+    accuracy: p.contextSuccessRate || 0,
+    rank: i + 1,
+  }));
+
+  if (existingDivergence) {
+    // Update existing divergence
+    await prisma.performanceDivergence.update({
+      where: { id: existingDivergence.id },
+      data: {
+        bestContextId: best.categoryId,
+        bestAccuracy: best.contextSuccessRate || 0,
+        worstContextId: worst.categoryId,
+        worstAccuracy: worst.contextSuccessRate || 0,
+        performanceSpread: spread,
+        severity,
+        contextRankings,
+      },
+    });
+  } else {
+    // Create new divergence record
+    await prisma.performanceDivergence.create({
+      data: {
+        userId,
+        cardId,
+        bestContextId: best.categoryId,
+        bestAccuracy: best.contextSuccessRate || 0,
+        worstContextId: worst.categoryId,
+        worstAccuracy: worst.contextSuccessRate || 0,
+        performanceSpread: spread,
+        severity,
+        contextRankings,
+        status: "active",
+        possibleCauses: [
+          "Different difficulty levels across contexts",
+          "Varying prerequisite knowledge",
+          "Context-specific terminology",
+        ],
+      },
+    });
+  }
+}
+
+/**
+ * Check if synthesis prompts should be triggered after a review
+ */
+async function checkSynthesisTriggers(
+  userId: string,
+  cardId: string,
+  categoryId: string,
+): Promise<void> {
+  // Get participation count
+  const participationCount = await prisma.cardCategoryParticipation.count({
+    where: { cardId },
+  });
+
+  // Check if divergence exists
+  const divergence = await prisma.performanceDivergence.findFirst({
+    where: { userId, cardId, status: "active" },
+  });
+
+  // Check for pending synthesis prompts
+  const pendingPrompts = await prisma.synthesisPrompt.count({
+    where: {
+      userId,
+      cardId,
+      status: { in: ["pending", "shown"] },
+    },
+  });
+
+  // Don't create more prompts if there are pending ones
+  if (pendingPrompts > 0) return;
+
+  // Trigger conditions
+  const shouldTrigger =
+    participationCount >= 3 || // High participation count
+    (divergence && divergence.severity !== "mild"); // Significant divergence
+
+  if (!shouldTrigger) return;
+
+  // Determine trigger type and create appropriate prompt
+  let triggerType: string;
+  let promptType: string;
+  let promptText: string;
+
+  if (divergence && divergence.severity !== "mild") {
+    triggerType = "performance_divergence";
+    promptType = "context_comparison";
+
+    const bestContext = await prisma.category.findUnique({
+      where: { id: divergence.bestContextId },
+      select: { name: true },
+    });
+    const worstContext = await prisma.category.findUnique({
+      where: { id: divergence.worstContextId },
+      select: { name: true },
+    });
+
+    promptText =
+      `You perform differently on this card across contexts. ` +
+      `Best: "${bestContext?.name}" (${Math.round((divergence.bestAccuracy || 0) * 100)}%), ` +
+      `Needs work: "${worstContext?.name}" (${Math.round((divergence.worstAccuracy || 0) * 100)}%). ` +
+      `What makes this concept harder in one context vs another?`;
+  } else {
+    triggerType = "high_participation_count";
+    promptType = "connection";
+    promptText =
+      `This card appears in ${participationCount} different contexts. ` +
+      `How do these different perspectives connect or build on each other?`;
+  }
+
+  // Get category IDs for this card
+  const categoryIds = await prisma.cardCategoryParticipation.findMany({
+    where: { cardId },
+    select: { categoryId: true },
+  });
+
+  // Create synthesis prompt
+  await prisma.synthesisPrompt.create({
+    data: {
+      userId,
+      cardId,
+      categoryIds: categoryIds.map((c) => c.categoryId),
+      triggerType,
+      promptType,
+      promptText,
+      triggerDetails: {
+        participationCount,
+        currentCategoryId: categoryId,
+        divergenceId: divergence?.id,
+        divergenceSeverity: divergence?.severity,
+      },
+      status: "pending",
+      alternativePrompts: [],
+      hints: [],
+    },
+  });
 }

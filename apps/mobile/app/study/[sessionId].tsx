@@ -16,11 +16,20 @@ import {
   useStudyQueue,
   useSubmitReview,
   useEndStudySession,
+  useCardParticipations,
 } from "@/services/api";
 import { useNativeDriver, shadows, haptics } from "@/utils/animation";
 import { useRequireAuth } from "@/components/AuthGuard";
+import { ActiveLensIndicator } from "@/components/multi-belonging";
+import { useEcosystemStore } from "@/stores/ecosystem.store";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+interface CardCategory {
+  id: string;
+  name: string;
+  color?: string;
+}
 
 interface Card {
   id: string;
@@ -28,6 +37,7 @@ interface Card {
   back: string;
   type: string;
   deckName?: string;
+  categories?: CardCategory[];
 }
 
 export default function StudySessionScreen() {
@@ -39,6 +49,17 @@ export default function StudySessionScreen() {
   const { data: studyQueue, isLoading: queueLoading } = useStudyQueue();
   const submitReview = useSubmitReview();
   const endSession = useEndStudySession();
+
+  // Get the focused category from ecosystem store as initial active lens
+  const focusedCategoryId = useEcosystemStore(
+    (state) => state.navigation.focusedCategoryId,
+  );
+  const categories = useEcosystemStore((state) => state.categories);
+
+  // Active lens state - which category context to track performance for
+  const [activeLensId, setActiveLensId] = useState<string | null>(
+    focusedCategoryId || null,
+  );
 
   // Store session cards locally to avoid issues with queue refetching
   const [sessionCards, setSessionCards] = useState<Card[]>([]);
@@ -77,12 +98,23 @@ export default function StudySessionScreen() {
                   ? backContent
                   : "No back content";
 
+            // Extract categories from participations
+            const cardCategories: CardCategory[] =
+              card.participations
+                ?.filter((p: any) => p.category)
+                .map((p: any) => ({
+                  id: p.category.id,
+                  name: p.category.name,
+                  color: p.category.color,
+                })) || [];
+
             return {
               id: card.id,
               front,
               back,
               type: card.cardType || "basic",
               deckName: card.deck?.name,
+              categories: cardCategories,
             };
           }),
         );
@@ -128,12 +160,21 @@ export default function StudySessionScreen() {
       haptics.heavy();
     }
 
+    // Determine the effective category for context tracking
+    // If activeLensId is set and the card participates in that category, use it
+    const effectiveCategoryId =
+      activeLensId && currentCard.categories?.some((c) => c.id === activeLensId)
+        ? activeLensId
+        : null;
+
     try {
       await submitReview.mutateAsync({
         cardId: currentCard.id,
         rating,
         responseTimeMs,
         studySessionId: sessionId,
+        // Include category context for multi-belonging tracking
+        ...(effectiveCategoryId && { categoryId: effectiveCategoryId }),
       });
 
       const isCorrect = rating >= 3;
@@ -535,6 +576,31 @@ export default function StudySessionScreen() {
           </View>
         )}
       </View>
+
+      {/* Active Lens Indicator - shows which category context is being tracked */}
+      {currentCard.categories && currentCard.categories.length > 0 && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+          }}
+        >
+          <ActiveLensIndicator
+            activeLens={
+              activeLensId
+                ? currentCard.categories.find((c) => c.id === activeLensId) ||
+                  null
+                : null
+            }
+            availableLenses={currentCard.categories}
+            onLensChange={(lensId) => setActiveLensId(lensId)}
+            size="compact"
+          />
+        </View>
+      )}
 
       {/* Card */}
       <View

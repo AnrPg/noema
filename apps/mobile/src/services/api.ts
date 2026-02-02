@@ -409,10 +409,25 @@ export function useSubmitReview() {
       responseTimeMs: number;
       studySessionId?: string;
       confidenceBefore?: number;
+      categoryId?: string; // Active lens/context for multi-belonging tracking
     }) => apiClient.post("/reviews", data),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["study", "queue"] });
       queryClient.invalidateQueries({ queryKey: ["study", "today"] });
+      // Invalidate participation data if context was provided
+      if (variables.categoryId) {
+        queryClient.invalidateQueries({
+          queryKey: ["participations", "card", variables.cardId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: [
+            "participations",
+            "context",
+            variables.cardId,
+            variables.categoryId,
+          ],
+        });
+      }
     },
   });
 }
