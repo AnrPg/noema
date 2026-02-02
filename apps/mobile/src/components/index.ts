@@ -19,3 +19,16 @@ export {
   LKGCModal,
   LKGCSection,
 } from "./settings";
+
+// Import Components
+export * from "./import";
+
+// Ecosystem Components (Knowledge Territories)
+export {
+  TerritoryMap,
+  ContextWheel,
+  ContextIndicator,
+  CategoryTree,
+  LearningModeSelector,
+  CategoryForm,
+} from "./ecosystem";
