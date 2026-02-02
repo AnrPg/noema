@@ -96,7 +96,7 @@ export type {
   DecisionConstraints,
   RetrievabilityRange,
   ContentFilters,
-  LearningMode,
+  SessionLearningMode,
   DeviceType,
   DecisionTimeOfDay,
   DecisionContext,

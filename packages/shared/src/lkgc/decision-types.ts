@@ -122,9 +122,10 @@ export interface ContentFilters {
 // =============================================================================
 
 /**
- * Learning mode
+ * Learning mode for study sessions (used in decision context)
+ * Different from ecosystem LearningMode for categories
  */
-export type LearningMode = "review" | "learn" | "exam" | "mixed";
+export type SessionLearningMode = "review" | "learn" | "exam" | "mixed";
 
 /**
  * Device type
@@ -141,7 +142,7 @@ export type DecisionTimeOfDay = "morning" | "afternoon" | "evening" | "night";
  */
 export interface DecisionContext {
   /** Current learning mode */
-  readonly mode: LearningMode;
+  readonly mode: SessionLearningMode;
 
   /** Device being used */
   readonly device: DeviceType;
