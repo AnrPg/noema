@@ -5,6 +5,56 @@
 export { useAuthStore } from "./auth.store";
 export { useStudyStore } from "./study.store";
 export { authState, useIsAuthenticated } from "./auth-state";
+export {
+  useImportStore,
+  useCurrentStep,
+  useSelectedFile,
+  useParsedSheets,
+  useMappings,
+  usePreviewCards,
+  useImportProgress,
+  useImportResult,
+  useRecentImports,
+  useCanProceed,
+} from "./import.store";
+export type {
+  ImportStep,
+  SelectedFile,
+  ParsedSheet,
+  FieldMapping,
+  PreviewCard,
+  ImportProgress,
+  ImportResult,
+  LocalDetectedSchema,
+} from "./import.store";
+
+// Knowledge Ecosystem store
+export {
+  useEcosystemStore,
+  selectCategories,
+  selectCategoryTree,
+  selectRelations,
+  selectNavigation,
+  selectGraph,
+  selectTerritory,
+  selectIsLoading,
+  selectError,
+  selectFocusedCategory,
+  selectSelectedCategories,
+  selectRootCategories,
+  selectPinnedCategories,
+  selectRecentCategories,
+  // Lens-based selectors
+  selectCategoriesBySemanticIntent,
+  selectLensesForCard,
+  selectAnnotationsByCategory,
+  selectEmphasisRulesForLens,
+  selectContextPerformance,
+  selectMetacognitiveInsights,
+  selectNeedsAttentionCategories,
+  selectCategoriesByMaturityStage,
+  selectCardMultiContextPresence,
+} from "./ecosystem.store";
 
 // Legacy settings store (deprecated - use settings-v2 for new features)
 export {
