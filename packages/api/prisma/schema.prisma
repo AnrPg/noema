@@ -56,6 +56,12 @@ model User {
   categorySuggestions CategorySuggestion[]
   multiContextReviewSessions MultiContextReviewSession[]
   
+  // Structural Refactoring relations
+  structuralRefactorEvents StructuralRefactorEvent[]
+  structuralSnapshots StructuralSnapshot[]
+  aiSplitSuggestions AISplitSuggestion[]
+  aiMergeSuggestions AIMergeSuggestion[]
+  
   @@index([email])
   @@index([createdAt])
 }
@@ -1334,6 +1340,279 @@ model CategoryEvolutionEvent {
   @@index([eventType])
   @@index([createdAt])
 }
+
+// =============================================================================
+// STRUCTURAL REFACTORING - SUBCATEGORIES AS COGNITIVE REFINEMENT
+// =============================================================================
+// Structural changes are LEARNING EVENTS, not admin edits.
+// They reflect evolution of understanding and must:
+// 1. Never reset spaced repetition schedules or card histories
+// 2. Maintain append-only event log for timeline and rollback
+// 3. Support offline-first conflict resolution
+// 4. Provide AI hooks for suggestions and analysis
+// =============================================================================
+
+// Structural refactor operation - append-only event log
+model StructuralRefactorEvent {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // OPERATION IDENTIFICATION
+  // =========================================================================
+  
+  // Type: split, merge, move, rename, archive, restore, bulk_reassign
+  operationType   String
+  
+  // Status: pending, in_progress, completed, failed, rolled_back, conflict
+  status          String   @default("pending")
+  
+  // Primary category involved
+  primaryCategoryId String
+  
+  // All categories affected by this operation
+  affectedCategoryIds String[] @default([])
+  
+  // All cards affected by this operation
+  affectedCardIds String[] @default([])
+  
+  // =========================================================================
+  // OPERATION DATA
+  // =========================================================================
+  
+  // Input parameters for the operation
+  operationInput  Json     // Full operation input (type-specific)
+  
+  // Result of the operation (if completed)
+  operationResult Json?    // Full operation result (type-specific)
+  
+  // User's articulated reason for this change
+  userReason      String?
+  
+  // AI-generated summary of the change
+  aiSummary       String?
+  
+  // =========================================================================
+  // SNAPSHOT REFERENCES
+  // =========================================================================
+  
+  // Snapshot taken before this operation
+  beforeSnapshotId String?
+  beforeSnapshot   StructuralSnapshot? @relation("BeforeSnapshot", fields: [beforeSnapshotId], references: [id], onDelete: SetNull)
+  
+  // Snapshot taken after this operation
+  afterSnapshotId  String?
+  afterSnapshot    StructuralSnapshot? @relation("AfterSnapshot", fields: [afterSnapshotId], references: [id], onDelete: SetNull)
+  
+  // =========================================================================
+  // ROLLBACK SUPPORT
+  // =========================================================================
+  
+  // Can this operation be rolled back?
+  isRollbackable  Boolean  @default(true)
+  
+  // Has this operation been rolled back?
+  wasRolledBack   Boolean  @default(false)
+  
+  // ID of the rollback event (if rolled back)
+  rollbackEventId String?
+  
+  // Reference to the original event (if this is a rollback)
+  originalEventId String?
+  originalEvent   StructuralRefactorEvent? @relation("RollbackChain", fields: [originalEventId], references: [id], onDelete: SetNull)
+  rollbacks       StructuralRefactorEvent[] @relation("RollbackChain")
+  
+  // =========================================================================
+  // OFFLINE CONFLICT HANDLING
+  // =========================================================================
+  
+  // Conflict information (if status = "conflict")
+  conflictInfo    Json?    // { conflictType, severity, conflictingClientId, ... }
+  
+  // Resolution information (if conflict was resolved)
+  conflictResolution Json? // { strategy, actions, resolvedBy, resolvedAt }
+  
+  // Client ID for offline sync
+  clientId        String?
+  
+  // Client timestamp for offline sync
+  clientTimestamp DateTime?
+  
+  // Server timestamp
+  serverTimestamp DateTime @default(now())
+  
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([operationType])
+  @@index([status])
+  @@index([primaryCategoryId])
+  @@index([clientId])
+  @@index([serverTimestamp])
+  @@index([createdAt])
+}
+
+// Point-in-time snapshot of category structure
+model StructuralSnapshot {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // SNAPSHOT IDENTIFICATION
+  // =========================================================================
+  
+  // User-provided name (for manually created snapshots)
+  name            String?
+  
+  // Was this auto-created (before refactor) or user-created?
+  isAutomatic     Boolean  @default(true)
+  
+  // Associated refactor event (if automatic)
+  refactorEventId String?
+  
+  // =========================================================================
+  // SNAPSHOT DATA
+  // =========================================================================
+  
+  // Full category tree structure (JSON array of SnapshotCategoryNode)
+  categoryTree    Json     // Array of category nodes with hierarchy
+  
+  // All category relations (JSON array of SnapshotRelation)
+  relations       Json     // Array of relation objects
+  
+  // Card category participations (JSON array of SnapshotParticipation)
+  participations  Json     // Array of participation objects
+  
+  // =========================================================================
+  // STATISTICS AT SNAPSHOT TIME
+  // =========================================================================
+  
+  totalCategories Int      @default(0)
+  totalCards      Int      @default(0)
+  totalRelations  Int      @default(0)
+  maxDepth        Int      @default(0)
+  
+  // =========================================================================
+  // LIFECYCLE
+  // =========================================================================
+  
+  // Expiration (null = never expires)
+  expiresAt       DateTime?
+  
+  createdAt       DateTime @default(now())
+  
+  // Relations
+  beforeRefactorEvents StructuralRefactorEvent[] @relation("BeforeSnapshot")
+  afterRefactorEvents  StructuralRefactorEvent[] @relation("AfterSnapshot")
+  
+  @@index([userId])
+  @@index([isAutomatic])
+  @@index([refactorEventId])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+// AI-generated suggestion for category split
+model AISplitSuggestion {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Target category
+  categoryId      String
+  
+  // =========================================================================
+  // SUGGESTION DATA
+  // =========================================================================
+  
+  // Source of the suggestion
+  source          String   // card_clustering, naming_pattern, performance_divergence, etc.
+  
+  // Confidence score (0-1)
+  confidence      Float    @default(0.5)
+  
+  // Suggested children (JSON array)
+  suggestedChildren Json   // Array of { name, description, framingQuestion, cardIds, rationale }
+  
+  // Overall rationale for the split
+  overallRationale String
+  
+  // =========================================================================
+  // STATUS
+  // =========================================================================
+  
+  status          String   @default("pending") // pending, accepted, rejected, deferred
+  respondedAt     DateTime?
+  
+  // If accepted, the refactor event ID
+  refactorEventId String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([confidence])
+  @@index([createdAt])
+}
+
+// AI-generated suggestion for category merge
+model AIMergeSuggestion {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Source categories
+  sourceCategoryIds String[]
+  
+  // =========================================================================
+  // SUGGESTION DATA
+  // =========================================================================
+  
+  // Source of the suggestion
+  source          String   // content_similarity, usage_pattern, etc.
+  
+  // Confidence score (0-1)
+  confidence      Float    @default(0.5)
+  
+  // Suggested merged category
+  suggestedName   String
+  suggestedFramingQuestion String?
+  
+  // Rationale
+  rationale       String
+  
+  // Overlap analysis (JSON)
+  overlapAnalysis Json     // { sharedCardCount, sharedThemes, contentSimilarity }
+  
+  // =========================================================================
+  // STATUS
+  // =========================================================================
+  
+  status          String   @default("pending") // pending, accepted, rejected, deferred
+  respondedAt     DateTime?
+  
+  // If accepted, the refactor event ID
+  refactorEventId String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([status])
+  @@index([confidence])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// END STRUCTURAL REFACTORING
+// =============================================================================
 
 // User's current learning mode/flow state
 model UserLearningFlow {
