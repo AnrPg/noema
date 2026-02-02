@@ -187,7 +187,9 @@ export type DataSourceType =
   | "excel"
   | "google_sheets"
   | "json"
+  | "yaml"
   | "markdown"
+  | "typst"
   | "pdf"
   | "docx"
   | "txt"
@@ -919,6 +921,170 @@ export interface ImportStatistics {
   readonly duplicatesHandled: number;
   readonly transformationsApplied: number;
   readonly averageCardQualityScore: number;
+}
+
+// =============================================================================
+// UX GUIDANCE & WORKFLOW TYPES
+// =============================================================================
+
+/**
+ * Import step for UX guidance
+ */
+export type ImportStep =
+  | "select_files"
+  | "review_files"
+  | "configure_mapping"
+  | "target_settings"
+  | "preview_cards"
+  | "confirm_import"
+  | "import_progress"
+  | "import_complete";
+
+/**
+ * Step definition with guidance for UI
+ */
+export interface ImportStepDefinition {
+  readonly step: ImportStep;
+  readonly title: string;
+  readonly description: string;
+  readonly helpText: string | null;
+  readonly isOptional: boolean;
+  readonly canSkip: boolean;
+  readonly estimatedDuration: string; // e.g., "30 seconds", "1-2 minutes"
+  readonly prerequisites: readonly ImportStep[];
+}
+
+/**
+ * Workflow configuration based on import mode
+ */
+export interface ImportWorkflowConfig {
+  readonly mode: ImportMode;
+  readonly steps: readonly ImportStepDefinition[];
+  readonly allowStepSkipping: boolean;
+  readonly showProgressIndicator: boolean;
+  readonly autoAdvanceOnComplete: boolean;
+  readonly confirmBeforeAdvance: boolean;
+}
+
+/**
+ * UX state for tracking wizard progress
+ */
+export interface ImportWizardState {
+  readonly currentStep: ImportStep;
+  readonly completedSteps: readonly ImportStep[];
+  readonly skippedSteps: readonly ImportStep[];
+  readonly validationState: Record<ImportStep, StepValidationState>;
+  readonly canProceed: boolean;
+  readonly canGoBack: boolean;
+  readonly blockers: readonly string[];
+}
+
+/**
+ * Validation state for a step
+ */
+export interface StepValidationState {
+  readonly isValid: boolean;
+  readonly errors: readonly string[];
+  readonly warnings: readonly string[];
+  readonly isPending: boolean;
+}
+
+/**
+ * Help content for a specific context
+ */
+export interface ImportHelpContent {
+  readonly id: string;
+  readonly title: string;
+  readonly content: string;
+  readonly type: "tooltip" | "popover" | "modal" | "inline";
+  readonly mediaUrl: string | null; // Video or image URL
+  readonly learnMoreUrl: string | null;
+}
+
+/**
+ * Quick action for common operations
+ */
+export interface ImportQuickAction {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly icon: string;
+  readonly action:
+    | "apply_suggestions"
+    | "auto_map"
+    | "clear_mappings"
+    | "swap_front_back"
+    | "bulk_tag"
+    | "preview_all";
+  readonly isDestructive: boolean;
+  readonly requiresConfirmation: boolean;
+}
+
+/**
+ * Import template for reusable configurations
+ */
+export interface ImportTemplate {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly sourceType: DataSourceType | "any";
+  readonly targetConfig: Partial<ImportTargetConfig>;
+  readonly mappingRules: readonly MappingRule[];
+  readonly transformations: readonly FieldTransformation[];
+  readonly createdAt: Date;
+  readonly lastUsedAt: Date | null;
+  readonly useCount: number;
+  readonly isBuiltIn: boolean;
+  readonly isShared: boolean;
+}
+
+/**
+ * Rule for automatic mapping
+ */
+export interface MappingRule {
+  readonly id: string;
+  readonly name: string;
+  readonly condition: MappingCondition;
+  readonly target: CardTargetField;
+  readonly transformation: FieldTransformation | null;
+  readonly priority: number;
+}
+
+/**
+ * Condition for applying a mapping rule
+ */
+export interface MappingCondition {
+  readonly type:
+    | "header_name"
+    | "header_pattern"
+    | "data_type"
+    | "semantic_type"
+    | "column_index";
+  readonly value: string | number;
+  readonly operator:
+    | "equals"
+    | "contains"
+    | "starts_with"
+    | "ends_with"
+    | "matches"
+    | "greater_than"
+    | "less_than";
+  readonly caseSensitive: boolean;
+}
+
+/**
+ * Import history entry for recent imports
+ */
+export interface ImportHistoryEntry {
+  readonly sessionId: ImportSessionId;
+  readonly filename: string;
+  readonly sourceType: DataSourceType;
+  readonly importedAt: Date;
+  readonly cardCount: number;
+  readonly deckName: string;
+  readonly status: "success" | "partial" | "failed";
+  readonly templateUsed: string | null;
+  readonly canReimport: boolean;
 }
 
 // =============================================================================

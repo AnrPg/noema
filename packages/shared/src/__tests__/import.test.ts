@@ -12,7 +12,6 @@ const {
   ParserRegistry,
   SchemaInferenceEngine,
   parseFile,
-  analyzeSheet,
   isFileTypeSupported,
   getSupportedExtensions,
   getSupportedMimeTypes,
@@ -21,6 +20,26 @@ const {
   IMPORT_MODES,
   DUPLICATE_STRATEGIES,
 } = DataImport;
+
+// Helper to create properly typed CellValue objects for tests
+function createTestCellValue(
+  columnIndex: number,
+  rawValue: unknown,
+  dataType: DataImport.InferredDataType = "string",
+): DataImport.CellValue {
+  return {
+    columnIndex,
+    rawValue,
+    displayValue: String(rawValue),
+    formattedValue: null,
+    formula: null,
+    dataType,
+    style: null,
+    isNull: rawValue === null || rawValue === undefined,
+    isMerged: false,
+    mergeSpan: null,
+  };
+}
 
 // =============================================================================
 // PARSER TESTS
@@ -299,24 +318,9 @@ describe("SchemaInferenceEngine", () => {
             nullCount: 0,
             uniqueCount: 3,
             sampleValues: [
-              {
-                rawValue: "Alice",
-                displayValue: "Alice",
-                isNull: false,
-                originalType: "string",
-              },
-              {
-                rawValue: "Bob",
-                displayValue: "Bob",
-                isNull: false,
-                originalType: "string",
-              },
-              {
-                rawValue: "Charlie",
-                displayValue: "Charlie",
-                isNull: false,
-                originalType: "string",
-              },
+              createTestCellValue(0, "Alice", "string"),
+              createTestCellValue(0, "Bob", "string"),
+              createTestCellValue(0, "Charlie", "string"),
             ],
             semanticType: null,
             semanticConfidence: 0,
@@ -332,24 +336,9 @@ describe("SchemaInferenceEngine", () => {
             nullCount: 0,
             uniqueCount: 3,
             sampleValues: [
-              {
-                rawValue: 25,
-                displayValue: "25",
-                isNull: false,
-                originalType: "number",
-              },
-              {
-                rawValue: 30,
-                displayValue: "30",
-                isNull: false,
-                originalType: "number",
-              },
-              {
-                rawValue: 35,
-                displayValue: "35",
-                isNull: false,
-                originalType: "number",
-              },
+              createTestCellValue(1, 25, "integer"),
+              createTestCellValue(1, 30, "integer"),
+              createTestCellValue(1, 35, "integer"),
             ],
             semanticType: null,
             semanticConfidence: 0,
@@ -365,42 +354,20 @@ describe("SchemaInferenceEngine", () => {
             nullCount: 0,
             uniqueCount: 3,
             sampleValues: [
-              {
-                rawValue: "alice@example.com",
-                displayValue: "alice@example.com",
-                isNull: false,
-                originalType: "string",
-              },
-              {
-                rawValue: "bob@example.com",
-                displayValue: "bob@example.com",
-                isNull: false,
-                originalType: "string",
-              },
-              {
-                rawValue: "charlie@example.com",
-                displayValue: "charlie@example.com",
-                isNull: false,
-                originalType: "string",
-              },
+              createTestCellValue(2, "alice@example.com", "email"),
+              createTestCellValue(2, "bob@example.com", "email"),
+              createTestCellValue(2, "charlie@example.com", "email"),
             ],
             semanticType: null,
             semanticConfidence: 0,
             issues: [],
           },
         ],
-        rows: [
-          { index: 0, rowType: "header", cells: [], issues: [] },
-          { index: 1, rowType: "data", cells: [], issues: [] },
-          { index: 2, rowType: "data", cells: [], issues: [] },
-          { index: 3, rowType: "data", cells: [], issues: [] },
-        ],
+        headerRow: 0,
+        dataStartRow: 1,
+        dataEndRow: 3,
         sampleRows: [],
-        headerRowIndex: 0,
-        dataStartRowIndex: 1,
-        hasMultipleHeaderRows: false,
         issues: [],
-        mergedCells: [],
       };
 
       const schema = engine.analyzeSheet(sheet);
@@ -431,18 +398,8 @@ describe("SchemaInferenceEngine", () => {
             nullCount: 0,
             uniqueCount: 2,
             sampleValues: [
-              {
-                rawValue: "Question 1",
-                displayValue: "Question 1",
-                isNull: false,
-                originalType: "string",
-              },
-              {
-                rawValue: "Question 2",
-                displayValue: "Question 2",
-                isNull: false,
-                originalType: "string",
-              },
+              createTestCellValue(0, "Question 1", "string"),
+              createTestCellValue(0, "Question 2", "string"),
             ],
             semanticType: "front",
             semanticConfidence: 0.9,
@@ -458,35 +415,19 @@ describe("SchemaInferenceEngine", () => {
             nullCount: 0,
             uniqueCount: 2,
             sampleValues: [
-              {
-                rawValue: "Answer 1",
-                displayValue: "Answer 1",
-                isNull: false,
-                originalType: "string",
-              },
-              {
-                rawValue: "Answer 2",
-                displayValue: "Answer 2",
-                isNull: false,
-                originalType: "string",
-              },
+              createTestCellValue(1, "Answer 1", "string"),
+              createTestCellValue(1, "Answer 2", "string"),
             ],
             semanticType: "back",
             semanticConfidence: 0.9,
             issues: [],
           },
         ],
-        rows: [
-          { index: 0, rowType: "header", cells: [], issues: [] },
-          { index: 1, rowType: "data", cells: [], issues: [] },
-          { index: 2, rowType: "data", cells: [], issues: [] },
-        ],
+        headerRow: 0,
+        dataStartRow: 1,
+        dataEndRow: 2,
         sampleRows: [],
-        headerRowIndex: 0,
-        dataStartRowIndex: 1,
-        hasMultipleHeaderRows: false,
         issues: [],
-        mergedCells: [],
       };
 
       const schema = engine.analyzeSheet(sheet);
