@@ -1,10 +1,17 @@
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl, FlatList } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { useState, useCallback } from 'react';
-import { useColors } from '@/theme/ThemeProvider';
-import { useDecks, useCreateDeck } from '@/services/api';
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  FlatList,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { router } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useState, useCallback } from "react";
+import { useColors } from "@/theme/ThemeProvider";
+import { useDecks, useCreateDeck } from "@/services/api";
 
 interface Deck {
   id: string;
@@ -33,7 +40,7 @@ export default function DecksScreen() {
 
   const handleCreateDeck = () => {
     // TODO: Open create deck modal
-    router.push('/deck/new');
+    router.push("/deck/new");
   };
 
   const renderDeckCard = ({ item }: { item: Deck }) => (
@@ -49,13 +56,13 @@ export default function DecksScreen() {
         borderColor: colors.border,
       }}
     >
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <View style={{ flex: 1 }}>
           <Text
             style={{
               color: colors.text,
               fontSize: 18,
-              fontWeight: '600',
+              fontWeight: "600",
               marginBottom: 4,
             }}
           >
@@ -76,7 +83,7 @@ export default function DecksScreen() {
       {/* Stats Row */}
       <View
         style={{
-          flexDirection: 'row',
+          flexDirection: "row",
           marginTop: 12,
           paddingTop: 12,
           borderTopWidth: 1,
@@ -84,7 +91,7 @@ export default function DecksScreen() {
           gap: 16,
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
           <Ionicons name="layers-outline" size={16} color={colors.textMuted} />
           <Text style={{ color: colors.textSecondary, fontSize: 14 }}>
             {item.cardCount} cards
@@ -93,8 +100,8 @@ export default function DecksScreen() {
         {item.dueCount > 0 && (
           <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
+              flexDirection: "row",
+              alignItems: "center",
               gap: 4,
               backgroundColor: colors.warningLight,
               paddingHorizontal: 8,
@@ -103,7 +110,9 @@ export default function DecksScreen() {
             }}
           >
             <Ionicons name="time-outline" size={14} color={colors.warning} />
-            <Text style={{ color: colors.warning, fontSize: 12, fontWeight: '500' }}>
+            <Text
+              style={{ color: colors.warning, fontSize: 12, fontWeight: "500" }}
+            >
               {item.dueCount} due
             </Text>
           </View>
@@ -111,17 +120,19 @@ export default function DecksScreen() {
         {item.newCount > 0 && (
           <View
             style={{
-              flexDirection: 'row',
-              alignItems: 'center',
+              flexDirection: "row",
+              alignItems: "center",
               gap: 4,
-              backgroundColor: colors.primaryLight + '30',
+              backgroundColor: colors.primaryLight + "30",
               paddingHorizontal: 8,
               paddingVertical: 2,
               borderRadius: 8,
             }}
           >
             <Ionicons name="sparkles" size={14} color={colors.primary} />
-            <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '500' }}>
+            <Text
+              style={{ color: colors.primary, fontSize: 12, fontWeight: "500" }}
+            >
               {item.newCount} new
             </Text>
           </View>
@@ -130,7 +141,14 @@ export default function DecksScreen() {
 
       {/* Tags */}
       {item.tags && item.tags.length > 0 && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
           {item.tags.slice(0, 3).map((tag, index) => (
             <View
               key={index}
@@ -147,7 +165,13 @@ export default function DecksScreen() {
             </View>
           ))}
           {item.tags.length > 3 && (
-            <Text style={{ color: colors.textMuted, fontSize: 12, alignSelf: 'center' }}>
+            <Text
+              style={{
+                color: colors.textMuted,
+                fontSize: 12,
+                alignSelf: "center",
+              }}
+            >
               +{item.tags.length - 3} more
             </Text>
           )}
@@ -157,15 +181,22 @@ export default function DecksScreen() {
   );
 
   const EmptyState = () => (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 48 }}>
+    <View
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 48,
+      }}
+    >
       <View
         style={{
           width: 80,
           height: 80,
           borderRadius: 40,
           backgroundColor: colors.surfaceVariant,
-          alignItems: 'center',
-          justifyContent: 'center',
+          alignItems: "center",
+          justifyContent: "center",
           marginBottom: 16,
         }}
       >
@@ -175,7 +206,7 @@ export default function DecksScreen() {
         style={{
           color: colors.text,
           fontSize: 20,
-          fontWeight: '600',
+          fontWeight: "600",
           marginBottom: 8,
         }}
       >
@@ -185,7 +216,7 @@ export default function DecksScreen() {
         style={{
           color: colors.textSecondary,
           fontSize: 16,
-          textAlign: 'center',
+          textAlign: "center",
           marginBottom: 24,
         }}
       >
@@ -198,13 +229,13 @@ export default function DecksScreen() {
           borderRadius: 12,
           paddingVertical: 12,
           paddingHorizontal: 24,
-          flexDirection: 'row',
-          alignItems: 'center',
+          flexDirection: "row",
+          alignItems: "center",
           gap: 8,
         }}
       >
         <Ionicons name="add" size={20} color={colors.onPrimary} />
-        <Text style={{ color: colors.onPrimary, fontWeight: '600' }}>
+        <Text style={{ color: colors.onPrimary, fontWeight: "600" }}>
           Create Deck
         </Text>
       </TouchableOpacity>
@@ -216,9 +247,9 @@ export default function DecksScreen() {
       {/* Header */}
       <View
         style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
           paddingHorizontal: 24,
           paddingVertical: 16,
         }}
@@ -227,21 +258,33 @@ export default function DecksScreen() {
           style={{
             color: colors.text,
             fontSize: 28,
-            fontWeight: 'bold',
+            fontWeight: "bold",
           }}
         >
           Decks
         </Text>
-        <TouchableOpacity
-          onPress={handleCreateDeck}
-          style={{
-            backgroundColor: colors.primary,
-            borderRadius: 12,
-            padding: 10,
-          }}
-        >
-          <Ionicons name="add" size={24} color={colors.onPrimary} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => router.push("/import" as any)}
+            style={{
+              backgroundColor: colors.surfaceVariant,
+              borderRadius: 12,
+              padding: 10,
+            }}
+          >
+            <Ionicons name="cloud-upload" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleCreateDeck}
+            style={{
+              backgroundColor: colors.primary,
+              borderRadius: 12,
+              padding: 10,
+            }}
+          >
+            <Ionicons name="add" size={24} color={colors.onPrimary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Search */}
@@ -253,13 +296,15 @@ export default function DecksScreen() {
           borderRadius: 12,
           paddingHorizontal: 16,
           paddingVertical: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
+          flexDirection: "row",
+          alignItems: "center",
           gap: 8,
         }}
       >
         <Ionicons name="search" size={20} color={colors.textMuted} />
-        <Text style={{ color: colors.textMuted, flex: 1 }}>Search decks...</Text>
+        <Text style={{ color: colors.textMuted, flex: 1 }}>
+          Search decks...
+        </Text>
       </TouchableOpacity>
 
       {/* Decks List */}
