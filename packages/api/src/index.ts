@@ -31,7 +31,14 @@ import { reviewRoutes } from "./routes/review.routes.js";
 import { studyRoutes } from "./routes/study.routes.js";
 import { gamificationRoutes } from "./routes/gamification.routes.js";
 import { pluginRoutes } from "./routes/plugin.routes.js";
-import { uploadRoutes } from "./routes/upload.routes.js";
+import { uploadRoutes } from "./routes/upload.routes";
+import { categoryRoutes } from "./routes/category.routes";
+import { learningFlowRoutes } from "./routes/learning-flow.routes";
+import { annotationRoutes } from "./routes/annotation.routes";
+import { emphasisRoutes } from "./routes/emphasis.routes";
+import { multiContextRoutes } from "./routes/multi-context.routes";
+import { syncRoutes } from "./routes/sync.routes";
+import { aiAugmentationRoutes } from "./routes/ai-augmentation.routes";
 
 // GraphQL
 import { schema } from "./graphql/schema.js";
@@ -128,6 +135,25 @@ async function buildServer() {
         { name: "Gamification", description: "XP, achievements, and progress" },
         { name: "Plugins", description: "Plugin management" },
         { name: "Uploads", description: "File uploads and parsing" },
+        { name: "Categories", description: "Knowledge ecosystem categories" },
+        {
+          name: "Learning Flow",
+          description: "Learning modes and dynamic decks",
+        },
+        {
+          name: "Annotations",
+          description: "Contextual annotations (marginalia)",
+        },
+        { name: "Emphasis", description: "Differential emphasis rules" },
+        {
+          name: "Multi-Context",
+          description: "Multi-context awareness and metacognition",
+        },
+        { name: "Sync", description: "Offline-first synchronization" },
+        {
+          name: "AI Augmentation",
+          description: "AI-powered learning enhancements",
+        },
       ],
     },
   });
@@ -199,6 +225,13 @@ async function buildServer() {
   await app.register(gamificationRoutes, { prefix: "/api/v1/gamification" });
   await app.register(pluginRoutes, { prefix: "/api/v1/plugins" });
   await app.register(uploadRoutes, { prefix: "/api/v1/uploads" });
+  await app.register(categoryRoutes, { prefix: "/api/v1/categories" });
+  await app.register(learningFlowRoutes, { prefix: "/api/v1/learning" });
+  await app.register(annotationRoutes, { prefix: "/api/v1/annotations" });
+  await app.register(emphasisRoutes, { prefix: "/api/v1/emphasis" });
+  await app.register(multiContextRoutes, { prefix: "/api/v1/multi-context" });
+  await app.register(syncRoutes, { prefix: "/api/v1/sync" });
+  await app.register(aiAugmentationRoutes, { prefix: "/api/v1/ai" });
 
   // ==========================================================================
   // ERROR HANDLING

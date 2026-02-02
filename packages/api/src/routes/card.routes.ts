@@ -39,6 +39,9 @@ const bulkCreateSchema = z.object({
       source: z.string().optional(),
     }),
   ),
+  duplicateStrategy: z
+    .enum(["skip", "update", "create_anyway"])
+    .default("skip"),
 });
 
 const querySchema = z.object({
@@ -269,38 +272,112 @@ export async function cardRoutes(app: FastifyInstance) {
 
       let position = lastCard?.position || 0;
 
-      // Create cards
-      const cards = await prisma.card.createMany({
-        data: body.cards.map((card) => ({
-          userId: request.user!.id,
-          deckId: body.deckId,
-          cardType: card.cardType,
-          content: card.content,
-          tags: card.tags || [],
-          notes: card.notes,
-          source: card.source,
-          position: ++position,
-        })),
-      });
+      // Handle duplicate detection
+      const { duplicateStrategy } = body;
+      let cardsToCreate = body.cards;
+      let skipped = 0;
+      let updated = 0;
 
-      // Update counts
-      await prisma.deck.update({
-        where: { id: body.deckId },
-        data: {
-          cardCount: { increment: body.cards.length },
-          newCount: { increment: body.cards.length },
-        },
-      });
+      if (duplicateStrategy !== "create_anyway") {
+        // Get existing cards in the deck to check for duplicates
+        const existingCards = await prisma.card.findMany({
+          where: { deckId: body.deckId, userId: request.user!.id },
+          select: { id: true, content: true },
+        });
 
-      await prisma.userLearningStats.update({
-        where: { userId: request.user!.id },
-        data: {
-          cardsCreated: { increment: body.cards.length },
-          totalCards: { increment: body.cards.length },
-        },
-      });
+        // Create a map of existing card content for fast lookup
+        // We'll use a hash of front+back content for basic cards
+        const existingContentMap = new Map<string, string>();
+        for (const card of existingCards) {
+          const content = card.content as Record<string, unknown>;
+          const frontBack = `${content.front || ""}::${content.back || ""}`;
+          existingContentMap.set(frontBack, card.id);
+        }
 
-      return reply.status(201).send({ created: cards.count });
+        if (duplicateStrategy === "skip") {
+          // Filter out duplicates
+          cardsToCreate = body.cards.filter((card) => {
+            const frontBack = `${card.content.front || ""}::${card.content.back || ""}`;
+            if (existingContentMap.has(frontBack)) {
+              skipped++;
+              return false;
+            }
+            return true;
+          });
+        } else if (duplicateStrategy === "update") {
+          // Separate cards to update vs create
+          const cardsToUpdate: Array<{
+            id: string;
+            card: (typeof body.cards)[0];
+          }> = [];
+          cardsToCreate = [];
+
+          for (const card of body.cards) {
+            const frontBack = `${card.content.front || ""}::${card.content.back || ""}`;
+            const existingId = existingContentMap.get(frontBack);
+            if (existingId) {
+              cardsToUpdate.push({ id: existingId, card });
+            } else {
+              cardsToCreate.push(card);
+            }
+          }
+
+          // Update existing cards
+          for (const { id, card } of cardsToUpdate) {
+            await prisma.card.update({
+              where: { id },
+              data: {
+                tags: card.tags || [],
+                notes: card.notes,
+                source: card.source,
+                updatedAt: new Date(),
+              },
+            });
+            updated++;
+          }
+        }
+      }
+
+      // Create new cards (if any)
+      let createdCount = 0;
+      if (cardsToCreate.length > 0) {
+        const cards = await prisma.card.createMany({
+          data: cardsToCreate.map((card) => ({
+            userId: request.user!.id,
+            deckId: body.deckId,
+            cardType: card.cardType,
+            content: card.content,
+            tags: card.tags || [],
+            notes: card.notes,
+            source: card.source,
+            position: ++position,
+          })),
+        });
+        createdCount = cards.count;
+
+        // Update counts only for newly created cards
+        await prisma.deck.update({
+          where: { id: body.deckId },
+          data: {
+            cardCount: { increment: createdCount },
+            newCount: { increment: createdCount },
+          },
+        });
+
+        await prisma.userLearningStats.update({
+          where: { userId: request.user!.id },
+          data: {
+            cardsCreated: { increment: createdCount },
+            totalCards: { increment: createdCount },
+          },
+        });
+      }
+
+      return reply.status(201).send({
+        created: createdCount,
+        skipped,
+        updated,
+      });
     },
   );
 
