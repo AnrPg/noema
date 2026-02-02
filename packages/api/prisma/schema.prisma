@@ -49,6 +49,13 @@ model User {
   studySessions  StudySession[]
   notifications  Notification[]
   
+  // Knowledge Ecosystem relations
+  categories     Category[]
+  learningFlow   UserLearningFlow?
+  dynamicDecks   DynamicDeck[]
+  categorySuggestions CategorySuggestion[]
+  multiContextReviewSessions MultiContextReviewSession[]
+  
   @@index([email])
   @@index([createdAt])
 }
@@ -299,6 +306,12 @@ model Card {
   reviews         ReviewRecord[]
   relatedCards    CardRelation[] @relation("SourceCard")
   relatedTo       CardRelation[] @relation("TargetCard")
+  
+  // Knowledge Ecosystem relations
+  categoryParticipations CardCategoryParticipation[]
+  contextFaces    CardContextFace[]
+  contextualAnnotations ContextualAnnotation[]
+  contextPerformanceRecords ContextPerformanceRecord[]
   
   @@index([userId])
   @@index([deckId])
@@ -649,25 +662,776 @@ model Upload {
 }
 
 // =============================================================================
-// SYNC & OFFLINE
+// SYNC & OFFLINE - Enhanced for offline-first architecture
 // =============================================================================
 
 model SyncLog {
-  id          String   @id @default(cuid())
-  userId      String
-  deviceId    String
+  id              String   @id @default(cuid())
+  userId          String
+  deviceId        String?   // Legacy field for backward compatibility
+  clientId        String?   // New: identifies client device
   
-  entityType  String   // card, deck, review
-  entityId    String
-  operation   String   // create, update, delete
-  data        Json
+  // Entity-level tracking (legacy)
+  entityType      String?  // card, deck, review
+  entityId        String?
+  operation       String?  // create, update, delete
+  data            Json?
   
-  serverVersion Int
-  clientVersion Int
+  // Version tracking
+  serverVersion   Int      @default(0)
+  clientVersion   Int      @default(0)
   
-  syncedAt    DateTime @default(now())
+  // Session-level tracking (new)
+  direction       String?  // push, pull, bidirectional
+  changesCount    Int      @default(0)
+  acceptedCount   Int      @default(0)
+  rejectedCount   Int      @default(0)
+  conflictsCount  Int      @default(0)
+  completedAt     DateTime?
+  
+  syncedAt        DateTime @default(now())
+  createdAt       DateTime @default(now())
   
   @@index([userId])
   @@index([deviceId])
+  @@index([clientId])
   @@index([serverVersion])
+  @@index([completedAt])
 }
+
+// Pending conflicts awaiting resolution
+model PendingConflict {
+  id              String   @id @default(cuid())
+  userId          String
+  entityType      String
+  entityId        String
+  conflictData    Json     // Full conflict details including local/remote changes
+  severity        String   @default("medium") // critical, high, medium, low
+  autoResolvable  Boolean  @default(false)
+  detectedAt      DateTime @default(now())
+  
+  @@unique([userId, entityType, entityId])
+  @@index([userId])
+  @@index([detectedAt])
+}
+
+// Deletion log for tracking deleted entities across syncs
+model DeletionLog {
+  id              String   @id @default(cuid())
+  userId          String
+  entityType      String
+  entityId        String
+  deletedAt       DateTime @default(now())
+  syncedClients   String[] @default([]) // Clients that have acknowledged deletion
+  
+  @@unique([entityType, entityId])
+  @@index([userId])
+  @@index([deletedAt])
+}
+
+// =============================================================================
+// KNOWLEDGE ECOSYSTEM - CATEGORIES & SEMANTIC TERRITORIES
+// =============================================================================
+
+// =============================================================================
+// CATEGORY = LENS PARADIGM
+// Categories are INTERPRETIVE LENSES, not containers. A card exists once;
+// categories define the epistemic context through which cards are viewed.
+// =============================================================================
+
+// Categories are semantic lenses - interpretive contexts for knowledge
+model Category {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // CORE IDENTITY - What defines this lens
+  // =========================================================================
+  name            String
+  description     String?
+  iconEmoji       String?
+  color           String?  // Hex color for visual identity
+  coverImageUrl   String?
+  
+  // =========================================================================
+  // LENS DEFINITION - The epistemic framing this category provides
+  // =========================================================================
+  
+  // The framing question - the epistemic prompt that defines this lens
+  // e.g., "How does this relate to memory systems?" or "What does this mean for clinical practice?"
+  framingQuestion String?
+  
+  // Semantic intent - what kind of meaning does this lens extract?
+  semanticIntent  String?  // e.g., "theoretical foundations", "practical applications", "historical context"
+  
+  // Visual identity layer - how cards should be visually distinguished in this context
+  visualIdentityLayer Json?  // { borderColor?, backgroundColor?, iconOverlay?, badgeText? }
+  
+  // Interpretation priority - when multiple lenses apply, which takes precedence?
+  interpretationPriority Int @default(50) // 0-100, higher = more dominant
+  
+  // What should a learner understand about cards viewed through this lens?
+  learningGoals   String[] @default([]) // Array of learning objectives
+  
+  // =========================================================================
+  // HIERARCHY (soft conceptual containment, not storage)
+  // =========================================================================
+  parentId        String?
+  parent          Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Category[] @relation("CategoryHierarchy")
+  depth           Int      @default(0)
+  path            String[] @default([]) // Materialized path for efficient queries
+  
+  // =========================================================================
+  // LEARNING PARAMETERS - How this lens affects SRS behavior
+  // =========================================================================
+  learningIntent  String   @default("foundational") // foundational, contextual, reference
+  depthGoal       String   @default("recall") // recognition, recall, application, synthesis
+  difficultyMultiplier Float @default(1.0) // Adjust difficulty for cards in this context
+  decayRateMultiplier Float @default(1.0) // Adjust memory decay rate
+  
+  // =========================================================================
+  // MATURITY & STATUS
+  // =========================================================================
+  maturityStage   String   @default("acquisition") // acquisition, differentiation, crystallization
+  isArchived      Boolean  @default(false)
+  isPinned        Boolean  @default(false)
+  
+  // =========================================================================
+  // AGGREGATED STATS (denormalized for performance)
+  // =========================================================================
+  cardCount       Int      @default(0)
+  masteryScore    Float    @default(0)
+  lastStudiedAt   DateTime?
+  totalStudyTime  Int      @default(0) // Minutes
+  
+  // =========================================================================
+  // ORDERING & UI STATE
+  // =========================================================================
+  position        Int      @default(0)
+  
+  // =========================================================================
+  // PLUGIN EXTENSIBILITY - Categories can be enhanced by plugins
+  // =========================================================================
+  pluginData      Json     @default("{}") // Arbitrary plugin-specific data
+  enabledPlugins  String[] @default([])   // Plugin slugs that enhance this category
+  
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // =========================================================================
+  // RELATIONS
+  // =========================================================================
+  cardParticipations      CardCategoryParticipation[]
+  outgoingRelations       CategoryRelation[] @relation("SourceCategory")
+  incomingRelations       CategoryRelation[] @relation("TargetCategory")
+  learningModes           CategoryLearningMode[]
+  evolutionHistory        CategoryEvolutionEvent[]
+  contextFaces            CardContextFace[]
+  contextualAnnotations   ContextualAnnotation[]
+  emphasisRules           EmphasisRule[]
+  contextPerformanceRecords ContextPerformanceRecord[]
+  
+  @@unique([userId, name, parentId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([path])
+  @@index([maturityStage])
+  @@index([interpretationPriority])
+}
+
+// Relationships between categories (the graph structure of lenses)
+model CategoryRelation {
+  id              String   @id @default(cuid())
+  userId          String
+  
+  sourceCategoryId String
+  sourceCategory   Category @relation("SourceCategory", fields: [sourceCategoryId], references: [id], onDelete: Cascade)
+  targetCategoryId String
+  targetCategory   Category @relation("TargetCategory", fields: [targetCategoryId], references: [id], onDelete: Cascade)
+  
+  // Relationship semantics
+  relationType    String   // conceptual_contains, prepares_for, contrasts_with, analogous_to, specializes, generalizes
+  strength        Float    @default(0.5) // 0-1, how strong the relationship is
+  isDirectional   Boolean  @default(true)
+  
+  // Epistemic meaning - what does viewing through connected lenses reveal?
+  epistemicBridge String?  // e.g., "Understanding X deepens appreciation of Y"
+  
+  // Metadata
+  description     String?  // Why this relationship exists
+  
+  // Discovery
+  isAutoSuggested Boolean  @default(false)
+  isUserConfirmed Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([sourceCategoryId, targetCategoryId, relationType])
+  @@index([sourceCategoryId])
+  @@index([targetCategoryId])
+  @@index([relationType])
+}
+
+// How a card participates in a category lens (multi-belonging as multi-interpretation)
+model CardCategoryParticipation {
+  id              String   @id @default(cuid())
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // SEMANTIC ROLE - How this card functions within this lens
+  // =========================================================================
+  semanticRole    String   @default("concept") // foundational, application, example, edge_case, counterexample, concept
+  isPrimary       Boolean  @default(false) // Is this the card's "home" lens? (first context it was created in)
+  
+  // =========================================================================
+  // CONTEXT-SPECIFIC LEARNING STATE
+  // =========================================================================
+  contextDifficulty Float?  // Override difficulty for this context
+  contextMastery    Float   @default(0) // 0-1 mastery in this specific context
+  reviewCountInContext Int  @default(0)
+  lastReviewedInContext DateTime?
+  
+  // =========================================================================
+  // CONTEXT-SPECIFIC QUICK NOTES (simple annotations)
+  // =========================================================================
+  contextNotes    String?  // Quick notes specific to this category context
+  contextTags     String[] @default([])
+  
+  // =========================================================================
+  // LEARNING GOALS FOR THIS CONTEXT
+  // =========================================================================
+  learningGoal    String?  // What should learner understand in this context?
+  targetMastery   Float    @default(0.8) // Target mastery level for this context
+  
+  // =========================================================================
+  // DIFFERENTIAL EMPHASIS QUICK SETTINGS
+  // =========================================================================
+  emphasisLevel   Int      @default(0) // -2 to +2: de-emphasized to emphasized
+  isContextHighlighted Boolean @default(false) // Quick toggle to highlight this card in this context
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  annotations     ContextualAnnotation[]
+  
+  @@unique([cardId, categoryId])
+  @@index([cardId])
+  @@index([categoryId])
+  @@index([isPrimary])
+  @@index([emphasisLevel])
+}
+
+// Context-sensitive card faces (different questions per context)
+model CardContextFace {
+  id              String   @id @default(cuid())
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // The context-specific content
+  frontOverride   Json?    // Override front content for this context
+  backOverride    Json?    // Override back content for this context
+  promptOverride  String?  // Different question for this context
+  
+  // Learning tracking for this specific face
+  timesShown      Int      @default(0)
+  timesCorrect    Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([cardId, categoryId])
+  @@index([cardId])
+  @@index([categoryId])
+}
+
+// =============================================================================
+// CONTEXTUAL ANNOTATIONS (MARGINALIA)
+// Rich, versioned annotations that exist only within a specific lens
+// These are the "margin notes" that scholars write in books - context-dependent
+// =============================================================================
+
+model ContextualAnnotation {
+  id                String   @id @default(cuid())
+  userId            String
+  
+  // The card being annotated
+  cardId            String
+  card              Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // The lens/context in which this annotation exists
+  categoryId        String
+  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Optional: Link to participation for more granular tracking
+  participationId   String?
+  participation     CardCategoryParticipation? @relation(fields: [participationId], references: [id], onDelete: SetNull)
+  
+  // =========================================================================
+  // ANNOTATION CONTENT
+  // =========================================================================
+  
+  // The annotation type
+  annotationType    String   @default("note") // note, insight, question, warning, connection, correction, elaboration
+  
+  // The actual content (rich text supporting markdown)
+  content           String
+  
+  // Optional: Target a specific segment of the card content
+  // Uses JSON path or character ranges to identify what's being annotated
+  targetSelector    Json?    // { type: "text_range", start: 0, end: 50 } or { type: "field", path: "front.text" }
+  
+  // Visual styling for this annotation
+  style             Json?    // { color?: string, icon?: string, highlight?: boolean }
+  
+  // =========================================================================
+  // CONNECTIONS & REFERENCES
+  // =========================================================================
+  
+  // Link to other cards (for "connection" type annotations)
+  linkedCardIds     String[] @default([])
+  
+  // External references
+  externalUrl       String?
+  citationText      String?
+  
+  // =========================================================================
+  // VISIBILITY & LIFECYCLE
+  // =========================================================================
+  
+  // Is this annotation visible? (soft delete / hide)
+  isVisible         Boolean  @default(true)
+  
+  // Should this annotation be shown during study sessions?
+  showDuringStudy   Boolean  @default(true)
+  
+  // Importance level (affects display priority)
+  importance        Int      @default(0) // -2 to +2
+  
+  // =========================================================================
+  // VERSION CONTROL - Annotations survive card restructuring
+  // =========================================================================
+  version           Int      @default(1)
+  previousVersionId String?  // Link to previous version of this annotation
+  
+  // Hash of the card content when this annotation was created
+  // Used to detect if the card has changed significantly
+  cardContentHash   String?
+  
+  // Has the underlying card changed since this annotation was created?
+  isStale           Boolean  @default(false)
+  
+  // =========================================================================
+  // AI AUGMENTATION HOOKS
+  // =========================================================================
+  
+  // Was this annotation AI-generated?
+  isAiGenerated     Boolean  @default(false)
+  aiConfidence      Float?   // 0-1 confidence score if AI-generated
+  aiSource          String?  // Which AI model/service generated this
+  
+  // Has user reviewed/approved AI-generated annotation?
+  isUserApproved    Boolean  @default(false)
+  
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([cardId, categoryId, version])
+  @@index([cardId])
+  @@index([categoryId])
+  @@index([participationId])
+  @@index([annotationType])
+  @@index([isVisible])
+  @@index([importance])
+}
+
+// =============================================================================
+// DIFFERENTIAL EMPHASIS ENGINE
+// Rules that define how card content should be emphasized or de-emphasized
+// within a specific category lens
+// =============================================================================
+
+model EmphasisRule {
+  id                String   @id @default(cuid())
+  userId            String
+  
+  // The category/lens this rule applies to
+  categoryId        String
+  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // RULE DEFINITION
+  // =========================================================================
+  
+  // Rule name for user reference
+  name              String
+  description       String?
+  
+  // Rule type determines what kind of emphasis is applied
+  ruleType          String   // highlight, de_emphasize, collapse, inject_prompt, reorder, annotate
+  
+  // =========================================================================
+  // TARGETING - What does this rule apply to?
+  // =========================================================================
+  
+  // Apply to specific cards (if empty, applies to all cards in category)
+  targetCardIds     String[] @default([])
+  
+  // Apply to cards with specific semantic roles
+  targetSemanticRoles String[] @default([])
+  
+  // Apply to cards with specific tags
+  targetTags        String[] @default([])
+  
+  // Content targeting - JSON path or regex to identify content segments
+  contentSelector   Json?    // { type: "regex", pattern: "\\b(definition|theorem)\\b" }
+  
+  // =========================================================================
+  // EMPHASIS CONFIGURATION
+  // =========================================================================
+  
+  // Emphasis level (-2 to +2)
+  // -2: Collapse/hide
+  // -1: De-emphasize (gray out, smaller text)
+  //  0: Normal
+  // +1: Emphasize (bold, highlight)
+  // +2: Strong emphasis (box, color, larger)
+  emphasisLevel     Int      @default(0)
+  
+  // Visual styling when rule matches
+  style             Json?    // { backgroundColor?, textColor?, fontSize?, fontWeight?, border? }
+  
+  // =========================================================================
+  // MICRO-PROMPT INJECTION
+  // =========================================================================
+  
+  // For "inject_prompt" rule type - supplemental questions/prompts
+  injectedPrompt    String?
+  promptPosition    String   @default("after") // before, after, replace, overlay
+  
+  // =========================================================================
+  // CONDITIONAL ACTIVATION
+  // =========================================================================
+  
+  // Only activate after N reviews
+  minReviewCount    Int?
+  
+  // Only activate at certain mastery levels
+  minMastery        Float?
+  maxMastery        Float?
+  
+  // Only activate during certain learning modes
+  activeLearningModes String[] @default([])
+  
+  // =========================================================================
+  // LIFECYCLE
+  // =========================================================================
+  
+  isEnabled         Boolean  @default(true)
+  priority          Int      @default(50) // Higher priority rules applied last (override)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([categoryId])
+  @@index([ruleType])
+  @@index([isEnabled])
+  @@index([priority])
+}
+
+// =============================================================================
+// MULTI-CONTEXT PERFORMANCE TRACKING
+// Tracks how well a user performs on a card across different category lenses
+// Essential for detecting context drift and metacognition
+// =============================================================================
+
+model ContextPerformanceRecord {
+  id                String   @id @default(cuid())
+  userId            String
+  
+  // The card and category this record tracks
+  cardId            String
+  card              Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId        String
+  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // PERFORMANCE METRICS
+  // =========================================================================
+  
+  // Basic stats
+  totalReviews      Int      @default(0)
+  correctReviews    Int      @default(0)
+  accuracy          Float    @default(0) // Computed: correctReviews / totalReviews
+  
+  // Response time tracking
+  avgResponseTime   Float    @default(0) // Milliseconds
+  minResponseTime   Float?
+  maxResponseTime   Float?
+  
+  // Difficulty perception
+  perceivedDifficulty Float  @default(0.5) // 0-1, based on response patterns
+  
+  // =========================================================================
+  // TEMPORAL PATTERNS
+  // =========================================================================
+  
+  // Last review in this context
+  lastReviewedAt    DateTime?
+  
+  // Time since last review across ALL contexts (for context drift detection)
+  daysSinceAnyReview Int?
+  
+  // Review streak in this context
+  currentStreak     Int      @default(0)
+  longestStreak     Int      @default(0)
+  
+  // =========================================================================
+  // CONTEXT DRIFT DETECTION
+  // =========================================================================
+  
+  // Rolling accuracy over last N reviews (for drift detection)
+  recentAccuracy    Float    @default(0) // Last 5-10 reviews
+  accuracyTrend     String   @default("stable") // improving, declining, stable, volatile
+  
+  // Comparison to performance in other contexts
+  performanceDeviation Float @default(0) // How different is performance here vs other contexts?
+  
+  // Context drift flags
+  hasDriftWarning   Boolean  @default(false)
+  driftDetectedAt   DateTime?
+  driftSeverity     String?  // mild, moderate, severe
+  
+  // =========================================================================
+  // METACOGNITION SUPPORT
+  // =========================================================================
+  
+  // User's confidence ratings (if collected)
+  avgConfidence     Float?   // 0-1
+  confidenceAccuracyCorrelation Float? // How well does confidence predict accuracy?
+  
+  // "Illusion of knowing" detection
+  hasOverconfidenceFlag Boolean @default(false)
+  hasUnderconfidenceFlag Boolean @default(false)
+  
+  // =========================================================================
+  // MULTI-CONTEXT MOMENTS
+  // =========================================================================
+  
+  // Count of times this card was shown in multi-context review
+  multiContextReviewCount Int @default(0)
+  
+  // How user performed when switching FROM another context TO this one
+  contextSwitchAccuracy Float?
+  
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([cardId, categoryId])
+  @@index([userId])
+  @@index([cardId])
+  @@index([categoryId])
+  @@index([hasDriftWarning])
+  @@index([accuracyTrend])
+}
+
+// =============================================================================
+// MULTI-CONTEXT REVIEW SESSION
+// Tracks review sessions specifically designed for multi-context awareness
+// =============================================================================
+
+model MultiContextReviewSession {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Session configuration
+  sessionType       String   @default("drift_remediation") // drift_remediation, context_comparison, synthesis_check
+  
+  // Categories involved
+  categoryIds       String[]
+  
+  // Cards reviewed
+  cardsReviewed     Int      @default(0)
+  
+  // Performance during this session
+  overallAccuracy   Float    @default(0)
+  contextSwitchAccuracy Float @default(0) // Accuracy when switching contexts
+  
+  // Insights generated
+  driftResolved     Int      @default(0) // Number of drift warnings resolved
+  newDriftDetected  Int      @default(0)
+  
+  // Session timing
+  startedAt         DateTime @default(now())
+  completedAt       DateTime?
+  durationMinutes   Int      @default(0)
+  
+  @@index([userId])
+  @@index([sessionType])
+  @@index([startedAt])
+}
+
+// Learning modes/personas per category
+model CategoryLearningMode {
+  id              String   @id @default(cuid())
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  modeName        String   // rigorous, intuitive, applied, teaching
+  isActive        Boolean  @default(false)
+  
+  // Mode configuration
+  questionStyle   String   @default("standard") // proof, analogy, problem, explain
+  difficultyBias  Float    @default(0) // -1 to 1, prefer easier or harder
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([categoryId, modeName])
+  @@index([categoryId])
+}
+
+// Track evolution of category structure over time
+model CategoryEvolutionEvent {
+  id              String   @id @default(cuid())
+  categoryId      String
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userId          String
+  
+  eventType       String   // created, renamed, split, merged, reparented, archived
+  
+  // State snapshot
+  previousState   Json?    // Snapshot before change
+  newState        Json?    // Snapshot after change
+  
+  // For splits/merges
+  relatedCategoryIds String[] @default([])
+  
+  // User reasoning
+  reason          String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([categoryId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// User's current learning mode/flow state
+model UserLearningFlow {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Current mode
+  currentMode     String   @default("exploration") // exploration, goal_driven, exam_oriented, synthesis
+  
+  // Goal-driven mode settings
+  goalCategoryId  String?  // Target category for goal-driven mode
+  goalDeadline    DateTime?
+  goalProgress    Float    @default(0)
+  
+  // Exam mode settings
+  examCategoryIds String[] @default([])
+  examDate        DateTime?
+  examPriority    String   @default("breadth") // breadth, depth, mixed
+  
+  // Synthesis mode
+  synthesisCategoryIds String[] @default([])
+  
+  // Active lens
+  activeLens      String   @default("structure") // structure, flow, bridge, progress
+  
+  // Complexity preference
+  complexityLevel Int      @default(1) // 1-5, how much structure to show
+  
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+}
+
+// Dynamic deck definitions (queries over the ecosystem)
+model DynamicDeck {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name            String
+  description     String?
+  iconEmoji       String?
+  color           String?
+  
+  // Query definition
+  queryType       String   @default("category") // category, union, intersection, difference, custom
+  
+  // Category-based queries
+  includeCategoryIds String[] @default([])
+  excludeCategoryIds String[] @default([])
+  includeSubcategories Boolean @default(true)
+  
+  // Filters
+  stateFilter     String[] @default([]) // new, learning, review, mastered
+  tagFilter       String[] @default([])
+  difficultyRange Json?    // { min: 0, max: 1 }
+  
+  // Sorting
+  sortBy          String   @default("due_date") // due_date, difficulty, created, random
+  sortOrder       String   @default("asc")
+  
+  // Limits
+  maxCards        Int?
+  
+  // Cached stats (updated periodically)
+  cachedCardCount Int      @default(0)
+  cacheUpdatedAt  DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+}
+
+// Suggested category (AI-detected clusters)
+model CategorySuggestion {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  suggestedName   String
+  suggestedDescription String?
+  detectedTheme   String?  // AI-detected theme
+  
+  // Cards that would belong
+  cardIds         String[]
+  
+  // Confidence
+  confidence      Float    @default(0.5)
+  
+  // Status
+  status          String   @default("pending") // pending, accepted, rejected, deferred
+  respondedAt     DateTime?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([status])
+}
+
