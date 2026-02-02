@@ -54,3 +54,12 @@ export * from "./settings";
 // Everything else (features, mastery, decisions, AI snapshots) derives from here.
 
 export * from "./lkgc";
+
+// =============================================================================
+// DATA IMPORT
+// =============================================================================
+// Comprehensive data import system for heterogeneous formats.
+// Handles Excel, CSV, JSON, Markdown flashcard files, and more.
+// Provides schema inference, interactive mapping, and card generation.
+
+export * as DataImport from "./import";
