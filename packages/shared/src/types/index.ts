@@ -904,6 +904,78 @@ export type {
 } from "./ecosystem.types";
 
 // =============================================================================
+// MULTI-BELONGING & CONCEPTUAL OVERLAP TYPES
+// =============================================================================
+
+export type {
+  // Identifiers (ParticipationId already exported from ecosystem.types.ts)
+  SynthesisPromptId,
+  SynthesisResponseId,
+  SynthesisNoteId,
+  BridgeCardId,
+  BridgeCardSuggestionId,
+  CrossContextQuizId,
+  PerformanceDivergenceId,
+  // Enums & Type Unions
+  ExtendedSemanticRole,
+  ProvenanceType,
+  SynthesisTriggerType,
+  SynthesisPromptType,
+  SynthesisPromptStatus,
+  SynthesisNoteType,
+  BridgeType,
+  ConnectionType,
+  BridgeSurfaceTrigger,
+  BridgeCardStatus,
+  CrossContextQuizType,
+  DivergenceSeverity,
+  DivergenceStatus,
+  // Core Participation Model
+  CardCategoryParticipation as MultiBelongingParticipation,
+  ParticipationWithCategory as MultiBelongingParticipationWithCategory,
+  ParticipationWithCard as MultiBelongingParticipationWithCard,
+  FullParticipation,
+  // Synthesis Engine
+  SynthesisPrompt,
+  SynthesisPromptWithContext,
+  SynthesisResponse,
+  SynthesisNote,
+  // Bridge Cards
+  BridgeCard,
+  BridgeCardWithContext,
+  BridgeCardSuggestion,
+  // Cross-Context Quiz
+  CrossContextQuiz,
+  // Performance Divergence
+  PerformanceDivergence,
+  PerformanceDivergenceWithContext,
+  // Card Presentation
+  CardPresentationContext as MultiBelongingCardPresentationContext,
+  // API Input Types
+  AddParticipationInput,
+  UpdateParticipationInput,
+  BulkAddParticipationsInput,
+  BulkUpdateParticipationsInput,
+  RespondToSynthesisInput,
+  CreateSynthesisNoteInput,
+  CreateBridgeCardInput,
+  AnswerCrossContextQuizInput,
+  // Query Types
+  ParticipationQueryOptions,
+  BridgeCandidateQueryOptions,
+  SynthesisPromptQueryOptions,
+  // Analytics Types
+  CardParticipationAnalytics,
+  CategoryParticipationAnalytics,
+  // Event Types
+  MultiBelongingEvent,
+  // Plugin Hooks
+  ParticipationSuggestionProvider,
+  SynthesisPromptGenerator,
+  BridgeCardRecommender,
+} from "./multi-belonging.types";
+
+// =============================================================================
 // OFFLINE-FIRST SYNC TYPES
 // =============================================================================
 

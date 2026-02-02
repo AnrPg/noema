@@ -40,6 +40,9 @@ import { multiContextRoutes } from "./routes/multi-context.routes";
 import { syncRoutes } from "./routes/sync.routes";
 import { aiAugmentationRoutes } from "./routes/ai-augmentation.routes";
 import { refactorRoutes } from "./routes/refactor.routes";
+import participationRoutes from "./routes/participation.routes";
+import synthesisRoutes from "./routes/synthesis.routes";
+import bridgeCardRoutes from "./routes/bridge-card.routes";
 
 // GraphQL
 import { schema } from "./graphql/schema.js";
@@ -160,6 +163,20 @@ async function buildServer() {
           description:
             "Structural refactoring - split, merge, re-parent operations",
         },
+        {
+          name: "Participation",
+          description:
+            "Multi-belonging participation management - cards in multiple categories",
+        },
+        {
+          name: "Synthesis",
+          description:
+            "Anti-fragmentation synthesis engine - prompts, responses, notes, divergence analysis",
+        },
+        {
+          name: "Bridge Cards",
+          description: "Bridge cards for connecting concepts across contexts",
+        },
       ],
     },
   });
@@ -239,6 +256,9 @@ async function buildServer() {
   await app.register(syncRoutes, { prefix: "/api/v1/sync" });
   await app.register(aiAugmentationRoutes, { prefix: "/api/v1/ai" });
   await app.register(refactorRoutes, { prefix: "/api/v1/refactor" });
+  await app.register(participationRoutes, { prefix: "/api/v1/participations" });
+  await app.register(synthesisRoutes, { prefix: "/api/v1/synthesis" });
+  await app.register(bridgeCardRoutes, { prefix: "/api/v1/bridge-cards" });
 
   // ==========================================================================
   // ERROR HANDLING

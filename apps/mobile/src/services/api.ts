@@ -633,14 +633,7 @@ export function useCategoryCards(categoryId: string) {
   });
 }
 
-export function useCardParticipations(cardId: string) {
-  const isAuthenticated = useIsAuthenticated();
-  return useQuery<CardCategoryParticipation[]>({
-    queryKey: ["card", cardId, "participations"],
-    queryFn: () => fetcher(`/cards/${cardId}/categories`),
-    enabled: isAuthenticated && !!cardId,
-  });
-}
+// Note: useCardParticipations is defined in the Participation Queries section below
 
 export function useAddCardToCategory() {
   const queryClient = useQueryClient();
@@ -2316,5 +2309,1226 @@ export function useCategoryCardsForRefactor(categoryId: string) {
     queryKey: ["category-cards-refactor", categoryId],
     queryFn: () => fetcher(`/categories/${categoryId}/cards`),
     enabled: isAuthenticated && !!categoryId,
+  });
+}
+
+// =============================================================================
+// MULTI-BELONGING & PARTICIPATION HOOKS
+// =============================================================================
+
+// ----- Participation Types -----
+export interface Participation {
+  id: string;
+  cardId: string;
+  categoryId: string;
+  semanticRole: string;
+  isPrimary: boolean;
+  contextSpecificDifficulty?: number;
+  contextReviewCount?: number;
+  contextCorrectCount?: number;
+  provenanceType?: string;
+  provenanceReason?: string;
+  positionInCategory?: number;
+  customPriority?: number;
+  createdAt: string;
+  updatedAt: string;
+  category?: {
+    id: string;
+    name: string;
+  };
+  card?: {
+    id: string;
+    front: string;
+    back?: string;
+  };
+}
+
+export interface ParticipationWithContext extends Participation {
+  contextAccuracy: number;
+  contextMastery: number;
+}
+
+// ----- Participation Queries -----
+
+export function useCardParticipations(cardId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<Participation[]>({
+    queryKey: ["participations", "card", cardId],
+    queryFn: () => fetcher(`/participations/card/${cardId}`),
+    enabled: isAuthenticated && !!cardId,
+  });
+}
+
+export function useCategoryParticipations(
+  categoryId: string,
+  options?: {
+    role?: string;
+    includePrimary?: boolean;
+    cursor?: string;
+    limit?: number;
+  },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.role) params.set("role", options.role);
+  if (options?.includePrimary !== undefined)
+    params.set("includePrimary", String(options.includePrimary));
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery<{
+    items: Participation[];
+    pagination: { hasMore: boolean; nextCursor?: string };
+  }>({
+    queryKey: ["participations", "category", categoryId, options],
+    queryFn: () =>
+      fetcher(
+        `/participations/category/${categoryId}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!categoryId,
+  });
+}
+
+export function useParticipationsByRole(
+  role: string,
+  options?: { userId?: string; cursor?: string; limit?: number },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.userId) params.set("userId", options.userId);
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery<{
+    items: Participation[];
+    pagination: { hasMore: boolean; nextCursor?: string };
+  }>({
+    queryKey: ["participations", "by-role", role, options],
+    queryFn: () =>
+      fetcher(
+        `/participations/by-role/${role}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!role,
+  });
+}
+
+export function useContextAwareCard(cardId: string, categoryId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<ParticipationWithContext>({
+    queryKey: ["participations", "context", cardId, categoryId],
+    queryFn: () =>
+      fetcher(`/participations/card/${cardId}/context/${categoryId}`),
+    enabled: isAuthenticated && !!cardId && !!categoryId,
+  });
+}
+
+export function useCardsWithDivergence(options?: {
+  userId?: string;
+  minSpread?: number;
+  limit?: number;
+}) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.userId) params.set("userId", options.userId);
+  if (options?.minSpread) params.set("minSpread", String(options.minSpread));
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery({
+    queryKey: ["participations", "divergence", options],
+    queryFn: () =>
+      fetcher(
+        `/participations/divergence${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated,
+  });
+}
+
+export function useBridgeCandidates(options?: {
+  userId?: string;
+  minContexts?: number;
+  limit?: number;
+}) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.userId) params.set("userId", options.userId);
+  if (options?.minContexts)
+    params.set("minContexts", String(options.minContexts));
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery({
+    queryKey: ["participations", "bridge-candidates", options],
+    queryFn: () =>
+      fetcher(
+        `/participations/bridge-candidates${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated,
+  });
+}
+
+// ----- Participation Mutations -----
+
+export function useAddParticipation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      cardId: string;
+      categoryId: string;
+      semanticRole?: string;
+      isPrimary?: boolean;
+      positionInCategory?: number;
+      customPriority?: number;
+      provenanceType?: string;
+      provenanceReason?: string;
+    }) => apiClient.post("/participations", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["participations", "card", variables.cardId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["participations", "category", variables.categoryId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+}
+
+export function useRemoveParticipation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (participationId: string) =>
+      apiClient.delete(`/participations/${participationId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["participations"] });
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+}
+
+export function useUpdateParticipation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      participationId,
+      data,
+    }: {
+      participationId: string;
+      data: {
+        semanticRole?: string;
+        isPrimary?: boolean;
+        positionInCategory?: number;
+        customPriority?: number;
+        contextSpecificDifficulty?: number;
+      };
+    }) => apiClient.patch(`/participations/${participationId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["participations"] });
+    },
+  });
+}
+
+export function useBulkAddParticipations() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      participations: Array<{
+        cardId: string;
+        categoryId: string;
+        semanticRole?: string;
+        isPrimary?: boolean;
+      }>;
+    }) => apiClient.post("/participations/bulk/add", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["participations"] });
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+}
+
+export function useBulkRemoveParticipations() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: { participationIds: string[] }) =>
+      apiClient.post("/participations/bulk/remove", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["participations"] });
+      queryClient.invalidateQueries({ queryKey: ["cards"] });
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+    },
+  });
+}
+
+export function useBulkUpdateRole() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: { participationIds: string[]; semanticRole: string }) =>
+      apiClient.post("/participations/bulk/update-role", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["participations"] });
+    },
+  });
+}
+
+// =============================================================================
+// SYNTHESIS ENGINE HOOKS
+// =============================================================================
+
+// ----- Synthesis Types -----
+export interface SynthesisPrompt {
+  id: string;
+  cardId: string;
+  userId: string;
+  promptType: string;
+  triggerType: string;
+  promptText: string;
+  status: "PENDING" | "SHOWN" | "DISMISSED" | "RESPONDED" | "EXPIRED";
+  triggerContextA?: string;
+  triggerContextB?: string;
+  metadata?: Record<string, unknown>;
+  expiresAt?: string;
+  createdAt: string;
+  card?: {
+    id: string;
+    front: string;
+    back?: string;
+  };
+  response?: SynthesisResponse;
+}
+
+export interface SynthesisResponse {
+  id: string;
+  promptId: string;
+  userId: string;
+  responseText: string;
+  qualityRating?: number;
+  createdBridgeCardId?: string;
+  createdAt: string;
+}
+
+export interface SynthesisNote {
+  id: string;
+  cardId: string;
+  userId: string;
+  noteType: string;
+  content: string;
+  sourcePromptId?: string;
+  sourceResponseId?: string;
+  linkedCardIds: string[];
+  linkedCategoryIds: string[];
+  tags: string[];
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PerformanceDivergence {
+  id: string;
+  cardId: string;
+  userId: string;
+  performanceSpread: number;
+  contextCount: number;
+  bestContextId: string;
+  worstContextId: string;
+  detectedAt: string;
+  resolvedAt?: string;
+  card?: { id: string; front: string };
+  bestContext?: { id: string; name: string };
+  worstContext?: { id: string; name: string };
+}
+
+export interface CrossContextQuiz {
+  id: string;
+  cardId: string;
+  userId: string;
+  quizQuestion: string;
+  correctAnswer: string;
+  distractors: string[];
+  involvedContextIds: string[];
+  difficulty: number;
+  timesPresented: number;
+  timesCorrect: number;
+  isActive: boolean;
+}
+
+// ----- Synthesis Prompt Queries -----
+
+export function useSynthesisPrompts(options: {
+  userId: string;
+  status?: string;
+  promptType?: string;
+  cardId?: string;
+  cursor?: string;
+  limit?: number;
+}) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  params.set("userId", options.userId);
+  if (options.status) params.set("status", options.status);
+  if (options.promptType) params.set("promptType", options.promptType);
+  if (options.cardId) params.set("cardId", options.cardId);
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.limit) params.set("limit", String(options.limit));
+
+  return useQuery<{
+    items: SynthesisPrompt[];
+    pagination: { hasMore: boolean; nextCursor?: string };
+  }>({
+    queryKey: ["synthesis", "prompts", options],
+    queryFn: () => fetcher(`/synthesis/prompts?${params.toString()}`),
+    enabled: isAuthenticated && !!options.userId,
+  });
+}
+
+export function usePendingSynthesisPrompts(userId: string, limit = 10) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<{ items: SynthesisPrompt[]; totalPending: number }>({
+    queryKey: ["synthesis", "prompts", "pending", userId, limit],
+    queryFn: () =>
+      fetcher(`/synthesis/prompts/pending?userId=${userId}&limit=${limit}`),
+    enabled: isAuthenticated && !!userId,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+export function useSynthesisPrompt(promptId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<SynthesisPrompt>({
+    queryKey: ["synthesis", "prompt", promptId],
+    queryFn: () => fetcher(`/synthesis/prompts/${promptId}`),
+    enabled: isAuthenticated && !!promptId,
+  });
+}
+
+// ----- Synthesis Prompt Mutations -----
+
+export function useCreateSynthesisPrompt() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      cardId: string;
+      userId: string;
+      promptType: string;
+      triggerType: string;
+      promptText: string;
+      triggerContextA?: string;
+      triggerContextB?: string;
+      metadata?: Record<string, unknown>;
+      expiresAt?: string;
+    }) => apiClient.post("/synthesis/prompts", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "prompts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["synthesis", "prompts", "pending", variables.userId],
+      });
+    },
+  });
+}
+
+export function useUpdatePromptStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      promptId,
+      status,
+      dismissReason,
+    }: {
+      promptId: string;
+      status: string;
+      dismissReason?: string;
+    }) =>
+      apiClient.patch(`/synthesis/prompts/${promptId}/status`, {
+        status,
+        dismissReason,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "prompts"] });
+    },
+  });
+}
+
+// ----- Synthesis Response Mutations -----
+
+export function useSubmitSynthesisResponse() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      promptId: string;
+      userId: string;
+      responseText: string;
+      qualityRating?: number;
+      createBridgeCard?: boolean;
+      bridgeCardData?: {
+        bridgeQuestion: string;
+        bridgeAnswer: string;
+        connectionType: string;
+        linkedCategoryIds: string[];
+      };
+    }) => apiClient.post("/synthesis/responses", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "responses"] });
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+      queryClient.invalidateQueries({
+        queryKey: ["synthesis", "prompt", variables.promptId],
+      });
+    },
+  });
+}
+
+export function useUserSynthesisResponses(
+  userId: string,
+  options?: { promptType?: string; cursor?: string; limit?: number },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.promptType) params.set("promptType", options.promptType);
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery({
+    queryKey: ["synthesis", "responses", "user", userId, options],
+    queryFn: () =>
+      fetcher(
+        `/synthesis/responses/user/${userId}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!userId,
+  });
+}
+
+// ----- Synthesis Notes -----
+
+export function useCardSynthesisNotes(
+  cardId: string,
+  options?: { userId?: string; includePublic?: boolean },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.userId) params.set("userId", options.userId);
+  if (options?.includePublic !== undefined)
+    params.set("includePublic", String(options.includePublic));
+
+  const queryString = params.toString();
+
+  return useQuery<{ items: SynthesisNote[] }>({
+    queryKey: ["synthesis", "notes", "card", cardId, options],
+    queryFn: () =>
+      fetcher(
+        `/synthesis/notes/card/${cardId}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!cardId,
+  });
+}
+
+export function useCreateSynthesisNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      cardId: string;
+      userId: string;
+      noteType: string;
+      content: string;
+      sourcePromptId?: string;
+      sourceResponseId?: string;
+      linkedCardIds?: string[];
+      linkedCategoryIds?: string[];
+      tags?: string[];
+      isPublic?: boolean;
+    }) => apiClient.post("/synthesis/notes", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["synthesis", "notes", "card", variables.cardId],
+      });
+    },
+  });
+}
+
+export function useUpdateSynthesisNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      noteId,
+      data,
+    }: {
+      noteId: string;
+      data: {
+        content?: string;
+        noteType?: string;
+        tags?: string[];
+        linkedCardIds?: string[];
+        linkedCategoryIds?: string[];
+        isPublic?: boolean;
+      };
+    }) => apiClient.patch(`/synthesis/notes/${noteId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "notes"] });
+    },
+  });
+}
+
+export function useDeleteSynthesisNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (noteId: string) =>
+      apiClient.delete(`/synthesis/notes/${noteId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "notes"] });
+    },
+  });
+}
+
+// ----- Divergence Analysis -----
+
+export function useAnalyzeDivergence() {
+  return useMutation({
+    mutationFn: (data: {
+      cardId: string;
+      userId: string;
+      minPerformanceGap?: number;
+      minReviewsPerContext?: number;
+    }) => apiClient.post("/synthesis/divergence/analyze", data),
+  });
+}
+
+export function useUserDivergences(
+  userId: string,
+  options?: {
+    minSpread?: number;
+    resolved?: boolean;
+    cursor?: string;
+    limit?: number;
+  },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.minSpread) params.set("minSpread", String(options.minSpread));
+  if (options?.resolved !== undefined)
+    params.set("resolved", String(options.resolved));
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery<{
+    items: PerformanceDivergence[];
+    pagination: { hasMore: boolean; nextCursor?: string };
+  }>({
+    queryKey: ["synthesis", "divergence", "user", userId, options],
+    queryFn: () =>
+      fetcher(
+        `/synthesis/divergence/user/${userId}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!userId,
+  });
+}
+
+export function useResolveDivergence() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      divergenceId,
+      data,
+    }: {
+      divergenceId: string;
+      data: {
+        resolutionType: string;
+        resolutionNotes?: string;
+        relatedBridgeCardId?: string;
+        relatedResponseId?: string;
+      };
+    }) =>
+      apiClient.patch(`/synthesis/divergence/${divergenceId}/resolve`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "divergence"] });
+    },
+  });
+}
+
+// ----- Cross-Context Quizzes -----
+
+export function useCardCrossContextQuizzes(
+  cardId: string,
+  options?: {
+    activeOnly?: boolean;
+    minDifficulty?: number;
+    maxDifficulty?: number;
+  },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.activeOnly !== undefined)
+    params.set("activeOnly", String(options.activeOnly));
+  if (options?.minDifficulty)
+    params.set("minDifficulty", String(options.minDifficulty));
+  if (options?.maxDifficulty)
+    params.set("maxDifficulty", String(options.maxDifficulty));
+
+  const queryString = params.toString();
+
+  return useQuery<{ items: CrossContextQuiz[] }>({
+    queryKey: ["synthesis", "quizzes", "card", cardId, options],
+    queryFn: () =>
+      fetcher(
+        `/synthesis/quizzes/card/${cardId}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!cardId,
+  });
+}
+
+export function useCreateCrossContextQuiz() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      cardId: string;
+      userId: string;
+      quizQuestion: string;
+      correctAnswer: string;
+      distractors: string[];
+      involvedContextIds: string[];
+      difficulty?: number;
+    }) => apiClient.post("/synthesis/quizzes", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["synthesis", "quizzes", "card", variables.cardId],
+      });
+    },
+  });
+}
+
+export function useRecordQuizAttempt() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      quizId: string;
+      userId: string;
+      selectedAnswer: string;
+      isCorrect: boolean;
+      responseTimeMs: number;
+    }) => apiClient.post(`/synthesis/quizzes/${data.quizId}/attempt`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["synthesis", "quizzes"] });
+    },
+  });
+}
+
+// ----- Synthesis Triggers -----
+
+export function useCheckSynthesisTriggers() {
+  return useMutation({
+    mutationFn: (data: {
+      userId: string;
+      recentCardIds?: string[];
+      sessionType?: "STUDY_SESSION_END" | "REVIEW_MILESTONE" | "MANUAL_CHECK";
+    }) => apiClient.post("/synthesis/triggers/check", data),
+  });
+}
+
+export function useGenerateSynthesisPrompts() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      userId: string;
+      triggers: Array<{
+        cardId: string;
+        triggerType: string;
+        reason: string;
+        contextAId?: string;
+        contextBId?: string;
+      }>;
+    }) => apiClient.post("/synthesis/triggers/generate-prompts", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["synthesis", "prompts", "pending", variables.userId],
+      });
+    },
+  });
+}
+
+// ----- Synthesis Statistics -----
+
+export function useSynthesisStats(userId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery({
+    queryKey: ["synthesis", "stats", userId],
+    queryFn: () => fetcher(`/synthesis/stats/${userId}`),
+    enabled: isAuthenticated && !!userId,
+    staleTime: 1000 * 60 * 10, // 10 minutes
+  });
+}
+
+// =============================================================================
+// BRIDGE CARD HOOKS
+// =============================================================================
+
+// ----- Bridge Card Types -----
+export interface BridgeCard {
+  id: string;
+  cardId: string;
+  userId: string;
+  bridgeQuestion: string;
+  bridgeAnswer: string;
+  connectionType: string;
+  connectionStrength?: number;
+  linkedCategoryIds: string[];
+  linkedCardIds: string[];
+  showFrequency: number;
+  isActive: boolean;
+  timesShown: number;
+  timesHelpful: number;
+  effectivenessScore: number;
+  traversalCount?: number;
+  lastShownAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  card?: { id: string; front: string; back?: string };
+  user?: { id: string; username: string };
+  linkedCategories?: Array<{
+    id: string;
+    categoryId: string;
+    isPrimary?: boolean;
+    category?: {
+      id: string;
+      name: string;
+    };
+  }>;
+  sourceCards?: Array<{
+    cardId: string;
+    context?: string;
+    card?: {
+      id: string;
+      front: string;
+      back?: string;
+    };
+  }>;
+}
+
+export interface BridgeCardSuggestion {
+  id: string;
+  cardId: string;
+  userId: string;
+  suggestedQuestion: string;
+  suggestedAnswer: string;
+  suggestedConnectionType: string;
+  suggestedCategoryIds: string[];
+  confidenceScore: number;
+  reasoning?: string;
+  sourceType: string;
+  status: "PENDING" | "ACCEPTED" | "REJECTED" | "EXPIRED" | "MODIFIED_ACCEPTED";
+  respondedAt?: string;
+  createdBridgeCardId?: string;
+  createdAt: string;
+  card?: { id: string; front: string };
+  // Aliases for component compatibility
+  suggestedBridgeQuestion?: string;
+  suggestedBridgeAnswer?: string;
+  sourceCategoryIds?: string[];
+  confidence?: number;
+}
+
+// ----- Bridge Card Queries -----
+
+export function useBridgeCards(options?: {
+  userId?: string;
+  cardId?: string;
+  categoryId?: string;
+  connectionType?: string;
+  isActive?: boolean;
+  minEffectiveness?: number;
+  cursor?: string;
+  limit?: number;
+}) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.userId) params.set("userId", options.userId);
+  if (options?.cardId) params.set("cardId", options.cardId);
+  if (options?.categoryId) params.set("categoryId", options.categoryId);
+  if (options?.connectionType)
+    params.set("connectionType", options.connectionType);
+  if (options?.isActive !== undefined)
+    params.set("isActive", String(options.isActive));
+  if (options?.minEffectiveness)
+    params.set("minEffectiveness", String(options.minEffectiveness));
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  const queryString = params.toString();
+
+  return useQuery<{
+    items: BridgeCard[];
+    pagination: { hasMore: boolean; nextCursor?: string };
+  }>({
+    queryKey: ["bridge-cards", options],
+    queryFn: () =>
+      fetcher(`/bridge-cards${queryString ? `?${queryString}` : ""}`),
+    enabled: isAuthenticated,
+  });
+}
+
+export function useBridgeCard(
+  bridgeCardId: string,
+  options?: { enabled?: boolean },
+) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<BridgeCard>({
+    queryKey: ["bridge-card", bridgeCardId],
+    queryFn: () => fetcher(`/bridge-cards/${bridgeCardId}`),
+    enabled: isAuthenticated && !!bridgeCardId && options?.enabled !== false,
+  });
+}
+
+export function useBridgeCardQueue(
+  userId: string,
+  options?: { contextId?: string; limit?: number; excludeRecent?: boolean },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  if (options?.contextId) params.set("contextId", options.contextId);
+  if (options?.limit) params.set("limit", String(options.limit));
+  if (options?.excludeRecent !== undefined)
+    params.set("excludeRecent", String(options.excludeRecent));
+
+  const queryString = params.toString();
+
+  return useQuery<{ items: BridgeCard[]; totalCandidates: number }>({
+    queryKey: ["bridge-cards", "queue", userId, options],
+    queryFn: () =>
+      fetcher(
+        `/bridge-cards/queue/${userId}${queryString ? `?${queryString}` : ""}`,
+      ),
+    enabled: isAuthenticated && !!userId,
+    staleTime: 1000 * 60 * 3, // 3 minutes
+  });
+}
+
+export function useBridgeCardCandidates(
+  cardId: string,
+  userId: string,
+  limit = 10,
+) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery({
+    queryKey: ["bridge-cards", "candidates", cardId, userId, limit],
+    queryFn: () =>
+      fetcher(
+        `/bridge-cards/candidates/${cardId}?userId=${userId}&limit=${limit}`,
+      ),
+    enabled: isAuthenticated && !!cardId && !!userId,
+  });
+}
+
+export function useBridgeCardStats(userId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery({
+    queryKey: ["bridge-cards", "stats", userId],
+    queryFn: () => fetcher(`/bridge-cards/stats/${userId}`),
+    enabled: isAuthenticated && !!userId,
+    staleTime: 1000 * 60 * 10, // 10 minutes
+  });
+}
+
+export function useBridgeCardEffectiveness(bridgeCardId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery({
+    queryKey: ["bridge-cards", "effectiveness", bridgeCardId],
+    queryFn: () => fetcher(`/bridge-cards/effectiveness/${bridgeCardId}`),
+    enabled: isAuthenticated && !!bridgeCardId,
+  });
+}
+
+// ----- Bridge Card Mutations -----
+
+export function useCreateBridgeCard() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      cardId?: string;
+      userId?: string;
+      bridgeQuestion: string;
+      bridgeAnswer: string;
+      connectionType: string;
+      connectionStrength?: number;
+      linkedCategoryIds?: string[];
+      categoryIds?: string[];
+      linkedCardIds?: string[];
+      sourceCardIds?: string[];
+      showFrequency?: number;
+      metadata?: Record<string, unknown>;
+      contexts?: Record<string, string>;
+    }) =>
+      apiClient.post("/bridge-cards", {
+        ...data,
+        linkedCategoryIds: data.linkedCategoryIds || data.categoryIds,
+        linkedCardIds: data.linkedCardIds || data.sourceCardIds,
+      }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+      if (variables.cardId) {
+        queryClient.invalidateQueries({
+          queryKey: ["participations", "card", variables.cardId],
+        });
+      }
+    },
+  });
+}
+
+export function useUpdateBridgeCard() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      bridgeCardId,
+      data,
+    }: {
+      bridgeCardId: string;
+      data: {
+        bridgeQuestion?: string;
+        bridgeAnswer?: string;
+        connectionType?: string;
+        linkedCategoryIds?: string[];
+        linkedCardIds?: string[];
+        showFrequency?: number;
+        isActive?: boolean;
+      };
+    }) => apiClient.patch(`/bridge-cards/${bridgeCardId}`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+      queryClient.invalidateQueries({
+        queryKey: ["bridge-card", variables.bridgeCardId],
+      });
+    },
+  });
+}
+
+export function useDeleteBridgeCard() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (bridgeCardId: string) =>
+      apiClient.delete(`/bridge-cards/${bridgeCardId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+    },
+  });
+}
+
+export function useRecordBridgeCardReview() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      bridgeCardId: string;
+      userId: string;
+      rating: number;
+      responseTimeMs: number;
+      reviewedInContext?: string;
+      feedbackType?: "HELPFUL" | "CONFUSING" | "OBVIOUS" | "INSIGHTFUL";
+    }) => apiClient.post("/bridge-cards/review", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+      queryClient.invalidateQueries({
+        queryKey: ["bridge-card", variables.bridgeCardId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards", "queue"] });
+    },
+  });
+}
+
+export function useTraverseBridgeCard() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      bridgeCardId: string;
+      fromCategoryId?: string;
+      toCategoryId?: string;
+      traversalContext?: string;
+    }) => apiClient.post(`/bridge-cards/${data.bridgeCardId}/traverse`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["bridge-card", variables.bridgeCardId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+    },
+  });
+}
+
+// ----- Bridge Card Suggestions -----
+
+export function useBridgeCardSuggestions(
+  userId: string,
+  options?: {
+    status?: string;
+    cardId?: string;
+    sourceType?: string;
+    minConfidence?: number;
+    cursor?: string;
+    limit?: number;
+    enabled?: boolean;
+  },
+) {
+  const isAuthenticated = useIsAuthenticated();
+  const params = new URLSearchParams();
+  params.set("userId", userId);
+  if (options?.status) params.set("status", options.status);
+  if (options?.cardId) params.set("cardId", options.cardId);
+  if (options?.sourceType) params.set("sourceType", options.sourceType);
+  if (options?.minConfidence)
+    params.set("minConfidence", String(options.minConfidence));
+  if (options?.cursor) params.set("cursor", options.cursor);
+  if (options?.limit) params.set("limit", String(options.limit));
+
+  return useQuery<BridgeCardSuggestion[]>({
+    queryKey: ["bridge-cards", "suggestions", userId, options],
+    queryFn: async () => {
+      const result = await fetcher<{ items: BridgeCardSuggestion[] }>(
+        `/bridge-cards/suggestions?${params.toString()}`,
+      );
+      // Transform suggestions to include aliases for component compatibility
+      return (result.items || []).map((s) => ({
+        ...s,
+        suggestedBridgeQuestion:
+          s.suggestedBridgeQuestion || s.suggestedQuestion,
+        suggestedBridgeAnswer: s.suggestedBridgeAnswer || s.suggestedAnswer,
+        sourceCategoryIds: s.sourceCategoryIds || s.suggestedCategoryIds,
+        confidence: s.confidence ?? s.confidenceScore,
+      }));
+    },
+    enabled: isAuthenticated && !!userId && options?.enabled !== false,
+  });
+}
+
+export function usePendingBridgeCardSuggestions(userId: string, limit = 10) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<{ items: BridgeCardSuggestion[]; totalPending: number }>({
+    queryKey: ["bridge-cards", "suggestions", "pending", userId, limit],
+    queryFn: () =>
+      fetcher(`/bridge-cards/suggestions/pending/${userId}?limit=${limit}`),
+    enabled: isAuthenticated && !!userId,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+export function useBridgeCardSuggestion(suggestionId: string) {
+  const isAuthenticated = useIsAuthenticated();
+
+  return useQuery<BridgeCardSuggestion>({
+    queryKey: ["bridge-cards", "suggestion", suggestionId],
+    queryFn: () => fetcher(`/bridge-cards/suggestions/${suggestionId}`),
+    enabled: isAuthenticated && !!suggestionId,
+  });
+}
+
+export function useRespondToBridgeCardSuggestion() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      suggestionId,
+      data,
+    }: {
+      suggestionId: string;
+      data: {
+        action: "ACCEPT" | "REJECT" | "MODIFY_ACCEPT";
+        rejectionReason?: string;
+        modifications?: {
+          bridgeQuestion?: string;
+          bridgeAnswer?: string;
+          connectionType?: string;
+          linkedCategoryIds?: string[];
+        };
+      };
+    }) =>
+      apiClient.post(`/bridge-cards/suggestions/${suggestionId}/respond`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+      queryClient.invalidateQueries({
+        queryKey: ["bridge-cards", "suggestions"],
+      });
+    },
+  });
+}
+
+export function useAcceptBridgeSuggestion() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      suggestionId,
+      modifications,
+    }: {
+      suggestionId: string;
+      modifications?: {
+        bridgeQuestion?: string;
+        bridgeAnswer?: string;
+        connectionType?: string;
+        linkedCategoryIds?: string[];
+      };
+    }) =>
+      apiClient.post(`/bridge-cards/suggestions/${suggestionId}/respond`, {
+        action: modifications ? "MODIFY_ACCEPT" : "ACCEPT",
+        modifications,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bridge-cards"] });
+      queryClient.invalidateQueries({
+        queryKey: ["bridge-cards", "suggestions"],
+      });
+    },
+  });
+}
+
+export function useGenerateBridgeCardSuggestions() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: {
+      userId: string;
+      cardIds?: string[];
+      maxSuggestions?: number;
+      sources?: Array<"divergence" | "semantic_similarity" | "usage_pattern">;
+    }) => apiClient.post("/bridge-cards/generate-suggestions", data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["bridge-cards", "suggestions", variables.userId],
+      });
+    },
   });
 }

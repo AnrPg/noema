@@ -40,3 +40,11 @@ export {
   MoveCategorySheet,
   StructuralTimeline,
 } from "./refactoring";
+
+// Multi-Belonging Components
+export {
+  ParticipationPanel,
+  SynthesisPromptUI,
+  BridgeCardViewer,
+  BridgeCardCreator,
+} from "./multi-belonging";

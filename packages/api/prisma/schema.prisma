@@ -62,6 +62,15 @@ model User {
   aiSplitSuggestions AISplitSuggestion[]
   aiMergeSuggestions AIMergeSuggestion[]
   
+  // Multi-Belonging & Synthesis Engine relations
+  synthesisPrompts SynthesisPrompt[]
+  synthesisResponses SynthesisResponse[]
+  synthesisNotes SynthesisNote[]
+  bridgeCards BridgeCard[]
+  bridgeCardSuggestions BridgeCardSuggestion[]
+  crossContextQuizzes CrossContextQuiz[]
+  performanceDivergences PerformanceDivergence[]
+  
   @@index([email])
   @@index([createdAt])
 }
@@ -318,6 +327,17 @@ model Card {
   contextFaces    CardContextFace[]
   contextualAnnotations ContextualAnnotation[]
   contextPerformanceRecords ContextPerformanceRecord[]
+  
+  // Multi-Belonging & Synthesis relations
+  synthesisNotes  SynthesisNote[]
+  synthesisPrompts SynthesisPrompt[]
+  bridgeCardAsSource BridgeCard[] @relation("SourceBridgeCard")
+  bridgeCardAsTarget BridgeCard[] @relation("TargetBridgeCard")
+  bridgeCard      BridgeCard? @relation("BridgeCardRef")
+  bridgeSuggestionsAsSource BridgeCardSuggestion[] @relation("SourceBridgeSuggestion")
+  bridgeSuggestionsAsTarget BridgeCardSuggestion[] @relation("TargetBridgeSuggestion")
+  crossContextQuizzes CrossContextQuiz[]
+  performanceDivergences PerformanceDivergence[]
   
   @@index([userId])
   @@index([deckId])
@@ -842,6 +862,16 @@ model Category {
   emphasisRules           EmphasisRule[]
   contextPerformanceRecords ContextPerformanceRecord[]
   
+  // Bridge card relations
+  bridgeCardsAsSource     BridgeCard[] @relation("SourceBridgeCategory")
+  bridgeCardsAsTarget     BridgeCard[] @relation("TargetBridgeCategory")
+  bridgeSuggestionsAsSource BridgeCardSuggestion[] @relation("SourceBridgeSuggestionCategory")
+  bridgeSuggestionsAsTarget BridgeCardSuggestion[] @relation("TargetBridgeSuggestionCategory")
+  
+  // Performance divergence relations
+  bestPerformanceDivergences PerformanceDivergence[] @relation("BestPerformanceContext")
+  worstPerformanceDivergences PerformanceDivergence[] @relation("WorstPerformanceContext")
+  
   @@unique([userId, name, parentId])
   @@index([userId])
   @@index([parentId])
@@ -884,6 +914,14 @@ model CategoryRelation {
   @@index([relationType])
 }
 
+// =============================================================================
+// MULTI-BELONGING & PARTICIPATION MODEL
+// =============================================================================
+// Core principle: A card exists ONCE, but PARTICIPATES in many categories.
+// Each participation defines the card's role, context-specific behavior, and
+// performance tracking within that interpretive lens.
+// =============================================================================
+
 // How a card participates in a category lens (multi-belonging as multi-interpretation)
 model CardCategoryParticipation {
   id              String   @id @default(cuid())
@@ -895,7 +933,16 @@ model CardCategoryParticipation {
   // =========================================================================
   // SEMANTIC ROLE - How this card functions within this lens
   // =========================================================================
-  semanticRole    String   @default("concept") // foundational, application, example, edge_case, counterexample, concept
+  // foundational: Core concept for this lens
+  // application: Applied example
+  // example: Illustrative example
+  // edge_case: Edge case or exception
+  // counterexample: Counterexample
+  // concept: General concept
+  // prerequisite: Required knowledge for other cards
+  // bridge: Connects this context to another
+  // synthesis: Integrates multiple concepts
+  semanticRole    String   @default("concept")
   isPrimary       Boolean  @default(false) // Is this the card's "home" lens? (first context it was created in)
   
   // =========================================================================
@@ -905,6 +952,17 @@ model CardCategoryParticipation {
   contextMastery    Float   @default(0) // 0-1 mastery in this specific context
   reviewCountInContext Int  @default(0)
   lastReviewedInContext DateTime?
+  
+  // =========================================================================
+  // CONTEXT-SPECIFIC PERFORMANCE SIGNALS
+  // These metrics track how well the user performs on this card when
+  // viewed through this specific category lens
+  // =========================================================================
+  contextSuccessRate Float  @default(0) // Success rate in this context
+  contextLapseRate   Float  @default(0) // Lapse rate in this context
+  avgResponseTimeMs  Int?   // Average response time in this context
+  confidenceRating   Float? // User's self-reported confidence (0-1)
+  contextMasteryScore Float @default(0) // Computed mastery score for this context
   
   // =========================================================================
   // CONTEXT-SPECIFIC QUICK NOTES (simple annotations)
@@ -917,6 +975,21 @@ model CardCategoryParticipation {
   // =========================================================================
   learningGoal    String?  // What should learner understand in this context?
   targetMastery   Float    @default(0.8) // Target mastery level for this context
+  intentOverride  String?  // Override learning intent (foundational, contextual, reference)
+  
+  // =========================================================================
+  // ORDERING & PRIORITY
+  // =========================================================================
+  positionInCategory Int   @default(0) // Ordering within this category
+  priorityWeight     Float @default(1.0) // Weight for review selection
+  
+  // =========================================================================
+  // PROVENANCE - Why does this card belong here?
+  // =========================================================================
+  belongsBecause  String?  // User's justification for this participation
+  provenanceType  String   @default("manual") // manual, import, split, merge, ai_suggested
+  provenanceRef   String?  // Reference to source (e.g., split event ID)
+  addedAt         DateTime @default(now())
   
   // =========================================================================
   // DIFFERENTIAL EMPHASIS QUICK SETTINGS
@@ -924,17 +997,27 @@ model CardCategoryParticipation {
   emphasisLevel   Int      @default(0) // -2 to +2: de-emphasized to emphasized
   isContextHighlighted Boolean @default(false) // Quick toggle to highlight this card in this context
   
+  // =========================================================================
+  // SCAFFOLDING & PROMPTS
+  // =========================================================================
+  scaffoldingLevel Int     @default(0) // 0=none, 1=hints, 2=partial, 3=full
+  customPrompts    String[] @default([]) // Additional prompts for weaker contexts
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   
   // Relations
   annotations     ContextualAnnotation[]
+  synthesisResponses SynthesisResponse[]
   
   @@unique([cardId, categoryId])
   @@index([cardId])
   @@index([categoryId])
   @@index([isPrimary])
   @@index([emphasisLevel])
+  @@index([semanticRole])
+  @@index([contextMasteryScore])
+  @@index([provenanceType])
 }
 
 // Context-sensitive card faces (different questions per context)
@@ -1293,6 +1376,500 @@ model MultiContextReviewSession {
   @@index([userId])
   @@index([sessionType])
   @@index([startedAt])
+}
+
+// =============================================================================
+// SYNTHESIS ENGINE - ANTI-FRAGMENTATION MECHANISMS
+// =============================================================================
+// Multi-belonging can create fragmented knowledge. The synthesis engine
+// counteracts this by prompting users to connect concepts across contexts,
+// tracking synthesis responses, and suggesting bridge cards.
+// =============================================================================
+
+// Synthesis prompt - triggered when cards have multiple participations
+// or when performance diverges across contexts
+model SynthesisPrompt {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // TRIGGER CONTEXT
+  // =========================================================================
+  
+  // The card that triggered this synthesis prompt
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // The category contexts involved
+  categoryIds     String[]
+  
+  // What triggered this prompt
+  triggerType     String   // high_participation_count, performance_divergence, frequent_lens_switch, scheduled
+  triggerDetails  Json?    // { participationCount, performanceSpread, switchCount, etc. }
+  
+  // =========================================================================
+  // PROMPT CONTENT
+  // =========================================================================
+  
+  // The type of synthesis prompt
+  promptType      String   @default("connection") // connection, fundamental_context, bridge_explanation, context_comparison
+  
+  // The actual prompt text
+  promptText      String
+  
+  // Alternative prompts (for variety)
+  alternativePrompts String[] @default([])
+  
+  // Hints to guide the user
+  hints           String[] @default([])
+  
+  // =========================================================================
+  // STATUS & LIFECYCLE
+  // =========================================================================
+  
+  status          String   @default("pending") // pending, shown, responded, skipped, deferred
+  shownAt         DateTime?
+  respondedAt     DateTime?
+  skippedAt       DateTime?
+  deferredUntil   DateTime?
+  
+  // Times shown (for retry logic)
+  timesShown      Int      @default(0)
+  maxAttempts     Int      @default(3)
+  
+  // =========================================================================
+  // AI AUGMENTATION
+  // =========================================================================
+  
+  isAiGenerated   Boolean  @default(false)
+  aiConfidence    Float?
+  aiModel         String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  responses       SynthesisResponse[]
+  
+  @@index([userId])
+  @@index([cardId])
+  @@index([status])
+  @@index([triggerType])
+  @@index([promptType])
+  @@index([createdAt])
+}
+
+// User's response to a synthesis prompt
+model SynthesisResponse {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // The prompt being responded to
+  promptId        String
+  prompt          SynthesisPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  
+  // Optional: linked to a specific participation
+  participationId String?
+  participation   CardCategoryParticipation? @relation(fields: [participationId], references: [id], onDelete: SetNull)
+  
+  // =========================================================================
+  // RESPONSE CONTENT
+  // =========================================================================
+  
+  // The user's response text
+  responseText    String
+  
+  // Structured response data (for specific prompt types)
+  responseData    Json?    // { fundamentalContextId, difficultyRankings, etc. }
+  
+  // Quality indicators
+  wordCount       Int      @default(0)
+  hasConnections  Boolean  @default(false) // References multiple contexts
+  
+  // =========================================================================
+  // OUTPUT ACTIONS
+  // =========================================================================
+  
+  // Did this response create a synthesis note?
+  createdNoteId   String?
+  
+  // Did this response create a bridge card draft?
+  createdBridgeCardDraftId String?
+  
+  // Did this update any participations?
+  updatedParticipationIds String[] @default([])
+  
+  // =========================================================================
+  // QUALITY & FEEDBACK
+  // =========================================================================
+  
+  // User's self-rating of their response
+  selfRating      Int?     // 1-5
+  
+  // AI quality assessment
+  aiQualityScore  Float?   // 0-1
+  aiFeedback      String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([promptId])
+  @@index([participationId])
+  @@index([createdAt])
+}
+
+// Synthesis notes - stored insights from synthesis prompts
+model SynthesisNote {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // The card this synthesis note is about
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // The contexts being synthesized
+  categoryIds     String[]
+  
+  // =========================================================================
+  // NOTE CONTENT
+  // =========================================================================
+  
+  // The synthesis insight
+  content         String
+  
+  // Type of synthesis
+  noteType        String   @default("connection") // connection, hierarchy, transformation, application
+  
+  // Key terms/concepts mentioned
+  keyTerms        String[] @default([])
+  
+  // Referenced cards
+  referencedCardIds String[] @default([])
+  
+  // =========================================================================
+  // METADATA
+  // =========================================================================
+  
+  // Source of this note
+  sourceType      String   @default("synthesis_prompt") // synthesis_prompt, manual, ai_suggested
+  sourceId        String?  // Reference to source (prompt ID, etc.)
+  
+  // Visibility
+  isVisible       Boolean  @default(true)
+  showDuringReview Boolean @default(true)
+  
+  // Quality
+  qualityScore    Float?   // 0-1, based on AI assessment or user feedback
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([cardId])
+  @@index([noteType])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// BRIDGE CARDS - EXPLICIT CROSS-CONTEXT CONNECTIONS
+// =============================================================================
+// Bridge cards explicitly link concepts or contexts, helping prevent
+// knowledge fragmentation by making connections explicit and reviewable.
+// =============================================================================
+
+model BridgeCard {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // BRIDGE TYPE & TARGETS
+  // =========================================================================
+  
+  // Type of bridge
+  bridgeType      String   // concept_to_concept, context_to_context, concept_context
+  
+  // Source card/category (the "from" side)
+  sourceCardId    String?
+  sourceCard      Card?    @relation("SourceBridgeCard", fields: [sourceCardId], references: [id], onDelete: SetNull)
+  sourceCategoryId String?
+  sourceCategory  Category? @relation("SourceBridgeCategory", fields: [sourceCategoryId], references: [id], onDelete: SetNull)
+  
+  // Target card/category (the "to" side)
+  targetCardId    String?
+  targetCard      Card?    @relation("TargetBridgeCard", fields: [targetCardId], references: [id], onDelete: SetNull)
+  targetCategoryId String?
+  targetCategory  Category? @relation("TargetBridgeCategory", fields: [targetCategoryId], references: [id], onDelete: SetNull)
+  
+  // =========================================================================
+  // CARD CONTENT
+  // =========================================================================
+  
+  // The actual card ID (bridge cards are Cards with special metadata)
+  cardId          String   @unique
+  card            Card     @relation("BridgeCardRef", fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // Bridge-specific content
+  bridgeQuestion  String   // "How does X relate to Y?"
+  bridgeAnswer    String   // The connection explanation
+  
+  // Bidirectional: can be reviewed from either direction
+  isBidirectional Boolean  @default(true)
+  reverseQuestion String?  // Question when reviewed in reverse
+  reverseAnswer   String?  // Answer when reviewed in reverse
+  
+  // =========================================================================
+  // RELATIONSHIP METADATA
+  // =========================================================================
+  
+  // Type of connection
+  connectionType  String   @default("relates_to") // relates_to, contrasts_with, generalizes, specializes, enables, depends_on, transforms_into
+  
+  // Strength of connection (0-1)
+  connectionStrength Float @default(0.5)
+  
+  // Description of the connection
+  connectionDescription String?
+  
+  // =========================================================================
+  // REVIEW BEHAVIOR
+  // =========================================================================
+  
+  // Review frequency relative to normal cards (0.5 = half as often)
+  frequencyMultiplier Float @default(0.5)
+  
+  // When to surface this bridge (during review of connected cards)
+  surfaceTrigger  String   @default("related_card_review") // related_card_review, context_switch, scheduled, synthesis_session
+  
+  // Minimum gap between showing bridge and related card (in reviews)
+  minGapReviews   Int      @default(3)
+  
+  // =========================================================================
+  // PROVENANCE
+  // =========================================================================
+  
+  // How was this bridge created?
+  createdFrom     String   @default("manual") // manual, synthesis_prompt, ai_suggestion, import
+  sourceId        String?  // Reference to source (prompt ID, etc.)
+  
+  // AI suggestion metadata
+  aiSuggested     Boolean  @default(false)
+  aiConfidence    Float?
+  
+  // User confirmed/edited
+  isUserConfirmed Boolean  @default(false)
+  
+  // =========================================================================
+  // STATUS
+  // =========================================================================
+  
+  status          String   @default("active") // draft, active, suspended, archived
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([cardId])
+  @@index([sourceCardId])
+  @@index([targetCardId])
+  @@index([sourceCategoryId])
+  @@index([targetCategoryId])
+  @@index([bridgeType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// AI suggestions for bridge cards
+model BridgeCardSuggestion {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // SUGGESTION CONTENT
+  // =========================================================================
+  
+  bridgeType      String   // concept_to_concept, context_to_context, concept_context
+  
+  sourceCardId    String?
+  sourceCard      Card?    @relation("SourceBridgeSuggestion", fields: [sourceCardId], references: [id], onDelete: SetNull)
+  sourceCategoryId String?
+  sourceCategory  Category? @relation("SourceBridgeSuggestionCategory", fields: [sourceCategoryId], references: [id], onDelete: SetNull)
+  targetCardId    String?
+  targetCard      Card?    @relation("TargetBridgeSuggestion", fields: [targetCardId], references: [id], onDelete: SetNull)
+  targetCategoryId String?
+  targetCategory  Category? @relation("TargetBridgeSuggestionCategory", fields: [targetCategoryId], references: [id], onDelete: SetNull)
+  
+  // Suggested content
+  suggestedQuestion String
+  suggestedAnswer String
+  connectionType  String
+  
+  // =========================================================================
+  // AI METADATA
+  // =========================================================================
+  
+  confidence      Float    @default(0.5)
+  rationale       String   // Why this bridge is suggested
+  
+  // Source of suggestion
+  suggestionSource String  // performance_analysis, semantic_similarity, co_occurrence, user_behavior
+  suggestionDetails Json?
+  
+  // =========================================================================
+  // STATUS
+  // =========================================================================
+  
+  status          String   @default("pending") // pending, accepted, rejected, deferred
+  respondedAt     DateTime?
+  
+  // If accepted, the created bridge card ID
+  createdBridgeId String?
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([status])
+  @@index([confidence])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// CROSS-CONTEXT QUIZ - METACOGNITION SUPPORT
+// =============================================================================
+// Occasional quizzes that test user's awareness of context differences
+// and help calibrate their understanding across multiple lenses.
+// =============================================================================
+
+model CrossContextQuiz {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // QUIZ CONTEXT
+  // =========================================================================
+  
+  // The card being quizzed about
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // The contexts involved
+  categoryIds     String[]
+  
+  // Type of cross-context question
+  quizType        String   // easiest_context, hardest_context, best_role, context_comparison
+  
+  // =========================================================================
+  // QUESTION CONTENT
+  // =========================================================================
+  
+  questionText    String
+  
+  // Options (for multiple choice)
+  options         Json?    // Array of { id, text, categoryId?, roleLabel? }
+  
+  // Correct answer(s)
+  correctAnswers  String[] @default([])
+  
+  // =========================================================================
+  // RESPONSE
+  // =========================================================================
+  
+  userAnswer      String?
+  isCorrect       Boolean?
+  answeredAt      DateTime?
+  responseTimeMs  Int?
+  
+  // =========================================================================
+  // OUTCOME
+  // =========================================================================
+  
+  // What insight does this quiz provide?
+  insightType     String?  // calibration_correct, needs_review, overconfident, underconfident
+  insightDetails  Json?
+  
+  // Actions triggered by this quiz
+  triggeredActions String[] @default([]) // create_annotation, adjust_emphasis, schedule_review
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([cardId])
+  @@index([quizType])
+  @@index([isCorrect])
+  @@index([createdAt])
+}
+
+// =============================================================================
+// PERFORMANCE DIVERGENCE TRACKING
+// =============================================================================
+// Tracks when a card's performance diverges significantly across contexts,
+// triggering synthesis prompts and other anti-fragmentation mechanisms.
+// =============================================================================
+
+model PerformanceDivergence {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // The card with divergent performance
+  cardId          String
+  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  
+  // =========================================================================
+  // DIVERGENCE METRICS
+  // =========================================================================
+  
+  // Best performing context
+  bestContextId   String
+  bestContext     Category @relation("BestPerformanceContext", fields: [bestContextId], references: [id], onDelete: Cascade)
+  bestAccuracy    Float
+  
+  // Worst performing context
+  worstContextId  String
+  worstContext    Category @relation("WorstPerformanceContext", fields: [worstContextId], references: [id], onDelete: Cascade)
+  worstAccuracy   Float
+  
+  // Spread between best and worst
+  performanceSpread Float
+  
+  // All contexts ranked by performance
+  contextRankings Json     // Array of { categoryId, accuracy, rank }
+  
+  // =========================================================================
+  // ANALYSIS
+  // =========================================================================
+  
+  // Severity of divergence
+  severity        String   @default("mild") // mild, moderate, severe
+  
+  // Possible causes (AI-inferred or rule-based)
+  possibleCauses  String[] @default([])
+  
+  // Recommended actions
+  recommendations Json?    // Array of { action, categoryId?, priority }
+  
+  // =========================================================================
+  // STATUS
+  // =========================================================================
+  
+  status          String   @default("active") // active, addressed, dismissed, resolved
+  
+  // Actions taken to address divergence
+  actionsTaken    Json?    // Array of { action, timestamp, result }
+  
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  
+  @@index([userId])
+  @@index([cardId])
+  @@index([severity])
+  @@index([status])
+  @@index([detectedAt])
 }
 
 // Learning modes/personas per category
