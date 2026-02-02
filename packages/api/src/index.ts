@@ -39,6 +39,7 @@ import { emphasisRoutes } from "./routes/emphasis.routes";
 import { multiContextRoutes } from "./routes/multi-context.routes";
 import { syncRoutes } from "./routes/sync.routes";
 import { aiAugmentationRoutes } from "./routes/ai-augmentation.routes";
+import { refactorRoutes } from "./routes/refactor.routes";
 
 // GraphQL
 import { schema } from "./graphql/schema.js";
@@ -154,6 +155,11 @@ async function buildServer() {
           name: "AI Augmentation",
           description: "AI-powered learning enhancements",
         },
+        {
+          name: "Refactoring",
+          description:
+            "Structural refactoring - split, merge, re-parent operations",
+        },
       ],
     },
   });
@@ -232,6 +238,7 @@ async function buildServer() {
   await app.register(multiContextRoutes, { prefix: "/api/v1/multi-context" });
   await app.register(syncRoutes, { prefix: "/api/v1/sync" });
   await app.register(aiAugmentationRoutes, { prefix: "/api/v1/ai" });
+  await app.register(refactorRoutes, { prefix: "/api/v1/refactor" });
 
   // ==========================================================================
   // ERROR HANDLING
