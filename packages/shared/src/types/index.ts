@@ -16,6 +16,7 @@ export type {
   AuthProvider,
   SubscriptionTier,
   UserPreferences,
+  ImportPreferences,
   User,
   UserLearningStats,
 } from "./user.types";
@@ -254,9 +255,9 @@ export type {
   ExportRequest,
   ExportResponse,
   SyncRequest,
-  SyncChange,
+  // SyncChange - using sync.types version
   SyncResponse,
-  SyncConflict,
+  // SyncConflict - using sync.types version
   AnalyticsTimeRange,
   StudyAnalyticsDTO,
   DailyStatsDTO,
@@ -385,7 +386,7 @@ export type {
   TelemetryConsent,
   PrivacyScope,
   MergeStrategy,
-  SyncState,
+  // SyncState - using sync.types version
   ConflictState,
   LKGCEntity,
   NormalizedValue,
@@ -786,3 +787,137 @@ export type {
 } from "./lkgc/metrics";
 
 export { DEFAULT_METRIC_THRESHOLDS } from "./lkgc/metrics";
+
+// Knowledge Ecosystem types
+export type {
+  // Core identifiers
+  CategoryId,
+  CategoryRelationId,
+  ParticipationId,
+  DynamicDeckId,
+  AnnotationId,
+  EmphasisRuleId,
+  ContextPerformanceId,
+  // Category types
+  LearningIntent,
+  DepthGoal,
+  MaturityStage,
+  SemanticIntent,
+  InterpretationPriority,
+  Category,
+  CategoryWithChildren,
+  CategoryWithRelations,
+  CategorySummary,
+  // Relationship types
+  CategoryRelationType,
+  CategoryRelation,
+  CategoryRelationWithCategories,
+  // Participation types
+  SemanticRole,
+  CardCategoryParticipation,
+  ParticipationWithCategory,
+  ParticipationWithCard,
+  // Context faces
+  CardContextFace,
+  // Lens-based types
+  ContextualAnnotation,
+  AnnotationType,
+  EmphasisRule,
+  EmphasisRuleType,
+  // Learning modes
+  LearningMode,
+  ViewLens,
+  CategoryModeType,
+  QuestionStyle,
+  CategoryLearningMode,
+  UserLearningFlow,
+  // Dynamic decks
+  DynamicDeckQueryType,
+  DynamicDeckSortBy,
+  DynamicDeck,
+  // Evolution
+  EvolutionEventType,
+  CategoryEvolutionEvent,
+  // Suggestions
+  SuggestionStatus,
+  CategorySuggestion,
+  // API Input/Output
+  CreateCategoryInput,
+  UpdateCategoryInput,
+  MoveCategoryInput,
+  SplitCategoryInput,
+  MergeCategoriesInput,
+  CreateCategoryRelationInput,
+  AddCardToCategoryInput,
+  BulkAddCardsToCategoryInput,
+  CreateContextFaceInput,
+  CreateDynamicDeckInput,
+  UpdateLearningFlowInput,
+  RespondToSuggestionInput,
+  CreateAnnotationInput,
+  UpdateAnnotationInput,
+  CreateEmphasisRuleInput,
+  UpdateEmphasisRuleInput,
+  // Graph visualization
+  CategoryGraphNode,
+  CategoryGraphEdge,
+  CategoryGraph,
+  TerritoryRegion,
+  // Study flow
+  EcosystemStudyContext,
+  CardPresentationContext,
+} from "./ecosystem.types";
+
+// =============================================================================
+// OFFLINE-FIRST SYNC TYPES
+// =============================================================================
+
+export type {
+  SyncId,
+  ClientId,
+  VectorClock,
+  SyncEntityType,
+  SyncOperation,
+  SyncChange,
+  ConflictHint,
+  ConflictResolutionStrategy,
+  SyncConflict,
+  ConflictType,
+  ConflictSeverity,
+  ResolvedConflict,
+  MergeDetails,
+  DroppedChange,
+  SyncSession,
+  SyncStatus,
+  SyncDirection,
+  SyncStats,
+  SyncError,
+  SyncErrorCode,
+  SyncPushRequest,
+  SyncPushResponse,
+  SyncPullRequest,
+  SyncPullResponse,
+  AcceptedChange,
+  RejectedChange,
+  DeletedEntity,
+  DeviceInfo,
+  SyncState,
+  ClientSyncStatus,
+  ChangeLogEntry,
+  OfflineQueueEntry,
+  OfflineOperation,
+  OfflineQueueStatus,
+  SyncConfig,
+  SyncEventType,
+  SyncEvent,
+  SyncProgressEvent,
+  SyncConflictEvent,
+} from "./sync.types";
+
+export {
+  DEFAULT_SYNC_CONFIG,
+  compareVersions,
+  mergeVectorClocks,
+  incrementVectorClock,
+  generateChecksum,
+} from "./sync.types";
