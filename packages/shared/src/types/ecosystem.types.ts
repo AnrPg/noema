@@ -816,6 +816,659 @@ export interface CategoryEvolutionEvent {
 }
 
 // =============================================================================
+// STRUCTURAL REFACTORING - SUBCATEGORIES AS COGNITIVE REFINEMENT
+// =============================================================================
+// Structural changes are LEARNING EVENTS, not admin edits.
+// They reflect the evolution of understanding and must:
+// 1. Never reset spaced repetition schedules or card histories
+// 2. Maintain an append-only event log for timeline and rollback
+// 3. Support offline-first conflict resolution
+// 4. Provide AI hooks for suggestions and analysis
+// =============================================================================
+
+/**
+ * Types of structural refactoring operations
+ */
+export type StructuralRefactorType =
+  | "split" // Parent → children with distinction articulation
+  | "merge" // A + B → unified with rationale capture
+  | "move" // Re-parent preserving all state
+  | "rename" // Identity evolution with history
+  | "archive" // Soft-delete with recovery
+  | "restore" // Undo archive or rollback to snapshot
+  | "bulk_reassign"; // Mass card reassignment
+
+/**
+ * Operation status for tracking refactor progress
+ */
+export type RefactorOperationStatus =
+  | "pending" // Awaiting user confirmation
+  | "in_progress" // Currently executing
+  | "completed" // Successfully finished
+  | "failed" // Error during execution
+  | "rolled_back" // Undone via rollback
+  | "conflict"; // Offline conflict detected
+
+/**
+ * Severity of conflicts during sync
+ */
+export type RefactorConflictSeverity =
+  | "low" // Cosmetic differences, auto-resolvable
+  | "medium" // Structural differences, needs review
+  | "high" // Data integrity risk, manual resolution required
+  | "critical"; // Potential data loss, block sync
+
+/**
+ * AI suggestion source for refactoring
+ */
+export type RefactorAISuggestionSource =
+  | "card_clustering" // Cards naturally cluster into subcategories
+  | "naming_pattern" // Card names suggest hidden structure
+  | "performance_divergence" // Different mastery levels within category
+  | "content_similarity" // Semantic analysis suggests merge
+  | "usage_pattern" // User behavior suggests restructure
+  | "external_knowledge"; // External ontology alignment
+
+// =============================================================================
+// SPLIT OPERATION - Parent → Children with Distinction Articulation
+// =============================================================================
+
+/**
+ * Child category definition for split operation
+ */
+export interface SplitChildDefinition {
+  /** Temporary ID for reference during split */
+  tempId: string;
+  /** Name of the new child category */
+  name: string;
+  /** Description of what distinguishes this child */
+  description?: string;
+  /** Framing question specific to this child lens */
+  framingQuestion?: string;
+  /** Semantic intent for this child */
+  semanticIntent?: SemanticIntent;
+  /** Icon emoji for visual identity */
+  iconEmoji?: string;
+  /** Color for visual identity */
+  color?: string;
+  /** Card IDs to assign to this child */
+  cardIds: CardId[];
+  /** Learning intent for this child */
+  learningIntent?: LearningIntent;
+  /** Depth goal for this child */
+  depthGoal?: DepthGoal;
+}
+
+/**
+ * Articulation of why cards belong to different children
+ */
+export interface SplitDistinctionArticulation {
+  /** What distinguishes child A from child B */
+  distinctionStatement: string;
+  /** Example cards that exemplify the distinction */
+  exemplarCardIds?: { childTempId: string; cardId: CardId }[];
+  /** AI confidence if auto-generated */
+  aiConfidence?: number;
+}
+
+/**
+ * Input for split operation
+ */
+export interface SplitCategoryInput {
+  /** Category ID being split */
+  categoryId: CategoryId;
+  /** Definitions for each child category */
+  children: SplitChildDefinition[];
+  /** Articulation of distinctions between children */
+  distinctions?: SplitDistinctionArticulation[];
+  /** Whether to keep the parent as a container or archive it */
+  parentDisposition: "keep_as_container" | "archive" | "convert_to_first_child";
+  /** User's reasoning for this split */
+  reason?: string;
+  /** AI hook: request AI analysis of the split */
+  requestAIAnalysis?: boolean;
+  /** Offline: timestamp for conflict resolution */
+  clientTimestamp?: Date;
+  /** Offline: client ID for conflict resolution */
+  clientId?: string;
+}
+
+/**
+ * Result of split operation
+ */
+export interface SplitCategoryResult {
+  /** Operation ID for tracking */
+  operationId: string;
+  /** Original category ID */
+  originalCategoryId: CategoryId;
+  /** Created child category IDs (maps tempId → realId) */
+  createdChildren: Record<string, CategoryId>;
+  /** Updated parent category (if kept) */
+  updatedParent?: Category;
+  /** Card reassignments performed */
+  cardReassignments: {
+    cardId: CardId;
+    fromCategoryId: CategoryId;
+    toCategoryId: CategoryId;
+  }[];
+  /** Evolution event created */
+  evolutionEventId: string;
+  /** AI analysis if requested */
+  aiAnalysis?: SplitAIAnalysis;
+}
+
+/**
+ * AI analysis of a split operation
+ */
+export interface SplitAIAnalysis {
+  /** Overall quality score of the split */
+  qualityScore: number;
+  /** Feedback on each child category */
+  childFeedback: {
+    tempId: string;
+    coherenceScore: number;
+    suggestedImprovements: string[];
+  }[];
+  /** Cards that might be misassigned */
+  potentialMisassignments: {
+    cardId: CardId;
+    currentTempId: string;
+    suggestedTempId: string;
+    confidence: number;
+    reason: string;
+  }[];
+  /** Suggested additional distinctions */
+  suggestedDistinctions?: string[];
+}
+
+// =============================================================================
+// MERGE OPERATION - A + B → Unified with Rationale Capture
+// =============================================================================
+
+/**
+ * Input for merge operation
+ */
+export interface MergeCategoriesInput {
+  /** Source category IDs to merge */
+  sourceCategoryIds: CategoryId[];
+  /** Target configuration */
+  target: {
+    /** Use existing category as target, or create new */
+    existingCategoryId?: CategoryId;
+    /** Name for merged category (if creating new) */
+    name?: string;
+    /** Description for merged category */
+    description?: string;
+    /** Framing question for merged lens */
+    framingQuestion?: string;
+    /** Semantic intent for merged category */
+    semanticIntent?: SemanticIntent;
+    /** Icon emoji */
+    iconEmoji?: string;
+    /** Color */
+    color?: string;
+    /** Parent category ID */
+    parentId?: CategoryId;
+  };
+  /** How to handle duplicate card participations */
+  duplicateHandling:
+    | "keep_highest_mastery"
+    | "keep_all_participations"
+    | "merge_participations";
+  /** How to handle conflicting annotations */
+  annotationHandling: "keep_all" | "keep_most_recent" | "merge_by_type";
+  /** How to handle conflicting emphasis rules */
+  emphasisHandling: "keep_all" | "keep_from_primary" | "disable_all";
+  /** User's rationale for this merge */
+  rationale?: string;
+  /** AI hook: request AI validation */
+  requestAIValidation?: boolean;
+  /** Offline: timestamp for conflict resolution */
+  clientTimestamp?: Date;
+  /** Offline: client ID for conflict resolution */
+  clientId?: string;
+}
+
+/**
+ * Result of merge operation
+ */
+export interface MergeCategoriesResult {
+  /** Operation ID for tracking */
+  operationId: string;
+  /** Merged category ID */
+  mergedCategoryId: CategoryId;
+  /** Source categories that were archived */
+  archivedSourceIds: CategoryId[];
+  /** Card participations migrated */
+  cardsMigrated: number;
+  /** Annotations migrated */
+  annotationsMigrated: number;
+  /** Relations updated */
+  relationsUpdated: number;
+  /** Evolution events created (one per source) */
+  evolutionEventIds: string[];
+  /** AI validation if requested */
+  aiValidation?: MergeAIValidation;
+}
+
+/**
+ * AI validation of merge operation
+ */
+export interface MergeAIValidation {
+  /** Overall coherence score of merged category */
+  coherenceScore: number;
+  /** Whether merge is recommended */
+  isRecommended: boolean;
+  /** Potential issues with the merge */
+  potentialIssues: {
+    severity: "low" | "medium" | "high";
+    description: string;
+    affectedCardIds?: CardId[];
+  }[];
+  /** Suggested post-merge improvements */
+  suggestions: string[];
+}
+
+// =============================================================================
+// MOVE/RE-PARENT OPERATION - Relocate Preserving All State
+// =============================================================================
+
+/**
+ * Input for move/re-parent operation
+ */
+export interface MoveCategoryInput {
+  /** Category ID to move */
+  categoryId: CategoryId;
+  /** New parent category ID (null for root level) */
+  newParentId: CategoryId | null;
+  /** Position among siblings */
+  position?: number;
+  /** User's reason for the move */
+  reason?: string;
+  /** Offline: timestamp for conflict resolution */
+  clientTimestamp?: Date;
+  /** Offline: client ID for conflict resolution */
+  clientId?: string;
+}
+
+/**
+ * Result of move operation
+ */
+export interface MoveCategoryResult {
+  /** Operation ID for tracking */
+  operationId: string;
+  /** Moved category with updated path */
+  movedCategory: Category;
+  /** Previous parent ID (null if was root) */
+  previousParentId: CategoryId | null;
+  /** Descendants with updated paths */
+  updatedDescendantCount: number;
+  /** Relations that were updated */
+  relationsUpdated: number;
+  /** Evolution event created */
+  evolutionEventId: string;
+}
+
+// =============================================================================
+// STRUCTURAL HISTORY - APPEND-ONLY EVENT LOG
+// =============================================================================
+
+/**
+ * Structural refactor event - append-only log entry
+ */
+export interface StructuralRefactorEvent {
+  id: string;
+  userId: UserId;
+
+  /** Type of refactoring operation */
+  operationType: StructuralRefactorType;
+  /** Status of the operation */
+  status: RefactorOperationStatus;
+
+  /** Primary category involved */
+  primaryCategoryId: CategoryId;
+  /** All categories involved in this operation */
+  affectedCategoryIds: CategoryId[];
+  /** All cards affected by this operation */
+  affectedCardIds: CardId[];
+
+  /** Input parameters for the operation */
+  operationInput: Record<string, unknown>;
+  /** Result of the operation (if completed) */
+  operationResult?: Record<string, unknown>;
+
+  /** User's articulated reason */
+  userReason?: string;
+  /** AI-generated summary of the change */
+  aiSummary?: string;
+
+  /** Snapshot ID before this operation */
+  beforeSnapshotId?: string;
+  /** Snapshot ID after this operation */
+  afterSnapshotId?: string;
+
+  /** Can this operation be rolled back? */
+  isRollbackable: boolean;
+  /** Has this operation been rolled back? */
+  wasRolledBack: boolean;
+  /** ID of the rollback event (if rolled back) */
+  rollbackEventId?: string;
+
+  /** Offline conflict information */
+  conflictInfo?: RefactorConflictInfo;
+
+  /** Client ID for offline sync */
+  clientId?: string;
+  /** Client timestamp for offline sync */
+  clientTimestamp?: Date;
+  /** Server timestamp */
+  serverTimestamp: Date;
+
+  createdAt: Date;
+}
+
+/**
+ * Conflict information for offline sync scenarios
+ */
+export interface RefactorConflictInfo {
+  /** Type of conflict */
+  conflictType:
+    | "concurrent_split" // Same category split differently offline
+    | "concurrent_merge" // Same categories merged differently
+    | "move_into_deleted" // Moved into a category that was deleted
+    | "split_after_merge" // Split a category that was merged elsewhere
+    | "card_reassignment"; // Card assigned to different categories
+  /** Severity of the conflict */
+  severity: RefactorConflictSeverity;
+  /** Conflicting client ID */
+  conflictingClientId: string;
+  /** Conflicting operation ID */
+  conflictingOperationId: string;
+  /** Details for conflict resolution */
+  conflictDetails: Record<string, unknown>;
+  /** Suggested resolution */
+  suggestedResolution?: RefactorConflictResolution;
+}
+
+/**
+ * Resolution for a refactor conflict
+ */
+export interface RefactorConflictResolution {
+  /** Resolution strategy */
+  strategy: "accept_local" | "accept_remote" | "merge_both" | "manual";
+  /** Specific actions to take */
+  actions: RefactorConflictAction[];
+  /** User who resolved (if manual) */
+  resolvedBy?: UserId;
+  /** Timestamp of resolution */
+  resolvedAt?: Date;
+}
+
+/**
+ * Individual action in conflict resolution
+ */
+export interface RefactorConflictAction {
+  actionType: "keep" | "discard" | "rename" | "reassign";
+  targetType: "category" | "card" | "relation" | "annotation";
+  targetId: string;
+  newValue?: unknown;
+}
+
+// =============================================================================
+// STRUCTURAL SNAPSHOTS - POINT-IN-TIME STATE CAPTURE
+// =============================================================================
+
+/**
+ * Snapshot of category structure at a point in time
+ */
+export interface StructuralSnapshot {
+  id: string;
+  userId: UserId;
+
+  /** Name/label for this snapshot */
+  name?: string;
+  /** Was this auto-created (before refactor) or user-created? */
+  isAutomatic: boolean;
+  /** Associated refactor event (if automatic) */
+  refactorEventId?: string;
+
+  /** Full category tree structure */
+  categoryTree: SnapshotCategoryNode[];
+  /** All category relations */
+  relations: SnapshotRelation[];
+  /** Card category participations */
+  participations: SnapshotParticipation[];
+
+  /** Stats at snapshot time */
+  stats: {
+    totalCategories: number;
+    totalCards: number;
+    totalRelations: number;
+    maxDepth: number;
+  };
+
+  /** Timestamp */
+  createdAt: Date;
+  /** Expiration (null = never expires) */
+  expiresAt?: Date;
+}
+
+/**
+ * Category node in a snapshot
+ */
+export interface SnapshotCategoryNode {
+  id: CategoryId;
+  name: string;
+  description?: string;
+  framingQuestion?: string;
+  semanticIntent?: string;
+  iconEmoji?: string;
+  color?: string;
+  parentId?: CategoryId;
+  depth: number;
+  path: CategoryId[];
+  learningIntent: string;
+  depthGoal: string;
+  maturityStage: string;
+  cardCount: number;
+  masteryScore: number;
+  position: number;
+  isArchived: boolean;
+}
+
+/**
+ * Relation in a snapshot
+ */
+export interface SnapshotRelation {
+  id: CategoryRelationId;
+  sourceCategoryId: CategoryId;
+  targetCategoryId: CategoryId;
+  relationType: string;
+  strength: number;
+  isDirectional: boolean;
+}
+
+/**
+ * Card participation in a snapshot
+ */
+export interface SnapshotParticipation {
+  cardId: CardId;
+  categoryId: CategoryId;
+  semanticRole: string;
+  isPrimary: boolean;
+  contextMastery: number;
+}
+
+/**
+ * Diff between two snapshots
+ */
+export interface StructuralDiff {
+  /** Snapshot being compared from */
+  fromSnapshotId: string;
+  /** Snapshot being compared to */
+  toSnapshotId: string;
+
+  /** Categories added */
+  addedCategories: SnapshotCategoryNode[];
+  /** Categories removed */
+  removedCategories: SnapshotCategoryNode[];
+  /** Categories modified */
+  modifiedCategories: {
+    categoryId: CategoryId;
+    changes: { field: string; oldValue: unknown; newValue: unknown }[];
+  }[];
+
+  /** Relations added */
+  addedRelations: SnapshotRelation[];
+  /** Relations removed */
+  removedRelations: SnapshotRelation[];
+
+  /** Card reassignments */
+  cardMovements: {
+    cardId: CardId;
+    fromCategoryIds: CategoryId[];
+    toCategoryIds: CategoryId[];
+  }[];
+
+  /** Summary statistics */
+  summary: {
+    categoriesAdded: number;
+    categoriesRemoved: number;
+    categoriesModified: number;
+    relationsAdded: number;
+    relationsRemoved: number;
+    cardsMoved: number;
+  };
+}
+
+// =============================================================================
+// REFACTOR TIMELINE - USER-FACING HISTORY VIEW
+// =============================================================================
+
+/**
+ * Timeline entry for display
+ */
+export interface RefactorTimelineEntry {
+  id: string;
+  timestamp: Date;
+
+  /** Type of event */
+  eventType: StructuralRefactorType | "snapshot_created" | "conflict_resolved";
+
+  /** Human-readable summary */
+  summary: string;
+  /** Detailed description */
+  description?: string;
+
+  /** Primary category name (for context) */
+  primaryCategoryName: string;
+  /** Number of categories affected */
+  affectedCategoryCount: number;
+  /** Number of cards affected */
+  affectedCardCount: number;
+
+  /** User's articulated reason */
+  userReason?: string;
+
+  /** Can this be rolled back? */
+  isRollbackable: boolean;
+  /** Has been rolled back? */
+  wasRolledBack: boolean;
+
+  /** Associated snapshot ID */
+  snapshotId?: string;
+
+  /** Visual indicator */
+  icon: string;
+  /** Color coding */
+  color: string;
+}
+
+/**
+ * Timeline query options
+ */
+export interface RefactorTimelineQuery {
+  /** Filter by category ID */
+  categoryId?: CategoryId;
+  /** Filter by operation types */
+  operationTypes?: StructuralRefactorType[];
+  /** Include rolled-back events */
+  includeRolledBack?: boolean;
+  /** Date range */
+  fromDate?: Date;
+  toDate?: Date;
+  /** Pagination */
+  limit?: number;
+  offset?: number;
+}
+
+// =============================================================================
+// AI HOOKS FOR REFACTORING
+// =============================================================================
+
+/**
+ * AI suggestion for category split
+ */
+export interface AISplitSuggestion {
+  id: string;
+  categoryId: CategoryId;
+
+  /** Source of the suggestion */
+  source: RefactorAISuggestionSource;
+  /** Confidence score */
+  confidence: number;
+
+  /** Suggested children */
+  suggestedChildren: {
+    name: string;
+    description?: string;
+    framingQuestion?: string;
+    cardIds: CardId[];
+    rationale: string;
+  }[];
+
+  /** Why this split is recommended */
+  overallRationale: string;
+
+  /** Status */
+  status: "pending" | "accepted" | "rejected" | "deferred";
+
+  createdAt: Date;
+}
+
+/**
+ * AI suggestion for category merge
+ */
+export interface AIMergeSuggestion {
+  id: string;
+  sourceCategoryIds: CategoryId[];
+
+  /** Source of the suggestion */
+  source: RefactorAISuggestionSource;
+  /** Confidence score */
+  confidence: number;
+
+  /** Suggested merged name */
+  suggestedName: string;
+  /** Suggested framing question */
+  suggestedFramingQuestion?: string;
+
+  /** Why this merge is recommended */
+  rationale: string;
+  /** Overlap analysis */
+  overlapAnalysis: {
+    sharedCardCount: number;
+    sharedThemes: string[];
+    contentSimilarity: number;
+  };
+
+  /** Status */
+  status: "pending" | "accepted" | "rejected" | "deferred";
+
+  createdAt: Date;
+}
+
+// =============================================================================
 // SUGGESTIONS - AI-DETECTED PATTERNS
 // =============================================================================
 
@@ -894,35 +1547,9 @@ export interface UpdateCategoryInput {
   enabledPlugins?: string[];
 }
 
-/**
- * Input for moving a category (re-parenting)
- */
-export interface MoveCategoryInput {
-  newParentId?: CategoryId | null;
-  position?: number;
-  reason?: string;
-}
-
-/**
- * Input for splitting a category
- */
-export interface SplitCategoryInput {
-  childNames: string[];
-  cardAssignments: Record<string, CardId[]>; // childName -> cardIds
-  keepParent?: boolean;
-  reason?: string;
-}
-
-/**
- * Input for merging categories
- */
-export interface MergeCategoriesInput {
-  sourceIds: CategoryId[];
-  targetName: string;
-  targetDescription?: string;
-  targetFramingQuestion?: string;
-  reason?: string;
-}
+// NOTE: MoveCategoryInput, SplitCategoryInput, and MergeCategoriesInput
+// are defined in the "STRUCTURAL REFACTORING" section above with full
+// offline-first support, AI hooks, and comprehensive options.
 
 /**
  * Input for creating a category relation

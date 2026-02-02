@@ -866,6 +866,41 @@ export type {
   // Study flow
   EcosystemStudyContext,
   CardPresentationContext,
+  // =========================================================================
+  // STRUCTURAL REFACTORING - Subcategories as Cognitive Refinement
+  // =========================================================================
+  // Refactor types
+  StructuralRefactorType,
+  RefactorOperationStatus,
+  RefactorConflictSeverity,
+  RefactorAISuggestionSource,
+  // Split operation
+  SplitChildDefinition,
+  SplitDistinctionArticulation,
+  SplitCategoryResult,
+  SplitAIAnalysis,
+  // Merge operation
+  MergeCategoriesResult,
+  MergeAIValidation,
+  // Move operation
+  MoveCategoryResult,
+  // Structural history
+  StructuralRefactorEvent,
+  RefactorConflictInfo,
+  RefactorConflictResolution,
+  RefactorConflictAction,
+  // Snapshots & diffs
+  StructuralSnapshot,
+  SnapshotCategoryNode,
+  SnapshotRelation,
+  SnapshotParticipation,
+  StructuralDiff,
+  // Timeline
+  RefactorTimelineEntry,
+  RefactorTimelineQuery,
+  // AI suggestions
+  AISplitSuggestion,
+  AIMergeSuggestion,
 } from "./ecosystem.types";
 
 // =============================================================================
