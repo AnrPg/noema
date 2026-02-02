@@ -161,3 +161,16 @@ export * from "./decision-engine";
 // This keeps the ai-boundary as a distinct integration point with its own
 // namespace, which aligns with its role as a boundary layer.
 // -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// OBSIDIAN MARKDOWN MIRROR
+// -----------------------------------------------------------------------------
+// NOTE: The markdown-mirror module is NOT re-exported from here to keep
+// a clean separation of concerns. Import directly when needed:
+//
+//   import { MarkdownSyncEngine, createMarkdownSyncEngine } from "./lkgc/markdown-mirror";
+//
+// Core principle: LKGC is the source of truth. Markdown is a mirror, not
+// the canonical store. All imports from Markdown are treated as content
+// operations with provenance.
+// -----------------------------------------------------------------------------
