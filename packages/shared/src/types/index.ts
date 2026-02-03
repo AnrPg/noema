@@ -1082,12 +1082,15 @@ export type {
   // Parameters
   ModeParameterType,
   ModeParameterDefinition,
+  ParameterRange,
+  EnumOption,
   ModeParameterConstraints,
   ModeParameterSchema,
   ModeParameterUiGroup,
   CrossValidationRule,
   // Policies
   ModePolicyAffects,
+  AffectedPolicies,
   LkgcSignalType,
   // UI
   ModeUiEmphasis,

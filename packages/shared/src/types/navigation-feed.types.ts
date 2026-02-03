@@ -1156,7 +1156,7 @@ export type NavigationFeedType =
  * Default feed configuration for Exploration mode
  */
 export const EXPLORATION_FEED_CONFIG: ModeFeedConfiguration = {
-  modeId: "system:exploration",
+  modeId: "system:exploration" as LearningModeId,
   enabledFeeds: ["neighborhood", "constellation_challenge"],
   feedWeights: {
     neighborhood: 0.6,
@@ -1184,7 +1184,7 @@ export const EXPLORATION_FEED_CONFIG: ModeFeedConfiguration = {
  * Default feed configuration for Goal-Driven mode
  */
 export const GOAL_DRIVEN_FEED_CONFIG: ModeFeedConfiguration = {
-  modeId: "system:goal_driven",
+  modeId: "system:goal_driven" as LearningModeId,
   enabledFeeds: ["prerequisite_path", "coverage", "neighborhood"],
   feedWeights: {
     neighborhood: 0.2,
@@ -1217,7 +1217,7 @@ export const GOAL_DRIVEN_FEED_CONFIG: ModeFeedConfiguration = {
  * Default feed configuration for Exam-Oriented mode
  */
 export const EXAM_ORIENTED_FEED_CONFIG: ModeFeedConfiguration = {
-  modeId: "system:exam_oriented",
+  modeId: "system:exam_oriented" as LearningModeId,
   enabledFeeds: ["coverage", "prerequisite_path"],
   feedWeights: {
     neighborhood: 0.05,
@@ -1245,7 +1245,7 @@ export const EXAM_ORIENTED_FEED_CONFIG: ModeFeedConfiguration = {
  * Default feed configuration for Synthesis mode
  */
 export const SYNTHESIS_FEED_CONFIG: ModeFeedConfiguration = {
-  modeId: "system:synthesis",
+  modeId: "system:synthesis" as LearningModeId,
   enabledFeeds: ["constellation_challenge", "neighborhood"],
   feedWeights: {
     neighborhood: 0.2,
