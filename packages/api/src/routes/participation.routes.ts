@@ -18,7 +18,7 @@ import { prisma, Prisma } from "../config/database.js";
 import { authenticate } from "../middleware/auth.js";
 import {
   syncParticipationOnCreate,
-  syncParticipationOnUpdate,
+  syncParticipationOnUpdate as _syncParticipationOnUpdate,
 } from "../ecosystem-bridge/index.js";
 
 // =============================================================================

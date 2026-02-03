@@ -9,6 +9,14 @@ import { authenticate } from "../middleware/auth.js";
 import { getEcosystemBridge } from "./index.js";
 
 // =============================================================================
+// TYPES
+// =============================================================================
+
+interface _AuthenticatedRequest extends FastifyRequest {
+  userId?: string;
+}
+
+// =============================================================================
 // SCHEMAS
 // =============================================================================
 
@@ -48,6 +56,18 @@ const masteryProjectionSchema = z.object({
 });
 
 // =============================================================================
+// HELPERS
+// =============================================================================
+
+function getUserId(request: FastifyRequest): string {
+  const userId = getUserId(request);
+  if (!userId) {
+    throw new Error("User not authenticated");
+  }
+  return userId;
+}
+
+// =============================================================================
 // ROUTES
 // =============================================================================
 
@@ -66,7 +86,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { categoryId } = syncCategorySchema.parse(request.body);
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       // Get category details
       const { prisma } = await import("../config/database.js");
@@ -100,7 +120,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
       const { categoryRelationId } = syncCategoryRelationSchema.parse(
         request.body,
       );
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       const { prisma } = await import("../config/database.js");
       const relation = await prisma.categoryRelation.findFirst({
@@ -134,7 +154,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { participationId } = syncParticipationSchema.parse(request.body);
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       const { prisma } = await import("../config/database.js");
       const participation = await prisma.cardCategoryParticipation.findFirst({
@@ -175,7 +195,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     "/ecosystem-bridge/sync/all-categories",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
       const result = await bridge.syncAllCategories(userId);
       return reply.send(result);
     },
@@ -188,7 +208,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     "/ecosystem-bridge/sync/all-relations",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
       const result = await bridge.syncAllCategoryRelations(userId);
       return reply.send(result);
     },
@@ -201,7 +221,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     "/ecosystem-bridge/sync/all-participations",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
       const result = await bridge.syncAllParticipations(userId);
       return reply.send(result);
     },
@@ -214,7 +234,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     "/ecosystem-bridge/sync/full",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       const [categoriesResult, relationsResult, participationsResult] =
         await Promise.all([
@@ -247,7 +267,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const data = contextReviewSchema.parse(request.body);
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       const result = await bridge.emitContextReviewEvent({
         ...data,
@@ -270,7 +290,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const data = masteryProjectionSchema.parse(request.body);
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       const result = await bridge.projectMasteryToParticipation({
         ...data,
@@ -293,7 +313,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const data = decisionContextSchema.parse(request.body);
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
 
       const result = await bridge.buildDecisionEngineContext({
         ...data,
@@ -315,7 +335,7 @@ export async function ecosystemBridgeRoutes(app: FastifyInstance) {
     "/ecosystem-bridge/statistics",
     { preHandler: [authenticate] },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const userId = (request as any).userId;
+      const userId = getUserId(request);
       const stats = await bridge.getStatistics(userId);
       return reply.send(stats);
     },

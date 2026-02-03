@@ -44,6 +44,7 @@ import participationRoutes from "./routes/participation.routes";
 import synthesisRoutes from "./routes/synthesis.routes";
 import bridgeCardRoutes from "./routes/bridge-card.routes";
 import ecosystemBridgeRoutes from "./ecosystem-bridge/routes";
+import { canonicalCardRoutes } from "./canonical-card/index";
 
 // GraphQL
 import { schema } from "./graphql/schema.js";
@@ -183,6 +184,11 @@ async function buildServer() {
           description:
             "Bidirectional sync between Ecosystem (Categories as Lenses) and LKGC (Local Knowledge Graph Core)",
         },
+        {
+          name: "Canonical Cards",
+          description:
+            "Multi-faceted canonical cards with content primitives and context-sensitive faces",
+        },
       ],
     },
   });
@@ -266,6 +272,9 @@ async function buildServer() {
   await app.register(synthesisRoutes, { prefix: "/api/v1/synthesis" });
   await app.register(bridgeCardRoutes, { prefix: "/api/v1/bridge-cards" });
   await app.register(ecosystemBridgeRoutes, { prefix: "/api/v1" });
+  await app.register(canonicalCardRoutes, {
+    prefix: "/api/v1/canonical-cards",
+  });
 
   // ==========================================================================
   // ERROR HANDLING

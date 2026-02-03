@@ -19,192 +19,201 @@ datasource db {
 // =============================================================================
 
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  passwordHash   String?   // Null for OAuth users
-  displayName    String
-  avatarUrl      String?
-  isEmailVerified Boolean  @default(false)
-  isActive       Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  lastLoginAt    DateTime?
-  
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String? // Null for OAuth users
+  displayName     String
+  avatarUrl       String?
+  isEmailVerified Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime?
+
   // Relations
-  preferences    UserPreferences?
-  learningStats  UserLearningStats?
-  cognitiveProfile CognitiveProfile?
-  oauthAccounts  OAuthAccount[]
-  sessions       Session[]
-  decks          Deck[]
-  cards          Card[]
-  reviews        ReviewRecord[]
-  xpTransactions XPTransaction[]
-  achievements   UserAchievement[]
-  streaks        Streak[]
-  skillProgress  UserSkillProgress[]
-  challenges     UserChallenge[]
+  preferences         UserPreferences?
+  learningStats       UserLearningStats?
+  cognitiveProfile    CognitiveProfile?
+  oauthAccounts       OAuthAccount[]
+  sessions            Session[]
+  decks               Deck[]
+  cards               Card[]
+  reviews             ReviewRecord[]
+  xpTransactions      XPTransaction[]
+  achievements        UserAchievement[]
+  streaks             Streak[]
+  skillProgress       UserSkillProgress[]
+  challenges          UserChallenge[]
   metaLearningUnlocks UserMetaLearningUnlock[]
-  installedPlugins UserPlugin[]
-  studySessions  StudySession[]
-  notifications  Notification[]
-  
+  installedPlugins    UserPlugin[]
+  studySessions       StudySession[]
+  notifications       Notification[]
+
   // Knowledge Ecosystem relations
-  categories     Category[]
-  learningFlow   UserLearningFlow?
-  dynamicDecks   DynamicDeck[]
-  categorySuggestions CategorySuggestion[]
+  categories                 Category[]
+  learningFlow               UserLearningFlow?
+  dynamicDecks               DynamicDeck[]
+  categorySuggestions        CategorySuggestion[]
   multiContextReviewSessions MultiContextReviewSession[]
-  
+
   // Structural Refactoring relations
   structuralRefactorEvents StructuralRefactorEvent[]
-  structuralSnapshots StructuralSnapshot[]
-  aiSplitSuggestions AISplitSuggestion[]
-  aiMergeSuggestions AIMergeSuggestion[]
-  
+  structuralSnapshots      StructuralSnapshot[]
+  aiSplitSuggestions       AISplitSuggestion[]
+  aiMergeSuggestions       AIMergeSuggestion[]
+
   // Multi-Belonging & Synthesis Engine relations
-  synthesisPrompts SynthesisPrompt[]
-  synthesisResponses SynthesisResponse[]
-  synthesisNotes SynthesisNote[]
-  bridgeCards BridgeCard[]
-  bridgeCardSuggestions BridgeCardSuggestion[]
-  crossContextQuizzes CrossContextQuiz[]
+  synthesisPrompts       SynthesisPrompt[]
+  synthesisResponses     SynthesisResponse[]
+  synthesisNotes         SynthesisNote[]
+  bridgeCards            BridgeCard[]
+  bridgeCardSuggestions  BridgeCardSuggestion[]
+  crossContextQuizzes    CrossContextQuiz[]
   performanceDivergences PerformanceDivergence[]
-  
+
+  // Learning Mode Framework relations
+  modePreference       UserModePreference?
+  modeSessions         ModeSession[]
+  modeActivations      ModeActivation[]
+  modeParameterPresets ModeParameterPreset[]
+
+  // Canonical Card & Face System relations
+  canonicalCards CanonicalCard[]
+
   @@index([email])
   @@index([createdAt])
 }
 
 model UserPreferences {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Display settings
-  theme             String   @default("system") // light, dark, system
-  language          String   @default("en")
-  timezone          String   @default("UTC")
-  
+  theme    String @default("system") // light, dark, system
+  language String @default("en")
+  timezone String @default("UTC")
+
   // Study settings
-  dailyGoal         Int      @default(50) // Cards per day
-  sessionDuration   Int      @default(20) // Minutes
-  newCardsPerDay    Int      @default(20)
-  maxReviewsPerDay  Int      @default(200)
-  
+  dailyGoal        Int @default(50) // Cards per day
+  sessionDuration  Int @default(20) // Minutes
+  newCardsPerDay   Int @default(20)
+  maxReviewsPerDay Int @default(200)
+
   // Notification settings
-  enableReminders   Boolean  @default(true)
-  reminderTime      String   @default("09:00") // HH:mm format
+  enableReminders    Boolean @default(true)
+  reminderTime       String  @default("09:00") // HH:mm format
   emailNotifications Boolean @default(true)
-  pushNotifications Boolean  @default(true)
-  
+  pushNotifications  Boolean @default(true)
+
   // Scheduler settings
-  schedulerType     String   @default("fsrs") // fsrs, hlr, sm2
-  schedulerConfig   Json     @default("{}")
-  
+  schedulerType   String @default("fsrs") // fsrs, hlr, sm2
+  schedulerConfig Json   @default("{}")
+
   // Audio/Visual settings
-  audioEnabled      Boolean  @default(true)
-  animationsEnabled Boolean  @default(true)
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  audioEnabled      Boolean @default(true)
+  animationsEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model UserLearningStats {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Core metrics
-  totalReviews    Int      @default(0)
-  totalCards      Int      @default(0)
-  masteredCards   Int      @default(0)
-  totalStudyTime  Int      @default(0) // Minutes
-  totalXP         Int      @default(0)
-  level           Int      @default(1)
-  
+  totalReviews   Int @default(0)
+  totalCards     Int @default(0)
+  masteredCards  Int @default(0)
+  totalStudyTime Int @default(0) // Minutes
+  totalXP        Int @default(0)
+  level          Int @default(1)
+
   // Streak info
-  currentStreak   Int      @default(0)
-  longestStreak   Int      @default(0)
-  
+  currentStreak Int @default(0)
+  longestStreak Int @default(0)
+
   // Performance
-  averageAccuracy Float    @default(0)
-  avgResponseTime Int      @default(0) // Milliseconds
-  retentionRate   Float    @default(0)
-  
+  averageAccuracy Float @default(0)
+  avgResponseTime Int   @default(0) // Milliseconds
+  retentionRate   Float @default(0)
+
   // Achievement tracking
-  perfectSessions Int      @default(0)
-  accuracyStreak  Int      @default(0)
-  decksCreated    Int      @default(0)
-  cardsCreated    Int      @default(0)
-  decksShared     Int      @default(0)
-  deckDownloads   Int      @default(0)
-  nightReviews    Int      @default(0)
-  morningReviews  Int      @default(0)
-  
+  perfectSessions Int @default(0)
+  accuracyStreak  Int @default(0)
+  decksCreated    Int @default(0)
+  cardsCreated    Int @default(0)
+  decksShared     Int @default(0)
+  deckDownloads   Int @default(0)
+  nightReviews    Int @default(0)
+  morningReviews  Int @default(0)
+
   // Calibration
-  calibrationScore Float   @default(0.5)
-  overconfidence   Float   @default(0)
-  underconfidence  Float   @default(0)
-  
+  calibrationScore Float @default(0.5)
+  overconfidence   Float @default(0)
+  underconfidence  Float @default(0)
+
   // Memory integrity
   memoryIntegrityScore Int @default(50)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CognitiveProfile {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Learning style preferences
-  preferredModality     String   @default("mixed") // visual, auditory, kinesthetic, mixed
-  optimalSessionLength  Int      @default(25) // Minutes
-  peakPerformanceHours  Json     @default("[]") // Array of hours (0-23)
-  
+  preferredModality    String @default("mixed") // visual, auditory, kinesthetic, mixed
+  optimalSessionLength Int    @default(25) // Minutes
+  peakPerformanceHours Json   @default("[]") // Array of hours (0-23)
+
   // Cognitive metrics
-  workingMemoryCapacity Float    @default(0.5) // 0-1 normalized
-  processingSpeed       Float    @default(0.5)
-  attentionSpan         Int      @default(25) // Minutes
-  
+  workingMemoryCapacity Float @default(0.5) // 0-1 normalized
+  processingSpeed       Float @default(0.5)
+  attentionSpan         Int   @default(25) // Minutes
+
   // Difficulty preferences
-  preferredDifficulty   Float    @default(0.5) // 0-1, determines challenge level
-  
+  preferredDifficulty Float @default(0.5) // 0-1, determines challenge level
+
   // Inferred parameters (updated by ML)
-  fsrsParameters        Json     @default("[]") // Personalized FSRS weights
-  hlrParameters         Json     @default("{}")
-  
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  fsrsParameters Json @default("[]") // Personalized FSRS weights
+  hlrParameters  Json @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model OAuthAccount {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider      String   // google, github, apple
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String // google, github, apple
   providerAccountId String
-  accessToken   String?
-  refreshToken  String?
-  expiresAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
 
 model Session {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token        String   @unique
-  userAgent    String?
-  ipAddress    String?
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([token])
 }
@@ -214,54 +223,54 @@ model Session {
 // =============================================================================
 
 model Deck {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  name            String
-  description     String?
-  coverImageUrl   String?
-  iconEmoji       String?
-  color           String?  // Hex color for theming
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+  coverImageUrl String?
+  iconEmoji     String?
+  color         String? // Hex color for theming
+
   // Hierarchy
-  parentDeckId    String?
-  parentDeck      Deck?    @relation("DeckHierarchy", fields: [parentDeckId], references: [id])
-  subDecks        Deck[]   @relation("DeckHierarchy")
-  
+  parentDeckId String?
+  parentDeck   Deck?   @relation("DeckHierarchy", fields: [parentDeckId], references: [id])
+  subDecks     Deck[]  @relation("DeckHierarchy")
+
   // Settings (JSON for flexibility)
-  settings        Json     @default("{}")
-  
+  settings Json @default("{}")
+
   // Sharing
-  isPublic        Boolean  @default(false)
+  isPublic              Boolean @default(false)
   isSharedToMarketplace Boolean @default(false)
-  shareCode       String?  @unique
-  downloadCount   Int      @default(0)
-  
+  shareCode             String? @unique
+  downloadCount         Int     @default(0)
+
   // Stats (denormalized for performance)
-  cardCount       Int      @default(0)
-  newCount        Int      @default(0)
-  learningCount   Int      @default(0)
-  reviewCount     Int      @default(0)
-  relearningCount Int      @default(0)
-  masteredCount   Int      @default(0)
-  
+  cardCount       Int @default(0)
+  newCount        Int @default(0)
+  learningCount   Int @default(0)
+  reviewCount     Int @default(0)
+  relearningCount Int @default(0)
+  masteredCount   Int @default(0)
+
   // Metadata
-  tags            String[] @default([])
-  category        String?
-  language        String   @default("en")
-  
+  tags     String[] @default([])
+  category String?
+  language String   @default("en")
+
   // Ordering
-  position        Int      @default(0)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  lastStudiedAt   DateTime?
-  
+  position Int @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastStudiedAt DateTime?
+
   // Relations
-  cards           Card[]
-  studySessions   StudySession[]
-  
+  cards         Card[]
+  studySessions StudySession[]
+
   @@index([userId])
   @@index([parentDeckId])
   @@index([isPublic])
@@ -269,76 +278,80 @@ model Deck {
 }
 
 model Card {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deckId          String
-  deck            Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
   // Card type (discriminator for content)
-  cardType        String   // atomic_text, cloze, image_occlusion, etc.
-  
+  cardType String // atomic_text, cloze, image_occlusion, etc.
+
   // Content (JSON for flexibility across card types)
-  content         Json     // Front/back/options based on cardType
-  
+  content Json // Front/back/options based on cardType
+
   // Media attachments
-  media           CardMedia[]
-  
+  media CardMedia[]
+
   // SRS State
-  state           String   @default("new") // new, learning, review, relearning, mastered
-  stability       Float    @default(0)
-  difficulty      Float    @default(0.3)
-  elapsedDays     Float    @default(0)
-  scheduledDays   Float    @default(0)
-  reps            Int      @default(0)
-  lapses          Int      @default(0)
-  lastReviewDate  DateTime?
-  nextReviewDate  DateTime?
-  
+  state          String    @default("new") // new, learning, review, relearning, mastered
+  stability      Float     @default(0)
+  difficulty     Float     @default(0.3)
+  elapsedDays    Float     @default(0)
+  scheduledDays  Float     @default(0)
+  reps           Int       @default(0)
+  lapses         Int       @default(0)
+  lastReviewDate DateTime?
+  nextReviewDate DateTime?
+
   // HLR-specific state (if using HLR)
-  halfLife        Float?
-  theta           Json?    // HLR theta vector
-  
+  halfLife Float?
+  theta    Json? // HLR theta vector
+
   // Metadata
-  tags            String[] @default([])
-  flags           String[] @default([]) // leech, suspended, marked
-  notes           String?
-  source          String?  // Where the card came from
-  
+  tags   String[] @default([])
+  flags  String[] @default([]) // leech, suspended, marked
+  notes  String?
+  source String? // Where the card came from
+
   // Analytics
-  averageTime     Int      @default(0) // Avg response time in ms
-  totalReviews    Int      @default(0)
-  correctReviews  Int      @default(0)
-  
+  averageTime    Int @default(0) // Avg response time in ms
+  totalReviews   Int @default(0)
+  correctReviews Int @default(0)
+
   // Position within deck
-  position        Int      @default(0)
-  
+  position Int @default(0)
+
   // Timestamps
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  reviews         ReviewRecord[]
-  relatedCards    CardRelation[] @relation("SourceCard")
-  relatedTo       CardRelation[] @relation("TargetCard")
-  
+  reviews      ReviewRecord[]
+  relatedCards CardRelation[] @relation("SourceCard")
+  relatedTo    CardRelation[] @relation("TargetCard")
+
   // Knowledge Ecosystem relations
-  categoryParticipations CardCategoryParticipation[]
-  contextFaces    CardContextFace[]
-  contextualAnnotations ContextualAnnotation[]
+  categoryParticipations    CardCategoryParticipation[]
+  contextFaces              CardContextFace[]
+  contextualAnnotations     ContextualAnnotation[]
   contextPerformanceRecords ContextPerformanceRecord[]
-  
+
   // Multi-Belonging & Synthesis relations
-  synthesisNotes  SynthesisNote[]
-  synthesisPrompts SynthesisPrompt[]
-  bridgeCardAsSource BridgeCard[] @relation("SourceBridgeCard")
-  bridgeCardAsTarget BridgeCard[] @relation("TargetBridgeCard")
-  bridgeCard      BridgeCard? @relation("BridgeCardRef")
-  bridgeSuggestionsAsSource BridgeCardSuggestion[] @relation("SourceBridgeSuggestion")
-  bridgeSuggestionsAsTarget BridgeCardSuggestion[] @relation("TargetBridgeSuggestion")
-  crossContextQuizzes CrossContextQuiz[]
-  performanceDivergences PerformanceDivergence[]
-  
+  synthesisNotes            SynthesisNote[]
+  synthesisPrompts          SynthesisPrompt[]
+  bridgeCardAsSource        BridgeCard[]            @relation("SourceBridgeCard")
+  bridgeCardAsTarget        BridgeCard[]            @relation("TargetBridgeCard")
+  bridgeCard                BridgeCard?             @relation("BridgeCardRef")
+  bridgeSuggestionsAsSource BridgeCardSuggestion[]  @relation("SourceBridgeSuggestion")
+  bridgeSuggestionsAsTarget BridgeCardSuggestion[]  @relation("TargetBridgeSuggestion")
+  crossContextQuizzes       CrossContextQuiz[]
+  performanceDivergences    PerformanceDivergence[]
+
+  // Canonical Card migration relation
+  canonicalCardId String?        @unique
+  canonicalCard   CanonicalCard? @relation("CanonicalCardLegacy", fields: [canonicalCardId], references: [id])
+
   @@index([userId])
   @@index([deckId])
   @@index([state])
@@ -347,38 +360,38 @@ model Card {
 }
 
 model CardMedia {
-  id            String   @id @default(cuid())
-  cardId        String
-  card          Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
-  type          String   // image, audio, video
-  url           String
-  filename      String
-  mimeType      String
-  size          Int      // Bytes
-  width         Int?     // For images/videos
-  height        Int?
-  duration      Int?     // For audio/video in seconds
-  
+  id     String @id @default(cuid())
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  type     String // image, audio, video
+  url      String
+  filename String
+  mimeType String
+  size     Int // Bytes
+  width    Int? // For images/videos
+  height   Int?
+  duration Int? // For audio/video in seconds
+
   // For image occlusion
-  occlusionData Json?    // Regions, masks, etc.
-  
-  createdAt     DateTime @default(now())
-  
+  occlusionData Json? // Regions, masks, etc.
+
+  createdAt DateTime @default(now())
+
   @@index([cardId])
 }
 
 model CardRelation {
-  id            String   @id @default(cuid())
-  sourceCardId  String
-  sourceCard    Card     @relation("SourceCard", fields: [sourceCardId], references: [id], onDelete: Cascade)
-  targetCardId  String
-  targetCard    Card     @relation("TargetCard", fields: [targetCardId], references: [id], onDelete: Cascade)
-  relationType  String   // prerequisite, similar, opposite, related
-  strength      Float    @default(1) // Relationship strength 0-1
-  
-  createdAt     DateTime @default(now())
-  
+  id           String @id @default(cuid())
+  sourceCardId String
+  sourceCard   Card   @relation("SourceCard", fields: [sourceCardId], references: [id], onDelete: Cascade)
+  targetCardId String
+  targetCard   Card   @relation("TargetCard", fields: [targetCardId], references: [id], onDelete: Cascade)
+  relationType String // prerequisite, similar, opposite, related
+  strength     Float  @default(1) // Relationship strength 0-1
+
+  createdAt DateTime @default(now())
+
   @@unique([sourceCardId, targetCardId, relationType])
   @@index([sourceCardId])
   @@index([targetCardId])
@@ -389,38 +402,38 @@ model CardRelation {
 // =============================================================================
 
 model ReviewRecord {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  studySessionId  String?
-  studySession    StudySession? @relation(fields: [studySessionId], references: [id])
-  
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardId         String
+  card           Card          @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  studySessionId String?
+  studySession   StudySession? @relation(fields: [studySessionId], references: [id])
+
   // Review details
-  rating          Int      // 1-4 (Again, Hard, Good, Easy)
-  responseTime    Int      // Milliseconds
-  
+  rating       Int // 1-4 (Again, Hard, Good, Easy)
+  responseTime Int // Milliseconds
+
   // State before review
-  previousState   String
-  previousStability Float?
+  previousState      String
+  previousStability  Float?
   previousDifficulty Float?
-  
+
   // State after review
-  newState        String
-  newStability    Float?
-  newDifficulty   Float?
-  scheduledDays   Float
-  
+  newState      String
+  newStability  Float?
+  newDifficulty Float?
+  scheduledDays Float
+
   // Optional confidence rating
-  confidenceBefore Float?  // 0-1, user's predicted recall
-  
+  confidenceBefore Float? // 0-1, user's predicted recall
+
   // Context
-  reviewType      String   @default("normal") // normal, cram, filtered
-  schedulerUsed   String   @default("fsrs") // fsrs, hlr, sm2
-  
-  createdAt       DateTime @default(now())
-  
+  reviewType    String @default("normal") // normal, cram, filtered
+  schedulerUsed String @default("fsrs") // fsrs, hlr, sm2
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([cardId])
   @@index([studySessionId])
@@ -428,40 +441,40 @@ model ReviewRecord {
 }
 
 model StudySession {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deckId          String?
-  deck            Deck?    @relation(fields: [deckId], references: [id])
-  
+  id     String  @id @default(cuid())
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deckId String?
+  deck   Deck?   @relation(fields: [deckId], references: [id])
+
   // Session info
-  sessionType     String   @default("normal") // normal, cram, filtered, challenge
-  
+  sessionType String @default("normal") // normal, cram, filtered, challenge
+
   // Timing
-  startTime       DateTime
-  endTime         DateTime?
-  totalDuration   Int      @default(0) // Minutes
-  activeDuration  Int      @default(0) // Excluding breaks
-  
+  startTime      DateTime
+  endTime        DateTime?
+  totalDuration  Int       @default(0) // Minutes
+  activeDuration Int       @default(0) // Excluding breaks
+
   // Stats
-  cardsStudied    Int      @default(0)
-  cardsNew        Int      @default(0)
-  cardsLearning   Int      @default(0)
-  cardsReview     Int      @default(0)
-  correctCount    Int      @default(0)
-  
+  cardsStudied  Int @default(0)
+  cardsNew      Int @default(0)
+  cardsLearning Int @default(0)
+  cardsReview   Int @default(0)
+  correctCount  Int @default(0)
+
   // Performance
-  accuracy        Float    @default(0)
-  avgResponseTime Int      @default(0)
-  
+  accuracy        Float @default(0)
+  avgResponseTime Int   @default(0)
+
   // XP earned
-  xpEarned        Int      @default(0)
-  
+  xpEarned Int @default(0)
+
   // Reviews in this session
-  reviews         ReviewRecord[]
-  
-  createdAt       DateTime @default(now())
-  
+  reviews ReviewRecord[]
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([deckId])
   @@index([startTime])
@@ -472,16 +485,16 @@ model StudySession {
 // =============================================================================
 
 model XPTransaction {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  amount      Int
-  source      String   // card_review, achievement, challenge, streak, etc.
-  details     Json     @default("{}")
-  
-  createdAt   DateTime @default(now())
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount  Int
+  source  String // card_review, achievement, challenge, streak, etc.
+  details Json   @default("{}")
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([createdAt])
 }
@@ -493,80 +506,80 @@ model UserAchievement {
   achievementId String
   unlockedAt    DateTime @default(now())
   xpAwarded     Int
-  
+
   @@unique([userId, achievementId])
   @@index([userId])
 }
 
 model Streak {
-  id                String   @id @default(cuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  streakType        String   @default("daily") // daily, weekly
-  currentCount      Int      @default(0)
-  longestStreak     Int      @default(0)
-  lastActivityDate  DateTime
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  streakType       String   @default("daily") // daily, weekly
+  currentCount     Int      @default(0)
+  longestStreak    Int      @default(0)
+  lastActivityDate DateTime
+
   // Streak freeze
-  freezeCount       Int      @default(0)
-  lastFreezeUsed    DateTime?
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  freezeCount    Int       @default(0)
+  lastFreezeUsed DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([userId, streakType])
   @@index([userId])
 }
 
 model UserSkillProgress {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  treeId      String
-  nodeId      String
-  level       Int      @default(0)
-  xpInvested  Int      @default(0)
-  unlockedAt  DateTime?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  treeId     String
+  nodeId     String
+  level      Int       @default(0)
+  xpInvested Int       @default(0)
+  unlockedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([userId, treeId, nodeId])
   @@index([userId])
 }
 
 model UserChallenge {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   challengeId   String
-  challengeData Json     // Snapshot of challenge details
-  
-  progress      Int      @default(0)
-  isComplete    Boolean  @default(false)
-  completedAt   DateTime?
-  xpAwarded     Int      @default(0)
-  
-  startDate     DateTime
-  endDate       DateTime
-  
-  createdAt     DateTime @default(now())
-  
+  challengeData Json // Snapshot of challenge details
+
+  progress    Int       @default(0)
+  isComplete  Boolean   @default(false)
+  completedAt DateTime?
+  xpAwarded   Int       @default(0)
+
+  startDate DateTime
+  endDate   DateTime
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([endDate])
 }
 
 model UserMetaLearningUnlock {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  unlockId    String
-  unlockedAt  DateTime @default(now())
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  unlockId   String
+  unlockedAt DateTime @default(now())
+
   @@unique([userId, unlockId])
   @@index([userId])
 }
@@ -576,60 +589,60 @@ model UserMetaLearningUnlock {
 // =============================================================================
 
 model Plugin {
-  id            String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Identity
-  name          String
-  slug          String   @unique
-  version       String
-  author        String
-  description   String?
-  
+  name        String
+  slug        String  @unique
+  version     String
+  author      String
+  description String?
+
   // Metadata
-  category      String   // card_generation, scheduling, domain_specific, etc.
-  iconUrl       String?
-  repository    String?
-  homepage      String?
-  
+  category   String // card_generation, scheduling, domain_specific, etc.
+  iconUrl    String?
+  repository String?
+  homepage   String?
+
   // Content
-  manifestUrl   String
-  bundleUrl     String
-  
+  manifestUrl String
+  bundleUrl   String
+
   // Stats
-  downloadCount Int      @default(0)
-  rating        Float    @default(0)
-  ratingCount   Int      @default(0)
-  
+  downloadCount Int   @default(0)
+  rating        Float @default(0)
+  ratingCount   Int   @default(0)
+
   // Verification
-  isVerified    Boolean  @default(false)
-  isOfficial    Boolean  @default(false)
-  
+  isVerified Boolean @default(false)
+  isOfficial Boolean @default(false)
+
   // Permissions required
-  permissions   String[] @default([])
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  permissions String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  users         UserPlugin[]
-  
+  users UserPlugin[]
+
   @@index([slug])
   @@index([category])
 }
 
 model UserPlugin {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pluginId    String
-  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
-  
-  isEnabled   Boolean  @default(true)
-  settings    Json     @default("{}")
-  
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pluginId String
+  plugin   Plugin @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  isEnabled Boolean @default(true)
+  settings  Json    @default("{}")
+
   installedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   @@unique([userId, pluginId])
   @@index([userId])
 }
@@ -639,20 +652,20 @@ model UserPlugin {
 // =============================================================================
 
 model Notification {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  type        String   // streak_reminder, achievement, challenge, system
-  title       String
-  body        String
-  data        Json     @default("{}")
-  
-  isRead      Boolean  @default(false)
-  readAt      DateTime?
-  
-  createdAt   DateTime @default(now())
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type  String // streak_reminder, achievement, challenge, system
+  title String
+  body  String
+  data  Json   @default("{}")
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
@@ -663,26 +676,26 @@ model Notification {
 // =============================================================================
 
 model Upload {
-  id          String   @id @default(cuid())
-  userId      String
-  
-  filename    String
+  id     String @id @default(cuid())
+  userId String
+
+  filename     String
   originalName String
-  mimeType    String
-  size        Int      // Bytes
-  
-  bucket      String   @default("uploads")
-  key         String   // S3/MinIO key
-  url         String
-  
-  status      String   @default("pending") // pending, processing, ready, error
+  mimeType     String
+  size         Int // Bytes
+
+  bucket String @default("uploads")
+  key    String // S3/MinIO key
+  url    String
+
+  status      String    @default("pending") // pending, processing, ready, error
   processedAt DateTime?
-  
+
   // For parsed content
   parsedContent Json?
-  
-  createdAt   DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([status])
 }
@@ -692,32 +705,32 @@ model Upload {
 // =============================================================================
 
 model SyncLog {
-  id              String   @id @default(cuid())
-  userId          String
-  deviceId        String?   // Legacy field for backward compatibility
-  clientId        String?   // New: identifies client device
-  
+  id       String  @id @default(cuid())
+  userId   String
+  deviceId String? // Legacy field for backward compatibility
+  clientId String? // New: identifies client device
+
   // Entity-level tracking (legacy)
-  entityType      String?  // card, deck, review
-  entityId        String?
-  operation       String?  // create, update, delete
-  data            Json?
-  
+  entityType String? // card, deck, review
+  entityId   String?
+  operation  String? // create, update, delete
+  data       Json?
+
   // Version tracking
-  serverVersion   Int      @default(0)
-  clientVersion   Int      @default(0)
-  
+  serverVersion Int @default(0)
+  clientVersion Int @default(0)
+
   // Session-level tracking (new)
-  direction       String?  // push, pull, bidirectional
-  changesCount    Int      @default(0)
-  acceptedCount   Int      @default(0)
-  rejectedCount   Int      @default(0)
-  conflictsCount  Int      @default(0)
-  completedAt     DateTime?
-  
-  syncedAt        DateTime @default(now())
-  createdAt       DateTime @default(now())
-  
+  direction      String? // push, pull, bidirectional
+  changesCount   Int       @default(0)
+  acceptedCount  Int       @default(0)
+  rejectedCount  Int       @default(0)
+  conflictsCount Int       @default(0)
+  completedAt    DateTime?
+
+  syncedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([deviceId])
   @@index([clientId])
@@ -727,15 +740,15 @@ model SyncLog {
 
 // Pending conflicts awaiting resolution
 model PendingConflict {
-  id              String   @id @default(cuid())
-  userId          String
-  entityType      String
-  entityId        String
-  conflictData    Json     // Full conflict details including local/remote changes
-  severity        String   @default("medium") // critical, high, medium, low
-  autoResolvable  Boolean  @default(false)
-  detectedAt      DateTime @default(now())
-  
+  id             String   @id @default(cuid())
+  userId         String
+  entityType     String
+  entityId       String
+  conflictData   Json // Full conflict details including local/remote changes
+  severity       String   @default("medium") // critical, high, medium, low
+  autoResolvable Boolean  @default(false)
+  detectedAt     DateTime @default(now())
+
   @@unique([userId, entityType, entityId])
   @@index([userId])
   @@index([detectedAt])
@@ -743,13 +756,13 @@ model PendingConflict {
 
 // Deletion log for tracking deleted entities across syncs
 model DeletionLog {
-  id              String   @id @default(cuid())
-  userId          String
-  entityType      String
-  entityId        String
-  deletedAt       DateTime @default(now())
-  syncedClients   String[] @default([]) // Clients that have acknowledged deletion
-  
+  id            String   @id @default(cuid())
+  userId        String
+  entityType    String
+  entityId      String
+  deletedAt     DateTime @default(now())
+  syncedClients String[] @default([]) // Clients that have acknowledged deletion
+
   @@unique([entityType, entityId])
   @@index([userId])
   @@index([deletedAt])
@@ -767,111 +780,115 @@ model DeletionLog {
 
 // Categories are semantic lenses - interpretive contexts for knowledge
 model Category {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // CORE IDENTITY - What defines this lens
   // =========================================================================
-  name            String
-  description     String?
-  iconEmoji       String?
-  color           String?  // Hex color for visual identity
-  coverImageUrl   String?
-  
+  name          String
+  description   String?
+  iconEmoji     String?
+  color         String? // Hex color for visual identity
+  coverImageUrl String?
+
   // =========================================================================
   // LENS DEFINITION - The epistemic framing this category provides
   // =========================================================================
-  
+
   // The framing question - the epistemic prompt that defines this lens
   // e.g., "How does this relate to memory systems?" or "What does this mean for clinical practice?"
   framingQuestion String?
-  
+
   // Semantic intent - what kind of meaning does this lens extract?
-  semanticIntent  String?  // e.g., "theoretical foundations", "practical applications", "historical context"
-  
+  semanticIntent String? // e.g., "theoretical foundations", "practical applications", "historical context"
+
   // Visual identity layer - how cards should be visually distinguished in this context
-  visualIdentityLayer Json?  // { borderColor?, backgroundColor?, iconOverlay?, badgeText? }
-  
+  visualIdentityLayer Json? // { borderColor?, backgroundColor?, iconOverlay?, badgeText? }
+
   // Interpretation priority - when multiple lenses apply, which takes precedence?
   interpretationPriority Int @default(50) // 0-100, higher = more dominant
-  
+
   // What should a learner understand about cards viewed through this lens?
-  learningGoals   String[] @default([]) // Array of learning objectives
-  
+  learningGoals String[] @default([]) // Array of learning objectives
+
   // =========================================================================
   // HIERARCHY (soft conceptual containment, not storage)
   // =========================================================================
-  parentId        String?
-  parent          Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children        Category[] @relation("CategoryHierarchy")
-  depth           Int      @default(0)
-  path            String[] @default([]) // Materialized path for efficient queries
-  
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+  depth    Int        @default(0)
+  path     String[]   @default([]) // Materialized path for efficient queries
+
   // =========================================================================
   // LEARNING PARAMETERS - How this lens affects SRS behavior
   // =========================================================================
-  learningIntent  String   @default("foundational") // foundational, contextual, reference
-  depthGoal       String   @default("recall") // recognition, recall, application, synthesis
-  difficultyMultiplier Float @default(1.0) // Adjust difficulty for cards in this context
-  decayRateMultiplier Float @default(1.0) // Adjust memory decay rate
-  
+  learningIntent       String @default("foundational") // foundational, contextual, reference
+  depthGoal            String @default("recall") // recognition, recall, application, synthesis
+  difficultyMultiplier Float  @default(1.0) // Adjust difficulty for cards in this context
+  decayRateMultiplier  Float  @default(1.0) // Adjust memory decay rate
+
   // =========================================================================
   // MATURITY & STATUS
   // =========================================================================
-  maturityStage   String   @default("acquisition") // acquisition, differentiation, crystallization
-  isArchived      Boolean  @default(false)
-  isPinned        Boolean  @default(false)
-  
+  maturityStage String  @default("acquisition") // acquisition, differentiation, crystallization
+  isArchived    Boolean @default(false)
+  isPinned      Boolean @default(false)
+
   // =========================================================================
   // AGGREGATED STATS (denormalized for performance)
   // =========================================================================
-  cardCount       Int      @default(0)
-  masteryScore    Float    @default(0)
-  lastStudiedAt   DateTime?
-  totalStudyTime  Int      @default(0) // Minutes
-  
+  cardCount      Int       @default(0)
+  masteryScore   Float     @default(0)
+  lastStudiedAt  DateTime?
+  totalStudyTime Int       @default(0) // Minutes
+
   // =========================================================================
   // ORDERING & UI STATE
   // =========================================================================
-  position        Int      @default(0)
-  
+  position Int @default(0)
+
   // =========================================================================
   // PLUGIN EXTENSIBILITY - Categories can be enhanced by plugins
   // =========================================================================
-  pluginData      Json     @default("{}") // Arbitrary plugin-specific data
-  enabledPlugins  String[] @default([])   // Plugin slugs that enhance this category
-  
+  pluginData     Json     @default("{}") // Arbitrary plugin-specific data
+  enabledPlugins String[] @default([]) // Plugin slugs that enhance this category
+
   // =========================================================================
   // TIMESTAMPS
   // =========================================================================
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // =========================================================================
   // RELATIONS
   // =========================================================================
-  cardParticipations      CardCategoryParticipation[]
-  outgoingRelations       CategoryRelation[] @relation("SourceCategory")
-  incomingRelations       CategoryRelation[] @relation("TargetCategory")
-  learningModes           CategoryLearningMode[]
-  evolutionHistory        CategoryEvolutionEvent[]
-  contextFaces            CardContextFace[]
-  contextualAnnotations   ContextualAnnotation[]
-  emphasisRules           EmphasisRule[]
+  cardParticipations        CardCategoryParticipation[]
+  outgoingRelations         CategoryRelation[]          @relation("SourceCategory")
+  incomingRelations         CategoryRelation[]          @relation("TargetCategory")
+  learningModes             CategoryLearningMode[]
+  evolutionHistory          CategoryEvolutionEvent[]
+  contextFaces              CardContextFace[]
+  contextualAnnotations     ContextualAnnotation[]
+  emphasisRules             EmphasisRule[]
   contextPerformanceRecords ContextPerformanceRecord[]
-  
+
   // Bridge card relations
-  bridgeCardsAsSource     BridgeCard[] @relation("SourceBridgeCategory")
-  bridgeCardsAsTarget     BridgeCard[] @relation("TargetBridgeCategory")
+  bridgeCardsAsSource       BridgeCard[]           @relation("SourceBridgeCategory")
+  bridgeCardsAsTarget       BridgeCard[]           @relation("TargetBridgeCategory")
   bridgeSuggestionsAsSource BridgeCardSuggestion[] @relation("SourceBridgeSuggestionCategory")
   bridgeSuggestionsAsTarget BridgeCardSuggestion[] @relation("TargetBridgeSuggestionCategory")
-  
+
   // Performance divergence relations
-  bestPerformanceDivergences PerformanceDivergence[] @relation("BestPerformanceContext")
+  bestPerformanceDivergences  PerformanceDivergence[] @relation("BestPerformanceContext")
   worstPerformanceDivergences PerformanceDivergence[] @relation("WorstPerformanceContext")
-  
+
+  // Learning Mode Framework relations
+  modeDefaults       CategoryModeDefault[]
+  schedulingMetadata CategorySchedulingMetadata?
+
   @@unique([userId, name, parentId])
   @@index([userId])
   @@index([parentId])
@@ -882,32 +899,32 @@ model Category {
 
 // Relationships between categories (the graph structure of lenses)
 model CategoryRelation {
-  id              String   @id @default(cuid())
-  userId          String
-  
+  id     String @id @default(cuid())
+  userId String
+
   sourceCategoryId String
   sourceCategory   Category @relation("SourceCategory", fields: [sourceCategoryId], references: [id], onDelete: Cascade)
   targetCategoryId String
   targetCategory   Category @relation("TargetCategory", fields: [targetCategoryId], references: [id], onDelete: Cascade)
-  
+
   // Relationship semantics
-  relationType    String   // conceptual_contains, prepares_for, contrasts_with, analogous_to, specializes, generalizes
-  strength        Float    @default(0.5) // 0-1, how strong the relationship is
-  isDirectional   Boolean  @default(true)
-  
+  relationType  String // conceptual_contains, prepares_for, contrasts_with, analogous_to, specializes, generalizes
+  strength      Float   @default(0.5) // 0-1, how strong the relationship is
+  isDirectional Boolean @default(true)
+
   // Epistemic meaning - what does viewing through connected lenses reveal?
-  epistemicBridge String?  // e.g., "Understanding X deepens appreciation of Y"
-  
+  epistemicBridge String? // e.g., "Understanding X deepens appreciation of Y"
+
   // Metadata
-  description     String?  // Why this relationship exists
-  
+  description String? // Why this relationship exists
+
   // Discovery
-  isAutoSuggested Boolean  @default(false)
-  isUserConfirmed Boolean  @default(true)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  isAutoSuggested Boolean @default(false)
+  isUserConfirmed Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([sourceCategoryId, targetCategoryId, relationType])
   @@index([sourceCategoryId])
   @@index([targetCategoryId])
@@ -924,12 +941,12 @@ model CategoryRelation {
 
 // How a card participates in a category lens (multi-belonging as multi-interpretation)
 model CardCategoryParticipation {
-  id              String   @id @default(cuid())
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  categoryId      String
-  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  cardId     String
+  card       Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // SEMANTIC ROLE - How this card functions within this lens
   // =========================================================================
@@ -942,74 +959,74 @@ model CardCategoryParticipation {
   // prerequisite: Required knowledge for other cards
   // bridge: Connects this context to another
   // synthesis: Integrates multiple concepts
-  semanticRole    String   @default("concept")
-  isPrimary       Boolean  @default(false) // Is this the card's "home" lens? (first context it was created in)
-  
+  semanticRole String  @default("concept")
+  isPrimary    Boolean @default(false) // Is this the card's "home" lens? (first context it was created in)
+
   // =========================================================================
   // CONTEXT-SPECIFIC LEARNING STATE
   // =========================================================================
-  contextDifficulty Float?  // Override difficulty for this context
-  contextMastery    Float   @default(0) // 0-1 mastery in this specific context
-  reviewCountInContext Int  @default(0)
+  contextDifficulty     Float? // Override difficulty for this context
+  contextMastery        Float     @default(0) // 0-1 mastery in this specific context
+  reviewCountInContext  Int       @default(0)
   lastReviewedInContext DateTime?
-  
+
   // =========================================================================
   // CONTEXT-SPECIFIC PERFORMANCE SIGNALS
   // These metrics track how well the user performs on this card when
   // viewed through this specific category lens
   // =========================================================================
-  contextSuccessRate Float  @default(0) // Success rate in this context
-  contextLapseRate   Float  @default(0) // Lapse rate in this context
-  avgResponseTimeMs  Int?   // Average response time in this context
-  confidenceRating   Float? // User's self-reported confidence (0-1)
-  contextMasteryScore Float @default(0) // Computed mastery score for this context
-  
+  contextSuccessRate  Float  @default(0) // Success rate in this context
+  contextLapseRate    Float  @default(0) // Lapse rate in this context
+  avgResponseTimeMs   Int? // Average response time in this context
+  confidenceRating    Float? // User's self-reported confidence (0-1)
+  contextMasteryScore Float  @default(0) // Computed mastery score for this context
+
   // =========================================================================
   // CONTEXT-SPECIFIC QUICK NOTES (simple annotations)
   // =========================================================================
-  contextNotes    String?  // Quick notes specific to this category context
-  contextTags     String[] @default([])
-  
+  contextNotes String? // Quick notes specific to this category context
+  contextTags  String[] @default([])
+
   // =========================================================================
   // LEARNING GOALS FOR THIS CONTEXT
   // =========================================================================
-  learningGoal    String?  // What should learner understand in this context?
-  targetMastery   Float    @default(0.8) // Target mastery level for this context
-  intentOverride  String?  // Override learning intent (foundational, contextual, reference)
-  
+  learningGoal   String? // What should learner understand in this context?
+  targetMastery  Float   @default(0.8) // Target mastery level for this context
+  intentOverride String? // Override learning intent (foundational, contextual, reference)
+
   // =========================================================================
   // ORDERING & PRIORITY
   // =========================================================================
   positionInCategory Int   @default(0) // Ordering within this category
   priorityWeight     Float @default(1.0) // Weight for review selection
-  
+
   // =========================================================================
   // PROVENANCE - Why does this card belong here?
   // =========================================================================
-  belongsBecause  String?  // User's justification for this participation
-  provenanceType  String   @default("manual") // manual, import, split, merge, ai_suggested
-  provenanceRef   String?  // Reference to source (e.g., split event ID)
-  addedAt         DateTime @default(now())
-  
+  belongsBecause String? // User's justification for this participation
+  provenanceType String   @default("manual") // manual, import, split, merge, ai_suggested
+  provenanceRef  String? // Reference to source (e.g., split event ID)
+  addedAt        DateTime @default(now())
+
   // =========================================================================
   // DIFFERENTIAL EMPHASIS QUICK SETTINGS
   // =========================================================================
-  emphasisLevel   Int      @default(0) // -2 to +2: de-emphasized to emphasized
+  emphasisLevel        Int     @default(0) // -2 to +2: de-emphasized to emphasized
   isContextHighlighted Boolean @default(false) // Quick toggle to highlight this card in this context
-  
+
   // =========================================================================
   // SCAFFOLDING & PROMPTS
   // =========================================================================
-  scaffoldingLevel Int     @default(0) // 0=none, 1=hints, 2=partial, 3=full
+  scaffoldingLevel Int      @default(0) // 0=none, 1=hints, 2=partial, 3=full
   customPrompts    String[] @default([]) // Additional prompts for weaker contexts
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  annotations     ContextualAnnotation[]
+  annotations        ContextualAnnotation[]
   synthesisResponses SynthesisResponse[]
-  
+
   @@unique([cardId, categoryId])
   @@index([cardId])
   @@index([categoryId])
@@ -1022,24 +1039,24 @@ model CardCategoryParticipation {
 
 // Context-sensitive card faces (different questions per context)
 model CardContextFace {
-  id              String   @id @default(cuid())
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  categoryId      String
-  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(cuid())
+  cardId     String
+  card       Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   // The context-specific content
-  frontOverride   Json?    // Override front content for this context
-  backOverride    Json?    // Override back content for this context
-  promptOverride  String?  // Different question for this context
-  
+  frontOverride  Json? // Override front content for this context
+  backOverride   Json? // Override back content for this context
+  promptOverride String? // Different question for this context
+
   // Learning tracking for this specific face
-  timesShown      Int      @default(0)
-  timesCorrect    Int      @default(0)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  timesShown   Int @default(0)
+  timesCorrect Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([cardId, categoryId])
   @@index([cardId])
   @@index([categoryId])
@@ -1052,93 +1069,93 @@ model CardContextFace {
 // =============================================================================
 
 model ContextualAnnotation {
-  id                String   @id @default(cuid())
-  userId            String
-  
+  id     String @id @default(cuid())
+  userId String
+
   // The card being annotated
-  cardId            String
-  card              Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
   // The lens/context in which this annotation exists
-  categoryId        String
-  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   // Optional: Link to participation for more granular tracking
-  participationId   String?
-  participation     CardCategoryParticipation? @relation(fields: [participationId], references: [id], onDelete: SetNull)
-  
+  participationId String?
+  participation   CardCategoryParticipation? @relation(fields: [participationId], references: [id], onDelete: SetNull)
+
   // =========================================================================
   // ANNOTATION CONTENT
   // =========================================================================
-  
+
   // The annotation type
-  annotationType    String   @default("note") // note, insight, question, warning, connection, correction, elaboration
-  
+  annotationType String @default("note") // note, insight, question, warning, connection, correction, elaboration
+
   // The actual content (rich text supporting markdown)
-  content           String
-  
+  content String
+
   // Optional: Target a specific segment of the card content
   // Uses JSON path or character ranges to identify what's being annotated
-  targetSelector    Json?    // { type: "text_range", start: 0, end: 50 } or { type: "field", path: "front.text" }
-  
+  targetSelector Json? // { type: "text_range", start: 0, end: 50 } or { type: "field", path: "front.text" }
+
   // Visual styling for this annotation
-  style             Json?    // { color?: string, icon?: string, highlight?: boolean }
-  
+  style Json? // { color?: string, icon?: string, highlight?: boolean }
+
   // =========================================================================
   // CONNECTIONS & REFERENCES
   // =========================================================================
-  
+
   // Link to other cards (for "connection" type annotations)
-  linkedCardIds     String[] @default([])
-  
+  linkedCardIds String[] @default([])
+
   // External references
-  externalUrl       String?
-  citationText      String?
-  
+  externalUrl  String?
+  citationText String?
+
   // =========================================================================
   // VISIBILITY & LIFECYCLE
   // =========================================================================
-  
+
   // Is this annotation visible? (soft delete / hide)
-  isVisible         Boolean  @default(true)
-  
+  isVisible Boolean @default(true)
+
   // Should this annotation be shown during study sessions?
-  showDuringStudy   Boolean  @default(true)
-  
+  showDuringStudy Boolean @default(true)
+
   // Importance level (affects display priority)
-  importance        Int      @default(0) // -2 to +2
-  
+  importance Int @default(0) // -2 to +2
+
   // =========================================================================
   // VERSION CONTROL - Annotations survive card restructuring
   // =========================================================================
-  version           Int      @default(1)
-  previousVersionId String?  // Link to previous version of this annotation
-  
+  version           Int     @default(1)
+  previousVersionId String? // Link to previous version of this annotation
+
   // Hash of the card content when this annotation was created
   // Used to detect if the card has changed significantly
-  cardContentHash   String?
-  
+  cardContentHash String?
+
   // Has the underlying card changed since this annotation was created?
-  isStale           Boolean  @default(false)
-  
+  isStale Boolean @default(false)
+
   // =========================================================================
   // AI AUGMENTATION HOOKS
   // =========================================================================
-  
+
   // Was this annotation AI-generated?
-  isAiGenerated     Boolean  @default(false)
-  aiConfidence      Float?   // 0-1 confidence score if AI-generated
-  aiSource          String?  // Which AI model/service generated this
-  
+  isAiGenerated Boolean @default(false)
+  aiConfidence  Float? // 0-1 confidence score if AI-generated
+  aiSource      String? // Which AI model/service generated this
+
   // Has user reviewed/approved AI-generated annotation?
-  isUserApproved    Boolean  @default(false)
-  
+  isUserApproved Boolean @default(false)
+
   // =========================================================================
   // TIMESTAMPS
   // =========================================================================
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([cardId, categoryId, version])
   @@index([cardId])
   @@index([categoryId])
@@ -1155,87 +1172,87 @@ model ContextualAnnotation {
 // =============================================================================
 
 model EmphasisRule {
-  id                String   @id @default(cuid())
-  userId            String
-  
+  id     String @id @default(cuid())
+  userId String
+
   // The category/lens this rule applies to
-  categoryId        String
-  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // RULE DEFINITION
   // =========================================================================
-  
+
   // Rule name for user reference
-  name              String
-  description       String?
-  
+  name        String
+  description String?
+
   // Rule type determines what kind of emphasis is applied
-  ruleType          String   // highlight, de_emphasize, collapse, inject_prompt, reorder, annotate
-  
+  ruleType String // highlight, de_emphasize, collapse, inject_prompt, reorder, annotate
+
   // =========================================================================
   // TARGETING - What does this rule apply to?
   // =========================================================================
-  
+
   // Apply to specific cards (if empty, applies to all cards in category)
-  targetCardIds     String[] @default([])
-  
+  targetCardIds String[] @default([])
+
   // Apply to cards with specific semantic roles
   targetSemanticRoles String[] @default([])
-  
+
   // Apply to cards with specific tags
-  targetTags        String[] @default([])
-  
+  targetTags String[] @default([])
+
   // Content targeting - JSON path or regex to identify content segments
-  contentSelector   Json?    // { type: "regex", pattern: "\\b(definition|theorem)\\b" }
-  
+  contentSelector Json? // { type: "regex", pattern: "\\b(definition|theorem)\\b" }
+
   // =========================================================================
   // EMPHASIS CONFIGURATION
   // =========================================================================
-  
+
   // Emphasis level (-2 to +2)
   // -2: Collapse/hide
   // -1: De-emphasize (gray out, smaller text)
   //  0: Normal
   // +1: Emphasize (bold, highlight)
   // +2: Strong emphasis (box, color, larger)
-  emphasisLevel     Int      @default(0)
-  
+  emphasisLevel Int @default(0)
+
   // Visual styling when rule matches
-  style             Json?    // { backgroundColor?, textColor?, fontSize?, fontWeight?, border? }
-  
+  style Json? // { backgroundColor?, textColor?, fontSize?, fontWeight?, border? }
+
   // =========================================================================
   // MICRO-PROMPT INJECTION
   // =========================================================================
-  
+
   // For "inject_prompt" rule type - supplemental questions/prompts
-  injectedPrompt    String?
-  promptPosition    String   @default("after") // before, after, replace, overlay
-  
+  injectedPrompt String?
+  promptPosition String  @default("after") // before, after, replace, overlay
+
   // =========================================================================
   // CONDITIONAL ACTIVATION
   // =========================================================================
-  
+
   // Only activate after N reviews
-  minReviewCount    Int?
-  
+  minReviewCount Int?
+
   // Only activate at certain mastery levels
-  minMastery        Float?
-  maxMastery        Float?
-  
+  minMastery Float?
+  maxMastery Float?
+
   // Only activate during certain learning modes
   activeLearningModes String[] @default([])
-  
+
   // =========================================================================
   // LIFECYCLE
   // =========================================================================
-  
-  isEnabled         Boolean  @default(true)
-  priority          Int      @default(50) // Higher priority rules applied last (override)
-  
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+
+  isEnabled Boolean @default(true)
+  priority  Int     @default(50) // Higher priority rules applied last (override)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([categoryId])
   @@index([ruleType])
   @@index([isEnabled])
@@ -1249,90 +1266,90 @@ model EmphasisRule {
 // =============================================================================
 
 model ContextPerformanceRecord {
-  id                String   @id @default(cuid())
-  userId            String
-  
+  id     String @id @default(cuid())
+  userId String
+
   // The card and category this record tracks
-  cardId            String
-  card              Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  categoryId        String
-  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
+  cardId     String
+  card       Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // PERFORMANCE METRICS
   // =========================================================================
-  
+
   // Basic stats
-  totalReviews      Int      @default(0)
-  correctReviews    Int      @default(0)
-  accuracy          Float    @default(0) // Computed: correctReviews / totalReviews
-  
+  totalReviews   Int   @default(0)
+  correctReviews Int   @default(0)
+  accuracy       Float @default(0) // Computed: correctReviews / totalReviews
+
   // Response time tracking
-  avgResponseTime   Float    @default(0) // Milliseconds
-  minResponseTime   Float?
-  maxResponseTime   Float?
-  
+  avgResponseTime Float  @default(0) // Milliseconds
+  minResponseTime Float?
+  maxResponseTime Float?
+
   // Difficulty perception
-  perceivedDifficulty Float  @default(0.5) // 0-1, based on response patterns
-  
+  perceivedDifficulty Float @default(0.5) // 0-1, based on response patterns
+
   // =========================================================================
   // TEMPORAL PATTERNS
   // =========================================================================
-  
+
   // Last review in this context
-  lastReviewedAt    DateTime?
-  
+  lastReviewedAt DateTime?
+
   // Time since last review across ALL contexts (for context drift detection)
   daysSinceAnyReview Int?
-  
+
   // Review streak in this context
-  currentStreak     Int      @default(0)
-  longestStreak     Int      @default(0)
-  
+  currentStreak Int @default(0)
+  longestStreak Int @default(0)
+
   // =========================================================================
   // CONTEXT DRIFT DETECTION
   // =========================================================================
-  
+
   // Rolling accuracy over last N reviews (for drift detection)
-  recentAccuracy    Float    @default(0) // Last 5-10 reviews
-  accuracyTrend     String   @default("stable") // improving, declining, stable, volatile
-  
+  recentAccuracy Float  @default(0) // Last 5-10 reviews
+  accuracyTrend  String @default("stable") // improving, declining, stable, volatile
+
   // Comparison to performance in other contexts
   performanceDeviation Float @default(0) // How different is performance here vs other contexts?
-  
+
   // Context drift flags
-  hasDriftWarning   Boolean  @default(false)
-  driftDetectedAt   DateTime?
-  driftSeverity     String?  // mild, moderate, severe
-  
+  hasDriftWarning Boolean   @default(false)
+  driftDetectedAt DateTime?
+  driftSeverity   String? // mild, moderate, severe
+
   // =========================================================================
   // METACOGNITION SUPPORT
   // =========================================================================
-  
+
   // User's confidence ratings (if collected)
-  avgConfidence     Float?   // 0-1
+  avgConfidence                 Float? // 0-1
   confidenceAccuracyCorrelation Float? // How well does confidence predict accuracy?
-  
+
   // "Illusion of knowing" detection
-  hasOverconfidenceFlag Boolean @default(false)
+  hasOverconfidenceFlag  Boolean @default(false)
   hasUnderconfidenceFlag Boolean @default(false)
-  
+
   // =========================================================================
   // MULTI-CONTEXT MOMENTS
   // =========================================================================
-  
+
   // Count of times this card was shown in multi-context review
   multiContextReviewCount Int @default(0)
-  
+
   // How user performed when switching FROM another context TO this one
   contextSwitchAccuracy Float?
-  
+
   // =========================================================================
   // TIMESTAMPS
   // =========================================================================
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([cardId, categoryId])
   @@index([userId])
   @@index([cardId])
@@ -1347,32 +1364,32 @@ model ContextPerformanceRecord {
 // =============================================================================
 
 model MultiContextReviewSession {
-  id                String   @id @default(cuid())
-  userId            String
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Session configuration
-  sessionType       String   @default("drift_remediation") // drift_remediation, context_comparison, synthesis_check
-  
+  sessionType String @default("drift_remediation") // drift_remediation, context_comparison, synthesis_check
+
   // Categories involved
-  categoryIds       String[]
-  
+  categoryIds String[]
+
   // Cards reviewed
-  cardsReviewed     Int      @default(0)
-  
+  cardsReviewed Int @default(0)
+
   // Performance during this session
-  overallAccuracy   Float    @default(0)
+  overallAccuracy       Float @default(0)
   contextSwitchAccuracy Float @default(0) // Accuracy when switching contexts
-  
+
   // Insights generated
-  driftResolved     Int      @default(0) // Number of drift warnings resolved
-  newDriftDetected  Int      @default(0)
-  
+  driftResolved    Int @default(0) // Number of drift warnings resolved
+  newDriftDetected Int @default(0)
+
   // Session timing
-  startedAt         DateTime @default(now())
-  completedAt       DateTime?
-  durationMinutes   Int      @default(0)
-  
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  durationMinutes Int       @default(0)
+
   @@index([userId])
   @@index([sessionType])
   @@index([startedAt])
@@ -1389,69 +1406,69 @@ model MultiContextReviewSession {
 // Synthesis prompt - triggered when cards have multiple participations
 // or when performance diverges across contexts
 model SynthesisPrompt {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // TRIGGER CONTEXT
   // =========================================================================
-  
+
   // The card that triggered this synthesis prompt
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
   // The category contexts involved
-  categoryIds     String[]
-  
+  categoryIds String[]
+
   // What triggered this prompt
-  triggerType     String   // high_participation_count, performance_divergence, frequent_lens_switch, scheduled
-  triggerDetails  Json?    // { participationCount, performanceSpread, switchCount, etc. }
-  
+  triggerType    String // high_participation_count, performance_divergence, frequent_lens_switch, scheduled
+  triggerDetails Json? // { participationCount, performanceSpread, switchCount, etc. }
+
   // =========================================================================
   // PROMPT CONTENT
   // =========================================================================
-  
+
   // The type of synthesis prompt
-  promptType      String   @default("connection") // connection, fundamental_context, bridge_explanation, context_comparison
-  
+  promptType String @default("connection") // connection, fundamental_context, bridge_explanation, context_comparison
+
   // The actual prompt text
-  promptText      String
-  
+  promptText String
+
   // Alternative prompts (for variety)
   alternativePrompts String[] @default([])
-  
+
   // Hints to guide the user
-  hints           String[] @default([])
-  
+  hints String[] @default([])
+
   // =========================================================================
   // STATUS & LIFECYCLE
   // =========================================================================
-  
-  status          String   @default("pending") // pending, shown, responded, skipped, deferred
-  shownAt         DateTime?
-  respondedAt     DateTime?
-  skippedAt       DateTime?
-  deferredUntil   DateTime?
-  
+
+  status        String    @default("pending") // pending, shown, responded, skipped, deferred
+  shownAt       DateTime?
+  respondedAt   DateTime?
+  skippedAt     DateTime?
+  deferredUntil DateTime?
+
   // Times shown (for retry logic)
-  timesShown      Int      @default(0)
-  maxAttempts     Int      @default(3)
-  
+  timesShown  Int @default(0)
+  maxAttempts Int @default(3)
+
   // =========================================================================
   // AI AUGMENTATION
   // =========================================================================
-  
-  isAiGenerated   Boolean  @default(false)
-  aiConfidence    Float?
-  aiModel         String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+
+  isAiGenerated Boolean @default(false)
+  aiConfidence  Float?
+  aiModel       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relations
-  responses       SynthesisResponse[]
-  
+  responses SynthesisResponse[]
+
   @@index([userId])
   @@index([cardId])
   @@index([status])
@@ -1462,58 +1479,58 @@ model SynthesisPrompt {
 
 // User's response to a synthesis prompt
 model SynthesisResponse {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // The prompt being responded to
-  promptId        String
-  prompt          SynthesisPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
-  
+  promptId String
+  prompt   SynthesisPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
   // Optional: linked to a specific participation
   participationId String?
   participation   CardCategoryParticipation? @relation(fields: [participationId], references: [id], onDelete: SetNull)
-  
+
   // =========================================================================
   // RESPONSE CONTENT
   // =========================================================================
-  
+
   // The user's response text
-  responseText    String
-  
+  responseText String
+
   // Structured response data (for specific prompt types)
-  responseData    Json?    // { fundamentalContextId, difficultyRankings, etc. }
-  
+  responseData Json? // { fundamentalContextId, difficultyRankings, etc. }
+
   // Quality indicators
-  wordCount       Int      @default(0)
-  hasConnections  Boolean  @default(false) // References multiple contexts
-  
+  wordCount      Int     @default(0)
+  hasConnections Boolean @default(false) // References multiple contexts
+
   // =========================================================================
   // OUTPUT ACTIONS
   // =========================================================================
-  
+
   // Did this response create a synthesis note?
-  createdNoteId   String?
-  
+  createdNoteId String?
+
   // Did this response create a bridge card draft?
   createdBridgeCardDraftId String?
-  
+
   // Did this update any participations?
   updatedParticipationIds String[] @default([])
-  
+
   // =========================================================================
   // QUALITY & FEEDBACK
   // =========================================================================
-  
+
   // User's self-rating of their response
-  selfRating      Int?     // 1-5
-  
+  selfRating Int? // 1-5
+
   // AI quality assessment
-  aiQualityScore  Float?   // 0-1
-  aiFeedback      String?
-  
-  createdAt       DateTime @default(now())
-  
+  aiQualityScore Float? // 0-1
+  aiFeedback     String?
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([promptId])
   @@index([participationId])
@@ -1522,51 +1539,51 @@ model SynthesisResponse {
 
 // Synthesis notes - stored insights from synthesis prompts
 model SynthesisNote {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // The card this synthesis note is about
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
   // The contexts being synthesized
-  categoryIds     String[]
-  
+  categoryIds String[]
+
   // =========================================================================
   // NOTE CONTENT
   // =========================================================================
-  
+
   // The synthesis insight
-  content         String
-  
+  content String
+
   // Type of synthesis
-  noteType        String   @default("connection") // connection, hierarchy, transformation, application
-  
+  noteType String @default("connection") // connection, hierarchy, transformation, application
+
   // Key terms/concepts mentioned
-  keyTerms        String[] @default([])
-  
+  keyTerms String[] @default([])
+
   // Referenced cards
   referencedCardIds String[] @default([])
-  
+
   // =========================================================================
   // METADATA
   // =========================================================================
-  
+
   // Source of this note
-  sourceType      String   @default("synthesis_prompt") // synthesis_prompt, manual, ai_suggested
-  sourceId        String?  // Reference to source (prompt ID, etc.)
-  
+  sourceType String  @default("synthesis_prompt") // synthesis_prompt, manual, ai_suggested
+  sourceId   String? // Reference to source (prompt ID, etc.)
+
   // Visibility
-  isVisible       Boolean  @default(true)
+  isVisible        Boolean @default(true)
   showDuringReview Boolean @default(true)
-  
+
   // Quality
-  qualityScore    Float?   // 0-1, based on AI assessment or user feedback
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  qualityScore Float? // 0-1, based on AI assessment or user feedback
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([cardId])
   @@index([noteType])
@@ -1581,96 +1598,96 @@ model SynthesisNote {
 // =============================================================================
 
 model BridgeCard {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // BRIDGE TYPE & TARGETS
   // =========================================================================
-  
+
   // Type of bridge
-  bridgeType      String   // concept_to_concept, context_to_context, concept_context
-  
+  bridgeType String // concept_to_concept, context_to_context, concept_context
+
   // Source card/category (the "from" side)
-  sourceCardId    String?
-  sourceCard      Card?    @relation("SourceBridgeCard", fields: [sourceCardId], references: [id], onDelete: SetNull)
+  sourceCardId     String?
+  sourceCard       Card?     @relation("SourceBridgeCard", fields: [sourceCardId], references: [id], onDelete: SetNull)
   sourceCategoryId String?
-  sourceCategory  Category? @relation("SourceBridgeCategory", fields: [sourceCategoryId], references: [id], onDelete: SetNull)
-  
+  sourceCategory   Category? @relation("SourceBridgeCategory", fields: [sourceCategoryId], references: [id], onDelete: SetNull)
+
   // Target card/category (the "to" side)
-  targetCardId    String?
-  targetCard      Card?    @relation("TargetBridgeCard", fields: [targetCardId], references: [id], onDelete: SetNull)
+  targetCardId     String?
+  targetCard       Card?     @relation("TargetBridgeCard", fields: [targetCardId], references: [id], onDelete: SetNull)
   targetCategoryId String?
-  targetCategory  Category? @relation("TargetBridgeCategory", fields: [targetCategoryId], references: [id], onDelete: SetNull)
-  
+  targetCategory   Category? @relation("TargetBridgeCategory", fields: [targetCategoryId], references: [id], onDelete: SetNull)
+
   // =========================================================================
   // CARD CONTENT
   // =========================================================================
-  
+
   // The actual card ID (bridge cards are Cards with special metadata)
-  cardId          String   @unique
-  card            Card     @relation("BridgeCardRef", fields: [cardId], references: [id], onDelete: Cascade)
-  
+  cardId String @unique
+  card   Card   @relation("BridgeCardRef", fields: [cardId], references: [id], onDelete: Cascade)
+
   // Bridge-specific content
-  bridgeQuestion  String   // "How does X relate to Y?"
-  bridgeAnswer    String   // The connection explanation
-  
+  bridgeQuestion String // "How does X relate to Y?"
+  bridgeAnswer   String // The connection explanation
+
   // Bidirectional: can be reviewed from either direction
-  isBidirectional Boolean  @default(true)
-  reverseQuestion String?  // Question when reviewed in reverse
-  reverseAnswer   String?  // Answer when reviewed in reverse
-  
+  isBidirectional Boolean @default(true)
+  reverseQuestion String? // Question when reviewed in reverse
+  reverseAnswer   String? // Answer when reviewed in reverse
+
   // =========================================================================
   // RELATIONSHIP METADATA
   // =========================================================================
-  
+
   // Type of connection
-  connectionType  String   @default("relates_to") // relates_to, contrasts_with, generalizes, specializes, enables, depends_on, transforms_into
-  
+  connectionType String @default("relates_to") // relates_to, contrasts_with, generalizes, specializes, enables, depends_on, transforms_into
+
   // Strength of connection (0-1)
   connectionStrength Float @default(0.5)
-  
+
   // Description of the connection
   connectionDescription String?
-  
+
   // =========================================================================
   // REVIEW BEHAVIOR
   // =========================================================================
-  
+
   // Review frequency relative to normal cards (0.5 = half as often)
   frequencyMultiplier Float @default(0.5)
-  
+
   // When to surface this bridge (during review of connected cards)
-  surfaceTrigger  String   @default("related_card_review") // related_card_review, context_switch, scheduled, synthesis_session
-  
+  surfaceTrigger String @default("related_card_review") // related_card_review, context_switch, scheduled, synthesis_session
+
   // Minimum gap between showing bridge and related card (in reviews)
-  minGapReviews   Int      @default(3)
-  
+  minGapReviews Int @default(3)
+
   // =========================================================================
   // PROVENANCE
   // =========================================================================
-  
+
   // How was this bridge created?
-  createdFrom     String   @default("manual") // manual, synthesis_prompt, ai_suggestion, import
-  sourceId        String?  // Reference to source (prompt ID, etc.)
-  
+  createdFrom String  @default("manual") // manual, synthesis_prompt, ai_suggestion, import
+  sourceId    String? // Reference to source (prompt ID, etc.)
+
   // AI suggestion metadata
-  aiSuggested     Boolean  @default(false)
-  aiConfidence    Float?
-  
+  aiSuggested  Boolean @default(false)
+  aiConfidence Float?
+
   // User confirmed/edited
-  isUserConfirmed Boolean  @default(false)
-  
+  isUserConfirmed Boolean @default(false)
+
   // =========================================================================
   // STATUS
   // =========================================================================
-  
-  status          String   @default("active") // draft, active, suspended, archived
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+
+  status String @default("active") // draft, active, suspended, archived
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([cardId])
   @@index([sourceCardId])
@@ -1684,53 +1701,53 @@ model BridgeCard {
 
 // AI suggestions for bridge cards
 model BridgeCardSuggestion {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // SUGGESTION CONTENT
   // =========================================================================
-  
-  bridgeType      String   // concept_to_concept, context_to_context, concept_context
-  
-  sourceCardId    String?
-  sourceCard      Card?    @relation("SourceBridgeSuggestion", fields: [sourceCardId], references: [id], onDelete: SetNull)
+
+  bridgeType String // concept_to_concept, context_to_context, concept_context
+
+  sourceCardId     String?
+  sourceCard       Card?     @relation("SourceBridgeSuggestion", fields: [sourceCardId], references: [id], onDelete: SetNull)
   sourceCategoryId String?
-  sourceCategory  Category? @relation("SourceBridgeSuggestionCategory", fields: [sourceCategoryId], references: [id], onDelete: SetNull)
-  targetCardId    String?
-  targetCard      Card?    @relation("TargetBridgeSuggestion", fields: [targetCardId], references: [id], onDelete: SetNull)
+  sourceCategory   Category? @relation("SourceBridgeSuggestionCategory", fields: [sourceCategoryId], references: [id], onDelete: SetNull)
+  targetCardId     String?
+  targetCard       Card?     @relation("TargetBridgeSuggestion", fields: [targetCardId], references: [id], onDelete: SetNull)
   targetCategoryId String?
-  targetCategory  Category? @relation("TargetBridgeSuggestionCategory", fields: [targetCategoryId], references: [id], onDelete: SetNull)
-  
+  targetCategory   Category? @relation("TargetBridgeSuggestionCategory", fields: [targetCategoryId], references: [id], onDelete: SetNull)
+
   // Suggested content
   suggestedQuestion String
-  suggestedAnswer String
-  connectionType  String
-  
+  suggestedAnswer   String
+  connectionType    String
+
   // =========================================================================
   // AI METADATA
   // =========================================================================
-  
-  confidence      Float    @default(0.5)
-  rationale       String   // Why this bridge is suggested
-  
+
+  confidence Float  @default(0.5)
+  rationale  String // Why this bridge is suggested
+
   // Source of suggestion
-  suggestionSource String  // performance_analysis, semantic_similarity, co_occurrence, user_behavior
+  suggestionSource  String // performance_analysis, semantic_similarity, co_occurrence, user_behavior
   suggestionDetails Json?
-  
+
   // =========================================================================
   // STATUS
   // =========================================================================
-  
-  status          String   @default("pending") // pending, accepted, rejected, deferred
-  respondedAt     DateTime?
-  
+
+  status      String    @default("pending") // pending, accepted, rejected, deferred
+  respondedAt DateTime?
+
   // If accepted, the created bridge card ID
   createdBridgeId String?
-  
-  createdAt       DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([status])
   @@index([confidence])
@@ -1745,58 +1762,58 @@ model BridgeCardSuggestion {
 // =============================================================================
 
 model CrossContextQuiz {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // QUIZ CONTEXT
   // =========================================================================
-  
+
   // The card being quizzed about
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
   // The contexts involved
-  categoryIds     String[]
-  
+  categoryIds String[]
+
   // Type of cross-context question
-  quizType        String   // easiest_context, hardest_context, best_role, context_comparison
-  
+  quizType String // easiest_context, hardest_context, best_role, context_comparison
+
   // =========================================================================
   // QUESTION CONTENT
   // =========================================================================
-  
-  questionText    String
-  
+
+  questionText String
+
   // Options (for multiple choice)
-  options         Json?    // Array of { id, text, categoryId?, roleLabel? }
-  
+  options Json? // Array of { id, text, categoryId?, roleLabel? }
+
   // Correct answer(s)
-  correctAnswers  String[] @default([])
-  
+  correctAnswers String[] @default([])
+
   // =========================================================================
   // RESPONSE
   // =========================================================================
-  
-  userAnswer      String?
-  isCorrect       Boolean?
-  answeredAt      DateTime?
-  responseTimeMs  Int?
-  
+
+  userAnswer     String?
+  isCorrect      Boolean?
+  answeredAt     DateTime?
+  responseTimeMs Int?
+
   // =========================================================================
   // OUTCOME
   // =========================================================================
-  
+
   // What insight does this quiz provide?
-  insightType     String?  // calibration_correct, needs_review, overconfident, underconfident
-  insightDetails  Json?
-  
+  insightType    String? // calibration_correct, needs_review, overconfident, underconfident
+  insightDetails Json?
+
   // Actions triggered by this quiz
   triggeredActions String[] @default([]) // create_annotation, adjust_emphasis, schedule_review
-  
-  createdAt       DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([cardId])
   @@index([quizType])
@@ -1812,59 +1829,59 @@ model CrossContextQuiz {
 // =============================================================================
 
 model PerformanceDivergence {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // The card with divergent performance
-  cardId          String
-  card            Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // DIVERGENCE METRICS
   // =========================================================================
-  
+
   // Best performing context
-  bestContextId   String
-  bestContext     Category @relation("BestPerformanceContext", fields: [bestContextId], references: [id], onDelete: Cascade)
-  bestAccuracy    Float
-  
+  bestContextId String
+  bestContext   Category @relation("BestPerformanceContext", fields: [bestContextId], references: [id], onDelete: Cascade)
+  bestAccuracy  Float
+
   // Worst performing context
-  worstContextId  String
-  worstContext    Category @relation("WorstPerformanceContext", fields: [worstContextId], references: [id], onDelete: Cascade)
-  worstAccuracy   Float
-  
+  worstContextId String
+  worstContext   Category @relation("WorstPerformanceContext", fields: [worstContextId], references: [id], onDelete: Cascade)
+  worstAccuracy  Float
+
   // Spread between best and worst
   performanceSpread Float
-  
+
   // All contexts ranked by performance
-  contextRankings Json     // Array of { categoryId, accuracy, rank }
-  
+  contextRankings Json // Array of { categoryId, accuracy, rank }
+
   // =========================================================================
   // ANALYSIS
   // =========================================================================
-  
+
   // Severity of divergence
-  severity        String   @default("mild") // mild, moderate, severe
-  
+  severity String @default("mild") // mild, moderate, severe
+
   // Possible causes (AI-inferred or rule-based)
-  possibleCauses  String[] @default([])
-  
+  possibleCauses String[] @default([])
+
   // Recommended actions
-  recommendations Json?    // Array of { action, categoryId?, priority }
-  
+  recommendations Json? // Array of { action, categoryId?, priority }
+
   // =========================================================================
   // STATUS
   // =========================================================================
-  
-  status          String   @default("active") // active, addressed, dismissed, resolved
-  
+
+  status String @default("active") // active, addressed, dismissed, resolved
+
   // Actions taken to address divergence
-  actionsTaken    Json?    // Array of { action, timestamp, result }
-  
-  detectedAt      DateTime @default(now())
-  resolvedAt      DateTime?
-  
+  actionsTaken Json? // Array of { action, timestamp, result }
+
+  detectedAt DateTime  @default(now())
+  resolvedAt DateTime?
+
   @@index([userId])
   @@index([cardId])
   @@index([severity])
@@ -1874,44 +1891,44 @@ model PerformanceDivergence {
 
 // Learning modes/personas per category
 model CategoryLearningMode {
-  id              String   @id @default(cuid())
-  categoryId      String
-  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
-  modeName        String   // rigorous, intuitive, applied, teaching
-  isActive        Boolean  @default(false)
-  
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  modeName String // rigorous, intuitive, applied, teaching
+  isActive Boolean @default(false)
+
   // Mode configuration
-  questionStyle   String   @default("standard") // proof, analogy, problem, explain
-  difficultyBias  Float    @default(0) // -1 to 1, prefer easier or harder
-  
-  createdAt       DateTime @default(now())
-  
+  questionStyle  String @default("standard") // proof, analogy, problem, explain
+  difficultyBias Float  @default(0) // -1 to 1, prefer easier or harder
+
+  createdAt DateTime @default(now())
+
   @@unique([categoryId, modeName])
   @@index([categoryId])
 }
 
 // Track evolution of category structure over time
 model CategoryEvolutionEvent {
-  id              String   @id @default(cuid())
-  categoryId      String
-  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  userId          String
-  
-  eventType       String   // created, renamed, split, merged, reparented, archived
-  
+  id         String   @id @default(cuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  userId     String
+
+  eventType String // created, renamed, split, merged, reparented, archived
+
   // State snapshot
-  previousState   Json?    // Snapshot before change
-  newState        Json?    // Snapshot after change
-  
+  previousState Json? // Snapshot before change
+  newState      Json? // Snapshot after change
+
   // For splits/merges
   relatedCategoryIds String[] @default([])
-  
+
   // User reasoning
-  reason          String?
-  
-  createdAt       DateTime @default(now())
-  
+  reason String?
+
+  createdAt DateTime @default(now())
+
   @@index([categoryId])
   @@index([userId])
   @@index([eventType])
@@ -1931,101 +1948,101 @@ model CategoryEvolutionEvent {
 
 // Structural refactor operation - append-only event log
 model StructuralRefactorEvent {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // OPERATION IDENTIFICATION
   // =========================================================================
-  
+
   // Type: split, merge, move, rename, archive, restore, bulk_reassign
-  operationType   String
-  
+  operationType String
+
   // Status: pending, in_progress, completed, failed, rolled_back, conflict
-  status          String   @default("pending")
-  
+  status String @default("pending")
+
   // Primary category involved
   primaryCategoryId String
-  
+
   // All categories affected by this operation
   affectedCategoryIds String[] @default([])
-  
+
   // All cards affected by this operation
   affectedCardIds String[] @default([])
-  
+
   // =========================================================================
   // OPERATION DATA
   // =========================================================================
-  
+
   // Input parameters for the operation
-  operationInput  Json     // Full operation input (type-specific)
-  
+  operationInput Json // Full operation input (type-specific)
+
   // Result of the operation (if completed)
-  operationResult Json?    // Full operation result (type-specific)
-  
+  operationResult Json? // Full operation result (type-specific)
+
   // User's articulated reason for this change
-  userReason      String?
-  
+  userReason String?
+
   // AI-generated summary of the change
-  aiSummary       String?
-  
+  aiSummary String?
+
   // =========================================================================
   // SNAPSHOT REFERENCES
   // =========================================================================
-  
+
   // Snapshot taken before this operation
   beforeSnapshotId String?
   beforeSnapshot   StructuralSnapshot? @relation("BeforeSnapshot", fields: [beforeSnapshotId], references: [id], onDelete: SetNull)
-  
+
   // Snapshot taken after this operation
-  afterSnapshotId  String?
-  afterSnapshot    StructuralSnapshot? @relation("AfterSnapshot", fields: [afterSnapshotId], references: [id], onDelete: SetNull)
-  
+  afterSnapshotId String?
+  afterSnapshot   StructuralSnapshot? @relation("AfterSnapshot", fields: [afterSnapshotId], references: [id], onDelete: SetNull)
+
   // =========================================================================
   // ROLLBACK SUPPORT
   // =========================================================================
-  
+
   // Can this operation be rolled back?
-  isRollbackable  Boolean  @default(true)
-  
+  isRollbackable Boolean @default(true)
+
   // Has this operation been rolled back?
-  wasRolledBack   Boolean  @default(false)
-  
+  wasRolledBack Boolean @default(false)
+
   // ID of the rollback event (if rolled back)
   rollbackEventId String?
-  
+
   // Reference to the original event (if this is a rollback)
   originalEventId String?
-  originalEvent   StructuralRefactorEvent? @relation("RollbackChain", fields: [originalEventId], references: [id], onDelete: SetNull)
+  originalEvent   StructuralRefactorEvent?  @relation("RollbackChain", fields: [originalEventId], references: [id], onDelete: SetNull)
   rollbacks       StructuralRefactorEvent[] @relation("RollbackChain")
-  
+
   // =========================================================================
   // OFFLINE CONFLICT HANDLING
   // =========================================================================
-  
+
   // Conflict information (if status = "conflict")
-  conflictInfo    Json?    // { conflictType, severity, conflictingClientId, ... }
-  
+  conflictInfo Json? // { conflictType, severity, conflictingClientId, ... }
+
   // Resolution information (if conflict was resolved)
   conflictResolution Json? // { strategy, actions, resolvedBy, resolvedAt }
-  
+
   // Client ID for offline sync
-  clientId        String?
-  
+  clientId String?
+
   // Client timestamp for offline sync
   clientTimestamp DateTime?
-  
+
   // Server timestamp
   serverTimestamp DateTime @default(now())
-  
+
   // =========================================================================
   // TIMESTAMPS
   // =========================================================================
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([operationType])
   @@index([status])
@@ -2037,58 +2054,58 @@ model StructuralRefactorEvent {
 
 // Point-in-time snapshot of category structure
 model StructuralSnapshot {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // =========================================================================
   // SNAPSHOT IDENTIFICATION
   // =========================================================================
-  
+
   // User-provided name (for manually created snapshots)
-  name            String?
-  
+  name String?
+
   // Was this auto-created (before refactor) or user-created?
-  isAutomatic     Boolean  @default(true)
-  
+  isAutomatic Boolean @default(true)
+
   // Associated refactor event (if automatic)
   refactorEventId String?
-  
+
   // =========================================================================
   // SNAPSHOT DATA
   // =========================================================================
-  
+
   // Full category tree structure (JSON array of SnapshotCategoryNode)
-  categoryTree    Json     // Array of category nodes with hierarchy
-  
+  categoryTree Json // Array of category nodes with hierarchy
+
   // All category relations (JSON array of SnapshotRelation)
-  relations       Json     // Array of relation objects
-  
+  relations Json // Array of relation objects
+
   // Card category participations (JSON array of SnapshotParticipation)
-  participations  Json     // Array of participation objects
-  
+  participations Json // Array of participation objects
+
   // =========================================================================
   // STATISTICS AT SNAPSHOT TIME
   // =========================================================================
-  
-  totalCategories Int      @default(0)
-  totalCards      Int      @default(0)
-  totalRelations  Int      @default(0)
-  maxDepth        Int      @default(0)
-  
+
+  totalCategories Int @default(0)
+  totalCards      Int @default(0)
+  totalRelations  Int @default(0)
+  maxDepth        Int @default(0)
+
   // =========================================================================
   // LIFECYCLE
   // =========================================================================
-  
+
   // Expiration (null = never expires)
-  expiresAt       DateTime?
-  
-  createdAt       DateTime @default(now())
-  
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
   // Relations
   beforeRefactorEvents StructuralRefactorEvent[] @relation("BeforeSnapshot")
   afterRefactorEvents  StructuralRefactorEvent[] @relation("AfterSnapshot")
-  
+
   @@index([userId])
   @@index([isAutomatic])
   @@index([refactorEventId])
@@ -2098,41 +2115,41 @@ model StructuralSnapshot {
 
 // AI-generated suggestion for category split
 model AISplitSuggestion {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Target category
-  categoryId      String
-  
+  categoryId String
+
   // =========================================================================
   // SUGGESTION DATA
   // =========================================================================
-  
+
   // Source of the suggestion
-  source          String   // card_clustering, naming_pattern, performance_divergence, etc.
-  
+  source String // card_clustering, naming_pattern, performance_divergence, etc.
+
   // Confidence score (0-1)
-  confidence      Float    @default(0.5)
-  
+  confidence Float @default(0.5)
+
   // Suggested children (JSON array)
-  suggestedChildren Json   // Array of { name, description, framingQuestion, cardIds, rationale }
-  
+  suggestedChildren Json // Array of { name, description, framingQuestion, cardIds, rationale }
+
   // Overall rationale for the split
   overallRationale String
-  
+
   // =========================================================================
   // STATUS
   // =========================================================================
-  
-  status          String   @default("pending") // pending, accepted, rejected, deferred
-  respondedAt     DateTime?
-  
+
+  status      String    @default("pending") // pending, accepted, rejected, deferred
+  respondedAt DateTime?
+
   // If accepted, the refactor event ID
   refactorEventId String?
-  
-  createdAt       DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([categoryId])
   @@index([status])
@@ -2142,45 +2159,45 @@ model AISplitSuggestion {
 
 // AI-generated suggestion for category merge
 model AIMergeSuggestion {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Source categories
   sourceCategoryIds String[]
-  
+
   // =========================================================================
   // SUGGESTION DATA
   // =========================================================================
-  
+
   // Source of the suggestion
-  source          String   // content_similarity, usage_pattern, etc.
-  
+  source String // content_similarity, usage_pattern, etc.
+
   // Confidence score (0-1)
-  confidence      Float    @default(0.5)
-  
+  confidence Float @default(0.5)
+
   // Suggested merged category
-  suggestedName   String
+  suggestedName            String
   suggestedFramingQuestion String?
-  
+
   // Rationale
-  rationale       String
-  
+  rationale String
+
   // Overlap analysis (JSON)
-  overlapAnalysis Json     // { sharedCardCount, sharedThemes, contentSimilarity }
-  
+  overlapAnalysis Json // { sharedCardCount, sharedThemes, contentSimilarity }
+
   // =========================================================================
   // STATUS
   // =========================================================================
-  
-  status          String   @default("pending") // pending, accepted, rejected, deferred
-  respondedAt     DateTime?
-  
+
+  status      String    @default("pending") // pending, accepted, rejected, deferred
+  respondedAt DateTime?
+
   // If accepted, the refactor event ID
   refactorEventId String?
-  
-  createdAt       DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([status])
   @@index([confidence])
@@ -2193,100 +2210,100 @@ model AIMergeSuggestion {
 
 // User's current learning mode/flow state
 model UserLearningFlow {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Current mode
-  currentMode     String   @default("exploration") // exploration, goal_driven, exam_oriented, synthesis
-  
+  currentMode String @default("exploration") // exploration, goal_driven, exam_oriented, synthesis
+
   // Goal-driven mode settings
-  goalCategoryId  String?  // Target category for goal-driven mode
-  goalDeadline    DateTime?
-  goalProgress    Float    @default(0)
-  
+  goalCategoryId String? // Target category for goal-driven mode
+  goalDeadline   DateTime?
+  goalProgress   Float     @default(0)
+
   // Exam mode settings
-  examCategoryIds String[] @default([])
+  examCategoryIds String[]  @default([])
   examDate        DateTime?
-  examPriority    String   @default("breadth") // breadth, depth, mixed
-  
+  examPriority    String    @default("breadth") // breadth, depth, mixed
+
   // Synthesis mode
   synthesisCategoryIds String[] @default([])
-  
+
   // Active lens
-  activeLens      String   @default("structure") // structure, flow, bridge, progress
-  
+  activeLens String @default("structure") // structure, flow, bridge, progress
+
   // Complexity preference
-  complexityLevel Int      @default(1) // 1-5, how much structure to show
-  
-  updatedAt       DateTime @updatedAt
-  
+  complexityLevel Int @default(1) // 1-5, how much structure to show
+
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
 }
 
 // Dynamic deck definitions (queries over the ecosystem)
 model DynamicDeck {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  name            String
-  description     String?
-  iconEmoji       String?
-  color           String?
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  iconEmoji   String?
+  color       String?
+
   // Query definition
-  queryType       String   @default("category") // category, union, intersection, difference, custom
-  
+  queryType String @default("category") // category, union, intersection, difference, custom
+
   // Category-based queries
-  includeCategoryIds String[] @default([])
-  excludeCategoryIds String[] @default([])
-  includeSubcategories Boolean @default(true)
-  
+  includeCategoryIds   String[] @default([])
+  excludeCategoryIds   String[] @default([])
+  includeSubcategories Boolean  @default(true)
+
   // Filters
   stateFilter     String[] @default([]) // new, learning, review, mastered
   tagFilter       String[] @default([])
-  difficultyRange Json?    // { min: 0, max: 1 }
-  
+  difficultyRange Json? // { min: 0, max: 1 }
+
   // Sorting
-  sortBy          String   @default("due_date") // due_date, difficulty, created, random
-  sortOrder       String   @default("asc")
-  
+  sortBy    String @default("due_date") // due_date, difficulty, created, random
+  sortOrder String @default("asc")
+
   // Limits
-  maxCards        Int?
-  
+  maxCards Int?
+
   // Cached stats (updated periodically)
-  cachedCardCount Int      @default(0)
+  cachedCardCount Int       @default(0)
   cacheUpdatedAt  DateTime?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
 }
 
 // Suggested category (AI-detected clusters)
 model CategorySuggestion {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  suggestedName   String
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  suggestedName        String
   suggestedDescription String?
-  detectedTheme   String?  // AI-detected theme
-  
+  detectedTheme        String? // AI-detected theme
+
   // Cards that would belong
-  cardIds         String[]
-  
+  cardIds String[]
+
   // Confidence
-  confidence      Float    @default(0.5)
-  
+  confidence Float @default(0.5)
+
   // Status
-  status          String   @default("pending") // pending, accepted, rejected, deferred
-  respondedAt     DateTime?
-  
-  createdAt       DateTime @default(now())
-  
+  status      String    @default("pending") // pending, accepted, rejected, deferred
+  respondedAt DateTime?
+
+  createdAt DateTime @default(now())
+
   @@index([userId])
   @@index([status])
 }
@@ -2299,39 +2316,39 @@ model CategorySuggestion {
 
 // Mapping between Ecosystem entities and LKGC entities
 model EcosystemLkgcMapping {
-  id              String   @id @default(cuid())
-  userId          String
-  
+  id     String @id @default(cuid())
+  userId String
+
   // Source entity (Ecosystem side)
-  sourceType      String   // category, category_relation, participation
-  sourceId        String
-  
+  sourceType String // category, category_relation, participation
+  sourceId   String
+
   // Target entity (LKGC side)
-  targetType      String   // lkgc_node, lkgc_edge
-  targetId        String
-  
+  targetType String // lkgc_node, lkgc_edge
+  targetId   String
+
   // Sync configuration
-  direction       String   @default("ecosystem_to_lkgc") // ecosystem_to_lkgc, lkgc_to_ecosystem, bidirectional
-  status          String   @default("active") // active, pending, orphaned, conflict, archived
-  
+  direction String @default("ecosystem_to_lkgc") // ecosystem_to_lkgc, lkgc_to_ecosystem, bidirectional
+  status    String @default("active") // active, pending, orphaned, conflict, archived
+
   // Confidence in the mapping (0-1)
-  confidence      Float    @default(0.85)
-  
+  confidence Float @default(0.85)
+
   // State hashes for change detection
   sourceStateHash String?
   targetStateHash String?
-  
+
   // Additional metadata (JSON)
   // For category: name, description, framingQuestion
   // For category_relation: originalRelationType, mappedEdgeType, directionReversed, strength
   // For participation: cardId, categoryId, semanticRole, isPrimary, mappedEdgeType
-  metadata        Json     @default("{}")
-  
+  metadata Json @default("{}")
+
   // Timestamps
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  lastSyncedAt    DateTime @default(now())
-  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastSyncedAt DateTime @default(now())
+
   @@unique([userId, sourceType, sourceId, targetType])
   @@index([userId])
   @@index([sourceType, sourceId])
@@ -2342,38 +2359,38 @@ model EcosystemLkgcMapping {
 
 // Sync event log for audit trail
 model EcosystemSyncEvent {
-  id              String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Event type
-  eventType       String   // category_created, category_updated, category_deleted,
-                           // category_relation_created, category_relation_updated, category_relation_deleted,
-                           // participation_created, participation_updated, participation_deleted,
-                           // context_review_recorded, mastery_projected,
-                           // lkgc_edge_created, lkgc_edge_updated, lkgc_node_updated
-  
-  userId          String
-  
+  eventType String // category_created, category_updated, category_deleted,
+  // category_relation_created, category_relation_updated, category_relation_deleted,
+  // participation_created, participation_updated, participation_deleted,
+  // context_review_recorded, mastery_projected,
+  // lkgc_edge_created, lkgc_edge_updated, lkgc_node_updated
+
+  userId String
+
   // Source entity
-  sourceType      String   // category, category_relation, participation, review, lkgc_node, lkgc_edge
-  sourceId        String
-  
+  sourceType String // category, category_relation, participation, review, lkgc_node, lkgc_edge
+  sourceId   String
+
   // Target entity
-  targetType      String   // lkgc_node, lkgc_edge, lkgc_event, participation, category
-  targetId        String
-  
+  targetType String // lkgc_node, lkgc_edge, lkgc_event, participation, category
+  targetId   String
+
   // Reference to mapping (if applicable)
-  mappingId       String?
-  
+  mappingId String?
+
   // Result
-  success         Boolean  @default(true)
-  errorMessage    String?
-  
+  success      Boolean @default(true)
+  errorMessage String?
+
   // Additional metadata
-  metadata        Json     @default("{}")
-  
+  metadata Json @default("{}")
+
   // Timestamp
-  timestamp       DateTime @default(now())
-  
+  timestamp DateTime @default(now())
+
   @@index([userId])
   @@index([eventType])
   @@index([sourceType, sourceId])
@@ -2381,4 +2398,850 @@ model EcosystemSyncEvent {
   @@index([mappingId])
   @@index([timestamp])
   @@index([success])
+}
+
+// =============================================================================
+// LEARNING MODE FRAMEWORK - Phase 5A
+// =============================================================================
+// Modes are FIRST-CLASS ENTITIES that control:
+// - Navigation suggestions (what to explore next)
+// - Review candidate selection & ordering
+// - New-card introduction rate
+// - Metacognitive prompts and synthesis triggers
+// - UI emphasis (pressure vs discovery)
+//
+// Persistence levels:
+// 1. Global (user default) - stored in UserModePreference
+// 2. Per-category (hook for later) - stored in CategoryModeDefault
+// 3. Per-session (temporary override) - stored in ModeSession
+// =============================================================================
+
+// Mode definition - stored for plugin-defined modes
+// System modes (exploration, goal_driven, exam_oriented, synthesis) are defined in code
+model LearningModeDefinition {
+  id String @id @default(cuid())
+
+  // =========================================================================
+  // IDENTIFICATION
+  // =========================================================================
+  name        String
+  description String
+  tagline     String?
+  icon        String  @default("📚")
+
+  // System type (null for plugin-defined modes)
+  // Values: exploration, goal_driven, exam_oriented, synthesis
+  systemType String?
+
+  // Source: system, plugin, user_custom
+  source String @default("system")
+
+  // Plugin ID (if source is 'plugin')
+  pluginId String?
+
+  // Version for compatibility
+  version String @default("1.0.0")
+
+  // =========================================================================
+  // PARAMETER SCHEMA
+  // =========================================================================
+  // JSON schema for mode-specific parameters
+  parameterSchema Json @default("{}")
+
+  // Default parameter values
+  defaultParameters Json @default("{}")
+
+  // =========================================================================
+  // POLICY DECLARATIONS
+  // =========================================================================
+  // Which policies this mode affects (JSON flags)
+  affectedPolicies Json @default("{}")
+
+  // LKGC signals this mode consumes (string array)
+  consumedLkgcSignals String[] @default([])
+
+  // LKGC signals this mode amplifies (string array)
+  amplifiedLkgcSignals String[] @default([])
+
+  // =========================================================================
+  // UI HINTS
+  // =========================================================================
+  uiEmphasis        Json    @default("{}")
+  suggestedViewLens String?
+  colorTheme        Json?
+
+  // =========================================================================
+  // METADATA
+  // =========================================================================
+  enabledByDefault        Boolean  @default(true)
+  supportsCategoryDefault Boolean  @default(true)
+  supportsSessionOverride Boolean  @default(true)
+  requiredCapabilities    String[] @default([])
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // =========================================================================
+  // RELATIONS
+  // =========================================================================
+  userPreferences  UserModePreference[]
+  categoryDefaults CategoryModeDefault[]
+  sessions         ModeSession[]
+  activations      ModeActivation[]
+  parameterPresets ModeParameterPreset[]
+
+  @@unique([name, source, pluginId])
+  @@index([systemType])
+  @@index([source])
+  @@index([pluginId])
+}
+
+// User's mode preferences - global default and settings
+model UserModePreference {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // GLOBAL DEFAULT
+  // =========================================================================
+  defaultModeId String
+  defaultMode   LearningModeDefinition @relation(fields: [defaultModeId], references: [id])
+
+  // Parameter overrides for the default mode
+  defaultParameters Json @default("{}")
+
+  // =========================================================================
+  // QUICK ACCESS
+  // =========================================================================
+  // Recently used mode IDs (ordered, most recent first)
+  recentModeIds String[] @default([])
+
+  // Favorite mode IDs
+  favoriteModeIds String[] @default([])
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId])
+  @@index([userId])
+  @@index([defaultModeId])
+}
+
+// Category-specific mode defaults (hook for later - Phase 5C)
+model CategoryModeDefault {
+  id     String @id @default(cuid())
+  userId String
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  modeId String
+  mode   LearningModeDefinition @relation(fields: [modeId], references: [id])
+
+  // Parameter overrides for this category
+  parameterOverrides Json @default("{}")
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, categoryId])
+  @@index([userId])
+  @@index([categoryId])
+  @@index([modeId])
+}
+
+// Mode session - temporary override for a study session
+model ModeSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // SESSION CONFIGURATION
+  // =========================================================================
+  modeId String
+  mode   LearningModeDefinition @relation(fields: [modeId], references: [id])
+
+  // Parameter overrides for this session
+  parameterOverrides Json @default("{}")
+
+  // Optional category filter for session
+  categoryId String?
+
+  // =========================================================================
+  // SESSION STATE
+  // =========================================================================
+  status String @default("active") // active, paused, completed, abandoned
+
+  // Time budget (optional, in minutes)
+  timeBudgetMinutes Int?
+
+  // Items reviewed this session
+  reviewedCardIds String[] @default([])
+
+  // =========================================================================
+  // TIMING
+  // =========================================================================
+  startedAt DateTime  @default(now())
+  pausedAt  DateTime?
+  resumedAt DateTime?
+  endedAt   DateTime?
+
+  // Total active time (excluding pauses)
+  activeTimeSeconds Int @default(0)
+
+  // =========================================================================
+  // RELATIONS
+  // =========================================================================
+  activations ModeActivation[]
+
+  @@index([userId])
+  @@index([modeId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// Mode activation - tracks which mode is active at what scope
+model ModeActivation {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // ACTIVATION TARGET
+  // =========================================================================
+  modeId String
+  mode   LearningModeDefinition @relation(fields: [modeId], references: [id])
+
+  // Scope: global, category, session
+  scope String @default("global")
+
+  // Category ID (if scope is 'category')
+  categoryId String?
+
+  // Session ID (if scope is 'session')
+  sessionId String?
+  session   ModeSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // PARAMETERS
+  // =========================================================================
+  // Parameter overrides from defaults
+  parameterOverrides Json @default("{}")
+
+  // =========================================================================
+  // STATE
+  // =========================================================================
+  isActive Boolean @default(true)
+
+  // Priority for conflict resolution (higher wins)
+  priority Int @default(0)
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  activatedAt   DateTime  @default(now())
+  deactivatedAt DateTime?
+
+  @@index([userId])
+  @@index([modeId])
+  @@index([scope])
+  @@index([categoryId])
+  @@index([sessionId])
+  @@index([isActive])
+  @@index([priority])
+}
+
+// Saved parameter presets for quick mode configuration
+model ModeParameterPreset {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // PRESET CONFIGURATION
+  // =========================================================================
+  name        String
+  description String?
+
+  modeId String
+  mode   LearningModeDefinition @relation(fields: [modeId], references: [id])
+
+  // The preset parameters
+  parameters Json @default("{}")
+
+  // =========================================================================
+  // METADATA
+  // =========================================================================
+  isDefault  Boolean @default(false)
+  usageCount Int     @default(0)
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  lastUsedAt DateTime?
+
+  @@unique([userId, modeId, name])
+  @@index([userId])
+  @@index([modeId])
+  @@index([isDefault])
+}
+
+// Explainability trace - "Why am I seeing this?"
+model ExplainabilityTrace {
+  id     String @id @default(cuid())
+  userId String
+
+  // =========================================================================
+  // SUBJECT
+  // =========================================================================
+  // What is being explained
+  subjectType String // card, category, navigation_suggestion, review_candidate, synthesis_prompt, mode_switch
+  subjectId   String
+
+  // =========================================================================
+  // CONTEXT
+  // =========================================================================
+  modeId         String
+  parametersUsed Json   @default("{}")
+
+  // =========================================================================
+  // EXPLANATION
+  // =========================================================================
+  // Factors that influenced the decision (JSON array)
+  factors Json @default("[]")
+
+  // Human-readable summary
+  summary String
+
+  // Detailed explanation
+  detailedExplanation String?
+
+  // Suggested actions (JSON array)
+  suggestedActions Json @default("[]")
+
+  // =========================================================================
+  // METADATA
+  // =========================================================================
+  // Time to live in milliseconds
+  ttlMs Int @default(300000) // 5 minutes
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([subjectType, subjectId])
+  @@index([modeId])
+  @@index([createdAt])
+  @@index([expiresAt])
+}
+
+// Category scheduling metadata - structure influences scheduling
+model CategorySchedulingMetadata {
+  id     String @id @default(cuid())
+  userId String
+
+  categoryId String   @unique
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // DIFFICULTY MULTIPLIER
+  // =========================================================================
+  difficultyMultiplier Float  @default(1.0)
+  targetStability      Float?
+
+  // =========================================================================
+  // DECAY MODEL
+  // =========================================================================
+  // Values: fsrs, hlr, exponential, power_law, custom
+  decayModel        String @default("fsrs")
+  customDecayParams Json?
+
+  // =========================================================================
+  // CROSS-CATEGORY INTERFERENCE
+  // =========================================================================
+  interferenceGroupIds     String[] @default([])
+  interferenceSpacingHours Int      @default(4)
+
+  // =========================================================================
+  // COMPLETION / MASTERY GOALS
+  // =========================================================================
+  targetMasteryDate  DateTime?
+  targetMasteryLevel Float     @default(0.9)
+  dailyAllocation    Int? // Cards per day
+
+  // =========================================================================
+  // MODE-SPECIFIC OVERRIDES
+  // =========================================================================
+  modeOverrides Json @default("{}")
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, categoryId])
+  @@index([userId])
+  @@index([categoryId])
+  @@index([decayModel])
+}
+
+// =============================================================================
+// CANONICAL CARD & FACE SYSTEM
+// =============================================================================
+// Phase 6A: Multi-Faceted Cards
+// Cards exist ONCE canonically, faces are context-sensitive overlays
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CONTENT PRIMITIVES - Stable, reusable content blocks
+// -----------------------------------------------------------------------------
+model ContentPrimitive {
+  id              String        @id @default(cuid())
+  canonicalCardId String
+  canonicalCard   CanonicalCard @relation(fields: [canonicalCardId], references: [id], onDelete: Cascade)
+
+  // Primitive type and content
+  type    String // text, markdown, latex, code, image, audio, cloze_region, formula, etc.
+  content Json // Type-specific content structure
+
+  // Metadata
+  label          String? // Optional label for referencing
+  altText        String? // Accessibility description
+  sourcePluginId String? // Plugin that created this primitive
+
+  // Ordering within the card
+  displayOrder Int @default(0)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  faceRefs FacePrimitiveRef[]
+
+  @@index([canonicalCardId])
+  @@index([type])
+}
+
+// -----------------------------------------------------------------------------
+// CANONICAL CARD - Single source of truth
+// -----------------------------------------------------------------------------
+model CanonicalCard {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // STRUCTURAL TYPE & METADATA
+  // =========================================================================
+  structuralType String   @default("single_primitive") // single_primitive, multi_primitive, cloze_based, media_primary, composite
+  tags           String[] @default([])
+  notes          String?
+
+  // =========================================================================
+  // SOURCE PROVENANCE
+  // =========================================================================
+  sourceType         String  @default("manual") // manual, import, ai_generated, plugin, split, merge, template
+  sourcePluginId     String?
+  sourceImportId     String?
+  sourceOriginalId   String?
+  sourceUrl          String?
+  sourceCreatedBy    String  @default("user") // user, ai, import, plugin
+  sourceAiModel      String?
+  sourceAiPromptHash String?
+
+  // =========================================================================
+  // DEFAULT LAYOUT
+  // =========================================================================
+  defaultLayoutArrangement    String   @default("sequential") // sequential, side_by_side, grid, custom
+  defaultLayoutPrimitiveOrder String[] @default([]) // Ordered primitive IDs
+  defaultLayoutCustomSpec     Json?
+
+  // =========================================================================
+  // GLOBAL SCHEDULING STATE (SRS)
+  // =========================================================================
+  schedulingState  String    @default("new") // new, learning, review, relearning, mastered
+  stability        Float     @default(0)
+  difficulty       Float     @default(0.3)
+  elapsedDays      Float     @default(0)
+  scheduledDays    Float     @default(0)
+  reps             Int       @default(0)
+  lapses           Int       @default(0)
+  lastReviewDate   DateTime?
+  nextReviewDate   DateTime?
+  halfLife         Float? // HLR-specific
+  thetaVector      Json? // HLR-specific
+  algorithmType    String    @default("fsrs") // fsrs, hlr, sm2, custom
+  algorithmVersion String    @default("4.0")
+
+  // =========================================================================
+  // LEARNING HISTORY SNAPSHOT
+  // =========================================================================
+  totalReviews         Int       @default(0)
+  correctReviews       Int       @default(0)
+  avgResponseTimeMs    Int       @default(0)
+  retentionRate        Float     @default(0)
+  firstReviewDate      DateTime?
+  mostRecentReviewDate DateTime?
+  facesReviewed        Int       @default(0)
+
+  // =========================================================================
+  // FACE REGISTRY
+  // =========================================================================
+  defaultFaceId String? // ID of default face (set after face creation)
+
+  // =========================================================================
+  // STATUS FLAGS
+  // =========================================================================
+  isArchived    Boolean @default(false)
+  isSuspended   Boolean @default(false)
+  suspendReason String?
+
+  // =========================================================================
+  // VERSIONING
+  // =========================================================================
+  version Int @default(1)
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // =========================================================================
+  // RELATIONS
+  // =========================================================================
+  contentPrimitives  ContentPrimitive[]
+  faces              CardFace[]
+  performanceRecords FacePerformanceRecord[]
+  aiSuggestions      AiFaceSuggestion[]
+  events             CanonicalCardEvent[]
+
+  // Legacy card relation (for migration)
+  legacyCard Card? @relation("CanonicalCardLegacy")
+
+  @@index([userId])
+  @@index([structuralType])
+  @@index([schedulingState])
+  @@index([nextReviewDate])
+  @@index([isArchived])
+  @@index([isSuspended])
+}
+
+// -----------------------------------------------------------------------------
+// CARD FACE - Context-sensitive overlay
+// -----------------------------------------------------------------------------
+model CardFace {
+  id              String        @id @default(cuid())
+  canonicalCardId String
+  canonicalCard   CanonicalCard @relation(fields: [canonicalCardId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // FACE IDENTITY
+  // =========================================================================
+  name        String
+  description String?
+  faceType    String // recognition, recall, application, synthesis, etc.
+  depthLevel  String  @default("recall") // recognition, recall, understanding, application, analysis, synthesis, evaluation
+
+  // =========================================================================
+  // CONTENT PRESENTATION
+  // =========================================================================
+  // Question presentation
+  questionStrategy        String  @default("reference_all") // reference_all, reference_subset, override, augment, transform
+  questionOverrideContent Json? // For override/augment strategies
+  questionWrapperPrefix   String?
+  questionWrapperSuffix   String?
+  questionLayoutOverride  Json?
+  questionEmphasisHints   Json?
+
+  // Answer presentation  
+  answerStrategy        String  @default("reference_all")
+  answerOverrideContent Json?
+  answerWrapperPrefix   String?
+  answerWrapperSuffix   String?
+  answerLayoutOverride  Json?
+  answerEmphasisHints   Json?
+
+  // =========================================================================
+  // SCAFFOLDING
+  // =========================================================================
+  scaffoldingLevel            Int      @default(0)
+  scaffoldingHints            Json? // Array of hints
+  scaffoldingAutoReveal       Boolean  @default(false)
+  scaffoldingPartialTemplates String[] @default([])
+
+  // =========================================================================
+  // EXPECTED OUTPUT
+  // =========================================================================
+  expectedOutputType     String  @default("binary") // none, binary, rating, selection, text_exact, text_fuzzy, text_semantic, spoken, drawn, ordered, custom
+  evaluationCriteriaType String? // exact, fuzzy, semantic, rubric, custom
+  evaluationCriteria     Json? // Type-specific criteria
+
+  // =========================================================================
+  // PRIORITY
+  // =========================================================================
+  priority Int @default(50) // Higher = preferred
+
+  // =========================================================================
+  // MASTERY TRANSFER
+  // =========================================================================
+  globalContributionWeight Float   @default(1.0)
+  crossFaceTransferRules   Json? // Array of transfer rules
+  canEstablishMastery      Boolean @default(true)
+  minReviewsForTransfer    Int     @default(1)
+
+  // =========================================================================
+  // FACE PERFORMANCE SNAPSHOT
+  // =========================================================================
+  timesShown            Int       @default(0)
+  timesCorrect          Int       @default(0)
+  successRate           Float     @default(0)
+  faceAvgResponseTimeMs Int       @default(0)
+  lastShownAt           DateTime?
+  estimatedMastery      Float     @default(0)
+
+  // =========================================================================
+  // PROVENANCE
+  // =========================================================================
+  sourceType         String    @default("manual") // manual, ai_generated, ai_suggested, plugin, system, derived, import
+  sourceCreatedBy    String    @default("user") // user, ai, plugin, system
+  sourceAiModel      String?
+  sourceAiPromptHash String?
+  sourcePluginId     String?
+  sourceApprovedBy   String?
+  sourceApprovedAt   DateTime?
+  derivedFromFaceId  String?
+
+  // =========================================================================
+  // VERSIONING
+  // =========================================================================
+  version          String   @default(cuid())
+  previousVersions String[] @default([])
+
+  // =========================================================================
+  // STATUS FLAGS
+  // =========================================================================
+  isActive  Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // =========================================================================
+  // RELATIONS
+  // =========================================================================
+  applicabilityRules FaceApplicabilityRule[]
+  primitiveRefs      FacePrimitiveRef[]
+  performanceRecords FacePerformanceRecord[]
+
+  @@unique([canonicalCardId, isDefault])
+  @@index([canonicalCardId])
+  @@index([faceType])
+  @@index([depthLevel])
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([priority])
+}
+
+// -----------------------------------------------------------------------------
+// FACE PRIMITIVE REFERENCES - Links faces to content primitives
+// -----------------------------------------------------------------------------
+model FacePrimitiveRef {
+  id String @id @default(cuid())
+
+  // Which face this reference belongs to
+  faceId String
+  face   CardFace @relation(fields: [faceId], references: [id], onDelete: Cascade)
+
+  // Which primitive is referenced
+  primitiveId String
+  primitive   ContentPrimitive @relation(fields: [primitiveId], references: [id], onDelete: Cascade)
+
+  // Reference metadata
+  refType         String // question, answer
+  displayOrder    Int    @default(0)
+  transformType   String @default("none") // none, hide_clozes, reveal_clozes, highlight, redact, custom
+  transformConfig Json?
+
+  @@index([faceId])
+  @@index([primitiveId])
+  @@index([refType])
+}
+
+// -----------------------------------------------------------------------------
+// FACE APPLICABILITY RULES - When does a face apply?
+// -----------------------------------------------------------------------------
+model FaceApplicabilityRule {
+  id     String   @id @default(cuid())
+  faceId String
+  face   CardFace @relation(fields: [faceId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // RULE IDENTITY
+  // =========================================================================
+  description String
+  ruleType    String // category_binding, role_binding, mode_binding, depth_binding, intent_binding, lkgc_signal, user_preference, temporal, composite, custom
+
+  // =========================================================================
+  // CONDITIONS
+  // =========================================================================
+  conditionOperator String  @default("and") // and, or
+  conditions        Json // Array of condition objects
+  conditionNegated  Boolean @default(false)
+
+  // =========================================================================
+  // PRIORITY & STATUS
+  // =========================================================================
+  priority Int     @default(50)
+  isActive Boolean @default(true)
+
+  // =========================================================================
+  // SOURCE
+  // =========================================================================
+  source     String @default("manual") // manual, ai_suggested, plugin
+  confidence Float? // For AI-generated rules
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([faceId])
+  @@index([ruleType])
+  @@index([isActive])
+  @@index([priority])
+}
+
+// -----------------------------------------------------------------------------
+// FACE PERFORMANCE RECORDS - Detailed performance tracking per face
+// -----------------------------------------------------------------------------
+model FacePerformanceRecord {
+  id String @id @default(cuid())
+
+  faceId String
+  face   CardFace @relation(fields: [faceId], references: [id], onDelete: Cascade)
+
+  canonicalCardId String
+  canonicalCard   CanonicalCard @relation(fields: [canonicalCardId], references: [id], onDelete: Cascade)
+
+  userId String
+
+  // =========================================================================
+  // PERFORMANCE DATA
+  // =========================================================================
+  isCorrect        Boolean
+  responseTimeMs   Int
+  confidenceRating Float?
+
+  // =========================================================================
+  // CONTEXT
+  // =========================================================================
+  contextCategoryId String?
+  contextModeId     String?
+
+  // =========================================================================
+  // TIMESTAMP
+  // =========================================================================
+  recordedAt DateTime @default(now())
+
+  @@index([faceId])
+  @@index([canonicalCardId])
+  @@index([userId])
+  @@index([recordedAt])
+  @@index([contextCategoryId])
+  @@index([contextModeId])
+}
+
+// -----------------------------------------------------------------------------
+// AI FACE SUGGESTIONS - Pending human approval
+// -----------------------------------------------------------------------------
+model AiFaceSuggestion {
+  id              String        @id @default(cuid())
+  canonicalCardId String
+  canonicalCard   CanonicalCard @relation(fields: [canonicalCardId], references: [id], onDelete: Cascade)
+
+  // =========================================================================
+  // SUGGESTED FACE DATA
+  // =========================================================================
+  suggestedFaceData Json // CreateCardFaceInput minus canonicalCardId
+
+  // =========================================================================
+  // AI METADATA
+  // =========================================================================
+  aiExplanation String
+  aiModel       String
+  promptHash    String
+  confidence    Float
+
+  // =========================================================================
+  // STATUS
+  // =========================================================================
+  status String @default("pending") // pending, approved, rejected, modified, expired
+
+  // =========================================================================
+  // REVIEW INFO
+  // =========================================================================
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  createdFaceId String? // If approved
+
+  // =========================================================================
+  // TIMESTAMPS
+  // =========================================================================
+  createdAt DateTime @default(now())
+
+  @@index([canonicalCardId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// CANONICAL CARD EVENTS - Audit trail
+// -----------------------------------------------------------------------------
+model CanonicalCardEvent {
+  id String @id @default(cuid())
+
+  canonicalCardId String
+  canonicalCard   CanonicalCard @relation(fields: [canonicalCardId], references: [id], onDelete: Cascade)
+
+  userId String
+
+  // =========================================================================
+  // EVENT DATA
+  // =========================================================================
+  eventType String // canonical_card_created, canonical_card_updated, card_face_created, card_face_updated, face_performance_recorded
+  eventData Json // Type-specific event data
+
+  // =========================================================================
+  // TIMESTAMP
+  // =========================================================================
+  occurredAt DateTime @default(now())
+
+  @@index([canonicalCardId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([occurredAt])
 }

@@ -886,7 +886,7 @@ export class EcosystemBridgeService {
 
       const context: ActiveLensContext = {
         activeCategoryId: input.activeCategoryId,
-        activeConceptNodeId: categoryMapping?.targetId as any,
+        activeConceptNodeId: categoryMapping?.targetId,
         activeCategoryName: category.name,
         filterToActiveCategory: input.filterToActiveCategory ?? false,
         emphasisMultiplier: input.emphasisMultiplier ?? 1.5,
@@ -1115,7 +1115,9 @@ export class EcosystemBridgeService {
     // Count relation mappings by type
     const relationsByType: Record<string, number> = {};
     for (const mapping of relationMappings) {
-      const metadata = mapping.metadata as any;
+      const metadata = mapping.metadata as {
+        originalRelationType?: string;
+      } | null;
       const relType = metadata?.originalRelationType || "unknown";
       relationsByType[relType] = (relationsByType[relType] || 0) + 1;
     }
