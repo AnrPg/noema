@@ -2291,3 +2291,94 @@ model CategorySuggestion {
   @@index([status])
 }
 
+// =============================================================================
+// ECOSYSTEM-LKGC BRIDGE
+// =============================================================================
+// Bidirectional sync between Ecosystem (Categories as Lenses) and LKGC
+// (Local Knowledge Graph Core).
+
+// Mapping between Ecosystem entities and LKGC entities
+model EcosystemLkgcMapping {
+  id              String   @id @default(cuid())
+  userId          String
+  
+  // Source entity (Ecosystem side)
+  sourceType      String   // category, category_relation, participation
+  sourceId        String
+  
+  // Target entity (LKGC side)
+  targetType      String   // lkgc_node, lkgc_edge
+  targetId        String
+  
+  // Sync configuration
+  direction       String   @default("ecosystem_to_lkgc") // ecosystem_to_lkgc, lkgc_to_ecosystem, bidirectional
+  status          String   @default("active") // active, pending, orphaned, conflict, archived
+  
+  // Confidence in the mapping (0-1)
+  confidence      Float    @default(0.85)
+  
+  // State hashes for change detection
+  sourceStateHash String?
+  targetStateHash String?
+  
+  // Additional metadata (JSON)
+  // For category: name, description, framingQuestion
+  // For category_relation: originalRelationType, mappedEdgeType, directionReversed, strength
+  // For participation: cardId, categoryId, semanticRole, isPrimary, mappedEdgeType
+  metadata        Json     @default("{}")
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastSyncedAt    DateTime @default(now())
+  
+  @@unique([userId, sourceType, sourceId, targetType])
+  @@index([userId])
+  @@index([sourceType, sourceId])
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([direction])
+}
+
+// Sync event log for audit trail
+model EcosystemSyncEvent {
+  id              String   @id @default(cuid())
+  
+  // Event type
+  eventType       String   // category_created, category_updated, category_deleted,
+                           // category_relation_created, category_relation_updated, category_relation_deleted,
+                           // participation_created, participation_updated, participation_deleted,
+                           // context_review_recorded, mastery_projected,
+                           // lkgc_edge_created, lkgc_edge_updated, lkgc_node_updated
+  
+  userId          String
+  
+  // Source entity
+  sourceType      String   // category, category_relation, participation, review, lkgc_node, lkgc_edge
+  sourceId        String
+  
+  // Target entity
+  targetType      String   // lkgc_node, lkgc_edge, lkgc_event, participation, category
+  targetId        String
+  
+  // Reference to mapping (if applicable)
+  mappingId       String?
+  
+  // Result
+  success         Boolean  @default(true)
+  errorMessage    String?
+  
+  // Additional metadata
+  metadata        Json     @default("{}")
+  
+  // Timestamp
+  timestamp       DateTime @default(now())
+  
+  @@index([userId])
+  @@index([eventType])
+  @@index([sourceType, sourceId])
+  @@index([targetType, targetId])
+  @@index([mappingId])
+  @@index([timestamp])
+  @@index([success])
+}

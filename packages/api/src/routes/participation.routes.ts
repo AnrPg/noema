@@ -16,6 +16,10 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma, Prisma } from "../config/database.js";
 import { authenticate } from "../middleware/auth.js";
+import {
+  syncParticipationOnCreate,
+  syncParticipationOnUpdate,
+} from "../ecosystem-bridge/index.js";
 
 // =============================================================================
 // SCHEMAS
@@ -556,6 +560,16 @@ export async function participationRoutes(app: FastifyInstance) {
         semanticRole: input.semanticRole,
         provenance: input.provenanceType,
       });
+
+      // Sync participation to LKGC (non-blocking)
+      syncParticipationOnCreate({
+        id: participation.id,
+        cardId: participation.cardId,
+        categoryId: participation.categoryId,
+        semanticRole: participation.semanticRole,
+        isPrimary: participation.isPrimary,
+        category: { userId },
+      }).catch(() => {});
 
       return reply.status(201).send({
         success: true,

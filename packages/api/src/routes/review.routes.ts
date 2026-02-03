@@ -14,6 +14,10 @@ import {
   type NumericRating,
   toRating,
 } from "@manthanein/shared";
+import {
+  emitContextReviewOnSubmit,
+  projectMasteryAfterReview,
+} from "../ecosystem-bridge/index.js";
 
 // =============================================================================
 // SCHEMAS
@@ -220,6 +224,26 @@ export async function reviewRoutes(app: FastifyInstance) {
                 body.contextConfidence ?? participation.confidenceRating,
             },
           });
+
+          // Emit context review event to LKGC (non-blocking)
+          emitContextReviewOnSubmit({
+            cardId: body.cardId,
+            categoryId: body.categoryId,
+            userId,
+            rating: body.rating,
+            responseTimeMs: body.responseTimeMs,
+            contextSuccessRate: newSuccessRate,
+            contextMasteryScore,
+            reviewCountInContext: newReviewCount,
+          }).catch(() => {});
+
+          // Project mastery from LKGC (non-blocking)
+          projectMasteryAfterReview({
+            participationId: participation.id,
+            cardId: body.cardId,
+            categoryId: body.categoryId,
+            userId,
+          }).catch(() => {});
 
           // Check for performance divergence after update
           await checkAndRecordDivergence(userId, body.cardId);

@@ -976,6 +976,41 @@ export type {
 } from "./multi-belonging.types";
 
 // =============================================================================
+// ECOSYSTEM-LKGC BRIDGE TYPES
+// =============================================================================
+
+export type {
+  // Identifiers
+  EcosystemMappingId,
+  SyncEventId,
+  // Enums
+  SyncDirection as EcosystemSyncDirection,
+  MappingStatus,
+  EcosystemSyncEventType,
+  // Mappings
+  CategoryToConceptMapping,
+  CategoryRelationToEdgeMapping,
+  ParticipationToEdgeMapping,
+  // Context & Projection
+  ContextReviewEventData,
+  MasteryProjection,
+  ActiveLensContext,
+  // Sync Events
+  EcosystemSyncEvent,
+  // Configuration
+  EcosystemBridgeConfig,
+} from "./ecosystem-bridge.types";
+
+export {
+  // Constants
+  CATEGORY_RELATION_TO_LKGC_EDGE,
+  LKGC_EDGE_TO_CATEGORY_RELATION,
+  ECOSYSTEM_SYNC_CONFIDENCE,
+  DEFAULT_ACTIVE_LENS_CONTEXT,
+  DEFAULT_BRIDGE_CONFIG,
+} from "./ecosystem-bridge.types";
+
+// =============================================================================
 // OFFLINE-FIRST SYNC TYPES
 // =============================================================================
 

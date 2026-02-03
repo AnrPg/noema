@@ -6,6 +6,13 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { prisma } from "../config/database.js";
 import { authenticate } from "../middleware/auth.js";
+import {
+  syncCategoryOnCreate,
+  syncCategoryOnUpdate,
+  syncCategoryOnDelete,
+  syncCategoryRelationOnCreate,
+  syncCategoryRelationOnUpdate,
+} from "../ecosystem-bridge/index.js";
 
 // =============================================================================
 // SCHEMAS
@@ -569,6 +576,9 @@ export async function categoryRoutes(app: FastifyInstance) {
         parentId: category.parentId,
       });
 
+      // Sync to LKGC (non-blocking)
+      syncCategoryOnCreate(category).catch(() => {});
+
       return reply.status(201).send(category);
     },
   );
@@ -1130,6 +1140,18 @@ export async function categoryRoutes(app: FastifyInstance) {
           },
         },
       });
+
+      // Sync relation to LKGC (non-blocking)
+      syncCategoryRelationOnCreate({
+        id: relation.id,
+        userId: request.user!.id,
+        sourceCategoryId: relation.sourceCategoryId,
+        targetCategoryId: relation.targetCategoryId,
+        relationType: relation.relationType,
+        strength: relation.strength,
+        isUserConfirmed: true,
+        isAutoSuggested: false,
+      }).catch(() => {});
 
       return reply.status(201).send(relation);
     },

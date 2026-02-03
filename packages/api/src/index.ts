@@ -43,6 +43,7 @@ import { refactorRoutes } from "./routes/refactor.routes";
 import participationRoutes from "./routes/participation.routes";
 import synthesisRoutes from "./routes/synthesis.routes";
 import bridgeCardRoutes from "./routes/bridge-card.routes";
+import ecosystemBridgeRoutes from "./ecosystem-bridge/routes";
 
 // GraphQL
 import { schema } from "./graphql/schema.js";
@@ -177,6 +178,11 @@ async function buildServer() {
           name: "Bridge Cards",
           description: "Bridge cards for connecting concepts across contexts",
         },
+        {
+          name: "Ecosystem Bridge",
+          description:
+            "Bidirectional sync between Ecosystem (Categories as Lenses) and LKGC (Local Knowledge Graph Core)",
+        },
       ],
     },
   });
@@ -259,6 +265,7 @@ async function buildServer() {
   await app.register(participationRoutes, { prefix: "/api/v1/participations" });
   await app.register(synthesisRoutes, { prefix: "/api/v1/synthesis" });
   await app.register(bridgeCardRoutes, { prefix: "/api/v1/bridge-cards" });
+  await app.register(ecosystemBridgeRoutes, { prefix: "/api/v1" });
 
   // ==========================================================================
   // ERROR HANDLING
