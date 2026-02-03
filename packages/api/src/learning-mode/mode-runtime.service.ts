@@ -26,11 +26,15 @@ import {
 import type {
   LearningModeId,
   ModeSessionId,
+  ExplainabilityTraceId,
+  ModePluginId,
   ModeDefinition,
   ModeActivation,
   ModeRuntimeState,
   ModeScopeContext,
   LkgcSignalSnapshot,
+  LkgcSignalType,
+  LkgcSignalValue,
   RankedCandidateList,
   ReviewCandidate,
   NavigationSuggestion,
@@ -47,6 +51,16 @@ import type {
   Duration,
   UserId,
   CategoryId,
+  CanonicalCardId,
+} from "@manthanein/shared";
+import {
+  createLearningModeId,
+  createModeSessionId,
+  generateModeSessionId,
+  createExplainabilityTraceId,
+  generateExplainabilityTraceId,
+  createModePluginId,
+  asMutable,
 } from "@manthanein/shared";
 import {
   getAllBuiltInModes,
@@ -84,11 +98,11 @@ function _generateId(): string {
 }
 
 function _generateSessionId(): ModeSessionId {
-  return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return generateModeSessionId();
 }
 
-function generateTraceId(): string {
-  return `trace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+function _generateTraceId(): ExplainabilityTraceId {
+  return generateExplainabilityTraceId();
 }
 
 // =============================================================================
@@ -156,8 +170,12 @@ export class ModeRuntimeService {
               mode.defaultParameters as unknown as Prisma.JsonObject,
             affectedPolicies:
               mode.affectedPolicies as unknown as Prisma.JsonObject,
-            consumedLkgcSignals: mode.consumedLkgcSignals,
-            amplifiedLkgcSignals: mode.amplifiedLkgcSignals,
+            consumedLkgcSignals: mode.consumedLkgcSignals
+              ? asMutable(mode.consumedLkgcSignals as readonly string[])
+              : undefined,
+            amplifiedLkgcSignals: mode.amplifiedLkgcSignals
+              ? asMutable(mode.amplifiedLkgcSignals as readonly string[])
+              : undefined,
             uiEmphasis: mode.uiEmphasis as unknown as Prisma.JsonObject,
             suggestedViewLens: mode.suggestedViewLens,
             colorTheme: mode.colorTheme
@@ -166,7 +184,9 @@ export class ModeRuntimeService {
             enabledByDefault: mode.enabledByDefault,
             supportsCategoryDefault: mode.supportsCategoryDefault,
             supportsSessionOverride: mode.supportsSessionOverride,
-            requiredCapabilities: mode.requiredCapabilities,
+            requiredCapabilities: mode.requiredCapabilities
+              ? asMutable(mode.requiredCapabilities as readonly string[])
+              : undefined,
           },
         });
       }
@@ -388,7 +408,9 @@ export class ModeRuntimeService {
       });
 
       if (sessionActivation) {
-        const mode = await this.getModeDefinition(sessionActivation.modeId);
+        const mode = await this.getModeDefinition(
+          createLearningModeId(sessionActivation.modeId),
+        );
         if (mode) {
           resolutionPath.push(`session:${sessionId}`);
           return {
@@ -414,7 +436,9 @@ export class ModeRuntimeService {
       });
 
       if (categoryDefault) {
-        const mode = await this.getModeDefinition(categoryDefault.modeId);
+        const mode = await this.getModeDefinition(
+          createLearningModeId(categoryDefault.modeId),
+        );
         if (mode) {
           resolutionPath.push(`category:${categoryId}`);
           return {
@@ -422,7 +446,7 @@ export class ModeRuntimeService {
             activation: {
               id: categoryDefault.id,
               userId: userId as UserId,
-              modeId: categoryDefault.modeId,
+              modeId: createLearningModeId(categoryDefault.modeId),
               scope: "category",
               categoryId: categoryId as CategoryId,
               parameterOverrides: categoryDefault.parameterOverrides as Record<
@@ -455,7 +479,9 @@ export class ModeRuntimeService {
       });
 
       if (globalActivation) {
-        const mode = await this.getModeDefinition(globalActivation.modeId);
+        const mode = await this.getModeDefinition(
+          createLearningModeId(globalActivation.modeId),
+        );
         if (mode) {
           resolutionPath.push("global");
           return {
@@ -477,7 +503,9 @@ export class ModeRuntimeService {
       });
 
       if (userPrefs) {
-        const mode = await this.getModeDefinition(userPrefs.defaultModeId);
+        const mode = await this.getModeDefinition(
+          createLearningModeId(userPrefs.defaultModeId),
+        );
         if (mode) {
           resolutionPath.push("user_preference");
           return {
@@ -485,7 +513,7 @@ export class ModeRuntimeService {
             activation: {
               id: `pref_${userId}`,
               userId: userId as UserId,
-              modeId: userPrefs.defaultModeId,
+              modeId: createLearningModeId(userPrefs.defaultModeId),
               scope: "global",
               parameterOverrides: userPrefs.defaultParameters as Record<
                 string,
@@ -568,15 +596,20 @@ export class ModeRuntimeService {
     );
 
     // Get LKGC signal snapshot
-    const lkgcSignals = await this.getLkgcSignalSnapshot(input.userId);
+    const lkgcSnapshot = await this.getLkgcSignalSnapshot(input.userId);
 
     const runtimeState: ModeRuntimeState = {
-      activeModeDefinition: resolved.mode,
-      resolvedParameters: resolved.resolvedParameters,
+      modeId: resolved.mode.id,
+      definition: resolved.mode,
       activation: resolved.activation,
       scopeContext,
-      activeLkgcSignals: lkgcSignals,
-      computedAt: Date.now() as Timestamp,
+      lkgcSnapshot,
+      // Convenience aliases
+      activeModeDefinition: resolved.mode,
+      resolvedParameters: resolved.resolvedParameters,
+      activeLkgcSignals: lkgcSnapshot.signals instanceof Map
+        ? lkgcSnapshot.signals as ReadonlyMap<LkgcSignalType, LkgcSignalValue>
+        : new Map(Object.entries(lkgcSnapshot.signals || {})) as ReadonlyMap<LkgcSignalType, LkgcSignalValue>,
     };
 
     // Cache the result
@@ -918,7 +951,7 @@ export class ModeRuntimeService {
   private async createExplainabilityTraceForList(
     userId: string,
     runtimeState: ModeRuntimeState,
-  ): Promise<string> {
+  ): Promise<ExplainabilityTraceId> {
     const result = await this.createExplainabilityTrace({
       userId,
       subjectType: "review_candidate",
@@ -940,7 +973,9 @@ export class ModeRuntimeService {
       summary: `Ranked using ${runtimeState.activeModeDefinition.name} mode at ${runtimeState.activation.scope} scope`,
     });
 
-    return result.traceId || generateTraceId();
+    return result.traceId
+      ? createExplainabilityTraceId(result.traceId)
+      : _generateTraceId();
   }
 
   // ===========================================================================
@@ -959,13 +994,22 @@ export class ModeRuntimeService {
 
     if (!prefs) return null;
 
+    const defaultModeId = createLearningModeId(prefs.defaultModeId);
+
     return {
       userId: prefs.userId as UserId,
-      defaultModeId: prefs.defaultModeId as LearningModeId,
-      categoryDefaults: [], // Fetched separately if needed
-      parameterPresets: [], // Fetched separately if needed
-      recentModes: prefs.recentModeIds as LearningModeId[],
-      favoriteModes: prefs.favoriteModeIds as LearningModeId[],
+      defaultMode: defaultModeId,
+      defaultModeId,
+      categoryDefaults: new Map(), // Fetched separately if needed
+      savedPresets: [], // Fetched separately if needed
+      parameterPresets: [], // Alias
+      recentModes: (prefs.recentModeIds as string[]).map(id =>
+        createLearningModeId(id),
+      ),
+      favoriteModes: (prefs.favoriteModeIds as string[]).map(id =>
+        createLearningModeId(id),
+      ),
+      lastUpdated: prefs.updatedAt.getTime() as Timestamp,
       updatedAt: prefs.updatedAt.getTime() as Timestamp,
     };
   }
@@ -1214,6 +1258,8 @@ export class ModeRuntimeService {
     categoryId?: string,
     sessionId?: ModeSessionId,
   ): Promise<ModeScopeContext> {
+    const now = Date.now() as Timestamp;
+
     // Build category context if needed
     let categoryContext: ModeScopeContext["categoryContext"] | undefined;
     if (categoryId) {
@@ -1223,10 +1269,27 @@ export class ModeRuntimeService {
       });
 
       if (category) {
+        // Get due and new counts using Card model
+        // Note: This uses legacy Card model, may need update for CanonicalCard
+        const dueCount = await prisma.card.count({
+          where: {
+            deckId: categoryId,
+            nextReviewDate: { lte: new Date() },
+          },
+        });
+
+        const newCount = await prisma.card.count({
+          where: {
+            deckId: categoryId,
+            state: "new",
+          },
+        });
+
         categoryContext = {
-          categoryId: categoryId as CategoryId,
           categoryName: category.name,
-          participatingCardCount: category.cardCount,
+          cardCount: category.cardCount,
+          dueCount,
+          newCount,
         };
       }
     }
@@ -1240,13 +1303,9 @@ export class ModeRuntimeService {
 
       if (session) {
         sessionContext = {
-          sessionId,
           startedAt: session.startedAt.getTime() as Timestamp,
-          reviewedCount: session.reviewedCardIds.length,
-          remainingTime: session.timeBudgetMinutes
-            ? ((session.timeBudgetMinutes * 60 * 1000 -
-                session.activeTimeSeconds * 1000) as Duration)
-            : undefined,
+          cardsReviewed: session.reviewedCardIds.length,
+          timeSpentMinutes: Math.floor(session.activeTimeSeconds / 60),
         };
       }
     }
@@ -1256,6 +1315,7 @@ export class ModeRuntimeService {
       scope,
       categoryId: categoryId as CategoryId | undefined,
       sessionId,
+      startedAt: now,
       categoryContext,
       sessionContext,
     };
@@ -1275,7 +1335,8 @@ export class ModeRuntimeService {
     // Otherwise return empty placeholder
     // Full implementation requires LKGC integration
     return {
-      signals: {},
+      timestamp: Date.now() as Timestamp,
+      signals: {} as Partial<Record<LkgcSignalType, LkgcSignalValue>>,
       snapshotAt: Date.now() as Timestamp,
       userContext: {
         userId: userId as UserId,
@@ -1294,11 +1355,11 @@ export class ModeRuntimeService {
     userId: string,
   ): ModePolicyContext {
     return {
-      modeRuntimeState: runtimeState,
+      modeRuntime: runtimeState,
       userId: userId as UserId,
-      now: Date.now() as Timestamp,
-      reviewedThisSession: [],
-      lkgcSignals: runtimeState.activeLkgcSignals,
+      currentTime: Date.now() as Timestamp,
+      cardsReviewedThisSession: 0,
+      categoryFocus: runtimeState.scopeContext.categoryId,
     };
   }
 
@@ -1307,14 +1368,16 @@ export class ModeRuntimeService {
    */
   private dbModeToDefinition(dbMode: DbLearningModeDefinition): ModeDefinition {
     return {
-      id: dbMode.id,
+      id: createLearningModeId(dbMode.id),
       name: dbMode.name,
       description: dbMode.description,
       tagline: dbMode.tagline || "",
       icon: dbMode.icon,
       systemType: dbMode.systemType as ModeDefinition["systemType"],
       source: dbMode.source as "system" | "plugin" | "user_custom",
-      pluginId: dbMode.pluginId ?? undefined,
+      pluginId: dbMode.pluginId
+        ? createModePluginId(dbMode.pluginId)
+        : undefined,
       version: dbMode.version,
       parameterSchema:
         dbMode.parameterSchema as unknown as ModeDefinition["parameterSchema"],
@@ -1348,10 +1411,14 @@ export class ModeRuntimeService {
     return {
       id: dbActivation.id,
       userId: dbActivation.userId as UserId,
-      modeId: dbActivation.modeId,
+      modeId: createLearningModeId(dbActivation.modeId),
       scope: dbActivation.scope as "global" | "category" | "session",
-      categoryId: dbActivation.categoryId ?? undefined,
-      sessionId: dbActivation.sessionId ?? undefined,
+      categoryId: (dbActivation.categoryId ?? undefined) as
+        | CategoryId
+        | undefined,
+      sessionId: dbActivation.sessionId
+        ? createModeSessionId(dbActivation.sessionId)
+        : undefined,
       parameterOverrides: dbActivation.parameterOverrides as Record<
         string,
         unknown

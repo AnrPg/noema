@@ -98,7 +98,7 @@ export interface ModeDefinition {
   readonly tagline?: string;
   readonly version?: string;
   readonly icon: string;
-  readonly color: ModeColorTheme;
+  readonly color?: ModeColorTheme;
   readonly colorTheme?: ModeColorTheme; // Alias for color
 
   // Parameter Schema
@@ -106,8 +106,8 @@ export interface ModeDefinition {
   readonly defaultParameters: Record<string, unknown>;
 
   // Policy Declarations
-  readonly policyDeclarations: readonly ModePolicyDeclaration[];
-  readonly affects: ModePolicyAffects;
+  readonly policyDeclarations?: readonly ModePolicyDeclaration[];
+  readonly affects?: ModePolicyAffects;
   readonly affectedPolicies?: AffectedPolicies; // Alias for explainability
 
   // LKGC Signal Configuration
@@ -116,7 +116,7 @@ export interface ModeDefinition {
 
   // UI Configuration
   readonly uiEmphasis: ModeUiEmphasis;
-  readonly capabilities: readonly ModeCapability[];
+  readonly capabilities?: readonly ModeCapability[];
   readonly suggestedViewLens?: string;
 
   // Mode Availability
@@ -128,6 +128,10 @@ export interface ModeDefinition {
   // Plugin specific
   readonly pluginId?: ModePluginId;
   readonly pluginManifest?: ModePluginManifest;
+
+  // Timestamps
+  readonly createdAt?: Timestamp;
+  readonly updatedAt?: Timestamp;
 }
 
 // =============================================================================
@@ -255,8 +259,10 @@ export interface ModePolicyAffects {
   readonly scheduling: boolean;
   readonly schedulingParameters?: boolean; // Alias for scheduling
   readonly ui: boolean;
+  readonly uiEmphasis?: boolean; // Alias for ui
   readonly metacognitivePrompts?: boolean;
   readonly synthesisTriggers?: boolean;
+  readonly categoryBehavior?: boolean;
 }
 
 /**
@@ -264,10 +270,15 @@ export interface ModePolicyAffects {
  * (alternate naming convention for algorithm compatibility)
  */
 export interface AffectedPolicies {
+  readonly navigation?: boolean;
   readonly reviewSelection: boolean;
   readonly cardOrdering: boolean;
   readonly newCardIntroduction: boolean;
   readonly schedulingParameters: boolean;
+  readonly metacognitivePrompts?: boolean;
+  readonly synthesisTriggers?: boolean;
+  readonly uiEmphasis?: boolean;
+  readonly categoryBehavior?: boolean;
 }
 
 /**
@@ -276,6 +287,7 @@ export interface AffectedPolicies {
 export type LkgcSignalType =
   // Core LKGC signals
   | "confidence"
+  | "confidence_variance"
   | "volatility"
   | "interference"
   | "coherence"
@@ -322,8 +334,18 @@ export interface ModeUiEmphasis {
   readonly showStreaks: boolean;
   readonly showEstimates: boolean;
   readonly showOverdueIndicators?: boolean;
+  readonly showTimePressure?: boolean;
+  readonly showDiscoveryPrompts?: boolean;
+  readonly showSynthesisPrompts?: boolean;
+  readonly showMetacognitiveSignals?: boolean;
   readonly cardTransitionSpeed: "slow" | "normal" | "fast";
   readonly feedbackDetail: "minimal" | "standard" | "detailed";
+  /** Deprecated alias for showProgress */
+  readonly showProgressMeters?: boolean;
+  /** Coverage vs depth bias: -1 = depth, 0 = balanced, 1 = coverage */
+  readonly coverageVsDepth?: number;
+  /** Card display density */
+  readonly cardDisplayDensity?: "compact" | "normal" | "detailed";
 }
 
 /**
@@ -383,10 +405,18 @@ export interface ModeActivation {
 export interface UserModePreferences {
   readonly userId: UserId;
   readonly defaultMode: LearningModeId;
+  /** Alias for defaultMode */
+  readonly defaultModeId?: LearningModeId;
   readonly categoryDefaults: ReadonlyMap<CategoryId, LearningModeId>;
   readonly savedPresets: readonly ModeParameterPreset[];
+  /** Alias for savedPresets */
+  readonly parameterPresets?: readonly ModeParameterPreset[];
   readonly recentModes: readonly LearningModeId[];
+  /** Alias for recentModes */
+  readonly favoriteModes?: readonly LearningModeId[];
   readonly lastUpdated: Timestamp;
+  /** Alias for lastUpdated */
+  readonly updatedAt?: Timestamp;
 }
 
 /**
@@ -433,6 +463,19 @@ export interface ModeScopeContext {
   readonly startedAt: Timestamp;
   readonly timeBudgetMinutes?: number;
   readonly goalTargets?: readonly GoalTarget[];
+  /** Category-specific context for category-scoped modes */
+  readonly categoryContext?: {
+    readonly categoryName: string;
+    readonly cardCount: number;
+    readonly dueCount: number;
+    readonly newCount: number;
+  };
+  /** Session-specific context for session-scoped modes */
+  readonly sessionContext?: {
+    readonly startedAt: Timestamp;
+    readonly cardsReviewed: number;
+    readonly timeSpentMinutes: number;
+  };
 }
 
 /**
@@ -464,9 +507,21 @@ export interface ModeSessionStats {
  */
 export interface LkgcSignalSnapshot {
   readonly timestamp: Timestamp;
-  readonly signals: ReadonlyMap<LkgcSignalType, LkgcSignalValue>;
-  readonly aggregateConfidence: Confidence;
-  readonly aggregateStability: NormalizedValue;
+  /** Signal values indexed by signal type - can be Map or Record for flexibility */
+  readonly signals:
+    | ReadonlyMap<LkgcSignalType, LkgcSignalValue>
+    | Partial<Record<LkgcSignalType, LkgcSignalValue>>;
+  readonly aggregateConfidence?: Confidence;
+  readonly aggregateStability?: NormalizedValue;
+  /** Snapshot timestamp alias */
+  readonly snapshotAt?: Timestamp;
+  /** Optional user context for enriched snapshots */
+  readonly userContext?: {
+    readonly userId: UserId;
+    readonly overallMastery: NormalizedValue;
+    readonly activeStreakDays: number;
+    readonly recentReviewCount: number;
+  };
 }
 
 /**
@@ -626,15 +681,19 @@ export interface ScoringFactor {
  * Ranked list of candidates from mode runtime
  */
 export interface RankedCandidateList {
-  readonly modeId: LearningModeId;
-  readonly timestamp: Timestamp;
-  readonly candidates: readonly ReviewCandidate[];
-  readonly reviewCandidates: readonly ReviewCandidate[]; // Alias for compatibility
+  readonly modeId?: LearningModeId;
+  readonly sourceModeId?: LearningModeId; // Alias for modeId
+  readonly timestamp?: Timestamp;
+  readonly generatedAt?: Timestamp; // Alias for timestamp
+  readonly candidates?: readonly ReviewCandidate[];
+  readonly reviewCandidates: readonly ReviewCandidate[]; // Required for compatibility
   readonly newCardRecommendations: readonly NewCardRecommendation[];
   readonly synthesisOpportunities: readonly SynthesisOpportunity[];
   readonly metacognitivePrompts: readonly MetacognitivePrompt[];
   readonly navigationSuggestions?: readonly NavigationSuggestion[];
   readonly listExplainabilityTraceId?: ExplainabilityTraceId;
+  readonly parametersUsed?: Record<string, unknown>;
+  readonly ttlMs?: Duration;
 }
 
 /**

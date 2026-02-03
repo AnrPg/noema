@@ -1148,6 +1148,56 @@ export {
   DEFAULT_CATEGORY_SCHEDULING_METADATA,
 } from "./learning-mode.types";
 
+// Branded type factories - Learning Mode identifiers
+export {
+  // Configuration
+  DEFAULT_VALIDATION_CONFIG,
+  STRICT_VALIDATION_CONFIG,
+  // LearningModeId factories
+  createLearningModeId,
+  createSystemModeId,
+  createPluginModeId,
+  createCustomModeId,
+  isLearningModeId,
+  isSystemModeId,
+  extractSystemModeType,
+  // ModeSessionId factories
+  createModeSessionId,
+  generateModeSessionId,
+  isModeSessionId,
+  // ModeParameterSetId factories
+  createModeParameterSetId,
+  generateModeParameterSetId,
+  isModeParameterSetId,
+  // ExplainabilityTraceId factories
+  createExplainabilityTraceId,
+  generateExplainabilityTraceId,
+  isExplainabilityTraceId,
+  // NavigationSuggestionId factories
+  createNavigationSuggestionId,
+  generateNavigationSuggestionId,
+  isNavigationSuggestionId,
+  // ReviewCandidateId factories
+  createReviewCandidateId,
+  generateReviewCandidateId,
+  isReviewCandidateId,
+  // ModePluginId factories
+  createModePluginId,
+  generateModePluginId,
+  isModePluginId,
+  // Foundation type factories
+  createTimestamp,
+  // Note: now() is exported from lkgc/id-generator.ts
+  createNormalizedValue,
+  createConfidence,
+  // Batch conversion utilities
+  batchCreateBrandedTypes,
+  asReadonly,
+  asMutable,
+} from "./branded-type-factories";
+
+export type { BrandedTypeValidationConfig } from "./branded-type-factories";
+
 // =============================================================================
 // NAVIGATION FEED TYPES (Phase 5B)
 // =============================================================================

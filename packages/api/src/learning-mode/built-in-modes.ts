@@ -22,10 +22,12 @@ import type {
   SystemModeType,
   ModeParameterSchema,
   ModePolicyAffects,
+  AffectedPolicies,
   ModeUiEmphasis,
   LkgcSignalType,
   NormalizedValue,
   Timestamp,
+  LearningModeId,
 } from "@manthanein/shared";
 
 // Import the default parameters as values
@@ -34,6 +36,7 @@ import {
   DEFAULT_GOAL_DRIVEN_PARAMETERS,
   DEFAULT_EXAM_ORIENTED_PARAMETERS,
   DEFAULT_SYNTHESIS_PARAMETERS,
+  createSystemModeId,
 } from "@manthanein/shared";
 
 // =============================================================================
@@ -43,8 +46,8 @@ import {
 /**
  * Generate a stable mode ID for built-in modes
  */
-function generateSystemModeId(type: SystemModeType): string {
-  return `system:${type}`;
+function generateBuiltInModeId(type: SystemModeType): LearningModeId {
+  return createSystemModeId(type);
 }
 
 /**
@@ -52,6 +55,23 @@ function generateSystemModeId(type: SystemModeType): string {
  */
 function now(): Timestamp {
   return Date.now() as Timestamp;
+}
+
+/**
+ * Convert ModePolicyAffects to AffectedPolicies (required fields only)
+ */
+function toAffectedPolicies(affects: ModePolicyAffects): AffectedPolicies {
+  return {
+    navigation: affects.navigation,
+    reviewSelection: affects.reviewSelection,
+    cardOrdering: affects.cardOrdering,
+    newCardIntroduction: affects.newCardIntroduction,
+    schedulingParameters: affects.schedulingParameters ?? affects.scheduling,
+    metacognitivePrompts: affects.metacognitivePrompts,
+    synthesisTriggers: affects.synthesisTriggers,
+    uiEmphasis: affects.uiEmphasis ?? affects.ui,
+    categoryBehavior: affects.categoryBehavior,
+  };
 }
 
 // =============================================================================
@@ -440,10 +460,12 @@ const EXPLORATION_POLICY_AFFECTS: ModePolicyAffects = {
   reviewSelection: true,
   cardOrdering: true,
   newCardIntroduction: true,
+  scheduling: false,
+  schedulingParameters: false,
+  ui: true,
+  uiEmphasis: true,
   metacognitivePrompts: true,
   synthesisTriggers: false,
-  schedulingParameters: false,
-  uiEmphasis: true,
   categoryBehavior: false,
 };
 
@@ -452,10 +474,12 @@ const GOAL_DRIVEN_POLICY_AFFECTS: ModePolicyAffects = {
   reviewSelection: true,
   cardOrdering: true,
   newCardIntroduction: true,
+  scheduling: true,
+  schedulingParameters: true,
+  ui: true,
+  uiEmphasis: true,
   metacognitivePrompts: true,
   synthesisTriggers: false,
-  schedulingParameters: true,
-  uiEmphasis: true,
   categoryBehavior: true,
 };
 
@@ -464,10 +488,12 @@ const EXAM_ORIENTED_POLICY_AFFECTS: ModePolicyAffects = {
   reviewSelection: true,
   cardOrdering: true,
   newCardIntroduction: true,
+  scheduling: true,
+  schedulingParameters: true,
+  ui: true,
+  uiEmphasis: true,
   metacognitivePrompts: true,
   synthesisTriggers: false,
-  schedulingParameters: true,
-  uiEmphasis: true,
   categoryBehavior: true,
 };
 
@@ -476,10 +502,12 @@ const SYNTHESIS_POLICY_AFFECTS: ModePolicyAffects = {
   reviewSelection: true,
   cardOrdering: true,
   newCardIntroduction: false,
+  scheduling: false,
+  schedulingParameters: false,
+  ui: true,
+  uiEmphasis: true,
   metacognitivePrompts: true,
   synthesisTriggers: true,
-  schedulingParameters: false,
-  uiEmphasis: true,
   categoryBehavior: true,
 };
 
@@ -489,48 +517,68 @@ const SYNTHESIS_POLICY_AFFECTS: ModePolicyAffects = {
 
 const EXPLORATION_UI_EMPHASIS: ModeUiEmphasis = {
   pressureLevel: 0.2 as NormalizedValue,
+  showTimer: false,
+  showProgress: false,
+  showStreaks: true,
+  showEstimates: false,
   showOverdueIndicators: false,
-  showProgressMeters: false,
   showTimePressure: false,
   showDiscoveryPrompts: true,
   showSynthesisPrompts: false,
   showMetacognitiveSignals: true,
+  cardTransitionSpeed: "slow",
+  feedbackDetail: "detailed",
   coverageVsDepth: 0.3, // Slight depth preference
   cardDisplayDensity: "detailed",
 };
 
 const GOAL_DRIVEN_UI_EMPHASIS: ModeUiEmphasis = {
   pressureLevel: 0.5 as NormalizedValue,
+  showTimer: false,
+  showProgress: true,
+  showStreaks: true,
+  showEstimates: true,
   showOverdueIndicators: true,
-  showProgressMeters: true,
   showTimePressure: false,
   showDiscoveryPrompts: false,
   showSynthesisPrompts: false,
   showMetacognitiveSignals: true,
+  cardTransitionSpeed: "normal",
+  feedbackDetail: "standard",
   coverageVsDepth: -0.5, // Depth preference
   cardDisplayDensity: "normal",
 };
 
 const EXAM_ORIENTED_UI_EMPHASIS: ModeUiEmphasis = {
   pressureLevel: 0.8 as NormalizedValue,
+  showTimer: true,
+  showProgress: true,
+  showStreaks: false,
+  showEstimates: true,
   showOverdueIndicators: true,
-  showProgressMeters: true,
   showTimePressure: true,
   showDiscoveryPrompts: false,
   showSynthesisPrompts: false,
   showMetacognitiveSignals: false,
+  cardTransitionSpeed: "fast",
+  feedbackDetail: "minimal",
   coverageVsDepth: 0.7, // Strong breadth preference
   cardDisplayDensity: "compact",
 };
 
 const SYNTHESIS_UI_EMPHASIS: ModeUiEmphasis = {
   pressureLevel: 0.3 as NormalizedValue,
+  showTimer: false,
+  showProgress: false,
+  showStreaks: true,
+  showEstimates: false,
   showOverdueIndicators: false,
-  showProgressMeters: false,
   showTimePressure: false,
   showDiscoveryPrompts: true,
   showSynthesisPrompts: true,
   showMetacognitiveSignals: true,
+  cardTransitionSpeed: "slow",
+  feedbackDetail: "detailed",
   coverageVsDepth: 0, // Balanced
   cardDisplayDensity: "detailed",
 };
@@ -607,7 +655,7 @@ const SYNTHESIS_LKGC_SIGNALS: {
 export function createExplorationMode(): ModeDefinition {
   const timestamp = now();
   return {
-    id: generateSystemModeId("exploration"),
+    id: generateBuiltInModeId("exploration"),
     name: "Exploration",
     description:
       "Curiosity-driven wandering through your knowledge ecosystem. " +
@@ -620,7 +668,7 @@ export function createExplorationMode(): ModeDefinition {
     version: "1.0.0",
     parameterSchema: EXPLORATION_PARAMETER_SCHEMA,
     defaultParameters: { ...DEFAULT_EXPLORATION_PARAMETERS },
-    affectedPolicies: EXPLORATION_POLICY_AFFECTS,
+    affectedPolicies: toAffectedPolicies(EXPLORATION_POLICY_AFFECTS),
     consumedLkgcSignals: EXPLORATION_LKGC_SIGNALS.consumed,
     amplifiedLkgcSignals: EXPLORATION_LKGC_SIGNALS.amplified,
     uiEmphasis: EXPLORATION_UI_EMPHASIS,
@@ -649,7 +697,7 @@ export function createExplorationMode(): ModeDefinition {
 export function createGoalDrivenMode(): ModeDefinition {
   const timestamp = now();
   return {
-    id: generateSystemModeId("goal_driven"),
+    id: generateBuiltInModeId("goal_driven"),
     name: "Goal-Driven",
     description:
       "Structured progress toward a learning target. " +
@@ -662,7 +710,7 @@ export function createGoalDrivenMode(): ModeDefinition {
     version: "1.0.0",
     parameterSchema: GOAL_DRIVEN_PARAMETER_SCHEMA,
     defaultParameters: { ...DEFAULT_GOAL_DRIVEN_PARAMETERS },
-    affectedPolicies: GOAL_DRIVEN_POLICY_AFFECTS,
+    affectedPolicies: toAffectedPolicies(GOAL_DRIVEN_POLICY_AFFECTS),
     consumedLkgcSignals: GOAL_DRIVEN_LKGC_SIGNALS.consumed,
     amplifiedLkgcSignals: GOAL_DRIVEN_LKGC_SIGNALS.amplified,
     uiEmphasis: GOAL_DRIVEN_UI_EMPHASIS,
@@ -692,7 +740,7 @@ export function createGoalDrivenMode(): ModeDefinition {
 export function createExamOrientedMode(): ModeDefinition {
   const timestamp = now();
   return {
-    id: generateSystemModeId("exam_oriented"),
+    id: generateBuiltInModeId("exam_oriented"),
     name: "Exam-Oriented",
     description:
       "Time-bounded preparation for an assessment. " +
@@ -705,7 +753,7 @@ export function createExamOrientedMode(): ModeDefinition {
     version: "1.0.0",
     parameterSchema: EXAM_ORIENTED_PARAMETER_SCHEMA,
     defaultParameters: { ...DEFAULT_EXAM_ORIENTED_PARAMETERS },
-    affectedPolicies: EXAM_ORIENTED_POLICY_AFFECTS,
+    affectedPolicies: toAffectedPolicies(EXAM_ORIENTED_POLICY_AFFECTS),
     consumedLkgcSignals: EXAM_ORIENTED_LKGC_SIGNALS.consumed,
     amplifiedLkgcSignals: EXAM_ORIENTED_LKGC_SIGNALS.amplified,
     uiEmphasis: EXAM_ORIENTED_UI_EMPHASIS,
@@ -735,7 +783,7 @@ export function createExamOrientedMode(): ModeDefinition {
 export function createSynthesisMode(): ModeDefinition {
   const timestamp = now();
   return {
-    id: generateSystemModeId("synthesis"),
+    id: generateBuiltInModeId("synthesis"),
     name: "Synthesis",
     description:
       "Integration work across contexts. " +
@@ -748,7 +796,7 @@ export function createSynthesisMode(): ModeDefinition {
     version: "1.0.0",
     parameterSchema: SYNTHESIS_PARAMETER_SCHEMA,
     defaultParameters: { ...DEFAULT_SYNTHESIS_PARAMETERS },
-    affectedPolicies: SYNTHESIS_POLICY_AFFECTS,
+    affectedPolicies: toAffectedPolicies(SYNTHESIS_POLICY_AFFECTS),
     consumedLkgcSignals: SYNTHESIS_LKGC_SIGNALS.consumed,
     amplifiedLkgcSignals: SYNTHESIS_LKGC_SIGNALS.amplified,
     uiEmphasis: SYNTHESIS_UI_EMPHASIS,
