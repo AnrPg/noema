@@ -656,7 +656,11 @@ export type ViewLens =
   | "structure" // Containment hierarchy
   | "flow" // Temporal dependencies
   | "bridge" // Cross-cutting connections
-  | "progress"; // Mastery levels
+  | "progress" // Mastery levels
+  | "hierarchy" // Traditional tree view (alias for structure)
+  | "flat" // Flat list without hierarchy
+  | "knowledge_network" // Graph-based network view
+  | "timeline"; // Chronological view
 
 /**
  * Learning mode per category (rigorous, intuitive, etc.)

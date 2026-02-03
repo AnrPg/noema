@@ -1,7 +1,5 @@
 // =============================================================================
 // TYPES INDEX - Re-export all types from a single entry point
-// =============================================================================
-// Import types from here: import { User, Card, Deck } from '@manthanein/shared/types';
 
 // User & Authentication types
 export type {
@@ -1063,3 +1061,614 @@ export {
   incrementVectorClock,
   generateChecksum,
 } from "./sync.types";
+
+// =============================================================================
+// LEARNING MODE FRAMEWORK TYPES
+// =============================================================================
+
+export type {
+  // Identifiers
+  LearningModeId,
+  ModeParameterSetId,
+  ModeSessionId,
+  ExplainabilityTraceId,
+  NavigationSuggestionId,
+  ReviewCandidateId,
+  ModePluginId,
+  // Mode Definition
+  SystemModeType,
+  ModeSource,
+  ModeDefinition,
+  // Parameters
+  ModeParameterType,
+  ModeParameterDefinition,
+  ModeParameterConstraints,
+  ModeParameterSchema,
+  ModeParameterUiGroup,
+  CrossValidationRule,
+  // Policies
+  ModePolicyAffects,
+  LkgcSignalType,
+  // UI
+  ModeUiEmphasis,
+  BipolarValue,
+  ModeColorTheme,
+  ModeCapability,
+  // Activation & Persistence
+  ModeActivationScope,
+  ModeActivation,
+  UserModePreferences,
+  ModeParameterPreset,
+  // Runtime
+  ModeRuntimeState,
+  ModeScopeContext,
+  LkgcSignalSnapshot,
+  LkgcSignalValue,
+  // Explainability
+  ExplainabilityTrace,
+  ExplainabilitySubject,
+  ExplainabilityFactor,
+  ExplainabilitySuggestedAction,
+  // Navigation (placeholder for Phase 5B)
+  NavigationSuggestion,
+  NavigationSuggestionType,
+  NavigationTarget,
+  // Review Candidates (placeholder for Phase 5B)
+  ReviewCandidate,
+  ReviewCandidateScoring,
+  // Ranked Output
+  RankedCandidateList,
+  NewCardRecommendation,
+  SynthesisOpportunity,
+  MetacognitivePrompt,
+  // Policy Interfaces
+  NavigationPolicy,
+  ReviewSelectionPolicy,
+  CardOrderingPolicy,
+  NewCardIntroductionPolicy,
+  ReviewCandidateInput,
+  ModePolicyContext,
+  // Plugin
+  ModePluginManifest,
+  ModePolicyDeclaration,
+  // Category Scheduling
+  CategorySchedulingMetadata,
+  DecayModelType,
+} from "./learning-mode.types";
+
+export {
+  // Default Parameters
+  DEFAULT_EXPLORATION_PARAMETERS,
+  DEFAULT_GOAL_DRIVEN_PARAMETERS,
+  DEFAULT_EXAM_ORIENTED_PARAMETERS,
+  DEFAULT_SYNTHESIS_PARAMETERS,
+  DEFAULT_CATEGORY_SCHEDULING_METADATA,
+} from "./learning-mode.types";
+
+// =============================================================================
+// NAVIGATION FEED TYPES (Phase 5B)
+// =============================================================================
+
+export type {
+  // Identifiers
+  NavigationFeedId,
+  NeighborhoodNodeId,
+  PrerequisitePathId,
+  CoverageGapId,
+  ConstellationChallengeId,
+  // Request Types
+  NavigationFeedRequest,
+  NeighborhoodFeedOptions,
+  PrerequisitePathOptions,
+  CoverageFeedOptions,
+  ConstellationChallengeOptions,
+  // Neighborhood Feed
+  NeighborhoodNode,
+  NeighborhoodEdge,
+  NeighborhoodFeed,
+  NeighborhoodSuggestion,
+  NeighborhoodSuggestionFactors,
+  NeighborhoodVisualizationData,
+  // Prerequisite Path Feed
+  PrerequisiteNode,
+  PrerequisitePath,
+  PrerequisiteEdge,
+  PrerequisiteGap,
+  PrerequisitePathFeed,
+  PrerequisiteSuggestion,
+  GapSeverity,
+  // Coverage Feed
+  CategoryCoverage,
+  CoverageGap,
+  CoverageSummary,
+  CoverageFeed,
+  CoverageSuggestion,
+  CoverageGapType,
+  // Constellation Challenge Feed
+  Constellation,
+  ConstellationType,
+  ConstellationChallenge,
+  ConstellationChallengeType,
+  BridgeOpportunity,
+  ConstellationChallengeFeed,
+  ConstellationSuggestion,
+  PerformanceDivergenceSummary,
+  // Unified Feed
+  UnifiedNavigationFeed,
+  NavigationSuggestionUnion,
+  NavigationFeedContext,
+  NavigationFeedMetadata,
+  // Generator Interfaces
+  NeighborhoodFeedGenerator,
+  PrerequisitePathFeedGenerator,
+  CoverageFeedGenerator,
+  ConstellationChallengeFeedGenerator,
+  NavigationFeedService,
+  // Configuration
+  ModeFeedConfiguration,
+  NavigationFeedType,
+} from "./navigation-feed.types";
+
+export {
+  // Mode Feed Configurations
+  EXPLORATION_FEED_CONFIG,
+  GOAL_DRIVEN_FEED_CONFIG,
+  EXAM_ORIENTED_FEED_CONFIG,
+  SYNTHESIS_FEED_CONFIG,
+  MODE_FEED_CONFIGS,
+} from "./navigation-feed.types";
+
+// =============================================================================
+// REVIEW POLICY TYPES (Policy-Based Review Planner)
+// =============================================================================
+
+export type {
+  // Identifiers
+  ReviewPolicyId,
+  PolicyChainId,
+  RankingFactorId,
+  // Candidate Types
+  SchedulerCandidateOutput,
+  CategoryMetadataForPolicy,
+  PolicyRankedCandidate,
+  CandidateRanking,
+  UrgencyLevel,
+  ReviewRecommendation,
+  // Ranking Factors
+  RankingFactor,
+  RankingFactorSource,
+  PolicyContribution,
+  // Policy Interface
+  ReviewPolicy,
+  ReviewPolicyType,
+  PolicyExecutionContext,
+  PolicyFactorResult,
+  PolicyWeights,
+  PolicyValidationResult,
+  // Policy Composition
+  PolicyCompositionChain,
+  ComposedPolicyEntry,
+  AggregationStrategy,
+  NormalizationStrategy,
+  // Policy Configurations
+  BaseUrgencyPolicyConfig,
+  ModeModifierPolicyConfig,
+  CategoryHookPolicyConfig,
+  ExamCramPolicyConfig,
+  ExplorationPolicyConfig,
+  // Execution Result
+  PolicyExecutionResult,
+  PolicyExecutionMetadata,
+  PolicyExplainabilitySummary,
+  // Request/Response
+  ReviewPlannerRequest,
+  ReviewPlannerResponse,
+  SessionRecommendations,
+  // Registry
+  PolicyRegistryEntry,
+  PolicyRegistry,
+} from "./review-policy.types";
+
+export {
+  // Default Configurations
+  DEFAULT_BASE_URGENCY_CONFIG,
+  DEFAULT_EXPLORATION_CONFIG,
+  DEFAULT_EXAM_CRAM_CONFIG,
+  DEFAULT_GOAL_DRIVEN_CONFIG,
+  DEFAULT_SYNTHESIS_CONFIG,
+} from "./review-policy.types";
+
+// =============================================================================
+// CANONICAL CARD & FACE SYSTEM (Phase 6A)
+// =============================================================================
+// Multi-faceted cards with context-sensitive faces
+
+export type {
+  // Identifiers
+  CanonicalCardId,
+  CardFaceId,
+  FaceApplicabilityRuleId,
+  ContentPrimitiveId,
+  FaceVersionId,
+  // Content Primitives
+  ContentPrimitiveType,
+  ContentPrimitiveBase,
+  TextPrimitive,
+  MarkdownPrimitive,
+  LatexPrimitive,
+  CodePrimitive,
+  ImagePrimitive,
+  ImageRegion,
+  AudioPrimitive,
+  AudioSegment,
+  ClozeRegionPrimitive,
+  ClozeDefinition,
+  FormulaPrimitive,
+  ContentPrimitive,
+  // Canonical Card
+  CanonicalCard,
+  CanonicalCardStructuralType,
+  CardSource,
+  CardSourceType,
+  CardContentLayout,
+  CustomLayoutSpec,
+  GlobalSchedulingState,
+  CardLearningState,
+  LearningHistorySnapshot,
+  // Card Face
+  CardFace,
+  CardFaceType,
+  CognitiveDepthLevel,
+  FaceContentPresentation,
+  ContentPresentationStrategy,
+  PrimitiveReference,
+  PrimitiveTransform,
+  EmphasisHint,
+  FaceScaffolding,
+  ScaffoldingHint,
+  ExpectedOutputType,
+  EvaluationCriteria,
+  EvaluationRubric,
+  // Note: RubricCriterion and RubricLevel are exported from lkgc/nodes
+  // Applicability Rules
+  FaceApplicabilityRule,
+  ApplicabilityRuleType,
+  ApplicabilityConditionSet,
+  ApplicabilityCondition,
+  CategoryCondition,
+  RoleCondition,
+  ModeCondition,
+  DepthCondition,
+  IntentCondition,
+  CategoryIntent,
+  LkgcSignalCondition,
+  // Note: LkgcSignalType is exported from lkgc/nodes
+  UserPreferenceCondition,
+  TemporalCondition,
+  TimeConstraint,
+  CompositeCondition,
+  CustomCondition,
+  // Mastery Transfer
+  MasteryTransferConfig,
+  CrossFaceTransferRule,
+  // Performance Tracking
+  FacePerformanceSnapshot,
+  // Face Provenance
+  FaceSource,
+  FaceSourceType,
+  // API Input/Output
+  CreateCanonicalCardInput,
+  UpdateCanonicalCardInput,
+  CreateCardFaceInput,
+  UpdateCardFaceInput,
+  AddFaceApplicabilityRulesInput,
+  RecordFacePerformanceInput,
+  FaceQueryContext,
+  FaceQueryResult,
+  // Events
+  CanonicalCardCreatedEvent,
+  CanonicalCardUpdatedEvent,
+  CardFaceCreatedEvent,
+  CardFaceUpdatedEvent,
+  FacePerformanceRecordedEvent,
+  CanonicalCardEvent,
+  // Explainability
+  FaceSelectionExplanation,
+  MatchedApplicabilityRule,
+  UnmatchedApplicabilityRule,
+  // Plugin Extension
+  FaceTypePlugin,
+  FaceTypeRenderHints,
+  ApplicabilityRulePlugin,
+  // AI Face Suggestions
+  AiFaceSuggestion,
+  AiFaceSuggestionStatus,
+  RequestAiFaceSuggestionsInput,
+} from "./canonical-card.types";
+
+// =============================================================================
+// FACE RESOLUTION ENGINE (Phase 6B)
+// =============================================================================
+// Declarative, rule-based face resolution engine
+
+export type {
+  // Identifiers
+  ResolutionRequestId,
+  ResolutionRulePluginId,
+  FaceResolutionTraceId,
+  // Input Types
+  FaceResolutionInput,
+  CardFaceWithRules,
+  CategoryLensContext,
+  ParticipationContext,
+  ModeContext,
+  LkgcSignalsContext,
+  UserPreferencesContext,
+  TemporalContext,
+  ResolutionOptions,
+  // Output Types
+  FaceResolutionOutput,
+  ScaffoldingDirectives,
+  RenderingDirectives,
+  EmphasisDirective,
+  ContentRegionHighlight,
+  ContextIndicator,
+  // Explainability Types
+  FaceResolutionExplainability,
+  FaceResolutionFactor,
+  FaceResolutionFactorType,
+  MatchedRuleExplanation,
+  UnmatchedRuleExplanation,
+  ConditionMatchExplanation,
+  ConditionFailureExplanation,
+  AlternativeFaceExplanation,
+  ResolutionContextSnapshot,
+  // Plugin Types
+  ResolutionRulePlugin,
+  CustomConditionTypeDefinition,
+  ConditionEvaluator,
+  ConditionEvaluationResult,
+  FaceScorer,
+  FaceScoringResult,
+  ScoreComponent,
+  NamedFaceScorer,
+  // Registry Types
+  ConditionEvaluatorRegistry,
+  FaceScorerRegistry,
+  // Configuration Types
+  FaceResolutionEngineConfig,
+  ScaffoldingAdjustmentConfig,
+  ResolutionCacheConfig,
+  // Event Types
+  FaceResolvedEvent,
+  FaceResolutionFailedEvent,
+  PluginRuleEvaluatedEvent,
+  FaceResolutionEvent,
+  // Engine Interface
+  IFaceResolutionEngine,
+  // Note: FaceResolutionInputBuilder class is exported from algorithms/
+} from "./face-resolution.types";
+
+export {
+  DEFAULT_RESOLUTION_CONFIG,
+  DEPTH_LEVEL_ORDER,
+} from "./face-resolution.types";
+
+// =============================================================================
+// DYNAMIC DECK TYPES (Phase 6C)
+// =============================================================================
+
+// Note: DynamicDeckId from dynamic-deck.types.ts is a branded version.
+// We export it with a different name to avoid conflicts with ecosystem.types.ts
+export type {
+  // Core deck types (DynamicDeckId branded version renamed to avoid conflict)
+  DynamicDeckId as BrandedDynamicDeckId,
+  DeckQueryId,
+  PredicateId,
+  DeckSnapshotId,
+  InclusionExplanationId,
+  DeckChangeEventId,
+  DynamicDeckDefinition,
+
+  // Query types
+  DeckQuery,
+  DeckQueryType,
+  BaseDeckQuery,
+  CombinatorQuery,
+  DeckReferenceQuery,
+
+  // Filter/State types (renamed to avoid conflicts with card.types.ts)
+  CardState as DeckQueryCardState,
+  NumericRange,
+  IntegerRange,
+  TemporalWindow,
+
+  // LKGC predicates (LkgcSignalType renamed to avoid conflict with learning-mode.types.ts)
+  LkgcPredicate,
+  LkgcSignalType as DeckQueryLkgcSignalType,
+  ComparisonOperator,
+
+  // Graph predicates
+  GraphPredicate,
+  DirectRelationPredicate,
+  TransitiveReachabilityPredicate,
+  NeighborhoodPredicate,
+  PathExistsPredicate,
+  SubgraphContainmentPredicate,
+  CustomDeckPredicate,
+
+  // Sorting
+  DeckSortSpec,
+  DeckSortField,
+  DeckSortableField,
+
+  // Evaluation types
+  DeckQueryEvaluationInput,
+  DeckQueryEvaluationResult,
+  DeckCardResult,
+  CardLkgcSignals,
+  DeckEvaluationMetadata,
+  DeckStatistics,
+
+  // Explainability types
+  CardInclusionExplanation,
+  InclusionReason,
+  QueryNodeMatch,
+  InclusionFactor,
+  InclusionFactorType,
+  ExclusionThreat,
+
+  // Auto-update types
+  DeckAutoUpdateConfig,
+  DeckUpdateTrigger,
+  DeckChangeType,
+  DeckChangeEvent,
+  DeckSnapshotSummary,
+
+  // Engine interface
+  IDeckQueryEngine,
+  DeckChangePreview,
+  DeckQueryValidationResult,
+  DeckQueryError,
+  DeckQueryWarning,
+  DeckQueryComplexity,
+
+  // Predicate evaluation
+  CustomPredicateEvaluator,
+  PredicateEvaluationContext,
+  PredicateEvaluationResult,
+
+  // Graph/LKGC readers
+  GraphReader,
+  LkgcReader,
+  GraphNode,
+  GraphEdge,
+  TraversalOptions as DeckTraversalOptions,
+  PathOptions,
+
+  // Subscriptions
+  DeckChangeCallback,
+  DeckChangeSubscription,
+
+  // Events
+  DeckQueryEvent,
+  DeckCreatedEvent,
+  DeckUpdatedEvent,
+  DeckDeletedEvent,
+  DeckEvaluatedEvent,
+  DeckCacheInvalidatedEvent,
+
+  // Builders
+  DeckQueryBuilder,
+  BaseQueryBuilder,
+  CombinatorQueryBuilder,
+} from "./dynamic-deck.types";
+
+// Constants
+export {
+  DEFAULT_AUTO_UPDATE_CONFIG,
+  DEFAULT_PAGE_SIZE,
+  MAX_QUERY_COMPLEXITY,
+  MAX_TRAVERSAL_DEPTH,
+  MAX_COMBINATOR_OPERANDS,
+} from "./dynamic-deck.types";
+
+// =============================================================================
+// REVIEW SESSION TYPES (Phase 6D)
+// =============================================================================
+
+export type {
+  // Session identifiers
+  ReviewSessionId,
+  ReviewItemId,
+  OrchestrationTraceId,
+  FacePivotId,
+  SessionEventId,
+
+  // Request/Response
+  ReviewSessionRequest,
+  ReviewSessionResponse,
+  ReviewSessionState,
+
+  // Review items
+  ResolvedReviewItem,
+  ReviewItemScheduling,
+  ReviewItemDeckContext,
+  ResolvedFaceContext,
+  AlternativeFace,
+  ImprovementPotential,
+
+  // Context indicators (ContextIndicator is already exported from face-resolution.types)
+  ContextIndicatorType,
+
+  // Review processing
+  ReviewResult,
+  ReviewResultResponse,
+  ReviewFeedback,
+
+  // Face pivoting
+  FacePivotRequest,
+  FacePivotResponse,
+  FacePivotReason,
+  FacePivotRecord,
+  LearningImpactEstimate,
+
+  // Session state
+  SessionStatus,
+  // SessionStatistics already exported from scheduler.types.ts - use ReviewSessionStatistics
+  ReviewSessionStatistics,
+  SessionConstraints,
+  ActiveDeckContext,
+  DeckEvaluationSummary,
+
+  // Completion
+  SessionCompletionSummary,
+  LearningInsight,
+  SessionRecommendation,
+
+  // Explainability
+  SessionExplainability,
+  ReviewItemExplainability,
+  SchedulerStageExplanation,
+  ModeStageExplanation,
+  DeckStageExplanation,
+  FaceStageExplanation,
+  SignalContribution,
+  ModeInfluenceExplanation,
+  SignalAmplificationExplanation,
+  PolicyModificationExplanation,
+  DeckFilterExplanation,
+  QueueCompositionExplanation,
+
+  // Events
+  SessionEvent,
+  SessionEventCallback,
+  SessionEventSubscription,
+  SessionStartedEvent,
+  ItemPresentedEvent,
+  ItemReviewedEvent,
+  FacePivotedEvent,
+  SessionPausedEvent,
+  SessionResumedEvent,
+  SessionCompletedEvent,
+  SessionErrorEvent,
+
+  // Provider interfaces
+  IReviewSessionOrchestrator,
+  RankedCandidateProvider,
+  RankedCandidateOptions,
+  DeckEvaluationProvider,
+  DeckMembershipResult,
+  FaceResolutionProvider,
+  CardDataProviderForSession,
+  CardData,
+  ParticipationSummary,
+
+  // Configuration
+  SessionOrchestratorConfig,
+
+  // Shared types - note: CardState exported from card.types, UrgencyLevel from scheduler.types
+} from "./review-session.types";
+
+// Constants
+export { DEFAULT_SESSION_ORCHESTRATOR_CONFIG } from "./review-session.types";
