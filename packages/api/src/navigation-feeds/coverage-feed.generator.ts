@@ -37,6 +37,7 @@ import type {
 import {
   generateFeedId,
   generateSuggestionId,
+  generateTraceId,
   DEFAULT_FEED_SERVICE_CONFIG,
 } from "./types.js";
 
@@ -598,7 +599,7 @@ export class CoverageFeedGenerator {
         recommendedCardIds,
         expectedCoverageImprovement: potentialImprovement,
         explainabilityTraceId: request.includeExplainability
-          ? `trace_coverage_${gap.categoryId}`
+          ? generateTraceId()
           : undefined,
       });
     }

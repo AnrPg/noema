@@ -27,6 +27,7 @@ import type {
   ModeSessionId,
   ReviewCandidateInput,
 } from "@manthanein/shared";
+import { createLearningModeId, createModeSessionId } from "@manthanein/shared";
 
 // =============================================================================
 // REQUEST TYPES
@@ -261,7 +262,7 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
     const runtimeState = await service.getModeRuntimeState({
       userId,
       categoryId,
-      sessionId,
+      sessionId: sessionId ? createModeSessionId(sessionId) : undefined,
     });
 
     if (!runtimeState) {
@@ -325,7 +326,9 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const { modeId } = request.params;
       const service = getService();
 
-      const mode = await service.getModeDefinition(modeId);
+      const mode = await service.getModeDefinition(
+        createLearningModeId(modeId),
+      );
 
       if (!mode) {
         reply.status(404);
@@ -355,10 +358,12 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const service = getService();
       const result = await service.activateMode({
         userId,
-        modeId,
+        modeId: createLearningModeId(modeId as unknown as string),
         scope,
         categoryId,
-        sessionId,
+        sessionId: sessionId
+          ? createModeSessionId(sessionId as unknown as string)
+          : undefined,
         parameterOverrides,
       });
 
@@ -415,7 +420,7 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const service = getService();
       const result = await service.createModeSession({
         userId,
-        modeId,
+        modeId: createLearningModeId(modeId as unknown as string),
         parameterOverrides,
         categoryId,
         timeBudgetMinutes,
@@ -444,7 +449,7 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const service = getService();
       const result = await service.endModeSession({
         userId,
-        sessionId,
+        sessionId: createModeSessionId(sessionId),
         status,
       });
 
@@ -474,7 +479,11 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const service = getService();
-      await service.recordSessionReview(userId, sessionId, cardId);
+      await service.recordSessionReview(
+        userId,
+        createModeSessionId(sessionId),
+        cardId,
+      );
 
       return apiResponse(true, { message: "Review recorded" });
     },
@@ -503,10 +512,16 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const service = getService();
       const result = await service.updateModePreferences({
         userId,
-        defaultModeId,
+        defaultModeId: defaultModeId
+          ? createLearningModeId(defaultModeId as unknown as string)
+          : undefined,
         defaultParameters,
-        addToFavorites,
-        removeFromFavorites,
+        addToFavorites: addToFavorites
+          ? createLearningModeId(addToFavorites as unknown as string)
+          : undefined,
+        removeFromFavorites: removeFromFavorites
+          ? createLearningModeId(removeFromFavorites as unknown as string)
+          : undefined,
       });
 
       if (!result.success) {
@@ -536,7 +551,7 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const service = getService();
       const result = await service.saveParameterPreset({
         userId,
-        modeId,
+        modeId: createLearningModeId(modeId as unknown as string),
         name,
         description,
         parameters,
@@ -571,7 +586,7 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const result = await service.setCategoryModeDefault({
         userId,
         categoryId,
-        modeId,
+        modeId: createLearningModeId(modeId as unknown as string),
         parameterOverrides,
       });
 
@@ -613,7 +628,9 @@ export async function learningModeRoutes(app: FastifyInstance): Promise<void> {
       const runtimeState = await service.getModeRuntimeState({
         userId,
         categoryId,
-        sessionId,
+        sessionId: sessionId
+          ? createModeSessionId(sessionId as unknown as string)
+          : undefined,
       });
 
       if (!runtimeState) {

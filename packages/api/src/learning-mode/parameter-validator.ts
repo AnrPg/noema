@@ -600,9 +600,19 @@ function runCrossValidationRule(
   params: Record<string, unknown>,
   _parameterDefs: Map<string, ModeParameterDefinition>,
 ): ValidationError | null {
+  // Skip if no validator key specified
+  if (!rule.validatorKey) {
+    return null;
+  }
+
   const handler = CROSS_VALIDATION_HANDLERS[rule.validatorKey];
   if (!handler) {
     // Unknown validator, skip
+    return null;
+  }
+
+  // Skip if no parameters specified
+  if (!rule.parameters || rule.parameters.length === 0) {
     return null;
   }
 

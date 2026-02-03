@@ -19,7 +19,9 @@ import type {
   CardId,
   ViewLens,
   CategoryRelationType,
+  LearningModeId,
 } from "@manthanein/shared";
+import { createLearningModeId } from "@manthanein/shared";
 import { getNavigationFeedService } from "./navigation-feed.service.js";
 
 // =============================================================================
@@ -105,7 +107,9 @@ function buildFeedRequest(
   const query = (request.query || {}) as FeedQuerystring;
 
   const userId = (body.userId || query.userId || "default-user") as UserId;
-  const modeId = body.modeId || query.modeId || "system:exploration";
+  const modeId = createLearningModeId(
+    body.modeId || query.modeId || "system:exploration",
+  );
   const currentCardId = (body.currentCardId || query.currentCardId) as
     | CardId
     | undefined;

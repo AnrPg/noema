@@ -29,6 +29,13 @@ import type { UserId } from "./user.types";
 export type LearningModeId = string & { readonly __brand: "LearningModeId" };
 
 /**
+ * Unique identifier for a mode activation record
+ */
+export type ModeActivationId = string & {
+  readonly __brand: "ModeActivationId";
+};
+
+/**
  * Unique identifier for a parameter set configuration
  */
 export type ModeParameterSetId = string & {
@@ -310,6 +317,8 @@ export type LkgcSignalType =
   | "novelty_score"
   | "retrievability"
   | "forgetting_risk"
+  // Performance trend signals
+  | "performance_trend"
   // Additional built-in mode signals
   | "serendipity_score"
   | "learning_velocity"
@@ -328,7 +337,12 @@ export type LkgcSignalType =
  * UI emphasis configuration for a mode
  */
 export interface ModeUiEmphasis {
-  readonly pressureLevel: "minimal" | "low" | "medium" | "high" | NormalizedValue;
+  readonly pressureLevel:
+    | "minimal"
+    | "low"
+    | "medium"
+    | "high"
+    | NormalizedValue;
   readonly showTimer: boolean;
   readonly showProgress: boolean;
   readonly showStreaks: boolean;
@@ -389,14 +403,19 @@ export type ModeActivationScope = "global" | "category" | "session";
  * Active mode configuration
  */
 export interface ModeActivation {
-  readonly id: LearningModeId;
+  readonly id: ModeActivationId;
   readonly userId: UserId;
+  readonly modeId: LearningModeId;
   readonly scope: ModeActivationScope;
   readonly categoryId?: CategoryId;
   readonly sessionId?: ModeSessionId;
-  readonly parameters: Record<string, unknown>;
+  readonly parameters?: Record<string, unknown>;
+  readonly parameterOverrides?: Record<string, unknown>;
   readonly activatedAt: Timestamp;
+  readonly deactivatedAt?: Timestamp;
   readonly expiresAt?: Timestamp;
+  readonly isActive?: boolean;
+  readonly priority?: number;
 }
 
 /**
@@ -545,11 +564,17 @@ export interface LkgcSignalValue {
  */
 export interface ExplainabilityTrace {
   readonly id: ExplainabilityTraceId;
-  readonly timestamp: Timestamp;
+  readonly timestamp?: Timestamp;
+  readonly createdAt?: Timestamp; // Alias for timestamp
+  readonly modeId?: LearningModeId;
   readonly subject: ExplainabilitySubject;
+  readonly parametersUsed?: Record<string, unknown>;
   readonly factors: readonly ExplainabilityFactor[];
-  readonly humanReadable: string;
+  readonly summary?: string;
+  readonly humanReadable?: string; // Alias for summary
+  readonly detailedExplanation?: string;
   readonly suggestedActions?: readonly ExplainabilitySuggestedAction[];
+  readonly ttlMs?: Duration;
 }
 
 /**
@@ -560,8 +585,14 @@ export interface ExplainabilitySubject {
     | "navigation"
     | "review_selection"
     | "card_ordering"
-    | "scheduling";
+    | "scheduling"
+    | "card"
+    | "list"
+    | "session";
   readonly cardId?: CanonicalCardId;
+  readonly listId?: string;
+  readonly navigationId?: string;
+  readonly sessionId?: ModeSessionId;
   readonly categoryId?: CategoryId;
   readonly faceId?: CardFaceId;
 }

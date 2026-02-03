@@ -1069,6 +1069,7 @@ export {
 export type {
   // Identifiers
   LearningModeId,
+  ModeActivationId,
   ModeParameterSetId,
   ModeSessionId,
   ExplainabilityTraceId,
@@ -1161,6 +1162,10 @@ export {
   isLearningModeId,
   isSystemModeId,
   extractSystemModeType,
+  // ModeActivationId factories
+  createModeActivationId,
+  generateModeActivationId,
+  isModeActivationId,
   // ModeSessionId factories
   createModeSessionId,
   generateModeSessionId,

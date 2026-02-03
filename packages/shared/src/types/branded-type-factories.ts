@@ -8,6 +8,7 @@
 
 import type {
   LearningModeId,
+  ModeActivationId,
   ModeParameterSetId,
   ModeSessionId,
   ExplainabilityTraceId,
@@ -70,7 +71,7 @@ export const STRICT_VALIDATION_CONFIG: BrandedTypeValidationConfig = {
  */
 function validateString(
   value: unknown,
-  config: Partial<BrandedTypeValidationConfig> = {}
+  config: Partial<BrandedTypeValidationConfig> = {},
 ): { valid: boolean; error?: string } {
   const mergedConfig = { ...DEFAULT_VALIDATION_CONFIG, ...config };
 
@@ -96,7 +97,10 @@ function validateString(
     };
   }
 
-  if (mergedConfig.requiredPrefix && !value.startsWith(mergedConfig.requiredPrefix)) {
+  if (
+    mergedConfig.requiredPrefix &&
+    !value.startsWith(mergedConfig.requiredPrefix)
+  ) {
     return {
       valid: false,
       error: `Value must start with '${mergedConfig.requiredPrefix}'`,
@@ -116,7 +120,7 @@ function validateString(
 function createBrandedType<T extends string>(
   value: unknown,
   typeName: string,
-  config: Partial<BrandedTypeValidationConfig> = {}
+  config: Partial<BrandedTypeValidationConfig> = {},
 ): T | undefined {
   const mergedConfig = { ...DEFAULT_VALIDATION_CONFIG, ...config };
   const result = validateString(value, mergedConfig);
@@ -143,9 +147,13 @@ function createBrandedType<T extends string>(
  */
 export function createLearningModeId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): LearningModeId {
-  return createBrandedType<LearningModeId>(value, "LearningModeId", config) as LearningModeId;
+  return createBrandedType<LearningModeId>(
+    value,
+    "LearningModeId",
+    config,
+  ) as LearningModeId;
 }
 
 /**
@@ -158,14 +166,20 @@ export function createSystemModeId(type: SystemModeType): LearningModeId {
 /**
  * Creates a plugin LearningModeId with 'plugin:' prefix
  */
-export function createPluginModeId(pluginId: string, modeName: string): LearningModeId {
+export function createPluginModeId(
+  pluginId: string,
+  modeName: string,
+): LearningModeId {
   return `plugin:${pluginId}:${modeName}` as LearningModeId;
 }
 
 /**
  * Creates a custom user LearningModeId with 'custom:' prefix
  */
-export function createCustomModeId(userId: string, modeName: string): LearningModeId {
+export function createCustomModeId(
+  userId: string,
+  modeName: string,
+): LearningModeId {
   return `custom:${userId}:${modeName}` as LearningModeId;
 }
 
@@ -186,11 +200,52 @@ export function isSystemModeId(modeId: LearningModeId): boolean {
 /**
  * Extracts the SystemModeType from a system mode ID
  */
-export function extractSystemModeType(modeId: LearningModeId): SystemModeType | undefined {
+export function extractSystemModeType(
+  modeId: LearningModeId,
+): SystemModeType | undefined {
   if (!isSystemModeId(modeId)) return undefined;
   const type = modeId.slice("system:".length) as SystemModeType;
-  const validTypes: SystemModeType[] = ["exploration", "goal_driven", "exam_oriented", "synthesis"];
+  const validTypes: SystemModeType[] = [
+    "exploration",
+    "goal_driven",
+    "exam_oriented",
+    "synthesis",
+  ];
   return validTypes.includes(type) ? type : undefined;
+}
+
+// =============================================================================
+// MODE ACTIVATION IDENTIFIER FACTORIES
+// =============================================================================
+
+/**
+ * Creates a ModeActivationId from a string
+ */
+export function createModeActivationId(
+  value: string,
+  config?: Partial<BrandedTypeValidationConfig>,
+): ModeActivationId {
+  return createBrandedType<ModeActivationId>(
+    value,
+    "ModeActivationId",
+    config,
+  ) as ModeActivationId;
+}
+
+/**
+ * Generates a new unique ModeActivationId
+ */
+export function generateModeActivationId(): ModeActivationId {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 11);
+  return `activation_${timestamp}_${random}` as ModeActivationId;
+}
+
+/**
+ * Type guard to check if a value is a valid ModeActivationId
+ */
+export function isModeActivationId(value: unknown): value is ModeActivationId {
+  return typeof value === "string" && value.length > 0;
 }
 
 // =============================================================================
@@ -202,9 +257,13 @@ export function extractSystemModeType(modeId: LearningModeId): SystemModeType | 
  */
 export function createModeSessionId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): ModeSessionId {
-  return createBrandedType<ModeSessionId>(value, "ModeSessionId", config) as ModeSessionId;
+  return createBrandedType<ModeSessionId>(
+    value,
+    "ModeSessionId",
+    config,
+  ) as ModeSessionId;
 }
 
 /**
@@ -232,12 +291,12 @@ export function isModeSessionId(value: unknown): value is ModeSessionId {
  */
 export function createModeParameterSetId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): ModeParameterSetId {
   return createBrandedType<ModeParameterSetId>(
     value,
     "ModeParameterSetId",
-    config
+    config,
   ) as ModeParameterSetId;
 }
 
@@ -253,7 +312,9 @@ export function generateModeParameterSetId(): ModeParameterSetId {
 /**
  * Type guard to check if a value is a valid ModeParameterSetId
  */
-export function isModeParameterSetId(value: unknown): value is ModeParameterSetId {
+export function isModeParameterSetId(
+  value: unknown,
+): value is ModeParameterSetId {
   return typeof value === "string" && value.length > 0;
 }
 
@@ -266,12 +327,12 @@ export function isModeParameterSetId(value: unknown): value is ModeParameterSetI
  */
 export function createExplainabilityTraceId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): ExplainabilityTraceId {
   return createBrandedType<ExplainabilityTraceId>(
     value,
     "ExplainabilityTraceId",
-    config
+    config,
   ) as ExplainabilityTraceId;
 }
 
@@ -287,7 +348,9 @@ export function generateExplainabilityTraceId(): ExplainabilityTraceId {
 /**
  * Type guard to check if a value is a valid ExplainabilityTraceId
  */
-export function isExplainabilityTraceId(value: unknown): value is ExplainabilityTraceId {
+export function isExplainabilityTraceId(
+  value: unknown,
+): value is ExplainabilityTraceId {
   return typeof value === "string" && value.length > 0;
 }
 
@@ -300,12 +363,12 @@ export function isExplainabilityTraceId(value: unknown): value is Explainability
  */
 export function createNavigationSuggestionId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): NavigationSuggestionId {
   return createBrandedType<NavigationSuggestionId>(
     value,
     "NavigationSuggestionId",
-    config
+    config,
   ) as NavigationSuggestionId;
 }
 
@@ -321,7 +384,9 @@ export function generateNavigationSuggestionId(): NavigationSuggestionId {
 /**
  * Type guard to check if a value is a valid NavigationSuggestionId
  */
-export function isNavigationSuggestionId(value: unknown): value is NavigationSuggestionId {
+export function isNavigationSuggestionId(
+  value: unknown,
+): value is NavigationSuggestionId {
   return typeof value === "string" && value.length > 0;
 }
 
@@ -334,12 +399,12 @@ export function isNavigationSuggestionId(value: unknown): value is NavigationSug
  */
 export function createReviewCandidateId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): ReviewCandidateId {
   return createBrandedType<ReviewCandidateId>(
     value,
     "ReviewCandidateId",
-    config
+    config,
   ) as ReviewCandidateId;
 }
 
@@ -355,7 +420,9 @@ export function generateReviewCandidateId(): ReviewCandidateId {
 /**
  * Type guard to check if a value is a valid ReviewCandidateId
  */
-export function isReviewCandidateId(value: unknown): value is ReviewCandidateId {
+export function isReviewCandidateId(
+  value: unknown,
+): value is ReviewCandidateId {
   return typeof value === "string" && value.length > 0;
 }
 
@@ -368,15 +435,22 @@ export function isReviewCandidateId(value: unknown): value is ReviewCandidateId 
  */
 export function createModePluginId(
   value: string,
-  config?: Partial<BrandedTypeValidationConfig>
+  config?: Partial<BrandedTypeValidationConfig>,
 ): ModePluginId {
-  return createBrandedType<ModePluginId>(value, "ModePluginId", config) as ModePluginId;
+  return createBrandedType<ModePluginId>(
+    value,
+    "ModePluginId",
+    config,
+  ) as ModePluginId;
 }
 
 /**
  * Generates a new unique ModePluginId
  */
-export function generateModePluginId(author: string, pluginName: string): ModePluginId {
+export function generateModePluginId(
+  author: string,
+  pluginName: string,
+): ModePluginId {
   return `${author}/${pluginName}` as ModePluginId;
 }
 
@@ -410,7 +484,10 @@ export function now(): Timestamp {
  * @param value The number to normalize
  * @param clamp Whether to clamp the value to 0-1 range (default: true)
  */
-export function createNormalizedValue(value: number, clamp: boolean = true): NormalizedValue {
+export function createNormalizedValue(
+  value: number,
+  clamp: boolean = true,
+): NormalizedValue {
   if (clamp) {
     return Math.max(0, Math.min(1, value)) as NormalizedValue;
   }
@@ -422,7 +499,10 @@ export function createNormalizedValue(value: number, clamp: boolean = true): Nor
  * @param value The number to use as confidence
  * @param clamp Whether to clamp the value to 0-1 range (default: true)
  */
-export function createConfidence(value: number, clamp: boolean = true): Confidence {
+export function createConfidence(
+  value: number,
+  clamp: boolean = true,
+): Confidence {
   if (clamp) {
     return Math.max(0, Math.min(1, value)) as Confidence;
   }
@@ -438,7 +518,7 @@ export function createConfidence(value: number, clamp: boolean = true): Confiden
  */
 export function batchCreateBrandedTypes<T extends string>(
   values: readonly string[],
-  factory: (value: string) => T
+  factory: (value: string) => T,
 ): readonly T[] {
   return values.map(factory);
 }

@@ -42,6 +42,7 @@ import type {
 import {
   generateFeedId,
   generateSuggestionId,
+  generateTraceId,
   DEFAULT_FEED_SERVICE_CONFIG,
 } from "./types.js";
 
@@ -547,7 +548,7 @@ export class NeighborhoodFeedGenerator {
         reason: this.generateReason(node, type, factors),
         factors,
         explainabilityTraceId: request.includeExplainability
-          ? `trace_${node.categoryId}`
+          ? generateTraceId()
           : undefined,
       });
     }

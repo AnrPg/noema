@@ -43,6 +43,7 @@ import type {
 import {
   generateFeedId,
   generateSuggestionId,
+  generateTraceId,
   DEFAULT_FEED_SERVICE_CONFIG,
 } from "./types.js";
 
@@ -846,7 +847,7 @@ export class ConstellationChallengeFeedGenerator {
         learningValue: challenge.learningOutcome,
         difficulty: challenge.difficulty,
         explainabilityTraceId: request.includeExplainability
-          ? `trace_challenge_${challenge.id}`
+          ? generateTraceId()
           : undefined,
       });
     }
@@ -868,7 +869,7 @@ export class ConstellationChallengeFeedGenerator {
         learningValue: bridge.learningValue,
         difficulty: 0.5 as NormalizedValue, // Default for bridges
         explainabilityTraceId: request.includeExplainability
-          ? `trace_bridge_${bridge.id}`
+          ? generateTraceId()
           : undefined,
       });
     }

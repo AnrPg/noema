@@ -20,6 +20,13 @@ import type {
   NavigationFeedMetadata as _NavigationFeedMetadata, // May be used for future type compositions
   ModeFeedConfiguration,
   LearningModeId,
+  NavigationSuggestionId,
+  ExplainabilityTraceId,
+} from "@manthanein/shared";
+import {
+  createNavigationSuggestionId,
+  createExplainabilityTraceId,
+  createLearningModeId,
 } from "@manthanein/shared";
 
 // =============================================================================
@@ -353,8 +360,26 @@ export function generateFeedId(): NavigationFeedId {
 /**
  * Generate a unique suggestion ID
  */
-export function generateSuggestionId(): string {
-  return `sug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+export function generateSuggestionId(): NavigationSuggestionId {
+  return createNavigationSuggestionId(
+    `sug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  );
+}
+
+/**
+ * Generate a unique explainability trace ID
+ */
+export function generateTraceId(): ExplainabilityTraceId {
+  return createExplainabilityTraceId(
+    `trace_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  );
+}
+
+/**
+ * Create a LearningModeId from a string
+ */
+export function createModeId(value: string): LearningModeId {
+  return createLearningModeId(value);
 }
 
 /**

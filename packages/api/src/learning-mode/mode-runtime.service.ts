@@ -56,6 +56,8 @@ import type {
 import {
   createLearningModeId,
   createModeSessionId,
+  createModeActivationId,
+  createReviewCandidateId,
   generateModeSessionId,
   createExplainabilityTraceId,
   generateExplainabilityTraceId,
@@ -444,7 +446,7 @@ export class ModeRuntimeService {
           return {
             mode,
             activation: {
-              id: categoryDefault.id,
+              id: createModeActivationId(categoryDefault.id),
               userId: userId as UserId,
               modeId: createLearningModeId(categoryDefault.modeId),
               scope: "category",
@@ -511,7 +513,7 @@ export class ModeRuntimeService {
           return {
             mode,
             activation: {
-              id: `pref_${userId}`,
+              id: createModeActivationId(`pref_${userId}`),
               userId: userId as UserId,
               modeId: createLearningModeId(userPrefs.defaultModeId),
               scope: "global",
@@ -541,7 +543,7 @@ export class ModeRuntimeService {
       return {
         mode: defaultMode,
         activation: {
-          id: "system_default",
+          id: createModeActivationId("system_default"),
           userId: userId as UserId,
           modeId: defaultMode.id,
           scope: "global",
@@ -607,9 +609,16 @@ export class ModeRuntimeService {
       // Convenience aliases
       activeModeDefinition: resolved.mode,
       resolvedParameters: resolved.resolvedParameters,
-      activeLkgcSignals: lkgcSnapshot.signals instanceof Map
-        ? lkgcSnapshot.signals as ReadonlyMap<LkgcSignalType, LkgcSignalValue>
-        : new Map(Object.entries(lkgcSnapshot.signals || {})) as ReadonlyMap<LkgcSignalType, LkgcSignalValue>,
+      activeLkgcSignals:
+        lkgcSnapshot.signals instanceof Map
+          ? (lkgcSnapshot.signals as ReadonlyMap<
+              LkgcSignalType,
+              LkgcSignalValue
+            >)
+          : (new Map(Object.entries(lkgcSnapshot.signals || {})) as ReadonlyMap<
+              LkgcSignalType,
+              LkgcSignalValue
+            >),
     };
 
     // Cache the result
@@ -711,17 +720,19 @@ export class ModeRuntimeService {
 
     // Score each candidate
     const scored = candidates.map((candidate) => {
-      let urgency = 1 - candidate.schedulingData.retrievability;
-      let modeModifier = 0;
+      // Safely get retrievability, default to 0.5 if not available
+      const retrievability = candidate.schedulingData?.retrievability ?? 0.5;
+      let urgency = (1 - retrievability) as NormalizedValue;
+      let modeModifier = 0 as NormalizedValue;
 
       // Apply basic mode-specific adjustments
       switch (modeType) {
         case "exploration":
           // Reduce urgency pressure
-          urgency *= 0.5;
+          urgency = (urgency * 0.5) as NormalizedValue;
           // Boost new cards
-          if (candidate.schedulingData.state === "new") {
-            modeModifier += 0.3;
+          if (candidate.schedulingData?.state === "new") {
+            modeModifier = 0.3 as NormalizedValue;
           }
           break;
 
@@ -731,8 +742,8 @@ export class ModeRuntimeService {
 
         case "exam_oriented":
           // Increase urgency for at-risk items
-          if (candidate.schedulingData.retrievability < 0.7) {
-            modeModifier += 0.4;
+          if ((candidate.schedulingData?.retrievability ?? 1) < 0.7) {
+            modeModifier = 0.4 as NormalizedValue;
           }
           break;
 
@@ -742,23 +753,27 @@ export class ModeRuntimeService {
           break;
       }
 
-      const finalScore = urgency + modeModifier;
+      const finalScore = (urgency + modeModifier) as NormalizedValue;
 
       return {
-        id: `rc_${candidate.cardId}`,
+        id: createReviewCandidateId(`rc_${candidate.cardId}`),
         cardId: candidate.cardId,
+        faceId: candidate.faceId,
         categoryId: candidate.categoryId,
         participationId: candidate.participationId,
+        scheduledFor: candidate.scheduledFor,
+        urgency,
         priorityScore: finalScore,
         scoring: {
-          urgency,
+          baseScore: urgency,
+          urgencyBonus: 0 as NormalizedValue,
           modeModifier,
-          signalContributions: {},
           finalScore,
-          weights: { urgency: 1.0, modeModifier: 1.0 },
+          urgency,
+          factors: [],
         },
-        sourceModeId: runtimeState.activeModeDefinition.id,
-      } as ReviewCandidate;
+        modeBoost: modeModifier,
+      } satisfies ReviewCandidate;
     });
 
     // Sort by final score and limit
@@ -802,7 +817,7 @@ export class ModeRuntimeService {
       userId: input.userId,
       modeId: input.modeId,
       scope: "session",
-      sessionId: session.id,
+      sessionId: createModeSessionId(session.id),
       parameterOverrides: input.parameterOverrides,
     });
 
@@ -927,13 +942,13 @@ export class ModeRuntimeService {
     if (!trace) return null;
 
     return {
-      id: trace.id,
+      id: createExplainabilityTraceId(trace.id),
       subject: {
         type: trace.subjectType as "card" | "list" | "navigation" | "session",
         [trace.subjectType === "card" ? "cardId" : `${trace.subjectType}Id`]:
           trace.subjectId,
       } as ExplainabilityTrace["subject"],
-      modeId: trace.modeId,
+      modeId: createLearningModeId(trace.modeId),
       parametersUsed: trace.parametersUsed as Record<string, unknown>,
       factors: trace.factors as unknown as readonly ExplainabilityFactor[],
       summary: trace.summary,
@@ -1003,10 +1018,10 @@ export class ModeRuntimeService {
       categoryDefaults: new Map(), // Fetched separately if needed
       savedPresets: [], // Fetched separately if needed
       parameterPresets: [], // Alias
-      recentModes: (prefs.recentModeIds as string[]).map(id =>
+      recentModes: (prefs.recentModeIds as string[]).map((id) =>
         createLearningModeId(id),
       ),
-      favoriteModes: (prefs.favoriteModeIds as string[]).map(id =>
+      favoriteModes: (prefs.favoriteModeIds as string[]).map((id) =>
         createLearningModeId(id),
       ),
       lastUpdated: prefs.updatedAt.getTime() as Timestamp,
@@ -1409,7 +1424,7 @@ export class ModeRuntimeService {
     dbActivation: DbModeActivation,
   ): ModeActivation {
     return {
-      id: dbActivation.id,
+      id: createModeActivationId(dbActivation.id),
       userId: dbActivation.userId as UserId,
       modeId: createLearningModeId(dbActivation.modeId),
       scope: dbActivation.scope as "global" | "category" | "session",

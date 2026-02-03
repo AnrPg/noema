@@ -39,6 +39,7 @@ import type {
 import {
   generateFeedId,
   generateSuggestionId,
+  generateTraceId,
   DEFAULT_FEED_SERVICE_CONFIG,
 } from "./types.js";
 
@@ -632,7 +633,7 @@ export class PrerequisitePathFeedGenerator {
         isRequired,
         unlocks: gap.blockingTargets,
         explainabilityTraceId: request.includeExplainability
-          ? `trace_prereq_${gap.categoryId}`
+          ? generateTraceId()
           : undefined,
       });
     }
@@ -659,7 +660,7 @@ export class PrerequisitePathFeedGenerator {
           isRequired: false,
           unlocks: [],
           explainabilityTraceId: request.includeExplainability
-            ? `trace_path_${node.categoryId}`
+            ? generateTraceId()
             : undefined,
         });
       }

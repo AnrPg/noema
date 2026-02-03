@@ -54,6 +54,7 @@ import type {
 import {
   generateFeedId,
   hashParameters,
+  createModeId,
   DEFAULT_FEED_SERVICE_CONFIG,
 } from "./types.js";
 import { prisma } from "../config/database.js";
@@ -637,7 +638,7 @@ export class NavigationFeedService {
       data,
       generatedAt: Date.now(),
       expiresAt: Date.now() + ttlMs,
-      modeId: "", // Would be set from request
+      modeId: createModeId("unknown"), // Would be set from request
       parametersHash: "",
     };
 

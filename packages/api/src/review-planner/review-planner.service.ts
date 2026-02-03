@@ -36,9 +36,12 @@ import type {
   ModeDefinition,
   LkgcSignalType,
   LkgcSignalValue,
+  LkgcSignalSnapshot,
+  SystemModeType,
   CategoryMetadataForPolicy,
   PolicyChainId,
 } from "@manthanein/shared";
+import { createModeActivationId } from "@manthanein/shared";
 
 import type { ReviewPlannerServiceConfig, CompositionResult } from "./types.js";
 
@@ -531,12 +534,7 @@ export class ReviewPlannerService {
       description: `${request.modeId} learning mode`,
       tagline: "Learn effectively",
       icon: "📚",
-      systemType: systemType as
-        | "exploration"
-        | "goal_driven"
-        | "exam_oriented"
-        | "synthesis"
-        | null,
+      systemType: systemType || undefined,
       source: "system" as const,
       version: "1.0.0",
       parameterSchema: { parameters: [], uiGroups: [] },
@@ -558,6 +556,10 @@ export class ReviewPlannerService {
       // UI hints
       uiEmphasis: {
         pressureLevel: 0.5 as NormalizedValue,
+        showTimer: false,
+        showProgress: true,
+        showStreaks: false,
+        showEstimates: true,
         showOverdueIndicators: true,
         showProgressMeters: true,
         showTimePressure: false,
@@ -566,6 +568,8 @@ export class ReviewPlannerService {
         showMetacognitiveSignals: false,
         coverageVsDepth: 0, // balanced
         cardDisplayDensity: "normal" as const,
+        cardTransitionSpeed: "normal" as const,
+        feedbackDetail: "standard" as const,
       },
       suggestedViewLens: "structure" as const,
       // Metadata
@@ -577,34 +581,49 @@ export class ReviewPlannerService {
       updatedAt: currentTime,
     };
 
+    // Build the LKGC snapshot
+    const lkgcSnapshot: LkgcSignalSnapshot = {
+      timestamp: currentTime,
+      snapshotAt: currentTime,
+      signals: {},
+      userContext: {
+        userId: request.userId,
+        overallMastery: 0.5 as NormalizedValue,
+        activeStreakDays: 0,
+        recentReviewCount: 0,
+      },
+    };
+
+    // Build activation record
+    const activation = {
+      id: createModeActivationId(`activation_${currentTime}`),
+      userId: request.userId,
+      modeId: request.modeId,
+      scope: "global" as const,
+      activatedAt: currentTime,
+      parameterOverrides: request.modeParameterOverrides ?? {},
+      isActive: true,
+      priority: 0,
+    };
+
+    // Build scope context
+    const scopeContext = {
+      scope: "global" as const,
+      categoryId: request.categoryFilter,
+      startedAt: currentTime,
+    };
+
     return {
+      // Required fields per ModeRuntimeState interface
+      modeId: request.modeId,
+      definition: modeDefinition,
+      activation,
+      scopeContext,
+      lkgcSnapshot,
+      // Convenience aliases
       activeModeDefinition: modeDefinition,
       resolvedParameters: request.modeParameterOverrides ?? {},
-      activation: {
-        id: `activation_${currentTime}`,
-        userId: request.userId,
-        modeId: request.modeId,
-        scope: "global" as const,
-        activatedAt: currentTime,
-        parameterOverrides: request.modeParameterOverrides ?? {},
-        isActive: true,
-        priority: 0,
-      },
-      scopeContext: {
-        scope: "global" as const,
-        categoryId: request.categoryFilter,
-      },
-      activeLkgcSignals: {
-        signals: {},
-        snapshotAt: currentTime,
-        userContext: {
-          userId: request.userId,
-          overallMastery: 0.5 as NormalizedValue,
-          activeStreakDays: 0,
-          recentReviewCount: 0,
-        },
-      },
-      computedAt: currentTime,
+      // activeLkgcSignals is optional and expects a Map - we leave it undefined
     };
   }
 
@@ -625,9 +644,18 @@ export class ReviewPlannerService {
   /**
    * Get system mode type from mode ID.
    */
-  private getSystemModeType(modeId: LearningModeId): string | null {
+  private getSystemModeType(modeId: LearningModeId): SystemModeType | null {
+    const systemTypes: SystemModeType[] = [
+      "exploration",
+      "goal_driven",
+      "exam_oriented",
+      "synthesis",
+    ];
     if (modeId.startsWith("system:")) {
-      return modeId.replace("system:", "");
+      const type = modeId.replace("system:", "");
+      if (systemTypes.includes(type as SystemModeType)) {
+        return type as SystemModeType;
+      }
     }
     return null;
   }
