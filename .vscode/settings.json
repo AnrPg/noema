@@ -32,5 +32,10 @@
   "[scminput]": {
     "editor.rulers": [45, 50, 72],
     "editor.wordWrap": "off"
-  }
+  },
+  "chat.agent.maxRequests": 40,
+  "chat.agent.thinking.collapsedTools": "all",
+  "chat.agent.thinkingStyle": "collapsedPreview",
+  "github.copilot.chat.agent.autoFix": true,
+  "chat.customAgentInSubagent.enabled": true
 }
