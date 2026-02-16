@@ -1,0 +1,165 @@
+# =============================================================================
+# Noema Deploy Pipeline
+# =============================================================================
+# Manual deployment to different environments
+# Requires approval for production deployments
+# =============================================================================
+
+name: Deploy
+
+on:
+    workflow_dispatch:
+        inputs:
+            environment:
+                description: "Environment to deploy to"
+                required: true
+                type: choice
+                options:
+                    - development
+                    - staging
+                    - production
+            version:
+                description: "Version to deploy (e.g., v1.0.0 or latest)"
+                required: true
+                default: "latest"
+                type: string
+
+env:
+    REGISTRY: ghcr.io
+    IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/noema
+
+jobs:
+    # ===========================================================================
+    # Validate
+    # ===========================================================================
+    validate:
+        name: Validate Deployment
+        runs-on: ubuntu-latest
+        outputs:
+            environment: ${{ steps.validate.outputs.environment }}
+            version: ${{ steps.validate.outputs.version }}
+        steps:
+            - name: Validate inputs
+              id: validate
+              run: |
+                  echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+                  echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+
+                  # Validate version format
+                  if [[ "${{ inputs.version }}" != "latest" && ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                    echo "::error::Invalid version format. Use 'latest' or semantic version (e.g., v1.0.0)"
+                    exit 1
+                  fi
+
+    # ===========================================================================
+    # Deploy to Development
+    # ===========================================================================
+    deploy-development:
+        name: Deploy to Development
+        runs-on: ubuntu-latest
+        needs: validate
+        if: inputs.environment == 'development'
+        environment:
+            name: development
+            url: https://dev.noema.app
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup kubectl
+              uses: azure/setup-kubectl@v4
+              with:
+                  version: "v1.29.0"
+
+            - name: Configure Kubernetes
+              run: |
+                  echo "${{ secrets.KUBE_CONFIG_DEV }}" | base64 -d > kubeconfig
+                  export KUBECONFIG=kubeconfig
+
+            - name: Deploy to Development
+              run: |
+                  echo "Deploying version ${{ needs.validate.outputs.version }} to development"
+                  # kubectl apply -k infrastructure/kubernetes/overlays/development
+                  # kubectl set image deployment/noema *=${{ env.IMAGE_PREFIX }}/*:${{ needs.validate.outputs.version }}
+
+    # ===========================================================================
+    # Deploy to Staging
+    # ===========================================================================
+    deploy-staging:
+        name: Deploy to Staging
+        runs-on: ubuntu-latest
+        needs: validate
+        if: inputs.environment == 'staging'
+        environment:
+            name: staging
+            url: https://staging.noema.app
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup kubectl
+              uses: azure/setup-kubectl@v4
+              with:
+                  version: "v1.29.0"
+
+            - name: Configure Kubernetes
+              run: |
+                  echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+                  export KUBECONFIG=kubeconfig
+
+            - name: Deploy to Staging
+              run: |
+                  echo "Deploying version ${{ needs.validate.outputs.version }} to staging"
+                  # kubectl apply -k infrastructure/kubernetes/overlays/staging
+                  # kubectl set image deployment/noema *=${{ env.IMAGE_PREFIX }}/*:${{ needs.validate.outputs.version }}
+
+            - name: Run smoke tests
+              run: |
+                  echo "Running smoke tests against staging..."
+                  # Add smoke test commands here
+
+    # ===========================================================================
+    # Deploy to Production
+    # ===========================================================================
+    deploy-production:
+        name: Deploy to Production
+        runs-on: ubuntu-latest
+        needs: validate
+        if: inputs.environment == 'production'
+        environment:
+            name: production
+            url: https://noema.app
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup kubectl
+              uses: azure/setup-kubectl@v4
+              with:
+                  version: "v1.29.0"
+
+            - name: Configure Kubernetes
+              run: |
+                  echo "${{ secrets.KUBE_CONFIG_PROD }}" | base64 -d > kubeconfig
+                  export KUBECONFIG=kubeconfig
+
+            - name: Create deployment backup
+              run: |
+                  echo "Creating backup of current deployment..."
+                  # kubectl get deployment -o yaml > backup-$(date +%Y%m%d-%H%M%S).yaml
+
+            - name: Deploy to Production
+              run: |
+                  echo "Deploying version ${{ needs.validate.outputs.version }} to production"
+                  # kubectl apply -k infrastructure/kubernetes/overlays/production
+                  # kubectl set image deployment/noema *=${{ env.IMAGE_PREFIX }}/*:${{ needs.validate.outputs.version }}
+
+            - name: Verify deployment
+              run: |
+                  echo "Verifying deployment health..."
+                  # kubectl rollout status deployment/noema --timeout=300s
+
+            - name: Run health checks
+              run: |
+                  echo "Running production health checks..."
+                  # Add health check commands here

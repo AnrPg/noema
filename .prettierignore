@@ -1,0 +1,56 @@
+# Prettier ignore file
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+.expo/
+.turbo/
+coverage/
+
+# Generated files
+*.generated.*
+**/prisma/client/
+**/*.prisma.d.ts
+
+# Lock files
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Environment
+.env*
+!.env.example
+
+# IDE
+.idea/
+.vscode/*.code-workspace
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Caches
+.cache/
+*.tsbuildinfo
+
+# Documentation assets
+docs/**/*.svg
+docs/**/*.png
+docs/**/*.jpg
+
+# Kubernetes/Helm generated
+infrastructure/kubernetes/overlays/*/secrets.yaml
+infrastructure/helm/*/charts/
+
+# Terraform state
+*.tfstate
+*.tfstate.*
+.terraform/

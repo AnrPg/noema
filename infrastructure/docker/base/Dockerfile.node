@@ -1,0 +1,90 @@
+# =============================================================================
+# Noema Node.js Base Image
+# =============================================================================
+# Multi-stage Dockerfile for Node.js/TypeScript services
+# Optimized for production with minimal image size
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Base - Common dependencies
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS base
+
+# Install essential packages
+RUN apk add --no-cache \
+    libc6-compat \
+    openssl \
+    && corepack enable \
+    && corepack prepare pnpm@9.14.4 --activate
+
+WORKDIR /app
+
+# -----------------------------------------------------------------------------
+# Stage 2: Dependencies - Install all dependencies
+# -----------------------------------------------------------------------------
+FROM base AS deps
+
+# Copy package management files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY turbo.json ./
+
+# Copy all package.json files for workspace packages
+COPY packages/*/package.json ./packages/
+COPY services/*/package.json ./services/
+
+# Install dependencies
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
+
+# -----------------------------------------------------------------------------
+# Stage 3: Builder - Build the application
+# -----------------------------------------------------------------------------
+FROM base AS builder
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/*/node_modules ./packages/
+COPY --from=deps /app/services/*/node_modules ./services/
+
+# Copy source code
+COPY . .
+
+# Generate Prisma clients
+RUN pnpm db:generate
+
+# Build all packages and services
+RUN pnpm build
+
+# Prune dev dependencies
+RUN pnpm prune --prod
+
+# -----------------------------------------------------------------------------
+# Stage 4: Production Runner
+# -----------------------------------------------------------------------------
+FROM node:20-alpine AS runner
+
+# Security: Run as non-root user
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 noema
+
+WORKDIR /app
+
+# Copy production dependencies and built output
+COPY --from=builder --chown=noema:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=noema:nodejs /app/packages ./packages
+COPY --from=builder --chown=noema:nodejs /app/services ./services
+COPY --from=builder --chown=noema:nodejs /app/package.json ./
+
+USER noema
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -q --spider http://localhost:${PORT:-3000}/health || exit 1
+
+# Default environment
+ENV NODE_ENV=production \
+    PORT=3000
+
+EXPOSE 3000
+
+# Default command (override per service)
+CMD ["node", "services/user-service/dist/index.js"]

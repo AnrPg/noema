@@ -1,0 +1,9 @@
+{
+  ".": "0.1.0",
+  "packages/config": "0.1.0",
+  "packages/contracts": "0.1.0",
+  "packages/events": "0.1.0",
+  "packages/types": "0.1.0",
+  "packages/utils": "0.1.0",
+  "packages/validation": "0.1.0"
+}

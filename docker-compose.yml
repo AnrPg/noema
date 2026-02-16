@@ -1,0 +1,150 @@
+# =============================================================================
+# Noema Development Infrastructure
+# =============================================================================
+# This file defines the core infrastructure services required for local
+# development. Use docker-compose.local.yml for development-specific overrides.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # PostgreSQL - Primary Database (per-service databases)
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: noema-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-noema}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-noema_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-noema}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/scripts/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-noema} -d ${POSTGRES_DB:-noema}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Redis - Cache, Sessions, Pub/Sub, Event Bus
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: noema-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Qdrant - Vector Database for Semantic Search
+  # ===========================================================================
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: noema-qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # MinIO - S3-Compatible Object Storage
+  # ===========================================================================
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: noema-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-noema}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-noema_minio_password}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # MinIO Client - Bucket Initialization
+  # ===========================================================================
+  minio-init:
+    image: minio/mc:RELEASE.2024-12-18T15-16-56Z
+    container_name: noema-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set noema http://minio:9000 ${MINIO_ROOT_USER:-noema} ${MINIO_ROOT_PASSWORD:-noema_minio_password};
+      mc mb --ignore-existing noema/content;
+      mc mb --ignore-existing noema/media;
+      mc mb --ignore-existing noema/exports;
+      mc mb --ignore-existing noema/imports;
+      mc mb --ignore-existing noema/backups;
+      exit 0;
+      "
+    networks:
+      - noema-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  noema-network:
+    name: noema-network
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    name: noema-postgres-data
+  redis_data:
+    name: noema-redis-data
+  qdrant_data:
+    name: noema-qdrant-data
+  minio_data:
+    name: noema-minio-data

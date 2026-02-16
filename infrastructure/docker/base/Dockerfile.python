@@ -1,0 +1,112 @@
+# =============================================================================
+# Noema Python Base Image for AI Agents
+# =============================================================================
+# Multi-stage Dockerfile for Python/FastAPI AI agent services
+# Includes ML dependencies and optimizations
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 1: Base - Python with system dependencies
+# -----------------------------------------------------------------------------
+FROM python:3.12-slim AS base
+
+# Prevent Python from buffering stdout/stderr
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies required for ML libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    libpq-dev \
+    libffi-dev \
+    libssl-dev \
+    # For document processing
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    poppler-utils \
+    libmagic1 \
+    # For image processing
+    libopencv-dev \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+WORKDIR /app
+
+# -----------------------------------------------------------------------------
+# Stage 2: Dependencies - Install Python packages
+# -----------------------------------------------------------------------------
+FROM base AS deps
+
+# Install uv for faster package management
+RUN pip install uv
+
+# Copy requirements files
+COPY agents/requirements.txt ./
+COPY agents/requirements-dev.txt ./
+
+# Create virtual environment and install dependencies
+RUN uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN uv pip install -r requirements.txt
+
+# -----------------------------------------------------------------------------
+# Stage 3: Builder - Prepare application
+# -----------------------------------------------------------------------------
+FROM deps AS builder
+
+# Copy agent source code
+COPY agents/ ./agents/
+
+# Install agents as editable packages if they have setup.py
+RUN find ./agents -name "setup.py" -execdir pip install -e . \;
+
+# -----------------------------------------------------------------------------
+# Stage 4: Production Runner
+# -----------------------------------------------------------------------------
+FROM python:3.12-slim AS runner
+
+# Security: Run as non-root user
+RUN groupadd --system --gid 1001 python \
+    && useradd --system --uid 1001 --gid python noema
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    poppler-utils \
+    libmagic1 \
+    libopencv-core4.6 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+WORKDIR /app
+
+# Copy virtual environment from deps stage
+COPY --from=deps /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application code
+COPY --from=builder --chown=noema:python /app/agents ./agents
+
+USER noema
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+
+# Default environment
+ENV PYTHONPATH=/app \
+    PORT=8000
+
+EXPOSE 8000
+
+# Default command (override per agent)
+CMD ["uvicorn", "agents.learning_agent.main:app", "--host", "0.0.0.0", "--port", "8000"]

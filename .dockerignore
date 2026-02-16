@@ -1,0 +1,91 @@
+# Noema Docker ignore file
+# Keeps Docker context small and build times fast
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editors
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Dependencies (rebuilt in Docker)
+node_modules
+**/node_modules
+__pycache__
+**/__pycache__
+*.pyc
+.venv
+venv
+.env.local
+.env.*.local
+
+# Build outputs
+dist
+build
+.next
+.expo
+.turbo
+coverage
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+**/*.test.tsx
+**/*.spec.tsx
+**/tests
+pytest.ini
+.pytest_cache
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Development configs
+.editorconfig
+.eslintcache
+.prettier*
+eslint.config.mjs
+commitlint.config.js
+.husky
+
+# Infrastructure (not needed in service images)
+infrastructure/terraform
+infrastructure/kubernetes
+infrastructure/helm
+*.tfstate*
+.terraform
+
+# Secrets (never include)
+*.pem
+*.key
+*.crt
+secrets
+.env
+.env.*
+!.env.example
+
+# CI/CD
+.github
+
+# Copilot/AI
+.copilot

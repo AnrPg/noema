@@ -1,0 +1,16 @@
+# pnpm workspace configuration for Noema monorepo
+packages:
+  # Shared packages
+  - "packages/*"
+
+  # Backend services (Node.js/TypeScript)
+  - "services/*"
+
+  # AI Agents (Python services have their own setup)
+  - "agents/shared/*"
+
+  # Client applications
+  - "apps/*"
+
+  # Infrastructure tools
+  - "infrastructure/scripts"

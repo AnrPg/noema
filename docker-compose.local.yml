@@ -1,0 +1,145 @@
+# =============================================================================
+# Noema Local Development Overrides
+# =============================================================================
+# This file extends docker-compose.yml with local development configurations.
+# Includes additional tools and observability stack for development.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # PostgreSQL Development Overrides
+  # ===========================================================================
+  postgres:
+    environment:
+      # Enable additional logging for development
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    ports:
+      - "5432:5432" # Expose on standard port for local tools
+
+  # ===========================================================================
+  # Redis Commander - Redis GUI
+  # ===========================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: noema-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # pgAdmin - PostgreSQL GUI
+  # ===========================================================================
+  pgadmin:
+    image: dpage/pgadmin4:8.14
+    container_name: noema-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@noema.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Mailpit - Local Email Testing (replaces real email service)
+  # ===========================================================================
+  mailpit:
+    image: axllent/mailpit:v1.21
+    container_name: noema-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_WEB_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Observability: Prometheus
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: noema-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infrastructure/docker/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Observability: Grafana
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: noema-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: false
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Observability: Jaeger (Distributed Tracing)
+  # ===========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.64
+    container_name: noema-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+    ports:
+      - "${JAEGER_UI_PORT:-16686}:16686"
+      - "6831:6831/udp" # Jaeger thrift compact
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    networks:
+      - noema-network
+
+# =============================================================================
+# Additional Volumes for Local Development
+# =============================================================================
+volumes:
+  pgadmin_data:
+    name: noema-pgadmin-data
+  prometheus_data:
+    name: noema-prometheus-data
+  grafana_data:
+    name: noema-grafana-data

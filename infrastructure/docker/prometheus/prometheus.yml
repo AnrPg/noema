@@ -1,0 +1,73 @@
+# Prometheus Configuration for Noema
+# ============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: "noema-monitor"
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rule files
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Node.js Services
+  - job_name: "noema-services"
+    static_configs:
+      - targets:
+          - "host.docker.internal:3001" # user-service
+          - "host.docker.internal:3002" # content-service
+          - "host.docker.internal:3003" # scheduler-service
+          - "host.docker.internal:3004" # session-service
+          - "host.docker.internal:3005" # gamification-service
+          - "host.docker.internal:3006" # knowledge-graph-service
+          - "host.docker.internal:3007" # metacognition-service
+          - "host.docker.internal:3008" # strategy-service
+          - "host.docker.internal:3009" # ingestion-service
+          - "host.docker.internal:3010" # analytics-service
+          - "host.docker.internal:3011" # sync-service
+          - "host.docker.internal:3012" # vector-service
+          - "host.docker.internal:3013" # notification-service
+          - "host.docker.internal:3014" # media-service
+          - "host.docker.internal:3015" # collaboration-service
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  # Python AI Agents
+  - job_name: "noema-agents"
+    static_configs:
+      - targets:
+          - "host.docker.internal:8001" # learning-agent
+          - "host.docker.internal:8002" # diagnostic-agent
+          - "host.docker.internal:8003" # strategy-agent
+          - "host.docker.internal:8004" # content-generation-agent
+          - "host.docker.internal:8005" # ingestion-agent
+          - "host.docker.internal:8006" # knowledge-graph-agent
+          - "host.docker.internal:8007" # socratic-tutor-agent
+          - "host.docker.internal:8008" # calibration-agent
+          - "host.docker.internal:8009" # governance-agent
+          - "host.docker.internal:8010" # taxonomy-curator-agent
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  # Redis Metrics (if redis_exporter is configured)
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis:6379"]
+
+  # PostgreSQL Metrics (if postgres_exporter is configured)
+  - job_name: "postgresql"
+    static_configs:
+      - targets: ["postgres:5432"]

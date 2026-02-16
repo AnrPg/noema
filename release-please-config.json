@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "draft": false,
+      "prerelease": false
+    },
+    "packages/config": {
+      "release-type": "node",
+      "component": "@noema/config"
+    },
+    "packages/contracts": {
+      "release-type": "node",
+      "component": "@noema/contracts"
+    },
+    "packages/events": {
+      "release-type": "node",
+      "component": "@noema/events"
+    },
+    "packages/types": {
+      "release-type": "node",
+      "component": "@noema/types"
+    },
+    "packages/utils": {
+      "release-type": "node",
+      "component": "@noema/utils"
+    },
+    "packages/validation": {
+      "release-type": "node",
+      "component": "@noema/validation"
+    }
+  },
+  "changelog-sections": [
+    { "type": "feat", "section": "🚀 Features" },
+    { "type": "fix", "section": "🐛 Bug Fixes" },
+    { "type": "perf", "section": "⚡ Performance" },
+    { "type": "refactor", "section": "♻️ Refactoring" },
+    { "type": "docs", "section": "📚 Documentation" },
+    { "type": "test", "section": "✅ Tests" },
+    { "type": "build", "section": "🔧 Build" },
+    { "type": "ci", "section": "🔄 CI/CD" },
+    { "type": "chore", "section": "🧹 Maintenance", "hidden": true }
+  ],
+  "group-pull-request-title-pattern": "chore: release ${version}",
+  "pull-request-title-pattern": "chore: release ${component} ${version}",
+  "include-component-in-tag": true,
+  "include-v-in-tag": true,
+  "tag-separator": "-"
+}

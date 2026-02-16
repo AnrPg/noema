@@ -1,0 +1,67 @@
+# EditorConfig helps maintain consistent coding styles across editors
+# https://editorconfig.org
+
+root = true
+
+# All files
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# TypeScript/JavaScript
+[*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}]
+indent_size = 2
+max_line_length = 100
+
+# JSON
+[*.json]
+indent_size = 2
+
+# YAML
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = 80
+
+# Prisma
+[*.prisma]
+indent_size = 2
+
+# Python (for agents)
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# Shell scripts
+[*.sh]
+indent_size = 2
+
+# Makefiles
+[Makefile]
+indent_style = tab
+indent_size = 4
+
+# Docker
+[Dockerfile*]
+indent_size = 4
+
+[docker-compose*.yml]
+indent_size = 2
+
+# Kubernetes/Helm
+[*.{yaml,yml}]
+indent_size = 2
+
+# Terraform
+[*.tf]
+indent_size = 2
+
+[*.tfvars]
+indent_size = 2
