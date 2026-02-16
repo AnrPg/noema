@@ -1,0 +1,72 @@
+NOEMA RESEARCH-ONLY ACADEMIC LICENSE (NRAAL) v1.0
+
+*(Allows Universities & Academic Research, Still Non-Commercial)*
+
+Copyright © [YEAR] Nikolas Rigas
+All Rights Reserved.
+
+---
+
+## 1. License Grant
+
+You are granted a limited, non-exclusive, non-transferable license to:
+
+a) Use the Software for academic research and teaching purposes only.
+b) Run experiments and publish academic papers referencing results.
+c) Modify the Software for internal research use.
+
+---
+
+## 2. Academic Use Only
+
+Permitted use includes:
+
+* University coursework
+* Non-commercial academic research
+* Peer-reviewed publications
+* Research prototypes not deployed commercially
+
+---
+
+## 3. Prohibited Uses
+
+You may NOT:
+
+a) Use the Software in industry-sponsored commercial research.
+b) Deploy it in production systems.
+c) Offer it as SaaS or platform.
+d) Create a startup based on it.
+e) Re-implement or replicate its architecture for commercial intent.
+f) Distribute modified versions publicly.
+
+---
+
+## 4. Publication Clause
+
+You may publish research results, but:
+
+* You may not publish substantial portions of the source code.
+* You must attribute Noema.
+
+---
+
+## 5. No Commercial Transition
+
+If research leads to commercial interest, a separate commercial license must be negotiated.
+
+---
+
+## 6. Trademark Note
+
+NOEMA™, Noema™, and associated logos, system names, and architectural identifiers are trademarks of Apostolos-Nikolaos Rigas.
+
+This License does not grant permission to use the NOEMA™ name, branding, domain names, or product identifiers in any derivative work, fork, or distribution without prior written consent.
+
+You may reference NOEMA™ solely for attribution purposes.
+
+---
+
+## 7. Ownership
+
+All IP remains exclusively with Apostolos-Nikolaos Rigas.
+

@@ -1,0 +1,38 @@
+NOEMA LICENSE CLASSIFICATION NOTICE
+
+Copyright © [YEAR] Apostolos-Nikolaos Rigas
+All Rights Reserved.
+
+Noema is licensed under a dual non-commercial structure.
+
+1. Academic Use:
+   Universities, students, and non-commercial academic researchers are licensed under:
+   NOEMA RESEARCH-ONLY ACADEMIC LICENSE (NRAAL) v1.0
+   See: /LICENSES/NOEMA-ACADEMIC-LICENSE.txt
+
+2. All Other Non-Commercial Use:
+   Individuals and non-academic users evaluating the software are licensed under:
+   NOEMA NON-COMMERCIAL PROTECTIVE LICENSE (NNPL) v1.0
+   See: /LICENSES/NOEMA-NONCOMMERCIAL-LICENSE.txt
+
+3. Commercial Use:
+   Any commercial, corporate, startup, SaaS, internal business, funded research,
+   or competitive usage requires a separate commercial agreement.
+
+You may not use the Software, its source code, architecture, ontologies, documentation, or system outputs to:
+
+a) Train, fine-tune, distill, align, or optimize any machine learning model.
+b) Create embeddings derived from the Software’s internal structures.
+c) Construct synthetic datasets derived from the Software.
+d) Extract architectural patterns for training foundation models.
+e) Generate derivative agent orchestration systems using learned representations from the Software.
+
+This prohibition applies to both commercial and non-commercial AI systems.
+
+
+For commercial licensing inquiries, contact:
+[YOUR EMAIL]
+
+All contributions require acceptance of the Contributor Agreement:
+See /AGREEMENTS/NOEMA-CONTRIBUTOR-AGREEMENT.txt
+

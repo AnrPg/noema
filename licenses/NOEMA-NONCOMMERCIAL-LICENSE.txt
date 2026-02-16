@@ -1,0 +1,89 @@
+NOEMA STARTUP PROTECTIVE LICENSE (NSPL) v1.0
+
+*(Maximum Commercial & Competitive Protection)*
+
+Copyright © [YEAR] Nikolas Rigas
+All Rights Reserved.
+
+## 1. Definitions
+
+**Software** means the Noema source code, models, architecture, schemas, ontologies, documentation, agents, prompts, APIs, and any associated materials.
+
+**Commercial Use** means any use intended for or resulting in revenue, funding, customer acquisition, competitive advantage, or operational benefit in a commercial entity.
+
+**Derivative Work** includes any modification, adaptation, port, re-implementation, re-architecture, or system inspired by or substantially similar to the Software.
+
+---
+
+## 2. Limited License Grant
+
+You are granted a revocable, non-exclusive, non-transferable, non-sublicensable license to:
+
+a) View and study the Source Code.
+b) Compile and execute it for evaluation purposes only.
+c) Submit bug reports and proposed patches to the Licensor.
+
+No other rights are granted.
+
+---
+
+## 3. Strict Prohibitions
+
+You may NOT:
+
+a) Use the Software for any Commercial Use.
+b) Integrate the Software into any product or service.
+c) Offer it as SaaS, API, platform, or internal infrastructure.
+d) Distribute copies (modified or unmodified).
+e) Create or distribute derivative works.
+f) Use the Software to build or assist in building a competing system.
+g) Port, translate, or re-implement the Software into another language or framework if derived from the Source Code.
+h) Use the Software or its structure to train or improve AI models intended for commercial deployment.
+
+---
+
+## 4. Competitive Use Restriction
+
+You may not use the Software:
+
+* To develop products in the same problem domain
+* To replicate its architecture, ontologies, workflow design, agent orchestration, or core system concepts
+* To benchmark, reverse-engineer, or derive competitive intelligence
+
+---
+
+## 5. Contributions
+
+By submitting a patch or suggestion:
+
+* You assign all rights in that contribution to the Licensor.
+* You acknowledge no ownership claim in the integrated code.
+
+---
+
+## 6. Ownership
+
+All rights, including derivative and commercial rights, remain exclusively with Nikolas Rigas.
+
+---
+
+## 7. Termination
+
+Any violation terminates this license immediately.
+
+---
+
+## 8. Trademark Note
+
+NOEMA™, Noema™, and associated logos, system names, and architectural identifiers are trademarks of Apostolos-Nikolaos Rigas.
+
+This License does not grant permission to use the NOEMA™ name, branding, domain names, or product identifiers in any derivative work, fork, or distribution without prior written consent.
+
+You may reference NOEMA™ solely for attribution purposes.
+
+---
+
+## 9. Governing Law
+
+This License is governed by the laws of Greece and the European Union.
+

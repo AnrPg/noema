@@ -1,0 +1,39 @@
+NOEMA CONTRIBUTOR LICENSE AGREEMENT (CLA) v1.0
+
+Copyright © [YEAR] Apostolos-Nikolaos Rigas
+
+1. Contribution Grant
+
+By submitting any pull request, patch, suggestion, or modification (“Contribution”), you:
+
+a) Represent that you have the legal right to submit the Contribution.
+b) Assign all intellectual property rights in the Contribution to Apostolos-Nikolaos Rigas.
+c) Waive any moral rights to the extent permitted by law.
+
+2. Ownership
+
+All Contributions become the exclusive property of the Licensor.
+
+You retain no ownership or licensing claim once merged.
+
+3. No Implied Rights
+
+Submitting a Contribution does not grant:
+
+Equity
+
+Revenue share
+
+Co-authorship
+
+Partnership
+
+Commercial rights
+
+4. Warranty Disclaimer
+
+You submit Contributions “as is” without warranty.
+
+5. Governing Law
+
+This Agreement is governed by Greek and EU law.
