@@ -1,6 +1,7 @@
 # 🎯 Design Patterns for Noema Architecture
 
-**Complete guide to design patterns that will benefit your AI-enhanced spaced repetition platform**
+**Complete guide to design patterns that will benefit your AI-enhanced spaced
+repetition platform**
 
 ---
 
@@ -22,14 +23,17 @@
 ## 1. 🏗️ Architectural Patterns
 
 ### 1.1 Microservices Architecture
-**What:** Decompose application into small, independent services
-**Why for Noema:** 
+
+**What:** Decompose application into small, independent services **Why for
+Noema:**
+
 - 15 services can scale independently
 - Different services can use different tech stacks
 - Easier to update individual learning algorithms
 - Fault isolation (one service failure doesn't break everything)
 
 **Implementation:**
+
 ```
 noema/
 ├── user-service/           # User management
@@ -42,14 +46,17 @@ noema/
 ---
 
 ### 1.2 Event-Driven Architecture (EDA)
-**What:** Services communicate via events instead of direct calls
-**Why for Noema:**
+
+**What:** Services communicate via events instead of direct calls **Why for
+Noema:**
+
 - Loose coupling between services
 - Async processing (e.g., analytics don't block card review)
 - Event replay for debugging
 - Audit trail for learning progress
 
 **Implementation:**
+
 ```typescript
 // Card created → Multiple services react
 card.created event →
@@ -62,13 +69,15 @@ card.created event →
 ---
 
 ### 1.3 CQRS (Command Query Responsibility Segregation)
-**What:** Separate read and write models
-**Why for Noema:**
+
+**What:** Separate read and write models **Why for Noema:**
+
 - Reads (dashboard, analytics) don't affect writes (card reviews)
 - Optimize each independently
 - Better performance for complex queries
 
 **Implementation:**
+
 ```typescript
 // Write model
 interface CreateCardCommand {
@@ -89,14 +98,16 @@ interface CardReadModel {
 ---
 
 ### 1.4 Event Sourcing
-**What:** Store state changes as events, not current state
-**Why for Noema:**
+
+**What:** Store state changes as events, not current state **Why for Noema:**
+
 - Perfect for learning analytics (track every review)
 - Can rebuild state at any point in time
 - Audit trail for compliance
 - Debug user learning patterns
 
 **Implementation:**
+
 ```typescript
 // Instead of storing current state:
 Card { id, difficulty: 5.2, interval: 30 }
@@ -115,13 +126,15 @@ Card { id, difficulty: 5.2, interval: 30 }
 ## 2. 🔄 Microservices Patterns
 
 ### 2.1 API Gateway Pattern
-**What:** Single entry point for all client requests
-**Why for Noema:**
+
+**What:** Single entry point for all client requests **Why for Noema:**
+
 - Mobile app doesn't need to know about 15 services
 - Centralized auth, rate limiting, logging
 - Routing, request aggregation
 
 **Implementation:**
+
 ```
 Mobile App → API Gateway → Routes to:
   - /cards → content-service
@@ -132,12 +145,14 @@ Mobile App → API Gateway → Routes to:
 ---
 
 ### 2.2 Backend for Frontend (BFF)
-**What:** Separate backend for each client type
-**Why for Noema:**
+
+**What:** Separate backend for each client type **Why for Noema:**
+
 - Mobile needs different data than web admin
 - Optimize for each client's needs
 
 **Implementation:**
+
 ```
 Mobile BFF → Optimized for mobile (minimal data)
 Web Admin BFF → Rich data for analytics dashboards
@@ -146,19 +161,21 @@ Web Admin BFF → Rich data for analytics dashboards
 ---
 
 ### 2.3 Saga Pattern
-**What:** Manage distributed transactions across services
-**Why for Noema:**
+
+**What:** Manage distributed transactions across services **Why for Noema:**
+
 - Complex operations span multiple services
 - Need compensating transactions on failure
 
 **Implementation:**
+
 ```typescript
 // Creating a deck with initial cards
 CreateDeckSaga:
   1. content-service.createDeck()
   2. knowledge-graph-service.createDeckNode()
   3. gamification-service.setupDeckAchievements()
-  
+
   If step 2 fails:
   - Compensate: content-service.deleteDeck()
 ```
@@ -166,12 +183,14 @@ CreateDeckSaga:
 ---
 
 ### 2.4 Strangler Fig Pattern
-**What:** Gradually replace legacy system
-**Why for Noema:**
+
+**What:** Gradually replace legacy system **Why for Noema:**
+
 - Migrate from monolith to microservices gradually
 - Reduce risk
 
 **Implementation:**
+
 ```
 Phase 1: Extract user-service
 Phase 2: Extract content-service
@@ -184,37 +203,42 @@ Phase 3: Extract scheduler-service
 ## 3. 📡 Event-Driven Patterns
 
 ### 3.1 Pub/Sub Pattern
-**What:** Publishers don't know about subscribers
-**Why for Noema:**
+
+**What:** Publishers don't know about subscribers **Why for Noema:**
+
 - Add new subscribers without changing publishers
 - Multiple services can react to same event
 
 **Implementation:**
+
 ```typescript
 // Publisher (content-service)
 eventBus.publish('card.created', { cardId: '123' });
 
 // Subscribers (don't know about each other)
-gamification-service.on('card.created', awardXP);
-analytics-service.on('card.created', trackCreation);
-knowledge-graph-service.on('card.created', linkConcepts);
+gamification - service.on('card.created', awardXP);
+analytics - service.on('card.created', trackCreation);
+knowledge - graph - service.on('card.created', linkConcepts);
 ```
 
 ---
 
 ### 3.2 Outbox Pattern
-**What:** Ensure database updates and events are published atomically
-**Why for Noema:**
+
+**What:** Ensure database updates and events are published atomically **Why for
+Noema:**
+
 - No lost events (critical for learning progress)
 - Consistency between database and event stream
 
 **Implementation:**
+
 ```typescript
 // Single transaction
 await db.transaction(async (tx) => {
   // 1. Update database
   await tx.cards.create({ id: '123', ... });
-  
+
   // 2. Write to outbox table
   await tx.outbox.create({
     eventType: 'card.created',
@@ -229,12 +253,14 @@ await db.transaction(async (tx) => {
 ---
 
 ### 3.3 Event Carried State Transfer
-**What:** Events contain enough data for subscribers
-**Why for Noema:**
+
+**What:** Events contain enough data for subscribers **Why for Noema:**
+
 - Subscribers don't need to query publisher
 - Reduces coupling
 
 **Implementation:**
+
 ```typescript
 // Good: Full data in event
 {
@@ -254,54 +280,37 @@ await db.transaction(async (tx) => {
 
 ## 4. 🎨 Domain-Driven Design Patterns
 
-### 4.1 Bounded Context
-**What:** Clear boundaries between domains
-**Why for Noema:**
-- Each service has its own model
-- Same concept can mean different things
+### 4.1 Shared Core Model
 
-**Implementation:**
-```
-Content Context: Card = { id, front, back, type }
-Scheduler Context: Card = { id, difficulty, stability, interval }
-Knowledge Graph Context: Card = { id, conceptNodes, relationships }
-```
+**What:** Common domain model across services and each Service Uses What It
+Needs while APIs Return Full Entity. **Why for Noema:**
+
+- Consistency across services
+- Easier to understand domain concepts
+- Avoids duplication of domain logic
+- Each service can use a subset of the model relevant to its context
 
 ---
 
-### 4.2 Aggregates
-**What:** Cluster of entities treated as single unit
-**Why for Noema:**
+### 4.2 Aggregates (Composite pattern)
+
+**What:** Cluster of entities treated as single unit **Why for Noema:**
+
 - Transaction boundaries
 - Consistency rules
-
-**Implementation:**
-```typescript
-// Deck is aggregate root
-class Deck {
-  private cards: Card[];  // Entities within aggregate
-  
-  addCard(card: Card) {
-    // Business rules enforced here
-    if (this.cards.length >= this.maxCards) {
-      throw new Error('Deck full');
-    }
-    this.cards.push(card);
-    this.publishEvent('card.added', { deckId: this.id, cardId: card.id });
-  }
-}
-```
 
 ---
 
 ### 4.3 Repository Pattern
-**What:** Abstract data access
-**Why for Noema:**
+
+**What:** Abstract data access **Why for Noema:**
+
 - Domain layer doesn't know about database
 - Easy to swap databases
 - Testable
 
 **Implementation:**
+
 ```typescript
 interface CardRepository {
   findById(id: string): Promise<Card | null>;
@@ -321,12 +330,14 @@ class PrismaCardRepository implements CardRepository {
 ---
 
 ### 4.4 Domain Events
-**What:** Events that domain experts care about
-**Why for Noema:**
+
+**What:** Events that domain experts care about **Why for Noema:**
+
 - Capture important business events
 - Drive event-driven architecture
 
 **Implementation:**
+
 ```typescript
 // Domain events
 - CardMastered (user achieved 95% confidence)
@@ -338,12 +349,14 @@ class PrismaCardRepository implements CardRepository {
 ---
 
 ### 4.5 Anti-Corruption Layer
-**What:** Translate between different models
-**Why for Noema:**
+
+**What:** Translate between different models **Why for Noema:**
+
 - Protect domain from external systems
 - Clean integration
 
 **Implementation:**
+
 ```typescript
 // External LLM API returns different format
 class LLMAdapter {
@@ -352,7 +365,7 @@ class LLMAdapter {
     return {
       front: llmResponse.question,
       back: llmResponse.answer,
-      hints: llmResponse.explanations.map(this.toHint)
+      hints: llmResponse.explanations.map(this.toHint),
     };
   }
 }
@@ -363,12 +376,14 @@ class LLMAdapter {
 ## 5. 🤖 Agent & AI Patterns
 
 ### 5.1 Strategy Pattern
-**What:** Interchangeable algorithms
-**Why for Noema:**
+
+**What:** Interchangeable algorithms **Why for Noema:**
+
 - Different learning strategies per user
 - Easy to add new strategies
 
 **Implementation:**
+
 ```typescript
 interface LearningStrategy {
   selectNextCard(deck: Deck, user: User): Card;
@@ -387,20 +402,23 @@ class GoalDrivenStrategy implements LearningStrategy {
 }
 
 // Runtime selection
-const strategy = user.currentMode === 'exam' 
-  ? new GoalDrivenStrategy() 
-  : new ExplorationStrategy();
+const strategy =
+  user.currentMode === 'exam'
+    ? new GoalDrivenStrategy()
+    : new ExplorationStrategy();
 ```
 
 ---
 
 ### 5.2 Chain of Responsibility
-**What:** Pass request through chain of handlers
-**Why for Noema:**
+
+**What:** Pass request through chain of handlers **Why for Noema:**
+
 - Metacognitive layers process in order
 - Each layer can modify or stop processing
 
 **Implementation:**
+
 ```typescript
 // 8 metacognitive layers
 class MetacognitionPipeline {
@@ -414,7 +432,7 @@ class MetacognitionPipeline {
     new KnowledgeGraphLayer(),
     new WatchtowerLayer(),
   ];
-  
+
   async process(input: ReviewSession): Promise<EnrichedSession> {
     let result = input;
     for (const layer of this.layers) {
@@ -429,25 +447,27 @@ class MetacognitionPipeline {
 ---
 
 ### 5.3 Observer Pattern
-**What:** Objects notify observers of changes
-**Why for Noema:**
+
+**What:** Objects notify observers of changes **Why for Noema:**
+
 - React to learning events
 - Multiple agents observe same data
 
 **Implementation:**
+
 ```typescript
 class UserKnowledgeState {
   private observers: Observer[] = [];
-  
+
   attach(observer: Observer) {
     this.observers.push(observer);
   }
-  
+
   updateKnowledge(concept: Concept, mastery: number) {
     this.knowledge.set(concept, mastery);
     this.notifyObservers();
   }
-  
+
   private notifyObservers() {
     for (const observer of this.observers) {
       observer.update(this);
@@ -464,22 +484,24 @@ calibrationAgent.observe(userState);
 ---
 
 ### 5.4 Template Method Pattern
-**What:** Define skeleton, subclasses fill in steps
-**Why for Noema:**
+
+**What:** Define skeleton, subclasses fill in steps **Why for Noema:**
+
 - All agents follow same structure
 - Customize specific steps
 
 **Implementation:**
+
 ```typescript
 abstract class BaseAgent {
   async execute(input: AgentInput): Promise<AgentOutput> {
     const validated = this.validateInput(input);
     const context = this.buildContext(validated);
-    const result = await this.executeAgentLoop(context);  // Abstract
+    const result = await this.executeAgentLoop(context); // Abstract
     const enriched = this.enrichResult(result);
     return this.formatOutput(enriched);
   }
-  
+
   protected abstract executeAgentLoop(context: Context): Promise<Result>;
 }
 
@@ -493,24 +515,29 @@ class LearningAgent extends BaseAgent {
 ---
 
 ### 5.5 Decorator Pattern
-**What:** Add behavior to objects dynamically
-**Why for Noema:**
+
+**What:** Add behavior to objects dynamically **Why for Noema:**
+
 - Add capabilities to agents at runtime
 - Compose complex behaviors
 
 **Implementation:**
+
 ```typescript
 interface Agent {
   execute(input: Input): Promise<Output>;
 }
 
 class CachingDecorator implements Agent {
-  constructor(private agent: Agent, private cache: Cache) {}
-  
+  constructor(
+    private agent: Agent,
+    private cache: Cache
+  ) {}
+
   async execute(input: Input): Promise<Output> {
     const cached = await this.cache.get(input);
     if (cached) return cached;
-    
+
     const result = await this.agent.execute(input);
     await this.cache.set(input, result);
     return result;
@@ -518,8 +545,11 @@ class CachingDecorator implements Agent {
 }
 
 class LoggingDecorator implements Agent {
-  constructor(private agent: Agent, private logger: Logger) {}
-  
+  constructor(
+    private agent: Agent,
+    private logger: Logger
+  ) {}
+
   async execute(input: Input): Promise<Output> {
     this.logger.info('Executing agent', { input });
     const result = await this.agent.execute(input);
@@ -530,10 +560,7 @@ class LoggingDecorator implements Agent {
 
 // Compose
 const agent = new LoggingDecorator(
-  new CachingDecorator(
-    new LearningAgent(),
-    cache
-  ),
+  new CachingDecorator(new LearningAgent(), cache),
   logger
 );
 ```
@@ -543,24 +570,26 @@ const agent = new LoggingDecorator(
 ## 6. 💾 Data Patterns
 
 ### 6.1 Cache-Aside Pattern
-**What:** Application manages cache
-**Why for Noema:**
+
+**What:** Application manages cache **Why for Noema:**
+
 - Fast access to frequently reviewed cards
 - Reduce database load
 
 **Implementation:**
+
 ```typescript
 async getCard(id: string): Promise<Card> {
   // 1. Try cache
   const cached = await redis.get(`card:${id}`);
   if (cached) return JSON.parse(cached);
-  
+
   // 2. Miss → Load from DB
   const card = await db.cards.findUnique({ where: { id } });
-  
+
   // 3. Store in cache
   await redis.set(`card:${id}`, JSON.stringify(card), 'EX', 3600);
-  
+
   return card;
 }
 ```
@@ -568,19 +597,21 @@ async getCard(id: string): Promise<Card> {
 ---
 
 ### 6.2 Read-Through / Write-Through Cache
-**What:** Cache intercepts all read/writes
-**Why for Noema:**
+
+**What:** Cache intercepts all read/writes **Why for Noema:**
+
 - Simpler application code
 - Consistent caching
 
 **Implementation:**
+
 ```typescript
 class CachedCardRepository implements CardRepository {
   constructor(
     private db: PrismaCardRepository,
     private cache: Redis
   ) {}
-  
+
   async findById(id: string): Promise<Card> {
     return await this.cache.getOrSet(
       `card:${id}`,
@@ -594,15 +625,17 @@ class CachedCardRepository implements CardRepository {
 ---
 
 ### 6.3 Materialized View Pattern
-**What:** Pre-compute and store query results
-**Why for Noema:**
+
+**What:** Pre-compute and store query results **Why for Noema:**
+
 - Fast analytics dashboards
 - Complex knowledge graph queries
 
 **Implementation:**
+
 ```typescript
 // Instead of computing on every request
-SELECT u.*, 
+SELECT u.*,
        COUNT(DISTINCT d.id) as deck_count,
        COUNT(c.id) as card_count,
        AVG(r.rating) as avg_rating
@@ -620,13 +653,15 @@ REFRESH MATERIALIZED VIEW user_statistics;
 ---
 
 ### 6.4 Database per Service Pattern
-**What:** Each service has its own database
-**Why for Noema:**
+
+**What:** Each service has its own database **Why for Noema:**
+
 - True service independence
 - Optimize database for service needs
 - Scale independently
 
 **Implementation:**
+
 ```
 user-service → PostgreSQL (relational user data)
 knowledge-graph-service → Neo4j (graph data)
@@ -639,23 +674,25 @@ cache-service → Redis (ephemeral data)
 ## 7. 🛡️ Resilience Patterns
 
 ### 7.1 Circuit Breaker Pattern
-**What:** Stop calling failing service
-**Why for Noema:**
+
+**What:** Stop calling failing service **Why for Noema:**
+
 - Prevent cascade failures
 - Fail fast
 
 **Implementation:**
+
 ```typescript
 class CircuitBreaker {
-  private state = 'closed';  // closed | open | half-open
+  private state = 'closed'; // closed | open | half-open
   private failures = 0;
   private threshold = 5;
-  
+
   async call<T>(fn: () => Promise<T>): Promise<T> {
     if (this.state === 'open') {
       throw new Error('Circuit breaker open');
     }
-    
+
     try {
       const result = await fn();
       this.onSuccess();
@@ -665,12 +702,12 @@ class CircuitBreaker {
       throw error;
     }
   }
-  
+
   private onFailure() {
     this.failures++;
     if (this.failures >= this.threshold) {
       this.state = 'open';
-      setTimeout(() => this.state = 'half-open', 60000);
+      setTimeout(() => (this.state = 'half-open'), 60000);
     }
   }
 }
@@ -679,12 +716,14 @@ class CircuitBreaker {
 ---
 
 ### 7.2 Retry Pattern
-**What:** Retry failed operations
-**Why for Noema:**
+
+**What:** Retry failed operations **Why for Noema:**
+
 - Handle transient failures
 - Improve reliability
 
 **Implementation:**
+
 ```typescript
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
@@ -696,7 +735,7 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (error) {
       if (i === maxRetries - 1) throw error;
-      
+
       const delay = baseDelay * Math.pow(2, i); // Exponential backoff
       await sleep(delay);
     }
@@ -708,12 +747,14 @@ async function retryWithBackoff<T>(
 ---
 
 ### 7.3 Bulkhead Pattern
-**What:** Isolate resources to prevent total failure
-**Why for Noema:**
+
+**What:** Isolate resources to prevent total failure **Why for Noema:**
+
 - One heavy query doesn't block all requests
 - Resource isolation
 
 **Implementation:**
+
 ```typescript
 // Separate thread pools
 const normalPool = new Pool({ size: 10 });
@@ -722,21 +763,21 @@ const aiAgentPool = new Pool({ size: 5 });
 
 // Heavy operations use dedicated pool
 async function generateCards(topic: string) {
-  return await aiAgentPool.execute(() => 
-    aiService.generateCards(topic)
-  );
+  return await aiAgentPool.execute(() => aiService.generateCards(topic));
 }
 ```
 
 ---
 
 ### 7.4 Timeout Pattern
-**What:** Set time limits on operations
-**Why for Noema:**
+
+**What:** Set time limits on operations **Why for Noema:**
+
 - Prevent indefinite waiting
 - Maintain responsiveness
 
 **Implementation:**
+
 ```typescript
 async function withTimeout<T>(
   promise: Promise<T>,
@@ -744,16 +785,16 @@ async function withTimeout<T>(
 ): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => 
+    new Promise<T>((_, reject) =>
       setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-    )
+    ),
   ]);
 }
 
 // Usage
 const cards = await withTimeout(
   aiService.generateCards(topic),
-  5000  // 5 second timeout
+  5000 // 5 second timeout
 );
 ```
 
@@ -762,12 +803,14 @@ const cards = await withTimeout(
 ## 8. 🌐 API Patterns
 
 ### 8.1 Pagination Pattern
-**What:** Return data in chunks
-**Why for Noema:**
+
+**What:** Return data in chunks **Why for Noema:**
+
 - Handle large decks
 - Better performance
 
 **Implementation:**
+
 ```typescript
 // Cursor-based (recommended)
 interface PaginatedResponse<T> {
@@ -792,17 +835,19 @@ interface OffsetPaginatedResponse<T> {
 ---
 
 ### 8.2 Rate Limiting Pattern
-**What:** Limit request frequency
-**Why for Noema:**
+
+**What:** Limit request frequency **Why for Noema:**
+
 - Prevent abuse
 - Fair resource allocation
 
 **Implementation:**
+
 ```typescript
 class TokenBucket {
   private tokens: number;
   private lastRefill: number;
-  
+
   constructor(
     private capacity: number,
     private refillRate: number
@@ -810,7 +855,7 @@ class TokenBucket {
     this.tokens = capacity;
     this.lastRefill = Date.now();
   }
-  
+
   tryConsume(): boolean {
     this.refill();
     if (this.tokens > 0) {
@@ -819,12 +864,12 @@ class TokenBucket {
     }
     return false;
   }
-  
+
   private refill() {
     const now = Date.now();
     const elapsed = now - this.lastRefill;
-    const tokensToAdd = elapsed * this.refillRate / 1000;
-    
+    const tokensToAdd = (elapsed * this.refillRate) / 1000;
+
     this.tokens = Math.min(this.capacity, this.tokens + tokensToAdd);
     this.lastRefill = now;
   }
@@ -834,12 +879,14 @@ class TokenBucket {
 ---
 
 ### 8.3 Versioning Pattern
-**What:** Support multiple API versions
-**Why for Noema:**
+
+**What:** Support multiple API versions **Why for Noema:**
+
 - Backward compatibility
 - Gradual migration
 
 **Implementation:**
+
 ```typescript
 // URL versioning
 app.get('/v1/cards', handlerV1);
@@ -860,35 +907,39 @@ app.get('/cards', (req, res) => {
 ## 9. 🧪 Testing Patterns
 
 ### 9.1 Test Pyramid
-**What:** Many unit tests, fewer integration, few E2E
-**Why for Noema:**
+
+**What:** Many unit tests, fewer integration, few E2E **Why for Noema:**
+
 - Fast feedback
 - Reliable tests
 
 **Implementation:**
+
 ```
      /\      E2E: Test full user flows (10%)
-    /  \     
+    /  \
    /____\    Integration: Test service boundaries (30%)
-  /      \   
+  /      \
  /________\  Unit: Test business logic (60%)
 ```
 
 ---
 
 ### 9.2 Contract Testing
-**What:** Test API contracts between services
-**Why for Noema:**
+
+**What:** Test API contracts between services **Why for Noema:**
+
 - Catch breaking changes early
 - Independent deployment
 
 **Implementation:**
+
 ```typescript
 // content-service publishes contract
 describe('Card API Contract', () => {
   it('should return card with required fields', async () => {
     const card = await api.get('/cards/123');
-    
+
     expect(card).toMatchObject({
       id: expect.any(String),
       content: {
@@ -906,12 +957,14 @@ describe('Card API Contract', () => {
 ---
 
 ### 9.3 Test Doubles (Mocks, Stubs, Fakes)
-**What:** Replace dependencies in tests
-**Why for Noema:**
+
+**What:** Replace dependencies in tests **Why for Noema:**
+
 - Fast, isolated tests
 - Test edge cases
 
 **Implementation:**
+
 ```typescript
 // Mock
 const mockCardRepo = {
@@ -929,7 +982,7 @@ class StubLLMService implements LLMService {
 // Fake (in-memory)
 class FakeCardRepository implements CardRepository {
   private cards = new Map<string, Card>();
-  
+
   async findById(id: string) {
     return this.cards.get(id) || null;
   }
@@ -941,21 +994,23 @@ class FakeCardRepository implements CardRepository {
 ## 10. ⚡ Performance Patterns
 
 ### 10.1 Lazy Loading
-**What:** Load data when needed
-**Why for Noema:**
+
+**What:** Load data when needed **Why for Noema:**
+
 - Faster initial load
 - Reduce bandwidth
 
 **Implementation:**
+
 ```typescript
 // Don't load all categories upfront
 class Deck {
   private _categories?: Category[];
-  
+
   async getCategories(): Promise<Category[]> {
     if (!this._categories) {
       this._categories = await db.categories.findMany({
-        where: { deckId: this.id }
+        where: { deckId: this.id },
       });
     }
     return this._categories;
@@ -966,12 +1021,14 @@ class Deck {
 ---
 
 ### 10.2 Batch Processing
-**What:** Process multiple items together
-**Why for Noema:**
+
+**What:** Process multiple items together **Why for Noema:**
+
 - Reduce database round trips
 - Better throughput
 
 **Implementation:**
+
 ```typescript
 // Instead of
 for (const card of cards) {
@@ -980,19 +1037,21 @@ for (const card of cards) {
 
 // Do
 await db.cards.updateMany({
-  data: cards.map(c => ({ where: { id: c.id }, data: c }))
+  data: cards.map((c) => ({ where: { id: c.id }, data: c })),
 });
 ```
 
 ---
 
 ### 10.3 Debouncing / Throttling
-**What:** Limit function execution rate
-**Why for Noema:**
+
+**What:** Limit function execution rate **Why for Noema:**
+
 - Reduce API calls as user types
 - Better UX
 
 **Implementation:**
+
 ```typescript
 // Debounce: Execute after quiet period
 const debouncedSearch = debounce(async (query: string) => {
@@ -1011,6 +1070,7 @@ const throttledSave = throttle(async (data: CardData) => {
 ## 📊 Summary: Which Patterns for Which Parts?
 
 ### Core Platform
+
 - ✅ Microservices Architecture
 - ✅ Event-Driven Architecture
 - ✅ API Gateway
@@ -1018,6 +1078,7 @@ const throttledSave = throttle(async (data: CardData) => {
 - ✅ Event Sourcing (for reviews)
 
 ### Services Layer
+
 - ✅ Repository Pattern
 - ✅ Domain Events
 - ✅ Bounded Context
@@ -1025,6 +1086,7 @@ const throttledSave = throttle(async (data: CardData) => {
 - ✅ Saga Pattern
 
 ### Agents Layer
+
 - ✅ Strategy Pattern
 - ✅ Chain of Responsibility
 - ✅ Template Method
@@ -1032,18 +1094,21 @@ const throttledSave = throttle(async (data: CardData) => {
 - ✅ Observer Pattern
 
 ### Data Layer
+
 - ✅ Database per Service
 - ✅ Cache-Aside
 - ✅ Materialized Views
 - ✅ Outbox Pattern
 
 ### Reliability
+
 - ✅ Circuit Breaker
 - ✅ Retry with Backoff
 - ✅ Bulkhead
 - ✅ Timeout
 
 ### API Design
+
 - ✅ Pagination
 - ✅ Rate Limiting
 - ✅ Versioning
@@ -1053,28 +1118,21 @@ const throttledSave = throttle(async (data: CardData) => {
 ## 🎯 Recommended Implementation Order
 
 **Phase 1: Foundation**
+
 1. Microservices Architecture
 2. API Gateway
 3. Repository Pattern
 4. Event-Driven Architecture
 
-**Phase 2: Core Functionality**
-5. CQRS (for analytics)
-6. Bounded Context (DDD)
-7. Strategy Pattern (learning modes)
-8. Cache-Aside
+**Phase 2: Core Functionality** 5. CQRS (for analytics) 6. Bounded Context
+(DDD) 7. Strategy Pattern (learning modes) 8. Cache-Aside
 
-**Phase 3: Reliability**
-9. Circuit Breaker
-10. Retry Pattern
-11. Outbox Pattern
+**Phase 3: Reliability** 9. Circuit Breaker 10. Retry Pattern 11. Outbox Pattern
 
-**Phase 4: Advanced**
-12. Event Sourcing
-13. Saga Pattern
-14. Materialized Views
-15. Chain of Responsibility (metacognition)
+**Phase 4: Advanced** 12. Event Sourcing 13. Saga Pattern 14. Materialized
+Views 15. Chain of Responsibility (metacognition)
 
 ---
 
-**Start with patterns that provide immediate value, add complexity as needed!** 🚀
+**Start with patterns that provide immediate value, add complexity as needed!**
+🚀

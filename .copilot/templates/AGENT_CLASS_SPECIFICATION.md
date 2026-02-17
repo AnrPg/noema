@@ -9,13 +9,16 @@
 
 ## Purpose
 
-This specification defines the REQUIRED structure for all LLM agent classes in Noema. All agents MUST conform to this specification to ensure consistent ReAct pattern implementation, complete reasoning traces, and proper observability.
+This specification defines the REQUIRED structure for all LLM agent classes in
+Noema. All agents MUST conform to this specification to ensure consistent ReAct
+pattern implementation, complete reasoning traces, and proper observability.
 
 ---
 
 ## Context
 
 Noema has 10 LLM agents that perform various tasks:
+
 - Learning Agent (next card selection)
 - Diagnostic Agent (learning pattern analysis)
 - Strategy Agent (learning strategy adjustment)
@@ -27,11 +30,15 @@ Noema has 10 LLM agents that perform various tasks:
 - Taxonomy Curator Agent (category organization)
 - Governance Agent (quality control)
 
-All agents must follow ReAct pattern (Reason → Act → Observe), produce complete reasoning traces, and provide cost/performance metrics.
+All agents must follow ReAct pattern (Reason → Act → Observe), produce complete
+reasoning traces, and provide cost/performance metrics.
 
 ---
 
-**Note:** This is the MINIMUM agent structure. Add domain-specific reasoning strategies, multi-agent collaboration, memory systems, specialized tool execution patterns, advanced prompt engineering, retrieval-augmented generation, chain-of-thought variations, or any agentic behaviors your use case requires.
+**Note:** This is the MINIMUM agent structure. Add domain-specific reasoning
+strategies, multi-agent collaboration, memory systems, specialized tool
+execution patterns, advanced prompt engineering, retrieval-augmented generation,
+chain-of-thought variations, or any agentic behaviors your use case requires.
 
 ---
 
@@ -44,9 +51,11 @@ All agent classes MUST implement the following structure.
 ## REQUIRED: Class Structure
 
 ### File Location
+
 `src/agents/{agent-name}/{agent-name}.agent.ts`
 
 ### Class Declaration
+
 ```typescript
 export class {Agent}Agent {
   // Implementation
@@ -58,61 +67,73 @@ export class {Agent}Agent {
 ## REQUIRED: Class Properties
 
 ### 1. Configuration (REQUIRED)
+
 ```typescript
 private readonly config: {Agent}Config
 ```
 
 **Requirements:**
+
 - Holds LLM settings, behavior, tools, prompts
 - Immutable after construction
 - Type-safe configuration object
 
 ### 2. LLM Instance (REQUIRED)
+
 ```typescript
 private readonly llm: ChatOpenAI | ChatAnthropic
 ```
 
 **Requirements:**
+
 - Configured LLM client
 - Supports streaming (optional)
 - Proper error handling
 
 ### 3. Tool Registry (REQUIRED)
+
 ```typescript
 private readonly tools: ToolRegistry
 ```
 
 **Requirements:**
+
 - Access to all available tools
 - Tool validation capabilities
 - Tool execution methods
 
 ### 4. Prompt Store (REQUIRED)
+
 ```typescript
 private readonly prompts: PromptStore
 ```
 
 **Requirements:**
+
 - Versioned prompts
 - Template rendering
 - Few-shot examples
 
 ### 5. Logger (REQUIRED)
+
 ```typescript
 private readonly logger: Logger
 ```
 
 **Requirements:**
+
 - Child logger with agent name
 - Structured logging
 - Trace ID propagation
 
 ### 6. Version (REQUIRED)
+
 ```typescript
 private readonly version: string = '1.0.0'
 ```
 
 **Requirements:**
+
 - Semantic versioning
 - Included in all outputs
 - Tracked in metadata
@@ -122,6 +143,7 @@ private readonly version: string = '1.0.0'
 ## REQUIRED: Constructor
 
 ### Signature
+
 ```typescript
 constructor(
   config: {Agent}Config,
@@ -133,6 +155,7 @@ constructor(
 ```
 
 **Requirements:**
+
 - Accept all required dependencies
 - Validate configuration
 - Initialize LLM client
@@ -144,6 +167,7 @@ constructor(
 ## REQUIRED: Public Methods
 
 ### execute() - Main Entry Point
+
 ```typescript
 async execute(
   input: {Agent}Input,
@@ -152,6 +176,7 @@ async execute(
 ```
 
 **Requirements:**
+
 - ONLY public method exposed
 - Validates input
 - Executes agent loop
@@ -160,6 +185,7 @@ async execute(
 - Calculates metrics
 
 **Flow:**
+
 1. Validate input with validateInput()
 2. Build system prompt with buildSystemPrompt()
 3. Execute agent loop with executeAgentLoop()
@@ -176,6 +202,7 @@ async execute(
 ## REQUIRED: Private Methods - ReAct Pattern
 
 ### executeAgentLoop()
+
 ```typescript
 private async executeAgentLoop(
   systemPrompt: string,
@@ -186,6 +213,7 @@ private async executeAgentLoop(
 ```
 
 **Requirements:**
+
 - Implements ReAct pattern: Reason → Act → Observe
 - Maintains reasoning array
 - Enforces max iterations
@@ -194,22 +222,23 @@ private async executeAgentLoop(
 - Returns final result
 
 **Algorithm:**
+
 ```
 Initialize reasoning steps array
 For iteration = 1 to maxIterations:
   1. REASON: Call LLM to think about what to do
   2. Parse response to extract thought and action
   3. Add reasoning step (thought)
-  
+
   If action present:
     4. ACT: Execute tool via executeAction()
     5. OBSERVE: Format tool result via formatObservation()
     6. Add to reasoning (action + observation)
-  
+
   If final answer in response:
     7. Extract result via extractFinalAnswer()
     8. Return result
-  
+
   If timeout:
     9. Return partial result or error
 
@@ -217,6 +246,7 @@ Throw MaxIterationsError if loop completes
 ```
 
 ### buildSystemPrompt()
+
 ```typescript
 private async buildSystemPrompt(
   input: {Agent}Input,
@@ -225,6 +255,7 @@ private async buildSystemPrompt(
 ```
 
 **Requirements:**
+
 - Define agent role and capabilities
 - Include available tools with descriptions
 - Specify output format (thought/action/observation)
@@ -233,6 +264,7 @@ private async buildSystemPrompt(
 - Use prompt template from PromptStore
 
 **Format:**
+
 ```
 You are a {AgentRole}. Your capabilities: {capabilities}.
 
@@ -257,6 +289,7 @@ Current Task: {input}
 ```
 
 ### executeAction()
+
 ```typescript
 private async executeAction(
   action: { tool: string; input: unknown },
@@ -265,6 +298,7 @@ private async executeAction(
 ```
 
 **Requirements:**
+
 - Validate tool exists in registry
 - Check tool is enabled
 - Validate tool input
@@ -283,6 +317,7 @@ private async executeAction(
   - Use estimatedImpact for prioritization
 
 ### parseResponse()
+
 ```typescript
 private parseResponse(
   content: string,
@@ -295,6 +330,7 @@ private parseResponse(
 ```
 
 **Requirements:**
+
 - Extract thought from response
 - Extract action if present (tool name + input)
 - Determine if task is done (Final Answer present)
@@ -303,6 +339,7 @@ private parseResponse(
 - Return structured object
 
 **Must parse formats like:**
+
 ```
 Thought: I need to get the card details
 Action: get-card
@@ -319,6 +356,7 @@ Final Answer: { ... }
 ## REQUIRED: Private Methods - Validation & Error Handling
 
 ### validateInput()
+
 ```typescript
 private validateInput(
   input: {Agent}Input,
@@ -326,12 +364,14 @@ private validateInput(
 ```
 
 **Requirements:**
+
 - Validate all required fields
 - Check field types
 - Verify constraints
 - Throw ValidationError if invalid
 
 ### handleError()
+
 ```typescript
 private handleError(
   error: unknown,
@@ -339,6 +379,7 @@ private handleError(
 ```
 
 **Requirements:**
+
 - Convert exceptions to AgentError
 - Categorize error types
 - Include stack trace for internal errors
@@ -346,6 +387,7 @@ private handleError(
 - MUST NOT leak sensitive information
 
 ### isTimeout()
+
 ```typescript
 private isTimeout(
   context: {Agent}Context,
@@ -353,6 +395,7 @@ private isTimeout(
 ```
 
 **Requirements:**
+
 - Check elapsed time against timeout
 - Return true if exceeded
 - Used in agent loop to break early
@@ -362,6 +405,7 @@ private isTimeout(
 ## REQUIRED: Private Methods - Metrics & Analysis
 
 ### calculateConfidence()
+
 ```typescript
 private calculateConfidence(
   result: any,
@@ -370,6 +414,7 @@ private calculateConfidence(
 ```
 
 **Requirements:**
+
 - Return 0.0 to 1.0
 - Based on reasoning quality
 - Consider number of iterations
@@ -377,12 +422,14 @@ private calculateConfidence(
 - Consider LLM confidence (if available)
 
 **Factors:**
+
 - Few iterations = higher confidence
 - Successful tool calls = higher confidence
 - Consistent reasoning = higher confidence
 - Contradictions = lower confidence
 
 ### extractToolsUsed()
+
 ```typescript
 private extractToolsUsed(
   reasoning: ReasoningStep[],
@@ -390,12 +437,14 @@ private extractToolsUsed(
 ```
 
 **Requirements:**
+
 - Parse reasoning steps
 - Extract tool names used
 - Return unique list
 - Maintain order of first use
 
 ### extractTokenUsage()
+
 ```typescript
 private extractTokenUsage(
   reasoning: ReasoningStep[],
@@ -407,11 +456,13 @@ private extractTokenUsage(
 ```
 
 **Requirements:**
+
 - Sum tokens from all LLM calls
 - Include prompt and completion separately
 - Return total
 
 ### calculateCost()
+
 ```typescript
 private calculateCost(
   reasoning: ReasoningStep[],
@@ -419,16 +470,19 @@ private calculateCost(
 ```
 
 **Requirements:**
+
 - Calculate based on model pricing
 - Use token usage from extractTokenUsage()
 - Return cost in dollars
 - Account for different models
 
 **Pricing (example):**
+
 - GPT-4: $0.03 per 1K prompt tokens, $0.06 per 1K completion
 - Claude: $0.008 per 1K prompt tokens, $0.024 per 1K completion
 
 ### extractDecision()
+
 ```typescript
 private extractDecision(
   reasoning: ReasoningStep[],
@@ -436,6 +490,7 @@ private extractDecision(
 ```
 
 **Requirements:**
+
 - Summarize the reasoning process
 - Extract key decision points
 - Return human-readable string
@@ -445,6 +500,7 @@ private extractDecision(
 ## REQUIRED: Private Methods - Helpers
 
 ### formatInput()
+
 ```typescript
 private formatInput(
   input: {Agent}Input,
@@ -452,12 +508,14 @@ private formatInput(
 ```
 
 **Requirements:**
+
 - Convert input to string for prompt
 - Include all relevant fields
 - Format for readability
 - Handle complex objects
 
 ### formatObservation()
+
 ```typescript
 private formatObservation(
   result: unknown,
@@ -465,12 +523,14 @@ private formatObservation(
 ```
 
 **Requirements:**
+
 - Convert tool result to string
 - Format for LLM consumption
 - Truncate if too long
 - Handle errors in results
 
 ### formatToolDescription()
+
 ```typescript
 private formatToolDescription(
   tool: Tool,
@@ -478,12 +538,14 @@ private formatToolDescription(
 ```
 
 **Requirements:**
+
 - Extract tool name and description
 - Include parameters
 - Include examples
 - Format for system prompt
 
 ### extractThought()
+
 ```typescript
 private extractThought(
   content: string,
@@ -491,12 +553,14 @@ private extractThought(
 ```
 
 **Requirements:**
+
 - Extract text after "Thought:"
 - Stop at "Action:" or "Final Answer:"
 - Trim whitespace
 - Handle missing thought
 
 ### extractAction()
+
 ```typescript
 private extractAction(
   content: string,
@@ -504,12 +568,14 @@ private extractAction(
 ```
 
 **Requirements:**
+
 - Extract tool name after "Action:"
 - Extract JSON after "Action Input:"
 - Parse JSON safely
 - Return undefined if no action
 
 ### extractFinalAnswer()
+
 ```typescript
 private extractFinalAnswer(
   content: string,
@@ -517,6 +583,7 @@ private extractFinalAnswer(
 ```
 
 **Requirements:**
+
 - Extract content after "Final Answer:"
 - Parse as JSON if possible
 - Return raw string if not JSON
@@ -527,6 +594,7 @@ private extractFinalAnswer(
 ## REQUIRED: Configuration Interface
 
 ### {Agent}Config
+
 ```typescript
 interface {Agent}Config {
   llm: {
@@ -535,20 +603,20 @@ interface {Agent}Config {
     maxTokens: number;       // REQUIRED: Max completion tokens
     topP?: number;           // OPTIONAL: 0.0 to 1.0
   };
-  
+
   behavior: {
     maxIterations: number;   // REQUIRED: e.g., 10
     timeoutMs: number;       // REQUIRED: e.g., 30000
     retryAttempts: number;   // REQUIRED: e.g., 3
   };
-  
+
   enabledTools: string[];    // REQUIRED: Array of tool names
-  
+
   prompts: {
     systemPromptVersion: string;  // REQUIRED: "1.0.0"
     fewShotExamples: boolean;     // REQUIRED: Include examples?
   };
-  
+
   tracing: {
     enabled: boolean;        // REQUIRED: Enable tracing?
     sampleRate: number;      // REQUIRED: 0.0 to 1.0
@@ -561,33 +629,35 @@ interface {Agent}Config {
 ## REQUIRED: Input Interface
 
 ### {Agent}Input
+
 ```typescript
 interface {Agent}Input {
   // Agent-specific input fields
   // Examples:
-  
+
   // For Learning Agent
   userId: string;
   deckId: string;
   sessionMode: 'exploration' | 'goal-driven' | 'exam' | 'synthesis';
-  
+
   // For Content Generation Agent
   topic: string;
   cardType: 'atomic' | 'cloze' | 'image_occlusion';
   count: number;
-  
+
   // Common fields
   constraints?: {
     maxTime?: number;
     maxCost?: number;
     requiredQuality?: number;
   };
-  
+
   context?: Record<string, unknown>;
 }
 ```
 
 **Requirements:**
+
 - Define all required inputs
 - Include optional constraints
 - Extensible context field
@@ -598,6 +668,7 @@ interface {Agent}Input {
 ## REQUIRED: Context Interface
 
 ### {Agent}Context
+
 ```typescript
 interface {Agent}Context {
   userId: string;            // REQUIRED
@@ -605,17 +676,18 @@ interface {Agent}Context {
   correlationId: string;     // REQUIRED
   traceId: string;           // REQUIRED
   timestamp: Date;           // REQUIRED
-  
+
   budget?: {
     maxCost: number;         // Dollars
     maxTime: number;         // Milliseconds
   };
-  
+
   metadata?: Record<string, unknown>;
 }
 ```
 
 **Requirements:**
+
 - Contains execution context
 - Used for authorization
 - Used for tracing
@@ -627,96 +699,106 @@ interface {Agent}Context {
 ## REQUIRED: Output Interface
 
 ### {Agent}Output
+
 ```typescript
 interface {Agent}Output {
   success: boolean;                     // REQUIRED
-  
+
   result?: {ResultType};                // REQUIRED if success
-  
+
   error?: AgentError;                   // REQUIRED if !success
-  
+
   reasoning: AgentReasoning;            // REQUIRED (never omit)
-  
+
   metadata: AgentExecutionMetadata;     // REQUIRED
 }
 ```
 
 ### AgentReasoning (REQUIRED)
+
 ```typescript
 interface AgentReasoning {
-  steps: ReasoningStep[];               // REQUIRED: Full trace
-  decision: string;                     // REQUIRED: Summary
-  confidence: number;                   // REQUIRED: 0.0 to 1.0
-  
+  steps: ReasoningStep[]; // REQUIRED: Full trace
+  decision: string; // REQUIRED: Summary
+  confidence: number; // REQUIRED: 0.0 to 1.0
+
   // Enhanced fields (v2.0.0) - included in reasoning output
   sourceQuality?: 'high' | 'medium' | 'low' | 'unknown';
-  contextUsed?: string[];               // What context was available
-  assumptionsMade?: string[];           // Assumptions during reasoning
-  alternatives?: Alternative[];         // Alternative approaches considered
+  contextUsed?: string[]; // What context was available
+  assumptionsMade?: string[]; // Assumptions during reasoning
+  alternatives?: Alternative[]; // Alternative approaches considered
 }
 ```
 
 ### ReasoningStep (REQUIRED)
+
 ```typescript
 interface ReasoningStep {
-  step: number;                         // REQUIRED: Step index
-  thought: string;                      // REQUIRED: What agent thought
-  action?: {                            // OPTIONAL: If tool called
+  step: number; // REQUIRED: Step index
+  thought: string; // REQUIRED: What agent thought
+  action?: {
+    // OPTIONAL: If tool called
     tool: string;
     input: unknown;
     output: unknown;
   };
-  observation?: string;                 // OPTIONAL: Tool result
-  timestamp: string;                    // REQUIRED: ISO 8601
+  observation?: string; // OPTIONAL: Tool result
+  timestamp: string; // REQUIRED: ISO 8601
 }
 ```
 
 ### AgentExecutionMetadata (REQUIRED)
+
 ```typescript
 interface AgentExecutionMetadata {
-  executionTime: number;                // REQUIRED: Milliseconds
-  iterations: number;                   // REQUIRED: Loop iterations
-  toolsUsed: string[];                  // REQUIRED: Tools called
-  tokenUsage: {                         // REQUIRED
+  executionTime: number; // REQUIRED: Milliseconds
+  iterations: number; // REQUIRED: Loop iterations
+  toolsUsed: string[]; // REQUIRED: Tools called
+  tokenUsage: {
+    // REQUIRED
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
-  estimatedCost: number;                // REQUIRED: Dollars
-  model: string;                        // REQUIRED: LLM model used
-  agentVersion: string;                 // REQUIRED: Agent version
+  estimatedCost: number; // REQUIRED: Dollars
+  model: string; // REQUIRED: LLM model used
+  agentVersion: string; // REQUIRED: Agent version
 }
 ```
 
 ### AgentError (REQUIRED for failures)
+
 ```typescript
 interface AgentError {
-  code: string;                         // REQUIRED: Error code
-  message: string;                      // REQUIRED: Human-readable
-  details?: unknown;                    // OPTIONAL: Additional context
-  recoverable: boolean;                 // REQUIRED: Can retry?
+  code: string; // REQUIRED: Error code
+  message: string; // REQUIRED: Human-readable
+  details?: unknown; // OPTIONAL: Additional context
+  recoverable: boolean; // REQUIRED: Can retry?
 }
 ```
 
 ### Alternative (OPTIONAL)
+
 ```typescript
 interface Alternative {
-  approach: string;                     // Alternative approach description
-  confidence: number;                   // 0.0 to 1.0
-  reasoning: string;                    // Why this alternative exists
-  pros?: string[];                      // Advantages
-  cons?: string[];                      // Disadvantages
-  estimatedImpact?: number;             // 0.0 to 1.0 - expected impact if chosen
+  approach: string; // Alternative approach description
+  confidence: number; // 0.0 to 1.0
+  reasoning: string; // Why this alternative exists
+  pros?: string[]; // Advantages
+  cons?: string[]; // Disadvantages
+  estimatedImpact?: number; // 0.0 to 1.0 - expected impact if chosen
 }
 ```
 
-**Note:** This structure aligns with the Alternative schema in enhanced AgentHints (v2.0.0)
+**Note:** This structure aligns with the Alternative schema in enhanced
+AgentHints (v2.0.0)
 
 ---
 
 ## ReAct Pattern Requirements
 
 ### MUST Implement
+
 The agent loop MUST follow this pattern:
 
 ```
@@ -742,7 +824,9 @@ The agent loop MUST follow this pattern:
 ```
 
 ### Reasoning Trace
+
 MUST capture:
+
 - Every thought
 - Every action (tool + input + output)
 - Every observation
@@ -750,6 +834,7 @@ MUST capture:
 - Step number
 
 **Purpose:**
+
 - Debugging agent behavior
 - Understanding decision-making
 - Improving prompts
@@ -760,6 +845,7 @@ MUST capture:
 ## Factory Pattern (REQUIRED)
 
 ### {Agent}AgentFactory
+
 ```typescript
 class {Agent}AgentFactory {
   static create(
@@ -786,9 +872,9 @@ class {Agent}AgentFactory {
         sampleRate: 1.0,
       },
     };
-    
+
     const mergedConfig = { ...defaultConfig, ...config };
-    
+
     return new {Agent}Agent(
       mergedConfig,
       toolRegistry,
@@ -800,6 +886,7 @@ class {Agent}AgentFactory {
 ```
 
 **Requirements:**
+
 - Provide sensible defaults
 - Allow partial overrides
 - Inject dependencies
@@ -810,7 +897,9 @@ class {Agent}AgentFactory {
 ## Error Handling Requirements
 
 ### Exception Types
+
 Agents MUST handle:
+
 - **ValidationError**: Invalid input
 - **TimeoutError**: Execution timeout
 - **MaxIterationsError**: Too many loops
@@ -819,7 +908,9 @@ Agents MUST handle:
 - **ParseError**: Response malformed
 
 ### Error Recovery
+
 Agents MUST:
+
 - Retry LLM calls (with backoff)
 - Retry tool calls (if idempotent)
 - Degrade gracefully
@@ -831,6 +922,7 @@ Agents MUST:
 ## Logging Requirements
 
 ### MUST Log
+
 - Agent execution started
 - Each reasoning step (thought/action/observation)
 - Tool executions
@@ -839,7 +931,9 @@ Agents MUST:
 - Metrics (tokens, cost, time)
 
 ### Log Format
+
 Include:
+
 - Agent name
 - Agent version
 - User ID
@@ -852,7 +946,9 @@ Include:
 ## Observability Requirements
 
 ### Metrics (REQUIRED)
+
 Emit:
+
 - Execution count
 - Success rate
 - Average execution time
@@ -862,6 +958,7 @@ Emit:
 - Error rate by type
 
 ### Tracing (REQUIRED)
+
 - Propagate traceId through all operations
 - Link LLM calls to trace
 - Link tool calls to trace
@@ -872,7 +969,9 @@ Emit:
 ## Testing Requirements
 
 ### Unit Tests (REQUIRED)
+
 Test:
+
 - Input validation
 - System prompt building
 - Response parsing
@@ -882,12 +981,15 @@ Test:
 - Metrics extraction
 
 Mock:
+
 - LLM (return predefined responses)
 - Tools (return test data)
 - Prompt store
 
 ### Integration Tests (REQUIRED)
+
 Test:
+
 - Full ReAct loop with real LLM
 - Real tool execution
 - Reasoning trace completeness
@@ -899,13 +1001,17 @@ Test:
 ## Budget Enforcement Requirements
 
 ### Time Budget
+
 If context.budget.maxTime provided:
+
 - Check elapsed time each iteration
 - Break loop if exceeded
 - Return partial result with TimeoutError
 
 ### Cost Budget
+
 If context.budget.maxCost provided:
+
 - Track cumulative cost
 - Check before each LLM call
 - Stop if budget exceeded
@@ -946,6 +1052,7 @@ Before deploying an agent:
 ## Performance Considerations
 
 ### Optimization Opportunities
+
 - Cache system prompts
 - Reuse tool descriptions
 - Batch tool calls when possible
@@ -953,6 +1060,7 @@ Before deploying an agent:
 - Parallel tool execution (when independent)
 
 ### Avoid
+
 - Synchronous external calls in tools
 - Large context windows unnecessarily
 - Redundant tool calls
@@ -963,6 +1071,7 @@ Before deploying an agent:
 ## Consequences
 
 ### Benefits
+
 - ✅ Consistent agent behavior
 - ✅ Complete reasoning transparency
 - ✅ Easy debugging
@@ -971,11 +1080,13 @@ Before deploying an agent:
 - ✅ Observable and traceable
 
 ### Drawbacks
+
 - ⚠️ More complex than direct LLM calls
 - ⚠️ Reasoning trace storage overhead
 - ⚠️ Performance overhead from loop
 
 ### Mitigation
+
 - Optimize system prompts
 - Limit max iterations appropriately
 - Use caching for repeated queries
@@ -986,7 +1097,8 @@ Before deploying an agent:
 ## References
 
 - ReAct Pattern: https://arxiv.org/abs/2210.03629
-- **Enhanced AgentHints v2.0.0**: See ENHANCED_AGENT_HINTS.ts for complete structure
+- **Enhanced AgentHints v2.0.0**: See ENHANCED_AGENT_HINTS.ts for complete
+  structure
 - Tool Specification: See MCP_TOOL_SPECIFICATION.md
 - Event Schema: See EVENT_SCHEMA_SPECIFICATION.md
 - Design Patterns: See DESIGN_PATTERNS_FOR_NOEMA.md
