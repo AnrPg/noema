@@ -1,0 +1,59 @@
+{
+  "name": "@noema/user-service",
+  "version": "0.1.0",
+  "description": "User identity and access management service for Noema",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist .turbo tsconfig.tsbuildinfo",
+    "dev": "tsx watch src/index.ts",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest watch",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@noema/contracts": "workspace:*",
+    "@noema/events": "workspace:*",
+    "@noema/types": "workspace:*",
+    "@noema/validation": "workspace:*",
+    "@prisma/client": "^5.22.0",
+    "bcrypt": "^5.1.1",
+    "fastify": "^5.2.0",
+    "ioredis": "^5.4.2",
+    "jose": "^5.9.6",
+    "nanoid": "^5.0.9",
+    "pino": "^9.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.10.5",
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
+  }
+}

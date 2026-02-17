@@ -1,0 +1,1010 @@
+openapi: 3.1.0
+info:
+  title: Noema User Service API
+  description: |
+    User management, authentication, and authorization service for the Noema platform.
+
+    This service handles:
+    - User registration and profile management
+    - Authentication (login, logout, token refresh)
+    - Authorization (roles and permissions)
+    - User settings and preferences
+  version: 1.0.0
+  contact:
+    name: Noema Team
+    email: support@noema.app
+  license:
+    name: Proprietary
+    url: https://noema.app/license
+
+servers:
+  - url: http://localhost:3001
+    description: Local development
+  - url: https://api.noema.app/v1/users
+    description: Production
+
+tags:
+  - name: Authentication
+    description: User authentication operations
+  - name: Users
+    description: User management operations
+  - name: Health
+    description: Service health checks
+
+paths:
+  # ============================================================================
+  # Authentication Endpoints
+  # ============================================================================
+  /api/v1/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserInput"
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login with email and password
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSessionResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  description: JWT refresh token
+      responses:
+        "200":
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPairResponse"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout and invalidate tokens
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Logged out successfully
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+
+  # ============================================================================
+  # User Management Endpoints
+  # ============================================================================
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users (admin only)
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+        # Core filters
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/UserStatus"
+          description: Filter by user status
+        - name: roles
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/UserRole"
+          style: form
+          explode: false
+          description: Filter by roles (comma-separated)
+        - name: emailVerified
+          in: query
+          schema:
+            type: boolean
+          description: Filter by email verification status
+        - name: authProvider
+          in: query
+          schema:
+            $ref: "#/components/schemas/AuthProvider"
+          description: Filter by authentication provider
+        # Profile filters
+        - name: username
+          in: query
+          schema:
+            type: string
+          description: Filter by username (partial match)
+        - name: displayName
+          in: query
+          schema:
+            type: string
+          description: Filter by display name (partial match)
+        - name: country
+          in: query
+          schema:
+            type: string
+            pattern: "^[A-Z]{2}$"
+          description: Filter by ISO 3166-1 alpha-2 country code
+        - name: language
+          in: query
+          schema:
+            $ref: "#/components/schemas/Language"
+          description: Filter by preferred language
+        - name: timezone
+          in: query
+          schema:
+            type: string
+          description: Filter by timezone
+        # Date range filters
+        - name: createdAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter users created after this date
+        - name: createdBefore
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter users created before this date
+        - name: updatedAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter users updated after this date
+        - name: updatedBefore
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter users updated before this date
+        - name: lastLoginAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter users who logged in after this date
+        - name: lastLoginBefore
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Filter users who logged in before this date
+        # Search
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Full-text search across email, username, displayName
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+        "403":
+          $ref: "#/components/responses/AuthorizationError"
+
+  /api/v1/users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      operationId: getUserById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "200":
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    delete:
+      tags: [Users]
+      summary: Delete user (admin or self)
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          description: User deleted successfully
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+        "403":
+          $ref: "#/components/responses/AuthorizationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /api/v1/users/{userId}/profile:
+    patch:
+      tags: [Users]
+      summary: Update user profile
+      operationId: updateUserProfile
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileInput"
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+        "403":
+          $ref: "#/components/responses/AuthorizationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /api/v1/users/{userId}/settings:
+    patch:
+      tags: [Users]
+      summary: Update user settings
+      operationId: updateUserSettings
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingsInput"
+      responses:
+        "200":
+          description: Settings updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+        "403":
+          $ref: "#/components/responses/AuthorizationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /api/v1/users/{userId}/password:
+    put:
+      tags: [Users]
+      summary: Change user password
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "204":
+          description: Password changed successfully
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+        "403":
+          $ref: "#/components/responses/AuthorizationError"
+
+  # ============================================================================
+  # "Me" Shortcut Endpoints
+  # ============================================================================
+  /api/v1/me:
+    get:
+      tags: [Users]
+      summary: Get current user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+
+  /api/v1/me/profile:
+    patch:
+      tags: [Users]
+      summary: Update current user profile
+      operationId: updateCurrentUserProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileInput"
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+
+  /api/v1/me/settings:
+    patch:
+      tags: [Users]
+      summary: Update current user settings
+      operationId: updateCurrentUserSettings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingsInput"
+      responses:
+        "200":
+          description: Settings updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/AuthenticationError"
+
+  # ============================================================================
+  # Health Check Endpoints
+  # ============================================================================
+  /health:
+    get:
+      tags: [Health]
+      summary: Overall health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      operationId: livenessProbe
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /health/ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe
+      operationId: readinessProbe
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        "503":
+          description: Service not ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: not ready
+                  reason:
+                    type: string
+
+components:
+  # ============================================================================
+  # Security Schemes
+  # ============================================================================
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token
+
+  # ============================================================================
+  # Parameters
+  # ============================================================================
+  parameters:
+    UserIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^user_[a-zA-Z0-9]{21}$"
+      description: User ID (branded with user_ prefix)
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Maximum number of items to return
+
+    OffsetParam:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Number of items to skip
+
+  # ============================================================================
+  # Responses
+  # ============================================================================
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    AuthenticationError:
+      description: Authentication error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    AuthorizationError:
+      description: Authorization error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    ConflictError:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  # ============================================================================
+  # Schemas
+  # ============================================================================
+  schemas:
+    # --------------------------------------------------------------------------
+    # Enums
+    # --------------------------------------------------------------------------
+    UserStatus:
+      type: string
+      enum: [pending, active, suspended, banned, deactivated]
+      description: User account status
+
+    UserRole:
+      type: string
+      enum: [learner, premium, creator, admin, super_admin]
+      description: User roles for authorization
+
+    AuthProvider:
+      type: string
+      enum: [local, google, apple, github]
+      description: Authentication provider
+
+    Theme:
+      type: string
+      enum: [light, dark, system]
+      description: UI theme preference
+
+    Language:
+      type: string
+      enum: [en, es, fr, de, it, pt, zh, ja, ko]
+      description: Supported interface languages
+
+    # --------------------------------------------------------------------------
+    # Input Schemas
+    # --------------------------------------------------------------------------
+    CreateUserInput:
+      type: object
+      required: [email, username, password, country]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: "^[a-zA-Z0-9_-]+$"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        displayName:
+          type: string
+          maxLength: 100
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+          pattern: "^[A-Z]{2}$"
+          description: ISO 3166-1 alpha-2 country code (required for compliance)
+        timezone:
+          type: string
+          default: UTC
+        language:
+          $ref: "#/components/schemas/Language"
+          default: en
+
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    UpdateProfileInput:
+      type: object
+      properties:
+        displayName:
+          type: string
+          maxLength: 100
+        bio:
+          type: string
+          maxLength: 500
+        avatarUrl:
+          type: string
+          format: uri
+        timezone:
+          type: string
+
+    UpdateSettingsInput:
+      type: object
+      properties:
+        emailNotifications:
+          type: boolean
+        pushNotifications:
+          type: boolean
+        dailyReminder:
+          type: boolean
+        dailyReminderTime:
+          type: string
+          pattern: "^([01]?[0-9]|2[0-3]):[0-5][0-9]$"
+        theme:
+          type: string
+          enum: [light, dark, system]
+        language:
+          type: string
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    # --------------------------------------------------------------------------
+    # User Schemas
+    # --------------------------------------------------------------------------
+    UserProfile:
+      type: object
+      properties:
+        displayName:
+          type: string
+        bio:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+        timezone:
+          type: string
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code
+        language:
+          $ref: "#/components/schemas/Language"
+
+    UserSettings:
+      type: object
+      properties:
+        emailNotifications:
+          type: boolean
+        pushNotifications:
+          type: boolean
+        dailyReminder:
+          type: boolean
+        dailyReminderTime:
+          type: string
+        theme:
+          type: string
+        language:
+          type: string
+
+    # --------------------------------------------------------------------------
+    # History Entry Schemas (for audit and tracking)
+    # --------------------------------------------------------------------------
+    LoginHistoryEntry:
+      type: object
+      required: [timestamp]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+        success:
+          type: boolean
+          default: true
+
+    FailedLoginHistoryEntry:
+      type: object
+      required: [timestamp]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          enum: [invalid_password, account_locked, invalid_mfa, account_inactive]
+        ipAddress:
+          type: string
+
+    PasswordChangeHistoryEntry:
+      type: object
+      required: [timestamp]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        changedBy:
+          type: string
+          description: User ID of who made the change (self or admin)
+
+    # --------------------------------------------------------------------------
+    # CQRS Read Model (used in responses)
+    # --------------------------------------------------------------------------
+    UserReadModel:
+      type: object
+      description: CQRS read model - optimized for querying and display
+      properties:
+        id:
+          type: string
+          pattern: "^user_[a-zA-Z0-9]{21}$"
+        email:
+          type: string
+          format: email
+        username:
+          type: string
+        status:
+          $ref: "#/components/schemas/UserStatus"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRole"
+        profile:
+          $ref: "#/components/schemas/UserProfile"
+        settings:
+          $ref: "#/components/schemas/UserSettings"
+        emailVerified:
+          type: boolean
+        mfaEnabled:
+          type: boolean
+        authProviders:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthProvider"
+        loginHistory:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/LoginHistoryEntry"
+          description: Last 5 successful logins
+        failedLoginHistory:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/FailedLoginHistoryEntry"
+          description: Last 5 failed login attempts
+        passwordChangeHistory:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/PasswordChangeHistoryEntry"
+          description: Last 5 password changes
+        loginCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          description: Optimistic locking version
+
+    # --------------------------------------------------------------------------
+    # User Schema (backward compatibility alias)
+    # --------------------------------------------------------------------------
+    User:
+      $ref: "#/components/schemas/UserReadModel"
+
+    # --------------------------------------------------------------------------
+    # Auth Schemas
+    # --------------------------------------------------------------------------
+    TokenPair:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expiresIn:
+          type: integer
+          description: Access token expiry in seconds
+        tokenType:
+          type: string
+          default: Bearer
+
+    AuthSession:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        tokens:
+          $ref: "#/components/schemas/TokenPair"
+
+    # --------------------------------------------------------------------------
+    # Response Wrappers
+    # --------------------------------------------------------------------------
+    AgentHints:
+      type: object
+      properties:
+        suggestedActions:
+          type: array
+          items:
+            type: string
+        relatedResources:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              id:
+                type: string
+        context:
+          type: object
+          additionalProperties: true
+
+    ResponseMetadata:
+      type: object
+      properties:
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        processingTime:
+          type: integer
+          description: Processing time in milliseconds
+
+    UserResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/User"
+        agentHints:
+          $ref: "#/components/schemas/AgentHints"
+        metadata:
+          $ref: "#/components/schemas/ResponseMetadata"
+
+    UserListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        agentHints:
+          $ref: "#/components/schemas/AgentHints"
+        metadata:
+          $ref: "#/components/schemas/ResponseMetadata"
+
+    TokenPairResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/TokenPair"
+        agentHints:
+          $ref: "#/components/schemas/AgentHints"
+        metadata:
+          $ref: "#/components/schemas/ResponseMetadata"
+
+    AuthSessionResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthSession"
+        agentHints:
+          $ref: "#/components/schemas/AgentHints"
+        metadata:
+          $ref: "#/components/schemas/ResponseMetadata"
+
+    # --------------------------------------------------------------------------
+    # Error Schemas
+    # --------------------------------------------------------------------------
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    # --------------------------------------------------------------------------
+    # Health Schemas
+    # --------------------------------------------------------------------------
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pass, fail, warn]
+        message:
+          type: string
+        latency:
+          type: integer
+          description: Latency in milliseconds
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        uptime:
+          type: number
+          description: Uptime in seconds
+        checks:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/HealthCheck"

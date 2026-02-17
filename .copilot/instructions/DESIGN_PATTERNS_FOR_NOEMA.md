@@ -1081,7 +1081,7 @@ const throttledSave = throttle(async (data: CardData) => {
 
 - ✅ Repository Pattern
 - ✅ Domain Events
-- ✅ Bounded Context
+- ✅ Shared Model
 - ✅ Aggregates
 - ✅ Saga Pattern
 

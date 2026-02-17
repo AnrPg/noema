@@ -1,0 +1,2 @@
+- IUserSettings should contain more fields as we add more features to the app. The settings will be grouped into categories (e.g. notifications, privacy, etc.) and each category will have its own interface. This will allow us to easily add new settings in the future without having to modify the IUserSettings interface.
+- The Language enum should be expanded to include more languages as we add support for them in the app. This will allow us to easily add new languages in the future without having to modify the Language enum.
