@@ -72,6 +72,9 @@ importers:
 
   packages/contracts:
     dependencies:
+      '@noema/types':
+        specifier: workspace:*
+        version: link:../types
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -85,6 +88,12 @@ importers:
 
   packages/events:
     dependencies:
+      '@noema/types':
+        specifier: workspace:*
+        version: link:../types
+      '@noema/validation':
+        specifier: workspace:*
+        version: link:../validation
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -116,6 +125,9 @@ importers:
 
   packages/validation:
     dependencies:
+      '@noema/types':
+        specifier: workspace:*
+        version: link:../types
       zod:
         specifier: ^3.23.8
         version: 3.25.76

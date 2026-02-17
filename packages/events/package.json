@@ -25,6 +25,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@noema/types": "workspace:*",
+    "@noema/validation": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

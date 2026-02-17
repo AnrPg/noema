@@ -1,7 +1,30 @@
 /**
  * @noema/events
- * Event definitions and schemas for Noema event-driven architecture
+ *
+ * Event definitions and schemas for Noema's event-driven architecture.
+ * All services communicate via immutable events defined here.
+ *
+ * @packageDocumentation
  */
 
-// Placeholder export - implement event definitions here
 export const VERSION = '0.1.0';
+
+// ============================================================================
+// Event Types
+// ============================================================================
+export type * from './types.js';
+
+// ============================================================================
+// Payload Patterns
+// ============================================================================
+export * from './payloads.js';
+
+// ============================================================================
+// Zod Schemas
+// ============================================================================
+export * from './schemas.js';
+
+// ============================================================================
+// Event Factory
+// ============================================================================
+export * from './factory.js';
