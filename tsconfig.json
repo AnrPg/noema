@@ -67,6 +67,8 @@
     ".turbo",
     "**/*.test.ts",
     "**/*.spec.ts",
-    "**/__tests__/**"
+    "**/__tests__/**",
+    // Services are skeleton directories without package.json
+    "services"
   ]
 }

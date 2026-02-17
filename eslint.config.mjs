@@ -17,6 +17,10 @@ export default tseslint.config(
       '**/expo-env.d.ts',
       '**/*.generated.*',
       '**/prisma/client/**',
+      // Services are skeleton directories without package.json
+      'services/**',
+      // Config files at root level
+      'eslint.config.mjs',
     ],
   },
 
@@ -151,5 +155,5 @@ export default tseslint.config(
   },
 
   // Prettier compatibility (must be last)
-  eslintConfigPrettier
+  /** @type {import('typescript-eslint').ConfigWithExtends} */ (eslintConfigPrettier)
 );

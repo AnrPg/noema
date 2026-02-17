@@ -33,7 +33,10 @@ import { z } from 'zod';
 // Helper to create enum schema from const object
 // ============================================================================
 
-function createEnumSchema(enumObj: Record<string, string>, description: string) {
+function createEnumSchema(
+  enumObj: Record<string, string>,
+  description: string
+): z.ZodEnum<[string, ...string[]]> {
   const values = Object.values(enumObj) as [string, ...string[]];
   return z.enum(values).describe(description);
 }
