@@ -465,8 +465,3 @@ export const IngestionState = {
 } as const;
 
 export type IngestionState = (typeof IngestionState)[keyof typeof IngestionState];
-
-// ============================================================================
-// Re-export Mental Debugger specific enums
-// ============================================================================
-export * from './mental-debugger.js';

@@ -106,25 +106,25 @@ export const ID_PREFIXES = {
   UserId: 'user_',
   CardId: 'card_',
   DeckId: 'deck_',
-  CategoryId: 'cat_',
-  SessionId: 'sess_',
-  AttemptId: 'att_',
+  CategoryId: 'category_',
+  SessionId: 'session_',
+  AttemptId: 'attempt_',
   TraceId: 'trace_',
-  DiagnosisId: 'diag_',
+  DiagnosisId: 'diagnosis_',
   PatchId: 'patch_',
   LoadoutId: 'load_',
   NodeId: 'node_',
   EdgeId: 'edge_',
-  AchievementId: 'ach_',
+  AchievementId: 'achievement_',
   StreakId: 'streak_',
   JobId: 'job_',
-  EventId: 'evt_',
-  CorrelationId: 'cor_',
-  CausationId: 'caus_',
+  EventId: 'event_',
+  CorrelationId: 'correlation_',
+  CausationId: 'causation_',
   ToolId: 'tool_',
   AgentId: 'agent_',
   MediaId: 'media_',
-  NotificationId: 'notif_',
+  NotificationId: 'notification_',
   RoomId: 'room_',
 } as const;
 
@@ -139,9 +139,7 @@ export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
  */
 function validateIdFormat(value: string, prefix: string): boolean {
   return (
-    typeof value === 'string' &&
-    value.startsWith(prefix) &&
-    value.length > prefix.length + 5 // prefix + at least 6 chars
+    typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length + 5 // prefix + at least 6 chars
   );
 }
 
@@ -152,11 +150,11 @@ function validateIdFormat(value: string, prefix: string): boolean {
 function createId<T extends string>(
   value: string,
   prefix: string,
-  typeName: string,
+  typeName: string
 ): Brand<string, T> {
   if (!validateIdFormat(value, prefix)) {
     throw new Error(
-      `Invalid ${typeName}: must start with "${prefix}" and have at least 6 characters after prefix. Got: "${value}"`,
+      `Invalid ${typeName}: must start with "${prefix}" and have at least 6 characters after prefix. Got: "${value}"`
     );
   }
   return value as Brand<string, T>;
@@ -171,28 +169,22 @@ function isValidId(value: unknown, prefix: string): value is string {
 
 // User ID
 export const UserId = {
-  create: (value: string): UserId =>
-    createId<'UserId'>(value, ID_PREFIXES.UserId, 'UserId'),
-  isValid: (value: unknown): value is UserId =>
-    isValidId(value, ID_PREFIXES.UserId),
+  create: (value: string): UserId => createId<'UserId'>(value, ID_PREFIXES.UserId, 'UserId'),
+  isValid: (value: unknown): value is UserId => isValidId(value, ID_PREFIXES.UserId),
   prefix: ID_PREFIXES.UserId,
 } as const;
 
 // Card ID
 export const CardId = {
-  create: (value: string): CardId =>
-    createId<'CardId'>(value, ID_PREFIXES.CardId, 'CardId'),
-  isValid: (value: unknown): value is CardId =>
-    isValidId(value, ID_PREFIXES.CardId),
+  create: (value: string): CardId => createId<'CardId'>(value, ID_PREFIXES.CardId, 'CardId'),
+  isValid: (value: unknown): value is CardId => isValidId(value, ID_PREFIXES.CardId),
   prefix: ID_PREFIXES.CardId,
 } as const;
 
 // Deck ID
 export const DeckId = {
-  create: (value: string): DeckId =>
-    createId<'DeckId'>(value, ID_PREFIXES.DeckId, 'DeckId'),
-  isValid: (value: unknown): value is DeckId =>
-    isValidId(value, ID_PREFIXES.DeckId),
+  create: (value: string): DeckId => createId<'DeckId'>(value, ID_PREFIXES.DeckId, 'DeckId'),
+  isValid: (value: unknown): value is DeckId => isValidId(value, ID_PREFIXES.DeckId),
   prefix: ID_PREFIXES.DeckId,
 } as const;
 
@@ -200,8 +192,7 @@ export const DeckId = {
 export const CategoryId = {
   create: (value: string): CategoryId =>
     createId<'CategoryId'>(value, ID_PREFIXES.CategoryId, 'CategoryId'),
-  isValid: (value: unknown): value is CategoryId =>
-    isValidId(value, ID_PREFIXES.CategoryId),
+  isValid: (value: unknown): value is CategoryId => isValidId(value, ID_PREFIXES.CategoryId),
   prefix: ID_PREFIXES.CategoryId,
 } as const;
 
@@ -209,8 +200,7 @@ export const CategoryId = {
 export const SessionId = {
   create: (value: string): SessionId =>
     createId<'SessionId'>(value, ID_PREFIXES.SessionId, 'SessionId'),
-  isValid: (value: unknown): value is SessionId =>
-    isValidId(value, ID_PREFIXES.SessionId),
+  isValid: (value: unknown): value is SessionId => isValidId(value, ID_PREFIXES.SessionId),
   prefix: ID_PREFIXES.SessionId,
 } as const;
 
@@ -218,17 +208,14 @@ export const SessionId = {
 export const AttemptId = {
   create: (value: string): AttemptId =>
     createId<'AttemptId'>(value, ID_PREFIXES.AttemptId, 'AttemptId'),
-  isValid: (value: unknown): value is AttemptId =>
-    isValidId(value, ID_PREFIXES.AttemptId),
+  isValid: (value: unknown): value is AttemptId => isValidId(value, ID_PREFIXES.AttemptId),
   prefix: ID_PREFIXES.AttemptId,
 } as const;
 
 // Trace ID
 export const TraceId = {
-  create: (value: string): TraceId =>
-    createId<'TraceId'>(value, ID_PREFIXES.TraceId, 'TraceId'),
-  isValid: (value: unknown): value is TraceId =>
-    isValidId(value, ID_PREFIXES.TraceId),
+  create: (value: string): TraceId => createId<'TraceId'>(value, ID_PREFIXES.TraceId, 'TraceId'),
+  isValid: (value: unknown): value is TraceId => isValidId(value, ID_PREFIXES.TraceId),
   prefix: ID_PREFIXES.TraceId,
 } as const;
 
@@ -236,17 +223,14 @@ export const TraceId = {
 export const DiagnosisId = {
   create: (value: string): DiagnosisId =>
     createId<'DiagnosisId'>(value, ID_PREFIXES.DiagnosisId, 'DiagnosisId'),
-  isValid: (value: unknown): value is DiagnosisId =>
-    isValidId(value, ID_PREFIXES.DiagnosisId),
+  isValid: (value: unknown): value is DiagnosisId => isValidId(value, ID_PREFIXES.DiagnosisId),
   prefix: ID_PREFIXES.DiagnosisId,
 } as const;
 
 // Patch ID
 export const PatchId = {
-  create: (value: string): PatchId =>
-    createId<'PatchId'>(value, ID_PREFIXES.PatchId, 'PatchId'),
-  isValid: (value: unknown): value is PatchId =>
-    isValidId(value, ID_PREFIXES.PatchId),
+  create: (value: string): PatchId => createId<'PatchId'>(value, ID_PREFIXES.PatchId, 'PatchId'),
+  isValid: (value: unknown): value is PatchId => isValidId(value, ID_PREFIXES.PatchId),
   prefix: ID_PREFIXES.PatchId,
 } as const;
 
@@ -254,26 +238,21 @@ export const PatchId = {
 export const LoadoutId = {
   create: (value: string): LoadoutId =>
     createId<'LoadoutId'>(value, ID_PREFIXES.LoadoutId, 'LoadoutId'),
-  isValid: (value: unknown): value is LoadoutId =>
-    isValidId(value, ID_PREFIXES.LoadoutId),
+  isValid: (value: unknown): value is LoadoutId => isValidId(value, ID_PREFIXES.LoadoutId),
   prefix: ID_PREFIXES.LoadoutId,
 } as const;
 
 // Node ID
 export const NodeId = {
-  create: (value: string): NodeId =>
-    createId<'NodeId'>(value, ID_PREFIXES.NodeId, 'NodeId'),
-  isValid: (value: unknown): value is NodeId =>
-    isValidId(value, ID_PREFIXES.NodeId),
+  create: (value: string): NodeId => createId<'NodeId'>(value, ID_PREFIXES.NodeId, 'NodeId'),
+  isValid: (value: unknown): value is NodeId => isValidId(value, ID_PREFIXES.NodeId),
   prefix: ID_PREFIXES.NodeId,
 } as const;
 
 // Edge ID
 export const EdgeId = {
-  create: (value: string): EdgeId =>
-    createId<'EdgeId'>(value, ID_PREFIXES.EdgeId, 'EdgeId'),
-  isValid: (value: unknown): value is EdgeId =>
-    isValidId(value, ID_PREFIXES.EdgeId),
+  create: (value: string): EdgeId => createId<'EdgeId'>(value, ID_PREFIXES.EdgeId, 'EdgeId'),
+  isValid: (value: unknown): value is EdgeId => isValidId(value, ID_PREFIXES.EdgeId),
   prefix: ID_PREFIXES.EdgeId,
 } as const;
 
@@ -281,8 +260,7 @@ export const EdgeId = {
 export const AchievementId = {
   create: (value: string): AchievementId =>
     createId<'AchievementId'>(value, ID_PREFIXES.AchievementId, 'AchievementId'),
-  isValid: (value: unknown): value is AchievementId =>
-    isValidId(value, ID_PREFIXES.AchievementId),
+  isValid: (value: unknown): value is AchievementId => isValidId(value, ID_PREFIXES.AchievementId),
   prefix: ID_PREFIXES.AchievementId,
 } as const;
 
@@ -290,26 +268,21 @@ export const AchievementId = {
 export const StreakId = {
   create: (value: string): StreakId =>
     createId<'StreakId'>(value, ID_PREFIXES.StreakId, 'StreakId'),
-  isValid: (value: unknown): value is StreakId =>
-    isValidId(value, ID_PREFIXES.StreakId),
+  isValid: (value: unknown): value is StreakId => isValidId(value, ID_PREFIXES.StreakId),
   prefix: ID_PREFIXES.StreakId,
 } as const;
 
 // Job ID
 export const JobId = {
-  create: (value: string): JobId =>
-    createId<'JobId'>(value, ID_PREFIXES.JobId, 'JobId'),
-  isValid: (value: unknown): value is JobId =>
-    isValidId(value, ID_PREFIXES.JobId),
+  create: (value: string): JobId => createId<'JobId'>(value, ID_PREFIXES.JobId, 'JobId'),
+  isValid: (value: unknown): value is JobId => isValidId(value, ID_PREFIXES.JobId),
   prefix: ID_PREFIXES.JobId,
 } as const;
 
 // Event ID
 export const EventId = {
-  create: (value: string): EventId =>
-    createId<'EventId'>(value, ID_PREFIXES.EventId, 'EventId'),
-  isValid: (value: unknown): value is EventId =>
-    isValidId(value, ID_PREFIXES.EventId),
+  create: (value: string): EventId => createId<'EventId'>(value, ID_PREFIXES.EventId, 'EventId'),
+  isValid: (value: unknown): value is EventId => isValidId(value, ID_PREFIXES.EventId),
   prefix: ID_PREFIXES.EventId,
 } as const;
 
@@ -317,8 +290,7 @@ export const EventId = {
 export const CorrelationId = {
   create: (value: string): CorrelationId =>
     createId<'CorrelationId'>(value, ID_PREFIXES.CorrelationId, 'CorrelationId'),
-  isValid: (value: unknown): value is CorrelationId =>
-    isValidId(value, ID_PREFIXES.CorrelationId),
+  isValid: (value: unknown): value is CorrelationId => isValidId(value, ID_PREFIXES.CorrelationId),
   prefix: ID_PREFIXES.CorrelationId,
 } as const;
 
@@ -326,46 +298,35 @@ export const CorrelationId = {
 export const CausationId = {
   create: (value: string): CausationId =>
     createId<'CausationId'>(value, ID_PREFIXES.CausationId, 'CausationId'),
-  isValid: (value: unknown): value is CausationId =>
-    isValidId(value, ID_PREFIXES.CausationId),
+  isValid: (value: unknown): value is CausationId => isValidId(value, ID_PREFIXES.CausationId),
   prefix: ID_PREFIXES.CausationId,
 } as const;
 
 // Tool ID
 export const ToolId = {
-  create: (value: string): ToolId =>
-    createId<'ToolId'>(value, ID_PREFIXES.ToolId, 'ToolId'),
-  isValid: (value: unknown): value is ToolId =>
-    isValidId(value, ID_PREFIXES.ToolId),
+  create: (value: string): ToolId => createId<'ToolId'>(value, ID_PREFIXES.ToolId, 'ToolId'),
+  isValid: (value: unknown): value is ToolId => isValidId(value, ID_PREFIXES.ToolId),
   prefix: ID_PREFIXES.ToolId,
 } as const;
 
 // Agent ID
 export const AgentId = {
-  create: (value: string): AgentId =>
-    createId<'AgentId'>(value, ID_PREFIXES.AgentId, 'AgentId'),
-  isValid: (value: unknown): value is AgentId =>
-    isValidId(value, ID_PREFIXES.AgentId),
+  create: (value: string): AgentId => createId<'AgentId'>(value, ID_PREFIXES.AgentId, 'AgentId'),
+  isValid: (value: unknown): value is AgentId => isValidId(value, ID_PREFIXES.AgentId),
   prefix: ID_PREFIXES.AgentId,
 } as const;
 
 // Media ID
 export const MediaId = {
-  create: (value: string): MediaId =>
-    createId<'MediaId'>(value, ID_PREFIXES.MediaId, 'MediaId'),
-  isValid: (value: unknown): value is MediaId =>
-    isValidId(value, ID_PREFIXES.MediaId),
+  create: (value: string): MediaId => createId<'MediaId'>(value, ID_PREFIXES.MediaId, 'MediaId'),
+  isValid: (value: unknown): value is MediaId => isValidId(value, ID_PREFIXES.MediaId),
   prefix: ID_PREFIXES.MediaId,
 } as const;
 
 // Notification ID
 export const NotificationId = {
   create: (value: string): NotificationId =>
-    createId<'NotificationId'>(
-      value,
-      ID_PREFIXES.NotificationId,
-      'NotificationId',
-    ),
+    createId<'NotificationId'>(value, ID_PREFIXES.NotificationId, 'NotificationId'),
   isValid: (value: unknown): value is NotificationId =>
     isValidId(value, ID_PREFIXES.NotificationId),
   prefix: ID_PREFIXES.NotificationId,
@@ -373,10 +334,8 @@ export const NotificationId = {
 
 // Room ID
 export const RoomId = {
-  create: (value: string): RoomId =>
-    createId<'RoomId'>(value, ID_PREFIXES.RoomId, 'RoomId'),
-  isValid: (value: unknown): value is RoomId =>
-    isValidId(value, ID_PREFIXES.RoomId),
+  create: (value: string): RoomId => createId<'RoomId'>(value, ID_PREFIXES.RoomId, 'RoomId'),
+  isValid: (value: unknown): value is RoomId => isValidId(value, ID_PREFIXES.RoomId),
   prefix: ID_PREFIXES.RoomId,
 } as const;
 
