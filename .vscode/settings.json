@@ -17,5 +17,12 @@
     "**/node_modules": true,
     "**/dist": true,
     "**/.turbo": true
+  },
+  "prisma.pinToPrisma6": true,
+  "[prisma]": {
+    "editor.defaultFormatter": "Prisma.prisma"
+  },
+  "[dockerfile]": {
+    "editor.defaultFormatter": "ms-azuretools.vscode-containers"
   }
 }
