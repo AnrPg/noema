@@ -15,3 +15,6 @@ export * from './agent-hints.js';
 
 // Response wrappers for APIs and tools
 export * from './responses.js';
+
+// Health check contracts (universal across all services)
+export * from './health.js';
