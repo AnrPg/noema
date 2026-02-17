@@ -44,7 +44,7 @@ export type DependencyStatus = (typeof DependencyStatus)[keyof typeof Dependency
 /**
  * Result of a single dependency health check.
  */
-export interface DependencyCheck {
+export interface IDependencyCheck {
   /** Dependency status */
   status: DependencyStatus;
 
@@ -65,7 +65,7 @@ export interface DependencyCheck {
  * Standard health check response.
  * Every service exposes this at GET /health
  */
-export interface HealthCheckResponse {
+export interface IHealthCheckResponse {
   /** Overall service status */
   status: HealthStatus;
 
@@ -84,19 +84,19 @@ export interface HealthCheckResponse {
   /** Individual dependency checks */
   checks: {
     /** Primary database connection */
-    database?: DependencyCheck;
+    database?: IDependencyCheck;
 
     /** Redis cache connection */
-    redis?: DependencyCheck;
+    redis?: IDependencyCheck;
 
     /** RabbitMQ / message queue */
-    messageQueue?: DependencyCheck;
+    messageQueue?: IDependencyCheck;
 
     /** External API dependencies */
-    externalApis?: Record<string, DependencyCheck>;
+    externalApis?: Record<string, IDependencyCheck>;
 
     /** Other services this service depends on */
-    services?: Record<string, DependencyCheck>;
+    services?: Record<string, IDependencyCheck>;
   };
 }
 
@@ -108,7 +108,7 @@ export interface HealthCheckResponse {
  * Kubernetes liveness probe response.
  * Simple check: is the process alive?
  */
-export interface LivenessResponse {
+export interface ILivenessResponse {
   /** Always 'alive' if the service responds */
   status: 'alive';
 
@@ -123,7 +123,7 @@ export interface LivenessResponse {
  * Kubernetes readiness probe response.
  * Check: is the service ready to receive traffic?
  */
-export interface ReadinessResponse {
+export interface IReadinessResponse {
   /** Whether service is ready */
   ready: boolean;
 

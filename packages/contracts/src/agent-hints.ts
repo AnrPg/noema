@@ -143,7 +143,7 @@ export type WarningSeverity = (typeof WarningSeverity)[keyof typeof WarningSever
 /**
  * A suggested next action for the agent.
  */
-export interface SuggestedAction {
+export interface ISuggestedAction {
   /** Action identifier (kebab-case) */
   action: string;
 
@@ -185,7 +185,7 @@ export interface SuggestedAction {
 /**
  * Resource metadata for related resources.
  */
-export interface ResourceMetadata {
+export interface IResourceMetadata {
   category?: string;
   lastAccessed?: string;
   accessCount?: number;
@@ -196,7 +196,7 @@ export interface ResourceMetadata {
 /**
  * A related resource that may be useful.
  */
-export interface RelatedResource {
+export interface IRelatedResource {
   /** Resource type */
   type: string;
 
@@ -210,7 +210,7 @@ export interface RelatedResource {
   relevance: number;
 
   /** Additional metadata */
-  metadata?: ResourceMetadata;
+  metadata?: IResourceMetadata;
 }
 
 // ============================================================================
@@ -220,7 +220,7 @@ export interface RelatedResource {
 /**
  * A potential risk associated with the suggestions.
  */
-export interface RiskFactor {
+export interface IRiskFactor {
   /** Risk type */
   type: RiskType;
 
@@ -247,7 +247,7 @@ export interface RiskFactor {
 /**
  * Dependency between actions.
  */
-export interface ActionDependency {
+export interface IActionDependency {
   /** The dependent action */
   action: string;
 
@@ -268,7 +268,7 @@ export interface ActionDependency {
 /**
  * Expected impact if suggestions are followed.
  */
-export interface EstimatedImpact {
+export interface IEstimatedImpact {
   /** Benefit score (0.0 to 1.0) */
   benefit: number;
 
@@ -289,7 +289,7 @@ export interface EstimatedImpact {
 /**
  * How a suggestion aligns with user preferences.
  */
-export interface PreferenceAlignment {
+export interface IPreferenceAlignment {
   /** Which action this applies to */
   action: string;
 
@@ -313,7 +313,7 @@ export interface PreferenceAlignment {
 /**
  * Warning about potential issues.
  */
-export interface Warning {
+export interface IWarning {
   /** Warning type */
   type: WarningType;
 
@@ -340,7 +340,7 @@ export interface Warning {
 /**
  * Alternative approach that was considered.
  */
-export interface Alternative {
+export interface IAlternative {
   /** Description of alternative */
   approach: string;
 
@@ -367,7 +367,7 @@ export interface Alternative {
 /**
  * Metadata about hint generation.
  */
-export interface HintsMetadata {
+export interface IHintsMetadata {
   /** When hints were generated */
   generatedAt: string;
 
@@ -393,14 +393,14 @@ export interface HintsMetadata {
  *
  * @version 2.0.0
  */
-export interface AgentHints {
+export interface IAgentHints {
   // ========== REQUIRED CORE FIELDS (8) ==========
 
   /** Suggested next actions (can be empty array) */
-  suggestedNextActions: SuggestedAction[];
+  suggestedNextActions: ISuggestedAction[];
 
   /** Related resources (can be empty array) */
-  relatedResources: RelatedResource[];
+  relatedResources: IRelatedResource[];
 
   /** Overall confidence (0.0 to 1.0) */
   confidence: number;
@@ -418,16 +418,16 @@ export interface AgentHints {
   assumptions: string[];
 
   /** Risk factors (can be empty array) */
-  riskFactors: RiskFactor[];
+  riskFactors: IRiskFactor[];
 
   /** Action dependencies (can be empty array) */
-  dependencies: ActionDependency[];
+  dependencies: IActionDependency[];
 
   /** Expected impact if suggestions followed */
-  estimatedImpact: EstimatedImpact;
+  estimatedImpact: IEstimatedImpact;
 
   /** How suggestions align with preferences (can be empty) */
-  preferenceAlignment: PreferenceAlignment[];
+  preferenceAlignment: IPreferenceAlignment[];
 
   // ========== OPTIONAL FIELDS (Strongly Recommended) ==========
 
@@ -435,16 +435,16 @@ export interface AgentHints {
   reasoning?: string;
 
   /** Potential issues and warnings */
-  warnings?: Warning[];
+  warnings?: IWarning[];
 
   /** Alternative approaches considered */
-  alternatives?: Alternative[];
+  alternatives?: IAlternative[];
 
   /** Limitations on the suggestions */
   constraints?: string[];
 
   /** Generation metadata */
-  metadata?: HintsMetadata;
+  metadata?: IHintsMetadata;
 }
 
 // ============================================================================
@@ -454,7 +454,7 @@ export interface AgentHints {
 /**
  * Create minimal valid AgentHints (all required fields with empty/default values).
  */
-export function createEmptyAgentHints(): AgentHints {
+export function createEmptyAgentHints(): IAgentHints {
   return {
     suggestedNextActions: [],
     relatedResources: [],

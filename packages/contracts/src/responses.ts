@@ -5,8 +5,8 @@
  * All responses include data, agentHints, and metadata.
  */
 
-import type { Metadata, JsonValue } from '@noema/types';
-import type { AgentHints } from './agent-hints.js';
+import type { JsonValue, Metadata } from '@noema/types';
+import type { IAgentHints } from './agent-hints.js';
 
 // ============================================================================
 // API Response
@@ -15,7 +15,7 @@ import type { AgentHints } from './agent-hints.js';
 /**
  * Standard metadata included in API responses.
  */
-export interface ResponseMetadata {
+export interface IResponseMetadata {
   /** Request ID for tracing */
   requestId: string;
 
@@ -44,7 +44,7 @@ export interface ResponseMetadata {
 /**
  * Pagination info for list responses.
  */
-export interface PaginationInfo {
+export interface IPaginationInfo {
   /** Current page offset */
   offset: number;
 
@@ -66,24 +66,24 @@ export interface PaginationInfo {
  *
  * @typeParam TData - The data type being returned
  */
-export interface ApiResponse<TData> {
+export interface IApiResponse<TData> {
   /** The primary response data */
   data: TData;
 
   /** Hints for agent guidance */
-  agentHints: AgentHints;
+  agentHints: IAgentHints;
 
   /** Response metadata */
-  metadata: ResponseMetadata;
+  metadata: IResponseMetadata;
 
   /** Pagination info (for list responses) */
-  pagination?: PaginationInfo;
+  pagination?: IPaginationInfo;
 }
 
 /**
  * Standard API error response.
  */
-export interface ApiErrorResponse {
+export interface IApiErrorResponse {
   /** Error details */
   error: {
     /** Machine-readable error code */
@@ -103,7 +103,7 @@ export interface ApiErrorResponse {
   };
 
   /** Response metadata */
-  metadata: ResponseMetadata;
+  metadata: IResponseMetadata;
 }
 
 // ============================================================================
@@ -113,7 +113,7 @@ export interface ApiErrorResponse {
 /**
  * Metadata included in tool results.
  */
-export interface ToolResultMetadata {
+export interface IToolResultMetadata {
   /** Tool version (semver) */
   toolVersion: string;
 
@@ -141,15 +141,15 @@ export interface ToolResultMetadata {
  *
  * @typeParam TResult - The result data type
  */
-export interface ToolResult<TResult> {
+export interface IToolResult<TResult> {
   /** The primary result data */
   data: TResult;
 
   /** Hints for agent guidance (NEVER omit) */
-  agentHints: AgentHints;
+  agentHints: IAgentHints;
 
   /** Tool execution metadata */
-  metadata: ToolResultMetadata;
+  metadata: IToolResultMetadata;
 }
 
 // ============================================================================
@@ -159,7 +159,7 @@ export interface ToolResult<TResult> {
 /**
  * Context provided to tool handlers.
  */
-export interface ToolContext {
+export interface IToolContext {
   /** User making the request (null for system) */
   userId?: string | null;
 
@@ -197,15 +197,15 @@ export interface ToolContext {
  * @typeParam TError - The error type
  */
 export type ServiceResult<TData, TError = Error> =
-  | { success: true; data: TData; agentHints: AgentHints }
-  | { success: false; error: TError; agentHints?: AgentHints };
+  | { success: true; data: TData; agentHints: IAgentHints }
+  | { success: false; error: TError; agentHints?: IAgentHints };
 
 /**
  * Helper to create successful service result.
  */
 export function serviceOk<TData>(
   data: TData,
-  agentHints: AgentHints
+  agentHints: IAgentHints
 ): ServiceResult<TData, never> {
   return { success: true, data, agentHints };
 }
@@ -215,9 +215,9 @@ export function serviceOk<TData>(
  */
 export function serviceErr<TError>(
   error: TError,
-  agentHints?: AgentHints
+  agentHints?: IAgentHints
 ): ServiceResult<never, TError> {
-  const base = { success: false as const, error };
+  const base: { success: false; error: TError } = { success: false, error };
   if (agentHints !== undefined) {
     return { ...base, agentHints };
   }

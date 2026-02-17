@@ -11,7 +11,7 @@
 /**
  * Standard timestamp fields for all entities.
  */
-export interface Timestamps {
+export interface ITimestamps {
   /** When entity was created (ISO 8601) */
   createdAt: string;
   /** When entity was last updated (ISO 8601) */
@@ -21,7 +21,7 @@ export interface Timestamps {
 /**
  * Soft-delete support.
  */
-export interface SoftDeletable {
+export interface ISoftDeletable {
   /** When entity was soft-deleted (ISO 8601), null if active */
   deletedAt: string | null;
 }
@@ -33,7 +33,7 @@ export interface SoftDeletable {
 /**
  * Optimistic locking version field.
  */
-export interface Versioned {
+export interface IVersioned {
   /** Version for optimistic concurrency control */
   version: number;
 }
@@ -45,7 +45,7 @@ export interface Versioned {
 /**
  * Full audit trail fields.
  */
-export interface Auditable {
+export interface IAuditable {
   /** User who created this entity */
   createdBy: string;
   /** User who last updated this entity */
@@ -59,12 +59,12 @@ export interface Auditable {
 /**
  * Standard entity with timestamps and version.
  */
-export interface BaseEntity extends Timestamps, Versioned {}
+export interface IBaseEntity extends ITimestamps, IVersioned {}
 
 /**
  * Full-featured entity with audit trail.
  */
-export interface AuditedEntity extends BaseEntity, Auditable, SoftDeletable {}
+export interface IAuditedEntity extends IBaseEntity, IAuditable, ISoftDeletable {}
 
 // ============================================================================
 // Pagination
@@ -73,7 +73,7 @@ export interface AuditedEntity extends BaseEntity, Auditable, SoftDeletable {}
 /**
  * Cursor-based pagination request.
  */
-export interface CursorPagination {
+export interface ICursorPagination {
   /** Cursor for next page */
   cursor?: string;
   /** Number of items per page */
@@ -83,7 +83,7 @@ export interface CursorPagination {
 /**
  * Offset-based pagination request.
  */
-export interface OffsetPagination {
+export interface IOffsetPagination {
   /** Page offset (0-indexed) */
   offset: number;
   /** Number of items per page */
@@ -93,7 +93,7 @@ export interface OffsetPagination {
 /**
  * Paginated response wrapper.
  */
-export interface PaginatedResponse<T> {
+export interface IPaginatedResponse<T> {
   /** Items in this page */
   items: T[];
   /** Total count (if available) */
@@ -171,10 +171,10 @@ export type NullableKeys<T> = {
  */
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonArray = JsonValue[];
-export interface JsonObject {
+export interface IJsonObject {
   [key: string]: JsonValue;
 }
-export type JsonValue = JsonPrimitive | JsonArray | JsonObject;
+export type JsonValue = JsonPrimitive | JsonArray | IJsonObject;
 
 // ============================================================================
 // Metadata Types
@@ -188,7 +188,7 @@ export type Metadata = Record<string, JsonValue>;
 /**
  * Entity with metadata support.
  */
-export interface WithMetadata {
+export interface IWithMetadata {
   /** Arbitrary metadata (JSON-compatible) */
   metadata?: Metadata;
 }
@@ -206,7 +206,7 @@ export type Duration = string;
 /**
  * Time range with start and optional end.
  */
-export interface TimeRange {
+export interface ITimeRange {
   /** Start time (ISO 8601) */
   start: string;
   /** End time (ISO 8601), null if ongoing */
@@ -239,7 +239,7 @@ export type Percentage = number;
 /**
  * 2D coordinates.
  */
-export interface Point2D {
+export interface IPoint2D {
   x: number;
   y: number;
 }
@@ -247,7 +247,7 @@ export interface Point2D {
 /**
  * Rectangular region.
  */
-export interface Rectangle {
+export interface IRectangle {
   x: number;
   y: number;
   width: number;
@@ -261,13 +261,13 @@ export interface Rectangle {
 /**
  * Structured error for API responses.
  */
-export interface ApiError {
+export interface IApiError {
   /** Error code (machine-readable) */
   code: string;
   /** Human-readable message */
   message: string;
   /** Additional details */
-  details?: JsonObject;
+  details?: IJsonObject;
   /** Stack trace (dev only) */
   stack?: string;
 }
@@ -275,7 +275,7 @@ export interface ApiError {
 /**
  * Validation error with field-level details.
  */
-export interface ValidationError extends ApiError {
+export interface IValidationError extends IApiError {
   /** Field-specific errors */
   fieldErrors: Record<string, string[]>;
 }

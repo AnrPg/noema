@@ -6,14 +6,14 @@
  */
 
 import type {
-  EventId,
-  CorrelationId,
-  CausationId,
-  UserId,
-  SessionId,
   AgentId,
+  CausationId,
+  CorrelationId,
   Environment,
+  EventId,
   Metadata,
+  SessionId,
+  UserId,
 } from '@noema/types';
 
 // ============================================================================
@@ -44,7 +44,7 @@ export type AggregateId = string;
 /**
  * Required metadata for all events.
  */
-export interface EventMetadata {
+export interface IEventMetadata {
   /** Service that published the event (e.g., "content-service") */
   serviceName: string;
 
@@ -88,7 +88,7 @@ export interface EventMetadata {
  *
  * @typeParam TPayload - The event-specific payload type
  */
-export interface BaseEvent<TPayload = unknown> {
+export interface IBaseEvent<TPayload = unknown> {
   /** Globally unique event identifier (UUID v4) */
   eventId: EventId;
 
@@ -108,7 +108,7 @@ export interface BaseEvent<TPayload = unknown> {
   timestamp: string;
 
   /** Event metadata for tracing and context */
-  metadata: EventMetadata;
+  metadata: IEventMetadata;
 
   /** Event-specific data */
   payload: TPayload;
@@ -121,11 +121,11 @@ export interface BaseEvent<TPayload = unknown> {
 /**
  * Create a strongly-typed event interface.
  */
-export interface TypedEvent<
+export interface ITypedEvent<
   TEventType extends string,
   TAggregateType extends string,
   TPayload,
-> extends BaseEvent<TPayload> {
+> extends IBaseEvent<TPayload> {
   eventType: TEventType;
   aggregateType: TAggregateType;
 }

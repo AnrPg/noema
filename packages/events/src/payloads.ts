@@ -19,8 +19,7 @@ export const EventSourceType = {
   IMPORT: 'import',
 } as const;
 
-export type EventSourceType =
-  (typeof EventSourceType)[keyof typeof EventSourceType];
+export type EventSourceType = (typeof EventSourceType)[keyof typeof EventSourceType];
 
 // ============================================================================
 // Pattern 1: Created Payload
@@ -31,7 +30,7 @@ export type EventSourceType =
  *
  * @typeParam TEntity - The entity type being created
  */
-export interface CreatedPayload<TEntity> {
+export interface ICreatedPayload<TEntity> {
   /** Full or partial entity data */
   entity: TEntity;
 
@@ -54,7 +53,7 @@ export interface CreatedPayload<TEntity> {
  *
  * @typeParam TChanges - Fields that can be changed
  */
-export interface UpdatedPayload<TChanges> {
+export interface IUpdatedPayload<TChanges> {
   /** Only the fields that changed */
   changes: TChanges;
 
@@ -83,7 +82,7 @@ export interface UpdatedPayload<TChanges> {
  *
  * @typeParam TSnapshot - Entity snapshot type (optional)
  */
-export interface DeletedPayload<TSnapshot = unknown> {
+export interface IDeletedPayload<TSnapshot = unknown> {
   /** ID of deleted entity */
   deletedId: string;
 
@@ -122,7 +121,7 @@ export type StateTrigger = (typeof StateTrigger)[keyof typeof StateTrigger];
  * @typeParam TState - The state enum/union type
  * @typeParam TContext - Additional context type
  */
-export interface StateChangedPayload<TState extends string, TContext = unknown> {
+export interface IStateChangedPayload<TState extends string, TContext = unknown> {
   /** State before the change */
   previousState: TState;
 
@@ -146,7 +145,7 @@ export interface StateChangedPayload<TState extends string, TContext = unknown> 
 /**
  * Payload for telemetry/analytics events.
  */
-export interface TelemetryPayload {
+export interface ITelemetryPayload {
   /** Event category (e.g., "engagement", "performance") */
   category: string;
 
@@ -172,7 +171,7 @@ export interface TelemetryPayload {
  *
  * @typeParam TResult - Command result type
  */
-export interface CommandResultPayload<TResult = unknown> {
+export interface ICommandResultPayload<TResult = unknown> {
   /** Whether command succeeded */
   success: boolean;
 
@@ -198,7 +197,7 @@ export interface CommandResultPayload<TResult = unknown> {
  *
  * @typeParam TItem - The item type in the batch
  */
-export interface BatchPayload<TItem> {
+export interface IBatchPayload<TItem> {
   /** Total items in batch */
   totalItems: number;
 
@@ -212,5 +211,5 @@ export interface BatchPayload<TItem> {
   succeeded?: TItem[];
 
   /** Items that failed with reasons */
-  failed?: Array<{ item: TItem; reason: string }>;
+  failed?: { item: TItem; reason: string }[];
 }
