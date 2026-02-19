@@ -17,7 +17,7 @@ services:
       # Enable additional logging for development
       POSTGRES_INITDB_ARGS: "--data-checksums"
     ports:
-      - "5432:5432" # Expose on standard port for local tools
+      - "${POSTGRES_PORT:-5432}:5432" # Use env var for external port
 
   # ===========================================================================
   # Redis Commander - Redis GUI
