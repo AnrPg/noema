@@ -5,8 +5,8 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import Fastify from 'fastify';
-import Redis from 'ioredis';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { Redis } from 'ioredis';
 import pino from 'pino';
 
 import { registerHealthRoutes } from './api/rest/health.routes.js';
@@ -26,13 +26,15 @@ async function bootstrap(): Promise<void> {
   // Load configuration
   const config = loadConfig();
 
-  // Create logger
-  const logger = pino({
-    level: config.logging.level,
-    transport: config.logging.pretty
-      ? { target: 'pino-pretty', options: { colorize: true } }
-      : undefined,
-  });
+  // Create logger - use pino-pretty via stream for dev, standard for prod
+  let logger: pino.Logger;
+  if (config.logging.pretty) {
+    // Dynamic import pino-pretty for development
+    const pinoPretty = await import('pino-pretty');
+    logger = pino({ level: config.logging.level }, pinoPretty.default({ colorize: true }));
+  } else {
+    logger = pino({ level: config.logging.level });
+  }
 
   logger.info(
     { serviceName: config.service.name, version: config.service.version },
@@ -63,15 +65,11 @@ async function bootstrap(): Promise<void> {
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
 
   // Create service
-  const userService = new UserService(userRepository, tokenService, eventPublisher, {
-    bcryptRounds: config.auth.bcryptRounds,
-    maxLoginAttempts: config.auth.maxLoginAttempts,
-    lockoutDurationMinutes: config.auth.lockoutDurationMinutes,
-  });
+  const userService = new UserService(userRepository, eventPublisher, tokenService, logger);
 
   // Create Fastify instance
   const fastify = Fastify({
-    logger,
+    loggerInstance: logger,
     requestIdHeader: 'x-correlation-id',
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
@@ -81,8 +79,8 @@ async function bootstrap(): Promise<void> {
   const authMiddleware = createAuthMiddleware(tokenService);
 
   // Register routes
-  await registerHealthRoutes(fastify, prisma, redis);
-  await registerUserRoutes(fastify, userService, authMiddleware);
+  await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
+  await registerUserRoutes(fastify as unknown as FastifyInstance, userService, authMiddleware);
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
