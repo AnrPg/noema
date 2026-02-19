@@ -23,15 +23,15 @@ export const MAX_HISTORY_ITEMS = 5;
  */
 export const UserStatus = {
   /** Newly registered, awaiting email verification */
-  PENDING: 'pending',
+  PENDING: 'PENDING',
   /** Active and verified */
-  ACTIVE: 'active',
+  ACTIVE: 'ACTIVE',
   /** Temporarily suspended */
-  SUSPENDED: 'suspended',
+  SUSPENDED: 'SUSPENDED',
   /** Permanently banned */
-  BANNED: 'banned',
+  BANNED: 'BANNED',
   /** Account deactivated by user */
-  DEACTIVATED: 'deactivated',
+  DEACTIVATED: 'DEACTIVATED',
 } as const;
 
 export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
@@ -418,9 +418,9 @@ export interface IUserFilters {
   authProvider?: AuthProvider;
 
   // Profile filters
-  username?: string;  // partial match
-  displayName?: string;  // partial match
-  country?: string;  // ISO 3166-1 alpha-2
+  username?: string; // partial match
+  displayName?: string; // partial match
+  country?: string; // ISO 3166-1 alpha-2
   language?: Language;
   timezone?: string;
 
@@ -433,7 +433,7 @@ export interface IUserFilters {
   lastLoginBefore?: string;
 
   // Full-text search
-  search?: string;  // searches email, username, displayName
+  search?: string; // searches email, username, displayName
 }
 
 // ============================================================================
@@ -469,7 +469,7 @@ export interface IUserReadModel {
  * Contains only the fields needed for create/update operations.
  */
 export interface IUserWriteModel {
-  id?: UserId;  // optional for create
+  id?: UserId; // optional for create
   email?: string;
   username?: string;
   passwordHash?: string;

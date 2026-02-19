@@ -13,7 +13,7 @@ import type {
   IUpdateProfileInput,
   IUpdateSettingsInput,
   IUser,
-} from '../../types/user.types.js';
+} from '../types/user.types.js';
 
 // ============================================================================
 // Event Types

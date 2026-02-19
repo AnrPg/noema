@@ -5,6 +5,7 @@
  */
 
 import { ID_PREFIXES, type Environment, type EventId } from '@noema/types';
+import type { Redis } from 'ioredis';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 import type { IEventPublisher, IEventToPublish } from '../../domain/shared/event-publisher.js';

@@ -6,6 +6,18 @@
 
 import type { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
+import type { Redis } from 'ioredis';
+
+// Module augmentation to extend FastifySchema with OpenAPI properties
+declare module 'fastify' {
+  interface FastifySchema {
+    tags?: string[];
+    summary?: string;
+    description?: string;
+    deprecated?: boolean;
+    operationId?: string;
+  }
+}
 
 /**
  * Health check response.

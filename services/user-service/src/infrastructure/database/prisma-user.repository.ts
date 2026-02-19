@@ -9,18 +9,25 @@ import type { Prisma, PrismaClient, User as PrismaUser } from '@prisma/client';
 import { VersionConflictError } from '../../domain/user-service/errors/index.js';
 import type { IUserRepository } from '../../domain/user-service/user.repository.js';
 import type {
-    ICreateUserInput,
-    IFailedLoginHistoryEntry,
-    ILoginHistoryEntry,
-    IPasswordChangeHistoryEntry,
-    IUpdateProfileInput,
-    IUpdateSettingsInput,
-    IUser,
-    IUserFilters,
-    IUserProfile,
-    IUserSettings,
+  ICreateUserInput,
+  IFailedLoginHistoryEntry,
+  ILoginHistoryEntry,
+  IPasswordChangeHistoryEntry,
+  IUpdateProfileInput,
+  IUpdateSettingsInput,
+  IUser,
+  IUserFilters,
+  IUserProfile,
+  IUserSettings,
 } from '../../types/user.types.js';
-import { AuthProvider, Language, MAX_HISTORY_ITEMS, Theme, UserRole, UserStatus } from '../../types/user.types.js';
+import {
+  AuthProvider,
+  Language,
+  MAX_HISTORY_ITEMS,
+  Theme,
+  UserRole,
+  UserStatus,
+} from '../../types/user.types.js';
 
 // ============================================================================
 // Default Values
@@ -114,7 +121,6 @@ export class PrismaUserRepository implements IUserRepository {
       items: users.map((u) => this.toDomain(u)),
       total,
       hasMore: pagination.offset + pagination.limit < total,
-      nextCursor: undefined,
     };
   }
 
@@ -155,7 +161,7 @@ export class PrismaUserRepository implements IUserRepository {
         id: input.id,
         username: input.username.toLowerCase(),
         email: input.email.toLowerCase(),
-        passwordHash: input.passwordHash,
+        passwordHash: input.passwordHash ?? null,
         status: UserStatus.PENDING,
         emailVerified: false,
         roles: [UserRole.LEARNER],
@@ -220,12 +226,18 @@ export class PrismaUserRepository implements IUserRepository {
     return this.toDomain(user);
   }
 
-  async updatePassword(id: UserId, passwordHash: string, version: number, changedBy?: UserId): Promise<IUser> {
+  async updatePassword(
+    id: UserId,
+    passwordHash: string,
+    version: number,
+    changedBy?: UserId
+  ): Promise<IUser> {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new Error(`User not found: ${id}`);
 
     // Build updated password change history
-    let passwordChangeHistory = (existing.passwordChangeHistory as unknown as IPasswordChangeHistoryEntry[]) || [];
+    let passwordChangeHistory =
+      (existing.passwordChangeHistory as unknown as IPasswordChangeHistoryEntry[]) || [];
     const newEntry: IPasswordChangeHistoryEntry = {
       timestamp: new Date().toISOString(),
       changedBy,
@@ -262,7 +274,7 @@ export class PrismaUserRepository implements IUserRepository {
       where: { id, version },
       data: {
         emailVerified: verified,
-        status: verified ? UserStatus.ACTIVE : undefined,
+        ...(verified && { status: UserStatus.ACTIVE }),
         version: { increment: 1 },
       },
     });
@@ -301,12 +313,16 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  async incrementFailedLoginAttempts(id: UserId, entry?: IFailedLoginHistoryEntry): Promise<number> {
+  async incrementFailedLoginAttempts(
+    id: UserId,
+    entry?: IFailedLoginHistoryEntry
+  ): Promise<number> {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) return 0;
 
     // Build updated failed login history
-    let failedLoginHistory = (existing.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];
+    let failedLoginHistory =
+      (existing.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];
     if (entry) {
       failedLoginHistory = [entry, ...failedLoginHistory].slice(0, MAX_HISTORY_ITEMS);
     }
@@ -477,7 +493,7 @@ export class PrismaUserRepository implements IUserRepository {
 
     if (filters.country) {
       where.profile = {
-        ...where.profile as object,
+        ...(where.profile as object),
         path: ['country'],
         equals: filters.country,
       };
@@ -485,7 +501,7 @@ export class PrismaUserRepository implements IUserRepository {
 
     if (filters.language) {
       where.profile = {
-        ...where.profile as object,
+        ...(where.profile as object),
         path: ['language'],
         equals: filters.language,
       };
@@ -493,7 +509,7 @@ export class PrismaUserRepository implements IUserRepository {
 
     if (filters.timezone) {
       where.profile = {
-        ...where.profile as object,
+        ...(where.profile as object),
         path: ['timezone'],
         equals: filters.timezone,
       };
@@ -526,7 +542,9 @@ export class PrismaUserRepository implements IUserRepository {
         (where.lastLoginAt as Prisma.DateTimeNullableFilter).gte = new Date(filters.lastLoginAfter);
       }
       if (filters.lastLoginBefore) {
-        (where.lastLoginAt as Prisma.DateTimeNullableFilter).lte = new Date(filters.lastLoginBefore);
+        (where.lastLoginAt as Prisma.DateTimeNullableFilter).lte = new Date(
+          filters.lastLoginBefore
+        );
       }
     }
 
@@ -545,8 +563,10 @@ export class PrismaUserRepository implements IUserRepository {
     const profile = user.profile as unknown as IUserProfile;
     const settings = user.settings as unknown as IUserSettings;
     const loginHistory = (user.loginHistory as unknown as ILoginHistoryEntry[]) || [];
-    const failedLoginHistory = (user.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];
-    const passwordChangeHistory = (user.passwordChangeHistory as unknown as IPasswordChangeHistoryEntry[]) || [];
+    const failedLoginHistory =
+      (user.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];
+    const passwordChangeHistory =
+      (user.passwordChangeHistory as unknown as IPasswordChangeHistoryEntry[]) || [];
 
     return {
       id: user.id as UserId,

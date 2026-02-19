@@ -8,25 +8,40 @@ import type { IApiResponse } from '@noema/contracts';
 import type { CorrelationId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
-    AuthenticationError,
-    BusinessRuleError,
-    DomainError,
-    EmailAlreadyExistsError,
-    UsernameAlreadyExistsError,
-    UserNotFoundError,
-    ValidationError,
-    VersionConflictError,
+  AuthenticationError,
+  BusinessRuleError,
+  DomainError,
+  EmailAlreadyExistsError,
+  UsernameAlreadyExistsError,
+  UserNotFoundError,
+  ValidationError,
+  VersionConflictError,
 } from '../../domain/user-service/errors/index.js';
 import type { IExecutionContext, UserService } from '../../domain/user-service/user.service.js';
 import type {
-    IChangePasswordInput,
-    ICreateUserInput,
-    ILoginInput,
-    IUpdateProfileInput,
-    IUpdateSettingsInput,
-    IUserFilters
+  IChangePasswordInput,
+  ICreateUserInput,
+  ILoginInput,
+  IUpdateProfileInput,
+  IUpdateSettingsInput,
+  IUserFilters,
 } from '../../types/user.types.js';
 import { UserRole } from '../../types/user.types.js';
+
+// Module augmentation to extend FastifySchema with OpenAPI properties
+declare module 'fastify' {
+  interface FastifySchema {
+    tags?: string[];
+    summary?: string;
+    description?: string;
+    deprecated?: boolean;
+    operationId?: string;
+    security?: unknown[];
+    consumes?: string[];
+    produces?: string[];
+    externalDocs?: { description?: string; url: string };
+  }
+}
 
 // ============================================================================
 // Request/Response Types
@@ -48,12 +63,11 @@ interface UpdateBody<T> {
 /**
  * Register user routes.
  */
-export async function userRoutes(
+export async function registerUserRoutes(
   fastify: FastifyInstance,
-  opts: { userService: UserService }
+  userService: UserService,
+  _authMiddleware?: unknown
 ): Promise<void> {
-  const { userService } = opts;
-
   // ============================================================================
   // Helper Functions
   // ============================================================================
@@ -62,23 +76,25 @@ export async function userRoutes(
    * Build execution context from request.
    */
   function buildContext(request: FastifyRequest): IExecutionContext {
-    return {
-      userId: (request.user?.id as UserId) || null,
-      correlationId: (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
-      roles: (request.user?.roles as UserRole[]) || [],
+    const user = request.user as { id?: string; roles?: string[] } | undefined;
+    const userAgent = request.headers['user-agent'];
+    const context: IExecutionContext = {
+      userId: (user?.id as UserId) || null,
+      correlationId:
+        (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
+      roles: (user?.roles as UserRole[]) || [],
       clientIp: request.ip,
-      userAgent: request.headers['user-agent'],
     };
+    if (userAgent) {
+      context.userAgent = userAgent;
+    }
+    return context;
   }
 
   /**
    * Standard response wrapper.
    */
-  function wrapResponse<T>(
-    data: T,
-    agentHints: unknown,
-    request: FastifyRequest
-  ): IApiResponse<T> {
+  function wrapResponse<T>(data: T, agentHints: unknown, request: FastifyRequest): IApiResponse<T> {
     return {
       data,
       agentHints: agentHints as IApiResponse<T>['agentHints'],
@@ -493,7 +509,7 @@ export async function userRoutes(
     async (request, reply) => {
       try {
         const context = buildContext(request);
-        const result = await userService.delete(
+        await userService.delete(
           request.params.id as UserId,
           request.query.soft !== false,
           context
