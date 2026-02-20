@@ -1,0 +1,13 @@
+# =============================================================================
+# HLR Sidecar - Half-Life Regression Service
+# =============================================================================
+# Thin FastAPI wrapper around Duolingo's HLR algorithm
+# See: third-party/halflife-regression/
+# =============================================================================
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+structlog>=24.4.0
+httpx>=0.28.0
