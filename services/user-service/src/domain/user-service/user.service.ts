@@ -29,8 +29,10 @@ import { UserRole, UserStatus } from '../../types/user.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
   AccountLockedError,
+  AuthorizationError,
   BusinessRuleError,
   EmailAlreadyExistsError,
+  InsufficientRoleError,
   InvalidAccountStatusError,
   InvalidCredentialsError,
   TooManyLoginAttemptsError,
@@ -761,7 +763,7 @@ export class UserService {
 
   private requireRole(context: IExecutionContext, roles: UserRole[]): void {
     if (!this.hasRole(context, roles)) {
-      throw new BusinessRuleError(`Requires one of these roles: ${roles.join(', ')}`);
+      throw new InsufficientRoleError(roles);
     }
   }
 
@@ -770,7 +772,7 @@ export class UserService {
       context.userId !== targetId &&
       !this.hasRole(context, [UserRole.ADMIN, UserRole.SUPER_ADMIN])
     ) {
-      throw new BusinessRuleError('Access denied');
+      throw new AuthorizationError('Access denied');
     }
   }
 
