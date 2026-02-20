@@ -31,8 +31,14 @@ export type UserId = Brand<string, 'UserId'>;
 /** Card identifier - prefix: card_ */
 export type CardId = Brand<string, 'CardId'>;
 
-/** Deck identifier - prefix: deck_ */
-export type DeckId = Brand<string, 'DeckId'>;
+/**
+ * Deck query log identifier - prefix: deck_
+ * TODO: To be used in future implementation of DeckQueryLog — an append-only log
+ * that records deck query executions (filters, resolved card IDs, timestamps)
+ * for analytics, reproducibility, and potential session replay. Decks are not
+ * persisted entities; they are dynamic queries on the card archive + knowledge graph.
+ */
+export type DeckQueryLogId = Brand<string, 'DeckQueryLogId'>;
 
 /** Category identifier - prefix: cat_ */
 export type CategoryId = Brand<string, 'CategoryId'>;
@@ -105,7 +111,7 @@ export type RoomId = Brand<string, 'RoomId'>;
 export const ID_PREFIXES = {
   UserId: 'user_',
   CardId: 'card_',
-  DeckId: 'deck_',
+  DeckQueryLogId: 'deck_',
   CategoryId: 'category_',
   SessionId: 'session_',
   AttemptId: 'attempt_',
@@ -181,11 +187,13 @@ export const CardId = {
   prefix: ID_PREFIXES.CardId,
 } as const;
 
-// Deck ID
-export const DeckId = {
-  create: (value: string): DeckId => createId<'DeckId'>(value, ID_PREFIXES.DeckId, 'DeckId'),
-  isValid: (value: unknown): value is DeckId => isValidId(value, ID_PREFIXES.DeckId),
-  prefix: ID_PREFIXES.DeckId,
+// Deck Query Log ID
+export const DeckQueryLogId = {
+  create: (value: string): DeckQueryLogId =>
+    createId<'DeckQueryLogId'>(value, ID_PREFIXES.DeckQueryLogId, 'DeckQueryLogId'),
+  isValid: (value: unknown): value is DeckQueryLogId =>
+    isValidId(value, ID_PREFIXES.DeckQueryLogId),
+  prefix: ID_PREFIXES.DeckQueryLogId,
 } as const;
 
 // Category ID
@@ -349,7 +357,7 @@ export const RoomId = {
 export type AnyBrandedId =
   | UserId
   | CardId
-  | DeckId
+  | DeckQueryLogId
   | CategoryId
   | SessionId
   | AttemptId

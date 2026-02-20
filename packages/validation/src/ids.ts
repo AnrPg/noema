@@ -5,8 +5,8 @@
  * These ensure IDs have correct format at runtime.
  */
 
-import { z } from 'zod';
 import { ID_PREFIXES } from '@noema/types';
+import { z } from 'zod';
 
 // ============================================================================
 // Base ID Schema Factory
@@ -29,7 +29,7 @@ function createIdSchema(prefix: string, description: string) {
 
 export const UserIdSchema = createIdSchema(ID_PREFIXES.UserId, 'User ID');
 export const CardIdSchema = createIdSchema(ID_PREFIXES.CardId, 'Card ID');
-export const DeckIdSchema = createIdSchema(ID_PREFIXES.DeckId, 'Deck ID');
+export const DeckQueryLogIdSchema = createIdSchema(ID_PREFIXES.DeckQueryLogId, 'Deck Query Log ID');
 export const CategoryIdSchema = createIdSchema(ID_PREFIXES.CategoryId, 'Category ID');
 export const SessionIdSchema = createIdSchema(ID_PREFIXES.SessionId, 'Session ID');
 export const AttemptIdSchema = createIdSchema(ID_PREFIXES.AttemptId, 'Attempt ID');
@@ -61,7 +61,7 @@ export const RoomIdSchema = createIdSchema(ID_PREFIXES.RoomId, 'Room ID');
 export const IdSchemas = {
   [ID_PREFIXES.UserId]: UserIdSchema,
   [ID_PREFIXES.CardId]: CardIdSchema,
-  [ID_PREFIXES.DeckId]: DeckIdSchema,
+  [ID_PREFIXES.DeckQueryLogId]: DeckQueryLogIdSchema,
   [ID_PREFIXES.CategoryId]: CategoryIdSchema,
   [ID_PREFIXES.SessionId]: SessionIdSchema,
   [ID_PREFIXES.AttemptId]: AttemptIdSchema,
@@ -90,7 +90,7 @@ export const IdSchemas = {
 
 export type UserIdInput = z.input<typeof UserIdSchema>;
 export type CardIdInput = z.input<typeof CardIdSchema>;
-export type DeckIdInput = z.input<typeof DeckIdSchema>;
+export type DeckQueryLogIdInput = z.input<typeof DeckQueryLogIdSchema>;
 export type CategoryIdInput = z.input<typeof CategoryIdSchema>;
 export type SessionIdInput = z.input<typeof SessionIdSchema>;
 export type AttemptIdInput = z.input<typeof AttemptIdSchema>;
