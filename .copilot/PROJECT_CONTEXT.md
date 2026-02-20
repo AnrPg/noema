@@ -871,7 +871,12 @@ noema/
 │   ├── vector-service/
 │   ├── notification-service/
 │   ├── media-service/
-│   └── collaboration-service/
+│   ├── collaboration-service/
+│   └── hlr-sidecar/          # Python FastAPI — HLR algorithm sidecar
+│
+├── third-party/               # External Algorithm Submodules
+│   ├── fsrs4anki/            # Git submodule — FSRS v6.1.1 reference (JS)
+│   └── halflife-regression/  # Git submodule — HLR (Python, Duolingo)
 │
 ├── agents/                    # LLM Agents
 │   ├── learning-agent/
