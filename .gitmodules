@@ -1,0 +1,6 @@
+[submodule "third-party/fsrs4anki"]
+	path = third-party/fsrs4anki
+	url = https://github.com/open-spaced-repetition/fsrs4anki.git
+[submodule "third-party/halflife-regression"]
+	path = third-party/halflife-regression
+	url = https://github.com/duolingo/halflife-regression.git

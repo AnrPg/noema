@@ -7,6 +7,13 @@ node_modules/
 **/node_modules/
 .pnpm-store/
 
+# Third-party submodule build artifacts
+third-party/**/node_modules/
+third-party/**/dist/
+third-party/**/__pycache__/
+third-party/**/results/
+third-party/**/.venv/
+
 # Build outputs
 dist/
 build/
