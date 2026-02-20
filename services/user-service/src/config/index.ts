@@ -39,6 +39,10 @@ export interface IServiceConfig {
     maxLoginAttempts: number;
     lockoutDurationMinutes: number;
   };
+  cors: {
+    origin: string[];
+    credentials: boolean;
+  };
   logging: {
     level: string;
     pretty: boolean;
@@ -112,6 +116,15 @@ export function loadConfig(): IServiceConfig {
       bcryptRounds: optionalEnvInt('BCRYPT_ROUNDS', 12),
       maxLoginAttempts: optionalEnvInt('MAX_LOGIN_ATTEMPTS', 5),
       lockoutDurationMinutes: optionalEnvInt('LOCKOUT_DURATION_MINUTES', 15),
+    },
+    cors: {
+      origin: optionalEnv(
+        'CORS_ORIGIN',
+        'http://localhost:3000,http://localhost:3004,http://localhost:3003'
+      )
+        .split(',')
+        .map((s) => s.trim()),
+      credentials: optionalEnvBool('CORS_CREDENTIALS', true),
     },
     logging: {
       level: optionalEnv('LOG_LEVEL', environment === 'production' ? 'info' : 'debug'),

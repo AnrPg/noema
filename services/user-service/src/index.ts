@@ -5,6 +5,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
@@ -73,6 +74,14 @@ async function bootstrap(): Promise<void> {
     requestIdHeader: 'x-correlation-id',
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
+  });
+
+  // Register CORS
+  await fastify.register(cors, {
+    origin: config.cors.origin,
+    credentials: config.cors.credentials,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
   });
 
   // Create auth middleware

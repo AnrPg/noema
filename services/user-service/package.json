@@ -31,6 +31,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@fastify/cors": "^11.0.0",
     "@noema/contracts": "workspace:*",
     "@noema/events": "workspace:*",
     "@noema/types": "workspace:*",
