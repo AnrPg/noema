@@ -418,6 +418,29 @@ export const StreakType = {
 export type StreakType = (typeof StreakType)[keyof typeof StreakType];
 
 // ============================================================================
+// Content & Difficulty
+// ============================================================================
+
+/**
+ * Difficulty levels for cards and knowledge graph nodes.
+ * Maps to Bloom's taxonomy tiers and determines scheduling parameters.
+ */
+export const DifficultyLevel = {
+  /** Foundational recall, pure recognition */
+  BEGINNER: 'beginner',
+  /** Basic comprehension, simple application */
+  ELEMENTARY: 'elementary',
+  /** Analysis, multi-step reasoning */
+  INTERMEDIATE: 'intermediate',
+  /** Synthesis, evaluation, near transfer */
+  ADVANCED: 'advanced',
+  /** Far transfer, novel contexts, metacognitive */
+  EXPERT: 'expert',
+} as const;
+
+export type DifficultyLevel = (typeof DifficultyLevel)[keyof typeof DifficultyLevel];
+
+// ============================================================================
 // Ingestion
 // ============================================================================
 

@@ -1,0 +1,143 @@
+// Prisma schema for content-service
+// Database: PostgreSQL
+// Design: Pure card archive with polymorphic JSONB content (ADR-0010 Decision 5)
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Card Entity
+// ============================================================================
+
+model Card {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Type discriminator (polymorphic JSONB dispatch)
+    cardType   CardType
+    state      CardState       @default(DRAFT)
+    difficulty DifficultyLevel @default(INTERMEDIATE)
+
+    // Polymorphic content blob — schema validated at app layer by Zod
+    content Json @default("{}")
+
+    // Knowledge graph linkage (card → PKG nodes)
+    nodeIds String[] @default([]) @map("node_ids")
+
+    // Classification
+    tags String[] @default([])
+
+    // Provenance
+    source EventSource @default(USER)
+
+    // Extensible metadata (scheduling hints, generation params, etc.)
+    metadata Json @default("{}")
+
+    // Audit fields
+    createdAt DateTime  @default(now()) @map("created_at")
+    updatedAt DateTime  @updatedAt @map("updated_at")
+    deletedAt DateTime? @map("deleted_at")
+    createdBy String?   @map("created_by") @db.VarChar(50)
+    updatedBy String?   @map("updated_by") @db.VarChar(50)
+
+    // Optimistic locking
+    version Int @default(1)
+
+    // Indexes
+    @@index([userId])
+    @@index([cardType])
+    @@index([state])
+    @@index([difficulty])
+    @@index([source])
+    @@index([createdAt])
+    @@index([deletedAt])
+    @@index([nodeIds], type: Gin)
+    @@index([tags], type: Gin)
+    @@map("cards")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum CardType {
+    ATOMIC
+    CLOZE
+    IMAGE_OCCLUSION
+    AUDIO
+    PROCESS
+    COMPARISON
+    EXCEPTION
+    ERROR_SPOTTING
+    CONFIDENCE_RATED
+    CONCEPT_GRAPH
+    CASE_BASED
+    MULTIMODAL
+    TRANSFER
+    PROGRESSIVE_DISCLOSURE
+    MULTIPLE_CHOICE
+    TRUE_FALSE
+    MATCHING
+    ORDERING
+    DEFINITION
+    CAUSE_EFFECT
+    TIMELINE
+    DIAGRAM
+    // Remediation card types
+    CONTRASTIVE_PAIR
+    MINIMAL_PAIR
+    FALSE_FRIEND
+    OLD_VS_NEW_DEFINITION
+    BOUNDARY_CASE
+    RULE_SCOPE
+    DISCRIMINANT_FEATURE
+    ASSUMPTION_CHECK
+    COUNTEREXAMPLE
+    REPRESENTATION_SWITCH
+    RETRIEVAL_CUE
+    ENCODING_REPAIR
+    OVERWRITE_DRILL
+    AVAILABILITY_BIAS_DISCONFIRMATION
+    SELF_CHECK_RITUAL
+    CALIBRATION_TRAINING
+    ATTRIBUTION_REFRAMING
+    STRATEGY_REMINDER
+    CONFUSABLE_SET_DRILL
+    PARTIAL_KNOWLEDGE_DECOMPOSITION
+
+    @@map("card_type")
+}
+
+enum CardState {
+    DRAFT
+    ACTIVE
+    SUSPENDED
+    ARCHIVED
+
+    @@map("card_state")
+}
+
+enum DifficultyLevel {
+    BEGINNER
+    ELEMENTARY
+    INTERMEDIATE
+    ADVANCED
+    EXPERT
+
+    @@map("difficulty_level")
+}
+
+enum EventSource {
+    USER
+    AGENT
+    SYSTEM
+    IMPORT
+
+    @@map("event_source")
+}
