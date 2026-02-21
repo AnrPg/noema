@@ -24,24 +24,25 @@ scrape_configs:
       - targets: ["localhost:9090"]
 
   # Node.js Services
+  # Port assignments match service configs (see content-service/src/config/index.ts CORS_ORIGIN)
   - job_name: "noema-services"
     static_configs:
       - targets:
           - "host.docker.internal:3001" # user-service
-          - "host.docker.internal:3002" # content-service
-          - "host.docker.internal:3003" # scheduler-service
-          - "host.docker.internal:3004" # session-service
-          - "host.docker.internal:3005" # gamification-service
+          - "host.docker.internal:3002" # session-service
+          - "host.docker.internal:3005" # content-service
           - "host.docker.internal:3006" # knowledge-graph-service
-          - "host.docker.internal:3007" # metacognition-service
-          - "host.docker.internal:3008" # strategy-service
-          - "host.docker.internal:3009" # ingestion-service
-          - "host.docker.internal:3010" # analytics-service
-          - "host.docker.internal:3011" # sync-service
-          - "host.docker.internal:3012" # vector-service
-          - "host.docker.internal:3013" # notification-service
-          - "host.docker.internal:3014" # media-service
-          - "host.docker.internal:3015" # collaboration-service
+          - "host.docker.internal:3007" # analytics-service
+          - "host.docker.internal:3008" # notification-service
+          - "host.docker.internal:3009" # gamification-service
+          - "host.docker.internal:3010" # collaboration-service
+          - "host.docker.internal:3011" # media-service
+          - "host.docker.internal:3012" # sync-service
+          - "host.docker.internal:3013" # vector-service
+          - "host.docker.internal:3014" # scheduler-service
+          - "host.docker.internal:3015" # ingestion-service
+          - "host.docker.internal:3016" # metacognition-service
+          - "host.docker.internal:3017" # strategy-service
     metrics_path: "/metrics"
     scrape_interval: 10s
 

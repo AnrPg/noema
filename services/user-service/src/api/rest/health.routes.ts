@@ -4,9 +4,9 @@
  * Health check endpoints for Kubernetes probes.
  */
 
-import type { PrismaClient } from '@prisma/client';
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
+import type { PrismaClient } from '../../../generated/prisma/index.js';
 
 // Module augmentation to extend FastifySchema with OpenAPI properties
 declare module 'fastify' {

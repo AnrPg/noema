@@ -4,11 +4,11 @@
  * Service bootstrap and dependency injection.
  */
 
-import { PrismaClient } from '@prisma/client';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
+import { PrismaClient } from '../generated/prisma/index.js';
 
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerUserRoutes } from './api/rest/user.routes.js';

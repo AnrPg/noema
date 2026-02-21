@@ -17,8 +17,20 @@ export default tseslint.config(
       '**/expo-env.d.ts',
       '**/*.generated.*',
       '**/prisma/client/**',
-      // Services are skeleton directories without package.json
-      'services/**',
+      // Skeleton services (no source code yet)
+      'services/analytics-service/**',
+      'services/collaboration-service/**',
+      'services/gamification-service/**',
+      'services/ingestion-service/**',
+      'services/knowledge-graph-service/**',
+      'services/media-service/**',
+      'services/metacognition-service/**',
+      'services/notification-service/**',
+      'services/scheduler-service/**',
+      'services/session-service/**',
+      'services/strategy-service/**',
+      'services/sync-service/**',
+      'services/vector-service/**',
       // Config files at root level
       'eslint.config.mjs',
     ],
@@ -143,6 +155,18 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
       'no-console': 'off',
+    },
+  },
+
+  // Fastify route files — async handlers are the correct pattern;
+  // Fastify internally awaits the returned promise.
+  {
+    files: ['services/**/src/api/**/*.ts', 'services/**/src/agents/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        { checksVoidReturn: { properties: false } },
+      ],
     },
   },
 

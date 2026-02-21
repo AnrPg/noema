@@ -152,6 +152,36 @@ export interface IToolResult<TResult> {
   metadata: IToolResultMetadata;
 }
 
+/**
+ * Result from executing an MCP tool handler.
+ *
+ * Unlike {@link IToolResult} (the wire response format), this includes a
+ * success/error discriminant because tool handlers may fail.  Metadata is
+ * populated by the ToolRegistry after execution — handlers may omit it.
+ *
+ * @typeParam TResult - The result data type (default: unknown)
+ */
+export interface IToolExecutionResult<TResult = unknown> {
+  /** Whether the tool executed successfully */
+  success: boolean;
+
+  /** Result data (present when success=true) */
+  data?: TResult;
+
+  /** Error info (present when success=false) */
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+
+  /** Agent guidance hints (always present) */
+  agentHints: IAgentHints;
+
+  /** Execution metadata — populated by ToolRegistry.execute() */
+  metadata?: IToolResultMetadata;
+}
+
 // ============================================================================
 // Tool Context
 // ============================================================================
