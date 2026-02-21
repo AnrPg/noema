@@ -4,6 +4,7 @@
 
 generator client {
     provider = "prisma-client-js"
+    output   = "../generated/prisma"
 }
 
 datasource db {
@@ -75,12 +76,12 @@ model Template {
     description String? @db.VarChar(2000)
 
     // Card blueprint fields
-    cardType   CardType
-    content    Json            @default("{}")
-    difficulty DifficultyLevel @default(INTERMEDIATE)
-    knowledgeNodeIds    String[]        @default([]) @map("knowledge_node_ids")
-    tags       String[]        @default([])
-    metadata   Json            @default("{}")
+    cardType         CardType
+    content          Json            @default("{}")
+    difficulty       DifficultyLevel @default(INTERMEDIATE)
+    knowledgeNodeIds String[]        @default([]) @map("knowledge_node_ids")
+    tags             String[]        @default([])
+    metadata         Json            @default("{}")
 
     // Access control
     visibility TemplateVisibility @default(PRIVATE)

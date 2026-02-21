@@ -160,3 +160,6 @@ GoogleService-Info.plist
 *.zip
 *.tar
 *.rar
+
+# Prisma generated clients
+**/generated/prisma

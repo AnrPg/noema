@@ -5,7 +5,7 @@
  */
 
 import type { IOffsetPagination, IPaginatedResponse, UserId } from '@noema/types';
-import type { Prisma, PrismaClient, User as PrismaUser } from '@prisma/client';
+import type { Prisma, PrismaClient, User as PrismaUser } from '../../../generated/prisma/index.js';
 import { VersionConflictError } from '../../domain/user-service/errors/index.js';
 import type { IUserRepository } from '../../domain/user-service/user.repository.js';
 import type {

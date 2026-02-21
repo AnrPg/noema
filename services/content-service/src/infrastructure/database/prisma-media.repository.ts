@@ -6,7 +6,7 @@
  */
 
 import type { MediaId, UserId } from '@noema/types';
-import { type PrismaClient, Prisma } from '@prisma/client';
+import { type Prisma, type PrismaClient } from '../../../generated/prisma/index.js';
 import type { IMediaRepository } from '../../domain/content-service/media.repository.js';
 import type { ICreateMediaInput, IMediaFile } from '../../types/content.types.js';
 
@@ -36,8 +36,8 @@ export class PrismaMediaRepository implements IMediaRepository {
     options?: { mimeType?: string; limit?: number; offset?: number }
   ): Promise<{ items: IMediaFile[]; total: number }> {
     const where: Prisma.MediaFileWhereInput = { userId, deletedAt: null };
-    if (options?.mimeType) {
-      where['mimeType'] = options.mimeType;
+    if (options?.mimeType !== undefined && options.mimeType !== '') {
+      where.mimeType = options.mimeType;
     }
 
     const [records, total] = await this.prisma.$transaction([

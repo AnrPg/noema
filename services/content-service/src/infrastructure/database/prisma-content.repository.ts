@@ -16,7 +16,15 @@ import type {
   RemediationCardType,
   UserId,
 } from '@noema/types';
-import type { Prisma, Card as PrismaCard, PrismaClient } from '@prisma/client';
+import type {
+  Prisma,
+  Card as PrismaCard,
+  CardState as PrismaCardState,
+  CardType as PrismaCardType,
+  PrismaClient,
+  DifficultyLevel as PrismaDifficultyLevel,
+  EventSource as PrismaEventSource,
+} from '../../../generated/prisma/index.js';
 import type { IContentRepository } from '../../domain/content-service/content.repository.js';
 import { VersionConflictError } from '../../domain/content-service/errors/index.js';
 import { generatePreview } from '../../domain/content-service/value-objects/content.value-objects.js';
@@ -107,12 +115,12 @@ export class PrismaContentRepository implements IContentRepository {
         userId: input.userId,
         cardType: this.toDbCardType(input.cardType),
         state: 'DRAFT',
-        difficulty: this.toDbDifficulty(input.difficulty || 'intermediate'),
-        content: (input.content || {}) as unknown as Prisma.JsonObject,
-        knowledgeNodeIds: (input.knowledgeNodeIds as string[]) || [],
-        tags: input.tags || [],
-        source: this.toDbSource(input.source || 'user'),
-        metadata: (input.metadata || {}) as unknown as Prisma.JsonObject,
+        difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
+        content: input.content as unknown as Prisma.JsonObject,
+        knowledgeNodeIds: input.knowledgeNodeIds as string[],
+        tags: input.tags ?? [],
+        source: this.toDbSource(input.source ?? 'user'),
+        metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
         createdBy: input.userId,
         version: 1,
       },
@@ -122,13 +130,14 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   async createBatch(
-    inputs: Array<ICreateCardInput & { id: CardId; userId: UserId }>
+    inputs: (ICreateCardInput & { id: CardId; userId: UserId })[]
   ): Promise<IBatchCreateResult> {
     const created: ICard[] = [];
-    const failed: Array<{ index: number; error: string; input: ICreateCardInput }> = [];
+    const failed: { index: number; error: string; input: ICreateCardInput }[] = [];
 
     // Use individual creates within a transaction for partial success
     for (let i = 0; i < inputs.length; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       const input = inputs[i]!;
       try {
         const card = await this.prisma.card.create({
@@ -137,12 +146,12 @@ export class PrismaContentRepository implements IContentRepository {
             userId: input.userId,
             cardType: this.toDbCardType(input.cardType),
             state: 'DRAFT',
-            difficulty: this.toDbDifficulty(input.difficulty || 'intermediate'),
-            content: (input.content || {}) as unknown as Prisma.JsonObject,
-            knowledgeNodeIds: (input.knowledgeNodeIds as string[]) || [],
-            tags: input.tags || [],
-            source: this.toDbSource(input.source || 'user'),
-            metadata: (input.metadata || {}) as unknown as Prisma.JsonObject,
+            difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
+            content: input.content as unknown as Prisma.JsonObject,
+            knowledgeNodeIds: input.knowledgeNodeIds as string[],
+            tags: input.tags ?? [],
+            source: this.toDbSource(input.source ?? 'user'),
+            metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
             createdBy: input.userId,
             version: 1,
           },
@@ -352,7 +361,7 @@ export class PrismaContentRepository implements IContentRepository {
     if (query.sources && query.sources.length > 0) {
       where.source = { in: query.sources.map((s) => this.toDbSource(s)) };
     }
-    if (query.search) {
+    if (query.search !== undefined && query.search !== '') {
       // Use Prisma JSON filtering for content search
       // This is a basic implementation; full-text search would use pg_trgm
       where.OR = [
@@ -360,27 +369,31 @@ export class PrismaContentRepository implements IContentRepository {
         { content: { path: ['back'], string_contains: query.search } },
       ];
     }
-    if (query.createdAfter) {
+    if (query.createdAfter !== undefined && query.createdAfter !== '') {
+      const existing = (where.createdAt ?? {}) as Prisma.DateTimeFilter;
       where.createdAt = {
-        ...((where.createdAt as Prisma.DateTimeFilter) || {}),
+        ...existing,
         gte: new Date(query.createdAfter),
       };
     }
-    if (query.createdBefore) {
+    if (query.createdBefore !== undefined && query.createdBefore !== '') {
+      const existing = (where.createdAt ?? {}) as Prisma.DateTimeFilter;
       where.createdAt = {
-        ...((where.createdAt as Prisma.DateTimeFilter) || {}),
+        ...existing,
         lte: new Date(query.createdBefore),
       };
     }
-    if (query.updatedAfter) {
+    if (query.updatedAfter !== undefined && query.updatedAfter !== '') {
+      const existing = (where.updatedAt ?? {}) as Prisma.DateTimeFilter;
       where.updatedAt = {
-        ...((where.updatedAt as Prisma.DateTimeFilter) || {}),
+        ...existing,
         gte: new Date(query.updatedAfter),
       };
     }
-    if (query.updatedBefore) {
+    if (query.updatedBefore !== undefined && query.updatedBefore !== '') {
+      const existing = (where.updatedAt ?? {}) as Prisma.DateTimeFilter;
       where.updatedAt = {
-        ...((where.updatedAt as Prisma.DateTimeFilter) || {}),
+        ...existing,
         lte: new Date(query.updatedBefore),
       };
     }
@@ -389,8 +402,8 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   private buildOrderBy(query: IDeckQuery): Prisma.CardOrderByWithRelationInput {
-    const field = query.sortBy || 'createdAt';
-    const direction = query.sortOrder || 'desc';
+    const field = query.sortBy ?? 'createdAt';
+    const direction = query.sortOrder ?? 'desc';
 
     return { [field]: direction };
   }
@@ -424,7 +437,7 @@ export class PrismaContentRepository implements IContentRepository {
 
   private toSummary(card: PrismaCard): ICardSummary {
     const content = card.content as unknown as ICardContent;
-    const front = typeof content?.front === 'string' ? content.front : '';
+    const front = typeof content.front === 'string' ? content.front : '';
 
     return {
       id: card.id as CardId,
@@ -446,23 +459,23 @@ export class PrismaContentRepository implements IContentRepository {
   // Enum Mapping (app lowercase ↔ Prisma UPPERCASE)
   // ============================================================================
 
-  private toDbCardType(type: string): import('@prisma/client').CardType {
-    return type.toUpperCase() as import('@prisma/client').CardType;
+  private toDbCardType(type: string): PrismaCardType {
+    return type.toUpperCase() as PrismaCardType;
   }
 
   private fromDbCardType(type: string): string {
     return type.toLowerCase();
   }
 
-  private toDbState(state: string): import('@prisma/client').CardState {
-    return state.toUpperCase() as import('@prisma/client').CardState;
+  private toDbState(state: string): PrismaCardState {
+    return state.toUpperCase() as PrismaCardState;
   }
 
-  private toDbDifficulty(difficulty: string): import('@prisma/client').DifficultyLevel {
-    return difficulty.toUpperCase() as import('@prisma/client').DifficultyLevel;
+  private toDbDifficulty(difficulty: string): PrismaDifficultyLevel {
+    return difficulty.toUpperCase() as PrismaDifficultyLevel;
   }
 
-  private toDbSource(source: string): import('@prisma/client').EventSource {
-    return source.toUpperCase() as import('@prisma/client').EventSource;
+  private toDbSource(source: string): PrismaEventSource {
+    return source.toUpperCase() as PrismaEventSource;
   }
 }

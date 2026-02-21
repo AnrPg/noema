@@ -5,32 +5,32 @@
  */
 
 import type {
-    CardType,
-    DifficultyLevel,
-    IPaginatedResponse,
-    JsonValue,
-    NodeId,
-    RemediationCardType,
-    TemplateId,
-    UserId,
+  CardType,
+  DifficultyLevel,
+  IPaginatedResponse,
+  JsonValue,
+  NodeId,
+  RemediationCardType,
+  TemplateId,
+  UserId,
 } from '@noema/types';
 import type {
-    Prisma,
-    CardType as PrismaCardType,
-    PrismaClient,
-    DifficultyLevel as PrismaDifficultyLevel,
-    Template as PrismaTemplate,
-    TemplateVisibility as PrismaTemplateVisibility,
-} from '@prisma/client';
+  Prisma,
+  CardType as PrismaCardType,
+  PrismaClient,
+  DifficultyLevel as PrismaDifficultyLevel,
+  Template as PrismaTemplate,
+  TemplateVisibility as PrismaTemplateVisibility,
+} from '../../../generated/prisma/index.js';
 import { VersionConflictError } from '../../domain/content-service/errors/index.js';
 import type { ITemplateRepository } from '../../domain/content-service/template.repository.js';
 import type {
-    ICreateTemplateInput,
-    ITemplate,
-    ITemplateQuery,
-    ITemplateSummary,
-    IUpdateTemplateInput,
-    TemplateVisibility,
+  ICreateTemplateInput,
+  ITemplate,
+  ITemplateQuery,
+  ITemplateSummary,
+  IUpdateTemplateInput,
+  TemplateVisibility,
 } from '../../types/content.types.js';
 
 // ============================================================================
@@ -162,9 +162,9 @@ export class PrismaTemplateRepository implements ITemplateRepository {
         name: input.name,
         description: input.description ?? null,
         cardType: toDbCardType(input.cardType),
-        content: (input.content ?? {}) as unknown as Prisma.JsonObject,
+        content: input.content as unknown as Prisma.JsonObject,
         difficulty: toDbDifficulty(input.difficulty ?? 'intermediate'),
-        knowledgeNodeIds: (input.knowledgeNodeIds as string[]) ?? [],
+        knowledgeNodeIds: input.knowledgeNodeIds as string[],
         tags: input.tags ?? [],
         metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
         visibility: toDbVisibility(input.visibility ?? 'private'),
@@ -178,16 +178,18 @@ export class PrismaTemplateRepository implements ITemplateRepository {
   async update(id: TemplateId, input: IUpdateTemplateInput, version: number): Promise<ITemplate> {
     const data: Prisma.TemplateUpdateInput = {};
 
-    if (input.name !== undefined) data['name'] = input.name;
-    if (input.description !== undefined) data['description'] = input.description;
-    if (input.content !== undefined) data['content'] = input.content as unknown as Prisma.JsonObject;
-    if (input.difficulty !== undefined) data['difficulty'] = toDbDifficulty(input.difficulty);
-    if (input.knowledgeNodeIds !== undefined) data['knowledgeNodeIds'] = input.knowledgeNodeIds as string[];
-    if (input.tags !== undefined) data['tags'] = input.tags;
-    if (input.metadata !== undefined) data['metadata'] = input.metadata as unknown as Prisma.JsonObject;
-    if (input.visibility !== undefined) data['visibility'] = toDbVisibility(input.visibility);
+    if (input.name !== undefined) data.name = input.name;
+    if (input.description !== undefined) data.description = input.description;
+    if (input.content !== undefined) data.content = input.content as unknown as Prisma.JsonObject;
+    if (input.difficulty !== undefined) data.difficulty = toDbDifficulty(input.difficulty);
+    if (input.knowledgeNodeIds !== undefined)
+      data.knowledgeNodeIds = input.knowledgeNodeIds as string[];
+    if (input.tags !== undefined) data.tags = input.tags;
+    if (input.metadata !== undefined)
+      data.metadata = input.metadata as unknown as Prisma.JsonObject;
+    if (input.visibility !== undefined) data.visibility = toDbVisibility(input.visibility);
 
-    data['version'] = { increment: 1 };
+    data.version = { increment: 1 };
 
     try {
       const row = await this.prisma.template.update({
@@ -237,29 +239,29 @@ export class PrismaTemplateRepository implements ITemplateRepository {
 
     // Non-admin: own templates + public templates
     // The service layer handles admin bypass via the userId param
-    where['OR'] = [
+    where.OR = [
       { userId },
       { visibility: 'PUBLIC' as PrismaTemplateVisibility },
       { visibility: 'SHARED' as PrismaTemplateVisibility },
     ];
 
-    if (query.cardTypes?.length) {
-      where['cardType'] = { in: query.cardTypes.map(toDbCardType) };
+    if (query.cardTypes !== undefined && query.cardTypes.length > 0) {
+      where.cardType = { in: query.cardTypes.map(toDbCardType) };
     }
 
-    if (query.visibility) {
-      where['visibility'] = toDbVisibility(query.visibility);
+    if (query.visibility !== undefined) {
+      where.visibility = toDbVisibility(query.visibility);
       // If filtering by visibility, remove the OR clause
-      delete where['OR'];
-      where['userId'] = userId;
+      delete where.OR;
+      where.userId = userId;
     }
 
-    if (query.tags?.length) {
-      where['tags'] = { hasSome: query.tags };
+    if (query.tags !== undefined && query.tags.length > 0) {
+      where.tags = { hasSome: query.tags };
     }
 
-    if (query.search) {
-      where['OR'] = [
+    if (query.search !== undefined && query.search !== '') {
+      where.OR = [
         { name: { contains: query.search, mode: 'insensitive' as const } },
         { description: { contains: query.search, mode: 'insensitive' as const } },
       ];
@@ -268,7 +270,7 @@ export class PrismaTemplateRepository implements ITemplateRepository {
     return where;
   }
 
-  private buildOrderBy(query: ITemplateQuery) {
+  private buildOrderBy(query: ITemplateQuery): Prisma.TemplateOrderByWithRelationInput {
     const field = query.sortBy ?? 'createdAt';
     const order = query.sortOrder ?? 'desc';
 

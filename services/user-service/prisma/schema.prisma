@@ -3,6 +3,7 @@
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -15,60 +16,59 @@ datasource db {
 // ============================================================================
 
 model User {
-  id           String   @id @db.VarChar(50)
-  username     String   @unique @db.VarChar(30)
-  email        String   @unique @db.VarChar(254)
-  passwordHash String?  @map("password_hash") @db.VarChar(128)
-  
+  id           String  @id @db.VarChar(50)
+  username     String  @unique @db.VarChar(30)
+  email        String  @unique @db.VarChar(254)
+  passwordHash String? @map("password_hash") @db.VarChar(128)
+
   // Status
-  status       UserStatus @default(PENDING)
-  emailVerified Boolean  @default(false) @map("email_verified")
-  
+  status        UserStatus @default(PENDING)
+  emailVerified Boolean    @default(false) @map("email_verified")
+
   // Roles (stored as JSON array)
-  roles        String[]  @default(["learner"])
-  
+  roles String[] @default(["learner"])
+
   // Auth providers (stored as JSON array)
   authProviders String[] @default([]) @map("auth_providers")
-  
+
   // Profile (embedded JSON)
-  profile      Json     @default("{}")
-  
+  profile Json @default("{}")
+
   // Settings (embedded JSON)
-  settings     Json     @default("{}")
-  
+  settings Json @default("{}")
+
   // Login tracking
-  lastLoginAt  DateTime? @map("last_login_at")
-  loginCount   Int       @default(0) @map("login_count")
-  failedLoginAttempts Int @default(0) @map("failed_login_attempts")
-  lockedUntil  DateTime? @map("locked_until")
-  passwordChangedAt DateTime? @map("password_changed_at")
-  
+  lastLoginAt         DateTime? @map("last_login_at")
+  loginCount          Int       @default(0) @map("login_count")
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until")
+  passwordChangedAt   DateTime? @map("password_changed_at")
+
   // History arrays (stored as JSON, max MAX_HISTORY_ITEMS entries)
-  loginHistory Json @default("[]") @map("login_history")
-  failedLoginHistory Json @default("[]") @map("failed_login_history")
+  loginHistory          Json @default("[]") @map("login_history")
+  failedLoginHistory    Json @default("[]") @map("failed_login_history")
   passwordChangeHistory Json @default("[]") @map("password_change_history")
-  
+
   // MFA
-  mfaEnabled   Boolean  @default(false) @map("mfa_enabled")
-  mfaSecret    String?  @map("mfa_secret") @db.VarChar(128)
-  
+  mfaEnabled Boolean @default(false) @map("mfa_enabled")
+  mfaSecret  String? @map("mfa_secret") @db.VarChar(128)
+
   // Audit fields
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  deletedAt    DateTime? @map("deleted_at")
-  createdBy    String?  @map("created_by") @db.VarChar(50)
-  updatedBy    String?  @map("updated_by") @db.VarChar(50)
-  
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  createdBy String?   @map("created_by") @db.VarChar(50)
+  updatedBy String?   @map("updated_by") @db.VarChar(50)
+
   // Optimistic locking
-  version      Int      @default(1)
-  
+  version Int @default(1)
+
   // Indexes
   @@index([email])
   @@index([username])
   @@index([status])
   @@index([createdAt])
   @@index([deletedAt])
-  
   @@map("users")
 }
 
@@ -77,22 +77,21 @@ model User {
 // ============================================================================
 
 model RefreshToken {
-  id        String   @id @db.VarChar(50)
-  userId    String   @map("user_id") @db.VarChar(50)
-  token     String   @unique @db.VarChar(512)
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @db.VarChar(50)
+  userId    String    @map("user_id") @db.VarChar(50)
+  token     String    @unique @db.VarChar(512)
+  expiresAt DateTime  @map("expires_at")
   revokedAt DateTime? @map("revoked_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  
+  createdAt DateTime  @default(now()) @map("created_at")
+
   // Device info
-  deviceId  String?  @map("device_id") @db.VarChar(100)
-  userAgent String?  @map("user_agent") @db.VarChar(500)
-  ipAddress String?  @map("ip_address") @db.VarChar(45)
-  
+  deviceId  String? @map("device_id") @db.VarChar(100)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+
   @@index([userId])
   @@index([token])
   @@index([expiresAt])
-  
   @@map("refresh_tokens")
 }
 
@@ -101,22 +100,21 @@ model RefreshToken {
 // ============================================================================
 
 model UserSession {
-  id        String   @id @db.VarChar(50)
-  userId    String   @map("user_id") @db.VarChar(50)
-  
+  id     String @id @db.VarChar(50)
+  userId String @map("user_id") @db.VarChar(50)
+
   // Session metadata
-  deviceId  String?  @map("device_id") @db.VarChar(100)
-  userAgent String?  @map("user_agent") @db.VarChar(500)
-  ipAddress String?  @map("ip_address") @db.VarChar(45)
-  
+  deviceId  String? @map("device_id") @db.VarChar(100)
+  userAgent String? @map("user_agent") @db.VarChar(500)
+  ipAddress String? @map("ip_address") @db.VarChar(45)
+
   // Timestamps
-  startedAt DateTime @default(now()) @map("started_at")
-  lastActiveAt DateTime @default(now()) @map("last_active_at")
-  endedAt   DateTime? @map("ended_at")
-  
+  startedAt    DateTime  @default(now()) @map("started_at")
+  lastActiveAt DateTime  @default(now()) @map("last_active_at")
+  endedAt      DateTime? @map("ended_at")
+
   @@index([userId])
   @@index([startedAt])
-  
   @@map("user_sessions")
 }
 
@@ -130,6 +128,6 @@ enum UserStatus {
   SUSPENDED
   BANNED
   DEACTIVATED
-  
+
   @@map("user_status")
 }
