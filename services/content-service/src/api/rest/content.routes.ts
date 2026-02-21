@@ -60,6 +60,11 @@ export async function registerContentRoutes(
   contentService: ContentService,
   authMiddleware: ReturnType<typeof import('../../middleware/auth.middleware.js').createAuthMiddleware>
 ): Promise<void> {
+  // Attach startTime for executionTime computation
+  fastify.addHook('onRequest', async (request) => {
+    (request as FastifyRequest & { startTime: number }).startTime = Date.now();
+  });
+
   // ============================================================================
   // Helper Functions
   // ============================================================================
@@ -87,6 +92,7 @@ export async function registerContentRoutes(
    * Standard response wrapper.
    */
   function wrapResponse<T>(data: T, agentHints: unknown, request: FastifyRequest): IApiResponse<T> {
+    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       data,
       agentHints: agentHints as IApiResponse<T>['agentHints'],
@@ -95,15 +101,32 @@ export async function registerContentRoutes(
         timestamp: new Date().toISOString(),
         serviceName: 'content-service',
         serviceVersion: '0.1.0',
-        executionTime: 0,
+        executionTime: Date.now() - startTime,
       },
     };
   }
 
   /**
-   * Error handler — maps domain errors to HTTP status codes.
+   * Build response metadata for error responses.
    */
-  function handleError(error: unknown, reply: FastifyReply): void {
+  function buildErrorMetadata(request: FastifyRequest) {
+    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
+    return {
+      requestId: request.id,
+      timestamp: new Date().toISOString(),
+      serviceName: 'content-service',
+      serviceVersion: '0.1.0',
+      executionTime: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Error handler — maps domain errors to HTTP status codes.
+   * Includes metadata per IApiErrorResponse contract.
+   */
+  function handleError(error: unknown, request: FastifyRequest, reply: FastifyReply): void {
+    const metadata = buildErrorMetadata(request);
+
     if (error instanceof ValidationError) {
       reply.status(400).send({
         error: {
@@ -111,6 +134,7 @@ export async function registerContentRoutes(
           message: error.message,
           fieldErrors: error.fieldErrors,
         },
+        metadata,
       });
     } else if (error instanceof CardNotFoundError) {
       reply.status(404).send({
@@ -118,6 +142,7 @@ export async function registerContentRoutes(
           code: error.code,
           message: error.message,
         },
+        metadata,
       });
     } else if (error instanceof VersionConflictError) {
       reply.status(409).send({
@@ -129,6 +154,7 @@ export async function registerContentRoutes(
             actualVersion: error.actualVersion,
           },
         },
+        metadata,
       });
     } else if (error instanceof AuthenticationError) {
       reply.status(401).send({
@@ -136,6 +162,7 @@ export async function registerContentRoutes(
           code: (error as DomainError).code,
           message: error.message,
         },
+        metadata,
       });
     } else if (error instanceof AuthorizationError) {
       reply.status(403).send({
@@ -143,6 +170,7 @@ export async function registerContentRoutes(
           code: error.code,
           message: error.message,
         },
+        metadata,
       });
     } else if (error instanceof BatchLimitExceededError) {
       reply.status(422).send({
@@ -154,6 +182,7 @@ export async function registerContentRoutes(
             requested: error.requested,
           },
         },
+        metadata,
       });
     } else if (error instanceof BusinessRuleError) {
       reply.status(422).send({
@@ -161,6 +190,7 @@ export async function registerContentRoutes(
           code: (error as DomainError).code,
           message: error.message,
         },
+        metadata,
       });
     } else if (error instanceof DomainError) {
       reply.status(400).send({
@@ -168,6 +198,7 @@ export async function registerContentRoutes(
           code: error.code,
           message: error.message,
         },
+        metadata,
       });
     } else {
       fastify.log.error(error);
@@ -176,6 +207,7 @@ export async function registerContentRoutes(
           code: 'INTERNAL_ERROR',
           message: 'An unexpected error occurred',
         },
+        metadata,
       });
     }
   }
@@ -210,7 +242,7 @@ export async function registerContentRoutes(
               },
             },
             difficulty: { type: 'string' },
-            nodeIds: { type: 'array', items: { type: 'string' } },
+            knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
             tags: { type: 'array', items: { type: 'string' } },
             source: { type: 'string' },
             metadata: { type: 'object' },
@@ -224,7 +256,7 @@ export async function registerContentRoutes(
         const result = await contentService.create(request.body, context);
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -253,7 +285,7 @@ export async function registerContentRoutes(
                   cardType: { type: 'string' },
                   content: { type: 'object' },
                   difficulty: { type: 'string' },
-                  nodeIds: { type: 'array', items: { type: 'string' } },
+                  knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
                   tags: { type: 'array', items: { type: 'string' } },
                   source: { type: 'string' },
                   metadata: { type: 'object' },
@@ -271,7 +303,7 @@ export async function registerContentRoutes(
         const result = await contentService.createBatch(request.body.cards, context);
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -301,7 +333,7 @@ export async function registerContentRoutes(
         const result = await contentService.findById(request.params.id as CardId, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -323,7 +355,8 @@ export async function registerContentRoutes(
             cardTypes: { type: 'array', items: { type: 'string' } },
             states: { type: 'array', items: { type: 'string' } },
             difficulties: { type: 'array', items: { type: 'string' } },
-            nodeIds: { type: 'array', items: { type: 'string' } },
+            knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
+            knowledgeNodeIdMode: { type: 'string', enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'] },
             tags: { type: 'array', items: { type: 'string' } },
             sources: { type: 'array', items: { type: 'string' } },
             userId: { type: 'string' },
@@ -344,9 +377,18 @@ export async function registerContentRoutes(
       try {
         const context = buildContext(request);
         const result = await contentService.query(request.body, context);
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+        const response = wrapResponse(result.data, result.agentHints, request);
+        // Populate top-level pagination per IApiResponse contract
+        response.pagination = {
+          offset: request.body.offset ?? 0,
+          limit: request.body.limit ?? 20,
+          total: result.data.total ?? 0,
+          hasMore: result.data.hasMore,
+        };
+        (response.metadata as { count?: number }).count = result.data.items.length;
+        reply.send(response);
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -381,7 +423,7 @@ export async function registerContentRoutes(
               properties: {
                 content: { type: 'object' },
                 difficulty: { type: 'string' },
-                nodeIds: { type: 'array', items: { type: 'string' } },
+                knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
                 tags: { type: 'array', items: { type: 'string' } },
                 metadata: { type: 'object' },
               },
@@ -402,7 +444,7 @@ export async function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -448,7 +490,7 @@ export async function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -491,7 +533,181 @@ export async function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Knowledge Node Link Routes
+  // ============================================================================
+
+  /**
+   * PATCH /v1/cards/:id/node-links - Update card knowledge node links
+   */
+  fastify.patch<{ Params: IdParams; Body: { knowledgeNodeIds: string[]; version: number } }>(
+    '/v1/cards/:id/node-links',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Update card knowledge node links',
+        description: 'Replace the knowledgeNodeIds array on a card. Used to link/unlink cards from PKG nodes.',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['knowledgeNodeIds', 'version'],
+          properties: {
+            knowledgeNodeIds: {
+              type: 'array',
+              items: { type: 'string', pattern: '^node_[a-zA-Z0-9]{21}$' },
+              maxItems: 50,
+            },
+            version: { type: 'number' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.updateKnowledgeNodeIds(
+          request.params.id as CardId,
+          request.body.knowledgeNodeIds,
+          request.body.version,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Count & Validation Routes
+  // ============================================================================
+
+  /**
+   * POST /v1/cards/count - Count cards matching a DeckQuery
+   */
+  fastify.post<{ Body: IDeckQuery }>(
+    '/v1/cards/count',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Count cards matching a DeckQuery',
+        description: 'Returns the count of matching cards without fetching them. Useful for pagination UIs and agent planning.',
+        body: {
+          type: 'object',
+          properties: {
+            cardTypes: { type: 'array', items: { type: 'string' } },
+            states: { type: 'array', items: { type: 'string' } },
+            difficulties: { type: 'array', items: { type: 'string' } },
+            knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
+            knowledgeNodeIdMode: { type: 'string', enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'] },
+            tags: { type: 'array', items: { type: 'string' } },
+            sources: { type: 'array', items: { type: 'string' } },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.count(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/cards/validate - Validate card content against type-specific schema
+   */
+  fastify.post<{ Body: { cardType: string; content: unknown } }>(
+    '/v1/cards/validate',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Validate card content',
+        description: 'Validate content against the schema for a specific card type without creating a card. Used by agents before batch creation.',
+        body: {
+          type: 'object',
+          required: ['cardType', 'content'],
+          properties: {
+            cardType: { type: 'string' },
+            content: { type: 'object' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.validateContent(
+          request.body.cardType,
+          request.body.content,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/cards/batch/state - Batch state transition
+   */
+  fastify.post<{
+    Body: { ids: string[]; state: string; reason?: string; version: number };
+  }>(
+    '/v1/cards/batch/state',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Batch change card state',
+        description: 'Change state of multiple cards at once. Used after batch creation to activate drafts.',
+        body: {
+          type: 'object',
+          required: ['ids', 'state', 'version'],
+          properties: {
+            ids: {
+              type: 'array',
+              items: { type: 'string' },
+              maxItems: 100,
+            },
+            state: { type: 'string', enum: ['draft', 'active', 'suspended', 'archived'] },
+            reason: { type: 'string' },
+            version: { type: 'number' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.batchChangeState(
+          request.body.ids as CardId[],
+          request.body.state as import('@noema/types').CardState,
+          request.body.reason,
+          request.body.version,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
       }
     }
   );
@@ -533,7 +749,7 @@ export async function registerContentRoutes(
         await contentService.delete(request.params.id as CardId, soft, context);
         reply.status(204).send();
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );

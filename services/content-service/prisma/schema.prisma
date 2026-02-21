@@ -28,7 +28,7 @@ model Card {
     content Json @default("{}")
 
     // Knowledge graph linkage (card → PKG nodes)
-    nodeIds String[] @default([]) @map("node_ids")
+    knowledgeNodeIds String[] @default([]) @map("knowledge_node_ids")
 
     // Classification
     tags String[] @default([])
@@ -57,9 +57,94 @@ model Card {
     @@index([source])
     @@index([createdAt])
     @@index([deletedAt])
-    @@index([nodeIds], type: Gin)
+    @@index([knowledgeNodeIds], type: Gin)
     @@index([tags], type: Gin)
     @@map("cards")
+}
+
+// ============================================================================
+// Template Entity — Reusable card blueprints
+// ============================================================================
+
+model Template {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Template metadata
+    name        String  @db.VarChar(200)
+    description String? @db.VarChar(2000)
+
+    // Card blueprint fields
+    cardType   CardType
+    content    Json            @default("{}")
+    difficulty DifficultyLevel @default(INTERMEDIATE)
+    knowledgeNodeIds    String[]        @default([]) @map("knowledge_node_ids")
+    tags       String[]        @default([])
+    metadata   Json            @default("{}")
+
+    // Access control
+    visibility TemplateVisibility @default(PRIVATE)
+
+    // Usage tracking
+    usageCount Int @default(0) @map("usage_count")
+
+    // Audit fields
+    createdAt DateTime  @default(now()) @map("created_at")
+    updatedAt DateTime  @updatedAt @map("updated_at")
+    deletedAt DateTime? @map("deleted_at")
+    createdBy String?   @map("created_by") @db.VarChar(50)
+    updatedBy String?   @map("updated_by") @db.VarChar(50)
+
+    // Optimistic locking
+    version Int @default(1)
+
+    // Indexes
+    @@index([userId])
+    @@index([cardType])
+    @@index([visibility])
+    @@index([deletedAt])
+    @@index([tags], type: Gin)
+    @@index([name])
+    @@map("templates")
+}
+
+// ============================================================================
+// MediaFile Entity — Media asset metadata (files stored in MinIO)
+// ============================================================================
+
+model MediaFile {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // File metadata
+    filename         String @db.VarChar(500)
+    originalFilename String @map("original_filename") @db.VarChar(500)
+    mimeType         String @map("mime_type") @db.VarChar(200)
+    sizeBytes        BigInt @map("size_bytes")
+
+    // Storage location
+    bucket    String @default("content") @db.VarChar(100)
+    objectKey String @map("object_key") @db.VarChar(1000)
+
+    // Accessibility
+    alt String? @db.VarChar(500)
+
+    // Extensible metadata
+    metadata Json @default("{}")
+
+    // Audit fields
+    createdAt DateTime  @default(now()) @map("created_at")
+    updatedAt DateTime  @updatedAt @map("updated_at")
+    deletedAt DateTime? @map("deleted_at")
+    createdBy String?   @map("created_by") @db.VarChar(50)
+    updatedBy String?   @map("updated_by") @db.VarChar(50)
+
+    // Indexes
+    @@index([userId])
+    @@index([mimeType])
+    @@index([bucket])
+    @@index([deletedAt])
+    @@map("media_files")
 }
 
 // ============================================================================
@@ -140,4 +225,12 @@ enum EventSource {
     IMPORT
 
     @@map("event_source")
+}
+
+enum TemplateVisibility {
+    PRIVATE
+    PUBLIC
+    SHARED
+
+    @@map("template_visibility")
 }

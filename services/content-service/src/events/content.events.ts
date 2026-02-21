@@ -77,7 +77,7 @@ export interface ICardTagsUpdatedPayload {
  * Payload for card.nodes.updated event.
  */
 export interface ICardNodesUpdatedPayload {
-  nodeIds: string[];
+  knowledgeNodeIds: string[];
 }
 
 /**

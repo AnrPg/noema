@@ -11,13 +11,22 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
 
-import { registerHealthRoutes } from './api/rest/health.routes.js';
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerContentRoutes } from './api/rest/content.routes.js';
-import { getEventPublisherConfig, getTokenVerifierConfig, loadConfig } from './config/index.js';
+import { registerHealthRoutes } from './api/rest/health.routes.js';
+import { registerMediaRoutes } from './api/rest/media.routes.js';
+import { registerTemplateRoutes } from './api/rest/template.routes.js';
+import { getEventPublisherConfig, getMinioConfig, getTokenVerifierConfig, loadConfig } from './config/index.js';
 import { ContentService } from './domain/content-service/content.service.js';
+import { MediaService } from './domain/content-service/media.service.js';
+import { TemplateService } from './domain/content-service/template.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import { PrismaContentRepository } from './infrastructure/database/prisma-content.repository.js';
+import { PrismaMediaRepository } from './infrastructure/database/prisma-media.repository.js';
+import { PrismaTemplateRepository } from './infrastructure/database/prisma-template.repository.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
+import { MinioStorageProvider } from './infrastructure/storage/minio-storage.provider.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 // ============================================================================
@@ -62,11 +71,28 @@ async function bootstrap(): Promise<void> {
 
   // Create infrastructure instances
   const contentRepository = new PrismaContentRepository(prisma);
+  const templateRepository = new PrismaTemplateRepository(prisma);
+  const mediaRepository = new PrismaMediaRepository(prisma);
   const tokenVerifier = new JwtTokenVerifier(getTokenVerifierConfig(config));
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
 
-  // Create service
+  // Initialize MinIO storage
+  const minioConfig = getMinioConfig(config);
+  const storageProvider = new MinioStorageProvider(minioConfig, logger);
+  await storageProvider.ensureBucket();
+  logger.info({ bucket: minioConfig.bucket }, 'Connected to object storage');
+
+  // Create services
   const contentService = new ContentService(contentRepository, eventPublisher, logger);
+  const templateService = new TemplateService(templateRepository, eventPublisher, logger);
+  const mediaService = new MediaService(
+    mediaRepository,
+    storageProvider,
+    eventPublisher,
+    minioConfig.bucket,
+    minioConfig.presignedUrlExpiry,
+    logger
+  );
 
   // Create Fastify instance
   const fastify = Fastify({
@@ -77,9 +103,12 @@ async function bootstrap(): Promise<void> {
   });
 
   // Register CORS
+  const corsOrigin = config.cors.origin.length === 1 && config.cors.origin[0] === '*'
+    ? true // Fastify CORS: true = reflect request origin (wildcard)
+    : config.cors.origin;
   await fastify.register(cors, {
-    origin: config.cors.origin,
-    credentials: config.cors.credentials,
+    origin: corsOrigin,
+    credentials: config.cors.origin[0] !== '*' && config.cors.credentials,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
   });
@@ -87,9 +116,16 @@ async function bootstrap(): Promise<void> {
   // Create auth middleware
   const authMiddleware = createAuthMiddleware(tokenVerifier);
 
+  // Create MCP tool registry
+  const toolRegistry = createToolRegistry(contentService);
+  logger.info({ toolCount: toolRegistry.size }, 'MCP tool registry initialized');
+
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
   await registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware);
+  await registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware);
+  await registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware);
+  await registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {

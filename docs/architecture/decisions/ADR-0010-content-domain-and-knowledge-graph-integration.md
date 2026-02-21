@@ -56,8 +56,8 @@ User sees:              System stores:
   duplicates structure and creates synchronization problems.
 - Users organizing their material _is_ them building their mental model. This is
   the core pedagogical insight of Noema: structure IS understanding.
-- PKG nodes already carry typed edges, mastery metadata, and ontology
-  alignment — everything a "category" would need.
+- PKG nodes already carry typed edges, mastery metadata, and ontology alignment
+  — everything a "category" would need.
 - The 4-stage structural metacognition progression (see Decision 6) depends on
   students directly engaging with graph structure, not a separate category
   system.
@@ -78,17 +78,17 @@ User sees:              System stores:
 
 ### Decision 2: Decks Are Dynamic Queries, Not Persistent Entities
 
-**There is no `Deck` entity.** A "deck" is a `DeckQuery` value object — a set
-of filters applied to the card archive and knowledge graph at query time.
+**There is no `Deck` entity.** A "deck" is a `DeckQuery` value object — a set of
+filters applied to the card archive and knowledge graph at query time.
 
 ```typescript
 // DeckQuery is a value object, not a persisted entity
 interface DeckQuery {
-  nodeIds?: NodeId[];           // Cards linked to these KG nodes
-  cardTypes?: CardType[];       // Filter by card type
-  states?: CardState[];         // e.g., ACTIVE, SUSPENDED
-  tags?: string[];              // Freeform tag filters
-  dueBefore?: Date;             // Scheduling constraint
+  nodeIds?: NodeId[]; // Cards linked to these KG nodes
+  cardTypes?: CardType[]; // Filter by card type
+  states?: CardState[]; // e.g., ACTIVE, SUSPENDED
+  tags?: string[]; // Freeform tag filters
+  dueBefore?: Date; // Scheduling constraint
   masteryRange?: [number, number]; // Mastery band filter
   difficulty?: DifficultyLevel; // Optional difficulty filter
 }
@@ -155,28 +155,28 @@ B ──relates-to──► A             B ──prerequisite──► C
 
 **Acyclic edge types (enforced):**
 
-| Edge Type         | Acyclicity | Rationale                       |
-| ----------------- | ---------- | ------------------------------- |
-| `is-prerequisite` | Enforced   | Ordering must be a DAG          |
-| `is-part-of`      | Enforced   | Composition must be a DAG       |
-| `is-subclass-of`  | Enforced   | Type hierarchy must be a DAG    |
+| Edge Type         | Acyclicity | Rationale                    |
+| ----------------- | ---------- | ---------------------------- |
+| `is-prerequisite` | Enforced   | Ordering must be a DAG       |
+| `is-part-of`      | Enforced   | Composition must be a DAG    |
+| `is-subclass-of`  | Enforced   | Type hierarchy must be a DAG |
 
 **Non-acyclic edge types (cycles allowed):**
 
-| Edge Type       | Cycles   | Rationale                          |
-| --------------- | -------- | ---------------------------------- |
-| `relates-to`    | Allowed  | Bidirectional associations         |
-| `explains`      | Allowed  | Mutual explanation is valid        |
-| `contrasts`     | Allowed  | Symmetric by nature                |
-| `causes`        | Allowed  | Feedback loops exist in reality    |
-| `example-of`    | Allowed  | Cross-referencing examples         |
+| Edge Type    | Cycles  | Rationale                       |
+| ------------ | ------- | ------------------------------- |
+| `relates-to` | Allowed | Bidirectional associations      |
+| `explains`   | Allowed | Mutual explanation is valid     |
+| `contrasts`  | Allowed | Symmetric by nature             |
+| `causes`     | Allowed | Feedback loops exist in reality |
+| `example-of` | Allowed | Cross-referencing examples      |
 
 **Consequences:**
 
 - Cycle detection is per-edge-type, not global — more efficient than whole-graph
   cycle detection.
-- The `NoCycleWouldBeIntroduced(relation_type, src, dst)` guard (ADR-003) is
-  the enforcement mechanism.
+- The `NoCycleWouldBeIntroduced(relation_type, src, dst)` guard (ADR-003) is the
+  enforcement mechanism.
 - UI must handle cycles in visualization — tree views are only valid for acyclic
   subgraphs (e.g., prerequisite chains).
 - UNITY invariant I1 ("Acyclic prerequisite relation") remains valid and is now
@@ -269,20 +269,20 @@ Content Service                Knowledge Graph Service
 type CardContent =
   | { cardType: 'BASIC_QA'; question: string; answer: string }
   | { cardType: 'CLOZE'; template: string; clozes: Cloze[] }
-  | { cardType: 'CONCEPT_MAP'; nodes: MapNode[]; edges: MapEdge[] }
-  // ... 39 more
+  | { cardType: 'CONCEPT_MAP'; nodes: MapNode[]; edges: MapEdge[] };
+// ... 39 more
 ```
 
 **Key endpoints:**
 
-| Method | Path               | Purpose                               |
-| ------ | ------------------ | ------------------------------------- |
-| POST   | `/v1/cards`        | Create single card                    |
-| POST   | `/v1/cards/batch`  | Bulk create (agent-optimized)         |
-| POST   | `/v1/cards/query`  | Resolve deck query → card list        |
-| GET    | `/v1/cards/:id`    | Get single card                       |
-| PATCH  | `/v1/cards/:id`    | Update card content/metadata          |
-| DELETE | `/v1/cards/:id`    | Soft-delete card                      |
+| Method | Path              | Purpose                        |
+| ------ | ----------------- | ------------------------------ |
+| POST   | `/v1/cards`       | Create single card             |
+| POST   | `/v1/cards/batch` | Bulk create (agent-optimized)  |
+| POST   | `/v1/cards/query` | Resolve deck query → card list |
+| GET    | `/v1/cards/:id`   | Get single card                |
+| PATCH  | `/v1/cards/:id`   | Update card content/metadata   |
+| DELETE | `/v1/cards/:id`   | Soft-delete card               |
 
 **Rationale:**
 
@@ -296,13 +296,13 @@ type CardContent =
 
 **Events emitted:**
 
-| Event                | Trigger                        |
-| -------------------- | ------------------------------ |
-| `card.created`       | New card persisted             |
-| `card.updated`       | Card content or metadata       |
-| `card.deleted`       | Soft-delete                    |
+| Event                | Trigger                                     |
+| -------------------- | ------------------------------------------- |
+| `card.created`       | New card persisted                          |
+| `card.updated`       | Card content or metadata                    |
+| `card.deleted`       | Soft-delete                                 |
 | `card.state.changed` | State transition (e.g., ACTIVE → SUSPENDED) |
-| `card.tags.updated`  | Tag list modified              |
+| `card.tags.updated`  | Tag list modified                           |
 
 **Consequences:**
 
@@ -324,23 +324,23 @@ drive the 4-stage structural metacognition progression.**
 
 **Structural metrics (computed from PKG on every mutation):**
 
-| Metric | Name                            | What It Measures                         |
-| ------ | ------------------------------- | ---------------------------------------- |
-| AD     | Articulation Density            | Nodes per concept area (graph density)   |
-| DCG    | Depth of Conceptual Grounding   | Max prerequisite chain depth             |
-| SLI    | Structural Linking Index        | Cross-domain edge ratio                  |
-| SCE    | Structural Coherence Estimate   | PKG-to-CKG alignment score              |
-| ULS    | User-Led Structuring            | % of edges created by user vs. system    |
-| TBS    | Taxonomy Building Score         | Quality of hierarchical organization     |
+| Metric | Name                          | What It Measures                       |
+| ------ | ----------------------------- | -------------------------------------- |
+| AD     | Articulation Density          | Nodes per concept area (graph density) |
+| DCG    | Depth of Conceptual Grounding | Max prerequisite chain depth           |
+| SLI    | Structural Linking Index      | Cross-domain edge ratio                |
+| SCE    | Structural Coherence Estimate | PKG-to-CKG alignment score             |
+| ULS    | User-Led Structuring          | % of edges created by user vs. system  |
+| TBS    | Taxonomy Building Score       | Quality of hierarchical organization   |
 
 **4-stage metacognitive progression:**
 
-| Stage | Name             | Trigger                                | System Behavior                        |
-| ----- | ---------------- | -------------------------------------- | -------------------------------------- |
-| 0     | System-Guided    | User is new or ULS < 10%               | System builds PKG, user reviews        |
-| 1     | Structure-Salient| ULS ≥ 10%, SCE improving               | System highlights structure, user edits |
-| 2     | Shared Control   | ULS ≥ 40%, SLI above threshold         | User and system co-author structure    |
-| 3     | User-Owned       | ULS ≥ 70%, all metrics above threshold | User drives, system validates          |
+| Stage | Name              | Trigger                                | System Behavior                         |
+| ----- | ----------------- | -------------------------------------- | --------------------------------------- |
+| 0     | System-Guided     | User is new or ULS < 10%               | System builds PKG, user reviews         |
+| 1     | Structure-Salient | ULS ≥ 10%, SCE improving               | System highlights structure, user edits |
+| 2     | Shared Control    | ULS ≥ 40%, SLI above threshold         | User and system co-author structure     |
+| 3     | User-Owned        | ULS ≥ 70%, all metrics above threshold | User drives, system validates           |
 
 **Rationale:**
 
@@ -358,7 +358,12 @@ drive the 4-stage structural metacognition progression.**
 interface PkgStructureChanged {
   userId: UserId;
   nodeId: NodeId;
-  mutationType: 'node.added' | 'node.removed' | 'edge.added' | 'edge.removed' | 'node.moved';
+  mutationType:
+    | 'node.added'
+    | 'node.removed'
+    | 'edge.added'
+    | 'edge.removed'
+    | 'node.moved';
   metrics: {
     AD: number;
     DCG: number;
@@ -397,14 +402,14 @@ minimal inputs with text-based deduplication.**
 
 **Interim contract (buildable now):**
 
-| Tool                      | Source Service   | Status     |
-| ------------------------- | ---------------- | ---------- |
-| `createCard`              | Content Service  | BUILDING   |
-| `createCardBatch`         | Content Service  | BUILDING   |
-| `queryCards`              | Content Service  | BUILDING   |
-| `getCardById`             | Content Service  | BUILDING   |
-| `updateCard`              | Content Service  | BUILDING   |
-| `searchSimilarContent`    | Vector Service   | PLANNED    |
+| Tool                   | Source Service  | Status   |
+| ---------------------- | --------------- | -------- |
+| `createCard`           | Content Service | BUILDING |
+| `createCardBatch`      | Content Service | BUILDING |
+| `queryCards`           | Content Service | BUILDING |
+| `getCardById`          | Content Service | BUILDING |
+| `updateCard`           | Content Service | BUILDING |
+| `searchSimilarContent` | Vector Service  | PLANNED  |
 
 **Interim generation strategy:**
 
@@ -438,19 +443,19 @@ not yet implemented.
 
 ### Package Changes Already Made
 
-- `DeckId` → `DeckQueryLogId` in `@noema/types` and `@noema/validation`
-  (commit `1e4888a`)
-- MCP tool registry created at
-  `docs/architecture/AGENT_MCP_TOOL_REGISTRY.md` (commit `ca37642`)
+- `DeckId` → `DeckQueryLogId` in `@noema/types` and `@noema/validation` (commit
+  `1e4888a`)
+- MCP tool registry created at `docs/architecture/AGENT_MCP_TOOL_REGISTRY.md`
+  (commit `ca37642`)
 
 ### Entities NOT Created (by design)
 
-| Avoided Entity | Reason                                      | Replaced By                        |
-| -------------- | ------------------------------------------- | ---------------------------------- |
-| `Category`     | Categories = PKG nodes (Decision 1)         | `NodeId` references on cards       |
-| `Deck`         | Decks = dynamic queries (Decision 2)        | `DeckQuery` value object           |
-| `DeckCard`     | No deck entity → no junction table          | `POST /v1/cards/query`             |
-| `CategoryTree` | No separate tree structure                  | PKG subgraph traversal             |
+| Avoided Entity | Reason                               | Replaced By                  |
+| -------------- | ------------------------------------ | ---------------------------- |
+| `Category`     | Categories = PKG nodes (Decision 1)  | `NodeId` references on cards |
+| `Deck`         | Decks = dynamic queries (Decision 2) | `DeckQuery` value object     |
+| `DeckCard`     | No deck entity → no junction table   | `POST /v1/cards/query`       |
+| `CategoryTree` | No separate tree structure           | PKG subgraph traversal       |
 
 ### Service Boundaries
 
@@ -504,8 +509,8 @@ not yet implemented.
 
 - Two-hop queries: API gateway can compose the calls; a denormalized
   `card_node_index` can optimize hot paths later.
-- Eventual consistency: <100ms typical lag; cycle-detection reads use write model
-  directly for strong consistency.
+- Eventual consistency: <100ms typical lag; cycle-detection reads use write
+  model directly for strong consistency.
 - Offline decks: mobile client caches last query result + cards locally;
   re-syncs on reconnect.
 - Agent degradation: tool stubs return structured "unavailable" responses; agent
@@ -515,11 +520,16 @@ not yet implemented.
 
 ## References
 
-- [ADR-001: Dual-Graph Architecture](../../.copilot/instructions/FEATURE_knowledge_graph.md) — PKG/CKG separation, CKG guardrails
-- [ADR-002: Stratified Reasoning Policy](../../.copilot/instructions/FEATURE_knowledge_graph.md) — 5-layer reasoning model
-- [ADR-003: Canonical Mutation DSL](../../.copilot/instructions/FEATURE_knowledge_graph.md) — `DeclareAcyclic`, typestate protocol
-- [ADR-001 (Foundation Types)](ADR-001-foundation-layer-type-system.md) — Branded IDs, `NodeId`, `CardId`, `DeckQueryLogId`
-- [ADR-0009: Scheduling Architecture](ADR-0009-scheduling-architecture-agent-service-split.md) — Agent-service split pattern
-- [Agent MCP Tool Registry](../AGENT_MCP_TOOL_REGISTRY.md) — 70 tools across 10 agents
-
+- [ADR-001: Dual-Graph Architecture](../../.copilot/instructions/FEATURE_knowledge_graph.md)
+  — PKG/CKG separation, CKG guardrails
+- [ADR-002: Stratified Reasoning Policy](../../.copilot/instructions/FEATURE_knowledge_graph.md)
+  — 5-layer reasoning model
+- [ADR-003: Canonical Mutation DSL](../../.copilot/instructions/FEATURE_knowledge_graph.md)
+  — `DeclareAcyclic`, typestate protocol
+- [ADR-001 (Foundation Types)](ADR-001-foundation-layer-type-system.md) —
+  Branded IDs, `NodeId`, `CardId`, `DeckQueryLogId`
+- [ADR-0009: Scheduling Architecture](ADR-0009-scheduling-architecture-agent-service-split.md)
+  — Agent-service split pattern
+- [Agent MCP Tool Registry](../AGENT_MCP_TOOL_REGISTRY.md) — 70 tools across 10
+  agents
 ````

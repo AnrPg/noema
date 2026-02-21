@@ -6,7 +6,7 @@
  * stores polymorphic JSONB blobs discriminated by cardType.
  *
  * Design: ADR-0010 Decision 5 — content service is a pure card archive.
- * Cards link to the Personal Knowledge Graph via nodeIds: NodeId[].
+ * Cards link to the Personal Knowledge Graph via knowledgeNodeIds: NodeId[].
  */
 
 import type {
@@ -17,8 +17,10 @@ import type {
   EventSource,
   IAuditedEntity,
   JsonValue,
+  MediaId,
   NodeId,
   RemediationCardType,
+  TemplateId,
   UserId,
 } from '@noema/types';
 
@@ -50,7 +52,7 @@ export interface ICard extends IAuditedEntity {
   content: ICardContent;
 
   /** PKG node IDs this card is linked to */
-  nodeIds: NodeId[];
+  knowledgeNodeIds: NodeId[];
 
   /** User-defined tags for filtering */
   tags: string[];
@@ -121,7 +123,7 @@ export interface ICardSummary {
   difficulty: DifficultyLevel;
   /** First N chars of front content for preview */
   preview: string;
-  nodeIds: NodeId[];
+  knowledgeNodeIds: NodeId[];
   tags: string[];
   source: EventSource;
   createdAt: string;
@@ -140,7 +142,7 @@ export interface ICreateCardInput {
   cardType: CardType | RemediationCardType;
   content: ICardContent;
   difficulty?: DifficultyLevel;
-  nodeIds?: NodeId[];
+  knowledgeNodeIds?: NodeId[];
   tags?: string[];
   source?: EventSource;
   metadata?: Record<string, JsonValue>;
@@ -159,7 +161,7 @@ export interface IBatchCreateCardInput {
 export interface IUpdateCardInput {
   content?: ICardContent;
   difficulty?: DifficultyLevel;
-  nodeIds?: NodeId[];
+  knowledgeNodeIds?: NodeId[];
   tags?: string[];
   metadata?: Record<string, JsonValue>;
 }
@@ -190,7 +192,21 @@ export interface IDeckQuery {
   /** Filter by difficulty levels */
   difficulties?: DifficultyLevel[];
   /** Filter by PKG node IDs (cards linked to ANY of these nodes) */
-  nodeIds?: NodeId[];
+  knowledgeNodeIds?: NodeId[];
+  /**
+   * How to match knowledgeNodeIds.
+   * - 'any'           — card linked to ANY of the given nodes (default)
+   * - 'all'           — card linked to ALL of the given nodes
+   * - 'exact'         — card linked to EXACTLY these nodes (set equality)
+   * - 'subtree'       — card linked to these nodes OR their descendants (requires KG service)
+   * - 'prerequisites' — card linked to prerequisites of these nodes (requires KG service)
+   * - 'related'       — card linked to semantically related nodes (requires KG service)
+   *
+   * Only 'any', 'all', and 'exact' are implemented in the content service.
+   * 'subtree', 'prerequisites', and 'related' require the knowledge-graph-service
+   * to resolve node sets first, then pass the expanded set with mode='any'.
+   */
+  knowledgeNodeIdMode?: 'any' | 'all' | 'exact' | 'subtree' | 'prerequisites' | 'related';
   /** Filter by tags (cards matching ANY of these tags) */
   tags?: string[];
   /** Filter by source */
@@ -239,4 +255,146 @@ export interface IBatchCreateResult {
   successCount: number;
   /** Total failures */
   failureCount: number;
+}
+
+// ============================================================================
+// Template Entity — Reusable Card Blueprints
+// ============================================================================
+
+/** Template visibility levels */
+export type TemplateVisibility = 'private' | 'public' | 'shared';
+
+/**
+ * Complete template entity.
+ * Templates are reusable card blueprints — predefined content structures
+ * that users or agents can instantiate into concrete cards.
+ */
+export interface ITemplate extends IAuditedEntity {
+  id: TemplateId;
+  userId: UserId;
+  name: string;
+  description: string | null;
+  cardType: CardType | RemediationCardType;
+  content: ICardContent;
+  difficulty: DifficultyLevel;
+  knowledgeNodeIds: NodeId[];
+  tags: string[];
+  metadata: Record<string, JsonValue>;
+  visibility: TemplateVisibility;
+  usageCount: number;
+}
+
+/**
+ * Lightweight template summary for list views.
+ */
+export interface ITemplateSummary {
+  id: TemplateId;
+  userId: UserId;
+  name: string;
+  description: string | null;
+  cardType: CardType | RemediationCardType;
+  difficulty: DifficultyLevel;
+  visibility: TemplateVisibility;
+  usageCount: number;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+/**
+ * Input for creating a new template.
+ */
+export interface ICreateTemplateInput {
+  name: string;
+  description?: string;
+  cardType: CardType | RemediationCardType;
+  content: ICardContent;
+  difficulty?: DifficultyLevel;
+  knowledgeNodeIds?: NodeId[];
+  tags?: string[];
+  metadata?: Record<string, JsonValue>;
+  visibility?: TemplateVisibility;
+}
+
+/**
+ * Input for updating an existing template.
+ */
+export interface IUpdateTemplateInput {
+  name?: string;
+  description?: string;
+  content?: ICardContent;
+  difficulty?: DifficultyLevel;
+  knowledgeNodeIds?: NodeId[];
+  tags?: string[];
+  metadata?: Record<string, JsonValue>;
+  visibility?: TemplateVisibility;
+}
+
+/**
+ * Query filters for listing templates.
+ */
+export interface ITemplateQuery {
+  cardTypes?: (CardType | RemediationCardType)[];
+  visibility?: TemplateVisibility;
+  tags?: string[];
+  search?: string;
+  userId?: UserId;
+  sortBy?: 'createdAt' | 'updatedAt' | 'usageCount' | 'name';
+  sortOrder?: 'asc' | 'desc';
+  offset?: number;
+  limit?: number;
+}
+
+// ============================================================================
+// Media File Entity
+// ============================================================================
+
+/**
+ * Media file metadata (actual files stored in MinIO).
+ */
+export interface IMediaFile {
+  id: MediaId;
+  userId: UserId;
+  filename: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  bucket: string;
+  objectKey: string;
+  alt: string | null;
+  metadata: Record<string, JsonValue>;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+/**
+ * Input for registering a media file after upload.
+ */
+export interface ICreateMediaInput {
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  alt?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+/**
+ * Presigned URL response for client-side upload.
+ */
+export interface IPresignedUploadUrl {
+  uploadUrl: string;
+  mediaId: MediaId;
+  objectKey: string;
+  bucket: string;
+  expiresAt: string;
+}
+
+/**
+ * Presigned URL response for download.
+ */
+export interface IPresignedDownloadUrl {
+  downloadUrl: string;
+  expiresAt: string;
 }

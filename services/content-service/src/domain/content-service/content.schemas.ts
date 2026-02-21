@@ -12,6 +12,7 @@ import {
   RemediationCardType,
 } from '@noema/types';
 import { z } from 'zod';
+import { CardContentSchemaRegistry } from './card-content.schemas.js';
 import {
   CardBackSchema,
   CardFrontSchema,
@@ -72,6 +73,8 @@ export const MediaAttachmentSchema = z.object({
 /**
  * Base card content — all card types must have front + back.
  * Additional type-specific fields are allowed via passthrough.
+ * Type-specific validation is performed by the discriminated validator
+ * in card-content.schemas.ts when paired with a cardType.
  */
 export const CardContentSchema = z
   .object({
@@ -99,16 +102,38 @@ const NodeIdItemSchema = z
 
 /**
  * Schema for creating a new card.
+ * Validates content against the type-specific schema based on cardType.
  */
-export const CreateCardInputSchema = z.object({
-  cardType: AnyCardTypeSchema,
-  content: CardContentSchema,
-  difficulty: DifficultyLevelSchema.default(DifficultyLevel.INTERMEDIATE),
-  nodeIds: z.array(NodeIdItemSchema).max(50).default([]),
-  tags: z.array(TagSchema).max(30).default([]),
-  source: EventSourceSchema.default(EventSource.USER),
-  metadata: z.record(z.unknown()).default({}),
-});
+export const CreateCardInputSchema = z
+  .object({
+    cardType: AnyCardTypeSchema,
+    content: CardContentSchema,
+    difficulty: DifficultyLevelSchema.default(DifficultyLevel.INTERMEDIATE),
+    knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).default([]),
+    tags: z.array(TagSchema).max(30).default([]),
+    source: EventSourceSchema.default(EventSource.USER),
+    metadata: z.record(z.unknown()).default({}),
+  })
+  .superRefine((data, ctx) => {
+    const typeSchema = CardContentSchemaRegistry[data.cardType];
+    if (!typeSchema) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardType'],
+        message: `Unknown card type: '${data.cardType}'`,
+      });
+      return;
+    }
+    const result = typeSchema.safeParse(data.content);
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        ctx.addIssue({
+          ...issue,
+          path: ['content', ...issue.path],
+        });
+      }
+    }
+  });
 
 /**
  * Schema for batch card creation.
@@ -123,12 +148,15 @@ export const BatchCreateCardInputSchema = z.object({
 
 /**
  * Schema for updating a card.
+ * Note: content is validated against the base schema here. Type-specific
+ * validation on update requires the existing card's cardType and is
+ * performed by the service layer via validateCardContent().
  */
 export const UpdateCardInputSchema = z
   .object({
     content: CardContentSchema.optional(),
     difficulty: DifficultyLevelSchema.optional(),
-    nodeIds: z.array(NodeIdItemSchema).max(50).optional(),
+    knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
     tags: z.array(TagSchema).max(30).optional(),
     metadata: z.record(z.unknown()).optional(),
   })
@@ -149,7 +177,11 @@ export const DeckQuerySchema = z.object({
   cardTypes: z.array(AnyCardTypeSchema).optional(),
   states: z.array(CardStateSchema).optional(),
   difficulties: z.array(DifficultyLevelSchema).optional(),
-  nodeIds: z.array(NodeIdItemSchema).optional(),
+  knowledgeNodeIds: z.array(NodeIdItemSchema).optional(),
+  knowledgeNodeIdMode: z
+    .enum(['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'])
+    .default('any')
+    .optional(),
   tags: z.array(TagSchema).optional(),
   sources: z.array(EventSourceSchema).optional(),
   userId: z.string().optional(),

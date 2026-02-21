@@ -35,6 +35,15 @@ export interface IServiceConfig {
     issuer: string;
     audience: string;
   };
+  minio: {
+    endPoint: string;
+    port: number;
+    useSSL: boolean;
+    accessKey: string;
+    secretKey: string;
+    bucket: string;
+    presignedUrlExpiry: number;
+  };
   cors: {
     origin: string[];
     credentials: boolean;
@@ -77,6 +86,21 @@ function optionalEnvBool(name: string, defaultValue: boolean): boolean {
   return value.toLowerCase() === 'true';
 }
 
+/**
+ * Parse CORS_ORIGIN env variable.
+ * Supports:
+ * - Comma-separated origins: "http://localhost:3000,http://localhost:3001"
+ * - Wildcard for development: "*" (allows all origins)
+ */
+function parseCorsOrigin(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (trimmed === '*') {
+    // Wildcard mode — Fastify CORS accepts '*' as a string origin
+    return ['*'];
+  }
+  return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 // ============================================================================
 // Configuration Loading
 // ============================================================================
@@ -107,13 +131,44 @@ export function loadConfig(): IServiceConfig {
       issuer: optionalEnv('JWT_ISSUER', 'noema.app'),
       audience: optionalEnv('JWT_AUDIENCE', 'noema.app'),
     },
+    minio: {
+      endPoint: optionalEnv('MINIO_ENDPOINT', 'localhost'),
+      port: optionalEnvInt('MINIO_PORT', 9000),
+      useSSL: optionalEnvBool('MINIO_USE_SSL', false),
+      accessKey: optionalEnv('MINIO_ACCESS_KEY', 'noema'),
+      secretKey: optionalEnv('MINIO_SECRET_KEY', 'noema_minio_password'),
+      bucket: optionalEnv('MINIO_BUCKET', 'content'),
+      presignedUrlExpiry: optionalEnvInt('MINIO_PRESIGNED_EXPIRY', 3600),
+    },
     cors: {
-      origin: optionalEnv(
-        'CORS_ORIGIN',
-        'http://localhost:3000,http://localhost:3004,http://localhost:3003'
-      )
-        .split(',')
-        .map((s) => s.trim()),
+      origin: parseCorsOrigin(
+        optionalEnv(
+          'CORS_ORIGIN',
+          // Default: all Noema service ports + frontends
+          // 3000=web, 3001=user-service, 3002=session, 3003=web-admin,
+          // 3004=mobile, 3005=content, 3006=knowledge-graph, 3007=analytics,
+          // 3008=notification, 3009=gamification, 3010=collaboration,
+          // 3011=media, 3012=sync, 3013=vector, 3014=scheduler, 3015=ingestion
+          [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:3002',
+            'http://localhost:3003',
+            'http://localhost:3004',
+            'http://localhost:3005',
+            'http://localhost:3006',
+            'http://localhost:3007',
+            'http://localhost:3008',
+            'http://localhost:3009',
+            'http://localhost:3010',
+            'http://localhost:3011',
+            'http://localhost:3012',
+            'http://localhost:3013',
+            'http://localhost:3014',
+            'http://localhost:3015',
+          ].join(',')
+        )
+      ),
       credentials: optionalEnvBool('CORS_CREDENTIALS', true),
     },
     logging: {
@@ -142,5 +197,17 @@ export function getEventPublisherConfig(config: IServiceConfig) {
     serviceName: config.service.name,
     serviceVersion: config.service.version,
     environment: config.service.environment,
+  };
+}
+
+export function getMinioConfig(config: IServiceConfig) {
+  return {
+    endPoint: config.minio.endPoint,
+    port: config.minio.port,
+    useSSL: config.minio.useSSL,
+    accessKey: config.minio.accessKey,
+    secretKey: config.minio.secretKey,
+    bucket: config.minio.bucket,
+    presignedUrlExpiry: config.minio.presignedUrlExpiry,
   };
 }

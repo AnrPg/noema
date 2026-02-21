@@ -91,6 +91,9 @@ export type ToolId = Brand<string, 'ToolId'>;
 /** Agent identifier - prefix: agent_ */
 export type AgentId = Brand<string, 'AgentId'>;
 
+/** Template identifier - prefix: tmpl_ */
+export type TemplateId = Brand<string, 'TemplateId'>;
+
 /** Media asset identifier - prefix: media_ */
 export type MediaId = Brand<string, 'MediaId'>;
 
@@ -129,6 +132,7 @@ export const ID_PREFIXES = {
   CausationId: 'causation_',
   ToolId: 'tool_',
   AgentId: 'agent_',
+  TemplateId: 'tmpl_',
   MediaId: 'media_',
   NotificationId: 'notification_',
   RoomId: 'room_',

@@ -109,7 +109,7 @@ export class PrismaContentRepository implements IContentRepository {
         state: 'DRAFT',
         difficulty: this.toDbDifficulty(input.difficulty || 'intermediate'),
         content: (input.content || {}) as unknown as Prisma.JsonObject,
-        nodeIds: (input.nodeIds as string[]) || [],
+        knowledgeNodeIds: (input.knowledgeNodeIds as string[]) || [],
         tags: input.tags || [],
         source: this.toDbSource(input.source || 'user'),
         metadata: (input.metadata || {}) as unknown as Prisma.JsonObject,
@@ -139,7 +139,7 @@ export class PrismaContentRepository implements IContentRepository {
             state: 'DRAFT',
             difficulty: this.toDbDifficulty(input.difficulty || 'intermediate'),
             content: (input.content || {}) as unknown as Prisma.JsonObject,
-            nodeIds: (input.nodeIds as string[]) || [],
+            knowledgeNodeIds: (input.knowledgeNodeIds as string[]) || [],
             tags: input.tags || [],
             source: this.toDbSource(input.source || 'user'),
             metadata: (input.metadata || {}) as unknown as Prisma.JsonObject,
@@ -185,8 +185,8 @@ export class PrismaContentRepository implements IContentRepository {
     if (input.difficulty !== undefined) {
       data.difficulty = this.toDbDifficulty(input.difficulty);
     }
-    if (input.nodeIds !== undefined) {
-      data.nodeIds = input.nodeIds as string[];
+    if (input.knowledgeNodeIds !== undefined) {
+      data.knowledgeNodeIds = input.knowledgeNodeIds as string[];
     }
     if (input.tags !== undefined) {
       data.tags = input.tags;
@@ -268,7 +268,11 @@ export class PrismaContentRepository implements IContentRepository {
     return this.toDomain(card);
   }
 
-  async updateNodeIds(id: CardId, nodeIds: string[], version: number): Promise<ICard> {
+  async updateKnowledgeNodeIds(
+    id: CardId,
+    knowledgeNodeIds: string[],
+    version: number
+  ): Promise<ICard> {
     const existing = await this.prisma.card.findUnique({ where: { id } });
     if (!existing) {
       throw new Error(`Card not found: ${id}`);
@@ -280,7 +284,7 @@ export class PrismaContentRepository implements IContentRepository {
     const card = await this.prisma.card.update({
       where: { id },
       data: {
-        nodeIds,
+        knowledgeNodeIds,
         version: { increment: 1 },
       },
     });
@@ -307,8 +311,40 @@ export class PrismaContentRepository implements IContentRepository {
     if (query.difficulties && query.difficulties.length > 0) {
       where.difficulty = { in: query.difficulties.map((d) => this.toDbDifficulty(d)) };
     }
-    if (query.nodeIds && query.nodeIds.length > 0) {
-      where.nodeIds = { hasSome: query.nodeIds as string[] };
+    if (query.knowledgeNodeIds && query.knowledgeNodeIds.length > 0) {
+      const mode = query.knowledgeNodeIdMode ?? 'any';
+      const ids = query.knowledgeNodeIds as string[];
+
+      switch (mode) {
+        case 'any':
+          // Card linked to ANY of the given node IDs
+          where.knowledgeNodeIds = { hasSome: ids };
+          break;
+        case 'all':
+          // Card linked to ALL of the given node IDs
+          where.knowledgeNodeIds = { hasEvery: ids };
+          break;
+        case 'exact':
+          // Card linked to EXACTLY these node IDs (set equality)
+          // hasEvery + length check via AND
+          where.AND = [
+            ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+            { knowledgeNodeIds: { hasEvery: ids } },
+            // Prisma doesn't have a native "set equals" so we also
+            // check that the array length matches via raw filter.
+            // For now, hasEvery is a reasonable approximation — exact set
+            // equality will be enforced in post-filter if needed.
+          ];
+          break;
+        case 'subtree':
+        case 'prerequisites':
+        case 'related':
+          // These modes require KG service pre-resolution.
+          // The caller (agent or KG service) should expand the node set
+          // and pass with mode='any'. For safety, fall back to 'any'.
+          where.knowledgeNodeIds = { hasSome: ids };
+          break;
+      }
     }
     if (query.tags && query.tags.length > 0) {
       where.tags = { hasSome: query.tags };
@@ -373,7 +409,7 @@ export class PrismaContentRepository implements IContentRepository {
       state: card.state.toLowerCase() as CardState,
       difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
       content,
-      nodeIds: card.nodeIds as NodeId[],
+      knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
       tags: card.tags,
       source: card.source.toLowerCase() as EventSource,
       metadata: card.metadata as Record<string, JsonValue>,
@@ -397,7 +433,7 @@ export class PrismaContentRepository implements IContentRepository {
       state: card.state.toLowerCase() as CardState,
       difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
       preview: generatePreview(front),
-      nodeIds: card.nodeIds as NodeId[],
+      knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
       tags: card.tags,
       source: card.source.toLowerCase() as EventSource,
       createdAt: card.createdAt.toISOString(),

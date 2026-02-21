@@ -1,5 +1,12 @@
-export * from './content.service.js';
 export * from './content.repository.js';
 export * from './content.schemas.js';
+export * from './content.service.js';
 export * from './errors/index.js';
+export * from './media.repository.js';
+export * from './media.schemas.js';
+export * from './media.service.js';
+export * from './template.repository.js';
+export * from './template.schemas.js';
+export * from './template.service.js';
 export * from './value-objects/index.js';
+

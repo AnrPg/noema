@@ -5,7 +5,7 @@
  * Follows the SERVICE_CLASS_SPECIFICATION pattern.
  *
  * Design: ADR-0010 Decision 5 — pure card archive.
- * Cards link to PKG nodes via nodeIds[]. No Category entity, no Deck entity.
+ * Cards link to PKG nodes via knowledgeNodeIds[]. No Category entity, no Deck entity.
  * Dynamic queries (DeckQuery) replace static deck CRUD.
  */
 
@@ -24,6 +24,7 @@ import type {
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
+import { validateCardContent } from './card-content.schemas.js';
 import type { IContentRepository } from './content.repository.js';
 import {
   BatchCreateCardInputSchema,
@@ -347,6 +348,18 @@ export class ContentService {
       throw new InvalidCardStateError(existing.state, 'update');
     }
 
+    // Type-specific content validation (uses existing card's cardType)
+    if (parseResult.data.content) {
+      const contentResult = validateCardContent(existing.cardType, parseResult.data.content);
+      if (!contentResult.success) {
+        const errors = contentResult.error.flatten();
+        throw new ValidationError(
+          `Content does not match ${existing.cardType} schema`,
+          errors.fieldErrors as Record<string, string[]>
+        );
+      }
+    }
+
     let card: ICard;
     try {
       card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version);
@@ -468,6 +481,265 @@ export class ContentService {
     return {
       data: card,
       agentHints: this.createAgentHints('updated', card),
+    };
+  }
+
+  // ============================================================================
+  // Knowledge Node Operations
+  // ============================================================================
+
+  /**
+   * Update knowledge node linkage on a card.
+   */
+  async updateKnowledgeNodeIds(
+    id: CardId,
+    knowledgeNodeIds: string[],
+    version: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard>> {
+    this.requireAuth(context);
+    this.logger.info({ cardId: id, nodeCount: knowledgeNodeIds.length }, 'Updating card knowledge node links');
+
+    // Verify ownership
+    await this.requireCardOwnership(id, context);
+
+    const card = await this.repository.updateKnowledgeNodeIds(id, knowledgeNodeIds, version);
+
+    // Publish event
+    await this.eventPublisher.publish({
+      eventType: 'card.knowledge-nodes.updated',
+      aggregateType: 'Card',
+      aggregateId: id,
+      payload: { knowledgeNodeIds },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    return {
+      data: card,
+      agentHints: this.createAgentHints('updated', card),
+    };
+  }
+
+  // ============================================================================
+  // Count & Validation Operations
+  // ============================================================================
+
+  /**
+   * Count cards matching a DeckQuery without fetching them.
+   */
+  async count(
+    query: IDeckQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ count: number }>> {
+    this.requireAuth(context);
+    this.logger.info('Counting cards');
+
+    const parseResult = DeckQuerySchema.safeParse(query);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError(
+        'Invalid query',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+
+    const count = await this.repository.count(
+      parseResult.data as unknown as IDeckQuery,
+      context.userId!
+    );
+
+    return {
+      data: { count },
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'query_cards',
+            description: `Fetch the ${count} matching cards`,
+            priority: 'medium',
+            category: 'exploration',
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+        preferenceAlignment: [],
+        reasoning: `Count query returned ${count} cards`,
+      },
+    };
+  }
+
+  /**
+   * Validate card content against the type-specific schema without creating.
+   * Returns validation result with detailed error messages.
+   */
+  async validateContent(
+    cardType: string,
+    content: unknown,
+    _context: IExecutionContext
+  ): Promise<IServiceResult<{ valid: boolean; errors?: Array<{ path: string; message: string }> }>> {
+    this.requireAuth(_context);
+    this.logger.info({ cardType }, 'Validating card content');
+
+    const result = validateCardContent(cardType, content);
+
+    if (result.success) {
+      return {
+        data: { valid: true },
+        agentHints: {
+          suggestedNextActions: [
+            {
+              action: 'create_card',
+              description: 'Content is valid — create the card',
+              priority: 'high',
+              category: 'optimization',
+            },
+          ],
+          relatedResources: [],
+          confidence: 1.0,
+          sourceQuality: 'high',
+          validityPeriod: 'short',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+          preferenceAlignment: [],
+          reasoning: `Content validates against ${cardType} schema`,
+        },
+      };
+    }
+
+    return {
+      data: {
+        valid: false,
+        errors: result.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          message: issue.message,
+        })),
+      },
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'fix_content',
+            description: `Fix ${result.error.issues.length} validation error(s) and retry`,
+            priority: 'high',
+            category: 'correction',
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [
+          {
+            type: 'accuracy',
+            severity: 'medium',
+            description: `${result.error.issues.length} validation error(s) found`,
+            probability: 1.0,
+            impact: 0.5,
+            mitigation: 'Review error details and fix content structure',
+          },
+        ],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.5, effort: 0.3, roi: 1.7 },
+        preferenceAlignment: [],
+        reasoning: `Content does not match ${cardType} schema: ${result.error.issues.length} error(s)`,
+      },
+    };
+  }
+
+  /**
+   * Batch state transition — change state of multiple cards at once.
+   */
+  async batchChangeState(
+    ids: CardId[],
+    state: CardState,
+    reason: string | undefined,
+    version: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ succeeded: CardId[]; failed: Array<{ id: CardId; error: string }> }>> {
+    this.requireAuth(context);
+    this.logger.info({ count: ids.length, targetState: state }, 'Batch changing card state');
+
+    if (ids.length > 100) {
+      throw new BatchLimitExceededError(100, ids.length);
+    }
+
+    const succeeded: CardId[] = [];
+    const failed: Array<{ id: CardId; error: string }> = [];
+
+    for (const id of ids) {
+      try {
+        const stateInput: IChangeCardStateInput = { state };
+        if (reason !== undefined) {
+          stateInput.reason = reason;
+        }
+        await this.changeState(id, stateInput, version, context);
+        succeeded.push(id);
+      } catch (error) {
+        failed.push({
+          id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      data: { succeeded, failed },
+      agentHints: {
+        suggestedNextActions: failed.length > 0
+          ? [
+              {
+                action: 'retry_failed',
+                description: `Retry ${failed.length} failed state transitions`,
+                priority: 'medium',
+                category: 'correction',
+              },
+            ]
+          : [],
+        relatedResources: succeeded.map((id) => ({
+          type: 'Card',
+          id: id as string,
+          label: `Card ${id}`,
+          relevance: 0.9,
+        })),
+        confidence: failed.length === 0 ? 1.0 : succeeded.length / ids.length,
+        sourceQuality: 'high',
+        validityPeriod: 'medium',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: failed.length > 0
+          ? [
+              {
+                type: 'accuracy' as const,
+                severity: 'medium' as const,
+                description: `${failed.length} state transitions failed`,
+                probability: 1.0,
+                impact: failed.length / ids.length,
+                mitigation: 'Review errors and retry individually',
+              },
+            ]
+          : [],
+        dependencies: [],
+        estimatedImpact: {
+          benefit: succeeded.length * 0.1,
+          effort: 0.2,
+          roi: succeeded.length > 0 ? (succeeded.length * 0.1) / 0.2 : 0,
+        },
+        preferenceAlignment: [],
+        reasoning: `Batch state change: ${succeeded.length}/${ids.length} succeeded`,
+      },
     };
   }
 
@@ -599,8 +871,8 @@ export class ContentService {
     };
 
     // Link related KG nodes as resources
-    if (card.nodeIds.length > 0) {
-      for (const nodeId of card.nodeIds) {
+    if (card.knowledgeNodeIds.length > 0) {
+      for (const nodeId of card.knowledgeNodeIds) {
         hints.relatedResources.push({
           type: 'KGNode',
           id: nodeId as string,

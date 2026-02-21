@@ -112,5 +112,5 @@ export interface IContentRepository {
    * Uses optimistic locking.
    * @returns Updated card
    */
-  updateNodeIds(id: CardId, nodeIds: string[], version: number): Promise<ICard>;
+  updateKnowledgeNodeIds(id: CardId, knowledgeNodeIds: string[], version: number): Promise<ICard>;
 }
