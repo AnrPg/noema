@@ -13,10 +13,10 @@
 
 import { ChevronDown, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { COUNTRIES, COUNTRY_BY_CODE, type Country } from '../lib/countries';
+import { COUNTRIES, COUNTRY_BY_CODE, type ICountry } from '../lib/countries';
 import { Trie } from '../lib/trie';
 
-interface CountrySelectorProps {
+interface ICountrySelectorProps {
   /** ISO 3166-1 alpha-2 code */
   value?: string;
   /** Called with the alpha-2 code */
@@ -32,7 +32,7 @@ export function CountrySelector({
   onChange,
   placeholder = 'Select country...',
   error,
-}: CountrySelectorProps) {
+}: ICountrySelectorProps): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
@@ -54,7 +54,7 @@ export function CountrySelector({
 
   // Search results — show all if query is empty, else trie search
   const results = useMemo(() => {
-    if (!query.trim()) return COUNTRIES;
+    if (query.trim() === '') return COUNTRIES;
     return trie.search(query.trim());
   }, [trie, query]);
 
@@ -72,7 +72,7 @@ export function CountrySelector({
 
   // Close on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent): void => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setIsOpen(false);
         setQuery('');
@@ -85,7 +85,7 @@ export function CountrySelector({
   }, []);
 
   const handleSelect = useCallback(
-    (country: Country) => {
+    (country: ICountry) => {
       onChange(country.code);
       setIsOpen(false);
       setQuery('');
@@ -134,7 +134,8 @@ export function CountrySelector({
     [onChange]
   );
 
-  const selectedCountry = value ? COUNTRY_BY_CODE.get(value) : undefined;
+  const selectedCountry =
+    value !== undefined && value !== '' ? COUNTRY_BY_CODE.get(value) : undefined;
 
   return (
     <div ref={containerRef} className="relative">
@@ -147,7 +148,7 @@ export function CountrySelector({
           px-3 py-2 text-sm ring-offset-background
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2
           disabled:cursor-not-allowed disabled:opacity-50
-          ${error ? 'border-destructive focus-visible:ring-destructive' : 'border-input'}
+          ${error === true ? 'border-destructive focus-visible:ring-destructive' : 'border-input'}
         `}
       >
         {selectedCountry ? (
@@ -159,7 +160,7 @@ export function CountrySelector({
           <span className="text-muted-foreground">{placeholder}</span>
         )}
         <div className="flex items-center gap-1">
-          {value && (
+          {value !== undefined && value !== '' && (
             <span
               role="button"
               tabIndex={-1}
@@ -193,7 +194,7 @@ export function CountrySelector({
               autoCorrect="off"
               spellCheck={false}
             />
-            {query && (
+            {query !== '' && (
               <button
                 type="button"
                 onClick={() => {
@@ -249,7 +250,7 @@ export function CountrySelector({
  * Returns alternative searchable names for better discoverability.
  * Covers common aliases and demonyms.
  */
-function getAlternativeNames(country: Country): string[] {
+function getAlternativeNames(country: ICountry): string[] {
   const alternatives: Record<string, string[]> = {
     US: ['USA', 'America', 'United States of America'],
     GB: ['UK', 'Britain', 'England', 'Scotland', 'Wales'],

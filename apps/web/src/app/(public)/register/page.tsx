@@ -74,7 +74,7 @@ const registerSchema = z
       .regex(/[a-z]/, 'Must contain a lowercase letter')
       .regex(/[A-Z]/, 'Must contain an uppercase letter')
       .regex(/[0-9]/, 'Must contain a number')
-      .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, 'Must contain a special character'),
+      .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, 'Must contain a special character'),
     confirmPassword: z.string(),
 
     // Step 2: Profile
@@ -115,7 +115,7 @@ const STEPS = [
 // Component
 // ============================================================================
 
-export default function RegisterPage() {
+export default function RegisterPage(): React.JSX.Element {
   const router = useRouter();
   const { register: registerUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -151,14 +151,19 @@ export default function RegisterPage() {
   // Auto-suggest username from email when user tabs out of email field
   const handleEmailBlur = useCallback(() => {
     const currentUsername = watch('username');
-    if (!currentUsername && email) {
+    if (currentUsername === '' && email !== '') {
       const suggested = email
         .split('@')[0]
         ?.replace(/[^a-zA-Z0-9_]/g, '')
         .toLowerCase();
-      if (suggested && suggested.length >= 3 && /^[a-zA-Z]/.test(suggested)) {
+      if (
+        suggested !== undefined &&
+        suggested !== '' &&
+        suggested.length >= 3 &&
+        /^[a-zA-Z]/.test(suggested)
+      ) {
         setValue('username', suggested.slice(0, 30));
-        trigger('username');
+        void trigger('username');
       }
     }
   }, [email, watch, setValue, trigger]);
@@ -177,17 +182,18 @@ export default function RegisterPage() {
     setCurrentStep((s) => Math.max(s - 1, 0));
   }, []);
 
-  const onSubmit = async (data: RegisterFormData) => {
+  const onSubmit = async (data: RegisterFormData): Promise<void> => {
     try {
       setError(null);
       await registerUser({
         username: data.username.toLowerCase(),
         email: data.email,
         password: data.password,
-        ...(data.displayName && { displayName: data.displayName }),
-        ...(data.language && { language: data.language }),
-        ...(data.timezone && { timezone: data.timezone }),
-        ...(data.country && { country: data.country }),
+        ...(data.displayName !== undefined &&
+          data.displayName !== '' && { displayName: data.displayName }),
+        ...(data.language !== undefined && data.language !== '' && { language: data.language }),
+        ...(data.timezone !== undefined && data.timezone !== '' && { timezone: data.timezone }),
+        ...(data.country !== undefined && data.country !== '' && { country: data.country }),
       });
       router.push('/dashboard');
     } catch (err) {
@@ -254,9 +260,9 @@ export default function RegisterPage() {
       </div>
 
       <Card>
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
           <CardContent className="space-y-4 pt-6">
-            {error && (
+            {error !== null && error !== '' && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
@@ -290,7 +296,7 @@ export default function RegisterPage() {
                     autoComplete="new-password"
                     {...register('password')}
                   />
-                  <PasswordStrength password={password ?? ''} />
+                  <PasswordStrength password={password} />
                 </FormField>
 
                 <FormField
@@ -408,7 +414,7 @@ export default function RegisterPage() {
                   {isSubmitting ? 'Creating account...' : 'Create account'}
                 </Button>
               ) : (
-                <Button type="button" onClick={handleNext} className="flex-1">
+                <Button type="button" onClick={() => void handleNext()} className="flex-1">
                   Next
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>

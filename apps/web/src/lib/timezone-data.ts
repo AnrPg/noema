@@ -5,7 +5,7 @@
  * for rendering snap points on the interactive timezone map.
  */
 
-export interface TimezoneCity {
+export interface ITimezoneCity {
   /** IANA timezone identifier (e.g. "America/New_York") */
   timezone: string;
   /** Display label (city name) */
@@ -22,7 +22,7 @@ export interface TimezoneCity {
  * Timezone cities with coordinates matching the server's COMMON_TIMEZONES array.
  * Coordinates are approximate city centers.
  */
-export const TIMEZONE_CITIES: TimezoneCity[] = [
+export const TIMEZONE_CITIES: ITimezoneCity[] = [
   { timezone: 'UTC', label: 'UTC', lat: 51.48, lng: 0.0, utcOffset: 'UTC+0' },
   { timezone: 'America/New_York', label: 'New York', lat: 40.71, lng: -74.01, utcOffset: 'UTC-5' },
   { timezone: 'America/Chicago', label: 'Chicago', lat: 41.88, lng: -87.63, utcOffset: 'UTC-6' },
@@ -108,7 +108,7 @@ export const TIMEZONE_CITIES: TimezoneCity[] = [
  * Get sorted timezones list for dropdown display.
  * Sorted by UTC offset (west to east), then alphabetically.
  */
-export function getSortedTimezones(): TimezoneCity[] {
+export function getSortedTimezones(): ITimezoneCity[] {
   return [...TIMEZONE_CITIES].sort((a, b) => {
     const offsetA = parseUtcOffset(a.utcOffset);
     const offsetB = parseUtcOffset(b.utcOffset);
@@ -124,8 +124,10 @@ function parseUtcOffset(offset: string): number {
   const match = /UTC([+-])(\d+)(?::(\d+))?/.exec(offset);
   if (!match) return 0;
   const sign = match[1] === '+' ? 1 : -1;
-  const hours = parseInt(match[2]!, 10);
-  const minutes = parseInt(match[3] || '0', 10);
+  const hoursStr = match[2];
+  const minutesStr = match[3];
+  const hours = parseInt(hoursStr ?? '0', 10);
+  const minutes = parseInt(minutesStr ?? '0', 10);
   return sign * (hours * 60 + minutes);
 }
 
@@ -146,6 +148,6 @@ export function formatTimeInTimezone(timezone: string): string {
 }
 
 /** Lookup map: IANA timezone → TimezoneCity */
-export const TIMEZONE_BY_ID = new Map<string, TimezoneCity>(
+export const TIMEZONE_BY_ID = new Map<string, ITimezoneCity>(
   TIMEZONE_CITIES.map((tz) => [tz.timezone, tz])
 );

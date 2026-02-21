@@ -5,7 +5,7 @@
  * Flag emojis are derived from regional indicator symbol pairs (zero external assets).
  */
 
-export interface Country {
+export interface ICountry {
   /** ISO 3166-1 alpha-2 code (e.g. "US") */
   code: string;
   /** English country name */
@@ -19,13 +19,15 @@ export interface Country {
  * Each letter is offset to the Regional Indicator Symbol range (U+1F1E6..U+1F1FF).
  */
 function toFlag(code: string): string {
-  return [...code.toUpperCase()]
-    .map((c) => String.fromCodePoint(0x1f1e6 + c.charCodeAt(0) - 65))
-    .join('');
+  const upper = code.toUpperCase();
+  return String.fromCodePoint(
+    0x1f1e6 + upper.charCodeAt(0) - 65,
+    0x1f1e6 + upper.charCodeAt(1) - 65
+  );
 }
 
 /** All ISO 3166-1 alpha-2 countries, sorted alphabetically by name. */
-export const COUNTRIES: Country[] = [
+export const COUNTRIES: ICountry[] = [
   { code: 'AF', name: 'Afghanistan' },
   { code: 'AL', name: 'Albania' },
   { code: 'DZ', name: 'Algeria' },
@@ -225,4 +227,4 @@ export const COUNTRIES: Country[] = [
 ].map((c) => ({ ...c, flag: toFlag(c.code) }));
 
 /** Lookup map: alpha-2 code → Country */
-export const COUNTRY_BY_CODE = new Map<string, Country>(COUNTRIES.map((c) => [c.code, c]));
+export const COUNTRY_BY_CODE = new Map<string, ICountry>(COUNTRIES.map((c) => [c.code, c]));

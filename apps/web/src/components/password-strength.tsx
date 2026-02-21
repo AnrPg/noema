@@ -14,29 +14,29 @@
 
 import { Check, X } from 'lucide-react';
 
-interface PasswordStrengthProps {
+interface IPasswordStrengthProps {
   password: string;
 }
 
-interface PasswordRequirement {
+interface IPasswordRequirement {
   label: string;
   test: (pw: string) => boolean;
 }
 
-const REQUIREMENTS: PasswordRequirement[] = [
+const REQUIREMENTS: IPasswordRequirement[] = [
   { label: 'At least 8 characters', test: (pw) => pw.length >= 8 },
   { label: 'Lowercase letter', test: (pw) => /[a-z]/.test(pw) },
   { label: 'Uppercase letter', test: (pw) => /[A-Z]/.test(pw) },
   { label: 'Number', test: (pw) => /[0-9]/.test(pw) },
   {
     label: 'Special character (!@#$%...)',
-    test: (pw) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw),
+    test: (pw) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pw),
   },
 ];
 
 /** Compute password strength score 0-100 matching server's Password.getStrength() */
 function computeStrength(pw: string): number {
-  if (!pw) return 0;
+  if (pw === '') return 0;
   let score = 0;
   if (pw.length >= 8) score += 20;
   if (pw.length >= 12) score += 20;
@@ -44,7 +44,7 @@ function computeStrength(pw: string): number {
   if (/[a-z]/.test(pw)) score += 10;
   if (/[A-Z]/.test(pw)) score += 10;
   if (/[0-9]/.test(pw)) score += 10;
-  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pw)) score += 20;
+  if (/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pw)) score += 20;
   return Math.min(score, 100);
 }
 
@@ -57,12 +57,12 @@ function getStrengthLabel(score: number): { label: string; color: string } {
   return { label: 'Very strong', color: 'bg-emerald-500' };
 }
 
-export function PasswordStrength({ password }: PasswordStrengthProps) {
+export function PasswordStrength({ password }: IPasswordStrengthProps): React.JSX.Element | null {
   const strength = computeStrength(password);
   const { label, color } = getStrengthLabel(strength);
   const metCount = REQUIREMENTS.filter((r) => r.test(password)).length;
 
-  if (!password) return null;
+  if (password === '') return null;
 
   return (
     <div className="space-y-2 pt-1">
@@ -79,7 +79,9 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
               />
             ))}
           </div>
-          {label && <span className="text-xs text-muted-foreground ml-3 shrink-0">{label}</span>}
+          {label !== '' && (
+            <span className="text-xs text-muted-foreground ml-3 shrink-0">{label}</span>
+          )}
         </div>
       </div>
 

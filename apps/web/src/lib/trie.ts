@@ -5,18 +5,18 @@
  * Used for efficient typeahead/autocomplete in form selectors.
  */
 
-interface TrieNode<T> {
-  children: Map<string, TrieNode<T>>;
+interface ITrieNode<T> {
+  children: Map<string, ITrieNode<T>>;
   values: T[];
   isEnd: boolean;
 }
 
-function createNode<T>(): TrieNode<T> {
+function createNode<T>(): ITrieNode<T> {
   return { children: new Map(), values: [], isEnd: false };
 }
 
 export class Trie<T> {
-  private readonly root: TrieNode<T>;
+  private readonly root: ITrieNode<T>;
 
   constructor() {
     this.root = createNode<T>();
@@ -35,7 +35,9 @@ export class Trie<T> {
         if (!node.children.has(char)) {
           node.children.set(char, createNode<T>());
         }
-        node = node.children.get(char)!;
+        const next = node.children.get(char);
+        if (!next) break;
+        node = next;
       }
 
       node.isEnd = true;
@@ -55,7 +57,9 @@ export class Trie<T> {
       if (!node.children.has(char)) {
         return [];
       }
-      node = node.children.get(char)!;
+      const next = node.children.get(char);
+      if (!next) return [];
+      node = next;
     }
 
     // Collect all values in the subtree
@@ -68,7 +72,7 @@ export class Trie<T> {
   /**
    * Recursively collect all values from a subtree.
    */
-  private collect(node: TrieNode<T>, results: T[], seen: Set<T>): void {
+  private collect(node: ITrieNode<T>, results: T[], seen: Set<T>): void {
     for (const value of node.values) {
       if (!seen.has(value)) {
         seen.add(value);

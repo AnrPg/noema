@@ -15,22 +15,22 @@ import { geoEqualEarth } from 'd3-geo';
 import { Clock, MapPin } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ComposableMap, Geographies, Geography, Graticule, Marker } from 'react-simple-maps';
-import { formatTimeInTimezone, TIMEZONE_CITIES, type TimezoneCity } from '../lib/timezone-data';
+import { formatTimeInTimezone, TIMEZONE_CITIES, type ITimezoneCity } from '../lib/timezone-data';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json';
 
 /** Snap distance in pixels — how close cursor must be to snap to a city marker */
 const SNAP_DISTANCE_PX = 30;
 
-interface TimezoneMapProps {
+interface ITimezoneMapProps {
   /** Currently selected timezone IANA id */
   value?: string;
   /** Called when user clicks a timezone city */
   onChange: (timezone: string) => void;
 }
 
-export function TimezoneMap({ value, onChange }: TimezoneMapProps) {
-  const [hoveredCity, setHoveredCity] = useState<TimezoneCity | null>(null);
+export function TimezoneMap({ value, onChange }: ITimezoneMapProps): React.JSX.Element {
+  const [hoveredCity, setHoveredCity] = useState<ITimezoneCity | null>(null);
   const [cursorLng, setCursorLng] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -66,7 +66,7 @@ export function TimezoneMap({ value, onChange }: TimezoneMapProps) {
       setCursorLng(lng);
 
       // Find the nearest timezone city within snap distance
-      let nearestCity: TimezoneCity | null = null;
+      let nearestCity: ITimezoneCity | null = null;
       let nearestDist = Infinity;
 
       for (const city of TIMEZONE_CITIES) {
@@ -112,7 +112,7 @@ export function TimezoneMap({ value, onChange }: TimezoneMapProps) {
       }
     }
     if (points.length < 2) return null;
-    return 'M' + points.map((p) => `${p[0]},${p[1]}`).join('L');
+    return 'M' + points.map((p) => `${String(p[0])},${String(p[1])}`).join('L');
   }, [lineLng, projection]);
 
   // Currently selected city
@@ -214,7 +214,7 @@ export function TimezoneMap({ value, onChange }: TimezoneMapProps) {
           </ComposableMap>
 
           {/* Vertical longitude line overlay */}
-          {verticalLinePath && (
+          {verticalLinePath !== null && verticalLinePath !== '' && (
             <path
               d={verticalLinePath}
               stroke={

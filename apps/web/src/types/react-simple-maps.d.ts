@@ -1,70 +1,70 @@
 declare module 'react-simple-maps' {
   import type { ComponentType, SVGAttributes } from 'react';
 
-  export interface ProjectionConfig {
+  export interface IProjectionConfig {
     rotate?: [number, number, number];
     center?: [number, number];
     scale?: number;
   }
 
-  export interface ComposableMapProps extends SVGAttributes<SVGSVGElement> {
+  export interface IComposableMapProps extends SVGAttributes<SVGSVGElement> {
     projection?: string;
-    projectionConfig?: ProjectionConfig;
+    projectionConfig?: IProjectionConfig;
     width?: number;
     height?: number;
   }
 
-  export interface GeographiesChildrenProps {
-    geographies: GeographyType[];
+  export interface IGeographiesChildrenProps {
+    geographies: IGeographyType[];
     outline: object;
     borders: object;
   }
 
-  export interface GeographiesProps {
+  export interface IGeographiesProps {
     geography: string | object;
-    children: (data: GeographiesChildrenProps) => React.ReactNode;
+    children: (data: IGeographiesChildrenProps) => React.ReactNode;
   }
 
-  export interface GeographyType {
+  export interface IGeographyType {
     rsmKey: string;
     properties: Record<string, unknown>;
     type: string;
     geometry: object;
   }
 
-  export interface GeographyProps extends SVGAttributes<SVGPathElement> {
-    geography: GeographyType;
+  export interface IGeographyProps extends SVGAttributes<SVGPathElement> {
+    geography: IGeographyType;
   }
 
-  export interface MarkerProps extends SVGAttributes<SVGGElement> {
+  export interface IMarkerProps extends SVGAttributes<SVGGElement> {
     coordinates: [number, number];
   }
 
-  export interface GraticuleProps extends SVGAttributes<SVGPathElement> {
+  export interface IGraticuleProps extends SVGAttributes<SVGPathElement> {
     step?: [number, number];
   }
 
-  export interface SphereProps extends SVGAttributes<SVGPathElement> {}
+  export type ISphereProps = SVGAttributes<SVGPathElement>;
 
-  export interface LineProps extends SVGAttributes<SVGPathElement> {
+  export interface ILineProps extends SVGAttributes<SVGPathElement> {
     from: [number, number];
     to: [number, number];
     coordinates?: [number, number][];
   }
 
-  export interface ZoomableGroupProps extends SVGAttributes<SVGGElement> {
+  export interface IZoomableGroupProps extends SVGAttributes<SVGGElement> {
     center?: [number, number];
     zoom?: number;
     minZoom?: number;
     maxZoom?: number;
   }
 
-  export const ComposableMap: ComponentType<ComposableMapProps>;
-  export const Geographies: ComponentType<GeographiesProps>;
-  export const Geography: ComponentType<GeographyProps>;
-  export const Marker: ComponentType<MarkerProps>;
-  export const Graticule: ComponentType<GraticuleProps>;
-  export const Sphere: ComponentType<SphereProps>;
-  export const Line: ComponentType<LineProps>;
-  export const ZoomableGroup: ComponentType<ZoomableGroupProps>;
+  export const ComposableMap: ComponentType<IComposableMapProps>;
+  export const Geographies: ComponentType<IGeographiesProps>;
+  export const Geography: ComponentType<IGeographyProps>;
+  export const Marker: ComponentType<IMarkerProps>;
+  export const Graticule: ComponentType<IGraticuleProps>;
+  export const Sphere: ComponentType<ISphereProps>;
+  export const Line: ComponentType<ILineProps>;
+  export const ZoomableGroup: ComponentType<IZoomableGroupProps>;
 }
