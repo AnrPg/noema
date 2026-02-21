@@ -73,7 +73,7 @@ export interface IContentRepository {
    * Uses a transaction; individual failures don't roll back the entire batch.
    */
   createBatch(
-    inputs: Array<ICreateCardInput & { id: CardId; userId: UserId }>
+    inputs: (ICreateCardInput & { id: CardId; userId: UserId })[]
   ): Promise<IBatchCreateResult>;
 
   /**

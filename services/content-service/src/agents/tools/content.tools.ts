@@ -10,7 +10,6 @@
  */
 
 import type { CardId, CardState, CorrelationId, UserId } from '@noema/types';
-import { CreateCardInputSchema } from '../../domain/content-service/content.schemas.js';
 import type {
   ContentService,
   IExecutionContext,
@@ -127,64 +126,17 @@ export function createBatchCreateCardsHandler(contentService: ContentService) {
 /**
  * validate-card-content — Validate content against card type schema.
  * P0 tool — dry-run validation without persisting.
+ *
+ * Delegates to {@link ContentService.validateContent} so behaviour
+ * matches the REST endpoint: same schemas, auth, logging, error format.
  */
-export function createValidateCardContentHandler() {
-  return async (input: unknown, _userId: string, _correlationId: string): Promise<IToolResult> => {
+export function createValidateCardContentHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
-      const parseResult = CreateCardInputSchema.safeParse(input);
-      if (!parseResult.success) {
-        const fieldErrors = parseResult.error.flatten().fieldErrors;
-        return {
-          success: true,
-          data: { valid: false, errors: fieldErrors },
-          agentHints: {
-            suggestedNextActions: [
-              {
-                action: 'fix_validation_errors',
-                description: 'Fix the validation errors and try again',
-                priority: 'high',
-                category: 'correction',
-              },
-            ],
-            relatedResources: [],
-            confidence: 1.0,
-            sourceQuality: 'high',
-            validityPeriod: 'short',
-            contextNeeded: [],
-            assumptions: [],
-            riskFactors: [],
-            dependencies: [],
-            estimatedImpact: { benefit: 0.3, effort: 0.2, roi: 1.5 },
-            preferenceAlignment: [],
-            reasoning: `Content validation failed with ${Object.keys(fieldErrors).length} field errors`,
-          },
-        };
-      }
-      return {
-        success: true,
-        data: { valid: true, validated: parseResult.data },
-        agentHints: {
-          suggestedNextActions: [
-            {
-              action: 'create_card',
-              description: 'Content is valid — proceed with card creation',
-              priority: 'high',
-              category: 'exploration',
-            },
-          ],
-          relatedResources: [],
-          confidence: 1.0,
-          sourceQuality: 'high',
-          validityPeriod: 'short',
-          contextNeeded: [],
-          assumptions: [],
-          riskFactors: [],
-          dependencies: [],
-          estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
-          preferenceAlignment: [],
-          reasoning: 'Content passed validation — ready for creation',
-        },
-      };
+      const context = buildContext(userId, correlationId);
+      const { cardType, content } = input as { cardType: string; content: unknown };
+      const result = await contentService.validateContent(cardType, content, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
     }
@@ -393,20 +345,21 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
   {
     name: 'validate-card-content',
     description:
-      'Validate content against card type schema without creating. Returns validation result.',
+      'Validate content against a card type schema without creating. Returns {valid, errors?}.',
     service: 'content-service',
     priority: 'P0',
     inputSchema: {
       type: 'object',
       required: ['cardType', 'content'],
       properties: {
-        cardType: { type: 'string' },
-        content: { type: 'object' },
-        difficulty: { type: 'string' },
-        knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
-        tags: { type: 'array', items: { type: 'string' } },
-        source: { type: 'string' },
-        metadata: { type: 'object' },
+        cardType: {
+          type: 'string',
+          description: 'Card type discriminator (e.g. multiple_choice, cloze_deletion)',
+        },
+        content: {
+          type: 'object',
+          description: 'Content blob to validate against the type-specific schema',
+        },
       },
     },
   },

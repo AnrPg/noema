@@ -66,7 +66,7 @@ export class ValidationError extends DomainError {
  * Thrown when authentication fails.
  */
 export class AuthenticationError extends DomainError {
-  constructor(message: string = 'Authentication failed') {
+  constructor(message = 'Authentication failed') {
     super('AUTHENTICATION_ERROR', message);
   }
 }
@@ -75,7 +75,7 @@ export class AuthenticationError extends DomainError {
  * Thrown when token is invalid or expired.
  */
 export class InvalidTokenError extends AuthenticationError {
-  constructor(message: string = 'Invalid or expired token') {
+  constructor(message = 'Invalid or expired token') {
     super(message);
   }
 }
@@ -88,7 +88,7 @@ export class InvalidTokenError extends AuthenticationError {
  * Thrown when user lacks permission.
  */
 export class AuthorizationError extends DomainError {
-  constructor(message: string = 'Access denied') {
+  constructor(message = 'Access denied') {
     super('AUTHORIZATION_ERROR', message);
   }
 }
@@ -135,7 +135,7 @@ export class VersionConflictError extends DomainError {
   constructor(expectedVersion: number, actualVersion: number) {
     super(
       'VERSION_CONFLICT',
-      `Version conflict: expected ${expectedVersion}, found ${actualVersion}`,
+      `Version conflict: expected ${String(expectedVersion)}, found ${String(actualVersion)}`,
       { expectedVersion, actualVersion }
     );
     this.expectedVersion = expectedVersion;
@@ -195,7 +195,7 @@ export class BatchLimitExceededError extends BusinessRuleError {
   public readonly requested: number;
 
   constructor(limit: number, requested: number) {
-    super(`Batch limit exceeded: max ${limit}, requested ${requested}`, {
+    super(`Batch limit exceeded: max ${String(limit)}, requested ${String(requested)}`, {
       limit,
       requested,
     });

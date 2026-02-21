@@ -6,7 +6,7 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CorrelationId, UserId } from '@noema/types';
+import type { CardId, CardState, CorrelationId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ContentService, IExecutionContext } from '../../domain/content-service/content.service.js';
 import {
@@ -19,6 +19,7 @@ import {
   ValidationError,
   VersionConflictError,
 } from '../../domain/content-service/errors/index.js';
+import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type {
   IChangeCardStateInput,
   ICreateCardInput,
@@ -30,21 +31,21 @@ import type {
 // Request/Response Types
 // ============================================================================
 
-interface IdParams {
+interface IIdParams {
   id: string;
 }
 
-interface UpdateBody<T> {
+interface IUpdateBody<T> {
   data: T;
   version: number;
 }
 
-interface TagsBody {
+interface ITagsBody {
   tags: string[];
   version: number;
 }
 
-interface DeleteQuery {
+interface IDeleteQuery {
   soft?: string;
 }
 
@@ -55,13 +56,13 @@ interface DeleteQuery {
 /**
  * Register content routes.
  */
-export async function registerContentRoutes(
+export function registerContentRoutes(
   fastify: FastifyInstance,
   contentService: ContentService,
-  authMiddleware: ReturnType<typeof import('../../middleware/auth.middleware.js').createAuthMiddleware>
-): Promise<void> {
+  authMiddleware: ReturnType<typeof createAuthMiddleware>
+): void {
   // Attach startTime for executionTime computation
-  fastify.addHook('onRequest', async (request) => {
+  fastify.addHook('onRequest', (request) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
   });
 
@@ -76,13 +77,13 @@ export async function registerContentRoutes(
     const user = request.user as { sub?: string; roles?: string[] } | undefined;
     const userAgent = request.headers['user-agent'];
     const context: IExecutionContext = {
-      userId: (user?.sub as UserId) || null,
+      userId: (user?.sub ?? null) as UserId | null,
       correlationId:
-        (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
-      roles: user?.roles || [],
+        request.id as CorrelationId,
+      roles: user?.roles ?? [],
       clientIp: request.ip,
     };
-    if (userAgent) {
+    if (userAgent !== undefined) {
       context.userAgent = userAgent;
     }
     return context;
@@ -109,7 +110,7 @@ export async function registerContentRoutes(
   /**
    * Build response metadata for error responses.
    */
-  function buildErrorMetadata(request: FastifyRequest) {
+  function buildErrorMetadata(request: FastifyRequest): Record<string, unknown> {
     const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       requestId: request.id,
@@ -311,7 +312,7 @@ export async function registerContentRoutes(
   /**
    * GET /v1/cards/:id - Get card by ID
    */
-  fastify.get<{ Params: IdParams }>(
+  fastify.get<{ Params: IIdParams }>(
     '/v1/cards/:id',
     {
       preHandler: authMiddleware,
@@ -400,7 +401,7 @@ export async function registerContentRoutes(
   /**
    * PATCH /v1/cards/:id - Update a card
    */
-  fastify.patch<{ Params: IdParams; Body: UpdateBody<IUpdateCardInput> }>(
+  fastify.patch<{ Params: IIdParams; Body: IUpdateBody<IUpdateCardInput> }>(
     '/v1/cards/:id',
     {
       preHandler: authMiddleware,
@@ -452,7 +453,7 @@ export async function registerContentRoutes(
   /**
    * PATCH /v1/cards/:id/state - Change card state
    */
-  fastify.patch<{ Params: IdParams; Body: IChangeCardStateInput & { version: number } }>(
+  fastify.patch<{ Params: IIdParams; Body: IChangeCardStateInput & { version: number } }>(
     '/v1/cards/:id/state',
     {
       preHandler: authMiddleware,
@@ -498,7 +499,7 @@ export async function registerContentRoutes(
   /**
    * PATCH /v1/cards/:id/tags - Update card tags
    */
-  fastify.patch<{ Params: IdParams; Body: TagsBody }>(
+  fastify.patch<{ Params: IIdParams; Body: ITagsBody }>(
     '/v1/cards/:id/tags',
     {
       preHandler: authMiddleware,
@@ -545,7 +546,7 @@ export async function registerContentRoutes(
   /**
    * PATCH /v1/cards/:id/node-links - Update card knowledge node links
    */
-  fastify.patch<{ Params: IdParams; Body: { knowledgeNodeIds: string[]; version: number } }>(
+  fastify.patch<{ Params: IIdParams; Body: { knowledgeNodeIds: string[]; version: number } }>(
     '/v1/cards/:id/node-links',
     {
       preHandler: authMiddleware,
@@ -654,7 +655,7 @@ export async function registerContentRoutes(
     async (request, reply) => {
       try {
         const context = buildContext(request);
-        const result = await contentService.validateContent(
+        const result = contentService.validateContent(
           request.body.cardType,
           request.body.content,
           context
@@ -700,7 +701,7 @@ export async function registerContentRoutes(
         const context = buildContext(request);
         const result = await contentService.batchChangeState(
           request.body.ids as CardId[],
-          request.body.state as import('@noema/types').CardState,
+          request.body.state as CardState,
           request.body.reason,
           request.body.version,
           context
@@ -719,7 +720,7 @@ export async function registerContentRoutes(
   /**
    * DELETE /v1/cards/:id - Delete a card
    */
-  fastify.delete<{ Params: IdParams; Querystring: DeleteQuery }>(
+  fastify.delete<{ Params: IIdParams; Querystring: IDeleteQuery }>(
     '/v1/cards/:id',
     {
       preHandler: authMiddleware,

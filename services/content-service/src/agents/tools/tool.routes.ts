@@ -10,25 +10,24 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type { ToolRegistry } from './tool.registry.js';
 
 // ============================================================================
 // Route Plugin
 // ============================================================================
 
-export async function registerToolRoutes(
+export function registerToolRoutes(
   fastify: FastifyInstance,
   toolRegistry: ToolRegistry,
-  authMiddleware: ReturnType<
-    typeof import('../../middleware/auth.middleware.js').createAuthMiddleware
-  >
-): Promise<void> {
+  authMiddleware: ReturnType<typeof createAuthMiddleware>
+): void {
   // Attach startTime
-  fastify.addHook('onRequest', async (request) => {
+  fastify.addHook('onRequest', (request) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
   });
 
-  function buildMetadata(request: FastifyRequest) {
+  function buildMetadata(request: FastifyRequest): Record<string, unknown> {
     const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       requestId: request.id,
@@ -43,13 +42,14 @@ export async function registerToolRoutes(
   // GET /v1/tools — List available tools
   // ============================================================================
 
+   
   fastify.get(
     '/v1/tools',
     { preHandler: authMiddleware },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       const definitions = toolRegistry.listDefinitions();
 
-      reply.status(200).send({
+      await reply.status(200).send({
         data: {
           tools: definitions,
           count: definitions.length,
@@ -63,14 +63,15 @@ export async function registerToolRoutes(
   // POST /v1/tools/execute — Execute a tool
   // ============================================================================
 
+   
   fastify.post(
     '/v1/tools/execute',
     { preHandler: authMiddleware },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const body = request.body as { tool: string; input?: unknown } | undefined;
 
-      if (!body?.tool) {
-        reply.status(400).send({
+      if (body?.tool === undefined || body.tool === '') {
+        await reply.status(400).send({
           error: { code: 'MISSING_TOOL_NAME', message: 'Request body must include "tool" field' },
           metadata: buildMetadata(request),
         });
@@ -79,13 +80,13 @@ export async function registerToolRoutes(
 
       const user = request.user as { sub?: string } | undefined;
       const userId = user?.sub ?? '';
-      const correlationId = request.id ?? `correlation_${Date.now()}`;
+      const correlationId = request.id;
 
       const result = await toolRegistry.execute(body.tool, body.input ?? {}, userId, correlationId);
 
       const statusCode = result.success ? 200 : result.error?.code === 'TOOL_NOT_FOUND' ? 404 : 422;
 
-      reply.status(statusCode).send({
+      await reply.status(statusCode).send({
         data: result,
         metadata: buildMetadata(request),
       });

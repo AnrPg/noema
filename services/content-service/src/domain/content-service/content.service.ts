@@ -129,6 +129,7 @@ export class ContentService {
     // Create card
     const card = await this.repository.create({
       id,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       userId: context.userId!,
       ...validated,
     });
@@ -140,7 +141,7 @@ export class ContentService {
       aggregateId: id,
       payload: {
         entity: card,
-        source: validated.source || 'user',
+        source: validated.source ?? 'user',
       },
       metadata: {
         correlationId: context.correlationId,
@@ -187,6 +188,7 @@ export class ContentService {
     const cardsWithIds = parseResult.data.cards.map((card) => ({
       ...card,
       id: `${ID_PREFIXES.CardId}${nanoid(21)}` as CardId,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       userId: context.userId!,
     })) as (ICreateCardInput & { id: CardId; userId: UserId })[];
 
@@ -235,6 +237,7 @@ export class ContentService {
     this.requireAuth(context);
     this.logger.debug({ cardId: id }, 'Finding card by ID');
 
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const card = await this.repository.findByIdForUser(id, context.userId!);
 
     if (!card) {
@@ -279,7 +282,8 @@ export class ContentService {
 
     // Non-admins can only query their own cards
     const effectiveUserId =
-      this.isAdmin(context) && validated.userId ? (validated.userId as UserId) : context.userId!;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.isAdmin(context) && validated.userId ? (validated.userId) : context.userId!;
 
     const result = await this.repository.query(validated, effectiveUserId);
 
@@ -310,7 +314,7 @@ export class ContentService {
         dependencies: [],
         estimatedImpact: { benefit: 0.5, effort: 0.2, roi: 2.5 },
         preferenceAlignment: [],
-        reasoning: `Query returned ${result.total} cards`,
+        reasoning: `Query returned ${String(result.total)} cards`,
       },
     };
   }
@@ -565,6 +569,7 @@ export class ContentService {
 
     const count = await this.repository.count(
       parseResult.data as unknown as IDeckQuery,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       context.userId!
     );
 
@@ -574,7 +579,7 @@ export class ContentService {
         suggestedNextActions: [
           {
             action: 'query_cards',
-            description: `Fetch the ${count} matching cards`,
+            description: `Fetch the ${String(count)} matching cards`,
             priority: 'medium',
             category: 'exploration',
           },
@@ -589,7 +594,7 @@ export class ContentService {
         dependencies: [],
         estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
         preferenceAlignment: [],
-        reasoning: `Count query returned ${count} cards`,
+        reasoning: `Count query returned ${String(count)} cards`,
       },
     };
   }
@@ -598,13 +603,11 @@ export class ContentService {
    * Validate card content against the type-specific schema without creating.
    * Returns validation result with detailed error messages.
    */
-  async validateContent(
+  validateContent(
     cardType: string,
     content: unknown,
     _context: IExecutionContext
-  ): Promise<
-    IServiceResult<{ valid: boolean; errors?: Array<{ path: string; message: string }> }>
-  > {
+  ): IServiceResult<{ valid: boolean; errors?: { path: string; message: string }[] }> {
     this.requireAuth(_context);
     this.logger.info({ cardType }, 'Validating card content');
 
@@ -649,7 +652,7 @@ export class ContentService {
         suggestedNextActions: [
           {
             action: 'fix_content',
-            description: `Fix ${result.error.issues.length} validation error(s) and retry`,
+            description: `Fix ${String(result.error.issues.length)} validation error(s) and retry`,
             priority: 'high',
             category: 'correction',
           },
@@ -664,7 +667,7 @@ export class ContentService {
           {
             type: 'accuracy',
             severity: 'medium',
-            description: `${result.error.issues.length} validation error(s) found`,
+            description: `${String(result.error.issues.length)} validation error(s) found`,
             probability: 1.0,
             impact: 0.5,
             mitigation: 'Review error details and fix content structure',
@@ -673,7 +676,7 @@ export class ContentService {
         dependencies: [],
         estimatedImpact: { benefit: 0.5, effort: 0.3, roi: 1.7 },
         preferenceAlignment: [],
-        reasoning: `Content does not match ${cardType} schema: ${result.error.issues.length} error(s)`,
+        reasoning: `Content does not match ${cardType} schema: ${String(result.error.issues.length)} error(s)`,
       },
     };
   }
@@ -688,7 +691,7 @@ export class ContentService {
     version: number,
     context: IExecutionContext
   ): Promise<
-    IServiceResult<{ succeeded: CardId[]; failed: Array<{ id: CardId; error: string }> }>
+    IServiceResult<{ succeeded: CardId[]; failed: { id: CardId; error: string }[] }>
   > {
     this.requireAuth(context);
     this.logger.info({ count: ids.length, targetState: state }, 'Batch changing card state');
@@ -698,7 +701,7 @@ export class ContentService {
     }
 
     const succeeded: CardId[] = [];
-    const failed: Array<{ id: CardId; error: string }> = [];
+    const failed: { id: CardId; error: string }[] = [];
 
     for (const id of ids) {
       try {
@@ -724,7 +727,7 @@ export class ContentService {
             ? [
                 {
                   action: 'retry_failed',
-                  description: `Retry ${failed.length} failed state transitions`,
+                  description: `Retry ${String(failed.length)} failed state transitions`,
                   priority: 'medium',
                   category: 'correction',
                 },
@@ -747,7 +750,7 @@ export class ContentService {
                 {
                   type: 'accuracy' as const,
                   severity: 'medium' as const,
-                  description: `${failed.length} state transitions failed`,
+                  description: `${String(failed.length)} state transitions failed`,
                   probability: 1.0,
                   impact: failed.length / ids.length,
                   mitigation: 'Review errors and retry individually',
@@ -761,7 +764,7 @@ export class ContentService {
           roi: succeeded.length > 0 ? (succeeded.length * 0.1) / 0.2 : 0,
         },
         preferenceAlignment: [],
-        reasoning: `Batch state change: ${succeeded.length}/${ids.length} succeeded`,
+        reasoning: `Batch state change: ${String(succeeded.length)}/${String(ids.length)} succeeded`,
       },
     };
   }
@@ -825,9 +828,9 @@ export class ContentService {
 
   private validateStateTransition(current: CardState, target: CardState): void {
     const allowed = STATE_TRANSITIONS[current];
-    if (!allowed || !allowed.includes(target)) {
+    if (allowed?.includes(target) !== true) {
       throw new BusinessRuleError(
-        `Invalid state transition: ${current} → ${target}. Allowed: ${allowed?.join(', ') || 'none'}`,
+        `Invalid state transition: ${current} → ${target}. Allowed: ${allowed?.join(', ') ?? 'none'}`,
         { currentState: current, targetState: target, allowedTransitions: allowed }
       );
     }
@@ -966,7 +969,7 @@ export class ContentService {
       suggestedNextActions: [
         {
           action: 'activate_batch',
-          description: `Activate ${result.successCount} created cards`,
+          description: `Activate ${String(result.successCount)} created cards`,
           priority: 'high',
           category: 'optimization',
         },
@@ -974,7 +977,7 @@ export class ContentService {
           ? [
               {
                 action: 'retry_failed' as const,
-                description: `Retry ${result.failureCount} failed cards`,
+                description: `Retry ${String(result.failureCount)} failed cards`,
                 priority: 'medium' as const,
                 category: 'correction' as const,
               },
@@ -998,7 +1001,7 @@ export class ContentService {
               {
                 type: 'accuracy' as const,
                 severity: 'medium' as const,
-                description: `${result.failureCount} cards failed to create`,
+                description: `${String(result.failureCount)} cards failed to create`,
                 probability: 1.0,
                 impact: result.failureCount / result.total,
                 mitigation: 'Retry the failed cards individually',
@@ -1012,7 +1015,7 @@ export class ContentService {
         roi: result.successCount > 0 ? (result.successCount * 0.1) / 0.3 : 0,
       },
       preferenceAlignment: [],
-      reasoning: `Batch created ${result.successCount}/${result.total} cards`,
+      reasoning: `Batch created ${String(result.successCount)}/${String(result.total)} cards`,
     };
   }
 }

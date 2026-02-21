@@ -52,9 +52,9 @@ export class RedisEventPublisher implements IEventPublisher {
         serviceName: this.config.serviceName,
         serviceVersion: this.config.serviceVersion,
         environment: this.config.environment,
-        userId: event.metadata.userId || null,
+        userId: event.metadata.userId ?? null,
         correlationId: event.metadata.correlationId,
-        causationId: event.metadata.causationId || null,
+        causationId: event.metadata.causationId ?? null,
       },
       payload: event.payload,
     };
@@ -98,9 +98,9 @@ export class RedisEventPublisher implements IEventPublisher {
           serviceName: this.config.serviceName,
           serviceVersion: this.config.serviceVersion,
           environment: this.config.environment,
-          userId: event.metadata.userId || null,
+          userId: event.metadata.userId ?? null,
           correlationId: event.metadata.correlationId,
-          causationId: event.metadata.causationId || null,
+          causationId: event.metadata.causationId ?? null,
         },
         payload: event.payload,
       };

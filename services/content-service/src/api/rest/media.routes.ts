@@ -8,20 +8,22 @@
 import type { IApiResponse } from '@noema/contracts';
 import type { CorrelationId, MediaId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { IExecutionContext } from '../../domain/content-service/content.service.js';
 import {
-    AuthorizationError,
-    BusinessRuleError,
-    DomainError,
-    ValidationError,
+  AuthorizationError,
+  BusinessRuleError,
+  DomainError,
+  ValidationError,
 } from '../../domain/content-service/errors/index.js';
 import type { MediaService } from '../../domain/content-service/media.service.js';
 import { MediaNotFoundError } from '../../domain/content-service/media.service.js';
+import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 
 // ============================================================================
 // Request Types
 // ============================================================================
 
-interface IdParams {
+interface IIdParams {
   id: string;
 }
 
@@ -29,29 +31,27 @@ interface IdParams {
 // Route Plugin
 // ============================================================================
 
-export async function registerMediaRoutes(
+export function registerMediaRoutes(
   fastify: FastifyInstance,
   mediaService: MediaService,
-  authMiddleware: ReturnType<
-    typeof import('../../middleware/auth.middleware.js').createAuthMiddleware
-  >
-): Promise<void> {
+  authMiddleware: ReturnType<typeof createAuthMiddleware>
+): void {
   // Attach startTime for executionTime computation
-  fastify.addHook('onRequest', async (request) => {
+  fastify.addHook('onRequest', (request) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
   });
 
-  function buildContext(request: FastifyRequest) {
+  function buildContext(request: FastifyRequest): IExecutionContext {
     const user = request.user as { sub?: string; roles?: string[] } | undefined;
     const userAgent = request.headers['user-agent'];
-    const context: import('../../domain/content-service/content.service.js').IExecutionContext = {
-      userId: (user?.sub as UserId) || null,
+    const context: IExecutionContext = {
+      userId: (user?.sub ?? null) as UserId | null,
       correlationId:
-        (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
-      roles: user?.roles || [],
+        request.id as CorrelationId,
+      roles: user?.roles ?? [],
       clientIp: request.ip,
     };
-    if (userAgent) context.userAgent = userAgent;
+    if (userAgent !== undefined) context.userAgent = userAgent;
     return context;
   }
 
@@ -70,7 +70,7 @@ export async function registerMediaRoutes(
     };
   }
 
-  function buildErrorMetadata(request: FastifyRequest) {
+  function buildErrorMetadata(request: FastifyRequest): Record<string, unknown> {
     const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       requestId: request.id,
@@ -141,10 +141,10 @@ export async function registerMediaRoutes(
   // POST /v1/media/:id/confirm — Confirm upload completed
   // ============================================================================
 
-  fastify.post<{ Params: IdParams }>(
+  fastify.post<{ Params: IIdParams }>(
     '/v1/media/:id/confirm',
     { preHandler: authMiddleware },
-    async (request: FastifyRequest<{ Params: IdParams }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: IIdParams }>, reply: FastifyReply) => {
       try {
         const context = buildContext(request);
         const mediaId = request.params.id as MediaId;
@@ -160,10 +160,10 @@ export async function registerMediaRoutes(
   // GET /v1/media/:id — Get media file metadata
   // ============================================================================
 
-  fastify.get<{ Params: IdParams }>(
+  fastify.get<{ Params: IIdParams }>(
     '/v1/media/:id',
     { preHandler: authMiddleware },
-    async (request: FastifyRequest<{ Params: IdParams }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: IIdParams }>, reply: FastifyReply) => {
       try {
         const context = buildContext(request);
         const mediaId = request.params.id as MediaId;
@@ -179,10 +179,10 @@ export async function registerMediaRoutes(
   // GET /v1/media/:id/download-url — Get presigned download URL
   // ============================================================================
 
-  fastify.get<{ Params: IdParams }>(
+  fastify.get<{ Params: IIdParams }>(
     '/v1/media/:id/download-url',
     { preHandler: authMiddleware },
-    async (request: FastifyRequest<{ Params: IdParams }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: IIdParams }>, reply: FastifyReply) => {
       try {
         const context = buildContext(request);
         const mediaId = request.params.id as MediaId;
@@ -208,8 +208,8 @@ export async function registerMediaRoutes(
 
         const response = wrapResponse(result.data.items, result.agentHints, request);
         const queryParams = request.query as Record<string, string>;
-        const offsetVal = queryParams['offset'] ? parseInt(queryParams['offset'], 10) : 0;
-        const limitVal = queryParams['limit'] ? parseInt(queryParams['limit'], 10) : 20;
+        const offsetVal = queryParams['offset'] !== undefined && queryParams['offset'] !== '' ? parseInt(queryParams['offset'], 10) : 0;
+        const limitVal = queryParams['limit'] !== undefined && queryParams['limit'] !== '' ? parseInt(queryParams['limit'], 10) : 20;
         const hasMore = result.data.total > (offsetVal + limitVal);
         (response as IApiResponse<unknown> & { pagination?: unknown }).pagination = {
           total: result.data.total,
@@ -231,10 +231,10 @@ export async function registerMediaRoutes(
   // DELETE /v1/media/:id — Delete a media file
   // ============================================================================
 
-  fastify.delete<{ Params: IdParams }>(
+  fastify.delete<{ Params: IIdParams }>(
     '/v1/media/:id',
     { preHandler: authMiddleware },
-    async (request: FastifyRequest<{ Params: IdParams }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: IIdParams }>, reply: FastifyReply) => {
       try {
         const context = buildContext(request);
         const mediaId = request.params.id as MediaId;

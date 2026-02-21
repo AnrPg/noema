@@ -23,7 +23,7 @@ import {
   createUpdateCardNodeLinksHandler,
   createValidateCardContentHandler,
 } from './content.tools.js';
-import type { IToolDefinition, IToolResult, ToolHandler } from './tool.types.js';
+import type { IToolDefinition, IToolResult, IToolResultMetadata, ToolHandler } from './tool.types.js';
 
 // ============================================================================
 // Tool Registry
@@ -87,9 +87,29 @@ export class ToolRegistry {
           preferenceAlignment: [],
           reasoning: `Tool "${name}" not found — available: ${[...this.tools.keys()].join(', ')}`,
         },
+        metadata: {
+          toolVersion: '0.1.0',
+          timestamp: new Date().toISOString(),
+          executionTime: 0,
+          serviceVersion: '0.1.0',
+          correlationId,
+        },
       };
     }
-    return tool.handler(input, userId, correlationId);
+
+    const startTime = Date.now();
+    const result = await tool.handler(input, userId, correlationId);
+
+    const metadata: IToolResultMetadata = {
+      toolVersion: '0.1.0',
+      timestamp: new Date().toISOString(),
+      executionTime: Date.now() - startTime,
+      serviceVersion: '0.1.0',
+      correlationId,
+    };
+    result.metadata = metadata;
+
+    return result;
   }
 
   get size(): number {
@@ -101,6 +121,14 @@ export class ToolRegistry {
 // Factory
 // ============================================================================
 
+function getDefinition(index: number): IToolDefinition {
+  const def = CONTENT_TOOL_DEFINITIONS[index];
+  if (def === undefined) {
+    throw new Error(`Missing tool definition at index ${String(index)}`);
+  }
+  return def;
+}
+
 /**
  * Create a tool registry bound to the given service instances.
  */
@@ -108,21 +136,18 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
   const registry = new ToolRegistry();
 
   // P0 tools
-  registry.register(CONTENT_TOOL_DEFINITIONS[0]!, createCreateCardHandler(contentService));
-  registry.register(CONTENT_TOOL_DEFINITIONS[1]!, createBatchCreateCardsHandler(contentService));
-  registry.register(CONTENT_TOOL_DEFINITIONS[2]!, createValidateCardContentHandler());
-  registry.register(CONTENT_TOOL_DEFINITIONS[3]!, createQueryCardsHandler(contentService));
+  registry.register(getDefinition(0), createCreateCardHandler(contentService));
+  registry.register(getDefinition(1), createBatchCreateCardsHandler(contentService));
+  registry.register(getDefinition(2), createValidateCardContentHandler(contentService));
+  registry.register(getDefinition(3), createQueryCardsHandler(contentService));
 
   // P1 tools
-  registry.register(CONTENT_TOOL_DEFINITIONS[4]!, createGetCardByIdHandler(contentService));
-  registry.register(CONTENT_TOOL_DEFINITIONS[5]!, createUpdateCardHandler(contentService));
-  registry.register(CONTENT_TOOL_DEFINITIONS[6]!, createChangeCardStateHandler(contentService));
-  registry.register(CONTENT_TOOL_DEFINITIONS[7]!, createCountCardsHandler(contentService));
-  registry.register(CONTENT_TOOL_DEFINITIONS[8]!, createUpdateCardNodeLinksHandler(contentService));
-  registry.register(
-    CONTENT_TOOL_DEFINITIONS[9]!,
-    createBatchChangeCardStateHandler(contentService)
-  );
+  registry.register(getDefinition(4), createGetCardByIdHandler(contentService));
+  registry.register(getDefinition(5), createUpdateCardHandler(contentService));
+  registry.register(getDefinition(6), createChangeCardStateHandler(contentService));
+  registry.register(getDefinition(7), createCountCardsHandler(contentService));
+  registry.register(getDefinition(8), createUpdateCardNodeLinksHandler(contentService));
+  registry.register(getDefinition(9), createBatchChangeCardStateHandler(contentService));
 
   return registry;
 }

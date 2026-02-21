@@ -60,19 +60,19 @@ export interface IServiceConfig {
 
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value === '') {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
 }
 
 function optionalEnv(name: string, defaultValue: string): string {
-  return process.env[name] || defaultValue;
+  return process.env[name] ?? defaultValue;
 }
 
 function optionalEnvInt(name: string, defaultValue: number): number {
   const value = process.env[name];
-  if (!value) return defaultValue;
+  if (value === undefined || value === '') return defaultValue;
   const parsed = parseInt(value, 10);
   if (isNaN(parsed)) {
     throw new Error(`Invalid integer for ${name}: ${value}`);
@@ -82,7 +82,7 @@ function optionalEnvInt(name: string, defaultValue: number): number {
 
 function optionalEnvBool(name: string, defaultValue: boolean): boolean {
   const value = process.env[name];
-  if (!value) return defaultValue;
+  if (value === undefined || value === '') return defaultValue;
   return value.toLowerCase() === 'true';
 }
 
@@ -182,7 +182,7 @@ export function loadConfig(): IServiceConfig {
 // Helper Functions
 // ============================================================================
 
-export function getTokenVerifierConfig(config: IServiceConfig) {
+export function getTokenVerifierConfig(config: IServiceConfig): { accessTokenSecret: string; issuer: string; audience: string } {
   return {
     accessTokenSecret: config.auth.accessTokenSecret,
     issuer: config.auth.issuer,
@@ -190,7 +190,7 @@ export function getTokenVerifierConfig(config: IServiceConfig) {
   };
 }
 
-export function getEventPublisherConfig(config: IServiceConfig) {
+export function getEventPublisherConfig(config: IServiceConfig): { streamKey: string; maxLen: number; serviceName: string; serviceVersion: string; environment: Environment } {
   return {
     streamKey: config.redis.eventStreamKey,
     maxLen: config.redis.maxStreamLen,
@@ -200,7 +200,7 @@ export function getEventPublisherConfig(config: IServiceConfig) {
   };
 }
 
-export function getMinioConfig(config: IServiceConfig) {
+export function getMinioConfig(config: IServiceConfig): { endPoint: string; port: number; useSSL: boolean; accessKey: string; secretKey: string; bucket: string; presignedUrlExpiry: number } {
   return {
     endPoint: config.minio.endPoint,
     port: config.minio.port,

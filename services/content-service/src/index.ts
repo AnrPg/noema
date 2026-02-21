@@ -6,10 +6,10 @@
  */
 
 import cors from '@fastify/cors';
-import { PrismaClient } from '@prisma/client';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
+import { PrismaClient } from '../generated/prisma/index.js';
 
 import { createToolRegistry } from './agents/tools/tool.registry.js';
 import { registerToolRoutes } from './agents/tools/tool.routes.js';
@@ -17,7 +17,12 @@ import { registerContentRoutes } from './api/rest/content.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerMediaRoutes } from './api/rest/media.routes.js';
 import { registerTemplateRoutes } from './api/rest/template.routes.js';
-import { getEventPublisherConfig, getMinioConfig, getTokenVerifierConfig, loadConfig } from './config/index.js';
+import {
+  getEventPublisherConfig,
+  getMinioConfig,
+  getTokenVerifierConfig,
+  loadConfig,
+} from './config/index.js';
 import { ContentService } from './domain/content-service/content.service.js';
 import { MediaService } from './domain/content-service/media.service.js';
 import { TemplateService } from './domain/content-service/template.service.js';
@@ -103,9 +108,10 @@ async function bootstrap(): Promise<void> {
   });
 
   // Register CORS
-  const corsOrigin = config.cors.origin.length === 1 && config.cors.origin[0] === '*'
-    ? true // Fastify CORS: true = reflect request origin (wildcard)
-    : config.cors.origin;
+  const corsOrigin =
+    config.cors.origin.length === 1 && config.cors.origin[0] === '*'
+      ? true // Fastify CORS: true = reflect request origin (wildcard)
+      : config.cors.origin;
   await fastify.register(cors, {
     origin: corsOrigin,
     credentials: config.cors.origin[0] !== '*' && config.cors.credentials,
@@ -121,11 +127,11 @@ async function bootstrap(): Promise<void> {
   logger.info({ toolCount: toolRegistry.size }, 'MCP tool registry initialized');
 
   // Register routes
-  await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  await registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware);
-  await registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware);
-  await registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware);
-  await registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
+  registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
+  registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware);
+  registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware);
+  registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware);
+  registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
@@ -139,8 +145,12 @@ async function bootstrap(): Promise<void> {
     process.exit(0);
   };
 
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
 
   // Start server
   try {
@@ -153,7 +163,7 @@ async function bootstrap(): Promise<void> {
 }
 
 // Run
-bootstrap().catch((error) => {
+bootstrap().catch((error: unknown) => {
   console.error('Fatal error during bootstrap:', error);
   process.exit(1);
 });

@@ -16,6 +16,7 @@ import type {
   DifficultyLevel,
   EventSource,
   IAuditedEntity,
+  IJsonObject,
   JsonValue,
   MediaId,
   NodeId,
@@ -88,7 +89,7 @@ export interface ICardContentBase {
 /**
  * Media attachment for card content.
  */
-export interface IMediaAttachment {
+export interface IMediaAttachment extends IJsonObject {
   /** Media URL (or media-service ID) */
   url: string;
   /** MIME type */
@@ -244,11 +245,11 @@ export interface IBatchCreateResult {
   /** Successfully created cards */
   created: ICard[];
   /** Failed items with error details */
-  failed: Array<{
+  failed: {
     index: number;
     error: string;
     input: ICreateCardInput;
-  }>;
+  }[];
   /** Total attempted */
   total: number;
   /** Total successfully created */

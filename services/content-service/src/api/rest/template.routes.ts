@@ -7,35 +7,37 @@
 import type { IApiResponse } from '@noema/contracts';
 import type { CorrelationId, TemplateId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { IExecutionContext } from '../../domain/content-service/content.service.js';
 import {
-    AuthorizationError,
-    BusinessRuleError,
-    DomainError,
-    ValidationError,
-    VersionConflictError,
+  AuthorizationError,
+  BusinessRuleError,
+  DomainError,
+  ValidationError,
+  VersionConflictError,
 } from '../../domain/content-service/errors/index.js';
 import type { TemplateService } from '../../domain/content-service/template.service.js';
 import { TemplateNotFoundError } from '../../domain/content-service/template.service.js';
+import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type {
-    ICreateTemplateInput,
-    ITemplateQuery,
-    IUpdateTemplateInput,
+  ICreateTemplateInput,
+  ITemplateQuery,
+  IUpdateTemplateInput,
 } from '../../types/content.types.js';
 
 // ============================================================================
 // Request Types
 // ============================================================================
 
-interface IdParams {
+interface IIdParams {
   id: string;
 }
 
-interface UpdateBody<T> {
+interface IUpdateBody<T> {
   data: T;
   version: number;
 }
 
-interface DeleteQuery {
+interface IDeleteQuery {
   soft?: string;
 }
 
@@ -43,29 +45,27 @@ interface DeleteQuery {
 // Route Plugin
 // ============================================================================
 
-export async function registerTemplateRoutes(
+export function registerTemplateRoutes(
   fastify: FastifyInstance,
   templateService: TemplateService,
-  authMiddleware: ReturnType<
-    typeof import('../../middleware/auth.middleware.js').createAuthMiddleware
-  >
-): Promise<void> {
+  authMiddleware: ReturnType<typeof createAuthMiddleware>
+): void {
   // Attach startTime for executionTime computation
-  fastify.addHook('onRequest', async (request) => {
+  fastify.addHook('onRequest', (request) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
   });
 
-  function buildContext(request: FastifyRequest) {
+  function buildContext(request: FastifyRequest): IExecutionContext {
     const user = request.user as { sub?: string; roles?: string[] } | undefined;
     const userAgent = request.headers['user-agent'];
-    const context: import('../../domain/content-service/content.service.js').IExecutionContext = {
-      userId: (user?.sub as UserId) || null,
+    const context: IExecutionContext = {
+      userId: (user?.sub ?? null) as UserId | null,
       correlationId:
-        (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
-      roles: user?.roles || [],
+        request.id as CorrelationId,
+      roles: user?.roles ?? [],
       clientIp: request.ip,
     };
-    if (userAgent) context.userAgent = userAgent;
+    if (userAgent !== undefined) context.userAgent = userAgent;
     return context;
   }
 
@@ -84,7 +84,7 @@ export async function registerTemplateRoutes(
     };
   }
 
-  function buildErrorMetadata(request: FastifyRequest) {
+  function buildErrorMetadata(request: FastifyRequest): Record<string, unknown> {
     const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       requestId: request.id,
@@ -171,7 +171,7 @@ export async function registerTemplateRoutes(
   );
 
   /** GET /v1/templates/:id - Get a template by ID */
-  fastify.get<{ Params: IdParams }>(
+  fastify.get<{ Params: IIdParams }>(
     '/v1/templates/:id',
     {
       preHandler: authMiddleware,
@@ -235,7 +235,7 @@ export async function registerTemplateRoutes(
   );
 
   /** PATCH /v1/templates/:id - Update a template */
-  fastify.patch<{ Params: IdParams; Body: UpdateBody<IUpdateTemplateInput> }>(
+  fastify.patch<{ Params: IIdParams; Body: IUpdateBody<IUpdateTemplateInput> }>(
     '/v1/templates/:id',
     {
       preHandler: authMiddleware,
@@ -270,7 +270,7 @@ export async function registerTemplateRoutes(
   );
 
   /** DELETE /v1/templates/:id - Delete a template */
-  fastify.delete<{ Params: IdParams; Querystring: DeleteQuery }>(
+  fastify.delete<{ Params: IIdParams; Querystring: IDeleteQuery }>(
     '/v1/templates/:id',
     {
       preHandler: authMiddleware,
@@ -294,7 +294,7 @@ export async function registerTemplateRoutes(
   );
 
   /** POST /v1/templates/:id/instantiate - Create card input from template */
-  fastify.post<{ Params: IdParams; Body: Record<string, unknown> }>(
+  fastify.post<{ Params: IIdParams; Body: Record<string, unknown> }>(
     '/v1/templates/:id/instantiate',
     {
       preHandler: authMiddleware,
@@ -324,7 +324,7 @@ export async function registerTemplateRoutes(
         const context = buildContext(request);
         const result = await templateService.instantiate(
           request.params.id as TemplateId,
-          request.body as Record<string, unknown>,
+          request.body,
           context
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));

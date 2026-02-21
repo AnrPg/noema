@@ -2,9 +2,12 @@
  * @noema/content-service - MCP Tool Type Definitions
  *
  * Shared types for the MCP Agent Tool layer.
+ * IToolResult re-exports IToolExecutionResult from @noema/contracts.
  */
 
-import type { IAgentHints } from '@noema/contracts';
+import type { IToolExecutionResult, IToolResultMetadata } from '@noema/contracts';
+
+export type { IToolResultMetadata };
 
 // ============================================================================
 // Tool Types
@@ -28,17 +31,11 @@ export interface IToolDefinition {
 
 /**
  * Result returned by a tool handler execution.
+ *
+ * Re-exports {@link IToolExecutionResult} from \@noema/contracts.
+ * Metadata is populated by {@link ToolRegistry.execute}, not by individual handlers.
  */
-export interface IToolResult {
-  success: boolean;
-  data?: unknown;
-  error?: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-  agentHints: IAgentHints;
-}
+export type IToolResult = IToolExecutionResult;
 
 /**
  * Tool handler function signature.

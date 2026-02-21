@@ -5,7 +5,7 @@
  */
 
 import type { IAgentHints } from '@noema/contracts';
-import type { IPaginatedResponse, TemplateId, UserId } from '@noema/types';
+import type { IPaginatedResponse, TemplateId } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
@@ -78,7 +78,7 @@ export class TemplateService {
 
     const template = await this.repository.create({
       id,
-      userId: context.userId!,
+      userId: context.userId!, // eslint-disable-line @typescript-eslint/no-non-null-assertion
       ...(parseResult.data as unknown as ICreateTemplateInput),
     });
 
@@ -109,7 +109,7 @@ export class TemplateService {
     this.requireAuth(context);
 
     // Public templates visible to all; private/shared require ownership or admin
-    let template = await this.repository.findById(id);
+    const template = await this.repository.findById(id);
     if (!template) {
       throw new TemplateNotFoundError(id);
     }
@@ -140,7 +140,8 @@ export class TemplateService {
 
     const validated = parseResult.data as ITemplateQuery;
     const effectiveUserId =
-      this.isAdmin(context) && validated.userId ? (validated.userId as UserId) : context.userId!;
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.isAdmin(context) && validated.userId ? (validated.userId) : context.userId!;
 
     const result = await this.repository.query(validated, effectiveUserId);
 
@@ -165,7 +166,7 @@ export class TemplateService {
         dependencies: [],
         estimatedImpact: { benefit: 0.5, effort: 0.2, roi: 2.5 },
         preferenceAlignment: [],
-        reasoning: `Query returned ${result.total} templates`,
+        reasoning: `Query returned ${String(result.total)} templates`,
       },
     };
   }

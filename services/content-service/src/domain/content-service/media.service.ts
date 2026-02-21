@@ -12,10 +12,10 @@ import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 import type {
-    ICreateMediaInput,
-    IMediaFile,
-    IPresignedDownloadUrl,
-    IPresignedUploadUrl,
+  ICreateMediaInput,
+  IMediaFile,
+  IPresignedDownloadUrl,
+  IPresignedUploadUrl,
 } from '../../types/content.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { IExecutionContext, IServiceResult } from './content.service.js';
@@ -111,19 +111,20 @@ export class MediaService {
     // Validate size
     if (validated.sizeBytes > MAX_FILE_SIZE) {
       throw new BusinessRuleError(
-        `File size ${validated.sizeBytes} exceeds maximum ${MAX_FILE_SIZE} bytes`
+        `File size ${String(validated.sizeBytes)} exceeds maximum ${String(MAX_FILE_SIZE)} bytes`
       );
     }
 
     // Generate IDs and storage key
     const mediaId = `${ID_PREFIXES.MediaId}${nanoid(21)}` as MediaId;
     const ext = this.extractExtension(validated.originalFilename);
-    const objectKey = `${context.userId}/${mediaId}${ext}`;
+    const objectKey = `${context.userId as string}/${mediaId}${ext}`;
     const filename = `${mediaId}${ext}`;
 
     // Create media record
     const createInput: ICreateMediaInput & { id: MediaId; userId: UserId; filename: string; bucket: string; objectKey: string } = {
       id: mediaId,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       userId: context.userId!,
       originalFilename: validated.originalFilename,
       mimeType: validated.mimeType,
@@ -133,7 +134,7 @@ export class MediaService {
       bucket: this.bucket,
       objectKey,
     };
-    if (validated.alt) {
+    if (validated.alt !== undefined && validated.alt !== '') {
       createInput.alt = validated.alt;
     }
     await this.mediaRepository.create(createInput);
@@ -177,7 +178,11 @@ export class MediaService {
     }
 
     // Verify ownership
-    const existing = await this.mediaRepository.findByIdForUser(mediaId, context.userId!);
+    const existing = await this.mediaRepository.findByIdForUser(
+      mediaId,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      context.userId!
+    );
     if (!existing) {
       throw new MediaNotFoundError(mediaId);
     }
@@ -226,7 +231,11 @@ export class MediaService {
   async findById(id: MediaId, context: IExecutionContext): Promise<IServiceResult<IMediaFile>> {
     this.requireAuth(context);
 
-    const media = await this.mediaRepository.findByIdForUser(id, context.userId!);
+    const media = await this.mediaRepository.findByIdForUser(
+      id,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      context.userId!
+    );
     if (!media) {
       throw new MediaNotFoundError(id);
     }
@@ -246,7 +255,11 @@ export class MediaService {
   ): Promise<IServiceResult<IPresignedDownloadUrl>> {
     this.requireAuth(context);
 
-    const media = await this.mediaRepository.findByIdForUser(id, context.userId!);
+    const media = await this.mediaRepository.findByIdForUser(
+      id,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      context.userId!
+    );
     if (!media) {
       throw new MediaNotFoundError(id);
     }
@@ -285,8 +298,12 @@ export class MediaService {
       limit: validated.limit,
       offset: validated.offset,
     };
-    if (validated.mimeType) findOptions.mimeType = validated.mimeType;
-    const result = await this.mediaRepository.findByUser(context.userId!, findOptions);
+    if (validated.mimeType !== undefined && validated.mimeType !== '') findOptions.mimeType = validated.mimeType;
+    const result = await this.mediaRepository.findByUser(
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      context.userId!,
+      findOptions
+    );
 
     return {
       data: result,
@@ -309,7 +326,7 @@ export class MediaService {
         dependencies: [],
         estimatedImpact: { benefit: 0.5, effort: 0.2, roi: 2.5 },
         preferenceAlignment: [],
-        reasoning: `Found ${result.total} media files`,
+        reasoning: `Found ${String(result.total)} media files`,
       },
     };
   }
@@ -329,7 +346,11 @@ export class MediaService {
     this.logger.info({ mediaId: id }, 'Deleting media file');
 
     // Verify ownership
-    const media = await this.mediaRepository.findByIdForUser(id, context.userId!);
+    const media = await this.mediaRepository.findByIdForUser(
+      id,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      context.userId!
+    );
     if (!media) {
       throw new MediaNotFoundError(id);
     }
