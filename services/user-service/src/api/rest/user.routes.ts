@@ -69,9 +69,7 @@ export async function registerUserRoutes(
   userService: UserService,
   authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
   tokenService?: {
-    generateTokenPair(
-      user: unknown
-    ): Promise<{
+    generateTokenPair(user: unknown): Promise<{
       accessToken: string;
       refreshToken: string;
       expiresIn: number;
@@ -213,7 +211,7 @@ export async function registerUserRoutes(
         summary: 'Register a new user',
         body: {
           type: 'object',
-          required: ['username', 'email', 'password'],
+          required: ['username', 'email', 'password', 'country'],
           properties: {
             username: { type: 'string', minLength: 3, maxLength: 30 },
             email: { type: 'string', format: 'email' },

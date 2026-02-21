@@ -24,7 +24,7 @@ export interface RegisterInput {
   displayName?: string;
   language?: string;
   timezone?: string;
-  country?: string;
+  country: string;
 }
 
 export interface TokenPair {

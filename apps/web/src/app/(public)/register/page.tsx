@@ -85,9 +85,8 @@ const registerSchema = z
     timezone: z.string().optional(),
     country: z
       .string()
-      .regex(/^([A-Z]{2})?$/, 'Must be a 2-letter uppercase country code')
-      .optional()
-      .or(z.literal('')),
+      .length(2, 'Country code is required (2-letter ISO code)')
+      .regex(/^[A-Z]{2}$/, 'Must be a 2-letter uppercase country code'),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords don't match",
@@ -193,7 +192,7 @@ export default function RegisterPage(): React.JSX.Element {
           data.displayName !== '' && { displayName: data.displayName }),
         ...(data.language !== undefined && data.language !== '' && { language: data.language }),
         ...(data.timezone !== undefined && data.timezone !== '' && { timezone: data.timezone }),
-        ...(data.country !== undefined && data.country !== '' && { country: data.country }),
+        country: data.country,
       });
       router.push('/dashboard');
     } catch (err) {
@@ -265,7 +264,9 @@ export default function RegisterPage(): React.JSX.Element {
         {' — '}
         {currentStep === 0
           ? 'All fields required'
-          : 'All fields optional'}
+          : currentStep === 2
+            ? 'Country required'
+            : 'All fields optional'}
         <span className="mx-1.5">·</span>
         {currentStep} of {STEPS.length} completed
       </p>
@@ -392,14 +393,15 @@ export default function RegisterPage(): React.JSX.Element {
                 <FormField
                   label="Country"
                   error={errors.country?.message}
-                  description="Used for content localization"
+                  description="Required for compliance and content localization"
+                  required
                 >
                   <Controller
                     name="country"
                     control={control}
                     render={({ field }) => (
                       <CountrySelector
-                        value={field.value ?? ''}
+                        value={field.value}
                         onChange={field.onChange}
                         error={!!errors.country}
                       />
@@ -432,8 +434,8 @@ export default function RegisterPage(): React.JSX.Element {
               )}
             </div>
 
-            {/* Skip optional steps link */}
-            {currentStep > 0 && !isLastStep && (
+            {/* Skip optional steps link — only for fully optional steps */}
+            {currentStep === 1 && (
               <button
                 type="button"
                 onClick={() => {
