@@ -69,7 +69,12 @@ export default function AdminDashboardPage() {
           description="Registered accounts"
           icon={Users}
         />
-        <StatCard title="Active Users" value={activeUsers} description="Last 7 days" icon={UserCheck} />
+        <StatCard
+          title="Active Users"
+          value={activeUsers}
+          description="Last 7 days"
+          icon={UserCheck}
+        />
         <StatCard
           title="Inactive Users"
           value={inactiveUsers}

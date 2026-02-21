@@ -68,7 +68,16 @@ export async function registerUserRoutes(
   fastify: FastifyInstance,
   userService: UserService,
   authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
-  tokenService?: { generateTokenPair(user: unknown): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; tokenType: 'Bearer' }> }
+  tokenService?: {
+    generateTokenPair(
+      user: unknown
+    ): Promise<{
+      accessToken: string;
+      refreshToken: string;
+      expiresIn: number;
+      tokenType: 'Bearer';
+    }>;
+  }
 ): Promise<void> {
   // ============================================================================
   // Helper Functions
@@ -225,7 +234,9 @@ export async function registerUserRoutes(
         // Generate tokens for immediate login after registration
         if (tokenService) {
           const tokens = await tokenService.generateTokenPair(result.data);
-          reply.status(201).send(wrapResponse({ user: result.data, tokens }, result.agentHints, request));
+          reply
+            .status(201)
+            .send(wrapResponse({ user: result.data, tokens }, result.agentHints, request));
         } else {
           reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
         }

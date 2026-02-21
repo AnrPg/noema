@@ -25,6 +25,7 @@ import {
   Input,
 } from '@noema/ui';
 import { AlertCircle, CheckCircle, Eye, Lock, MoreVertical, Search, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 function UserRow({
@@ -106,14 +107,14 @@ function UserRow({
 export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const router = useRouter();
 
   const { data: usersData, isLoading, refetch } = useUsers(search ? { search } : undefined);
   const deleteUser = useDeleteUser();
 
   const handleAction = async (action: 'view' | 'disable' | 'delete', user: UserDto) => {
     if (action === 'view') {
-      // TODO: Open detail modal or navigate
-      console.log('View user:', user.id);
+      router.push(`/dashboard/users/${user.id}`);
     } else if (action === 'disable') {
       // TODO: Implement toggle status
       console.log('Toggle status:', user.id);

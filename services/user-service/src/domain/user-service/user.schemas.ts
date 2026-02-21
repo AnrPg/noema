@@ -7,11 +7,11 @@
 import { z } from 'zod';
 import { AuthProvider, Language, Theme, UserRole, UserStatus } from '../../types/user.types.js';
 import {
-    DisplayNameSchema,
-    EmailSchema,
-    PasswordSchema,
-    TimezoneSchema,
-    UsernameSchema,
+  DisplayNameSchema,
+  EmailSchema,
+  PasswordSchema,
+  TimezoneSchema,
+  UsernameSchema,
 } from './value-objects/user.value-objects.js';
 
 // ============================================================================
