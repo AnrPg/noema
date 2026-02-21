@@ -17,7 +17,7 @@ import {
   CardTitle,
   Separator,
 } from '@noema/ui';
-import { ArrowLeft, Mail, Globe, Clock, Shield, Calendar, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Globe, Mail, Shield, type LucideIcon } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 
 export default function UserDetailPage() {
@@ -36,7 +36,12 @@ export default function UserDetailPage() {
   if (error || !user) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" onClick={() => router.back()}>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            router.back();
+          }}
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to users
         </Button>
@@ -63,7 +68,12 @@ export default function UserDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" onClick={() => router.push('/dashboard/users')}>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          router.push('/dashboard/users');
+        }}
+      >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back to users
       </Button>
@@ -84,10 +94,7 @@ export default function UserDetailPage() {
                   {user.status}
                 </span>
                 {user.roles.map((role) => (
-                  <span
-                    key={role}
-                    className="rounded-full border px-2 py-0.5 text-xs font-medium"
-                  >
+                  <span key={role} className="rounded-full border px-2 py-0.5 text-xs font-medium">
                     {role}
                   </span>
                 ))}
@@ -183,15 +190,7 @@ export default function UserDetailPage() {
   );
 }
 
-function InfoRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-}) {
+function InfoRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between text-sm">
       <div className="flex items-center gap-2 text-muted-foreground">
