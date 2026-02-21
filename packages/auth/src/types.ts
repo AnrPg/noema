@@ -13,6 +13,12 @@ export interface AuthState {
   /** User settings */
   settings: UserSettingsDto | null;
 
+  /** JWT access token */
+  accessToken: string | null;
+
+  /** JWT refresh token */
+  refreshToken: string | null;
+
   /** Whether user is authenticated */
   isAuthenticated: boolean;
 
@@ -29,6 +35,9 @@ export interface AuthState {
 export interface AuthActions {
   /** Set user data */
   setUser: (user: UserDto | null) => void;
+
+  /** Set tokens from login/refresh */
+  setTokens: (accessToken: string | null, refreshToken: string | null) => void;
 
   /** Set user settings */
   setSettings: (settings: UserSettingsDto | null) => void;

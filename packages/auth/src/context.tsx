@@ -6,13 +6,7 @@
 
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  type ReactNode,
-} from 'react';
+import { ApiRequestError } from '@noema/api-client';
 import {
   authApi,
   meApi,
@@ -21,7 +15,7 @@ import {
   type UserDto,
   type UserSettingsDto,
 } from '@noema/api-client/user';
-import { ApiRequestError } from '@noema/api-client';
+import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react';
 import { useAuthStore } from './store.js';
 
 // ============================================================================
@@ -120,50 +114,54 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
     initAuth();
   }, [store.isInitialized]);
 
-  const login = useCallback(async (input: LoginInput) => {
-    store.setLoading(true);
-    store.setError(null);
+  const login = useCallback(
+    async (input: LoginInput) => {
+      store.setLoading(true);
+      store.setError(null);
 
-    try {
-      const response = await authApi.login(input);
-      store.setUser(response.data.user);
-
-      // Fetch settings after login
       try {
-        const settingsResponse = await meApi.getSettings();
-        store.setSettings(settingsResponse.data);
-      } catch {
-        // Non-critical
+        const response = await authApi.login(input);
+        store.setUser(response.data.user);
+        store.setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
+
+        // Fetch settings after login
+        try {
+          const settingsResponse = await meApi.getSettings();
+          store.setSettings(settingsResponse.data);
+        } catch {
+          // Non-critical
+        }
+
+        store.setLoading(false);
+        onLogin?.(response.data.user);
+      } catch (error) {
+        const message = error instanceof ApiRequestError ? error.message : 'Login failed';
+        store.setError(message);
+        throw error;
       }
+    },
+    [onLogin]
+  );
 
-      store.setLoading(false);
-      onLogin?.(response.data.user);
-    } catch (error) {
-      const message = error instanceof ApiRequestError
-        ? error.message
-        : 'Login failed';
-      store.setError(message);
-      throw error;
-    }
-  }, [onLogin]);
+  const register = useCallback(
+    async (input: RegisterInput) => {
+      store.setLoading(true);
+      store.setError(null);
 
-  const register = useCallback(async (input: RegisterInput) => {
-    store.setLoading(true);
-    store.setError(null);
-
-    try {
-      const response = await authApi.register(input);
-      store.setUser(response.data.user);
-      store.setLoading(false);
-      onLogin?.(response.data.user);
-    } catch (error) {
-      const message = error instanceof ApiRequestError
-        ? error.message
-        : 'Registration failed';
-      store.setError(message);
-      throw error;
-    }
-  }, [onLogin]);
+      try {
+        const response = await authApi.register(input);
+        store.setUser(response.data.user);
+        store.setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
+        store.setLoading(false);
+        onLogin?.(response.data.user);
+      } catch (error) {
+        const message = error instanceof ApiRequestError ? error.message : 'Registration failed';
+        store.setError(message);
+        throw error;
+      }
+    },
+    [onLogin]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -188,9 +186,12 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
     }
   }, []);
 
-  const hasRole = useCallback((role: string) => {
-    return store.user?.roles.includes(role as never) ?? false;
-  }, [store.user]);
+  const hasRole = useCallback(
+    (role: string) => {
+      return store.user?.roles.includes(role as never) ?? false;
+    },
+    [store.user]
+  );
 
   const value: AuthContextValue = {
     user: store.user,
@@ -207,11 +208,7 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
     isAdmin: store.user?.roles.includes('admin') ?? false,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // ============================================================================

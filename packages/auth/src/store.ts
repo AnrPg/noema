@@ -4,10 +4,10 @@
  * Zustand store for authentication state.
  */
 
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import type { UserDto, UserSettingsDto } from '@noema/api-client/user';
-import type { AuthStore, AuthState } from './types.js';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import type { AuthState, AuthStore } from './types.js';
 
 // ============================================================================
 // Initial State
@@ -16,6 +16,8 @@ import type { AuthStore, AuthState } from './types.js';
 const initialState: AuthState = {
   user: null,
   settings: null,
+  accessToken: null,
+  refreshToken: null,
   isAuthenticated: false,
   isLoading: true,
   isInitialized: false,
@@ -37,6 +39,10 @@ export const useAuthStore = create<AuthStore>()(
           isAuthenticated: user !== null,
           error: null,
         });
+      },
+
+      setTokens: (accessToken: string | null, refreshToken: string | null) => {
+        set({ accessToken, refreshToken });
       },
 
       setSettings: (settings: UserSettingsDto | null) => {
@@ -79,6 +85,8 @@ export const useAuthStore = create<AuthStore>()(
       partialize: (state) => ({
         user: state.user,
         settings: state.settings,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }

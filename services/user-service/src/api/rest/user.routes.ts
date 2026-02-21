@@ -9,6 +9,7 @@ import type { CorrelationId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   AuthenticationError,
+  AuthorizationError,
   BusinessRuleError,
   DomainError,
   EmailAlreadyExistsError,
@@ -26,7 +27,7 @@ import type {
   IUpdateSettingsInput,
   IUserFilters,
 } from '../../types/user.types.js';
-import { UserRole } from '../../types/user.types.js';
+import { type UserRole } from '../../types/user.types.js';
 
 // Module augmentation to extend FastifySchema with OpenAPI properties
 declare module 'fastify' {
@@ -66,7 +67,7 @@ interface UpdateBody<T> {
 export async function registerUserRoutes(
   fastify: FastifyInstance,
   userService: UserService,
-  _authMiddleware?: unknown
+  authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
 ): Promise<void> {
   // ============================================================================
   // Helper Functions
@@ -76,10 +77,10 @@ export async function registerUserRoutes(
    * Build execution context from request.
    */
   function buildContext(request: FastifyRequest): IExecutionContext {
-    const user = request.user as { id?: string; roles?: string[] } | undefined;
+    const user = request.user as { sub?: string; roles?: string[] } | undefined;
     const userAgent = request.headers['user-agent'];
     const context: IExecutionContext = {
-      userId: (user?.id as UserId) || null,
+      userId: (user?.sub as UserId) || null,
       correlationId:
         (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
       roles: (user?.roles as UserRole[]) || [],
@@ -146,6 +147,13 @@ export async function registerUserRoutes(
             expectedVersion: error.expectedVersion,
             actualVersion: error.actualVersion,
           },
+        },
+      });
+    } else if (error instanceof AuthorizationError) {
+      reply.status(403).send({
+        error: {
+          code: (error as DomainError).code,
+          message: error.message,
         },
       });
     } else if (error instanceof AuthenticationError) {
@@ -288,6 +296,7 @@ export async function registerUserRoutes(
   fastify.get<{ Params: IdParams }>(
     '/users/:id',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Users'],
         summary: 'Get user by ID',
@@ -317,6 +326,7 @@ export async function registerUserRoutes(
   fastify.get<{ Querystring: IUserFilters & { offset?: number; limit?: number } }>(
     '/users',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Users'],
         summary: 'List users (admin only)',
@@ -350,6 +360,7 @@ export async function registerUserRoutes(
   fastify.patch<{ Params: IdParams; Body: UpdateBody<IUpdateProfileInput> }>(
     '/users/:id/profile',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Users'],
         summary: 'Update user profile',
@@ -402,6 +413,7 @@ export async function registerUserRoutes(
   fastify.patch<{ Params: IdParams; Body: UpdateBody<IUpdateSettingsInput> }>(
     '/users/:id/settings',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Users'],
         summary: 'Update user settings',
@@ -444,6 +456,7 @@ export async function registerUserRoutes(
   fastify.post<{ Params: IdParams; Body: IChangePasswordInput & { version: number } }>(
     '/users/:id/password',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Users'],
         summary: 'Change user password',
@@ -488,6 +501,7 @@ export async function registerUserRoutes(
   fastify.delete<{ Params: IdParams; Querystring: { soft?: boolean } }>(
     '/users/:id',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Users'],
         summary: 'Delete user',
@@ -531,6 +545,7 @@ export async function registerUserRoutes(
   fastify.get(
     '/me',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Me'],
         summary: 'Get current user profile',
@@ -562,6 +577,7 @@ export async function registerUserRoutes(
   fastify.patch<{ Body: UpdateBody<IUpdateProfileInput> }>(
     '/me/profile',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Me'],
         summary: 'Update current user profile',
@@ -593,11 +609,44 @@ export async function registerUserRoutes(
   );
 
   /**
+   * GET /me/settings - Get current user settings
+   */
+  fastify.get(
+    '/me/settings',
+    {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
+      schema: {
+        tags: ['Me'],
+        summary: 'Get current user settings',
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        if (!context.userId) {
+          reply.status(401).send({
+            error: {
+              code: 'UNAUTHORIZED',
+              message: 'Authentication required',
+            },
+          });
+          return;
+        }
+        const result = await userService.findById(context.userId, context);
+        reply.send(wrapResponse(result.data.settings, result.agentHints, request));
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  /**
    * PATCH /me/settings - Update current user settings
    */
   fastify.patch<{ Body: UpdateBody<IUpdateSettingsInput> }>(
     '/me/settings',
     {
+      ...(authMiddleware && { preHandler: [authMiddleware] }),
       schema: {
         tags: ['Me'],
         summary: 'Update current user settings',
