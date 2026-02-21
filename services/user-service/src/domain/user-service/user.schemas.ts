@@ -115,7 +115,8 @@ export const CreateUserInputSchema = z.object({
   country: z
     .string()
     .length(2, 'Country code must be ISO 3166-1 alpha-2 (2 characters)')
-    .regex(/^[A-Z]{2}$/, 'Country code must be uppercase letters only'),
+    .regex(/^[A-Z]{2}$/, 'Country code must be uppercase letters only')
+    .optional(),
   authProvider: AuthProviderSchema.optional(),
 });
 

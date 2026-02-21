@@ -41,7 +41,7 @@ export interface AuthResult {
 // User Types
 // ============================================================================
 
-export type UserStatus = 'active' | 'inactive' | 'suspended' | 'deleted';
+export type UserStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DEACTIVATED';
 export type UserRole = 'user' | 'admin' | 'moderator';
 
 export interface UserDto {
@@ -125,10 +125,9 @@ export interface UserFilters {
 }
 
 export interface PaginatedUsersResult {
-  users: UserDto[];
-  total: number;
-  offset: number;
-  limit: number;
+  items: UserDto[];
+  total?: number;
+  hasMore: boolean;
 }
 
 // ============================================================================

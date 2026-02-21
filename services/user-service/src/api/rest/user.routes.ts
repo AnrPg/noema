@@ -67,7 +67,8 @@ interface UpdateBody<T> {
 export async function registerUserRoutes(
   fastify: FastifyInstance,
   userService: UserService,
-  authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
+  tokenService?: { generateTokenPair(user: unknown): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; tokenType: 'Bearer' }> }
 ): Promise<void> {
   // ============================================================================
   // Helper Functions
@@ -211,6 +212,7 @@ export async function registerUserRoutes(
             displayName: { type: 'string' },
             language: { type: 'string' },
             timezone: { type: 'string' },
+            country: { type: 'string', minLength: 2, maxLength: 2 },
           },
         },
       },
@@ -219,7 +221,14 @@ export async function registerUserRoutes(
       try {
         const context = buildContext(request);
         const result = await userService.create(request.body, context);
-        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+
+        // Generate tokens for immediate login after registration
+        if (tokenService) {
+          const tokens = await tokenService.generateTokenPair(result.data);
+          reply.status(201).send(wrapResponse({ user: result.data, tokens }, result.agentHints, request));
+        } else {
+          reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+        }
       } catch (error) {
         handleError(error, reply);
       }

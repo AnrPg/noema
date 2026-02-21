@@ -162,7 +162,7 @@ export class PrismaUserRepository implements IUserRepository {
         username: input.username.toLowerCase(),
         email: input.email.toLowerCase(),
         passwordHash: input.passwordHash ?? null,
-        status: UserStatus.PENDING,
+        status: UserStatus.ACTIVE,
         emailVerified: false,
         roles: [UserRole.LEARNER],
         authProviders: input.authProvider ? [input.authProvider] : [AuthProvider.LOCAL],

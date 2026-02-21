@@ -89,7 +89,7 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  await registerUserRoutes(fastify as unknown as FastifyInstance, userService, authMiddleware);
+  await registerUserRoutes(fastify as unknown as FastifyInstance, userService, authMiddleware, tokenService);
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {

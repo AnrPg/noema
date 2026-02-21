@@ -57,7 +57,7 @@ function UserRow({
         <div className="text-sm text-muted-foreground">{user.roles.join(', ')}</div>
         <div
           className={`rounded-full px-2 py-1 text-xs ${
-            user.status === 'active'
+            user.status === 'ACTIVE'
               ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
               : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
           }`}
@@ -85,7 +85,7 @@ function UserRow({
               }}
             >
               <Lock className="mr-2 h-4 w-4" />
-              {user.status === 'active' ? 'Disable' : 'Enable'}
+              {user.status === 'ACTIVE' ? 'Disable' : 'Enable'}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive"
@@ -133,7 +133,7 @@ export default function UsersPage() {
     }
   };
 
-  const users = usersData?.data.users || [];
+  const users = usersData?.data.items || [];
 
   return (
     <div className="space-y-6">
@@ -185,7 +185,7 @@ export default function UsersPage() {
             </div>
           )}
 
-          {usersData && usersData.data.total > users.length && (
+          {usersData && (usersData.data.total ?? 0) > users.length && (
             <div className="mt-4 flex justify-center">
               <Button variant="outline" disabled>
                 Load more

@@ -314,7 +314,7 @@ export interface ICreateUserInput {
   username: string;
   email: string;
   password: string;
-  country: string;
+  country?: string;
   displayName?: string;
   language?: Language;
   timezone?: string;
