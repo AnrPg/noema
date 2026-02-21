@@ -1,3 +1,4 @@
+export * from './card-content.schemas.js';
 export * from './content.repository.js';
 export * from './content.schemas.js';
 export * from './content.service.js';
@@ -9,4 +10,3 @@ export * from './template.repository.js';
 export * from './template.schemas.js';
 export * from './template.service.js';
 export * from './value-objects/index.js';
-

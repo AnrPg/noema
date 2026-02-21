@@ -13,29 +13,18 @@ import type {
   EventSource,
   MediaId,
   NodeId,
-  RemediationCardType,
   TemplateId,
   UserId,
 } from '@noema/types';
+import type { IExecutionContext } from '../../src/domain/content-service/content.service.js';
 import type {
-  IExecutionContext,
-  IServiceResult,
-} from '../../src/domain/content-service/content.service.js';
-import type {
-  IBatchCreateResult,
   ICard,
   ICardContent,
   ICardSummary,
-  IChangeCardStateInput,
   ICreateCardInput,
-  ICreateMediaInput,
   ICreateTemplateInput,
-  IDeckQuery,
   IMediaFile,
-  IPresignedDownloadUrl,
-  IPresignedUploadUrl,
   ITemplate,
-  ITemplateSummary,
   IUpdateCardInput,
 } from '../../src/types/content.types.js';
 

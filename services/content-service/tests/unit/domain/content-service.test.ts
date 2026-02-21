@@ -4,8 +4,8 @@
  * Tests all business logic in ContentService with mocked dependencies.
  */
 
-import type { CardId, CardState } from '@noema/types';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { CardState } from '@noema/types';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { ContentService } from '../../../src/domain/content-service/content.service.js';
 import {
   AuthorizationError,

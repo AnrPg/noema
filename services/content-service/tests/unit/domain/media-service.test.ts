@@ -6,16 +6,16 @@
  */
 
 import type { MediaId } from '@noema/types';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  MediaService,
-  MediaNotFoundError,
-} from '../../../src/domain/content-service/media.service.js';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AuthorizationError,
   BusinessRuleError,
   ValidationError,
 } from '../../../src/domain/content-service/errors/index.js';
+import {
+  MediaNotFoundError,
+  MediaService,
+} from '../../../src/domain/content-service/media.service.js';
 import {
   executionContext,
   mediaFile,

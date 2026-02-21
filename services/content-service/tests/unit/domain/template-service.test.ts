@@ -6,15 +6,15 @@
  */
 
 import type { TemplateId } from '@noema/types';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  TemplateService,
-  TemplateNotFoundError,
-} from '../../../src/domain/content-service/template.service.js';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AuthorizationError,
   ValidationError,
 } from '../../../src/domain/content-service/errors/index.js';
+import {
+  TemplateNotFoundError,
+  TemplateService,
+} from '../../../src/domain/content-service/template.service.js';
 import {
   adminContext,
   createTemplateInput,

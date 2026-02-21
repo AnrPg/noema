@@ -6,12 +6,12 @@
 
 import { vi } from 'vitest';
 import type { IContentRepository } from '../../src/domain/content-service/content.repository.js';
-import type { IEventPublisher } from '../../src/domain/shared/event-publisher.js';
-import type { ITemplateRepository } from '../../src/domain/content-service/template.repository.js';
 import type {
   IMediaRepository,
   IStorageProvider,
 } from '../../src/domain/content-service/media.repository.js';
+import type { ITemplateRepository } from '../../src/domain/content-service/template.repository.js';
+import type { IEventPublisher } from '../../src/domain/shared/event-publisher.js';
 
 // ============================================================================
 // Content Repository Mock

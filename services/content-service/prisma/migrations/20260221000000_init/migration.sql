@@ -54,7 +54,7 @@ CREATE TABLE "templates" (
     "user_id" VARCHAR(50) NOT NULL,
     "name" VARCHAR(200) NOT NULL,
     "description" VARCHAR(2000),
-    "card_type" "card_type" NOT NULL,
+    "cardType" "card_type" NOT NULL,
     "content" JSONB NOT NULL DEFAULT '{}',
     "difficulty" "difficulty_level" NOT NULL DEFAULT 'INTERMEDIATE',
     "knowledge_node_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
@@ -106,7 +106,7 @@ CREATE INDEX "cards_tags_idx" ON "cards" USING GIN ("tags");
 
 -- CreateIndex: templates
 CREATE INDEX "templates_user_id_idx" ON "templates"("user_id");
-CREATE INDEX "templates_card_type_idx" ON "templates"("card_type");
+CREATE INDEX "templates_cardType_idx" ON "templates"("cardType");
 CREATE INDEX "templates_visibility_idx" ON "templates"("visibility");
 CREATE INDEX "templates_deleted_at_idx" ON "templates"("deleted_at");
 CREATE INDEX "templates_tags_idx" ON "templates" USING GIN ("tags");
