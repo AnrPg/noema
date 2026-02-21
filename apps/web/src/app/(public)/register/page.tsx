@@ -214,7 +214,7 @@ export default function RegisterPage(): React.JSX.Element {
       />
 
       {/* Step indicator */}
-      <div className="flex items-center justify-center gap-2 mb-2">
+      <div className="flex items-center justify-center gap-2 mb-1">
         {STEPS.map((step, index) => {
           const StepIcon = step.icon;
           const isActive = index === currentStep;
@@ -258,6 +258,17 @@ export default function RegisterPage(): React.JSX.Element {
           );
         })}
       </div>
+
+      {/* Step progress counter */}
+      <p className="text-center text-xs text-muted-foreground mb-2">
+        Step {currentStep + 1} of {STEPS.length}
+        {' — '}
+        {currentStep === 0
+          ? 'All fields required'
+          : 'All fields optional'}
+        <span className="mx-1.5">·</span>
+        {currentStep} of {STEPS.length} completed
+      </p>
 
       <Card>
         <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
