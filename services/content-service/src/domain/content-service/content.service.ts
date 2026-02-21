@@ -14,6 +14,7 @@ import type { CardId, CardState, CorrelationId, IPaginatedResponse, UserId } fro
 import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 import type {
   IBatchCreateResult,
   ICard,
@@ -461,6 +462,22 @@ export class ContentService {
     this.requireAuth(context);
     this.logger.info({ cardId: id, tagCount: tags.length }, 'Updating card tags');
 
+    // Validate tags
+    const TagArraySchema = z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(50)
+          .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$/, 'Invalid tag format')
+      )
+      .max(30);
+    const tagResult = TagArraySchema.safeParse(tags);
+    if (!tagResult.success) {
+      const errors = tagResult.error.flatten();
+      throw new ValidationError('Invalid tags', errors.fieldErrors as Record<string, string[]>);
+    }
+
     // Verify ownership
     await this.requireCardOwnership(id, context);
 
@@ -498,7 +515,10 @@ export class ContentService {
     context: IExecutionContext
   ): Promise<IServiceResult<ICard>> {
     this.requireAuth(context);
-    this.logger.info({ cardId: id, nodeCount: knowledgeNodeIds.length }, 'Updating card knowledge node links');
+    this.logger.info(
+      { cardId: id, nodeCount: knowledgeNodeIds.length },
+      'Updating card knowledge node links'
+    );
 
     // Verify ownership
     await this.requireCardOwnership(id, context);
@@ -540,10 +560,7 @@ export class ContentService {
     const parseResult = DeckQuerySchema.safeParse(query);
     if (!parseResult.success) {
       const errors = parseResult.error.flatten();
-      throw new ValidationError(
-        'Invalid query',
-        errors.fieldErrors as Record<string, string[]>
-      );
+      throw new ValidationError('Invalid query', errors.fieldErrors as Record<string, string[]>);
     }
 
     const count = await this.repository.count(
@@ -585,7 +602,9 @@ export class ContentService {
     cardType: string,
     content: unknown,
     _context: IExecutionContext
-  ): Promise<IServiceResult<{ valid: boolean; errors?: Array<{ path: string; message: string }> }>> {
+  ): Promise<
+    IServiceResult<{ valid: boolean; errors?: Array<{ path: string; message: string }> }>
+  > {
     this.requireAuth(_context);
     this.logger.info({ cardType }, 'Validating card content');
 
@@ -668,7 +687,9 @@ export class ContentService {
     reason: string | undefined,
     version: number,
     context: IExecutionContext
-  ): Promise<IServiceResult<{ succeeded: CardId[]; failed: Array<{ id: CardId; error: string }> }>> {
+  ): Promise<
+    IServiceResult<{ succeeded: CardId[]; failed: Array<{ id: CardId; error: string }> }>
+  > {
     this.requireAuth(context);
     this.logger.info({ count: ids.length, targetState: state }, 'Batch changing card state');
 
@@ -698,16 +719,17 @@ export class ContentService {
     return {
       data: { succeeded, failed },
       agentHints: {
-        suggestedNextActions: failed.length > 0
-          ? [
-              {
-                action: 'retry_failed',
-                description: `Retry ${failed.length} failed state transitions`,
-                priority: 'medium',
-                category: 'correction',
-              },
-            ]
-          : [],
+        suggestedNextActions:
+          failed.length > 0
+            ? [
+                {
+                  action: 'retry_failed',
+                  description: `Retry ${failed.length} failed state transitions`,
+                  priority: 'medium',
+                  category: 'correction',
+                },
+              ]
+            : [],
         relatedResources: succeeded.map((id) => ({
           type: 'Card',
           id: id as string,
@@ -719,18 +741,19 @@ export class ContentService {
         validityPeriod: 'medium',
         contextNeeded: [],
         assumptions: [],
-        riskFactors: failed.length > 0
-          ? [
-              {
-                type: 'accuracy' as const,
-                severity: 'medium' as const,
-                description: `${failed.length} state transitions failed`,
-                probability: 1.0,
-                impact: failed.length / ids.length,
-                mitigation: 'Review errors and retry individually',
-              },
-            ]
-          : [],
+        riskFactors:
+          failed.length > 0
+            ? [
+                {
+                  type: 'accuracy' as const,
+                  severity: 'medium' as const,
+                  description: `${failed.length} state transitions failed`,
+                  probability: 1.0,
+                  impact: failed.length / ids.length,
+                  mitigation: 'Review errors and retry individually',
+                },
+              ]
+            : [],
         dependencies: [],
         estimatedImpact: {
           benefit: succeeded.length * 0.1,
@@ -969,18 +992,19 @@ export class ContentService {
       validityPeriod: 'medium',
       contextNeeded: [],
       assumptions: [],
-      riskFactors: result.failureCount > 0
-        ? [
-            {
-              type: 'accuracy' as const,
-              severity: 'medium' as const,
-              description: `${result.failureCount} cards failed to create`,
-              probability: 1.0,
-              impact: result.failureCount / result.total,
-              mitigation: 'Retry the failed cards individually',
-            },
-          ]
-        : [],
+      riskFactors:
+        result.failureCount > 0
+          ? [
+              {
+                type: 'accuracy' as const,
+                severity: 'medium' as const,
+                description: `${result.failureCount} cards failed to create`,
+                probability: 1.0,
+                impact: result.failureCount / result.total,
+                mitigation: 'Retry the failed cards individually',
+              },
+            ]
+          : [],
       dependencies: [],
       estimatedImpact: {
         benefit: Math.min(result.successCount * 0.1, 1.0),

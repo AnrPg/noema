@@ -11,14 +11,17 @@
 
 import type { ContentService } from '../../domain/content-service/content.service.js';
 import {
-    CONTENT_TOOL_DEFINITIONS,
-    createBatchCreateCardsHandler,
-    createChangeCardStateHandler,
-    createCreateCardHandler,
-    createGetCardByIdHandler,
-    createQueryCardsHandler,
-    createUpdateCardHandler,
-    createValidateCardContentHandler,
+  CONTENT_TOOL_DEFINITIONS,
+  createBatchChangeCardStateHandler,
+  createBatchCreateCardsHandler,
+  createChangeCardStateHandler,
+  createCountCardsHandler,
+  createCreateCardHandler,
+  createGetCardByIdHandler,
+  createQueryCardsHandler,
+  createUpdateCardHandler,
+  createUpdateCardNodeLinksHandler,
+  createValidateCardContentHandler,
 } from './content.tools.js';
 import type { IToolDefinition, IToolResult, ToolHandler } from './tool.types.js';
 
@@ -52,7 +55,12 @@ export class ToolRegistry {
     return [...this.tools.values()].map((t) => t.definition);
   }
 
-  async execute(name: string, input: unknown, userId: string, correlationId: string): Promise<IToolResult> {
+  async execute(
+    name: string,
+    input: unknown,
+    userId: string,
+    correlationId: string
+  ): Promise<IToolResult> {
     const tool = this.tools.get(name);
     if (!tool) {
       return {
@@ -109,6 +117,12 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
   registry.register(CONTENT_TOOL_DEFINITIONS[4]!, createGetCardByIdHandler(contentService));
   registry.register(CONTENT_TOOL_DEFINITIONS[5]!, createUpdateCardHandler(contentService));
   registry.register(CONTENT_TOOL_DEFINITIONS[6]!, createChangeCardStateHandler(contentService));
+  registry.register(CONTENT_TOOL_DEFINITIONS[7]!, createCountCardsHandler(contentService));
+  registry.register(CONTENT_TOOL_DEFINITIONS[8]!, createUpdateCardNodeLinksHandler(contentService));
+  registry.register(
+    CONTENT_TOOL_DEFINITIONS[9]!,
+    createBatchChangeCardStateHandler(contentService)
+  );
 
   return registry;
 }

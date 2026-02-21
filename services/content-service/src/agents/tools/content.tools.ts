@@ -9,11 +9,11 @@
  * Each handler wraps a ContentService method and returns IToolResult.
  */
 
-import type { CardId, CorrelationId, UserId } from '@noema/types';
+import type { CardId, CardState, CorrelationId, UserId } from '@noema/types';
 import { CreateCardInputSchema } from '../../domain/content-service/content.schemas.js';
 import type {
-    ContentService,
-    IExecutionContext,
+  ContentService,
+  IExecutionContext,
 } from '../../domain/content-service/content.service.js';
 import { DomainError } from '../../domain/content-service/errors/index.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
@@ -44,7 +44,14 @@ function errorResult(error: unknown): IToolResult {
         contextNeeded: [],
         assumptions: [],
         riskFactors: [
-          { type: 'accuracy', severity: 'medium', description: error.message, probability: 1.0, impact: 0.5, mitigation: error.message },
+          {
+            type: 'accuracy',
+            severity: 'medium',
+            description: error.message,
+            probability: 1.0,
+            impact: 0.5,
+            mitigation: error.message,
+          },
         ],
         dependencies: [],
         estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
@@ -266,6 +273,70 @@ export function createChangeCardStateHandler(contentService: ContentService) {
   };
 }
 
+/**
+ * count-cards — Count cards matching a DeckQuery.
+ * P1 tool used for planning and pagination.
+ */
+export function createCountCardsHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = await contentService.count(
+        input as Parameters<typeof contentService.count>[0],
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * update-card-node-links — Update knowledge node linkage on a card.
+ * P1 tool used by Knowledge Graph Agent.
+ */
+export function createUpdateCardNodeLinksHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { cardId: string; knowledgeNodeIds: string[]; version: number };
+      const result = await contentService.updateKnowledgeNodeIds(
+        body.cardId as CardId,
+        body.knowledgeNodeIds,
+        body.version,
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * batch-change-card-state — Change state of multiple cards at once.
+ * P1 tool used after batch creation to activate drafts.
+ */
+export function createBatchChangeCardStateHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { ids: string[]; state: string; reason?: string; version: number };
+      const result = await contentService.batchChangeState(
+        body.ids as CardId[],
+        body.state as CardState,
+        body.reason,
+        body.version,
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
 // ============================================================================
 // Tool Definitions (for registration / discovery)
 // ============================================================================
@@ -290,7 +361,11 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
           type: 'string',
           enum: ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'],
         },
-        knowledgeNodeIds: { type: 'array', items: { type: 'string' }, description: 'PKG node IDs to link' },
+        knowledgeNodeIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'PKG node IDs to link',
+        },
         tags: { type: 'array', items: { type: 'string' } },
         source: { type: 'string', enum: ['user', 'agent', 'system', 'import'] },
         metadata: { type: 'object' },
@@ -351,7 +426,8 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
         knowledgeNodeIdMode: {
           type: 'string',
           enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'],
-          description: 'How to match knowledgeNodeIds: any (default), all, exact, subtree/prerequisites/related (require KG)',
+          description:
+            'How to match knowledgeNodeIds: any (default), all, exact, subtree/prerequisites/related (require KG)',
         },
         tags: { type: 'array', items: { type: 'string' } },
         search: { type: 'string' },
@@ -429,24 +505,8 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
     },
   },
   {
-    name: 'validate-card-content',
-    description:
-      'Validate card content against the type-specific schema without creating. Returns validation result with detailed errors.',
-    service: 'content-service',
-    priority: 'P0',
-    inputSchema: {
-      type: 'object',
-      required: ['cardType', 'content'],
-      properties: {
-        cardType: { type: 'string', description: 'Card type discriminator' },
-        content: { type: 'object', description: 'Card content to validate' },
-      },
-    },
-  },
-  {
     name: 'update-card-node-links',
-    description:
-      'Update knowledge node linkage on a card. Replaces the knowledgeNodeIds array.',
+    description: 'Update knowledge node linkage on a card. Replaces the knowledgeNodeIds array.',
     service: 'content-service',
     priority: 'P1',
     inputSchema: {
@@ -473,7 +533,11 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
       type: 'object',
       required: ['ids', 'state', 'version'],
       properties: {
-        ids: { type: 'array', items: { type: 'string' }, description: 'Card IDs to update (max 100)' },
+        ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Card IDs to update (max 100)',
+        },
         state: { type: 'string', enum: ['draft', 'active', 'suspended', 'archived'] },
         reason: { type: 'string' },
         version: { type: 'number' },
