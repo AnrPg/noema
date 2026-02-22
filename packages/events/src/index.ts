@@ -18,3 +18,15 @@ export type * from './types.js';
 // Zod Schemas
 // ============================================================================
 export * from './schemas.js';
+
+// ============================================================================
+// Session Domain Events
+// ============================================================================
+export * from './session/session-event.schemas.js';
+export type * from './session/session.events.js';
+
+// ============================================================================
+// Scheduler Domain Events
+// ============================================================================
+export * from './scheduler/scheduler-event.schemas.js';
+export type * from './scheduler/scheduler.events.js';

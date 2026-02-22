@@ -8,22 +8,33 @@
 import {
   AchievementRarity,
   AttemptOutcome,
+  CardLearningState,
+  CardQueueStatus,
   CardState,
   CardType,
+  CognitiveLoadLevel,
+  DifficultyLevel,
   DocumentFormat,
   Environment,
   EventSource,
+  FatigueLevel,
   ForceLevel,
   GraphEdgeType,
   GraphNodeType,
+  HintDepth,
   IngestionState,
   LearningMode,
   LoadoutArchetype,
+  MotivationSignal,
   MutationState,
+  Rating,
   RemediationCardType,
   SchedulingAlgorithm,
   SessionState,
+  SessionTerminationReason,
   StreakType,
+  TeachingApproach,
+  TeachingApproachCategory,
   ToolCategory,
   ToolResponseTime,
 } from '@noema/types';
@@ -71,6 +82,26 @@ export const AchievementRaritySchema = createEnumSchema(AchievementRarity, 'Achi
 export const StreakTypeSchema = createEnumSchema(StreakType, 'Streak type');
 export const DocumentFormatSchema = createEnumSchema(DocumentFormat, 'Document format');
 export const IngestionStateSchema = createEnumSchema(IngestionState, 'Ingestion state');
+export const DifficultyLevelSchema = createEnumSchema(DifficultyLevel, 'Difficulty level');
+export const RatingSchema = createEnumSchema(Rating, 'Review rating');
+export const CardLearningStateSchema = createEnumSchema(CardLearningState, 'Card learning state');
+export const CardQueueStatusSchema = createEnumSchema(CardQueueStatus, 'Card queue status');
+export const SessionTerminationReasonSchema = createEnumSchema(
+  SessionTerminationReason,
+  'Session termination reason'
+);
+export const CognitiveLoadLevelSchema = createEnumSchema(
+  CognitiveLoadLevel,
+  'Cognitive load level'
+);
+export const FatigueLevelSchema = createEnumSchema(FatigueLevel, 'Fatigue level');
+export const MotivationSignalSchema = createEnumSchema(MotivationSignal, 'Motivation signal');
+export const HintDepthSchema = createEnumSchema(HintDepth, 'Hint depth');
+export const TeachingApproachSchema = createEnumSchema(TeachingApproach, 'Teaching approach');
+export const TeachingApproachCategorySchema = createEnumSchema(
+  TeachingApproachCategory,
+  'Teaching approach category'
+);
 
 // ============================================================================
 // Type Inference
@@ -96,3 +127,14 @@ export type AchievementRarityInput = z.input<typeof AchievementRaritySchema>;
 export type StreakTypeInput = z.input<typeof StreakTypeSchema>;
 export type DocumentFormatInput = z.input<typeof DocumentFormatSchema>;
 export type IngestionStateInput = z.input<typeof IngestionStateSchema>;
+export type DifficultyLevelInput = z.input<typeof DifficultyLevelSchema>;
+export type RatingInput = z.input<typeof RatingSchema>;
+export type CardLearningStateInput = z.input<typeof CardLearningStateSchema>;
+export type CardQueueStatusInput = z.input<typeof CardQueueStatusSchema>;
+export type SessionTerminationReasonInput = z.input<typeof SessionTerminationReasonSchema>;
+export type CognitiveLoadLevelInput = z.input<typeof CognitiveLoadLevelSchema>;
+export type FatigueLevelInput = z.input<typeof FatigueLevelSchema>;
+export type MotivationSignalInput = z.input<typeof MotivationSignalSchema>;
+export type HintDepthInput = z.input<typeof HintDepthSchema>;
+export type TeachingApproachInput = z.input<typeof TeachingApproachSchema>;
+export type TeachingApproachCategoryInput = z.input<typeof TeachingApproachCategorySchema>;

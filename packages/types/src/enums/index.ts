@@ -488,3 +488,314 @@ export const IngestionState = {
 } as const;
 
 export type IngestionState = (typeof IngestionState)[keyof typeof IngestionState];
+
+// ============================================================================
+// Rating & Review
+// ============================================================================
+
+/**
+ * User's self-assessment of recall quality during a review.
+ * Maps directly to FSRS rating values 1-4.
+ * Other algorithms derive their ratings from these canonical values.
+ */
+export const Rating = {
+  /** Complete failure to recall — FSRS value: 1 */
+  AGAIN: 'again',
+  /** Recalled with significant difficulty — FSRS value: 2 */
+  HARD: 'hard',
+  /** Recalled with acceptable effort — FSRS value: 3 */
+  GOOD: 'good',
+  /** Recalled effortlessly — FSRS value: 4 */
+  EASY: 'easy',
+} as const;
+
+export type Rating = (typeof Rating)[keyof typeof Rating];
+
+/**
+ * Numeric values for Rating, aligned with FSRS convention.
+ * SM-2 quality (0-5), Leitner pass/fail, and HLR binary recall
+ * should be derived from these canonical values by each algorithm's adapter.
+ */
+export const RATING_VALUES: Record<Rating, number> = {
+  [Rating.AGAIN]: 1,
+  [Rating.HARD]: 2,
+  [Rating.GOOD]: 3,
+  [Rating.EASY]: 4,
+};
+
+/**
+ * Card learning states within the spaced repetition lifecycle.
+ * Shared across all scheduling algorithms (FSRS, SM-2, Leitner, HLR).
+ */
+export const CardLearningState = {
+  /** Card has never been reviewed */
+  NEW: 'new',
+  /** Card is in the initial learning phase (short-term memory) */
+  LEARNING: 'learning',
+  /** Card is in the long-term review cycle */
+  REVIEW: 'review',
+  /** Card lapsed (forgotten) and is being relearned */
+  RELEARNING: 'relearning',
+} as const;
+
+export type CardLearningState = (typeof CardLearningState)[keyof typeof CardLearningState];
+
+// ============================================================================
+// Session Queue & Termination
+// ============================================================================
+
+/**
+ * Status of a card within a session's review queue.
+ */
+export const CardQueueStatus = {
+  /** Card is waiting to be presented */
+  PENDING: 'pending',
+  /** Card is currently being presented to the learner */
+  PRESENTED: 'presented',
+  /** Card has been reviewed and completed */
+  COMPLETED: 'completed',
+  /** Card was skipped by the learner */
+  SKIPPED: 'skipped',
+  /** Card was dynamically injected into the queue by an agent */
+  INJECTED: 'injected',
+} as const;
+
+export type CardQueueStatus = (typeof CardQueueStatus)[keyof typeof CardQueueStatus];
+
+/**
+ * Reason a session was terminated.
+ */
+export const SessionTerminationReason = {
+  /** All cards in the queue were reviewed */
+  COMPLETED_NORMALLY: 'completed_normally',
+  /** Session time limit (maxDurationMinutes) was reached */
+  TIME_LIMIT_REACHED: 'time_limit_reached',
+  /** Session card limit (maxCards) was reached */
+  CARD_LIMIT_REACHED: 'card_limit_reached',
+  /** User explicitly ended the session */
+  USER_ENDED: 'user_ended',
+  /** Session exceeded the auto-expiration timeout (default 24h) */
+  AUTO_EXPIRED: 'auto_expired',
+  /** Session terminated due to an error */
+  ERROR: 'error',
+} as const;
+
+export type SessionTerminationReason =
+  (typeof SessionTerminationReason)[keyof typeof SessionTerminationReason];
+
+// ============================================================================
+// Cognitive & Metacognitive States
+// ============================================================================
+
+/**
+ * Estimated cognitive load level during a session.
+ * Inferred from response patterns, error rates, and timing.
+ */
+export const CognitiveLoadLevel = {
+  /** Learner is performing effortlessly */
+  LOW: 'low',
+  /** Normal cognitive engagement */
+  MODERATE: 'moderate',
+  /** Approaching cognitive capacity limits */
+  HIGH: 'high',
+  /** Exceeding capacity — performance degradation expected */
+  OVERLOADED: 'overloaded',
+} as const;
+
+export type CognitiveLoadLevel = (typeof CognitiveLoadLevel)[keyof typeof CognitiveLoadLevel];
+
+/**
+ * Learner fatigue level during a session.
+ * Inferred from response time degradation, error rate increase, and session duration.
+ */
+export const FatigueLevel = {
+  /** Fully alert and engaged */
+  FRESH: 'fresh',
+  /** Slight fatigue, minimal impact on performance */
+  MILD: 'mild',
+  /** Noticeable fatigue, some performance degradation */
+  MODERATE: 'moderate',
+  /** Significant fatigue, recommended to pause */
+  FATIGUED: 'fatigued',
+  /** Severe fatigue, session should be ended */
+  EXHAUSTED: 'exhausted',
+} as const;
+
+export type FatigueLevel = (typeof FatigueLevel)[keyof typeof FatigueLevel];
+
+/**
+ * Motivation signal from gamification and behavioral analysis.
+ */
+export const MotivationSignal = {
+  /** Highly motivated, positive engagement indicators */
+  HIGH: 'high',
+  /** Normal motivation level */
+  NORMAL: 'normal',
+  /** Showing signs of declining motivation */
+  DECLINING: 'declining',
+  /** Low motivation, at risk of disengagement */
+  LOW: 'low',
+} as const;
+
+export type MotivationSignal = (typeof MotivationSignal)[keyof typeof MotivationSignal];
+
+/**
+ * Hint depth levels for progressive hint delivery.
+ * Each level reveals more information to the learner.
+ */
+export const HintDepth = {
+  /** No hint used */
+  NONE: 'none',
+  /** Minimal cue — a nudge in the right direction */
+  CUE: 'cue',
+  /** Partial reveal — significant help without the full answer */
+  PARTIAL: 'partial',
+  /** Full explanation — complete answer revealed */
+  FULL_EXPLANATION: 'full_explanation',
+} as const;
+
+export type HintDepth = (typeof HintDepth)[keyof typeof HintDepth];
+
+// ============================================================================
+// Teaching Approaches (31 Epistemic Modes of Engagement)
+// ============================================================================
+
+/**
+ * All 31 teaching/learning approaches supported by Noema.
+ * Each mode represents a distinct epistemic mode of engagement
+ * with specific cognitive mechanisms and pedagogical goals.
+ *
+ * Formal Mode Definition: Mode = (E, T, R, M, C)
+ *   E = Epistemic Operation (10 types)
+ *   T = Tension Source (8 types)
+ *   R = Representation Space (5 types)
+ *   M = Metacognitive Activation (5 levels)
+ *   C = Constraint Profile (6 types)
+ *
+ * @see FEATURE_teaching_approaches.md for detailed descriptions
+ */
+export const TeachingApproach = {
+  /** Standard flashcard review — baseline mode with no special pedagogical framing */
+  STANDARD: 'standard',
+
+  // ── I. Inquiry & Discovery ──────────────────────────────────────────────
+
+  /** Διερευνητική Μάθηση — hypothesis → experiment → reflection → revision */
+  INQUIRY_BASED: 'inquiry_based',
+  /** Real-world scenario → learner derives necessary knowledge */
+  PROBLEM_BASED: 'problem_based',
+  /** Analyze specific cases and extract general principles */
+  CASE_BASED: 'case_based',
+
+  // ── II. Error-Centered & Contradiction-Based ────────────────────────────
+
+  /** Present plausible but flawed explanation — learner detects and corrects */
+  LOOPHOLE_LEARNING: 'loophole_learning',
+  /** AI intentionally misleads — learner cross-examines and demands justification */
+  ADVERSARIAL: 'adversarial',
+  /** Two "correct-looking" statements that can't both be true — resolve via higher-order principle */
+  CONTRADICTION_EXPOSURE: 'contradiction_exposure',
+
+  // ── III. Generative & Constructive ──────────────────────────────────────
+
+  /** Generate answer before seeing options — recall > recognition */
+  GENERATIVE_RETRIEVAL: 'generative_retrieval',
+  /** Given the answer, reconstruct the question — strengthens structural understanding */
+  REVERSE_LEARNING: 'reverse_learning',
+  /** Explain concept in simpler language or different domain (Feynman technique) */
+  TEACHING_TO_LEARN: 'teaching_to_learn',
+  /** Connect two unrelated concepts — activate transfer learning and creative abstraction */
+  CONCEPT_RECOMBINATION: 'concept_recombination',
+
+  // ── IV. Meta-Cognitive ──────────────────────────────────────────────────
+
+  /** Rate confidence after answering — track calibration gap and epistemic self-awareness */
+  CONFIDENCE_WEIGHTED: 'confidence_weighted',
+  /** Predict what concept means before learning — difference = learning signal */
+  PREDICTION_BASED: 'prediction_based',
+  /** Review error clusters and types, not individual answers — cognitive fingerprinting */
+  ERROR_PATTERN_REFLECTION: 'error_pattern_reflection',
+
+  // ── V. Constraint-Based ─────────────────────────────────────────────────
+
+  /** Explain concept in minimal words — force compression → deeper understanding */
+  MINIMAL_INFORMATION: 'minimal_information',
+  /** Explain without using the main term — enforces conceptual modeling */
+  NO_DEFINITION: 'no_definition',
+  /** Translate between representations: equation ↔ diagram ↔ code ↔ text ↔ graph */
+  DIMENSIONAL_TRANSLATION: 'dimensional_translation',
+
+  // ── VI. Game-Theoretic & Dynamic ────────────────────────────────────────
+
+  /** Correct → increase abstraction depth; wrong → foundational reconstruction */
+  ESCALATION: 'escalation',
+  /** Short response windows — measure automaticity vs reasoning depth */
+  TIME_PRESSURE: 'time_pressure',
+  /** Underspecified problems — learner must ask clarifying questions */
+  AMBIGUITY_TOLERANCE: 'ambiguity_tolerance',
+
+  // ── VII. Structural Knowledge ───────────────────────────────────────────
+
+  /** Given partial knowledge graph, complete missing nodes and edges */
+  GRAPH_COMPLETION: 'graph_completion',
+  /** Given shuffled hierarchy, reconstruct correct taxonomic structure */
+  HIERARCHY_RECONSTRUCTION: 'hierarchy_reconstruction',
+  /** Given partial causal chain, fill in missing causal links */
+  CAUSAL_CHAIN_COMPLETION: 'causal_chain_completion',
+
+  // ── VIII. Dialectical & Philosophical ───────────────────────────────────
+
+  /** Present thesis → generate antithesis → synthesize higher-order understanding */
+  THESIS_ANTITHESIS_SYNTHESIS: 'thesis_antithesis_synthesis',
+  /** "What if X were different?" — explore alternative worlds and counterfactual reasoning */
+  COUNTERFACTUAL: 'counterfactual',
+
+  // ── IX. Sensory & Representation ────────────────────────────────────────
+
+  /** Same concept in multiple modalities simultaneously — multi-sensory encoding */
+  MULTI_REPRESENTATION: 'multi_representation',
+  /** Slightly alter a known concept — detect what changed and why it matters */
+  PERTURBATION: 'perturbation',
+
+  // ── X. Advanced Experimental ────────────────────────────────────────────
+
+  /** Inject plausible misconceptions to build cognitive immunity */
+  ADAPTIVE_MISCONCEPTION_INJECTION: 'adaptive_misconception_injection',
+  /** Detect when learner's mental model is drifting from correct model */
+  COGNITIVE_DRIFT_DETECTION: 'cognitive_drift_detection',
+  /** Compress knowledge into minimal lossless representation */
+  KNOWLEDGE_COMPRESSION: 'knowledge_compression',
+  /** Explain the algorithm you used to solve this — metacognitive externalization */
+  EXPLAIN_YOUR_ALGORITHM: 'explain_your_algorithm',
+} as const;
+
+export type TeachingApproach = (typeof TeachingApproach)[keyof typeof TeachingApproach];
+
+/**
+ * Categories grouping the teaching approaches into pedagogical families.
+ */
+export const TeachingApproachCategory = {
+  /** Hypothesis-driven, scenario-based, case-analysis modes */
+  INQUIRY_AND_DISCOVERY: 'inquiry_and_discovery',
+  /** Mistake detection, adversarial reasoning, contradiction resolution */
+  ERROR_CENTERED: 'error_centered',
+  /** Active generation, reversal, teaching, recombination */
+  GENERATIVE_AND_CONSTRUCTIVE: 'generative_and_constructive',
+  /** Confidence calibration, prediction, error pattern analysis */
+  META_COGNITIVE: 'meta_cognitive',
+  /** Minimal information, no-definition, dimensional translation */
+  CONSTRAINT_BASED: 'constraint_based',
+  /** Escalation, time pressure, ambiguity tolerance */
+  GAME_THEORETIC_AND_DYNAMIC: 'game_theoretic_and_dynamic',
+  /** Graph completion, hierarchy reconstruction, causal chains */
+  STRUCTURAL_KNOWLEDGE: 'structural_knowledge',
+  /** Thesis-antithesis-synthesis, counterfactual reasoning */
+  DIALECTICAL_AND_PHILOSOPHICAL: 'dialectical_and_philosophical',
+  /** Multi-representation, perturbation detection */
+  SENSORY_AND_REPRESENTATION: 'sensory_and_representation',
+  /** Misconception injection, drift detection, compression, algorithm explanation */
+  ADVANCED_EXPERIMENTAL: 'advanced_experimental',
+} as const;
+
+export type TeachingApproachCategory =
+  (typeof TeachingApproachCategory)[keyof typeof TeachingApproachCategory];

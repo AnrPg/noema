@@ -103,6 +103,15 @@ export type NotificationId = Brand<string, 'NotificationId'>;
 /** Collaboration room identifier - prefix: room_ */
 export type RoomId = Brand<string, 'RoomId'>;
 
+/** Card schedule identifier - prefix: sched_ */
+export type ScheduleId = Brand<string, 'ScheduleId'>;
+
+/** Review log entry identifier - prefix: rlog_ */
+export type ReviewLogId = Brand<string, 'ReviewLogId'>;
+
+/** Algorithm configuration identifier - prefix: algcfg_ */
+export type AlgorithmConfigId = Brand<string, 'AlgorithmConfigId'>;
+
 // ============================================================================
 // ID Prefix Registry
 // ============================================================================
@@ -136,6 +145,9 @@ export const ID_PREFIXES = {
   MediaId: 'media_',
   NotificationId: 'notification_',
   RoomId: 'room_',
+  ScheduleId: 'sched_',
+  ReviewLogId: 'rlog_',
+  AlgorithmConfigId: 'algcfg_',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
@@ -351,6 +363,31 @@ export const RoomId = {
   prefix: ID_PREFIXES.RoomId,
 } as const;
 
+// Schedule ID
+export const ScheduleId = {
+  create: (value: string): ScheduleId =>
+    createId<'ScheduleId'>(value, ID_PREFIXES.ScheduleId, 'ScheduleId'),
+  isValid: (value: unknown): value is ScheduleId => isValidId(value, ID_PREFIXES.ScheduleId),
+  prefix: ID_PREFIXES.ScheduleId,
+} as const;
+
+// Review Log ID
+export const ReviewLogId = {
+  create: (value: string): ReviewLogId =>
+    createId<'ReviewLogId'>(value, ID_PREFIXES.ReviewLogId, 'ReviewLogId'),
+  isValid: (value: unknown): value is ReviewLogId => isValidId(value, ID_PREFIXES.ReviewLogId),
+  prefix: ID_PREFIXES.ReviewLogId,
+} as const;
+
+// Algorithm Config ID
+export const AlgorithmConfigId = {
+  create: (value: string): AlgorithmConfigId =>
+    createId<'AlgorithmConfigId'>(value, ID_PREFIXES.AlgorithmConfigId, 'AlgorithmConfigId'),
+  isValid: (value: unknown): value is AlgorithmConfigId =>
+    isValidId(value, ID_PREFIXES.AlgorithmConfigId),
+  prefix: ID_PREFIXES.AlgorithmConfigId,
+} as const;
+
 // ============================================================================
 // Union Types for Generic Handling
 // ============================================================================
@@ -381,7 +418,10 @@ export type AnyBrandedId =
   | AgentId
   | MediaId
   | NotificationId
-  | RoomId;
+  | RoomId
+  | ScheduleId
+  | ReviewLogId
+  | AlgorithmConfigId;
 
 /**
  * Map of ID type names to their prefixes.

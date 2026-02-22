@@ -50,6 +50,12 @@ export const AgentIdSchema = createIdSchema(ID_PREFIXES.AgentId, 'Agent ID');
 export const MediaIdSchema = createIdSchema(ID_PREFIXES.MediaId, 'Media ID');
 export const NotificationIdSchema = createIdSchema(ID_PREFIXES.NotificationId, 'Notification ID');
 export const RoomIdSchema = createIdSchema(ID_PREFIXES.RoomId, 'Room ID');
+export const ScheduleIdSchema = createIdSchema(ID_PREFIXES.ScheduleId, 'Schedule ID');
+export const ReviewLogIdSchema = createIdSchema(ID_PREFIXES.ReviewLogId, 'Review Log ID');
+export const AlgorithmConfigIdSchema = createIdSchema(
+  ID_PREFIXES.AlgorithmConfigId,
+  'Algorithm Config ID'
+);
 
 // ============================================================================
 // ID Schema Registry
@@ -82,6 +88,9 @@ export const IdSchemas = {
   [ID_PREFIXES.MediaId]: MediaIdSchema,
   [ID_PREFIXES.NotificationId]: NotificationIdSchema,
   [ID_PREFIXES.RoomId]: RoomIdSchema,
+  [ID_PREFIXES.ScheduleId]: ScheduleIdSchema,
+  [ID_PREFIXES.ReviewLogId]: ReviewLogIdSchema,
+  [ID_PREFIXES.AlgorithmConfigId]: AlgorithmConfigIdSchema,
 } as const;
 
 // ============================================================================
@@ -111,3 +120,6 @@ export type AgentIdInput = z.input<typeof AgentIdSchema>;
 export type MediaIdInput = z.input<typeof MediaIdSchema>;
 export type NotificationIdInput = z.input<typeof NotificationIdSchema>;
 export type RoomIdInput = z.input<typeof RoomIdSchema>;
+export type ScheduleIdInput = z.input<typeof ScheduleIdSchema>;
+export type ReviewLogIdInput = z.input<typeof ReviewLogIdSchema>;
+export type AlgorithmConfigIdInput = z.input<typeof AlgorithmConfigIdSchema>;
