@@ -1,0 +1,1350 @@
+openapi: 3.1.0
+info:
+  title: Noema Session Service API
+  version: 0.1.0
+  description: |
+    Session Service manages learning session lifecycle, card queuing,
+    attempt recording, and session state transitions.
+
+    **Bounded Context:** Learning Sessions
+    **Database:** PostgreSQL + Redis
+    **Events:** 12 session domain events via Redis Streams
+
+    All mutation responses include `agentHints` for downstream agent consumption.
+  contact:
+    name: Noema Platform
+  license:
+    name: Proprietary
+servers:
+  - url: http://localhost:3003
+    description: Local development
+
+tags:
+  - name: Sessions
+    description: Session lifecycle management (FSM-based)
+  - name: Attempts
+    description: Card review attempt recording
+  - name: Queue
+    description: Dynamic session card queue management
+  - name: Strategy
+    description: Mid-session strategy and teaching adjustments
+  - name: Tools
+    description: MCP agent tool discovery and execution
+  - name: Health
+    description: Health and readiness probes
+
+# ============================================================================
+# Security
+# ============================================================================
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  # ==========================================================================
+  # Schemas
+  # ==========================================================================
+  schemas:
+    # ---------- Branded IDs ----------
+    SessionId:
+      type: string
+      pattern: "^sess_[A-Za-z0-9_-]{21}$"
+      example: sess_V1StGXR8_Z5jdHi6B-myT
+
+    AttemptId:
+      type: string
+      pattern: "^att_[A-Za-z0-9_-]{21}$"
+      example: att_V1StGXR8_Z5jdHi6B-myT
+
+    UserId:
+      type: string
+      pattern: "^usr_[A-Za-z0-9_-]{21}$"
+      example: usr_V1StGXR8_Z5jdHi6B-myT
+
+    CardId:
+      type: string
+      pattern: "^card_[A-Za-z0-9_-]{21}$"
+      example: card_V1StGXR8_Z5jdHi6B-myT
+
+    DeckQueryLogId:
+      type: string
+      pattern: "^dql_[A-Za-z0-9_-]{21}$"
+      example: dql_V1StGXR8_Z5jdHi6B-myT
+
+    # ---------- Enums ----------
+    SessionState:
+      type: string
+      enum: [active, paused, completed, abandoned, expired]
+
+    SessionTerminationReason:
+      type: string
+      enum:
+        - completed_normally
+        - time_limit_reached
+        - card_limit_reached
+        - user_ended
+        - auto_expired
+        - error
+
+    LearningMode:
+      type: string
+      enum: [exploration, goal_driven, exam_oriented, synthesis]
+
+    AttemptOutcome:
+      type: string
+      enum: [correct, incorrect, partial, skipped]
+
+    Rating:
+      type: string
+      enum: [again, hard, good, easy]
+
+    CardQueueStatus:
+      type: string
+      enum: [pending, presented, completed, skipped, injected]
+
+    HintDepth:
+      type: string
+      enum: [none, cue, partial, full_explanation]
+
+    # ---------- Domain Objects ----------
+    SessionConfig:
+      type: object
+      properties:
+        maxCards:
+          type: integer
+          minimum: 1
+          nullable: true
+        maxDurationMinutes:
+          type: integer
+          minimum: 1
+          nullable: true
+        sessionTimeoutHours:
+          type: number
+          minimum: 0.1
+          default: 24
+        categoryIds:
+          type: array
+          items:
+            type: string
+        cardTypes:
+          type: array
+          items:
+            type: string
+      required: [sessionTimeoutHours]
+
+    SessionStats:
+      type: object
+      properties:
+        totalAttempts:
+          type: integer
+        correctCount:
+          type: integer
+        incorrectCount:
+          type: integer
+        skippedCount:
+          type: integer
+        averageResponseTimeMs:
+          type: number
+        averageConfidence:
+          type: number
+          nullable: true
+        averageCalibrationDelta:
+          type: number
+          nullable: true
+        retentionRate:
+          type: number
+        streakCurrent:
+          type: integer
+        streakBest:
+          type: integer
+        totalHintsUsed:
+          type: integer
+        uniqueCardsReviewed:
+          type: integer
+        newCardsIntroduced:
+          type: integer
+        lapsedCards:
+          type: integer
+        ratingDistribution:
+          type: object
+          additionalProperties:
+            type: integer
+
+    Session:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/SessionId"
+        userId:
+          $ref: "#/components/schemas/UserId"
+        deckQueryId:
+          $ref: "#/components/schemas/DeckQueryLogId"
+        state:
+          $ref: "#/components/schemas/SessionState"
+        learningMode:
+          $ref: "#/components/schemas/LearningMode"
+        teachingApproach:
+          type: string
+        schedulingAlgorithm:
+          type: string
+        loadoutId:
+          type: string
+          nullable: true
+        loadoutArchetype:
+          type: string
+          nullable: true
+        config:
+          $ref: "#/components/schemas/SessionConfig"
+        stats:
+          $ref: "#/components/schemas/SessionStats"
+        initialQueueSize:
+          type: integer
+        pauseCount:
+          type: integer
+        totalPausedDurationMs:
+          type: integer
+        startedAt:
+          type: string
+          format: date-time
+        lastActivityAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        terminationReason:
+          $ref: "#/components/schemas/SessionTerminationReason"
+        version:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - deckQueryId
+        - state
+        - learningMode
+        - teachingApproach
+        - schedulingAlgorithm
+        - config
+        - stats
+        - initialQueueSize
+        - pauseCount
+        - totalPausedDurationMs
+        - startedAt
+        - lastActivityAt
+        - version
+        - createdAt
+        - updatedAt
+
+    Attempt:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/AttemptId"
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        cardId:
+          $ref: "#/components/schemas/CardId"
+        userId:
+          $ref: "#/components/schemas/UserId"
+        sequenceNumber:
+          type: integer
+        outcome:
+          $ref: "#/components/schemas/AttemptOutcome"
+        rating:
+          $ref: "#/components/schemas/Rating"
+        ratingValue:
+          type: integer
+          minimum: 1
+          maximum: 4
+        responseTimeMs:
+          type: number
+        dwellTimeMs:
+          type: number
+        timeToFirstInteractionMs:
+          type: number
+          nullable: true
+        confidenceBefore:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+        confidenceAfter:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+        calibrationDelta:
+          type: number
+          nullable: true
+          minimum: -1
+          maximum: 1
+        wasRevisedBeforeCommit:
+          type: boolean
+        revisionCount:
+          type: integer
+        hintRequestCount:
+          type: integer
+        hintDepthReached:
+          $ref: "#/components/schemas/HintDepth"
+        contextSnapshot:
+          type: object
+          description: Attempt context at time of review
+        priorSchedulingState:
+          type: object
+          nullable: true
+          description: Prior scheduling state for the card
+        traceId:
+          type: string
+          nullable: true
+        diagnosisId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - cardId
+        - userId
+        - sequenceNumber
+        - outcome
+        - rating
+        - ratingValue
+        - responseTimeMs
+        - dwellTimeMs
+        - wasRevisedBeforeCommit
+        - revisionCount
+        - hintRequestCount
+        - hintDepthReached
+        - contextSnapshot
+        - createdAt
+
+    SessionQueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        cardId:
+          $ref: "#/components/schemas/CardId"
+        position:
+          type: integer
+        status:
+          $ref: "#/components/schemas/CardQueueStatus"
+        injectedBy:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - cardId
+        - position
+        - status
+        - createdAt
+        - updatedAt
+
+    # ---------- Request Bodies ----------
+    StartSessionInput:
+      type: object
+      properties:
+        deckQueryId:
+          $ref: "#/components/schemas/DeckQueryLogId"
+        learningMode:
+          $ref: "#/components/schemas/LearningMode"
+        teachingApproach:
+          type: string
+          default: standard
+        schedulingAlgorithm:
+          type: string
+          default: fsrs
+        loadoutId:
+          type: string
+        loadoutArchetype:
+          type: string
+        config:
+          $ref: "#/components/schemas/SessionConfig"
+        initialCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+          description: Pre-resolved card IDs for the initial queue
+      required:
+        - deckQueryId
+        - learningMode
+        - config
+        - initialCardIds
+
+    RecordAttemptInput:
+      type: object
+      properties:
+        cardId:
+          $ref: "#/components/schemas/CardId"
+        outcome:
+          $ref: "#/components/schemas/AttemptOutcome"
+        rating:
+          $ref: "#/components/schemas/Rating"
+        ratingValue:
+          type: integer
+          minimum: 1
+          maximum: 4
+        responseTimeMs:
+          type: number
+          minimum: 0
+        dwellTimeMs:
+          type: number
+          minimum: 0
+        timeToFirstInteractionMs:
+          type: number
+          minimum: 0
+        confidenceBefore:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidenceAfter:
+          type: number
+          minimum: 0
+          maximum: 1
+        wasRevisedBeforeCommit:
+          type: boolean
+          default: false
+        revisionCount:
+          type: integer
+          minimum: 0
+          default: 0
+        hintRequestCount:
+          type: integer
+          minimum: 0
+          default: 0
+        hintDepthReached:
+          $ref: "#/components/schemas/HintDepth"
+        contextSnapshot:
+          type: object
+        priorSchedulingState:
+          type: object
+      required:
+        - cardId
+        - outcome
+        - rating
+        - ratingValue
+        - responseTimeMs
+        - dwellTimeMs
+        - wasRevisedBeforeCommit
+        - hintDepthReached
+        - contextSnapshot
+
+    RequestHintInput:
+      type: object
+      properties:
+        hintDepth:
+          $ref: "#/components/schemas/HintDepth"
+        hintRequestNumber:
+          type: integer
+          minimum: 1
+        responseTimeMsAtRequest:
+          type: number
+          minimum: 0
+      required:
+        - hintDepth
+        - hintRequestNumber
+        - responseTimeMsAtRequest
+
+    InjectQueueInput:
+      type: object
+      properties:
+        cardId:
+          $ref: "#/components/schemas/CardId"
+        position:
+          type: integer
+          minimum: 0
+        reason:
+          type: string
+        injectedBy:
+          type: string
+          default: agent
+      required:
+        - cardId
+        - position
+        - reason
+
+    RemoveQueueInput:
+      type: object
+      properties:
+        cardId:
+          $ref: "#/components/schemas/CardId"
+        reason:
+          type: string
+        removedBy:
+          type: string
+          default: agent
+      required:
+        - cardId
+        - reason
+
+    UpdateStrategyInput:
+      type: object
+      properties:
+        newLoadoutId:
+          type: string
+        newLoadoutArchetype:
+          type: string
+        newForceLevel:
+          type: string
+        trigger:
+          type: string
+      required:
+        - newLoadoutId
+        - newLoadoutArchetype
+        - newForceLevel
+        - trigger
+
+    ChangeTeachingInput:
+      type: object
+      properties:
+        newApproach:
+          type: string
+        trigger:
+          type: string
+      required:
+        - newApproach
+        - trigger
+
+    # ---------- Response Wrappers ----------
+    AgentHints:
+      type: object
+      description: Guidance for downstream agents
+      properties:
+        suggestedNextActions:
+          type: array
+          items:
+            type: object
+        relatedResources:
+          type: array
+          items:
+            type: object
+        confidence:
+          type: number
+        reasoning:
+          type: string
+
+    ApiMetadata:
+      type: object
+      properties:
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        serviceName:
+          type: string
+        serviceVersion:
+          type: string
+        executionTime:
+          type: number
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+          required: [code, message]
+
+    # ---------- Tool Schemas ----------
+    ToolDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        service:
+          type: string
+        priority:
+          type: string
+          enum: [P0, P1, P2]
+        inputSchema:
+          type: object
+
+    ToolExecuteInput:
+      type: object
+      properties:
+        tool:
+          type: string
+        input:
+          type: object
+      required: [tool]
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        uptime:
+          type: number
+        checks:
+          type: object
+
+# ============================================================================
+# Paths
+# ============================================================================
+paths:
+  # ---------- Session Lifecycle ----------
+  /v1/sessions:
+    post:
+      operationId: startSession
+      tags: [Sessions]
+      summary: Start a new learning session
+      description: |
+        Creates a new session with FSM state=active, initializes the card queue,
+        and publishes `session.started`. Requires pre-resolved cardIds
+        (the Learning Agent resolves the DeckQuery before calling this).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartSessionInput"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+        "422":
+          description: Business rule violation
+
+    get:
+      operationId: listSessions
+      tags: [Sessions]
+      summary: List sessions for authenticated user
+      parameters:
+        - name: state
+          in: query
+          schema:
+            $ref: "#/components/schemas/SessionState"
+        - name: learningMode
+          in: query
+          schema:
+            $ref: "#/components/schemas/LearningMode"
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        "200":
+          description: Paginated session list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Session"
+                      total:
+                        type: integer
+                      offset:
+                        type: integer
+                      limit:
+                        type: integer
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "401":
+          description: Unauthorized
+
+  /v1/sessions/{sessionId}:
+    get:
+      operationId: getSession
+      tags: [Sessions]
+      summary: Get session by ID
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      responses:
+        "200":
+          description: Session found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/pause:
+    post:
+      operationId: pauseSession
+      tags: [Sessions]
+      summary: Pause an active session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Session paused
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Invalid state transition
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/resume:
+    post:
+      operationId: resumeSession
+      tags: [Sessions]
+      summary: Resume a paused session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      responses:
+        "200":
+          description: Session resumed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Invalid state transition
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/complete:
+    post:
+      operationId: completeSession
+      tags: [Sessions]
+      summary: Complete an active session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                terminationReason:
+                  $ref: "#/components/schemas/SessionTerminationReason"
+              required: [terminationReason]
+      responses:
+        "200":
+          description: Session completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Invalid state transition
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/abandon:
+    post:
+      operationId: abandonSession
+      tags: [Sessions]
+      summary: Abandon an active or paused session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Session abandoned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Invalid state transition
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  # ---------- Attempts ----------
+  /v1/sessions/{sessionId}/attempts:
+    post:
+      operationId: recordAttempt
+      tags: [Attempts]
+      summary: Record a card review attempt
+      description: |
+        Records a single attempt within an active session.
+        This is the most critical write operation in Noema — it publishes
+        `attempt.recorded` which is consumed by 5+ services.
+        Automatically updates session stats and queue item status.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordAttemptInput"
+      responses:
+        "201":
+          description: Attempt recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Attempt"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "422":
+          description: Session not active
+
+    get:
+      operationId: listAttempts
+      tags: [Attempts]
+      summary: List attempts for a session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Paginated attempt list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Attempt"
+                      total:
+                        type: integer
+                      offset:
+                        type: integer
+                      limit:
+                        type: integer
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/attempts/{attemptId}/hint:
+    post:
+      operationId: requestHint
+      tags: [Attempts]
+      summary: Request a progressive hint for current attempt
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+        - name: attemptId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/AttemptId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestHintInput"
+      responses:
+        "200":
+          description: Hint request recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      recorded:
+                        type: boolean
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session or attempt not found
+
+  # ---------- Queue Management ----------
+  /v1/sessions/{sessionId}/queue:
+    get:
+      operationId: getQueue
+      tags: [Queue]
+      summary: Get current session queue state
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      responses:
+        "200":
+          description: Queue items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SessionQueueItem"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/queue/inject:
+    post:
+      operationId: injectQueueItem
+      tags: [Queue]
+      summary: Inject a card into the session queue
+      description: |
+        Used by the Learning Agent to dynamically add cards (e.g., remediation
+        cards) into an active session's queue at a specific position.
+        Publishes `session.queue.injected`.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InjectQueueInput"
+      responses:
+        "201":
+          description: Card injected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SessionQueueItem"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "422":
+          description: Session not active
+
+  /v1/sessions/{sessionId}/queue/remove:
+    post:
+      operationId: removeQueueItem
+      tags: [Queue]
+      summary: Remove a card from the session queue
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemoveQueueInput"
+      responses:
+        "200":
+          description: Card removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      removed:
+                        type: boolean
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session or card not found
+
+  # ---------- Strategy & Teaching ----------
+  /v1/sessions/{sessionId}/strategy:
+    post:
+      operationId: updateStrategy
+      tags: [Strategy]
+      summary: Update session strategy mid-session
+      description: |
+        Changes the loadout, archetype, and force level for an active session.
+        Publishes `session.strategy.updated`.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStrategyInput"
+      responses:
+        "200":
+          description: Strategy updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "422":
+          description: Session not active
+
+  /v1/sessions/{sessionId}/teaching:
+    post:
+      operationId: changeTeaching
+      tags: [Strategy]
+      summary: Change teaching approach mid-session
+      description: |
+        Switches the teaching approach (one of 31 epistemic modes) for the session.
+        Publishes `session.teaching.changed`.
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeTeachingInput"
+      responses:
+        "200":
+          description: Teaching approach changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Session"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "422":
+          description: Session not active
+
+  # ---------- MCP Tools ----------
+  /v1/tools:
+    get:
+      operationId: listTools
+      tags: [Tools]
+      summary: List available MCP tools (discovery)
+      responses:
+        "200":
+          description: Tool definitions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      tools:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ToolDefinition"
+                      count:
+                        type: integer
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "401":
+          description: Unauthorized
+
+  /v1/tools/execute:
+    post:
+      operationId: executeTool
+      tags: [Tools]
+      summary: Execute an MCP tool by name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolExecuteInput"
+      responses:
+        "200":
+          description: Tool executed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          description: Unauthorized
+        "404":
+          description: Tool not found
+        "422":
+          description: Tool execution failed
+
+  # ---------- Health ----------
+  /health:
+    get:
+      operationId: healthCheck
+      tags: [Health]
+      summary: Overall health check
+      security: []
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /health/live:
+    get:
+      operationId: liveness
+      tags: [Health]
+      summary: Liveness probe for Kubernetes
+      security: []
+      responses:
+        "200":
+          description: Service alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /health/ready:
+    get:
+      operationId: readiness
+      tags: [Health]
+      summary: Readiness probe for Kubernetes
+      security: []
+      responses:
+        "200":
+          description: Service ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        "503":
+          description: Service not ready

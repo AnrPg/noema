@@ -1,0 +1,229 @@
+// Prisma schema for session-service
+// Database: PostgreSQL
+
+generator client {
+    provider = "prisma-client-js"
+    output   = "../generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Session Entity — FSM-based learning session
+// ============================================================================
+
+model Session {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // DeckQuery reference (resolved by Learning Agent before session start)
+    deckQueryId String @map("deck_query_id") @db.VarChar(50)
+
+    // FSM state
+    state SessionState @default(ACTIVE)
+
+    // Learning configuration
+    learningMode        LearningMode
+    teachingApproach    String       @map("teaching_approach") @db.VarChar(100)
+    schedulingAlgorithm String       @map("scheduling_algorithm") @db.VarChar(50)
+
+    // Strategy (mutable mid-session)
+    loadoutId        String? @map("loadout_id") @db.VarChar(50)
+    loadoutArchetype String? @map("loadout_archetype") @db.VarChar(50)
+    forceLevel       String? @map("force_level") @db.VarChar(20)
+
+    // Session configuration (immutable after creation)
+    config Json @default("{}")
+
+    // Running statistics (updated on each attempt)
+    stats Json @default("{}")
+
+    // Queue metadata
+    initialQueueSize Int @default(0) @map("initial_queue_size")
+
+    // Pause tracking
+    pauseCount            Int       @default(0) @map("pause_count")
+    totalPausedDurationMs Int       @default(0) @map("total_paused_duration_ms")
+    lastPausedAt          DateTime? @map("last_paused_at")
+
+    // Lifecycle timestamps
+    startedAt      DateTime  @default(now()) @map("started_at")
+    lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+    completedAt    DateTime? @map("completed_at")
+
+    // Termination
+    terminationReason String? @map("termination_reason") @db.VarChar(50)
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Optimistic locking
+    version Int @default(1)
+
+    // Relations
+    attempts   Attempt[]
+    queueItems SessionQueueItem[]
+
+    // Indexes
+    @@index([userId])
+    @@index([userId, state])
+    @@index([state])
+    @@index([startedAt])
+    @@index([lastActivityAt])
+    @@map("sessions")
+}
+
+// ============================================================================
+// Attempt Entity — Single card review attempt
+// ============================================================================
+
+model Attempt {
+    id        String @id @db.VarChar(50)
+    sessionId String @map("session_id") @db.VarChar(50)
+    cardId    String @map("card_id") @db.VarChar(50)
+    userId    String @map("user_id") @db.VarChar(50)
+
+    // Ordering within session
+    sequenceNumber Int @map("sequence_number")
+
+    // Response
+    outcome     AttemptOutcome
+    rating      Rating
+    ratingValue Int            @map("rating_value") @db.SmallInt
+
+    // Timing
+    responseTimeMs           Float  @map("response_time_ms")
+    dwellTimeMs              Float  @map("dwell_time_ms")
+    timeToFirstInteractionMs Float? @map("time_to_first_interaction_ms")
+
+    // Metacognitive signals
+    confidenceBefore       Float?    @map("confidence_before")
+    confidenceAfter        Float?    @map("confidence_after")
+    calibrationDelta       Float?    @map("calibration_delta")
+    wasRevisedBeforeCommit Boolean   @default(false) @map("was_revised_before_commit")
+    revisionCount          Int       @default(0) @map("revision_count")
+    hintRequestCount       Int       @default(0) @map("hint_request_count")
+    hintDepthReached       HintDepth @map("hint_depth_reached")
+
+    // Context at time of attempt (denormalized snapshot)
+    contextSnapshot Json @map("context_snapshot")
+
+    // Prior scheduling state for scheduler recomputation
+    priorSchedulingState Json? @map("prior_scheduling_state")
+
+    // Cross-service references
+    traceId     String? @map("trace_id") @db.VarChar(50)
+    diagnosisId String? @map("diagnosis_id") @db.VarChar(50)
+
+    // Audit
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Relations
+    session Session @relation(fields: [sessionId], references: [id])
+
+    // Indexes
+    @@index([sessionId])
+    @@index([sessionId, sequenceNumber])
+    @@index([userId])
+    @@index([cardId])
+    @@index([userId, cardId])
+    @@index([createdAt])
+    @@map("attempts")
+}
+
+// ============================================================================
+// Session Queue Item — Dynamic card queue within a session
+// ============================================================================
+
+model SessionQueueItem {
+    id        String @id @db.VarChar(50)
+    sessionId String @map("session_id") @db.VarChar(50)
+    cardId    String @map("card_id") @db.VarChar(50)
+
+    // Ordering
+    position Int
+
+    // Status tracking
+    status CardQueueStatus @default(PENDING)
+
+    // Injection metadata (for agent-injected cards)
+    injectedBy String? @map("injected_by") @db.VarChar(100)
+    reason     String? @db.VarChar(500)
+
+    // Audit
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    session Session @relation(fields: [sessionId], references: [id])
+
+    // Indexes
+    @@unique([sessionId, cardId])
+    @@index([sessionId, position])
+    @@index([sessionId, status])
+    @@map("session_queue_items")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum SessionState {
+    ACTIVE
+    PAUSED
+    COMPLETED
+    ABANDONED
+    EXPIRED
+
+    @@map("session_state")
+}
+
+enum LearningMode {
+    EXPLORATION
+    GOAL_DRIVEN
+    EXAM_ORIENTED
+    SYNTHESIS
+
+    @@map("learning_mode")
+}
+
+enum AttemptOutcome {
+    CORRECT
+    INCORRECT
+    PARTIAL
+    SKIPPED
+
+    @@map("attempt_outcome")
+}
+
+enum Rating {
+    AGAIN
+    HARD
+    GOOD
+    EASY
+
+    @@map("rating")
+}
+
+enum HintDepth {
+    NONE
+    CUE
+    PARTIAL
+    FULL_EXPLANATION
+
+    @@map("hint_depth")
+}
+
+enum CardQueueStatus {
+    PENDING
+    PRESENTED
+    COMPLETED
+    SKIPPED
+    INJECTED
+
+    @@map("card_queue_status")
+}
