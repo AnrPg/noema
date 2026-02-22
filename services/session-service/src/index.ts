@@ -96,7 +96,7 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  await registerSessionRoutes(
+  registerSessionRoutes(
     fastify as unknown as FastifyInstance,
     sessionService,
     authMiddleware

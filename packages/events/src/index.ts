@@ -4,20 +4,32 @@
  * Event definitions and schemas for Noema's event-driven architecture.
  * All services communicate via immutable events defined here.
  *
+ * Sub-path exports available for tree-shaking:
+ *   @noema/events/session   — Session domain events
+ *   @noema/events/scheduler — Scheduler domain events
+ *   @noema/events/content   — Content domain events
+ *   @noema/events/user      — User domain events
+ *   @noema/events/publisher  — Event publisher interface + Redis implementation
+ *
  * @packageDocumentation
  */
 
 export const VERSION = '0.1.0';
 
 // ============================================================================
-// Event Types
+// Base Event Types
 // ============================================================================
 export type * from './types.js';
 
 // ============================================================================
-// Zod Schemas
+// Base Zod Schemas
 // ============================================================================
 export * from './schemas.js';
+
+// ============================================================================
+// Event Publisher Infrastructure
+// ============================================================================
+export * from './publisher/index.js';
 
 // ============================================================================
 // Session Domain Events
@@ -30,3 +42,15 @@ export type * from './session/session.events.js';
 // ============================================================================
 export * from './scheduler/scheduler-event.schemas.js';
 export type * from './scheduler/scheduler.events.js';
+
+// ============================================================================
+// Content Domain Events
+// ============================================================================
+export * from './content/content-event.schemas.js';
+export type * from './content/content.events.js';
+
+// ============================================================================
+// User Domain Events
+// ============================================================================
+export * from './user/user-event.schemas.js';
+export type * from './user/user.events.js';

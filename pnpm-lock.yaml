@@ -269,6 +269,15 @@ importers:
       '@noema/validation':
         specifier: workspace:*
         version: link:../validation
+      ioredis:
+        specifier: ^5.4.2
+        version: 5.9.3
+      nanoid:
+        specifier: ^5.0.9
+        version: 5.1.6
+      pino:
+        specifier: ^9.6.0
+        version: 9.14.0
       zod:
         specifier: ^3.23.8
         version: 3.25.76

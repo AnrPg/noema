@@ -2,6 +2,7 @@
  * @noema/session-service - REST API Routes
  *
  * Fastify route definitions for session, attempt, and queue endpoints.
+ * Follows canonical pattern from content-service routes.
  */
 
 import type { IApiResponse } from '@noema/contracts';
@@ -28,6 +29,7 @@ import type {
   IExecutionContext,
   SessionService,
 } from '../../domain/session-service/session.service.js';
+import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type { SessionState } from '../../types/index.js';
 
 // ============================================================================
@@ -46,11 +48,19 @@ interface AttemptParams extends SessionIdParams {
 // Route Plugin
 // ============================================================================
 
-export async function registerSessionRoutes(
+export function registerSessionRoutes(
   fastify: FastifyInstance,
   sessionService: SessionService,
-  authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
-): Promise<void> {
+  authMiddleware: ReturnType<typeof createAuthMiddleware>
+): void {
+  // ==========================================================================
+  // Timing Hook
+  // ==========================================================================
+
+  fastify.addHook('onRequest', (request) => {
+    (request as FastifyRequest & { startTime: number }).startTime = Date.now();
+  });
+
   // ==========================================================================
   // Helpers
   // ==========================================================================
@@ -67,7 +77,19 @@ export async function registerSessionRoutes(
     };
   }
 
+  function buildMetadata(request: FastifyRequest): Record<string, unknown> {
+    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
+    return {
+      requestId: request.id,
+      timestamp: new Date().toISOString(),
+      serviceName: 'session-service',
+      serviceVersion: '0.1.0',
+      executionTime: Date.now() - startTime,
+    };
+  }
+
   function wrapResponse<T>(data: T, agentHints: unknown, request: FastifyRequest): IApiResponse<T> {
+    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       data,
       agentHints: agentHints as IApiResponse<T>['agentHints'],
@@ -76,23 +98,28 @@ export async function registerSessionRoutes(
         timestamp: new Date().toISOString(),
         serviceName: 'session-service',
         serviceVersion: '0.1.0',
-        executionTime: 0,
+        executionTime: Date.now() - startTime,
       },
     };
   }
 
-  function handleError(error: unknown, reply: FastifyReply): void {
+  function handleError(error: unknown, request: FastifyRequest, reply: FastifyReply): void {
+    const metadata = buildMetadata(request);
+
     if (error instanceof ValidationError) {
       reply.status(400).send({
         error: { code: error.code, message: error.message, fieldErrors: error.fieldErrors },
+        metadata,
       });
     } else if (error instanceof SessionNotFoundError || error instanceof AttemptNotFoundError) {
       reply.status(404).send({
         error: { code: error.code, message: error.message },
+        metadata,
       });
     } else if (error instanceof SessionAlreadyActiveError) {
       reply.status(409).send({
         error: { code: error.code, message: error.message },
+        metadata,
       });
     } else if (error instanceof VersionConflictError) {
       reply.status(409).send({
@@ -101,6 +128,7 @@ export async function registerSessionRoutes(
           message: error.message,
           details: { expectedVersion: error.expectedVersion, actualVersion: error.actualVersion },
         },
+        metadata,
       });
     } else if (error instanceof InvalidSessionStateError) {
       reply.status(422).send({
@@ -109,37 +137,35 @@ export async function registerSessionRoutes(
           message: error.message,
           details: { currentState: error.currentState, attemptedAction: error.attemptedAction },
         },
+        metadata,
       });
     } else if (error instanceof QueueError) {
       reply.status(422).send({
         error: { code: error.code, message: error.message },
+        metadata,
       });
     } else if (error instanceof AuthorizationError) {
       reply.status(403).send({
         error: { code: (error as DomainError).code, message: error.message },
+        metadata,
       });
     } else if (error instanceof BusinessRuleError) {
       reply.status(422).send({
         error: { code: (error as DomainError).code, message: error.message },
+        metadata,
       });
     } else if (error instanceof DomainError) {
       reply.status(400).send({
         error: { code: error.code, message: error.message },
+        metadata,
       });
     } else {
       fastify.log.error(error);
       reply.status(500).send({
         error: { code: 'INTERNAL_ERROR', message: 'An unexpected error occurred' },
+        metadata,
       });
     }
-  }
-
-  // ==========================================================================
-  // Auth Hook
-  // ==========================================================================
-
-  if (authMiddleware) {
-    fastify.addHook('preHandler', authMiddleware);
   }
 
   // ==========================================================================
@@ -149,15 +175,14 @@ export async function registerSessionRoutes(
   // POST /v1/sessions — Start session
   fastify.post<{ Body: unknown }>(
     '/v1/sessions',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
         const result = await sessionService.startSession(request.body, ctx);
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -165,8 +190,7 @@ export async function registerSessionRoutes(
   // GET /v1/sessions — List sessions
   fastify.get<{ Querystring: Record<string, string> }>(
     '/v1/sessions',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -182,7 +206,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -190,15 +214,14 @@ export async function registerSessionRoutes(
   // GET /v1/sessions/:sessionId — Get session
   fastify.get<{ Params: SessionIdParams }>(
     '/v1/sessions/:sessionId',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
         const result = await sessionService.getSession(request.params.sessionId, ctx);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -206,8 +229,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/pause
   fastify.post<{ Params: SessionIdParams; Body: { reason?: string } }>(
     '/v1/sessions/:sessionId/pause',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -219,7 +241,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -227,15 +249,14 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/resume
   fastify.post<{ Params: SessionIdParams }>(
     '/v1/sessions/:sessionId/resume',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
         const result = await sessionService.resumeSession(request.params.sessionId, ctx);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -243,15 +264,14 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/complete
   fastify.post<{ Params: SessionIdParams }>(
     '/v1/sessions/:sessionId/complete',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
         const result = await sessionService.completeSession(request.params.sessionId, ctx);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -259,8 +279,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/abandon
   fastify.post<{ Params: SessionIdParams; Body: { reason?: string } }>(
     '/v1/sessions/:sessionId/abandon',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -272,7 +291,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -284,8 +303,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/attempts — Record attempt
   fastify.post<{ Params: SessionIdParams; Body: unknown }>(
     '/v1/sessions/:sessionId/attempts',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -296,7 +314,7 @@ export async function registerSessionRoutes(
         );
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -304,8 +322,7 @@ export async function registerSessionRoutes(
   // GET /v1/sessions/:sessionId/attempts — List attempts
   fastify.get<{ Params: SessionIdParams; Querystring: Record<string, string> }>(
     '/v1/sessions/:sessionId/attempts',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -318,7 +335,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -329,8 +346,7 @@ export async function registerSessionRoutes(
     Body: unknown;
   }>(
     '/v1/sessions/:sessionId/hint',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -344,7 +360,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -356,15 +372,14 @@ export async function registerSessionRoutes(
   // GET /v1/sessions/:sessionId/queue — Get queue
   fastify.get<{ Params: SessionIdParams }>(
     '/v1/sessions/:sessionId/queue',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
         const result = await sessionService.getQueue(request.params.sessionId, ctx);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -372,8 +387,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/queue/inject — Inject queue item
   fastify.post<{ Params: SessionIdParams; Body: unknown }>(
     '/v1/sessions/:sessionId/queue/inject',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -384,7 +398,7 @@ export async function registerSessionRoutes(
         );
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -392,8 +406,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/queue/remove — Remove queue item
   fastify.post<{ Params: SessionIdParams; Body: unknown }>(
     '/v1/sessions/:sessionId/queue/remove',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -404,7 +417,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -416,8 +429,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/strategy
   fastify.post<{ Params: SessionIdParams; Body: unknown }>(
     '/v1/sessions/:sessionId/strategy',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -428,7 +440,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
@@ -436,8 +448,7 @@ export async function registerSessionRoutes(
   // POST /v1/sessions/:sessionId/teaching
   fastify.post<{ Params: SessionIdParams; Body: unknown }>(
     '/v1/sessions/:sessionId/teaching',
-    {
-    },
+    { preHandler: authMiddleware },
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
@@ -448,7 +459,7 @@ export async function registerSessionRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, reply);
+        handleError(error, request, reply);
       }
     }
   );
