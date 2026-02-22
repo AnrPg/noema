@@ -293,6 +293,21 @@ export function registerSessionRoutes(
     }
   );
 
+  // POST /v1/sessions/:sessionId/expire
+  fastify.post<{ Params: SessionIdParams }>(
+    '/v1/sessions/:sessionId/expire',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.expireSession(request.params.sessionId, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
   // POST /v1/sessions/:sessionId/abandon
   fastify.post<{ Params: SessionIdParams; Body: { reason?: string } }>(
     '/v1/sessions/:sessionId/abandon',
@@ -359,24 +374,26 @@ export function registerSessionRoutes(
 
   // POST /v1/sessions/:sessionId/attempts/:attemptId/hint — Request hint
   fastify.post<{
-    Params: AttemptParams & { cardId?: string };
+    Params: AttemptParams;
     Body: unknown;
-  }>('/v1/sessions/:sessionId/hint', { preHandler: authMiddleware }, async (request, reply) => {
-    try {
-      const ctx = buildContext(request);
-      const body = request.body as { attemptId?: string; cardId?: string };
-      const result = await sessionService.requestHint(
-        request.params.sessionId,
-        body.attemptId ?? '',
-        body.cardId ?? '',
-        request.body,
-        ctx
-      );
-      reply.send(wrapResponse(result.data, result.agentHints, request));
-    } catch (error) {
-      handleError(error, request, reply);
+  }>(
+    '/v1/sessions/:sessionId/attempts/:attemptId/hint',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.requestHint(
+          request.params.sessionId,
+          request.params.attemptId,
+          request.body,
+          ctx
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
     }
-  });
+  );
 
   // ==========================================================================
   // Queue Management

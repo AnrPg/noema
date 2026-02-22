@@ -65,7 +65,14 @@ async function bootstrap(): Promise<void> {
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
 
   // Create domain service
-  const sessionService = new SessionService(sessionRepository, eventPublisher, logger);
+  const sessionService = new SessionService(sessionRepository, eventPublisher, logger, {
+    security: {
+      verifyOfflineIntentTokens: config.security.verifyOfflineIntentTokens,
+      offlineIntentTokenSecret: config.security.offlineIntentTokenSecret,
+      offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
+      offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
+    },
+  });
 
   // Create tool registry
   const toolRegistry = createToolRegistry(sessionService);
@@ -96,11 +103,7 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  registerSessionRoutes(
-    fastify as unknown as FastifyInstance,
-    sessionService,
-    authMiddleware
-  );
+  registerSessionRoutes(fastify as unknown as FastifyInstance, sessionService, authMiddleware);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown

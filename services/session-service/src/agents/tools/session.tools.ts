@@ -5,8 +5,8 @@
  * - get-session-history (P2)
  * - record-attempt (P0)
  * - get-attempt-history (P0)
- * - get-thinking-trace (P0) — DEFERRED: returns stub until Phase 3+
- * - record-dialogue-turn (P1) — placeholder for future dialogue tracking
+ * - get-thinking-trace (P0)
+ * - record-dialogue-turn (P1)
  *
  * Each handler wraps a SessionService method and returns IToolResult.
  */
@@ -103,7 +103,7 @@ export function createGetSessionHistoryHandler(service: SessionService) {
         },
         (body['limit'] as number) ?? 10,
         (body['offset'] as number) ?? 0,
-        ctx,
+        ctx
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -158,7 +158,7 @@ export function createGetAttemptHistoryHandler(service: SessionService) {
         sessionId,
         (body['limit'] as number) ?? 50,
         (body['offset'] as number) ?? 0,
-        ctx,
+        ctx
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -168,64 +168,50 @@ export function createGetAttemptHistoryHandler(service: SessionService) {
 }
 
 /**
- * get-thinking-trace — DEFERRED to Phase 3+.
- *
- * This tool will eventually return the 7-frame cognitive stack trace
- * for an attempt (Perception → Encoding → Retrieval → Evaluation →
- * Metacognition → Response → Scheduling). Currently returns a stub.
+ * get-thinking-trace — Retrieve trace metadata for an attempt.
  */
-export function createGetThinkingTraceHandler(_service: SessionService) {
-  return async (input: unknown, _userId: string, _correlationId: string): Promise<IToolResult> => {
-    const body = input as Record<string, unknown>;
-    const attemptId = body['attemptId'] as string;
-    return {
-      success: true,
-      data: {
-        attemptId,
-        status: 'deferred',
-        message:
-          'Thinking traces (7-frame cognitive stack) are planned for Phase 3+. ' +
-          'The trace will cover: Perception → Encoding → Retrieval → Evaluation → ' +
-          'Metacognition → Response → Scheduling.',
-        frames: [],
-      },
-      agentHints: {
-        ...createEmptyAgentHints(),
-        suggestedNextActions: [
-          {
-            action: 'get-attempt-history',
-            description: 'Use get-attempt-history for available attempt data until traces are implemented',
-            priority: 'medium',
-          },
-        ],
-        reasoning: 'Thinking traces are deferred to Phase 3+ when metacognition service is available.',
-      },
-    };
+export function createGetThinkingTraceHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const attemptId = body['attemptId'] as string;
+      if (!attemptId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'attemptId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.getThinkingTrace(attemptId, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
   };
 }
 
 /**
- * record-dialogue-turn — Placeholder for future dialogue tracking.
- *
- * Will track agent ↔ learner dialogue turns within a session.
+ * record-dialogue-turn — Record a dialogue turn and update session activity.
  */
-export function createRecordDialogueTurnHandler(_service: SessionService) {
-  return async (input: unknown, _userId: string, _correlationId: string): Promise<IToolResult> => {
-    const body = input as Record<string, unknown>;
-    const sessionId = body['sessionId'] as string;
-    return {
-      success: true,
-      data: {
-        sessionId,
-        status: 'acknowledged',
-        message:
-          'Dialogue turn recording is a Phase 2+ feature. Turn acknowledged but not persisted.',
-      },
-      agentHints: {
-        ...createEmptyAgentHints(),
-        reasoning: 'Dialogue turn acknowledged but not yet persisted. Feature planned for Phase 2+.',
-      },
-    };
+export function createRecordDialogueTurnHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
+      if (!sessionId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.recordDialogueTurn(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
   };
 }
 
@@ -341,8 +327,7 @@ export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
   },
   {
     name: 'get-thinking-trace',
-    description:
-      'Get the 7-frame cognitive stack trace for an attempt. DEFERRED: returns stub until Phase 3+.',
+    description: 'Get trace metadata for an attempt when available.',
     service: 'session-service',
     priority: 'P0',
     inputSchema: {
@@ -355,8 +340,7 @@ export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
   },
   {
     name: 'record-dialogue-turn',
-    description:
-      'Record an agent-learner dialogue turn within a session. Placeholder for Phase 2+.',
+    description: 'Record an agent-learner dialogue turn within a session.',
     service: 'session-service',
     priority: 'P1',
     inputSchema: {

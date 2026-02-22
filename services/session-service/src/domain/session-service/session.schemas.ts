@@ -209,6 +209,7 @@ export type RecordAttemptInput = z.input<typeof RecordAttemptInputSchema>;
 // ============================================================================
 
 export const RequestHintInputSchema = z.object({
+  cardId: CardIdSchema.optional().describe('Card ID if provided by caller for consistency checks'),
   hintDepth: HintDepthSchema.describe('Hint depth requested'),
   hintRequestNumber: z.number().int().positive().describe('Sequential hint number in this attempt'),
   responseTimeMsAtRequest: z
@@ -219,6 +220,19 @@ export const RequestHintInputSchema = z.object({
 });
 
 export type RequestHintInput = z.input<typeof RequestHintInputSchema>;
+
+// ============================================================================
+// Dialogue Turn Input
+// ============================================================================
+
+export const RecordDialogueTurnInputSchema = z.object({
+  role: z.enum(['agent', 'learner']).describe('Who sent the dialogue message'),
+  content: z.string().min(1).max(4000).describe('Dialogue message content'),
+  turnType: z.string().min(1).max(100).optional().describe('Semantic turn type'),
+  metadata: z.record(z.unknown()).optional().describe('Optional dialogue metadata'),
+});
+
+export type RecordDialogueTurnInput = z.input<typeof RecordDialogueTurnInputSchema>;
 
 // ============================================================================
 // Inject Queue Item Input

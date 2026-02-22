@@ -40,6 +40,12 @@ export interface IServiceConfig {
     level: string;
     pretty: boolean;
   };
+  security: {
+    verifyOfflineIntentTokens: boolean;
+    offlineIntentTokenSecret: string;
+    offlineIntentTokenIssuer: string;
+    offlineIntentTokenAudience: string;
+  };
 }
 
 // ============================================================================
@@ -115,6 +121,12 @@ export function loadConfig(): IServiceConfig {
     logging: {
       level: optionalEnv('LOG_LEVEL', environment === 'production' ? 'info' : 'debug'),
       pretty: optionalEnvBool('LOG_PRETTY', environment === 'development'),
+    },
+    security: {
+      verifyOfflineIntentTokens: optionalEnvBool('VERIFY_OFFLINE_INTENT_TOKENS', true),
+      offlineIntentTokenSecret: optionalEnv('OFFLINE_INTENT_TOKEN_SECRET', ''),
+      offlineIntentTokenIssuer: optionalEnv('OFFLINE_INTENT_TOKEN_ISSUER', 'noema.scheduler'),
+      offlineIntentTokenAudience: optionalEnv('OFFLINE_INTENT_TOKEN_AUDIENCE', 'noema.mobile'),
     },
   };
 }

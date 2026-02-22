@@ -47,6 +47,7 @@ import type {
   UserId,
 } from '@noema/types';
 import { ID_PREFIXES, SessionTerminationReason } from '@noema/types';
+import { jwtVerify } from 'jose';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 
@@ -65,6 +66,7 @@ import type {
 import { createEmptyStats, SessionState as States } from '../../types/index.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
+  AttemptNotFoundError,
   AuthorizationError,
   InvalidSessionStateError,
   QueueError,
@@ -78,6 +80,7 @@ import {
   EvaluateAdaptiveCheckpointInputSchema,
   InjectQueueInputSchema,
   RecordAttemptInputSchema,
+  RecordDialogueTurnInputSchema,
   RemoveQueueInputSchema,
   RequestHintInputSchema,
   StartSessionInputSchema,
@@ -113,6 +116,17 @@ export interface IServiceResult<T> {
   agentHints: IAgentHints;
 }
 
+export interface ISessionServiceSecurityConfig {
+  verifyOfflineIntentTokens: boolean;
+  offlineIntentTokenSecret: string;
+  offlineIntentTokenIssuer: string;
+  offlineIntentTokenAudience: string;
+}
+
+export interface ISessionServiceOptions {
+  security: ISessionServiceSecurityConfig;
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -144,13 +158,23 @@ function buildHints(
 
 export class SessionService {
   private readonly logger: Logger;
+  private readonly options: ISessionServiceOptions;
 
   constructor(
     private readonly repository: ISessionRepository,
     private readonly eventPublisher: IEventPublisher,
-    logger: Logger
+    logger: Logger,
+    options?: Partial<ISessionServiceOptions>
   ) {
     this.logger = logger.child({ component: 'SessionService' });
+    this.options = {
+      security: {
+        verifyOfflineIntentTokens: options?.security?.verifyOfflineIntentTokens ?? false,
+        offlineIntentTokenSecret: options?.security?.offlineIntentTokenSecret ?? '',
+        offlineIntentTokenIssuer: options?.security?.offlineIntentTokenIssuer ?? 'noema.scheduler',
+        offlineIntentTokenAudience: options?.security?.offlineIntentTokenAudience ?? 'noema.mobile',
+      },
+    };
   }
 
   // ==========================================================================
@@ -169,6 +193,8 @@ export class SessionService {
       throw new ValidationError('Invalid start session input', parsed.error.flatten().fieldErrors);
     }
     const data = parsed.data;
+
+    await this.verifyOfflineIntentToken(data.offlineIntentToken, ctx);
 
     if (data.blueprint !== undefined) {
       const consistency = this.validateBlueprintConsistency(
@@ -805,6 +831,12 @@ export class SessionService {
       diagnosisId: null,
     });
 
+    const attemptsForCard = await this.repository.findAttemptsByCard(
+      session.id,
+      data.cardId as CardId
+    );
+    const isFirstAttemptForCard = attemptsForCard.length === 1;
+
     // Update session stats
     const updatedStats = this.computeUpdatedStats(session.stats, {
       outcome: data.outcome,
@@ -814,6 +846,7 @@ export class SessionService {
       confidenceBefore: data.confidenceBefore ?? undefined,
       confidenceAfter: data.confidenceAfter ?? undefined,
       hintRequestCount: data.hintRequestCount ?? undefined,
+      isFirstAttemptForCard,
     });
     await this.repository.updateSession(
       session.id,
@@ -894,7 +927,6 @@ export class SessionService {
   async requestHint(
     sessionId: string,
     attemptId: string,
-    cardId: string,
     input: unknown,
     ctx: IExecutionContext
   ): Promise<IServiceResult<{ acknowledged: boolean }>> {
@@ -907,10 +939,25 @@ export class SessionService {
     const session = await this.getAuthorizedSession(sessionId, ctx);
     this.assertState(session, States.ACTIVE, 'request hint');
 
+    const attempt = await this.repository.findAttemptById(attemptId as AttemptId);
+    if (!attempt) {
+      throw new AttemptNotFoundError(attemptId);
+    }
+    if (attempt.sessionId !== session.id) {
+      throw new ValidationError('Attempt does not belong to this session', {
+        attemptId: ['Attempt session mismatch'],
+      });
+    }
+    if (data.cardId !== undefined && attempt.cardId !== (data.cardId as CardId)) {
+      throw new ValidationError('Attempt card does not match provided cardId', {
+        cardId: ['Provided cardId does not match attempt.cardId'],
+      });
+    }
+
     const payload: IAttemptHintRequestedPayload = {
       attemptId: attemptId as AttemptId,
       sessionId: session.id,
-      cardId: cardId as CardId,
+      cardId: attempt.cardId,
       userId: ctx.userId,
       hintDepth: data.hintDepth as HintDepth,
       hintRequestNumber: data.hintRequestNumber,
@@ -941,6 +988,110 @@ export class SessionService {
           },
         ],
         `Hint depth ${data.hintDepth} requested (hint #${data.hintRequestNumber})`
+      ),
+    };
+  }
+
+  async getThinkingTrace(
+    attemptId: string,
+    ctx: IExecutionContext
+  ): Promise<
+    IServiceResult<{
+      attemptId: string;
+      traceId: string | null;
+      diagnosisId: string | null;
+      status: 'available' | 'not_available';
+      frames: unknown[];
+    }>
+  > {
+    const attempt = await this.repository.findAttemptById(attemptId as AttemptId);
+    if (!attempt) {
+      throw new AttemptNotFoundError(attemptId);
+    }
+    await this.getAuthorizedSession(attempt.sessionId, ctx);
+
+    const hasTrace = attempt.traceId !== null;
+    return {
+      data: {
+        attemptId: attempt.id,
+        traceId: attempt.traceId,
+        diagnosisId: attempt.diagnosisId,
+        status: hasTrace ? 'available' : 'not_available',
+        frames: [],
+      },
+      agentHints: buildHints(
+        [
+          {
+            action: hasTrace ? 'inspect_trace' : 'record_attempt',
+            description: hasTrace
+              ? 'Inspect the available trace identifiers for this attempt'
+              : 'Trace is not yet attached to this attempt; continue session flow',
+            priority: 'medium',
+          },
+        ],
+        hasTrace ? 'Attempt has trace metadata' : 'Attempt currently has no trace metadata'
+      ),
+    };
+  }
+
+  async recordDialogueTurn(
+    sessionId: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<
+    IServiceResult<{
+      acknowledged: boolean;
+      sessionId: string;
+      recordedAt: string;
+      role: 'agent' | 'learner';
+      turnType: string | null;
+    }>
+  > {
+    const parsed = RecordDialogueTurnInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid dialogue turn input', parsed.error.flatten().fieldErrors);
+    }
+    const data = parsed.data;
+
+    const session = await this.getAuthorizedSession(sessionId, ctx);
+    this.assertActiveOrPaused(session, 'record dialogue turn');
+
+    const recordedAt = new Date().toISOString();
+    await this.repository.updateSession(
+      session.id,
+      {
+        lastActivityAt: recordedAt,
+      },
+      session.version
+    );
+
+    this.logger.debug(
+      {
+        sessionId: session.id,
+        userId: ctx.userId,
+        role: data.role,
+        turnType: data.turnType ?? null,
+      },
+      'Dialogue turn recorded'
+    );
+
+    return {
+      data: {
+        acknowledged: true,
+        sessionId: session.id,
+        recordedAt,
+        role: data.role,
+        turnType: data.turnType ?? null,
+      },
+      agentHints: buildHints(
+        [
+          {
+            action: 'continue_session',
+            description: 'Continue the active tutoring interaction',
+            priority: 'high',
+          },
+        ],
+        `Dialogue turn recorded from ${data.role}`
       ),
     };
   }
@@ -1310,6 +1461,40 @@ export class SessionService {
     return { valid: errors.length === 0, errors };
   }
 
+  private async verifyOfflineIntentToken(
+    offlineIntentToken: string | undefined,
+    ctx: IExecutionContext
+  ): Promise<void> {
+    if (!this.options.security.verifyOfflineIntentTokens || offlineIntentToken === undefined) {
+      return;
+    }
+
+    if (this.options.security.offlineIntentTokenSecret.length === 0) {
+      throw new ValidationError('Offline intent token verification is enabled but not configured', {
+        offlineIntentToken: [
+          'OFFLINE_INTENT_TOKEN_SECRET is required when verification is enabled',
+        ],
+      });
+    }
+
+    try {
+      const key = new TextEncoder().encode(this.options.security.offlineIntentTokenSecret);
+      const { payload } = await jwtVerify(offlineIntentToken, key, {
+        issuer: this.options.security.offlineIntentTokenIssuer,
+        audience: this.options.security.offlineIntentTokenAudience,
+      });
+
+      if (payload.sub !== ctx.userId) {
+        throw new AuthorizationError('Offline intent token does not match authenticated user');
+      }
+    } catch (error) {
+      if (error instanceof AuthorizationError) {
+        throw error;
+      }
+      throw new AuthorizationError('Invalid offline intent token');
+    }
+  }
+
   /**
    * Compute updated session stats after an attempt.
    */
@@ -1323,6 +1508,7 @@ export class SessionService {
       confidenceBefore: number | undefined;
       confidenceAfter: number | undefined;
       hintRequestCount: number | undefined;
+      isFirstAttemptForCard: boolean;
     }
   ): ISessionStats {
     const totalAttempts = current.totalAttempts + 1;
@@ -1383,8 +1569,7 @@ export class SessionService {
       streakCurrent,
       streakBest,
       totalHintsUsed,
-      // These would need unique card tracking — use current values for now
-      uniqueCardsReviewed: current.uniqueCardsReviewed + 1, // simplified
+      uniqueCardsReviewed: current.uniqueCardsReviewed + (attempt.isFirstAttemptForCard ? 1 : 0),
       newCardsIntroduced: current.newCardsIntroduced,
       lapsedCards: current.lapsedCards,
       ratingDistribution,
