@@ -408,7 +408,7 @@ export class UserService {
     const passwordHash = await bcrypt.hash(validatedInput.newPassword, SALT_ROUNDS);
 
     // Update password with history tracking (changedBy is context.userId)
-    await this.repository.updatePassword(id, passwordHash, version, context.userId);
+    await this.repository.updatePassword(id, passwordHash, version, context.userId ?? undefined);
 
     // Security hardening: invalidate all active refresh tokens after password change
     await this.tokenService.revokeAllRefreshTokensForUser(id);
@@ -838,7 +838,17 @@ export class UserService {
 
   private validateCreateInput(input: ICreateUserInput): ICreateUserInput {
     try {
-      return CreateUserInputSchema.parse(input);
+      const parsed = CreateUserInputSchema.parse(input);
+      return {
+        username: parsed.username,
+        email: parsed.email,
+        password: parsed.password,
+        country: parsed.country,
+        ...(parsed.displayName !== undefined ? { displayName: parsed.displayName } : {}),
+        ...(parsed.language !== undefined ? { language: parsed.language } : {}),
+        ...(parsed.timezone !== undefined ? { timezone: parsed.timezone } : {}),
+        ...(parsed.authProvider !== undefined ? { authProvider: parsed.authProvider } : {}),
+      };
     } catch (error) {
       if (error instanceof Error && 'errors' in error) {
         const zodError = error as { errors: { path: string[]; message: string }[] };
