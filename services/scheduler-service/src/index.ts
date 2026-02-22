@@ -2,16 +2,23 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
+import { PrismaClient } from '../generated/prisma/index.js';
 
 import { createToolRegistry, registerToolRoutes } from './agents/tools/index.js';
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes, registerSchedulerRoutes } from './api/rest/index.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import {
-  SchedulerService,
-  type ISchedulerServiceConfig,
+    SchedulerService,
+    type ISchedulerServiceConfig,
 } from './domain/scheduler-service/scheduler.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
+import {
+    PrismaCalibrationDataRepository,
+    PrismaReviewRepository,
+    PrismaSchedulerCardRepository,
+} from './infrastructure/database/index.js';
+import { SchedulerEventConsumer } from './infrastructure/events/index.js';
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -37,6 +44,20 @@ async function bootstrap(): Promise<void> {
   await redis.connect();
   logger.info('Connected to Redis');
 
+  // Connect to PostgreSQL via Prisma
+  const prisma = new PrismaClient({
+    datasources: { db: { url: config.database.url } },
+    log: config.logging.level === 'debug' ? ['query', 'error', 'warn'] : ['error'],
+  });
+  await prisma.$connect();
+  logger.info('Connected to PostgreSQL');
+
+  const schedulerCardRepo = new PrismaSchedulerCardRepository(prisma);
+  const reviewRepo = new PrismaReviewRepository(prisma);
+  const calibrationDataRepo = new PrismaCalibrationDataRepository(prisma);
+
+  logger.info('Initialized database repositories');
+
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
   const serviceConfig: ISchedulerServiceConfig = {
     serviceVersion: config.service.version,
@@ -44,7 +65,30 @@ async function bootstrap(): Promise<void> {
     offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
     offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
   };
-  const schedulerService = new SchedulerService(eventPublisher, serviceConfig);
+  const schedulerService = new SchedulerService(eventPublisher, serviceConfig, {
+    schedulerCardRepository: schedulerCardRepo,
+    reviewRepository: reviewRepo,
+    calibrationDataRepository: calibrationDataRepo,
+  });
+
+  const eventConsumer = new SchedulerEventConsumer(
+    redis,
+    {
+      sourceStreamKey: config.redis.sourceStreamKey,
+      consumerGroup: config.redis.consumerGroup,
+      consumerName: config.redis.consumerName,
+      blockMs: config.redis.consumerBlockMs,
+      batchSize: config.redis.consumerBatchSize,
+    },
+    {
+      schedulerCardRepository: schedulerCardRepo,
+      reviewRepository: reviewRepo,
+      calibrationDataRepository: calibrationDataRepo,
+    },
+    logger
+  );
+  await eventConsumer.start();
+
   const toolRegistry = createToolRegistry(schedulerService);
 
   const fastify = Fastify({
@@ -68,7 +112,7 @@ async function bootstrap(): Promise<void> {
     audience: process.env['JWT_AUDIENCE'] ?? 'noema.app',
   });
 
-  registerHealthRoutes(fastify as unknown as FastifyInstance, redis);
+  registerHealthRoutes(fastify as unknown as FastifyInstance, redis, prisma);
   registerSchedulerRoutes(fastify as unknown as FastifyInstance, schedulerService, authMiddleware);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
@@ -76,6 +120,8 @@ async function bootstrap(): Promise<void> {
     logger.info({ signal }, 'Received shutdown signal');
 
     await fastify.close();
+    await eventConsumer.stop();
+    await prisma.$disconnect();
     await redis.quit();
 
     logger.info('Service shutdown complete');

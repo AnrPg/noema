@@ -8,10 +8,18 @@ export interface IServiceConfig {
     host: string;
     port: number;
   };
+  database: {
+    url: string;
+  };
   redis: {
     url: string;
     eventStreamKey: string;
     maxStreamLen: number;
+    sourceStreamKey: string;
+    consumerGroup: string;
+    consumerName: string;
+    consumerBlockMs: number;
+    consumerBatchSize: number;
   };
   cors: {
     origin: string[];
@@ -69,10 +77,18 @@ export function loadConfig(): IServiceConfig {
       host: optionalEnv('HOST', '0.0.0.0'),
       port: optionalEnvInt('PORT', 3009),
     },
+    database: {
+      url: requireEnv('DATABASE_URL'),
+    },
     redis: {
       url: requireEnv('REDIS_URL'),
       eventStreamKey: optionalEnv('REDIS_EVENT_STREAM', 'noema:events:scheduler-service'),
       maxStreamLen: optionalEnvInt('REDIS_STREAM_MAX_LEN', 10000),
+      sourceStreamKey: optionalEnv('REDIS_SOURCE_STREAM', 'noema:events:session-service'),
+      consumerGroup: optionalEnv('REDIS_CONSUMER_GROUP', 'scheduler-service-group'),
+      consumerName: optionalEnv('REDIS_CONSUMER_NAME', 'scheduler-service-1'),
+      consumerBlockMs: optionalEnvInt('REDIS_CONSUMER_BLOCK_MS', 5000),
+      consumerBatchSize: optionalEnvInt('REDIS_CONSUMER_BATCH_SIZE', 20),
     },
     cors: {
       origin: optionalEnv(

@@ -13,9 +13,15 @@ import type {
   IOfflineIntentTokenInput,
   ISchedulerLaneMix,
   IVerifyOfflineIntentTokenResult,
+  SchedulerLane,
   UserId,
 } from '../../types/scheduler.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
+import type {
+  ICalibrationDataRepository,
+  IReviewRepository,
+  ISchedulerCardRepository,
+} from './scheduler.repository.js';
 import {
   DualLanePlanInputSchema,
   OfflineIntentTokenInputSchema,
@@ -34,12 +40,19 @@ export interface ISchedulerServiceConfig {
   offlineIntentTokenAudience: string;
 }
 
+export interface ISchedulerServiceRepositories {
+  schedulerCardRepository: ISchedulerCardRepository;
+  reviewRepository: IReviewRepository;
+  calibrationDataRepository: ICalibrationDataRepository;
+}
+
 export class SchedulerService {
   private readonly jwtSecret: Uint8Array;
 
   constructor(
     private readonly eventPublisher: IEventPublisher,
-    private readonly config: ISchedulerServiceConfig
+    private readonly config: ISchedulerServiceConfig,
+    private readonly repositories?: ISchedulerServiceRepositories
   ) {
     this.jwtSecret = new TextEncoder().encode(config.offlineIntentTokenSecret);
   }
@@ -70,6 +83,15 @@ export class SchedulerService {
       calibrationSelected: selected.filter((id) => data.calibrationCardIds.includes(id)).length,
       rationale: 'Dual-lane plan generated from retention/calibration pools and target lane mix',
     };
+
+    if (this.repositories !== undefined) {
+      await this.persistPlannedCards(
+        data.userId,
+        data.retentionCardIds,
+        data.calibrationCardIds,
+        selected
+      );
+    }
 
     await this.eventPublisher.publish({
       eventType: 'schedule.dual_lane.planned',
@@ -250,6 +272,71 @@ export class SchedulerService {
       preferenceAlignment: [],
       reasoning,
     };
+  }
+
+  private async persistPlannedCards(
+    userId: UserId,
+    retentionCardIds: CardId[],
+    calibrationCardIds: CardId[],
+    selectedCardIds: CardId[]
+  ): Promise<void> {
+    if (this.repositories === undefined) {
+      return;
+    }
+
+    const repositories = this.repositories;
+
+    const retentionSet = new Set<CardId>(retentionCardIds);
+    const calibrationSet = new Set<CardId>(calibrationCardIds);
+    const now = new Date();
+
+    await Promise.all(
+      selectedCardIds.map(async (cardId) => {
+        const lane: SchedulerLane = retentionSet.has(cardId)
+          ? 'retention'
+          : calibrationSet.has(cardId)
+            ? 'calibration'
+            : 'retention';
+
+        const existing = await repositories.schedulerCardRepository.findById(cardId);
+
+        if (existing === null) {
+          await repositories.schedulerCardRepository.create({
+            id: cardId,
+            userId,
+            lane,
+            stability: null,
+            difficultyParameter: null,
+            halfLife: null,
+            interval: 0,
+            nextReviewDate: now.toISOString(),
+            lastReviewedAt: null,
+            reviewCount: 0,
+            lapseCount: 0,
+            consecutiveCorrect: 0,
+            schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+            cardType: null,
+            difficulty: null,
+            knowledgeNodeIds: [],
+            state: 'new',
+            suspendedUntil: null,
+            suspendedReason: null,
+            version: 1,
+          });
+          return;
+        }
+
+        await repositories.schedulerCardRepository.update(
+          cardId,
+          {
+            lane,
+            nextReviewDate: now.toISOString(),
+            schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+          },
+          existing.version
+        );
+      })
+    );
   }
 }
 

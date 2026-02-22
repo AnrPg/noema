@@ -8,7 +8,7 @@
     "declarationMap": true,
     "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "generated/prisma/index.d.ts"],
   "exclude": ["node_modules", "dist", "tests"],
   "references": [
     { "path": "../../packages/types" },

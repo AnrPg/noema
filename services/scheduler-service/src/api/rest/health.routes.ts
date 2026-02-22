@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
+import type { PrismaClient } from '../../../generated/prisma/index.js';
 
 interface IHealthResponse {
   status: 'healthy' | 'unhealthy';
@@ -15,7 +16,7 @@ interface IHealthResponse {
   >;
 }
 
-export function registerHealthRoutes(fastify: FastifyInstance, redis: Redis): void {
+export function registerHealthRoutes(fastify: FastifyInstance, redis: Redis, prisma: PrismaClient): void {
   const startTime = Date.now();
 
   fastify.get<{ Reply: IHealthResponse }>('/health', {}, async (_request, reply) => {
@@ -31,13 +32,26 @@ export function registerHealthRoutes(fastify: FastifyInstance, redis: Redis): vo
       redisStatus = 'fail';
     }
 
+    let databaseStatus: 'pass' | 'fail' = 'pass';
+    let databaseLatency = 0;
+    try {
+      const dbStart = Date.now();
+      await prisma.$queryRaw`SELECT 1`;
+      databaseLatency = Date.now() - dbStart;
+    } catch {
+      databaseStatus = 'fail';
+    }
+
+    const overallStatus = redisStatus === 'fail' || databaseStatus === 'fail' ? 'unhealthy' : 'healthy';
+
     reply.send({
-      status: redisStatus === 'fail' ? 'unhealthy' : 'healthy',
+      status: overallStatus,
       timestamp: new Date().toISOString(),
       version: '0.1.0',
       uptime,
       checks: {
         redis: { status: redisStatus, latency: redisLatency },
+        database: { status: databaseStatus, latency: databaseLatency },
       },
     });
   });
@@ -49,6 +63,7 @@ export function registerHealthRoutes(fastify: FastifyInstance, redis: Redis): vo
   fastify.get('/health/ready', {}, async (_request, reply) => {
     try {
       await redis.ping();
+      await prisma.$queryRaw`SELECT 1`;
       reply.send({ status: 'ready' });
     } catch {
       reply.status(503).send({ status: 'not_ready' });
