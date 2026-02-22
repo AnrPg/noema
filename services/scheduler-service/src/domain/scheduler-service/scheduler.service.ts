@@ -3,22 +3,23 @@ import { jwtVerify, SignJWT } from 'jose';
 
 import type {
   AdaptiveCheckpointSignal,
+  CardId,
   CorrelationId,
-    IDualLanePlan,
-    IDualLanePlanInput,
-    IExecutionContext,
-    IOfflineIntentToken,
+  IDualLanePlan,
+  IDualLanePlanInput,
+  IExecutionContext,
+  IOfflineIntentToken,
   IOfflineIntentTokenClaims,
-    IOfflineIntentTokenInput,
+  IOfflineIntentTokenInput,
   ISchedulerLaneMix,
+  IVerifyOfflineIntentTokenResult,
   UserId,
-    IVerifyOfflineIntentTokenResult,
 } from '../../types/scheduler.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
-    DualLanePlanInputSchema,
-    OfflineIntentTokenInputSchema,
-    VerifyOfflineIntentTokenInputSchema,
+  DualLanePlanInputSchema,
+  OfflineIntentTokenInputSchema,
+  VerifyOfflineIntentTokenInputSchema,
 } from './scheduler.schemas.js';
 
 export interface IServiceResult<T> {
@@ -143,7 +144,10 @@ export class SchedulerService {
         token,
         expiresAt: claims.expiresAt,
       },
-      agentHints: this.defaultHints('persist_intent_token', 'Store token offline for later session replay'),
+      agentHints: this.defaultHints(
+        'persist_intent_token',
+        'Store token offline for later session replay'
+      ),
     };
   }
 
@@ -164,13 +168,13 @@ export class SchedulerService {
 
       const claims = payload as unknown as IOfflineIntentTokenClaims;
       const checkpointSignals =
-        ((claims.sessionBlueprint as { checkpointSignals?: AdaptiveCheckpointSignal[] })
-          .checkpointSignals ?? []);
+        (claims.sessionBlueprint as { checkpointSignals?: AdaptiveCheckpointSignal[] })
+          .checkpointSignals ?? [];
 
       return {
         data: {
           valid: true,
-          userId: claims.userId as UserId,
+          userId: claims.userId,
           expiresAt: claims.expiresAt,
           checkpointSignals,
         },
@@ -205,11 +209,11 @@ export class SchedulerService {
   }
 
   private selectByLaneMix(
-    retention: string[],
-    calibration: string[],
+    retention: CardId[],
+    calibration: CardId[],
     mix: ISchedulerLaneMix,
     maxCards: number
-  ): string[] {
+  ): CardId[] {
     const retentionTarget = Math.round(maxCards * mix.retention);
     const calibrationTarget = Math.max(0, maxCards - retentionTarget);
 
@@ -249,6 +253,9 @@ export class SchedulerService {
   }
 }
 
-export function buildExecutionContext(userId: UserId, correlationId: CorrelationId): IExecutionContext {
+export function buildExecutionContext(
+  userId: UserId,
+  correlationId: CorrelationId
+): IExecutionContext {
   return { userId, correlationId };
 }

@@ -2,9 +2,9 @@
  * @noema/scheduler-service - Scheduler Domain Types
  */
 
-export type UserId = string;
-export type CorrelationId = string;
-export type CardId = string;
+import type { CardId, CorrelationId, UserId } from '@noema/types';
+
+export type { CardId, CorrelationId, UserId };
 
 export type AdaptiveCheckpointSignal =
   | 'confidence_drift'

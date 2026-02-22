@@ -6,10 +6,7 @@ import {
   buildExecutionContext,
   type SchedulerService,
 } from '../../domain/scheduler-service/scheduler.service.js';
-
-interface IRequestWithUser extends FastifyRequest {
-  user?: { sub?: string };
-}
+import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 
 function metadata(request: FastifyRequest): IApiResponse<unknown>['metadata'] {
   const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
@@ -44,57 +41,77 @@ function handleError(error: unknown, request: FastifyRequest, reply: FastifyRepl
 export function registerSchedulerRoutes(
   fastify: FastifyInstance,
   schedulerService: SchedulerService,
-  authMiddleware: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
+  authMiddleware: ReturnType<typeof createAuthMiddleware>
 ): void {
   fastify.addHook('onRequest', (request) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
   });
 
-  fastify.post<{ Body: unknown }>(
-    '/v1/scheduler/dual-lane/plan',
-    { preHandler: authMiddleware },
-    async (request, reply) => {
-      try {
-        const req = request as IRequestWithUser;
-        const userId = (req.user?.sub ?? 'anonymous') as UserId;
-        const ctx = buildExecutionContext(userId, request.id as CorrelationId);
-        const result = await schedulerService.planDualLaneQueue(request.body, ctx);
-        reply.send(wrapResponse(request, result.data, result.agentHints));
-      } catch (error) {
-        handleError(error, request, reply);
-      }
+  const planDualLaneHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    try {
+      await authMiddleware(request, reply);
+      if (reply.sent) return;
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
+      const result = await schedulerService.planDualLaneQueue(request.body, ctx);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
     }
-  );
+  };
+
+  const issueOfflineIntentHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    try {
+      await authMiddleware(request, reply);
+      if (reply.sent) return;
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
+      const result = await schedulerService.issueOfflineIntentToken(request.body, ctx);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  const verifyOfflineIntentHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    try {
+      await authMiddleware(request, reply);
+      if (reply.sent) return;
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
+      const result = await schedulerService.verifyOfflineIntentToken(request.body, ctx);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  fastify.post<{ Body: unknown }>('/v1/scheduler/dual-lane/plan', {}, planDualLaneHandler);
+  fastify.post<{ Body: unknown }>('/v1/schedule/dual-lane-plan', {}, planDualLaneHandler);
 
   fastify.post<{ Body: unknown }>(
     '/v1/scheduler/offline-intent/issue',
-    { preHandler: authMiddleware },
-    async (request, reply) => {
-      try {
-        const req = request as IRequestWithUser;
-        const userId = (req.user?.sub ?? 'anonymous') as UserId;
-        const ctx = buildExecutionContext(userId, request.id as CorrelationId);
-        const result = await schedulerService.issueOfflineIntentToken(request.body, ctx);
-        reply.send(wrapResponse(request, result.data, result.agentHints));
-      } catch (error) {
-        handleError(error, request, reply);
-      }
-    }
+    {},
+    issueOfflineIntentHandler
   );
+  fastify.post<{ Body: unknown }>('/v1/offline-intents', {}, issueOfflineIntentHandler);
 
   fastify.post<{ Body: unknown }>(
     '/v1/scheduler/offline-intent/verify',
-    { preHandler: authMiddleware },
-    async (request, reply) => {
-      try {
-        const req = request as IRequestWithUser;
-        const userId = (req.user?.sub ?? 'anonymous') as UserId;
-        const ctx = buildExecutionContext(userId, request.id as CorrelationId);
-        const result = await schedulerService.verifyOfflineIntentToken(request.body, ctx);
-        reply.send(wrapResponse(request, result.data, result.agentHints));
-      } catch (error) {
-        handleError(error, request, reply);
-      }
-    }
+    {},
+    verifyOfflineIntentHandler
   );
+  fastify.post<{ Body: unknown }>('/v1/offline-intents/verify', {}, verifyOfflineIntentHandler);
 }

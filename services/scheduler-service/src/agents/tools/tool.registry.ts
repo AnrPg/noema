@@ -72,8 +72,19 @@ export class ToolRegistry {
 
 export function createToolRegistry(service: SchedulerService): ToolRegistry {
   const registry = new ToolRegistry();
-  registry.register(SCHEDULER_TOOL_DEFINITIONS[0]!, createPlanDualLaneHandler(service));
-  registry.register(SCHEDULER_TOOL_DEFINITIONS[1]!, createIssueOfflineIntentTokenHandler(service));
-  registry.register(SCHEDULER_TOOL_DEFINITIONS[2]!, createVerifyOfflineIntentTokenHandler(service));
+
+  const [planDefinition, issueDefinition, verifyDefinition] = SCHEDULER_TOOL_DEFINITIONS;
+
+  if (
+    planDefinition === undefined ||
+    issueDefinition === undefined ||
+    verifyDefinition === undefined
+  ) {
+    throw new Error('Scheduler tool definitions are incomplete');
+  }
+
+  registry.register(planDefinition, createPlanDualLaneHandler(service));
+  registry.register(issueDefinition, createIssueOfflineIntentTokenHandler(service));
+  registry.register(verifyDefinition, createVerifyOfflineIntentTokenHandler(service));
   return registry;
 }

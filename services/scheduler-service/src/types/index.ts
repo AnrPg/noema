@@ -1,1 +1,1 @@
-export * from './scheduler.types.js';
+export type * from './scheduler.types.js';

@@ -43,7 +43,7 @@ function hclip(h: number): number {
 /** A single feature: [name, value] pair — mirrors Python's (str, float) tuples. */
 export type Feature = [name: string, value: number];
 
-export interface HLRModelOptions {
+export interface IHLRModelOptions {
   initialWeights?: Record<string, number> | null;
   omitHTerm?: boolean;
   lrate?: number;
@@ -52,7 +52,7 @@ export interface HLRModelOptions {
   sigma?: number;
 }
 
-export interface PredictResult {
+export interface IPredictResult {
   recallProbability: number;
   halfLifeDays: number;
 }
@@ -78,7 +78,7 @@ export class HLRModel {
   private weights: Map<string, number>;
   private fcounts: Map<string, number>;
 
-  constructor(options: HLRModelOptions = {}) {
+  constructor(options: IHLRModelOptions = {}) {
     const {
       initialWeights = null,
       omitHTerm = false,
@@ -90,7 +90,7 @@ export class HLRModel {
 
     this.omitHTerm = omitHTerm;
     this.weights = new Map();
-    if (initialWeights !== null && initialWeights !== undefined) {
+    if (initialWeights !== null) {
       for (const [k, v] of Object.entries(initialWeights)) {
         this.weights.set(k, v);
       }
@@ -103,7 +103,7 @@ export class HLRModel {
   }
 
   /** Compute half-life from feature vector. */
-  halflife(features: Feature[], base: number = 2.0): number {
+  halflife(features: Feature[], base = 2.0): number {
     try {
       let dp = 0;
       for (const [k, xK] of features) {
@@ -123,11 +123,7 @@ export class HLRModel {
    * @param base - Logarithmic base for half-life computation.
    * @returns { recallProbability, halfLifeDays }
    */
-  predict(
-    features: Feature[],
-    deltaDays: number,
-    base: number = 2.0,
-  ): PredictResult {
+  predict(features: Feature[], deltaDays: number, base = 2.0): IPredictResult {
     const h = this.halflife(features, base);
     const p = 2.0 ** (-deltaDays / h);
     return { recallProbability: pclip(p), halfLifeDays: h };
@@ -145,16 +141,12 @@ export class HLRModel {
     features: Feature[],
     deltaDays: number,
     actualRecall: number,
-    actualHalfLife: number | null = null,
+    actualHalfLife: number | null = null
   ): void {
     const base = 2.0;
-    const { recallProbability: p, halfLifeDays: h } = this.predict(
-      features,
-      deltaDays,
-      base,
-    );
+    const { recallProbability: p, halfLifeDays: h } = this.predict(features, deltaDays, base);
 
-    if (actualHalfLife === null || actualHalfLife === undefined) {
+    if (actualHalfLife === null) {
       // Estimate half-life from actual recall and delta
       if (actualRecall > 0.0001 && deltaDays > 0) {
         actualHalfLife = hclip(-deltaDays / Math.log2(actualRecall));
@@ -163,30 +155,24 @@ export class HLRModel {
       }
     }
 
-    const dlpDw =
-      2.0 * (p - actualRecall) * (LN2 ** 2) * p * (deltaDays / h);
+    const dlpDw = 2.0 * (p - actualRecall) * LN2 ** 2 * p * (deltaDays / h);
     const dlhDw = 2.0 * (h - actualHalfLife) * LN2 * h;
 
     for (const [k, xK] of features) {
       const rate =
-        (1.0 / (1.0 + actualRecall)) *
-        this.lrate /
-        Math.sqrt(1 + (this.fcounts.get(k) ?? 0));
+        ((1.0 / (1.0 + actualRecall)) * this.lrate) / Math.sqrt(1 + (this.fcounts.get(k) ?? 0));
 
       // sl(p) update
       this.weights.set(k, (this.weights.get(k) ?? 0) - rate * dlpDw * xK);
       // sl(h) update
       if (!this.omitHTerm) {
-        this.weights.set(
-          k,
-          (this.weights.get(k) ?? 0) - rate * this.hlwt * dlhDw * xK,
-        );
+        this.weights.set(k, (this.weights.get(k) ?? 0) - rate * this.hlwt * dlhDw * xK);
       }
       // L2 regularization update
       this.weights.set(
         k,
         (this.weights.get(k) ?? 0) -
-          (rate * this.l2wt * (this.weights.get(k) ?? 0)) / this.sigma ** 2,
+          (rate * this.l2wt * (this.weights.get(k) ?? 0)) / this.sigma ** 2
       );
       // increment feature count for learning rate
       this.fcounts.set(k, (this.fcounts.get(k) ?? 0) + 1);
@@ -213,5 +199,4 @@ export class HLRModel {
 }
 
 // Re-export helpers for testing
-export { hclip, LN2, MAX_HALF_LIFE, MIN_HALF_LIFE, pclip };
-
+export { LN2, MAX_HALF_LIFE, MIN_HALF_LIFE, hclip, pclip };

@@ -1,9 +1,10 @@
 import type { CorrelationId, UserId } from '@noema/types';
 import type { SchedulerService } from '../../domain/scheduler-service/scheduler.service.js';
 import { buildExecutionContext } from '../../domain/scheduler-service/scheduler.service.js';
-import type { IToolDefinition, IToolResult } from './tool.types.js';
+import type { IExecutionContext } from '../../types/scheduler.types.js';
+import type { IToolDefinition, IToolResult, ToolHandler } from './tool.types.js';
 
-function toContext(userId: string, correlationId: string) {
+function toContext(userId: string, correlationId: string): IExecutionContext {
   return buildExecutionContext(userId as UserId, correlationId as CorrelationId);
 }
 
@@ -29,7 +30,7 @@ function errorResult(error: unknown): IToolResult {
   };
 }
 
-export function createPlanDualLaneHandler(service: SchedulerService) {
+export function createPlanDualLaneHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const ctx = toContext(userId, correlationId);
@@ -41,7 +42,7 @@ export function createPlanDualLaneHandler(service: SchedulerService) {
   };
 }
 
-export function createIssueOfflineIntentTokenHandler(service: SchedulerService) {
+export function createIssueOfflineIntentTokenHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const ctx = toContext(userId, correlationId);
@@ -53,7 +54,7 @@ export function createIssueOfflineIntentTokenHandler(service: SchedulerService) 
   };
 }
 
-export function createVerifyOfflineIntentTokenHandler(service: SchedulerService) {
+export function createVerifyOfflineIntentTokenHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const ctx = toContext(userId, correlationId);
