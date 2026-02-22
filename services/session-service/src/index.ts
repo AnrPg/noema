@@ -68,7 +68,7 @@ async function bootstrap(): Promise<void> {
   const sessionService = new SessionService(sessionRepository, eventPublisher, logger);
 
   // Create tool registry
-  const toolRegistry = createToolRegistry(sessionService, logger);
+  const toolRegistry = createToolRegistry(sessionService);
 
   // Create Fastify instance
   const fastify = Fastify({
@@ -86,15 +86,13 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-User-Id'],
   });
 
-  // Create auth middleware (optional — can be disabled with JWT_SECRET unset in dev)
-  const jwtSecret = process.env['JWT_SECRET'] || process.env['ACCESS_TOKEN_SECRET'];
-  const authMiddleware = jwtSecret
-    ? createAuthMiddleware({
-        jwtSecret,
-        issuer: process.env['JWT_ISSUER'] || 'noema.app',
-        audience: process.env['JWT_AUDIENCE'] || 'noema.app',
-      })
-    : undefined;
+  // Create auth middleware
+  const jwtSecret = process.env['JWT_SECRET'] || process.env['ACCESS_TOKEN_SECRET'] || '';
+  const authMiddleware = createAuthMiddleware({
+    jwtSecret,
+    issuer: process.env['JWT_ISSUER'] || 'noema.app',
+    audience: process.env['JWT_AUDIENCE'] || 'noema.app',
+  });
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
@@ -103,7 +101,7 @@ async function bootstrap(): Promise<void> {
     sessionService,
     authMiddleware
   );
-  await registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
+  registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {

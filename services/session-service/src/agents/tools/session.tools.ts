@@ -1,5 +1,5 @@
 /**
- * @noema/session-service - Session MCP Tools
+ * @noema/session-service - Session MCP Tool Handlers
  *
  * 5 MCP tools registered per AGENT_MCP_TOOL_REGISTRY.md:
  * - get-session-history (P2)
@@ -7,38 +7,105 @@
  * - get-attempt-history (P0)
  * - get-thinking-trace (P0) — DEFERRED: returns stub until Phase 3+
  * - record-dialogue-turn (P1) — placeholder for future dialogue tracking
+ *
+ * Each handler wraps a SessionService method and returns IToolResult.
  */
 
+import { createEmptyAgentHints } from '@noema/contracts';
 import type { CorrelationId, UserId } from '@noema/types';
-import type { SessionService } from '../../domain/session-service/session.service.js';
+import type {
+  IExecutionContext,
+  SessionService,
+} from '../../domain/session-service/session.service.js';
+import { DomainError } from '../../domain/session-service/errors/index.js';
 import type { SessionState } from '../../types/index.js';
-import type { IToolDefinition, IToolHandlerResult, ToolHandler } from './tool.types.js';
+import type { IToolDefinition, IToolResult } from './tool.types.js';
 
 // ============================================================================
-// Tool Handler Factories
+// Helper
 // ============================================================================
 
-function errorResult(error: unknown): IToolHandlerResult {
-  const message = error instanceof Error ? error.message : String(error);
-  return { success: false, data: null, error: message };
+function buildContext(userId: string, correlationId: string): IExecutionContext {
+  return {
+    userId: userId as UserId,
+    correlationId: correlationId as CorrelationId,
+  };
 }
 
+function errorResult(error: unknown): IToolResult {
+  if (error instanceof DomainError) {
+    return {
+      success: false,
+      error: { code: error.code, message: error.message, details: error.details },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 0.9,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [
+          {
+            type: 'accuracy',
+            severity: 'medium',
+            description: error.message,
+            probability: 1.0,
+            impact: 0.5,
+            mitigation: error.message,
+          },
+        ],
+        dependencies: [],
+        estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+        preferenceAlignment: [],
+        reasoning: `Tool failed: ${error.message}`,
+      },
+    };
+  }
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  return {
+    success: false,
+    error: { code: 'INTERNAL_ERROR', message },
+    agentHints: {
+      suggestedNextActions: [],
+      relatedResources: [],
+      confidence: 0.5,
+      sourceQuality: 'low',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+      preferenceAlignment: [],
+      reasoning: `Tool failed unexpectedly: ${message}`,
+    },
+  };
+}
+
+// ============================================================================
+// Tool Handlers
+// ============================================================================
+
 /**
- * get-session-history: Get session history for a user.
+ * get-session-history — Get session history for the current user.
+ * P2 tool used by agents to review session patterns.
  */
-function createGetSessionHistoryHandler(service: SessionService): ToolHandler {
-  return async (input, userId, correlationId) => {
+export function createGetSessionHistoryHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
-      const stateRaw = input['state'] as string | undefined;
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const stateRaw = body['state'] as string | undefined;
       const result = await service.listSessions(
         {
           ...(stateRaw !== undefined ? { state: stateRaw as SessionState } : {}),
         },
-        (input['limit'] as number) ?? 10,
-        (input['offset'] as number) ?? 0,
-        { userId: userId as UserId, correlationId: correlationId as CorrelationId },
+        (body['limit'] as number) ?? 10,
+        (body['offset'] as number) ?? 0,
+        ctx,
       );
-      return { success: true, data: result.data, error: null };
+      return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
     }
@@ -46,20 +113,24 @@ function createGetSessionHistoryHandler(service: SessionService): ToolHandler {
 }
 
 /**
- * record-attempt: Record a card review attempt within an active session.
+ * record-attempt — Record a card review attempt within an active session.
+ * P0 tool — the most critical MCP tool. Publishes attempt.recorded event.
  */
-function createRecordAttemptHandler(service: SessionService): ToolHandler {
-  return async (input, userId, correlationId) => {
+export function createRecordAttemptHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
-      const sessionId = input['sessionId'] as string;
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
       if (!sessionId) {
-        return { success: false, data: null, error: 'sessionId is required' };
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
       }
-      const result = await service.recordAttempt(sessionId, input, {
-        userId: userId as UserId,
-        correlationId: correlationId as CorrelationId,
-      });
-      return { success: true, data: result.data, error: null };
+      const result = await service.recordAttempt(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
     }
@@ -67,22 +138,29 @@ function createRecordAttemptHandler(service: SessionService): ToolHandler {
 }
 
 /**
- * get-attempt-history: Get attempt history for a session.
+ * get-attempt-history — Get attempt history for a session.
+ * P0 tool used by metacognition and strategy agents.
  */
-function createGetAttemptHistoryHandler(service: SessionService): ToolHandler {
-  return async (input, userId, correlationId) => {
+export function createGetAttemptHistoryHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
-      const sessionId = input['sessionId'] as string;
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
       if (!sessionId) {
-        return { success: false, data: null, error: 'sessionId is required' };
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
       }
       const result = await service.listAttempts(
         sessionId,
-        (input['limit'] as number) ?? 50,
-        (input['offset'] as number) ?? 0,
-        { userId: userId as UserId, correlationId: correlationId as CorrelationId },
+        (body['limit'] as number) ?? 50,
+        (body['offset'] as number) ?? 0,
+        ctx,
       );
-      return { success: true, data: result.data, error: null };
+      return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
     }
@@ -90,15 +168,16 @@ function createGetAttemptHistoryHandler(service: SessionService): ToolHandler {
 }
 
 /**
- * get-thinking-trace: DEFERRED to Phase 3+.
+ * get-thinking-trace — DEFERRED to Phase 3+.
  *
  * This tool will eventually return the 7-frame cognitive stack trace
  * for an attempt (Perception → Encoding → Retrieval → Evaluation →
  * Metacognition → Response → Scheduling). Currently returns a stub.
  */
-function createGetThinkingTraceHandler(_service: SessionService): ToolHandler {
-  return async (input, _userId, _correlationId) => {
-    const attemptId = input['attemptId'] as string;
+export function createGetThinkingTraceHandler(_service: SessionService) {
+  return async (input: unknown, _userId: string, _correlationId: string): Promise<IToolResult> => {
+    const body = input as Record<string, unknown>;
+    const attemptId = body['attemptId'] as string;
     return {
       success: true,
       data: {
@@ -110,19 +189,30 @@ function createGetThinkingTraceHandler(_service: SessionService): ToolHandler {
           'Metacognition → Response → Scheduling.',
         frames: [],
       },
-      error: null,
+      agentHints: {
+        ...createEmptyAgentHints(),
+        suggestedNextActions: [
+          {
+            action: 'get-attempt-history',
+            description: 'Use get-attempt-history for available attempt data until traces are implemented',
+            priority: 'medium',
+          },
+        ],
+        reasoning: 'Thinking traces are deferred to Phase 3+ when metacognition service is available.',
+      },
     };
   };
 }
 
 /**
- * record-dialogue-turn: Placeholder for future dialogue tracking.
+ * record-dialogue-turn — Placeholder for future dialogue tracking.
  *
  * Will track agent ↔ learner dialogue turns within a session.
  */
-function createRecordDialogueTurnHandler(_service: SessionService): ToolHandler {
-  return async (input, _userId, _correlationId) => {
-    const sessionId = input['sessionId'] as string;
+export function createRecordDialogueTurnHandler(_service: SessionService) {
+  return async (input: unknown, _userId: string, _correlationId: string): Promise<IToolResult> => {
+    const body = input as Record<string, unknown>;
+    const sessionId = body['sessionId'] as string;
     return {
       success: true,
       data: {
@@ -131,7 +221,10 @@ function createRecordDialogueTurnHandler(_service: SessionService): ToolHandler 
         message:
           'Dialogue turn recording is a Phase 2+ feature. Turn acknowledged but not persisted.',
       },
-      error: null,
+      agentHints: {
+        ...createEmptyAgentHints(),
+        reasoning: 'Dialogue turn acknowledged but not yet persisted. Feature planned for Phase 2+.',
+      },
     };
   };
 }
@@ -253,8 +346,13 @@ export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
 // Handler Map Factory
 // ============================================================================
 
-export function createSessionToolHandlers(service: SessionService): Map<string, ToolHandler> {
-  const handlers = new Map<string, ToolHandler>();
+export function createSessionToolHandlers(
+  service: SessionService
+): Map<string, (input: unknown, userId: string, correlationId: string) => Promise<IToolResult>> {
+  const handlers = new Map<
+    string,
+    (input: unknown, userId: string, correlationId: string) => Promise<IToolResult>
+  >();
   handlers.set('get-session-history', createGetSessionHistoryHandler(service));
   handlers.set('record-attempt', createRecordAttemptHandler(service));
   handlers.set('get-attempt-history', createGetAttemptHistoryHandler(service));

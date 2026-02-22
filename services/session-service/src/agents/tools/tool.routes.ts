@@ -1,59 +1,93 @@
 /**
- * @noema/session-service - Tool Routes
+ * @noema/session-service - MCP Tool Routes
  *
- * MCP tool discovery and execution endpoints.
+ * HTTP endpoints for MCP tool execution.
+ * Agents call these endpoints to invoke tools via the tool registry.
+ *
+ * Endpoints:
+ *   GET  /v1/tools          — List available tools (discovery)
+ *   POST /v1/tools/execute  — Execute a tool by name
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type { ToolRegistry } from './tool.registry.js';
 
-export async function registerToolRoutes(
+// ============================================================================
+// Route Plugin
+// ============================================================================
+
+export function registerToolRoutes(
   fastify: FastifyInstance,
   toolRegistry: ToolRegistry,
-  authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
-): Promise<void> {
-  if (authMiddleware) {
-    fastify.addHook('preHandler', authMiddleware);
+  authMiddleware: ReturnType<typeof createAuthMiddleware>,
+): void {
+  // Attach startTime
+  fastify.addHook('onRequest', (request) => {
+    (request as FastifyRequest & { startTime: number }).startTime = Date.now();
+  });
+
+  function buildMetadata(request: FastifyRequest): Record<string, unknown> {
+    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
+    return {
+      requestId: request.id,
+      timestamp: new Date().toISOString(),
+      serviceName: 'session-service',
+      serviceVersion: '0.1.0',
+      executionTime: Date.now() - startTime,
+    };
   }
 
-  // GET /v1/tools — Tool discovery
+  // ============================================================================
+  // GET /v1/tools — List available tools
+  // ============================================================================
+
   fastify.get(
     '/v1/tools',
-    {
-    },
-    async (_request, reply) => {
+    { preHandler: authMiddleware },
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
       const definitions = toolRegistry.listDefinitions();
-      reply.send({ data: definitions });
-    }
+
+      await reply.status(200).send({
+        data: {
+          tools: definitions,
+          count: definitions.length,
+        },
+        metadata: buildMetadata(request),
+      });
+    },
   );
 
+  // ============================================================================
   // POST /v1/tools/execute — Execute a tool
-  fastify.post<{
-    Body: { tool: string; input: Record<string, unknown> };
-  }>(
+  // ============================================================================
+
+  fastify.post(
     '/v1/tools/execute',
-    {
-    },
-    async (request, reply) => {
-      const { tool, input } = request.body;
-      if (!tool) {
-        reply
-          .status(400)
-          .send({ error: { code: 'VALIDATION_ERROR', message: 'tool is required' } });
+    { preHandler: authMiddleware },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const body = request.body as { tool: string; input?: unknown } | undefined;
+
+      if (body?.tool === undefined || body.tool === '') {
+        await reply.status(400).send({
+          error: { code: 'MISSING_TOOL_NAME', message: 'Request body must include "tool" field' },
+          metadata: buildMetadata(request),
+        });
         return;
       }
 
       const user = request.user as { sub?: string } | undefined;
-      const userId = user?.sub ?? 'anonymous';
+      const userId = user?.sub ?? '';
+      const correlationId = request.id;
 
-      const result = await toolRegistry.execute(tool, input ?? {}, userId, request.id);
+      const result = await toolRegistry.execute(body.tool, body.input ?? {}, userId, correlationId);
 
-      if (!result.success) {
-        reply.status(422).send({ error: { code: 'TOOL_EXECUTION_ERROR', message: result.error } });
-        return;
-      }
+      const statusCode = result.success ? 200 : result.error?.code === 'TOOL_NOT_FOUND' ? 404 : 422;
 
-      reply.send({ data: result });
-    }
+      await reply.status(statusCode).send({
+        data: result,
+        metadata: buildMetadata(request),
+      });
+    },
   );
 }

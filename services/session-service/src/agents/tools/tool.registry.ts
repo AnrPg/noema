@@ -1,98 +1,145 @@
 /**
- * @noema/session-service - Tool Registry
+ * @noema/session-service - MCP Tool Registry
  *
- * Central registry for MCP tool discovery and execution.
- * Wraps handler results into full IToolResult with agentHints.
+ * Central registry for all MCP tools exposed by the session-service.
+ * Initializes handler functions bound to service instances.
+ *
+ * Usage in bootstrap:
+ *   const registry = createToolRegistry(sessionService);
+ *   await registerToolRoutes(fastify, registry, authMiddleware);
  */
 
-import { createEmptyAgentHints } from '@noema/contracts';
-import type { Logger } from 'pino';
 import type { SessionService } from '../../domain/session-service/session.service.js';
-import { SESSION_TOOL_DEFINITIONS, createSessionToolHandlers } from './session.tools.js';
-import type { IToolDefinition, IToolResult, ToolHandler } from './tool.types.js';
+import {
+  SESSION_TOOL_DEFINITIONS,
+  createGetAttemptHistoryHandler,
+  createGetSessionHistoryHandler,
+  createGetThinkingTraceHandler,
+  createRecordAttemptHandler,
+  createRecordDialogueTurnHandler,
+} from './session.tools.js';
+import type { IToolDefinition, IToolResult, IToolResultMetadata, ToolHandler } from './tool.types.js';
 
+// ============================================================================
+// Tool Registry
+// ============================================================================
+
+/**
+ * Registered tool entry.
+ */
+export interface IRegisteredTool {
+  definition: IToolDefinition;
+  handler: ToolHandler;
+}
+
+/**
+ * Tool registry — maps tool names to their handlers.
+ */
 export class ToolRegistry {
-  private readonly handlers = new Map<string, ToolHandler>();
-  private readonly definitions: IToolDefinition[] = [];
-  private readonly logger: Logger;
-
-  constructor(logger: Logger) {
-    this.logger = logger.child({ component: 'ToolRegistry' });
-  }
+  private readonly tools = new Map<string, IRegisteredTool>();
 
   register(definition: IToolDefinition, handler: ToolHandler): void {
-    this.definitions.push(definition);
-    this.handlers.set(definition.name, handler);
-    this.logger.debug({ tool: definition.name }, 'Tool registered');
+    this.tools.set(definition.name, { definition, handler });
   }
 
-  get(name: string): ToolHandler | undefined {
-    return this.handlers.get(name);
+  get(name: string): IRegisteredTool | undefined {
+    return this.tools.get(name);
   }
 
   listDefinitions(): IToolDefinition[] {
-    return [...this.definitions];
+    return [...this.tools.values()].map((t) => t.definition);
   }
 
   async execute(
     name: string,
-    input: Record<string, unknown>,
+    input: unknown,
     userId: string,
     correlationId: string,
   ): Promise<IToolResult> {
-    const handler = this.handlers.get(name);
-    if (!handler) {
+    const tool = this.tools.get(name);
+    if (!tool) {
       return {
         success: false,
-        error: { code: 'TOOL_NOT_FOUND', message: `Tool '${name}' not found` },
-        agentHints: createEmptyAgentHints(),
+        error: { code: 'TOOL_NOT_FOUND', message: `Unknown tool: ${name}` },
+        agentHints: {
+          suggestedNextActions: [
+            {
+              action: 'list_tools',
+              description: 'List available tools to find the correct name',
+              priority: 'high',
+              category: 'exploration',
+            },
+          ],
+          relatedResources: [],
+          confidence: 1.0,
+          sourceQuality: 'high',
+          validityPeriod: 'long',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+          preferenceAlignment: [],
+          reasoning: `Tool "${name}" not found — available: ${[...this.tools.keys()].join(', ')}`,
+        },
+        metadata: {
+          toolVersion: '0.1.0',
+          timestamp: new Date().toISOString(),
+          executionTime: 0,
+          serviceVersion: '0.1.0',
+          correlationId,
+        },
       };
     }
 
-    this.logger.info({ tool: name, userId }, 'Executing tool');
-    const start = Date.now();
+    const startTime = Date.now();
+    const result = await tool.handler(input, userId, correlationId);
 
-    try {
-      const handlerResult = await handler(input, userId, correlationId);
-      this.logger.info(
-        { tool: name, durationMs: Date.now() - start, success: handlerResult.success },
-        'Tool executed',
-      );
+    const metadata: IToolResultMetadata = {
+      toolVersion: '0.1.0',
+      timestamp: new Date().toISOString(),
+      executionTime: Date.now() - startTime,
+      serviceVersion: '0.1.0',
+      correlationId,
+    };
+    result.metadata = metadata;
 
-      // Wrap handler result into full IToolResult
-      return {
-        success: handlerResult.success,
-        data: handlerResult.data,
-        agentHints: createEmptyAgentHints(),
-        ...(handlerResult.error != null && {
-          error: { code: 'TOOL_ERROR', message: handlerResult.error },
-        }),
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error({ tool: name, error: message }, 'Tool execution failed');
-      return {
-        success: false,
-        error: { code: 'TOOL_EXECUTION_ERROR', message },
-        agentHints: createEmptyAgentHints(),
-      };
-    }
+    return result;
+  }
+
+  get size(): number {
+    return this.tools.size;
   }
 }
 
-/**
- * Create and populate a tool registry with all session tools.
- */
-export function createToolRegistry(sessionService: SessionService, logger: Logger): ToolRegistry {
-  const registry = new ToolRegistry(logger);
-  const handlers = createSessionToolHandlers(sessionService);
+// ============================================================================
+// Factory
+// ============================================================================
 
-  for (const def of SESSION_TOOL_DEFINITIONS) {
-    const handler = handlers.get(def.name);
-    if (handler) {
-      registry.register(def, handler);
-    }
+function getDefinition(index: number): IToolDefinition {
+  const def = SESSION_TOOL_DEFINITIONS[index];
+  if (def === undefined) {
+    throw new Error(`Missing tool definition at index ${String(index)}`);
   }
+  return def;
+}
+
+/**
+ * Create a tool registry bound to the given service instances.
+ */
+export function createToolRegistry(sessionService: SessionService): ToolRegistry {
+  const registry = new ToolRegistry();
+
+  // P0 tools
+  registry.register(getDefinition(1), createRecordAttemptHandler(sessionService));
+  registry.register(getDefinition(2), createGetAttemptHistoryHandler(sessionService));
+  registry.register(getDefinition(3), createGetThinkingTraceHandler(sessionService));
+
+  // P1 tools
+  registry.register(getDefinition(4), createRecordDialogueTurnHandler(sessionService));
+
+  // P2 tools
+  registry.register(getDefinition(0), createGetSessionHistoryHandler(sessionService));
 
   return registry;
 }
