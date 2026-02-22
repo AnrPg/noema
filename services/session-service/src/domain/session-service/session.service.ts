@@ -51,11 +51,15 @@ import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 
 import type {
+  AdaptiveCheckpointSignal,
   IAttempt,
+  IEvaluateAdaptiveCheckpointInput,
+  IEvaluateAdaptiveCheckpointResult,
   ISession,
   ISessionFilters,
   ISessionQueueItem,
   ISessionStats,
+  IValidateSessionBlueprintResult,
   SessionState,
 } from '../../types/index.js';
 import { createEmptyStats, SessionState as States } from '../../types/index.js';
@@ -71,12 +75,14 @@ import {
 import type { ISessionRepository } from './session.repository.js';
 import {
   ChangeTeachingInputSchema,
+  EvaluateAdaptiveCheckpointInputSchema,
   InjectQueueInputSchema,
   RecordAttemptInputSchema,
   RemoveQueueInputSchema,
   RequestHintInputSchema,
   StartSessionInputSchema,
   UpdateStrategyInputSchema,
+  ValidateSessionBlueprintInputSchema,
 } from './session.schemas.js';
 
 // ============================================================================
@@ -163,6 +169,18 @@ export class SessionService {
       throw new ValidationError('Invalid start session input', parsed.error.flatten().fieldErrors);
     }
     const data = parsed.data;
+
+    if (data.blueprint !== undefined) {
+      const consistency = this.validateBlueprintConsistency(
+        data.blueprint.initialCardIds,
+        data.initialCardIds
+      );
+      if (!consistency.valid) {
+        throw new ValidationError('Invalid session blueprint', {
+          blueprint: consistency.errors,
+        });
+      }
+    }
 
     // Check for existing active session
     const existing = await this.repository.findActiveSessionForUser(ctx.userId);
@@ -256,6 +274,136 @@ export class SessionService {
           { action: 'get_queue', description: 'Retrieve the session queue' },
         ],
         `Session started with ${data.initialCardIds.length} cards in ${data.learningMode} mode`
+      ),
+    };
+  }
+
+  async validateSessionBlueprint(
+    input: unknown,
+    _ctx: IExecutionContext
+  ): Promise<IServiceResult<IValidateSessionBlueprintResult>> {
+    const parsed = ValidateSessionBlueprintInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid session blueprint input', parsed.error.flatten().fieldErrors);
+    }
+
+    const { blueprint } = parsed.data;
+    const normalizedSignals = [...new Set(blueprint.checkpointSignals)] as AdaptiveCheckpointSignal[];
+    const laneSum = blueprint.laneMix.retention + blueprint.laneMix.calibration;
+    const errors: string[] = [];
+
+    if (Math.abs(laneSum - 1) > 0.0001) {
+      errors.push('laneMix.retention + laneMix.calibration must equal 1.0');
+    }
+
+    return {
+      data: {
+        valid: errors.length === 0,
+        errors,
+        normalizedCheckpointSignals: normalizedSignals,
+      },
+      agentHints: buildHints(
+        [
+          {
+            action: errors.length === 0 ? 'start_session' : 'fix_blueprint',
+            description:
+              errors.length === 0
+                ? 'Blueprint is valid and can be used to start session'
+                : 'Fix invalid blueprint fields before starting session',
+            priority: errors.length === 0 ? 'high' : 'critical',
+          },
+        ],
+        errors.length === 0
+          ? 'Blueprint validation passed'
+          : `Blueprint validation failed with ${errors.length} error(s)`
+      ),
+    };
+  }
+
+  async evaluateAdaptiveCheckpoint(
+    sessionId: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IEvaluateAdaptiveCheckpointResult>> {
+    const session = await this.getAuthorizedSession(sessionId, ctx);
+    this.assertState(session, States.ACTIVE, 'evaluate checkpoint');
+
+    const parsed = EvaluateAdaptiveCheckpointInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid adaptive checkpoint input',
+        parsed.error.flatten().fieldErrors
+      );
+    }
+
+    const data = parsed.data as IEvaluateAdaptiveCheckpointInput;
+    const directives: IEvaluateAdaptiveCheckpointResult['directives'] = [];
+
+    if (data.trigger === 'error_cascade' && (data.recentIncorrectStreak ?? 0) >= 2) {
+      directives.push({
+        action: 'increase_support',
+        reason: 'Incorrect streak indicates immediate support escalation',
+        priority: 'high',
+      });
+    }
+
+    if (
+      data.trigger === 'latency_spike' &&
+      data.lastAttemptResponseTimeMs !== undefined &&
+      data.rollingAverageResponseTimeMs !== undefined &&
+      data.lastAttemptResponseTimeMs > data.rollingAverageResponseTimeMs * 1.6
+    ) {
+      directives.push({
+        action: 'slowdown',
+        reason: 'Response latency spike indicates cognitive overload risk',
+        priority: 'medium',
+      });
+    }
+
+    if (data.trigger === 'confidence_drift' && Math.abs(data.confidenceDrift ?? 0) >= 0.25) {
+      directives.push({
+        action: 'reduce_calibration_lane',
+        reason: 'High confidence drift needs temporary lane rebalance',
+        priority: 'high',
+      });
+    }
+
+    if (directives.length === 0) {
+      directives.push({
+        action: 'continue',
+        reason: 'No adaptive intervention required for current checkpoint signal',
+        priority: 'low',
+      });
+    }
+
+    await this.eventPublisher.publish({
+      eventType: 'session.checkpoint.evaluated',
+      aggregateType: 'Session',
+      aggregateId: session.id,
+      payload: {
+        trigger: data.trigger,
+        shouldAdapt: directives.some((d) => d.action !== 'continue'),
+        directives,
+      },
+      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+    });
+
+    return {
+      data: {
+        shouldAdapt: directives.some((d) => d.action !== 'continue'),
+        directives,
+        reason: directives.map((d) => d.reason).join('; '),
+      },
+      agentHints: buildHints(
+        directives.map((directive) => ({
+          action: directive.action,
+          description: directive.reason,
+          priority:
+            directive.priority === 'critical' || directive.priority === 'high'
+              ? 'high'
+              : 'medium',
+        })),
+        `Checkpoint evaluated for trigger ${data.trigger}`
       ),
     };
   }
@@ -1127,6 +1275,26 @@ export class SessionService {
     if (session.state !== States.ACTIVE && session.state !== States.PAUSED) {
       throw new InvalidSessionStateError(session.state, action);
     }
+  }
+
+  private validateBlueprintConsistency(
+    blueprintCardIds: string[],
+    requestedCardIds: string[]
+  ): { valid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    if (blueprintCardIds.length !== requestedCardIds.length) {
+      errors.push('Blueprint card list length does not match initialCardIds length');
+    }
+
+    const requestedSet = new Set(requestedCardIds);
+    for (const cardId of blueprintCardIds) {
+      if (!requestedSet.has(cardId)) {
+        errors.push(`Blueprint card ${cardId} not present in initialCardIds`);
+        break;
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
   }
 
   /**

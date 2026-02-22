@@ -231,6 +231,30 @@ export interface IUserSettings {
 
   /** Analytics and telemetry consent */
   analyticsEnabled: boolean;
+
+  /** Cognitive control policy snapshot used by session/content/scheduler orchestration */
+  cognitivePolicy: ICognitivePolicySettings;
+}
+
+export interface ICognitivePolicySettings {
+  pacingPolicy: {
+    targetSecondsPerCard: number;
+    hardCapSecondsPerCard: number;
+    slowdownOnError: boolean;
+  };
+  hintPolicy: {
+    maxHintsPerCard: number;
+    progressiveHintsOnly: boolean;
+    allowAnswerReveal: boolean;
+  };
+  commitPolicy: {
+    requireConfidenceBeforeCommit: boolean;
+    requireVerificationGate: boolean;
+  };
+  reflectionPolicy: {
+    postAttemptReflection: boolean;
+    postSessionReflection: boolean;
+  };
 }
 
 // ============================================================================
@@ -350,6 +374,7 @@ export interface IUpdateSettingsInput {
   emailAchievements?: boolean;
   pushNotificationsEnabled?: boolean;
   analyticsEnabled?: boolean;
+  cognitivePolicy?: Partial<ICognitivePolicySettings>;
 }
 
 /**

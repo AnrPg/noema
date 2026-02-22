@@ -18,3 +18,6 @@ export * from './responses.js';
 
 // Health check contracts (universal across all services)
 export * from './health.js';
+
+// Session blueprint / dual-lane / offline intent contracts
+export * from './session-blueprint.js';

@@ -204,6 +204,45 @@ export const SessionSeedInputSchema = z.object({
   strategy: z.enum(['query_order', 'randomized', 'difficulty_balanced']).default('query_order'),
   maxCards: z.number().int().min(1).max(200).default(40),
   includeCardSummaries: z.boolean().default(false),
+  strategyContext: z
+    .object({
+      loadoutArchetype: z.string().optional(),
+      forceLevel: z.string().optional(),
+      targetLaneMix: z
+        .object({
+          retention: z.number().min(0).max(1),
+          calibration: z.number().min(0).max(1),
+        })
+        .optional(),
+      checkpointSignals: z
+        .array(
+          z.enum(['confidence_drift', 'latency_spike', 'error_cascade', 'streak_break', 'manual'])
+        )
+        .optional(),
+    })
+    .optional(),
+  policySnapshot: z
+    .object({
+      pacingPolicy: z.object({
+        targetSecondsPerCard: z.number().int().min(5).max(300),
+        hardCapSecondsPerCard: z.number().int().min(10).max(600),
+        slowdownOnError: z.boolean(),
+      }),
+      hintPolicy: z.object({
+        maxHintsPerCard: z.number().int().min(0).max(5),
+        progressiveHintsOnly: z.boolean(),
+        allowAnswerReveal: z.boolean(),
+      }),
+      commitPolicy: z.object({
+        requireConfidenceBeforeCommit: z.boolean(),
+        requireVerificationGate: z.boolean(),
+      }),
+      reflectionPolicy: z.object({
+        postAttemptReflection: z.boolean(),
+        postSessionReflection: z.boolean(),
+      }),
+    })
+    .optional(),
 });
 
 // ============================================================================

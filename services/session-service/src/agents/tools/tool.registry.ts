@@ -11,12 +11,14 @@
 
 import type { SessionService } from '../../domain/session-service/session.service.js';
 import {
-  SESSION_TOOL_DEFINITIONS,
+  createEvaluateSessionCheckpointHandler,
   createGetAttemptHistoryHandler,
   createGetSessionHistoryHandler,
   createGetThinkingTraceHandler,
   createRecordAttemptHandler,
   createRecordDialogueTurnHandler,
+  createValidateSessionBlueprintHandler,
+  SESSION_TOOL_DEFINITIONS,
 } from './session.tools.js';
 import type { IToolDefinition, IToolResult, IToolResultMetadata, ToolHandler } from './tool.types.js';
 
@@ -134,6 +136,8 @@ export function createToolRegistry(sessionService: SessionService): ToolRegistry
   registry.register(getDefinition(1), createRecordAttemptHandler(sessionService));
   registry.register(getDefinition(2), createGetAttemptHistoryHandler(sessionService));
   registry.register(getDefinition(3), createGetThinkingTraceHandler(sessionService));
+  registry.register(getDefinition(5), createValidateSessionBlueprintHandler(sessionService));
+  registry.register(getDefinition(6), createEvaluateSessionCheckpointHandler(sessionService));
 
   // P1 tools
   registry.register(getDefinition(4), createRecordDialogueTurnHandler(sessionService));

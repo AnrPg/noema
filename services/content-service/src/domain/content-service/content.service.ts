@@ -642,6 +642,14 @@ export class ContentService {
       validated.maxCards
     );
     const initialCardIds = selectedCards.map((card) => card.id);
+    const laneMixApplied = validated.strategyContext?.targetLaneMix ?? {
+      retention: 0.8,
+      calibration: 0.2,
+    };
+    const checkpointRecommendations = validated.strategyContext?.checkpointSignals ?? [
+      'confidence_drift',
+      'latency_spike',
+    ];
 
     return {
       data: {
@@ -649,9 +657,16 @@ export class ContentService {
         selectedCount: initialCardIds.length,
         totalMatched: result.total ?? 0,
         strategy: validated.strategy,
+        seedVersion: 'v2',
         recommendedSessionConfig: {
           sessionTimeoutHours: 24,
         },
+        laneMixApplied,
+        checkpointRecommendations,
+        selectionRationale:
+          validated.strategy === 'difficulty_balanced'
+            ? 'Balanced difficulty distribution with policy-aware lane targeting'
+            : `Selected using ${validated.strategy} strategy`,
         ...(validated.includeCardSummaries ? { selectedCards } : {}),
       },
       agentHints: {

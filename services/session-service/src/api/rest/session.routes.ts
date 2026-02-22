@@ -187,6 +187,21 @@ export function registerSessionRoutes(
     }
   );
 
+  // POST /v1/sessions/blueprint/validate — Validate agent-orchestrated blueprint
+  fastify.post<{ Body: unknown }>(
+    '/v1/sessions/blueprint/validate',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.validateSessionBlueprint(request.body, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
   // GET /v1/sessions — List sessions
   fastify.get<{ Querystring: Record<string, string> }>(
     '/v1/sessions',
@@ -198,7 +213,9 @@ export function registerSessionRoutes(
         const result = await sessionService.listSessions(
           {
             ...(query.state !== undefined ? { state: query.state as SessionState } : {}),
-            ...(query.learningMode !== undefined ? { learningMode: query.learningMode as LearningMode } : {}),
+            ...(query.learningMode !== undefined
+              ? { learningMode: query.learningMode as LearningMode }
+              : {}),
           },
           query.limit,
           query.offset,
@@ -344,26 +361,22 @@ export function registerSessionRoutes(
   fastify.post<{
     Params: AttemptParams & { cardId?: string };
     Body: unknown;
-  }>(
-    '/v1/sessions/:sessionId/hint',
-    { preHandler: authMiddleware },
-    async (request, reply) => {
-      try {
-        const ctx = buildContext(request);
-        const body = request.body as { attemptId?: string; cardId?: string };
-        const result = await sessionService.requestHint(
-          request.params.sessionId,
-          body.attemptId ?? '',
-          body.cardId ?? '',
-          request.body,
-          ctx
-        );
-        reply.send(wrapResponse(result.data, result.agentHints, request));
-      } catch (error) {
-        handleError(error, request, reply);
-      }
+  }>('/v1/sessions/:sessionId/hint', { preHandler: authMiddleware }, async (request, reply) => {
+    try {
+      const ctx = buildContext(request);
+      const body = request.body as { attemptId?: string; cardId?: string };
+      const result = await sessionService.requestHint(
+        request.params.sessionId,
+        body.attemptId ?? '',
+        body.cardId ?? '',
+        request.body,
+        ctx
+      );
+      reply.send(wrapResponse(result.data, result.agentHints, request));
+    } catch (error) {
+      handleError(error, request, reply);
     }
-  );
+  });
 
   // ==========================================================================
   // Queue Management
@@ -411,6 +424,25 @@ export function registerSessionRoutes(
       try {
         const ctx = buildContext(request);
         const result = await sessionService.removeQueueItem(
+          request.params.sessionId,
+          request.body,
+          ctx
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // POST /v1/sessions/:sessionId/checkpoints/evaluate — Evaluate adaptive checkpoint signal
+  fastify.post<{ Params: SessionIdParams; Body: unknown }>(
+    '/v1/sessions/:sessionId/checkpoints/evaluate',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.evaluateAdaptiveCheckpoint(
           request.params.sessionId,
           request.body,
           ctx

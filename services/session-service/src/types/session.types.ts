@@ -27,6 +27,63 @@ import type {
   UserId,
 } from '@noema/types';
 
+export interface ISchedulerLaneMix {
+  retention: number;
+  calibration: number;
+}
+
+export type AdaptiveCheckpointSignal =
+  | 'confidence_drift'
+  | 'latency_spike'
+  | 'error_cascade'
+  | 'streak_break'
+  | 'manual';
+
+export interface ICognitivePolicySnapshot {
+  pacingPolicy: {
+    targetSecondsPerCard: number;
+    hardCapSecondsPerCard: number;
+    slowdownOnError: boolean;
+  };
+  hintPolicy: {
+    maxHintsPerCard: number;
+    progressiveHintsOnly: boolean;
+    allowAnswerReveal: boolean;
+  };
+  commitPolicy: {
+    requireConfidenceBeforeCommit: boolean;
+    requireVerificationGate: boolean;
+  };
+  reflectionPolicy: {
+    postAttemptReflection: boolean;
+    postSessionReflection: boolean;
+  };
+}
+
+export interface ISessionBlueprint {
+  blueprintVersion: 'v1';
+  generatedAt: string;
+  generatedBy: 'agent';
+  deckQueryId: string;
+  initialCardIds: string[];
+  laneMix: ISchedulerLaneMix;
+  checkpointSignals: AdaptiveCheckpointSignal[];
+  policySnapshot: ICognitivePolicySnapshot;
+  assumptions: string[];
+}
+
+export interface IAdaptiveCheckpointDirective {
+  action:
+    | 'rebalance_queue'
+    | 'slowdown'
+    | 'increase_support'
+    | 'reduce_calibration_lane'
+    | 'switch_teaching_approach'
+    | 'continue';
+  reason: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+}
+
 // ============================================================================
 // Session State Enum (service-internal FSM state)
 // ============================================================================
@@ -216,6 +273,32 @@ export interface IStartSessionInput {
   loadoutArchetype?: LoadoutArchetype;
   config: ISessionConfig;
   initialCardIds: CardId[];
+  blueprint?: ISessionBlueprint;
+  offlineIntentToken?: string;
+}
+
+export interface IValidateSessionBlueprintInput {
+  blueprint: ISessionBlueprint;
+}
+
+export interface IValidateSessionBlueprintResult {
+  valid: boolean;
+  errors: string[];
+  normalizedCheckpointSignals: AdaptiveCheckpointSignal[];
+}
+
+export interface IEvaluateAdaptiveCheckpointInput {
+  trigger: AdaptiveCheckpointSignal;
+  lastAttemptResponseTimeMs?: number;
+  rollingAverageResponseTimeMs?: number;
+  recentIncorrectStreak?: number;
+  confidenceDrift?: number;
+}
+
+export interface IEvaluateAdaptiveCheckpointResult {
+  shouldAdapt: boolean;
+  directives: IAdaptiveCheckpointDirective[];
+  reason: string;
 }
 
 export interface IRecordAttemptInput {

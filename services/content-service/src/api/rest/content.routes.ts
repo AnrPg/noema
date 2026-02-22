@@ -425,6 +425,34 @@ export function registerContentRoutes(
             },
             maxCards: { type: 'number', minimum: 1, maximum: 200 },
             includeCardSummaries: { type: 'boolean' },
+            strategyContext: {
+              type: 'object',
+              properties: {
+                loadoutArchetype: { type: 'string' },
+                forceLevel: { type: 'string' },
+                targetLaneMix: {
+                  type: 'object',
+                  properties: {
+                    retention: { type: 'number', minimum: 0, maximum: 1 },
+                    calibration: { type: 'number', minimum: 0, maximum: 1 },
+                  },
+                },
+                checkpointSignals: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    enum: [
+                      'confidence_drift',
+                      'latency_spike',
+                      'error_cascade',
+                      'streak_break',
+                      'manual',
+                    ],
+                  },
+                },
+              },
+            },
+            policySnapshot: { type: 'object' },
           },
         },
       },

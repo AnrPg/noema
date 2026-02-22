@@ -25,6 +25,39 @@ import type {
   UserId,
 } from '@noema/types';
 
+export interface ICognitivePolicySnapshot {
+  pacingPolicy: {
+    targetSecondsPerCard: number;
+    hardCapSecondsPerCard: number;
+    slowdownOnError: boolean;
+  };
+  hintPolicy: {
+    maxHintsPerCard: number;
+    progressiveHintsOnly: boolean;
+    allowAnswerReveal: boolean;
+  };
+  commitPolicy: {
+    requireConfidenceBeforeCommit: boolean;
+    requireVerificationGate: boolean;
+  };
+  reflectionPolicy: {
+    postAttemptReflection: boolean;
+    postSessionReflection: boolean;
+  };
+}
+
+export interface ISchedulerLaneMix {
+  retention: number;
+  calibration: number;
+}
+
+export type AdaptiveCheckpointSignal =
+  | 'confidence_drift'
+  | 'latency_spike'
+  | 'error_cascade'
+  | 'streak_break'
+  | 'manual';
+
 // ============================================================================
 // Card Entity
 // ============================================================================
@@ -243,6 +276,13 @@ export interface ISessionSeedInput {
   strategy?: 'query_order' | 'randomized' | 'difficulty_balanced';
   maxCards?: number;
   includeCardSummaries?: boolean;
+  strategyContext?: {
+    loadoutArchetype?: string;
+    forceLevel?: string;
+    targetLaneMix?: ISchedulerLaneMix;
+    checkpointSignals?: AdaptiveCheckpointSignal[];
+  };
+  policySnapshot?: ICognitivePolicySnapshot;
 }
 
 /**
@@ -253,9 +293,13 @@ export interface ISessionSeed {
   selectedCount: number;
   totalMatched: number;
   strategy: 'query_order' | 'randomized' | 'difficulty_balanced';
+  seedVersion: 'v2';
   recommendedSessionConfig: {
     sessionTimeoutHours: number;
   };
+  laneMixApplied: ISchedulerLaneMix;
+  checkpointRecommendations: AdaptiveCheckpointSignal[];
+  selectionRationale: string;
   selectedCards?: ICardSummary[];
 }
 

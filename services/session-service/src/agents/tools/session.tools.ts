@@ -13,11 +13,11 @@
 
 import { createEmptyAgentHints } from '@noema/contracts';
 import type { CorrelationId, UserId } from '@noema/types';
+import { DomainError } from '../../domain/session-service/errors/index.js';
 import type {
   IExecutionContext,
   SessionService,
 } from '../../domain/session-service/session.service.js';
-import { DomainError } from '../../domain/session-service/errors/index.js';
 import type { SessionState } from '../../types/index.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
@@ -229,6 +229,39 @@ export function createRecordDialogueTurnHandler(_service: SessionService) {
   };
 }
 
+export function createValidateSessionBlueprintHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const result = await service.validateSessionBlueprint(input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createEvaluateSessionCheckpointHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
+      if (!sessionId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.evaluateAdaptiveCheckpoint(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
 // ============================================================================
 // Tool Definitions
 // ============================================================================
@@ -340,6 +373,40 @@ export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'validate-session-blueprint',
+    description: 'Validate an agent-orchestrated session blueprint before calling start-session.',
+    service: 'session-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['blueprint'],
+      properties: {
+        blueprint: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'evaluate-session-checkpoint',
+    description: 'Evaluate event-driven adaptive checkpoint signals and return directives.',
+    service: 'session-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['sessionId', 'trigger'],
+      properties: {
+        sessionId: { type: 'string' },
+        trigger: {
+          type: 'string',
+          enum: ['confidence_drift', 'latency_spike', 'error_cascade', 'streak_break', 'manual'],
+        },
+        lastAttemptResponseTimeMs: { type: 'number' },
+        rollingAverageResponseTimeMs: { type: 'number' },
+        recentIncorrectStreak: { type: 'number' },
+        confidenceDrift: { type: 'number' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -358,5 +425,7 @@ export function createSessionToolHandlers(
   handlers.set('get-attempt-history', createGetAttemptHistoryHandler(service));
   handlers.set('get-thinking-trace', createGetThinkingTraceHandler(service));
   handlers.set('record-dialogue-turn', createRecordDialogueTurnHandler(service));
+  handlers.set('validate-session-blueprint', createValidateSessionBlueprintHandler(service));
+  handlers.set('evaluate-session-checkpoint', createEvaluateSessionCheckpointHandler(service));
   return handlers;
 }

@@ -95,6 +95,47 @@ export const UserSettingsSchema = z.object({
   emailAchievements: z.boolean().default(true),
   pushNotificationsEnabled: z.boolean().default(true),
   analyticsEnabled: z.boolean().default(true),
+  cognitivePolicy: z
+    .object({
+      pacingPolicy: z.object({
+        targetSecondsPerCard: z.number().int().min(5).max(300).default(45),
+        hardCapSecondsPerCard: z.number().int().min(10).max(600).default(120),
+        slowdownOnError: z.boolean().default(true),
+      }),
+      hintPolicy: z.object({
+        maxHintsPerCard: z.number().int().min(0).max(5).default(2),
+        progressiveHintsOnly: z.boolean().default(true),
+        allowAnswerReveal: z.boolean().default(false),
+      }),
+      commitPolicy: z.object({
+        requireConfidenceBeforeCommit: z.boolean().default(true),
+        requireVerificationGate: z.boolean().default(false),
+      }),
+      reflectionPolicy: z.object({
+        postAttemptReflection: z.boolean().default(false),
+        postSessionReflection: z.boolean().default(true),
+      }),
+    })
+    .default({
+      pacingPolicy: {
+        targetSecondsPerCard: 45,
+        hardCapSecondsPerCard: 120,
+        slowdownOnError: true,
+      },
+      hintPolicy: {
+        maxHintsPerCard: 2,
+        progressiveHintsOnly: true,
+        allowAnswerReveal: false,
+      },
+      commitPolicy: {
+        requireConfidenceBeforeCommit: true,
+        requireVerificationGate: false,
+      },
+      reflectionPolicy: {
+        postAttemptReflection: false,
+        postSessionReflection: true,
+      },
+    }),
 });
 
 // ============================================================================
@@ -155,6 +196,36 @@ export const UpdateSettingsInputSchema = z
     emailAchievements: z.boolean().optional(),
     pushNotificationsEnabled: z.boolean().optional(),
     analyticsEnabled: z.boolean().optional(),
+    cognitivePolicy: z
+      .object({
+        pacingPolicy: z
+          .object({
+            targetSecondsPerCard: z.number().int().min(5).max(300).optional(),
+            hardCapSecondsPerCard: z.number().int().min(10).max(600).optional(),
+            slowdownOnError: z.boolean().optional(),
+          })
+          .optional(),
+        hintPolicy: z
+          .object({
+            maxHintsPerCard: z.number().int().min(0).max(5).optional(),
+            progressiveHintsOnly: z.boolean().optional(),
+            allowAnswerReveal: z.boolean().optional(),
+          })
+          .optional(),
+        commitPolicy: z
+          .object({
+            requireConfidenceBeforeCommit: z.boolean().optional(),
+            requireVerificationGate: z.boolean().optional(),
+          })
+          .optional(),
+        reflectionPolicy: z
+          .object({
+            postAttemptReflection: z.boolean().optional(),
+            postSessionReflection: z.boolean().optional(),
+          })
+          .optional(),
+      })
+      .optional(),
   })
   .strict();
 

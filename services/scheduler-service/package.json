@@ -1,0 +1,24 @@
+{
+  "name": "@noema/scheduler-service",
+  "version": "0.1.0",
+  "description": "Spaced repetition scheduler service for Noema",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist .turbo tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noema/contracts": "workspace:*",
+    "@noema/types": "workspace:*",
+    "@noema/validation": "workspace:*",
+    "fastify": "^5.2.0",
+    "jose": "^6.0.11",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

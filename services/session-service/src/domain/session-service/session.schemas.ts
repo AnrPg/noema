@@ -24,6 +24,50 @@ import {
 } from '@noema/validation';
 import { z } from 'zod';
 
+import type { ISessionBlueprint } from '../../types/index.js';
+
+const AdaptiveCheckpointSignalSchema = z.enum([
+  'confidence_drift',
+  'latency_spike',
+  'error_cascade',
+  'streak_break',
+  'manual',
+]);
+
+export const SessionBlueprintSchema: z.ZodType<ISessionBlueprint> = z.object({
+  blueprintVersion: z.literal('v1'),
+  generatedAt: z.string().datetime(),
+  generatedBy: z.literal('agent'),
+  deckQueryId: z.string().min(1),
+  initialCardIds: z.array(CardIdSchema).min(1),
+  laneMix: z.object({
+    retention: z.number().min(0).max(1),
+    calibration: z.number().min(0).max(1),
+  }),
+  checkpointSignals: z.array(AdaptiveCheckpointSignalSchema),
+  policySnapshot: z.object({
+    pacingPolicy: z.object({
+      targetSecondsPerCard: z.number().int().min(5).max(300),
+      hardCapSecondsPerCard: z.number().int().min(10).max(600),
+      slowdownOnError: z.boolean(),
+    }),
+    hintPolicy: z.object({
+      maxHintsPerCard: z.number().int().min(0).max(5),
+      progressiveHintsOnly: z.boolean(),
+      allowAnswerReveal: z.boolean(),
+    }),
+    commitPolicy: z.object({
+      requireConfidenceBeforeCommit: z.boolean(),
+      requireVerificationGate: z.boolean(),
+    }),
+    reflectionPolicy: z.object({
+      postAttemptReflection: z.boolean(),
+      postSessionReflection: z.boolean(),
+    }),
+  }),
+  assumptions: z.array(z.string()),
+});
+
 // ============================================================================
 // Session Config Schema
 // ============================================================================
@@ -59,9 +103,31 @@ export const StartSessionInputSchema = z.object({
     .array(CardIdSchema)
     .min(1, 'At least one card is required')
     .describe('Ordered list of card IDs for the session queue'),
+  blueprint: SessionBlueprintSchema.optional(),
+  offlineIntentToken: z.string().min(1).optional(),
 });
 
 export type StartSessionInput = z.input<typeof StartSessionInputSchema>;
+
+export const ValidateSessionBlueprintInputSchema = z.object({
+  blueprint: SessionBlueprintSchema,
+});
+
+export const EvaluateAdaptiveCheckpointInputSchema = z.object({
+  trigger: AdaptiveCheckpointSignalSchema,
+  lastAttemptResponseTimeMs: z.number().int().nonnegative().optional(),
+  rollingAverageResponseTimeMs: z.number().int().positive().optional(),
+  recentIncorrectStreak: z.number().int().nonnegative().optional(),
+  confidenceDrift: z.number().min(-1).max(1).optional(),
+});
+
+export type EvaluateAdaptiveCheckpointInput = z.input<
+  typeof EvaluateAdaptiveCheckpointInputSchema
+>;
+
+export type ValidateSessionBlueprintInput = z.input<
+  typeof ValidateSessionBlueprintInputSchema
+>;
 
 // ============================================================================
 // Attempt Context Snapshot Schema

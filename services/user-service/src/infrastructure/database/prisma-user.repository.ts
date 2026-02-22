@@ -56,6 +56,26 @@ const DEFAULT_SETTINGS: IUserSettings = {
   emailAchievements: true,
   pushNotificationsEnabled: true,
   analyticsEnabled: true,
+  cognitivePolicy: {
+    pacingPolicy: {
+      targetSecondsPerCard: 45,
+      hardCapSecondsPerCard: 120,
+      slowdownOnError: true,
+    },
+    hintPolicy: {
+      maxHintsPerCard: 2,
+      progressiveHintsOnly: true,
+      allowAnswerReveal: false,
+    },
+    commitPolicy: {
+      requireConfidenceBeforeCommit: true,
+      requireVerificationGate: false,
+    },
+    reflectionPolicy: {
+      postAttemptReflection: false,
+      postSessionReflection: true,
+    },
+  },
 };
 
 // ============================================================================
