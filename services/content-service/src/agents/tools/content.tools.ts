@@ -1,9 +1,9 @@
 /**
  * @noema/content-service - Content MCP Tool Handlers
  *
- * 7 MCP tools for the content-service (per AGENT_MCP_TOOL_REGISTRY):
+ * 8+ MCP tools for the content-service (per AGENT_MCP_TOOL_REGISTRY):
  *
- * P0: create-card, batch-create-cards, validate-card-content, query-cards
+ * P0: create-card, batch-create-cards, validate-card-content, query-cards, build-session-seed
  * P1: get-card-by-id, update-card, change-card-state
  *
  * Each handler wraps a ContentService method and returns IToolResult.
@@ -131,14 +131,14 @@ export function createBatchCreateCardsHandler(contentService: ContentService) {
  * matches the REST endpoint: same schemas, auth, logging, error format.
  */
 export function createValidateCardContentHandler(contentService: ContentService) {
-  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+  return (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
       const { cardType, content } = input as { cardType: string; content: unknown };
-      const result = await contentService.validateContent(cardType, content, context);
-      return { success: true, data: result.data, agentHints: result.agentHints };
+      const result = contentService.validateContent(cardType, content, context);
+      return Promise.resolve({ success: true, data: result.data, agentHints: result.agentHints });
     } catch (error) {
-      return errorResult(error);
+      return Promise.resolve(errorResult(error));
     }
   };
 }
@@ -153,6 +153,25 @@ export function createQueryCardsHandler(contentService: ContentService) {
       const context = buildContext(userId, correlationId);
       const result = await contentService.query(
         input as Parameters<typeof contentService.query>[0],
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * build-session-seed — Build initialCardIds for session-service startSession.
+ * P0 tool used by Session Service and strategy orchestration.
+ */
+export function createBuildSessionSeedHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = await contentService.buildSessionSeed(
+        input as Parameters<typeof contentService.buildSessionSeed>[0],
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
@@ -388,6 +407,27 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
         sortOrder: { type: 'string', enum: ['asc', 'desc'] },
         offset: { type: 'number' },
         limit: { type: 'number' },
+      },
+    },
+  },
+  {
+    name: 'build-session-seed',
+    description:
+      'Generate initialCardIds for session-service startSession from a DeckQuery, including strategy-aware card ordering.',
+    service: 'content-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['query'],
+      properties: {
+        query: { type: 'object', description: 'DeckQuery filter object' },
+        strategy: {
+          type: 'string',
+          enum: ['query_order', 'randomized', 'difficulty_balanced'],
+          description: 'Card selection strategy',
+        },
+        maxCards: { type: 'number', minimum: 1, maximum: 200 },
+        includeCardSummaries: { type: 'boolean' },
       },
     },
   },

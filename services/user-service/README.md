@@ -36,6 +36,7 @@ pnpm dev
 - `POST /api/v1/auth/login` - Login
 - `POST /api/v1/auth/refresh` - Refresh access token
 - `POST /api/v1/auth/logout` - Logout
+- `POST /api/v1/auth/logout-all` - Logout all devices
 
 ### Users
 
@@ -60,15 +61,17 @@ pnpm dev
 
 ## Environment Variables
 
-| Variable               | Description               | Default       |
-| ---------------------- | ------------------------- | ------------- |
-| `NODE_ENV`             | Environment               | `development` |
-| `PORT`                 | Server port               | `3001`        |
-| `DATABASE_URL`         | PostgreSQL connection URL | -             |
-| `REDIS_URL`            | Redis connection URL      | -             |
-| `ACCESS_TOKEN_SECRET`  | JWT access token secret   | -             |
-| `REFRESH_TOKEN_SECRET` | JWT refresh token secret  | -             |
-| `BCRYPT_ROUNDS`        | Password hashing rounds   | `12`          |
+| Variable                         | Description                         | Default                 |
+| -------------------------------- | ----------------------------------- | ----------------------- |
+| `NODE_ENV`                       | Environment                         | `development`           |
+| `PORT`                           | Server port                         | `3001`                  |
+| `DATABASE_URL`                   | PostgreSQL connection URL           | -                       |
+| `REDIS_URL`                      | Redis connection URL                | -                       |
+| `ACCESS_TOKEN_SECRET`            | JWT access token secret             | -                       |
+| `REFRESH_TOKEN_SECRET`           | JWT refresh token secret            | -                       |
+| `BCRYPT_ROUNDS`                  | Password hashing rounds             | `12`                    |
+| `SESSION_SERVICE_URL`            | Session service base URL            | `http://localhost:3003` |
+| `INTEGRATION_REQUEST_TIMEOUT_MS` | Integration timeout in milliseconds | `5000`                  |
 
 See `.env.example` for all variables.
 

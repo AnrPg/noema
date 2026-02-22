@@ -22,6 +22,8 @@ import type {
   IChangeCardStateInput,
   ICreateCardInput,
   IDeckQuery,
+  ISessionSeed,
+  ISessionSeedInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
@@ -32,6 +34,7 @@ import {
   ChangeCardStateInputSchema,
   CreateCardInputSchema,
   DeckQuerySchema,
+  SessionSeedInputSchema,
   UpdateCardInputSchema,
 } from './content.schemas.js';
 import {
@@ -283,7 +286,7 @@ export class ContentService {
     // Non-admins can only query their own cards
     const effectiveUserId =
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      this.isAdmin(context) && validated.userId ? (validated.userId) : context.userId!;
+      this.isAdmin(context) && validated.userId ? validated.userId : context.userId!;
 
     const result = await this.repository.query(validated, effectiveUserId);
 
@@ -600,6 +603,100 @@ export class ContentService {
   }
 
   /**
+   * Build an initial session seed (ordered card IDs) from a DeckQuery.
+   * This bridges content-service card selection with session-service startSession.
+   */
+  async buildSessionSeed(
+    input: ISessionSeedInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ISessionSeed>> {
+    this.requireAuth(context);
+    this.logger.info('Building session seed');
+
+    const parseResult = SessionSeedInputSchema.safeParse(input);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError(
+        'Invalid session seed input',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+
+    const validated = parseResult.data;
+    const query = {
+      ...validated.query,
+      offset: 0,
+      limit: Math.min(validated.maxCards, 200),
+    } as IDeckQuery;
+
+    const effectiveUserId =
+      this.isAdmin(context) && query.userId
+        ? query.userId
+        : // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          context.userId!;
+
+    const result = await this.repository.query(query, effectiveUserId);
+    const selectedCards = this.selectCardsForSession(
+      result.items,
+      validated.strategy,
+      validated.maxCards
+    );
+    const initialCardIds = selectedCards.map((card) => card.id);
+
+    return {
+      data: {
+        initialCardIds,
+        selectedCount: initialCardIds.length,
+        totalMatched: result.total ?? 0,
+        strategy: validated.strategy,
+        recommendedSessionConfig: {
+          sessionTimeoutHours: 24,
+        },
+        ...(validated.includeCardSummaries ? { selectedCards } : {}),
+      },
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'start_session',
+            description: 'Start session-service with the generated initialCardIds',
+            priority: 'high',
+            category: 'learning',
+          },
+          {
+            action: 'record_deck_query_log',
+            description: 'Persist DeckQuery provenance alongside the started session',
+            priority: 'medium',
+            category: 'optimization',
+          },
+        ],
+        relatedResources: selectedCards.slice(0, 10).map((card) => ({
+          type: 'Card',
+          id: card.id,
+          label: card.preview,
+          relevance: 0.9,
+        })),
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: ['Session timeout defaults to 24h unless the caller overrides session config'],
+        riskFactors: [],
+        dependencies: [
+          {
+            action: 'start_session',
+            dependsOn: ['build_session_seed'],
+            type: 'required',
+            reason: 'session-service requires initialCardIds generated from content query',
+          },
+        ],
+        estimatedImpact: { benefit: 0.8, effort: 0.2, roi: 4.0 },
+        preferenceAlignment: [],
+        reasoning: `Session seed prepared with ${String(initialCardIds.length)} cards from ${String(result.total)} matches`,
+      },
+    };
+  }
+
+  /**
    * Validate card content against the type-specific schema without creating.
    * Returns validation result with detailed error messages.
    */
@@ -690,9 +787,7 @@ export class ContentService {
     reason: string | undefined,
     version: number,
     context: IExecutionContext
-  ): Promise<
-    IServiceResult<{ succeeded: CardId[]; failed: { id: CardId; error: string }[] }>
-  > {
+  ): Promise<IServiceResult<{ succeeded: CardId[]; failed: { id: CardId; error: string }[] }>> {
     this.requireAuth(context);
     this.logger.info({ count: ids.length, targetState: state }, 'Batch changing card state');
 
@@ -1017,5 +1112,66 @@ export class ContentService {
       preferenceAlignment: [],
       reasoning: `Batch created ${String(result.successCount)}/${String(result.total)} cards`,
     };
+  }
+
+  private selectCardsForSession(
+    items: ICardSummary[],
+    strategy: 'query_order' | 'randomized' | 'difficulty_balanced',
+    maxCards: number
+  ): ICardSummary[] {
+    if (items.length <= maxCards) {
+      return items;
+    }
+
+    switch (strategy) {
+      case 'randomized': {
+        const copy = [...items];
+        for (let i = copy.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const current = copy[i];
+          const target = copy[j];
+          if (current !== undefined && target !== undefined) {
+            copy[i] = target;
+            copy[j] = current;
+          }
+        }
+        return copy.slice(0, maxCards);
+      }
+      case 'difficulty_balanced': {
+        const buckets = new Map<string, ICardSummary[]>();
+        for (const card of items) {
+          const key = card.difficulty;
+          const existing = buckets.get(key);
+          if (existing) {
+            existing.push(card);
+          } else {
+            buckets.set(key, [card]);
+          }
+        }
+
+        const priorities = ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'];
+        const orderedBuckets = priorities
+          .map((level) => buckets.get(level) ?? [])
+          .filter((bucket) => bucket.length > 0);
+
+        const selected: ICardSummary[] = [];
+        let bucketIndex = 0;
+        while (selected.length < maxCards && orderedBuckets.some((bucket) => bucket.length > 0)) {
+          const bucket = orderedBuckets[bucketIndex % orderedBuckets.length];
+          if (!bucket) {
+            break;
+          }
+          const card = bucket.shift();
+          if (card) {
+            selected.push(card);
+          }
+          bucketIndex += 1;
+        }
+        return selected;
+      }
+      case 'query_order':
+      default:
+        return items.slice(0, maxCards);
+    }
   }
 }

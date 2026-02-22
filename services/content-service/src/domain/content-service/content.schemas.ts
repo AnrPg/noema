@@ -196,6 +196,16 @@ export const DeckQuerySchema = z.object({
   limit: z.number().int().min(1).max(100).default(20),
 });
 
+/**
+ * Schema for generating a session seed from a DeckQuery.
+ */
+export const SessionSeedInputSchema = z.object({
+  query: DeckQuerySchema,
+  strategy: z.enum(['query_order', 'randomized', 'difficulty_balanced']).default('query_order'),
+  maxCards: z.number().int().min(1).max(200).default(40),
+  includeCardSummaries: z.boolean().default(false),
+});
+
 // ============================================================================
 // Type Inference
 // ============================================================================
@@ -205,3 +215,4 @@ export type BatchCreateCardInputSchemaType = z.infer<typeof BatchCreateCardInput
 export type UpdateCardInputSchemaType = z.infer<typeof UpdateCardInputSchema>;
 export type ChangeCardStateInputSchemaType = z.infer<typeof ChangeCardStateInputSchema>;
 export type DeckQuerySchemaType = z.infer<typeof DeckQuerySchema>;
+export type SessionSeedInputSchemaType = z.infer<typeof SessionSeedInputSchema>;

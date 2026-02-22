@@ -43,10 +43,36 @@ export interface IServiceConfig {
     origin: string[];
     credentials: boolean;
   };
+  integrations: {
+    sessionServiceUrl: string;
+    requestTimeoutMs: number;
+  };
   logging: {
     level: string;
     pretty: boolean;
   };
+}
+
+export interface ITokenConfig {
+  accessTokenSecret: string;
+  refreshTokenSecret: string;
+  accessTokenExpiresIn: string;
+  refreshTokenExpiresIn: string;
+  issuer: string;
+  audience: string;
+}
+
+export interface IEventPublisherConfig {
+  streamKey: string;
+  maxLen: number;
+  serviceName: string;
+  serviceVersion: string;
+  environment: Environment;
+}
+
+export interface ISessionOrchestrationConfig {
+  sessionServiceUrl: string;
+  requestTimeoutMs: number;
 }
 
 // ============================================================================
@@ -55,19 +81,19 @@ export interface IServiceConfig {
 
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) {
+  if (value === undefined || value === '') {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
 }
 
 function optionalEnv(name: string, defaultValue: string): string {
-  return process.env[name] || defaultValue;
+  return process.env[name] ?? defaultValue;
 }
 
 function optionalEnvInt(name: string, defaultValue: number): number {
   const value = process.env[name];
-  if (!value) return defaultValue;
+  if (value === undefined || value === '') return defaultValue;
   const parsed = parseInt(value, 10);
   if (isNaN(parsed)) {
     throw new Error(`Invalid integer for ${name}: ${value}`);
@@ -77,7 +103,7 @@ function optionalEnvInt(name: string, defaultValue: number): number {
 
 function optionalEnvBool(name: string, defaultValue: boolean): boolean {
   const value = process.env[name];
-  if (!value) return defaultValue;
+  if (value === undefined || value === '') return defaultValue;
   return value.toLowerCase() === 'true';
 }
 
@@ -126,6 +152,10 @@ export function loadConfig(): IServiceConfig {
         .map((s) => s.trim()),
       credentials: optionalEnvBool('CORS_CREDENTIALS', true),
     },
+    integrations: {
+      sessionServiceUrl: optionalEnv('SESSION_SERVICE_URL', 'http://localhost:3003'),
+      requestTimeoutMs: optionalEnvInt('INTEGRATION_REQUEST_TIMEOUT_MS', 5000),
+    },
     logging: {
       level: optionalEnv('LOG_LEVEL', environment === 'production' ? 'info' : 'debug'),
       pretty: optionalEnvBool('LOG_PRETTY', environment === 'development'),
@@ -137,7 +167,7 @@ export function loadConfig(): IServiceConfig {
 // Helper Functions
 // ============================================================================
 
-export function getTokenConfig(config: IServiceConfig) {
+export function getTokenConfig(config: IServiceConfig): ITokenConfig {
   return {
     accessTokenSecret: config.auth.accessTokenSecret,
     refreshTokenSecret: config.auth.refreshTokenSecret,
@@ -148,12 +178,19 @@ export function getTokenConfig(config: IServiceConfig) {
   };
 }
 
-export function getEventPublisherConfig(config: IServiceConfig) {
+export function getEventPublisherConfig(config: IServiceConfig): IEventPublisherConfig {
   return {
     streamKey: config.redis.eventStreamKey,
     maxLen: config.redis.maxStreamLen,
     serviceName: config.service.name,
     serviceVersion: config.service.version,
     environment: config.service.environment,
+  };
+}
+
+export function getSessionOrchestrationConfig(config: IServiceConfig): ISessionOrchestrationConfig {
+  return {
+    sessionServiceUrl: config.integrations.sessionServiceUrl,
+    requestTimeoutMs: config.integrations.requestTimeoutMs,
   };
 }

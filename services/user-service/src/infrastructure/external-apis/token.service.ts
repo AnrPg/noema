@@ -5,8 +5,10 @@
  */
 
 import type { UserId } from '@noema/types';
+import type { Redis } from 'ioredis';
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
 import { nanoid } from 'nanoid';
+import type { PrismaClient } from '../../../generated/prisma/index.js';
 import { InvalidTokenError } from '../../domain/user-service/errors/index.js';
 import type { ITokenPair, IUser } from '../../types/user.types.js';
 
@@ -25,6 +27,7 @@ export interface ITokenService {
   verifyAccessToken(token: string): Promise<ITokenPayload>;
   verifyRefreshToken(token: string): Promise<{ userId: UserId; tokenId: string }>;
   revokeRefreshToken(tokenId: string): Promise<void>;
+  revokeAllRefreshTokensForUser(userId: UserId): Promise<number>;
 }
 
 // ============================================================================
@@ -40,6 +43,12 @@ export interface ITokenConfig {
   audience: string;
 }
 
+export interface ITokenServiceDependencies {
+  prisma: PrismaClient;
+  redis: Redis;
+  revokedTokenPrefix?: string;
+}
+
 // ============================================================================
 // Implementation
 // ============================================================================
@@ -47,10 +56,15 @@ export interface ITokenConfig {
 export class JwtTokenService implements ITokenService {
   private readonly accessSecret: Uint8Array;
   private readonly refreshSecret: Uint8Array;
+  private readonly revokedTokenPrefix: string;
 
-  constructor(private readonly config: ITokenConfig) {
+  constructor(
+    private readonly config: ITokenConfig,
+    private readonly deps: ITokenServiceDependencies
+  ) {
     this.accessSecret = new TextEncoder().encode(config.accessTokenSecret);
     this.refreshSecret = new TextEncoder().encode(config.refreshTokenSecret);
+    this.revokedTokenPrefix = deps.revokedTokenPrefix ?? 'noema:auth:revoked:refresh';
   }
 
   async generateTokenPair(user: IUser): Promise<ITokenPair> {
@@ -85,6 +99,16 @@ export class JwtTokenService implements ITokenService {
       .setIssuer(this.config.issuer)
       .setAudience(this.config.audience)
       .sign(this.refreshSecret);
+
+    const refreshExpiresAt = new Date((now + refreshExpiresIn) * 1000);
+    await this.deps.prisma.refreshToken.create({
+      data: {
+        id: refreshTokenId,
+        userId: user.id,
+        token: refreshToken,
+        expiresAt: refreshExpiresAt,
+      },
+    });
 
     return {
       accessToken,
@@ -127,9 +151,16 @@ export class JwtTokenService implements ITokenService {
         throw new InvalidTokenError('Invalid token type');
       }
 
+      const tokenId = typedPayload.jti;
+      if (tokenId === undefined || tokenId === '') {
+        throw new InvalidTokenError('Missing token identifier');
+      }
+
+      await this.ensureRefreshTokenActive(tokenId, token, typedPayload.sub as UserId);
+
       return {
         userId: typedPayload.sub as UserId,
-        tokenId: typedPayload.jti as string,
+        tokenId,
       };
     } catch (error) {
       if (error instanceof InvalidTokenError) {
@@ -139,19 +170,117 @@ export class JwtTokenService implements ITokenService {
     }
   }
 
-  async revokeRefreshToken(_tokenId: string): Promise<void> {
-    // TODO: Store revoked tokens in Redis or database
-    // For now, tokens are not revokable
+  async revokeRefreshToken(tokenId: string): Promise<void> {
+    const tokenRow = await this.deps.prisma.refreshToken.findUnique({
+      where: { id: tokenId },
+    });
+
+    if (!tokenRow) {
+      return;
+    }
+
+    if (tokenRow.revokedAt === null) {
+      await this.deps.prisma.refreshToken.update({
+        where: { id: tokenId },
+        data: { revokedAt: new Date() },
+      });
+    }
+
+    await this.cacheRevokedToken(tokenId, tokenRow.expiresAt);
+  }
+
+  async revokeAllRefreshTokensForUser(userId: UserId): Promise<number> {
+    const activeTokens = await this.deps.prisma.refreshToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        expiresAt: true,
+      },
+    });
+
+    if (activeTokens.length === 0) {
+      return 0;
+    }
+
+    await this.deps.prisma.refreshToken.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { revokedAt: new Date() },
+    });
+
+    await Promise.all(
+      activeTokens.map((token) => this.cacheRevokedToken(token.id, token.expiresAt))
+    );
+
+    return activeTokens.length;
+  }
+
+  private async ensureRefreshTokenActive(
+    tokenId: string,
+    rawToken: string,
+    userId: UserId
+  ): Promise<void> {
+    const cacheKey = this.getRevokedTokenKey(tokenId);
+    const cachedRevocation = await this.deps.redis.get(cacheKey);
+    if (cachedRevocation !== null) {
+      throw new InvalidTokenError('Refresh token has been revoked');
+    }
+
+    const tokenRow = await this.deps.prisma.refreshToken.findUnique({
+      where: { id: tokenId },
+    });
+
+    if (!tokenRow) {
+      throw new InvalidTokenError('Refresh token not recognized');
+    }
+
+    if (tokenRow.userId !== userId) {
+      throw new InvalidTokenError('Refresh token subject mismatch');
+    }
+
+    if (tokenRow.token !== rawToken) {
+      throw new InvalidTokenError('Refresh token mismatch');
+    }
+
+    if (tokenRow.revokedAt !== null) {
+      await this.cacheRevokedToken(tokenId, tokenRow.expiresAt);
+      throw new InvalidTokenError('Refresh token has been revoked');
+    }
+
+    if (tokenRow.expiresAt.getTime() <= Date.now()) {
+      throw new InvalidTokenError('Refresh token is expired');
+    }
+  }
+
+  private getRevokedTokenKey(tokenId: string): string {
+    return `${this.revokedTokenPrefix}:${tokenId}`;
+  }
+
+  private async cacheRevokedToken(tokenId: string, expiresAt: Date): Promise<void> {
+    const ttlSeconds = Math.max(1, Math.ceil((expiresAt.getTime() - Date.now()) / 1000));
+    await this.deps.redis.set(this.getRevokedTokenKey(tokenId), '1', 'EX', ttlSeconds);
   }
 
   private parseExpiresIn(expiresIn: string): number {
-    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    const match = /^(\d+)([smhd])$/.exec(expiresIn);
     if (!match) {
       throw new Error(`Invalid expiresIn format: ${expiresIn}`);
     }
 
-    const value = parseInt(match[1]!, 10);
-    const unit = match[2]!;
+    const [, valueStr, unit] = match;
+
+    if (valueStr === undefined || unit === undefined) {
+      throw new Error(`Invalid expiresIn format: ${expiresIn}`);
+    }
+
+    const value = parseInt(valueStr, 10);
 
     switch (unit) {
       case 's':

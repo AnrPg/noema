@@ -234,6 +234,31 @@ export interface IDeckQuery {
   limit?: number;
 }
 
+/**
+ * Session seed generation input.
+ * Used to derive deterministic initialCardIds for session-service startSession.
+ */
+export interface ISessionSeedInput {
+  query: IDeckQuery;
+  strategy?: 'query_order' | 'randomized' | 'difficulty_balanced';
+  maxCards?: number;
+  includeCardSummaries?: boolean;
+}
+
+/**
+ * Session seed generation result.
+ */
+export interface ISessionSeed {
+  initialCardIds: CardId[];
+  selectedCount: number;
+  totalMatched: number;
+  strategy: 'query_order' | 'randomized' | 'difficulty_balanced';
+  recommendedSessionConfig: {
+    sessionTimeoutHours: number;
+  };
+  selectedCards?: ICardSummary[];
+}
+
 // ============================================================================
 // Result Types
 // ============================================================================

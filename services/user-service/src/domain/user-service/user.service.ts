@@ -11,6 +11,7 @@ import { ID_PREFIXES } from '@noema/types';
 import bcrypt from 'bcrypt';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
+import type { ISessionOrchestrationService } from '../../infrastructure/external-apis/session-orchestration.service.js';
 import type { ITokenService } from '../../infrastructure/external-apis/token.service.js';
 import type {
   IAuthSession,
@@ -102,6 +103,7 @@ export class UserService {
     private readonly repository: IUserRepository,
     private readonly eventPublisher: IEventPublisher,
     private readonly tokenService: ITokenService,
+    private readonly sessionOrchestration: ISessionOrchestrationService,
     logger: Logger
   ) {
     this.logger = logger.child({ service: 'UserService' });
@@ -121,7 +123,7 @@ export class UserService {
     this.logger.info({ input: { ...input, password: '[REDACTED]' } }, 'Creating user');
 
     // Validate input
-    const validatedInput = (await this.validateCreateInput(input)) as ICreateUserInput;
+    const validatedInput = this.validateCreateInput(input);
 
     // Check business rules
     await this.checkCreateRules(validatedInput);
@@ -392,7 +394,7 @@ export class UserService {
     }
 
     // Verify current password
-    if (existing.passwordHash) {
+    if (existing.passwordHash !== null) {
       const passwordValid = await bcrypt.compare(
         validatedInput.currentPassword,
         existing.passwordHash
@@ -406,7 +408,10 @@ export class UserService {
     const passwordHash = await bcrypt.hash(validatedInput.newPassword, SALT_ROUNDS);
 
     // Update password with history tracking (changedBy is context.userId)
-    await this.repository.updatePassword(id, passwordHash, version, context.userId || undefined);
+    await this.repository.updatePassword(id, passwordHash, version, context.userId);
+
+    // Security hardening: invalidate all active refresh tokens after password change
+    await this.tokenService.revokeAllRefreshTokensForUser(id);
 
     // Publish event
     await this.eventPublisher.publish({
@@ -477,12 +482,12 @@ export class UserService {
     }
 
     // Check if account is locked
-    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+    if (user.lockedUntil !== null && new Date(user.lockedUntil) > new Date()) {
       throw new AccountLockedError(user.lockedUntil);
     }
 
     // Verify password
-    if (!user.passwordHash) {
+    if (user.passwordHash === null) {
       throw new BusinessRuleError('Account requires OAuth login');
     }
 
@@ -493,7 +498,10 @@ export class UserService {
     }
 
     // Check MFA if enabled
-    if (user.mfaEnabled && !validatedInput.mfaCode) {
+    if (
+      user.mfaEnabled &&
+      (validatedInput.mfaCode === undefined || validatedInput.mfaCode === '')
+    ) {
       return {
         data: { user, tokens: null as unknown as ITokenPair },
         agentHints: {
@@ -576,7 +584,7 @@ export class UserService {
   ): Promise<IServiceResult<ITokenPair>> {
     this.logger.debug('Refreshing token');
 
-    const { userId } = await this.tokenService.verifyRefreshToken(refreshToken);
+    const { userId, tokenId } = await this.tokenService.verifyRefreshToken(refreshToken);
 
     const user = await this.repository.findById(userId);
     if (!user) {
@@ -586,6 +594,9 @@ export class UserService {
     if (user.status !== UserStatus.ACTIVE) {
       throw new InvalidAccountStatusError(user.status, 'refresh token');
     }
+
+    // Rotate refresh token (single-use semantics)
+    await this.tokenService.revokeRefreshToken(tokenId);
 
     const tokens = await this.tokenService.generateTokenPair(user);
 
@@ -608,6 +619,133 @@ export class UserService {
     };
   }
 
+  /**
+   * Logout current session by revoking the provided refresh token.
+   * Strict mode: active learning session must be paused before logout succeeds.
+   */
+  async logout(
+    refreshToken: string,
+    context: IExecutionContext,
+    accessToken: string
+  ): Promise<IServiceResult<void>> {
+    if (!context.userId) {
+      throw new AuthorizationError('Authentication required for logout');
+    }
+
+    const { userId, tokenId } = await this.tokenService.verifyRefreshToken(refreshToken);
+    if (userId !== context.userId) {
+      throw new AuthorizationError('Refresh token does not belong to current user');
+    }
+
+    const pauseResult = await this.sessionOrchestration.pauseActiveSessionStrict({
+      userId: context.userId,
+      accessToken,
+      correlationId: context.correlationId,
+      reason: 'user_logout',
+    });
+
+    await this.tokenService.revokeRefreshToken(tokenId);
+
+    await this.eventPublisher.publish({
+      eventType: 'user.logged_out',
+      aggregateType: 'User',
+      aggregateId: context.userId,
+      payload: {
+        reason: 'user_initiated',
+      },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    return {
+      data: undefined,
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'clear_client_session_cache',
+            description: 'Clear local tokens and user session state on the client',
+            priority: 'high',
+            category: 'optimization',
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'immediate',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.9, effort: 0.1, roi: 9.0 },
+        preferenceAlignment: [],
+        reasoning: pauseResult.paused
+          ? `Logout completed and session ${pauseResult.sessionId ?? 'unknown'} paused`
+          : 'Logout completed (no active learning session to pause)',
+      },
+    };
+  }
+
+  /**
+   * Logout all devices by revoking all active refresh tokens.
+   * Strict mode: active learning session must be paused before logout succeeds.
+   */
+  async logoutAll(context: IExecutionContext, accessToken: string): Promise<IServiceResult<void>> {
+    if (!context.userId) {
+      throw new AuthorizationError('Authentication required for logout-all');
+    }
+
+    const pauseResult = await this.sessionOrchestration.pauseActiveSessionStrict({
+      userId: context.userId,
+      accessToken,
+      correlationId: context.correlationId,
+      reason: 'user_logout_all',
+    });
+
+    const revokedCount = await this.tokenService.revokeAllRefreshTokensForUser(context.userId);
+
+    await this.eventPublisher.publish({
+      eventType: 'user.logged_out',
+      aggregateType: 'User',
+      aggregateId: context.userId,
+      payload: {
+        reason: 'forced',
+      },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    return {
+      data: undefined,
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'reauthenticate_all_clients',
+            description: 'Require all devices to re-authenticate using credentials',
+            priority: 'high',
+            category: 'optimization',
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'immediate',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 1.0, effort: 0.2, roi: 5.0 },
+        preferenceAlignment: [],
+        reasoning: pauseResult.paused
+          ? `Logout-all completed; revoked ${String(revokedCount)} refresh tokens and paused active session`
+          : `Logout-all completed; revoked ${String(revokedCount)} refresh tokens`,
+      },
+    };
+  }
+
   // ============================================================================
   // Delete Operations
   // ============================================================================
@@ -615,11 +753,7 @@ export class UserService {
   /**
    * Soft delete user account.
    */
-  async delete(
-    id: UserId,
-    soft: boolean = true,
-    context: IExecutionContext
-  ): Promise<IServiceResult<void>> {
+  async delete(id: UserId, soft = true, context: IExecutionContext): Promise<IServiceResult<void>> {
     this.logger.info({ userId: id, soft }, 'Deleting user');
 
     // Authorization
@@ -632,7 +766,7 @@ export class UserService {
     }
 
     // Check delete rules
-    await this.checkDeleteRules(existing, context);
+    this.checkDeleteRules(existing, context);
 
     if (soft) {
       await this.repository.softDelete(id);
@@ -702,18 +836,16 @@ export class UserService {
   // Private Validation Methods
   // ============================================================================
 
-  private async validateCreateInput(input: ICreateUserInput) {
+  private validateCreateInput(input: ICreateUserInput): ICreateUserInput {
     try {
       return CreateUserInputSchema.parse(input);
     } catch (error) {
       if (error instanceof Error && 'errors' in error) {
-        const zodError = error as { errors: Array<{ path: string[]; message: string }> };
+        const zodError = error as { errors: { path: string[]; message: string }[] };
         const fieldErrors: Record<string, string[]> = {};
         for (const err of zodError.errors) {
           const field = err.path.join('.');
-          if (!fieldErrors[field]) {
-            fieldErrors[field] = [];
-          }
+          fieldErrors[field] ??= [];
           fieldErrors[field].push(err.message);
         }
         throw new ValidationError('Invalid input', fieldErrors);
@@ -746,7 +878,7 @@ export class UserService {
     // Add any profile update rules here
   }
 
-  private async checkDeleteRules(existing: IUser, _context: IExecutionContext): Promise<void> {
+  private checkDeleteRules(existing: IUser, _context: IExecutionContext): void {
     // Prevent deleting super admins
     if (existing.roles.includes(UserRole.SUPER_ADMIN)) {
       throw new BusinessRuleError('Cannot delete super admin account');
@@ -802,7 +934,7 @@ export class UserService {
   }
 
   private sanitizeUser(user: IUser): Omit<IUser, 'passwordHash' | 'mfaSecret'> {
-    const { passwordHash, mfaSecret, ...sanitized } = user;
+    const { passwordHash: _passwordHash, mfaSecret: _mfaSecret, ...sanitized } = user;
     return sanitized;
   }
 
@@ -828,7 +960,7 @@ export class UserService {
         {
           type: 'User',
           id: user.id,
-          label: user.profile.displayName || user.username,
+          label: user.profile.displayName !== '' ? user.profile.displayName : user.username,
           relevance: 1.0,
         },
       ],

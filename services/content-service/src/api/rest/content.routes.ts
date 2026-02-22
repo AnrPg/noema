@@ -8,7 +8,10 @@
 import type { IApiResponse } from '@noema/contracts';
 import type { CardId, CardState, CorrelationId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { ContentService, IExecutionContext } from '../../domain/content-service/content.service.js';
+import type {
+  ContentService,
+  IExecutionContext,
+} from '../../domain/content-service/content.service.js';
 import {
   AuthenticationError,
   AuthorizationError,
@@ -24,6 +27,7 @@ import type {
   IChangeCardStateInput,
   ICreateCardInput,
   IDeckQuery,
+  ISessionSeedInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 
@@ -78,8 +82,7 @@ export function registerContentRoutes(
     const userAgent = request.headers['user-agent'];
     const context: IExecutionContext = {
       userId: (user?.sub ?? null) as UserId | null,
-      correlationId:
-        request.id as CorrelationId,
+      correlationId: request.id as CorrelationId,
       roles: user?.roles ?? [],
       clientIp: request.ip,
     };
@@ -272,7 +275,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Batch create cards',
-        description: 'Create up to 100 cards in a single request. Used by content generation agents for bulk import.',
+        description:
+          'Create up to 100 cards in a single request. Used by content generation agents for bulk import.',
         body: {
           type: 'object',
           required: ['cards'],
@@ -349,7 +353,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Query cards using DeckQuery',
-        description: 'Dynamic card query replacing static deck CRUD. Supports filtering, sorting, and pagination.',
+        description:
+          'Dynamic card query replacing static deck CRUD. Supports filtering, sorting, and pagination.',
         body: {
           type: 'object',
           properties: {
@@ -357,7 +362,10 @@ export function registerContentRoutes(
             states: { type: 'array', items: { type: 'string' } },
             difficulties: { type: 'array', items: { type: 'string' } },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
-            knowledgeNodeIdMode: { type: 'string', enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'] },
+            knowledgeNodeIdMode: {
+              type: 'string',
+              enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'],
+            },
             tags: { type: 'array', items: { type: 'string' } },
             sources: { type: 'array', items: { type: 'string' } },
             userId: { type: 'string' },
@@ -388,6 +396,44 @@ export function registerContentRoutes(
         };
         (response.metadata as { count?: number }).count = result.data.items.length;
         reply.send(response);
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/cards/session-seed - Build initial card IDs for session start.
+   */
+  fastify.post<{ Body: ISessionSeedInput }>(
+    '/v1/cards/session-seed',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Build session seed from DeckQuery',
+        description:
+          'Generates deterministic initialCardIds for session-service startSession, with optional card summaries.',
+        body: {
+          type: 'object',
+          required: ['query'],
+          properties: {
+            query: { type: 'object' },
+            strategy: {
+              type: 'string',
+              enum: ['query_order', 'randomized', 'difficulty_balanced'],
+            },
+            maxCards: { type: 'number', minimum: 1, maximum: 200 },
+            includeCardSummaries: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.buildSessionSeed(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
       }
@@ -460,7 +506,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Change card state',
-        description: 'Valid transitions: draft→active/archived, active→suspended/archived, suspended→active/archived, archived→draft',
+        description:
+          'Valid transitions: draft→active/archived, active→suspended/archived, suspended→active/archived, archived→draft',
         params: {
           type: 'object',
           required: ['id'],
@@ -553,7 +600,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Update card knowledge node links',
-        description: 'Replace the knowledgeNodeIds array on a card. Used to link/unlink cards from PKG nodes.',
+        description:
+          'Replace the knowledgeNodeIds array on a card. Used to link/unlink cards from PKG nodes.',
         params: {
           type: 'object',
           required: ['id'],
@@ -605,7 +653,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Count cards matching a DeckQuery',
-        description: 'Returns the count of matching cards without fetching them. Useful for pagination UIs and agent planning.',
+        description:
+          'Returns the count of matching cards without fetching them. Useful for pagination UIs and agent planning.',
         body: {
           type: 'object',
           properties: {
@@ -613,7 +662,10 @@ export function registerContentRoutes(
             states: { type: 'array', items: { type: 'string' } },
             difficulties: { type: 'array', items: { type: 'string' } },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
-            knowledgeNodeIdMode: { type: 'string', enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'] },
+            knowledgeNodeIdMode: {
+              type: 'string',
+              enum: ['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'],
+            },
             tags: { type: 'array', items: { type: 'string' } },
             sources: { type: 'array', items: { type: 'string' } },
           },
@@ -641,7 +693,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Validate card content',
-        description: 'Validate content against the schema for a specific card type without creating a card. Used by agents before batch creation.',
+        description:
+          'Validate content against the schema for a specific card type without creating a card. Used by agents before batch creation.',
         body: {
           type: 'object',
           required: ['cardType', 'content'],
@@ -679,7 +732,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Batch change card state',
-        description: 'Change state of multiple cards at once. Used after batch creation to activate drafts.',
+        description:
+          'Change state of multiple cards at once. Used after batch creation to activate drafts.',
         body: {
           type: 'object',
           required: ['ids', 'state', 'version'],

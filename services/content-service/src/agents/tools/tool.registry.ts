@@ -14,6 +14,7 @@ import {
   CONTENT_TOOL_DEFINITIONS,
   createBatchChangeCardStateHandler,
   createBatchCreateCardsHandler,
+  createBuildSessionSeedHandler,
   createChangeCardStateHandler,
   createCountCardsHandler,
   createCreateCardHandler,
@@ -23,7 +24,12 @@ import {
   createUpdateCardNodeLinksHandler,
   createValidateCardContentHandler,
 } from './content.tools.js';
-import type { IToolDefinition, IToolResult, IToolResultMetadata, ToolHandler } from './tool.types.js';
+import type {
+  IToolDefinition,
+  IToolResult,
+  IToolResultMetadata,
+  ToolHandler,
+} from './tool.types.js';
 
 // ============================================================================
 // Tool Registry
@@ -140,14 +146,15 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
   registry.register(getDefinition(1), createBatchCreateCardsHandler(contentService));
   registry.register(getDefinition(2), createValidateCardContentHandler(contentService));
   registry.register(getDefinition(3), createQueryCardsHandler(contentService));
+  registry.register(getDefinition(4), createBuildSessionSeedHandler(contentService));
 
   // P1 tools
-  registry.register(getDefinition(4), createGetCardByIdHandler(contentService));
-  registry.register(getDefinition(5), createUpdateCardHandler(contentService));
-  registry.register(getDefinition(6), createChangeCardStateHandler(contentService));
-  registry.register(getDefinition(7), createCountCardsHandler(contentService));
-  registry.register(getDefinition(8), createUpdateCardNodeLinksHandler(contentService));
-  registry.register(getDefinition(9), createBatchChangeCardStateHandler(contentService));
+  registry.register(getDefinition(5), createGetCardByIdHandler(contentService));
+  registry.register(getDefinition(6), createUpdateCardHandler(contentService));
+  registry.register(getDefinition(7), createChangeCardStateHandler(contentService));
+  registry.register(getDefinition(8), createCountCardsHandler(contentService));
+  registry.register(getDefinition(9), createUpdateCardNodeLinksHandler(contentService));
+  registry.register(getDefinition(10), createBatchChangeCardStateHandler(contentService));
 
   return registry;
 }

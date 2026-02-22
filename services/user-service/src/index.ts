@@ -12,10 +12,16 @@ import { PrismaClient } from '../generated/prisma/index.js';
 
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerUserRoutes } from './api/rest/user.routes.js';
-import { getEventPublisherConfig, getTokenConfig, loadConfig } from './config/index.js';
+import {
+  getEventPublisherConfig,
+  getSessionOrchestrationConfig,
+  getTokenConfig,
+  loadConfig,
+} from './config/index.js';
 import { UserService } from './domain/user-service/user.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import { PrismaUserRepository } from './infrastructure/database/prisma-user.repository.js';
+import { SessionOrchestrationService } from './infrastructure/external-apis/session-orchestration.service.js';
 import { JwtTokenService } from './infrastructure/external-apis/token.service.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
@@ -62,11 +68,24 @@ async function bootstrap(): Promise<void> {
 
   // Create infrastructure instances
   const userRepository = new PrismaUserRepository(prisma);
-  const tokenService = new JwtTokenService(getTokenConfig(config));
+  const tokenService = new JwtTokenService(getTokenConfig(config), {
+    prisma,
+    redis,
+  });
+  const sessionOrchestration = new SessionOrchestrationService(
+    getSessionOrchestrationConfig(config),
+    logger
+  );
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
 
   // Create service
-  const userService = new UserService(userRepository, eventPublisher, tokenService, logger);
+  const userService = new UserService(
+    userRepository,
+    eventPublisher,
+    tokenService,
+    sessionOrchestration,
+    logger
+  );
 
   // Create Fastify instance
   const fastify = Fastify({
@@ -89,7 +108,7 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  await registerUserRoutes(
+  registerUserRoutes(
     fastify as unknown as FastifyInstance,
     userService,
     authMiddleware,
@@ -108,8 +127,12 @@ async function bootstrap(): Promise<void> {
     process.exit(0);
   };
 
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
 
   // Start server
   try {
@@ -122,7 +145,7 @@ async function bootstrap(): Promise<void> {
 }
 
 // Run
-bootstrap().catch((error) => {
+bootstrap().catch((error: unknown) => {
   console.error('Fatal error during bootstrap:', error);
   process.exit(1);
 });
