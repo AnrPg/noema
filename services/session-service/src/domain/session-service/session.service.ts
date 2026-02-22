@@ -205,7 +205,9 @@ export class SessionService {
       config: {
         sessionTimeoutHours: data.config.sessionTimeoutHours ?? 24,
         ...(data.config.maxCards !== undefined ? { maxCards: data.config.maxCards } : {}),
-        ...(data.config.maxDurationMinutes !== undefined ? { maxDurationMinutes: data.config.maxDurationMinutes } : {}),
+        ...(data.config.maxDurationMinutes !== undefined
+          ? { maxDurationMinutes: data.config.maxDurationMinutes }
+          : {}),
         ...(data.config.categoryIds !== undefined ? { categoryIds: data.config.categoryIds } : {}),
         ...(data.config.cardTypes !== undefined ? { cardTypes: data.config.cardTypes } : {}),
       },
@@ -241,13 +243,21 @@ export class SessionService {
       teachingApproach: session.teachingApproach,
       schedulingAlgorithm: session.schedulingAlgorithm,
       ...(data.loadoutId !== undefined ? { loadoutId: data.loadoutId as LoadoutId } : {}),
-      ...(data.loadoutArchetype !== undefined ? { loadoutArchetype: data.loadoutArchetype as LoadoutArchetype } : {}),
+      ...(data.loadoutArchetype !== undefined
+        ? { loadoutArchetype: data.loadoutArchetype as LoadoutArchetype }
+        : {}),
       config: {
         sessionTimeoutHours: session.config.sessionTimeoutHours,
         ...(session.config.maxCards !== undefined ? { maxCards: session.config.maxCards } : {}),
-        ...(session.config.maxDurationMinutes !== undefined ? { maxDurationMinutes: session.config.maxDurationMinutes } : {}),
-        ...(session.config.categoryIds !== undefined ? { categoryIds: session.config.categoryIds as CategoryId[] } : {}),
-        ...(session.config.cardTypes !== undefined ? { cardTypes: session.config.cardTypes as (CardType | RemediationCardType)[] } : {}),
+        ...(session.config.maxDurationMinutes !== undefined
+          ? { maxDurationMinutes: session.config.maxDurationMinutes }
+          : {}),
+        ...(session.config.categoryIds !== undefined
+          ? { categoryIds: session.config.categoryIds as CategoryId[] }
+          : {}),
+        ...(session.config.cardTypes !== undefined
+          ? { cardTypes: session.config.cardTypes as (CardType | RemediationCardType)[] }
+          : {}),
       },
       initialQueueSize: data.initialCardIds.length,
     };
@@ -284,11 +294,16 @@ export class SessionService {
   ): Promise<IServiceResult<IValidateSessionBlueprintResult>> {
     const parsed = ValidateSessionBlueprintInputSchema.safeParse(input);
     if (!parsed.success) {
-      throw new ValidationError('Invalid session blueprint input', parsed.error.flatten().fieldErrors);
+      throw new ValidationError(
+        'Invalid session blueprint input',
+        parsed.error.flatten().fieldErrors
+      );
     }
 
     const { blueprint } = parsed.data;
-    const normalizedSignals = [...new Set(blueprint.checkpointSignals)] as AdaptiveCheckpointSignal[];
+    const normalizedSignals = [
+      ...new Set(blueprint.checkpointSignals),
+    ] as AdaptiveCheckpointSignal[];
     const laneSum = blueprint.laneMix.retention + blueprint.laneMix.calibration;
     const errors: string[] = [];
 
@@ -399,9 +414,7 @@ export class SessionService {
           action: directive.action,
           description: directive.reason,
           priority:
-            directive.priority === 'critical' || directive.priority === 'high'
-              ? 'high'
-              : 'medium',
+            directive.priority === 'critical' || directive.priority === 'high' ? 'high' : 'medium',
         })),
         `Checkpoint evaluated for trigger ${data.trigger}`
       ),

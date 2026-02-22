@@ -121,13 +121,9 @@ export const EvaluateAdaptiveCheckpointInputSchema = z.object({
   confidenceDrift: z.number().min(-1).max(1).optional(),
 });
 
-export type EvaluateAdaptiveCheckpointInput = z.input<
-  typeof EvaluateAdaptiveCheckpointInputSchema
->;
+export type EvaluateAdaptiveCheckpointInput = z.input<typeof EvaluateAdaptiveCheckpointInputSchema>;
 
-export type ValidateSessionBlueprintInput = z.input<
-  typeof ValidateSessionBlueprintInputSchema
->;
+export type ValidateSessionBlueprintInput = z.input<typeof ValidateSessionBlueprintInputSchema>;
 
 // ============================================================================
 // Attempt Context Snapshot Schema
