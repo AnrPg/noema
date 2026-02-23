@@ -47,7 +47,7 @@ import type {
   UserId,
 } from '@noema/types';
 import { ID_PREFIXES, SessionTerminationReason } from '@noema/types';
-import { jwtVerify } from 'jose';
+import { decodeProtectedHeader, jwtVerify, SignJWT } from 'jose';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 
@@ -79,6 +79,7 @@ import {
   ChangeTeachingInputSchema,
   EvaluateAdaptiveCheckpointInputSchema,
   InjectQueueInputSchema,
+  IssueOfflineIntentTokenInputSchema,
   RecordAttemptInputSchema,
   RecordDialogueTurnInputSchema,
   RemoveQueueInputSchema,
@@ -86,6 +87,7 @@ import {
   StartSessionInputSchema,
   UpdateStrategyInputSchema,
   ValidateSessionBlueprintInputSchema,
+  VerifyOfflineIntentTokenInputSchema,
 } from './session.schemas.js';
 
 // ============================================================================
@@ -118,7 +120,8 @@ export interface IServiceResult<T> {
 
 export interface ISessionServiceSecurityConfig {
   verifyOfflineIntentTokens: boolean;
-  offlineIntentTokenSecret: string;
+  offlineIntentTokenActiveKeyId: string;
+  offlineIntentTokenKeys: Record<string, string>;
   offlineIntentTokenIssuer: string;
   offlineIntentTokenAudience: string;
 }
@@ -156,9 +159,41 @@ function buildHints(
 // Session Service
 // ============================================================================
 
+export interface IOfflineIntentTokenInput {
+  userId: UserId;
+  sessionBlueprint: unknown;
+  expiresInSeconds: number;
+}
+
+export interface IOfflineIntentToken {
+  token: string;
+  expiresAt: string;
+}
+
+export interface IOfflineIntentTokenClaims {
+  tokenVersion: 'v1';
+  userId: UserId;
+  sessionBlueprint: {
+    checkpointSignals?: AdaptiveCheckpointSignal[];
+  };
+  issuedAt: string;
+  expiresAt: string;
+  nonce: string;
+}
+
+export interface IVerifyOfflineIntentTokenResult {
+  valid: boolean;
+  userId?: UserId;
+  expiresAt?: string;
+  checkpointSignals?: AdaptiveCheckpointSignal[];
+  reason?: string;
+}
+
 export class SessionService {
   private readonly logger: Logger;
   private readonly options: ISessionServiceOptions;
+  private readonly activeTokenKeyId: string;
+  private readonly tokenSecrets: Map<string, Uint8Array>;
 
   constructor(
     private readonly repository: ISessionRepository,
@@ -170,11 +205,20 @@ export class SessionService {
     this.options = {
       security: {
         verifyOfflineIntentTokens: options?.security?.verifyOfflineIntentTokens ?? false,
-        offlineIntentTokenSecret: options?.security?.offlineIntentTokenSecret ?? '',
-        offlineIntentTokenIssuer: options?.security?.offlineIntentTokenIssuer ?? 'noema.scheduler',
+        offlineIntentTokenActiveKeyId:
+          options?.security?.offlineIntentTokenActiveKeyId ?? 'default',
+        offlineIntentTokenKeys: options?.security?.offlineIntentTokenKeys ?? {},
+        offlineIntentTokenIssuer: options?.security?.offlineIntentTokenIssuer ?? 'noema.session',
         offlineIntentTokenAudience: options?.security?.offlineIntentTokenAudience ?? 'noema.mobile',
       },
     };
+    this.activeTokenKeyId = this.options.security.offlineIntentTokenActiveKeyId;
+    this.tokenSecrets = new Map(
+      Object.entries(this.options.security.offlineIntentTokenKeys).map(([keyId, secret]) => [
+        keyId,
+        new TextEncoder().encode(secret),
+      ])
+    );
   }
 
   // ==========================================================================
@@ -1461,6 +1505,196 @@ export class SessionService {
     return { valid: errors.length === 0, errors };
   }
 
+  // ==========================================================================
+  // Offline Intent Token — Issuance & Verification
+  // ==========================================================================
+
+  /**
+   * Issue a signed offline intent token.
+   *
+   * session-service is the single authority for token lifecycle (ADR-0023).
+   */
+  async issueOfflineIntentToken(
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IOfflineIntentToken>> {
+    const parsed = IssueOfflineIntentTokenInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid offline intent token input',
+        parsed.error.flatten().fieldErrors
+      );
+    }
+
+    const data = parsed.data as IOfflineIntentTokenInput;
+    if (data.userId !== ctx.userId) {
+      throw new AuthorizationError('userId in payload must match authenticated user');
+    }
+
+    if (this.tokenSecrets.size === 0) {
+      throw new ValidationError('Offline intent token issuance is not configured', {
+        offlineIntentToken: ['OFFLINE_INTENT_TOKEN_KEYS is required for token issuance'],
+      });
+    }
+
+    const activeSecret = this.requireTokenSecret(this.activeTokenKeyId);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + data.expiresInSeconds * 1000);
+
+    const claims: IOfflineIntentTokenClaims = {
+      tokenVersion: 'v1',
+      userId: data.userId as UserId,
+      sessionBlueprint: data.sessionBlueprint as IOfflineIntentTokenClaims['sessionBlueprint'],
+      issuedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+      nonce: crypto.randomUUID(),
+    };
+
+    const token = await new SignJWT(claims as unknown as Record<string, unknown>)
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT', kid: this.activeTokenKeyId })
+      .setIssuedAt(Math.floor(now.getTime() / 1000))
+      .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+      .setSubject(data.userId)
+      .setIssuer(this.options.security.offlineIntentTokenIssuer)
+      .setAudience(this.options.security.offlineIntentTokenAudience)
+      .setJti(claims.nonce)
+      .sign(activeSecret);
+
+    await this.eventPublisher.publish({
+      eventType: 'session.intent_token.issued',
+      aggregateType: 'Session',
+      aggregateId: data.userId,
+      payload: {
+        expiresAt: claims.expiresAt,
+        nonce: claims.nonce,
+      },
+      metadata: {
+        correlationId: ctx.correlationId,
+        userId: ctx.userId,
+      },
+    });
+
+    this.logger.info(
+      { userId: ctx.userId, kid: this.activeTokenKeyId, expiresAt: claims.expiresAt },
+      'Issued offline intent token'
+    );
+
+    return {
+      data: { token, expiresAt: claims.expiresAt },
+      agentHints: buildHints(
+        [
+          {
+            action: 'persist_intent_token',
+            description: 'Store token offline for later session replay',
+            priority: 'high',
+          },
+        ],
+        'Token issued successfully'
+      ),
+    };
+  }
+
+  /**
+   * Verify a signed offline intent token and extract claims.
+   *
+   * Supports kid-targeted key lookup with fallback to all keys for legacy tokens.
+   */
+  async verifyOfflineIntentTokenPublic(
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IVerifyOfflineIntentTokenResult>> {
+    const parsed = VerifyOfflineIntentTokenInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid verify intent token input',
+        parsed.error.flatten().fieldErrors
+      );
+    }
+
+    try {
+      const protectedHeader = decodeProtectedHeader(parsed.data.token);
+      const candidateKeys = this.getVerificationKeys(protectedHeader.kid);
+
+      let verifiedPayload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | undefined;
+      let lastError: unknown;
+
+      for (const key of candidateKeys) {
+        try {
+          const { payload } = await jwtVerify(parsed.data.token, key, {
+            issuer: this.options.security.offlineIntentTokenIssuer,
+            audience: this.options.security.offlineIntentTokenAudience,
+          });
+          verifiedPayload = payload;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (verifiedPayload === undefined) {
+        throw lastError instanceof Error ? lastError : new Error('Token verification failed');
+      }
+
+      const claims = verifiedPayload as unknown as IOfflineIntentTokenClaims;
+      if (claims.userId !== ctx.userId) {
+        return {
+          data: { valid: false, reason: 'Token userId does not match authenticated user' },
+          agentHints: buildHints(
+            [
+              {
+                action: 'request_new_intent_token',
+                description: 'Token subject does not match user',
+                priority: 'high',
+              },
+            ],
+            'Token subject mismatch'
+          ),
+        };
+      }
+
+      const checkpointSignals =
+        (claims.sessionBlueprint as { checkpointSignals?: AdaptiveCheckpointSignal[] })
+          .checkpointSignals ?? [];
+
+      return {
+        data: {
+          valid: true,
+          userId: claims.userId,
+          expiresAt: claims.expiresAt,
+          checkpointSignals,
+        },
+        agentHints: buildHints(
+          [
+            {
+              action: 'resume_offline_session',
+              description: 'Intent token is valid',
+              priority: 'high',
+            },
+          ],
+          'Token verified successfully'
+        ),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Token verification failed';
+      return {
+        data: { valid: false, reason: message },
+        agentHints: buildHints(
+          [
+            {
+              action: 'request_new_intent_token',
+              description: `Token invalid: ${message}`,
+              priority: 'high',
+            },
+          ],
+          'Token verification failed'
+        ),
+      };
+    }
+  }
+
+  /**
+   * Internal verification used by startSession.
+   */
   private async verifyOfflineIntentToken(
     offlineIntentToken: string | undefined,
     ctx: IExecutionContext
@@ -1469,30 +1703,72 @@ export class SessionService {
       return;
     }
 
-    if (this.options.security.offlineIntentTokenSecret.length === 0) {
+    if (this.tokenSecrets.size === 0) {
       throw new ValidationError('Offline intent token verification is enabled but not configured', {
-        offlineIntentToken: [
-          'OFFLINE_INTENT_TOKEN_SECRET is required when verification is enabled',
-        ],
+        offlineIntentToken: ['OFFLINE_INTENT_TOKEN_KEYS is required when verification is enabled'],
       });
     }
 
     try {
-      const key = new TextEncoder().encode(this.options.security.offlineIntentTokenSecret);
-      const { payload } = await jwtVerify(offlineIntentToken, key, {
-        issuer: this.options.security.offlineIntentTokenIssuer,
-        audience: this.options.security.offlineIntentTokenAudience,
-      });
+      const protectedHeader = decodeProtectedHeader(offlineIntentToken);
+      const candidateKeys = this.getVerificationKeys(protectedHeader.kid);
 
-      if (payload.sub !== ctx.userId) {
+      let verifiedPayload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | undefined;
+      let lastError: unknown;
+
+      for (const key of candidateKeys) {
+        try {
+          const { payload } = await jwtVerify(offlineIntentToken, key, {
+            issuer: this.options.security.offlineIntentTokenIssuer,
+            audience: this.options.security.offlineIntentTokenAudience,
+          });
+          verifiedPayload = payload;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (verifiedPayload === undefined) {
+        if (lastError instanceof AuthorizationError) throw lastError;
+        throw new AuthorizationError('Invalid offline intent token');
+      }
+
+      if (verifiedPayload.sub !== ctx.userId) {
         throw new AuthorizationError('Offline intent token does not match authenticated user');
       }
     } catch (error) {
       if (error instanceof AuthorizationError) {
         throw error;
       }
+      if (error instanceof ValidationError) {
+        throw error;
+      }
       throw new AuthorizationError('Invalid offline intent token');
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // Token Helpers
+  // --------------------------------------------------------------------------
+
+  private requireTokenSecret(keyId: string): Uint8Array {
+    const secret = this.tokenSecrets.get(keyId);
+    if (secret === undefined) {
+      throw new Error(`Offline intent token secret missing for key id '${keyId}'`);
+    }
+    return secret;
+  }
+
+  private getVerificationKeys(tokenKid: unknown): Uint8Array[] {
+    if (typeof tokenKid === 'string' && tokenKid.length > 0) {
+      const selected = this.tokenSecrets.get(tokenKid);
+      if (selected === undefined) {
+        return [];
+      }
+      return [selected];
+    }
+    return [...this.tokenSecrets.values()];
   }
 
   /**

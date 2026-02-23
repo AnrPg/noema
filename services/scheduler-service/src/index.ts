@@ -8,10 +8,7 @@ import { createToolRegistry, registerToolRoutes } from './agents/tools/index.js'
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes, registerSchedulerRoutes } from './api/rest/index.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
-import {
-  SchedulerService,
-  type ISchedulerServiceConfig,
-} from './domain/scheduler-service/scheduler.service.js';
+import { SchedulerService } from './domain/scheduler-service/scheduler.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaCalibrationDataRepository,
@@ -59,14 +56,7 @@ async function bootstrap(): Promise<void> {
   logger.info('Initialized database repositories');
 
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
-  const serviceConfig: ISchedulerServiceConfig = {
-    serviceVersion: config.service.version,
-    offlineIntentTokenActiveKeyId: config.security.offlineIntentTokenActiveKeyId,
-    offlineIntentTokenKeys: config.security.offlineIntentTokenKeys,
-    offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
-    offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
-  };
-  const schedulerService = new SchedulerService(eventPublisher, serviceConfig, {
+  const schedulerService = new SchedulerService(eventPublisher, {
     schedulerCardRepository: schedulerCardRepo,
     reviewRepository: reviewRepo,
     calibrationDataRepository: calibrationDataRepo,

@@ -68,7 +68,8 @@ async function bootstrap(): Promise<void> {
   const sessionService = new SessionService(sessionRepository, eventPublisher, logger, {
     security: {
       verifyOfflineIntentTokens: config.security.verifyOfflineIntentTokens,
-      offlineIntentTokenSecret: config.security.offlineIntentTokenSecret,
+      offlineIntentTokenActiveKeyId: config.security.offlineIntentTokenActiveKeyId,
+      offlineIntentTokenKeys: config.security.offlineIntentTokenKeys,
       offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
       offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
     },

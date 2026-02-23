@@ -13,13 +13,3 @@ export const DualLanePlanInputSchema = z.object({
     .optional(),
   maxCards: z.number().int().min(1).max(500),
 });
-
-export const OfflineIntentTokenInputSchema = z.object({
-  userId: UserIdSchema,
-  sessionBlueprint: z.unknown(),
-  expiresInSeconds: z.number().int().min(60).max(60 * 60 * 24),
-});
-
-export const VerifyOfflineIntentTokenInputSchema = z.object({
-  token: z.string().min(1),
-});

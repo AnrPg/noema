@@ -315,3 +315,26 @@ export const AttemptIdParamSchema = z.object({
   sessionId: SessionIdSchema,
   attemptId: z.string().describe('Attempt ID'),
 });
+
+// ============================================================================
+// Offline Intent Token Schemas
+// ============================================================================
+
+export const IssueOfflineIntentTokenInputSchema = z.object({
+  userId: z.string().min(1).describe('User ID requesting the token'),
+  sessionBlueprint: z.unknown().describe('Session blueprint for offline replay'),
+  expiresInSeconds: z
+    .number()
+    .int()
+    .min(60)
+    .max(60 * 60 * 24)
+    .describe('TTL in seconds'),
+});
+
+export type IssueOfflineIntentTokenInput = z.input<typeof IssueOfflineIntentTokenInputSchema>;
+
+export const VerifyOfflineIntentTokenInputSchema = z.object({
+  token: z.string().min(1).describe('Signed JWT token to verify'),
+});
+
+export type VerifyOfflineIntentTokenInput = z.input<typeof VerifyOfflineIntentTokenInputSchema>;

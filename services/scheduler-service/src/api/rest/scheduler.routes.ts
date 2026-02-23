@@ -77,34 +77,6 @@ export function registerSchedulerRoutes(
     }
   };
 
-  const issueOfflineIntentHandler = async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ): Promise<void> => {
-    try {
-      const userId = (request.user?.sub ?? 'anonymous') as UserId;
-      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
-      const result = await schedulerService.issueOfflineIntentToken(request.body, ctx);
-      reply.send(wrapResponse(request, result.data, result.agentHints));
-    } catch (error) {
-      handleError(error, request, reply);
-    }
-  };
-
-  const verifyOfflineIntentHandler = async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ): Promise<void> => {
-    try {
-      const userId = (request.user?.sub ?? 'anonymous') as UserId;
-      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
-      const result = await schedulerService.verifyOfflineIntentToken(request.body, ctx);
-      reply.send(wrapResponse(request, result.data, result.agentHints));
-    } catch (error) {
-      handleError(error, request, reply);
-    }
-  };
-
   fastify.post<{ Body: unknown }>(
     '/v1/scheduler/dual-lane/plan',
     authPreHandler,
@@ -114,23 +86,5 @@ export function registerSchedulerRoutes(
     '/v1/schedule/dual-lane-plan',
     authPreHandler,
     planDualLaneHandler
-  );
-
-  fastify.post<{ Body: unknown }>(
-    '/v1/scheduler/offline-intent/issue',
-    authPreHandler,
-    issueOfflineIntentHandler
-  );
-  fastify.post<{ Body: unknown }>('/v1/offline-intents', authPreHandler, issueOfflineIntentHandler);
-
-  fastify.post<{ Body: unknown }>(
-    '/v1/scheduler/offline-intent/verify',
-    authPreHandler,
-    verifyOfflineIntentHandler
-  );
-  fastify.post<{ Body: unknown }>(
-    '/v1/offline-intents/verify',
-    authPreHandler,
-    verifyOfflineIntentHandler
   );
 }

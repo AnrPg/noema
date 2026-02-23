@@ -42,30 +42,6 @@ export function createPlanDualLaneHandler(service: SchedulerService): ToolHandle
   };
 }
 
-export function createIssueOfflineIntentTokenHandler(service: SchedulerService): ToolHandler {
-  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.issueOfflineIntentToken(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
-  };
-}
-
-export function createVerifyOfflineIntentTokenHandler(service: SchedulerService): ToolHandler {
-  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.verifyOfflineIntentToken(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
-  };
-}
-
 export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] = [
   {
     name: 'plan-dual-lane',
@@ -87,34 +63,6 @@ export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] = [
           },
         },
         maxCards: { type: 'number', minimum: 1, maximum: 500 },
-      },
-    },
-  },
-  {
-    name: 'issue-offline-intent-token',
-    description: 'Issue a signed offline intent token for session replay and sync reconciliation.',
-    service: 'scheduler-service',
-    priority: 'P0',
-    inputSchema: {
-      type: 'object',
-      required: ['userId', 'sessionBlueprint', 'expiresInSeconds'],
-      properties: {
-        userId: { type: 'string' },
-        sessionBlueprint: { type: 'object' },
-        expiresInSeconds: { type: 'number', minimum: 60, maximum: 86400 },
-      },
-    },
-  },
-  {
-    name: 'verify-offline-intent-token',
-    description: 'Verify signed offline intent token authenticity and extract replay claims.',
-    service: 'scheduler-service',
-    priority: 'P0',
-    inputSchema: {
-      type: 'object',
-      required: ['token'],
-      properties: {
-        token: { type: 'string' },
       },
     },
   },

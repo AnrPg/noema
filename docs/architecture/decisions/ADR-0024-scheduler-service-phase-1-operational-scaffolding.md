@@ -34,8 +34,7 @@ Implement minimal operational surface for scheduler-service with:
    Redis connectivity checks
 3. **Authentication Middleware** - JWT verification with optional dev bypass,
    mirroring session-service pattern
-4. **REST API Routes** - Contract-aligned endpoints for dual-lane planning,
-   offline intent token issuance/verification
+4. **REST API Routes** - Contract-aligned endpoints for dual-lane planning
 5. **MCP Tool Execution** - HTTP routes for agent consumption of scheduler tools
    (list, execute)
 6. **Event Publishing** - RedisEventPublisher integration for domain event
@@ -95,9 +94,8 @@ async function bootstrap(): Promise<void> {
 - `POST /v1/scheduler/plan-dual-lane` - Core dual-lane planning (contract
   endpoint)
 - `POST /v1/schedule/plan` - Alias for backward compatibility
-- `POST /v1/scheduler/offline-intents/issue` - Issue offline intent token
-- `POST /v1/scheduler/offline-intents/verify` - Verify offline intent token
-- Includes additional `/v1/offline-intents/*` aliases for ergonomics
+- Offline intent token issuance/verification is handled by `session-service`
+  (see [ADR-0023](./ADR-0023-offline-intent-tokens.md))
 
 **Tool Routes** (`src/agents/tools/tool.routes.ts`):
 
@@ -123,7 +121,6 @@ Environment variables (see `.env.example`):
 - `PORT` - HTTP server port (default: 3004)
 - `HOST` - HTTP server host (default: 0.0.0.0)
 - `CORS_ORIGIN` - CORS allowed origins
-- `OFFLINE_INTENT_TOKEN_SECRET` - JWT signing secret for offline tokens
 - `JWT_SECRET` / `ACCESS_TOKEN_SECRET` - JWT verification secret
 - `JWT_ISSUER`, `JWT_AUDIENCE` - Token validation claims
 - `LOG_LEVEL` - Pino log level (default: info)

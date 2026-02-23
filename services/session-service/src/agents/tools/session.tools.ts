@@ -248,6 +248,38 @@ export function createEvaluateSessionCheckpointHandler(service: SessionService) 
   };
 }
 
+/**
+ * issue-offline-intent-token — Issue a signed offline intent token.
+ * P0 tool — session-service is the single authority for token lifecycle (ADR-0023).
+ */
+export function createIssueOfflineIntentTokenHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const result = await service.issueOfflineIntentToken(input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * verify-offline-intent-token — Verify signed offline intent token authenticity.
+ * P0 tool for token validation and claim extraction.
+ */
+export function createVerifyOfflineIntentTokenHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const result = await service.verifyOfflineIntentTokenPublic(input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
 // ============================================================================
 // Tool Definitions
 // ============================================================================
@@ -391,6 +423,40 @@ export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'issue-offline-intent-token',
+    description:
+      'Issue a signed offline intent token for session replay and sync reconciliation. Session-service is the single authority for token lifecycle (ADR-0023).',
+    service: 'session-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['userId', 'sessionBlueprint', 'expiresInSeconds'],
+      properties: {
+        userId: { type: 'string', description: 'User ID' },
+        sessionBlueprint: { type: 'object', description: 'Session blueprint for offline replay' },
+        expiresInSeconds: {
+          type: 'number',
+          minimum: 60,
+          maximum: 86400,
+          description: 'TTL in seconds',
+        },
+      },
+    },
+  },
+  {
+    name: 'verify-offline-intent-token',
+    description: 'Verify signed offline intent token authenticity and extract replay claims.',
+    service: 'session-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['token'],
+      properties: {
+        token: { type: 'string', description: 'Signed JWT token to verify' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -411,5 +477,7 @@ export function createSessionToolHandlers(
   handlers.set('record-dialogue-turn', createRecordDialogueTurnHandler(service));
   handlers.set('validate-session-blueprint', createValidateSessionBlueprintHandler(service));
   handlers.set('evaluate-session-checkpoint', createEvaluateSessionCheckpointHandler(service));
+  handlers.set('issue-offline-intent-token', createIssueOfflineIntentTokenHandler(service));
+  handlers.set('verify-offline-intent-token', createVerifyOfflineIntentTokenHandler(service));
   return handlers;
 }

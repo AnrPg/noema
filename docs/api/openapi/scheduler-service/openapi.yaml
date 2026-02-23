@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: Noema Scheduler Service API
+  version: 0.1.0
+  description: |
+    Scheduler Service manages dual-lane queue planning, scheduler tool execution,
+    and operational health probes.
+
+    This contract follows API-first governance and includes:
+    - Runtime endpoints implemented in scheduler-service.
+    - Planned endpoints (explicitly marked) aligned with scheduler bounded-context roadmap.
+
+    Planned operations use `x-noema-lifecycle: planned` and are not yet implemented.
+  contact:
+    name: Noema Platform
+  license:
+    name: Proprietary
+servers:
+  - url: http://localhost:3004
+    description: Local development
+
+tags:
+  - name: Scheduler
+    description: Dual-lane scheduling and queue planning
+  - name: Tools
+    description: MCP tool discovery and execution for scheduler capabilities
+  - name: Health
+    description: Liveness and readiness probes
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    $ref: ./paths/health.yaml#/health
+  /health/live:
+    $ref: ./paths/health.yaml#/healthLive
+  /health/ready:
+    $ref: ./paths/health.yaml#/healthReady
+
+  /v1/scheduler/dual-lane/plan:
+    $ref: ./paths/scheduler.yaml#/planDualLaneCanonical
+  /v1/schedule/dual-lane-plan:
+    $ref: ./paths/scheduler.yaml#/planDualLaneAlias
+
+  /v1/tools:
+    $ref: ./paths/tools.yaml#/listTools
+  /v1/tools/execute:
+    $ref: ./paths/tools.yaml#/executeTool
+
+  /v1/scheduler/review-queue:
+    $ref: ./paths/scheduler.yaml#/getReviewQueuePlanned
+  /v1/scheduler/cards/{cardId}/schedule:
+    $ref: ./paths/scheduler.yaml#/updateCardSchedulePlanned
+  /v1/scheduler/retention/predict:
+    $ref: ./paths/scheduler.yaml#/predictRetentionPlanned
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorInfo:
+      $ref: ./components/schemas/common.yaml#/ErrorInfo
+    ApiResponseMetadata:
+      $ref: ./components/schemas/common.yaml#/ApiResponseMetadata
+    AgentHintAction:
+      $ref: ./components/schemas/common.yaml#/AgentHintAction
+    EstimatedImpact:
+      $ref: ./components/schemas/common.yaml#/EstimatedImpact
+    AgentHints:
+      $ref: ./components/schemas/common.yaml#/AgentHints
+
+    UserId:
+      $ref: ./components/schemas/scheduler.yaml#/UserId
+    CardId:
+      $ref: ./components/schemas/scheduler.yaml#/CardId
+    CorrelationId:
+      $ref: ./components/schemas/scheduler.yaml#/CorrelationId
+    SchedulerLaneMix:
+      $ref: ./components/schemas/scheduler.yaml#/SchedulerLaneMix
+    DualLanePlanRequest:
+      $ref: ./components/schemas/scheduler.yaml#/DualLanePlanRequest
+    DualLanePlan:
+      $ref: ./components/schemas/scheduler.yaml#/DualLanePlan
+    DualLanePlanResponse:
+      $ref: ./components/schemas/scheduler.yaml#/DualLanePlanResponse
+
+    ToolPriority:
+      $ref: ./components/schemas/tools.yaml#/ToolPriority
+    ToolDefinition:
+      $ref: ./components/schemas/tools.yaml#/ToolDefinition
+    ToolListResponse:
+      $ref: ./components/schemas/tools.yaml#/ToolListResponse
+    ToolExecuteRequest:
+      $ref: ./components/schemas/tools.yaml#/ToolExecuteRequest
+    ToolExecutionMetadata:
+      $ref: ./components/schemas/tools.yaml#/ToolExecutionMetadata
+    ToolExecutionError:
+      $ref: ./components/schemas/tools.yaml#/ToolExecutionError
+    ToolExecutionResult:
+      $ref: ./components/schemas/tools.yaml#/ToolExecutionResult
+    ToolExecuteResponse:
+      $ref: ./components/schemas/tools.yaml#/ToolExecuteResponse
+
+    HealthStatus:
+      $ref: ./components/schemas/common.yaml#/HealthStatus
+    HealthCheckEntry:
+      $ref: ./components/schemas/common.yaml#/HealthCheckEntry
+    HealthResponse:
+      $ref: ./components/schemas/common.yaml#/HealthResponse
+    HealthLiveResponse:
+      $ref: ./components/schemas/common.yaml#/HealthLiveResponse
+    HealthReadyResponse:
+      $ref: ./components/schemas/common.yaml#/HealthReadyResponse
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or semantic validation failure.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/ErrorInfo"
+              metadata:
+                $ref: "#/components/schemas/ApiResponseMetadata"
+            required: [error, metadata]
+          examples:
+            invalidDualLaneInput:
+              value:
+                error:
+                  code: SCHEDULER_ERROR
+                  message: Invalid dual-lane plan input
+                metadata:
+                  requestId: cor_abc123
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 3
+    Unauthorized:
+      description: Missing or invalid authentication token.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/ErrorInfo"
+              metadata:
+                $ref: "#/components/schemas/ApiResponseMetadata"
+            required: [error, metadata]
+    ToolNotFound:
+      description: Requested tool is not registered.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolExecuteResponse"
+          examples:
+            notFound:
+              value:
+                data:
+                  success: false
+                  error:
+                    code: TOOL_NOT_FOUND
+                    message: "Unknown tool: get-srs-schedule"
+                  agentHints:
+                    suggestedNextActions: []
+                    relatedResources: []
+                    confidence: 1
+                    sourceQuality: high
+                    validityPeriod: long
+                    contextNeeded: []
+                    assumptions: []
+                    riskFactors: []
+                    dependencies: []
+                    estimatedImpact:
+                      benefit: 0
+                      effort: 0.1
+                      roi: 0
+                    preferenceAlignment: []
+                    reasoning: Unknown tool
+                  metadata:
+                    toolVersion: 0.1.0
+                    timestamp: "2026-02-23T12:00:00.000Z"
+                    executionTime: 1
+                    serviceVersion: 0.1.0
+                    correlationId: cor_abc123
+                metadata:
+                  requestId: cor_abc123
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 2

@@ -6,13 +6,6 @@ import type { CardId, CorrelationId, UserId } from '@noema/types';
 
 export type { CardId, CorrelationId, UserId };
 
-export type AdaptiveCheckpointSignal =
-  | 'confidence_drift'
-  | 'latency_spike'
-  | 'error_cascade'
-  | 'streak_break'
-  | 'manual';
-
 export interface ISchedulerLaneMix {
   retention: number;
   calibration: number;
@@ -38,40 +31,6 @@ export interface IDualLanePlan {
   retentionSelected: number;
   calibrationSelected: number;
   rationale: string;
-}
-
-export interface IOfflineIntentTokenInput {
-  userId: UserId;
-  sessionBlueprint: unknown;
-  expiresInSeconds: number;
-}
-
-export interface IOfflineIntentTokenClaims {
-  tokenVersion: 'v1';
-  userId: UserId;
-  sessionBlueprint: {
-    checkpointSignals?: AdaptiveCheckpointSignal[];
-  };
-  issuedAt: string;
-  expiresAt: string;
-  nonce: string;
-}
-
-export interface IOfflineIntentToken {
-  token: string;
-  expiresAt: string;
-}
-
-export interface IVerifyOfflineIntentTokenInput {
-  token: string;
-}
-
-export interface IVerifyOfflineIntentTokenResult {
-  valid: boolean;
-  userId?: UserId;
-  expiresAt?: string;
-  checkpointSignals?: AdaptiveCheckpointSignal[];
-  reason?: string;
 }
 
 // ============================================================================

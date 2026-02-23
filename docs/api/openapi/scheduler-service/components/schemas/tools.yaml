@@ -1,0 +1,117 @@
+ToolPriority:
+  type: string
+  enum: [P0, P1, P2]
+
+ToolDefinition:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    service:
+      type: string
+      example: scheduler-service
+    priority:
+      $ref: "#/ToolPriority"
+    inputSchema:
+      type: object
+      additionalProperties: true
+  required: [name, description, service, priority, inputSchema]
+
+ToolListResponse:
+  type: object
+  properties:
+    data:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            $ref: "#/ToolDefinition"
+        count:
+          type: integer
+          minimum: 0
+      required: [tools, count]
+    metadata:
+      $ref: ./common.yaml#/ApiResponseMetadata
+  required: [data, metadata]
+
+ToolExecuteRequest:
+  type: object
+  properties:
+    tool:
+      type: string
+      minLength: 1
+    input:
+      description: Tool input payload, validated by tool-specific schema.
+      default: {}
+      oneOf:
+        - type: object
+          additionalProperties: true
+        - type: array
+          items: {}
+        - type: string
+        - type: number
+        - type: boolean
+        - type: "null"
+  required: [tool]
+
+ToolExecutionMetadata:
+  type: object
+  properties:
+    toolVersion:
+      type: string
+    timestamp:
+      type: string
+      format: date-time
+    executionTime:
+      type: number
+      minimum: 0
+    serviceVersion:
+      type: string
+    traceId:
+      type: string
+      nullable: true
+    correlationId:
+      type: string
+      nullable: true
+    cached:
+      type: boolean
+      nullable: true
+  required: [toolVersion, timestamp, executionTime, serviceVersion]
+
+ToolExecutionError:
+  type: object
+  properties:
+    code:
+      type: string
+    message:
+      type: string
+    details:
+      nullable: true
+  required: [code, message]
+
+ToolExecutionResult:
+  type: object
+  properties:
+    success:
+      type: boolean
+    data:
+      nullable: true
+    error:
+      $ref: "#/ToolExecutionError"
+    agentHints:
+      $ref: ./common.yaml#/AgentHints
+    metadata:
+      $ref: "#/ToolExecutionMetadata"
+  required: [success, agentHints]
+
+ToolExecuteResponse:
+  type: object
+  properties:
+    data:
+      $ref: "#/ToolExecutionResult"
+    metadata:
+      $ref: ./common.yaml#/ApiResponseMetadata
+  required: [data, metadata]

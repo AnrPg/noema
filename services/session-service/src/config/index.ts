@@ -42,7 +42,8 @@ export interface IServiceConfig {
   };
   security: {
     verifyOfflineIntentTokens: boolean;
-    offlineIntentTokenSecret: string;
+    offlineIntentTokenActiveKeyId: string;
+    offlineIntentTokenKeys: Record<string, string>;
     offlineIntentTokenIssuer: string;
     offlineIntentTokenAudience: string;
   };
@@ -78,6 +79,86 @@ function optionalEnvBool(name: string, defaultValue: boolean): boolean {
   const value = process.env[name];
   if (!value) return defaultValue;
   return value.toLowerCase() === 'true';
+}
+
+// ============================================================================
+// Offline Intent Token Key Ring Parsing
+// ============================================================================
+
+const MIN_OFFLINE_INTENT_TOKEN_SECRET_LENGTH = 32;
+
+function ensureValidOfflineIntentTokenSecret(secret: string, keyId: string): string {
+  const normalizedSecret = secret.trim();
+  if (normalizedSecret.length < MIN_OFFLINE_INTENT_TOKEN_SECRET_LENGTH) {
+    throw new Error(
+      `OFFLINE_INTENT_TOKEN key '${keyId}' must be at least ${String(MIN_OFFLINE_INTENT_TOKEN_SECRET_LENGTH)} characters`
+    );
+  }
+  return normalizedSecret;
+}
+
+function parseOfflineIntentTokenKeyRing(): {
+  activeKeyId: string;
+  keys: Record<string, string>;
+} {
+  const keyRingRaw = process.env['OFFLINE_INTENT_TOKEN_KEYS'];
+  const activeKeyIdRaw = process.env['OFFLINE_INTENT_TOKEN_ACTIVE_KID'];
+
+  if (keyRingRaw !== undefined && keyRingRaw.trim() !== '') {
+    const entries = keyRingRaw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    const keys: Record<string, string> = {};
+
+    for (const entry of entries) {
+      const separatorIndex = entry.indexOf(':');
+      if (separatorIndex <= 0 || separatorIndex === entry.length - 1) {
+        throw new Error(
+          "Invalid OFFLINE_INTENT_TOKEN_KEYS format. Expected comma-separated 'kid:secret' pairs"
+        );
+      }
+
+      const keyId = entry.slice(0, separatorIndex).trim();
+      const secret = entry.slice(separatorIndex + 1).trim();
+      if (keyId.length === 0 || secret.length === 0) {
+        throw new Error('OFFLINE_INTENT_TOKEN_KEYS contains empty key id or secret');
+      }
+
+      keys[keyId] = ensureValidOfflineIntentTokenSecret(secret, keyId);
+    }
+
+    const activeKeyId = (activeKeyIdRaw ?? '').trim();
+    if (activeKeyId.length === 0) {
+      throw new Error(
+        'OFFLINE_INTENT_TOKEN_ACTIVE_KID is required when OFFLINE_INTENT_TOKEN_KEYS is set'
+      );
+    }
+
+    if (!(activeKeyId in keys)) {
+      throw new Error(
+        `OFFLINE_INTENT_TOKEN_ACTIVE_KID '${activeKeyId}' does not exist in OFFLINE_INTENT_TOKEN_KEYS`
+      );
+    }
+
+    return { activeKeyId, keys };
+  }
+
+  // Legacy single-secret fallback (optional — verification can be disabled)
+  const legacySecret = (process.env['OFFLINE_INTENT_TOKEN_SECRET'] ?? '').trim();
+  const activeKeyId = (activeKeyIdRaw ?? 'default').trim();
+
+  if (legacySecret.length === 0) {
+    return { activeKeyId, keys: {} };
+  }
+
+  return {
+    activeKeyId,
+    keys: {
+      [activeKeyId]: ensureValidOfflineIntentTokenSecret(legacySecret, activeKeyId),
+    },
+  };
 }
 
 // ============================================================================
@@ -124,8 +205,14 @@ export function loadConfig(): IServiceConfig {
     },
     security: {
       verifyOfflineIntentTokens: optionalEnvBool('VERIFY_OFFLINE_INTENT_TOKENS', true),
-      offlineIntentTokenSecret: optionalEnv('OFFLINE_INTENT_TOKEN_SECRET', ''),
-      offlineIntentTokenIssuer: optionalEnv('OFFLINE_INTENT_TOKEN_ISSUER', 'noema.scheduler'),
+      ...(() => {
+        const keyRing = parseOfflineIntentTokenKeyRing();
+        return {
+          offlineIntentTokenActiveKeyId: keyRing.activeKeyId,
+          offlineIntentTokenKeys: keyRing.keys,
+        };
+      })(),
+      offlineIntentTokenIssuer: optionalEnv('OFFLINE_INTENT_TOKEN_ISSUER', 'noema.session'),
       offlineIntentTokenAudience: optionalEnv('OFFLINE_INTENT_TOKEN_AUDIENCE', 'noema.mobile'),
     },
   };

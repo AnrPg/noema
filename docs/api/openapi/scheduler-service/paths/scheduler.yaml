@@ -1,0 +1,174 @@
+planDualLaneCanonical:
+  post:
+    operationId: planSchedulerDualLane
+    summary: Plan dual-lane scheduler queue
+    description: |
+      Generates a mixed review queue from retention and calibration card pools.
+      The authenticated principal must match `body.userId`.
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/DualLanePlanRequest
+          examples:
+            standard:
+              value:
+                userId: usr_V1StGXR8_Z5jdHi6B-myT
+                retentionCardIds:
+                  - card_retention_00000000001
+                  - card_retention_00000000002
+                calibrationCardIds:
+                  - card_calibration_000000001
+                targetMix:
+                  retention: 0.8
+                  calibration: 0.2
+                maxCards: 3
+    responses:
+      "200":
+        description: Dual-lane plan generated.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/DualLanePlanResponse
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+
+planDualLaneAlias:
+  post:
+    operationId: planSchedulerDualLaneLegacyAlias
+    summary: Plan dual-lane scheduler queue (legacy alias)
+    description: Backward-compatible alias for the canonical dual-lane planning endpoint.
+    tags: [Scheduler]
+    deprecated: true
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/DualLanePlanRequest
+    responses:
+      "200":
+        description: Dual-lane plan generated.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/DualLanePlanResponse
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+
+getReviewQueuePlanned:
+  get:
+    operationId: getSchedulerReviewQueue
+    summary: Get due review queue
+    description: |
+      Returns due cards for a user with optional lane filtering and pagination.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    parameters:
+      - name: userId
+        in: query
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/UserId
+      - name: lane
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [retention, calibration]
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+    responses:
+      "501":
+        description: Planned operation not implemented yet.
+
+updateCardSchedulePlanned:
+  patch:
+    operationId: updateSchedulerCardSchedule
+    summary: Update a single card schedule
+    description: |
+      Applies agent-approved schedule updates for one card.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    parameters:
+      - name: cardId
+        in: path
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/CardId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              userId:
+                $ref: ../openapi.yaml#/components/schemas/UserId
+              nextReviewDate:
+                type: string
+                format: date-time
+              interval:
+                type: integer
+                minimum: 0
+              schedulingAlgorithm:
+                type: string
+                enum: [fsrs, hlr, sm2]
+              rationale:
+                type: string
+            required: [userId, nextReviewDate, interval, schedulingAlgorithm]
+    responses:
+      "501":
+        description: Planned operation not implemented yet.
+
+predictRetentionPlanned:
+  post:
+    operationId: predictSchedulerRetention
+    summary: Predict retention probability
+    description: |
+      Computes retention prediction for one or more cards using scheduler models.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              userId:
+                $ref: ../openapi.yaml#/components/schemas/UserId
+              cards:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  properties:
+                    cardId:
+                      $ref: ../openapi.yaml#/components/schemas/CardId
+                    algorithm:
+                      type: string
+                      enum: [fsrs, hlr]
+                    asOf:
+                      type: string
+                      format: date-time
+                  required: [cardId, algorithm]
+            required: [userId, cards]
+    responses:
+      "501":
+        description: Planned operation not implemented yet.

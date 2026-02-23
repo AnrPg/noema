@@ -1,0 +1,50 @@
+health:
+  get:
+    operationId: getSchedulerHealth
+    summary: Service health with dependency checks
+    description: Returns scheduler-service health status including Redis and PostgreSQL checks.
+    tags: [Health]
+    security: []
+    responses:
+      "200":
+        description: Health status returned.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/HealthResponse
+
+healthLive:
+  get:
+    operationId: getSchedulerLiveness
+    summary: Liveness probe
+    description: Lightweight liveness endpoint used by orchestration probes.
+    tags: [Health]
+    security: []
+    responses:
+      "200":
+        description: Service process is running.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/HealthLiveResponse
+
+healthReady:
+  get:
+    operationId: getSchedulerReadiness
+    summary: Readiness probe
+    description: Readiness check against Redis and PostgreSQL connectivity.
+    tags: [Health]
+    security: []
+    responses:
+      "200":
+        description: Service is ready to accept traffic.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/HealthReadyResponse
+      "503":
+        description: Service is not ready.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/HealthReadyResponse

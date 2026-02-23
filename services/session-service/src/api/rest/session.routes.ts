@@ -512,4 +512,38 @@ export function registerSessionRoutes(
       }
     }
   );
+
+  // ==========================================================================
+  // Offline Intent Tokens (ADR-0023 — session-service is the single authority)
+  // ==========================================================================
+
+  // POST /v1/offline-intents — Issue a signed offline intent token
+  fastify.post<{ Body: unknown }>(
+    '/v1/offline-intents',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.issueOfflineIntentToken(request.body, ctx);
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // POST /v1/offline-intents/verify — Verify a signed offline intent token
+  fastify.post<{ Body: unknown }>(
+    '/v1/offline-intents/verify',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.verifyOfflineIntentTokenPublic(request.body, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
 }

@@ -1,0 +1,61 @@
+listTools:
+  get:
+    operationId: listSchedulerTools
+    summary: List available scheduler tools
+    description: Returns scheduler MCP tool definitions available for execution.
+    tags: [Tools]
+    responses:
+      "200":
+        description: Tool definitions listed.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/ToolListResponse
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+
+executeTool:
+  post:
+    operationId: executeSchedulerTool
+    summary: Execute a scheduler tool
+    description: |
+      Executes a registered scheduler tool in the caller's security context.
+      Returns structured tool success/failure result in `data`.
+    tags: [Tools]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/ToolExecuteRequest
+          examples:
+            planDualLane:
+              value:
+                tool: plan-dual-lane
+                input:
+                  userId: usr_V1StGXR8_Z5jdHi6B-myT
+                  retentionCardIds:
+                    - card_retention_00000000001
+                    - card_retention_00000000002
+                  calibrationCardIds:
+                    - card_calibration_000000001
+                  maxCards: 2
+    responses:
+      "200":
+        description: Tool executed successfully.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/ToolExecuteResponse
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "404":
+        $ref: ../openapi.yaml#/components/responses/ToolNotFound
+      "422":
+        description: Tool execution failed validation or business constraints.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/ToolExecuteResponse

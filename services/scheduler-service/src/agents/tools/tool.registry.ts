@@ -1,10 +1,5 @@
 import type { SchedulerService } from '../../domain/scheduler-service/scheduler.service.js';
-import {
-  createIssueOfflineIntentTokenHandler,
-  createPlanDualLaneHandler,
-  createVerifyOfflineIntentTokenHandler,
-  SCHEDULER_TOOL_DEFINITIONS,
-} from './scheduler.tools.js';
+import { createPlanDualLaneHandler, SCHEDULER_TOOL_DEFINITIONS } from './scheduler.tools.js';
 import type {
   IToolDefinition,
   IToolResult,
@@ -73,18 +68,12 @@ export class ToolRegistry {
 export function createToolRegistry(service: SchedulerService): ToolRegistry {
   const registry = new ToolRegistry();
 
-  const [planDefinition, issueDefinition, verifyDefinition] = SCHEDULER_TOOL_DEFINITIONS;
+  const [planDefinition] = SCHEDULER_TOOL_DEFINITIONS;
 
-  if (
-    planDefinition === undefined ||
-    issueDefinition === undefined ||
-    verifyDefinition === undefined
-  ) {
+  if (planDefinition === undefined) {
     throw new Error('Scheduler tool definitions are incomplete');
   }
 
   registry.register(planDefinition, createPlanDualLaneHandler(service));
-  registry.register(issueDefinition, createIssueOfflineIntentTokenHandler(service));
-  registry.register(verifyDefinition, createVerifyOfflineIntentTokenHandler(service));
   return registry;
 }

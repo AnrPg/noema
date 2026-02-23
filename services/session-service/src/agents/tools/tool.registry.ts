@@ -15,12 +15,19 @@ import {
   createGetAttemptHistoryHandler,
   createGetSessionHistoryHandler,
   createGetThinkingTraceHandler,
+  createIssueOfflineIntentTokenHandler,
   createRecordAttemptHandler,
   createRecordDialogueTurnHandler,
   createValidateSessionBlueprintHandler,
+  createVerifyOfflineIntentTokenHandler,
   SESSION_TOOL_DEFINITIONS,
 } from './session.tools.js';
-import type { IToolDefinition, IToolResult, IToolResultMetadata, ToolHandler } from './tool.types.js';
+import type {
+  IToolDefinition,
+  IToolResult,
+  IToolResultMetadata,
+  ToolHandler,
+} from './tool.types.js';
 
 // ============================================================================
 // Tool Registry
@@ -56,7 +63,7 @@ export class ToolRegistry {
     name: string,
     input: unknown,
     userId: string,
-    correlationId: string,
+    correlationId: string
   ): Promise<IToolResult> {
     const tool = this.tools.get(name);
     if (!tool) {
@@ -138,6 +145,8 @@ export function createToolRegistry(sessionService: SessionService): ToolRegistry
   registry.register(getDefinition(3), createGetThinkingTraceHandler(sessionService));
   registry.register(getDefinition(5), createValidateSessionBlueprintHandler(sessionService));
   registry.register(getDefinition(6), createEvaluateSessionCheckpointHandler(sessionService));
+  registry.register(getDefinition(7), createIssueOfflineIntentTokenHandler(sessionService));
+  registry.register(getDefinition(8), createVerifyOfflineIntentTokenHandler(sessionService));
 
   // P1 tools
   registry.register(getDefinition(4), createRecordDialogueTurnHandler(sessionService));

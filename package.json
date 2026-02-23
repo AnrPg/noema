@@ -31,6 +31,8 @@
     "test:coverage": "turbo run test:coverage",
     "test:e2e": "turbo run test:e2e",
     "typecheck": "turbo run typecheck",
+    "openapi:validate:scheduler": "pnpm --package=@redocly/cli@2.5.0 dlx redocly bundle docs/api/openapi/scheduler-service/openapi.yaml --output /tmp/noema-scheduler-openapi.bundle.yaml --ext yaml",
+    "openapi:validate": "pnpm run openapi:validate:scheduler",
     "clean": "turbo run clean && rm -rf node_modules",
     "clean:turbo": "rm -rf .turbo && turbo run clean",
     "db:generate": "turbo run db:generate",
