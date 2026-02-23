@@ -225,3 +225,42 @@ export interface ISchedulerProvenanceRepository {
   recordCommit(input: ICommitProvenanceInput): Promise<void>;
   recordCohortLineage(input: ICohortLineageInput): Promise<void>;
 }
+
+export type HandshakeState = 'proposed' | 'accepted' | 'revised' | 'committed';
+
+export interface IConsumerLinkage {
+  correlationId: string;
+  proposalId?: string;
+  decisionId?: string;
+  sessionId?: string;
+  sessionRevision?: number;
+  userId?: UserId;
+}
+
+export interface IInboxClaimInput {
+  idempotencyKey: string;
+  eventType: string;
+  streamMessageId?: string;
+  linkage: IConsumerLinkage;
+  payload: Record<string, unknown>;
+}
+
+export interface IHandshakeTransitionInput {
+  state: HandshakeState;
+  eventType: string;
+  streamMessageId?: string;
+  linkage: IConsumerLinkage;
+  metadata?: Record<string, unknown>;
+}
+
+export interface IInboxClaimResult {
+  status: 'claimed' | 'duplicate_processed' | 'duplicate_inflight';
+}
+
+export interface ISchedulerEventReliabilityRepository {
+  claimInbox(input: IInboxClaimInput): Promise<IInboxClaimResult>;
+  markInboxProcessed(idempotencyKey: string): Promise<void>;
+  markInboxFailed(idempotencyKey: string, errorMessage: string): Promise<void>;
+  readLatestSessionRevision(sessionId: string, proposalId: string): Promise<number | null>;
+  applyHandshakeTransition(input: IHandshakeTransitionInput): Promise<void>;
+}

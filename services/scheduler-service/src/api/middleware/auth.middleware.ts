@@ -176,7 +176,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
   const hasJwksUrl = config.jwksUrl !== undefined && config.jwksUrl.length > 0;
   const jwksUrl = hasJwksUrl ? config.jwksUrl : undefined;
   const secret = hasJwtSecret ? new TextEncoder().encode(config.jwtSecret) : undefined;
-  const jwks = jwksUrl ? jose.createRemoteJWKSet(new URL(jwksUrl)) : undefined;
+  const jwks = jwksUrl !== undefined ? jose.createRemoteJWKSet(new URL(jwksUrl)) : undefined;
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (config.authDisabled) {

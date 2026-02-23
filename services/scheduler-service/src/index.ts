@@ -12,6 +12,7 @@ import { SchedulerService } from './domain/scheduler-service/scheduler.service.j
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaCalibrationDataRepository,
+  PrismaEventReliabilityRepository,
   PrismaProvenanceRepository,
   PrismaReviewRepository,
   PrismaSchedulerCardRepository,
@@ -62,6 +63,7 @@ async function bootstrap(): Promise<void> {
   const reviewRepo = new PrismaReviewRepository(prisma);
   const calibrationDataRepo = new PrismaCalibrationDataRepository(prisma);
   const provenanceRepo = new PrismaProvenanceRepository(prisma);
+  const eventReliabilityRepo = new PrismaEventReliabilityRepository(prisma);
 
   logger.info('Initialized database repositories');
 
@@ -83,12 +85,17 @@ async function bootstrap(): Promise<void> {
       batchSize: config.redis.consumerBatchSize,
       retryBaseDelayMs: config.redis.consumerRetryBaseDelayMs,
       maxProcessAttempts: config.redis.consumerMaxProcessAttempts,
+      pendingIdleMs: config.redis.consumerPendingIdleMs,
+      pendingBatchSize: config.redis.consumerPendingBatchSize,
+      drainTimeoutMs: config.redis.consumerDrainTimeoutMs,
       deadLetterStreamKey: config.redis.deadLetterStreamKey,
     },
     {
       schedulerCardRepository: schedulerCardRepo,
       reviewRepository: reviewRepo,
       calibrationDataRepository: calibrationDataRepo,
+      reliabilityRepository: eventReliabilityRepo,
+      eventPublisher,
     },
     logger
   );

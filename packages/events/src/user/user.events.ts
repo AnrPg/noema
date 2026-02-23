@@ -109,9 +109,7 @@ export interface IUserSettingsChangedPayload {
 /**
  * Payload for user.password.changed event.
  */
-export interface IUserPasswordChangedPayload {
-  /** Nothing stored — security */
-}
+export type IUserPasswordChangedPayload = Record<string, never>;
 
 /**
  * Payload for user.logged_in event.

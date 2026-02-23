@@ -18,18 +18,18 @@ Make multi-service scheduler orchestration resilient, traceable, and replay-safe
 
 ## Tasks
 
-- [ ] Add/consume event types for propose/accept/revise/commit flows.
-- [ ] Implement handshake orchestration state transitions.
-- [ ] Propagate and persist linkage IDs:
+- [x] Add/consume event types for propose/accept/revise/commit flows.
+- [x] Implement handshake orchestration state transitions.
+- [x] Propagate and persist linkage IDs:
   - `correlationId`
   - `proposalId`
   - `decisionId`
   - `sessionId`
   - `sessionRevision`
-- [ ] Add inbox dedupe strategy for consumer processing.
-- [ ] Add pending-message recovery at startup (claim/replay pattern).
-- [ ] Add bounded graceful drain for in-flight messages.
-- [ ] Add reliability tests (duplicate delivery, replay, restart recovery).
+- [x] Add inbox dedupe strategy for consumer processing.
+- [x] Add pending-message recovery at startup (claim/replay pattern).
+- [x] Add bounded graceful drain for in-flight messages.
+- [x] Add reliability tests (duplicate delivery, replay, restart recovery).
 
 ## Constraints
 
@@ -38,6 +38,6 @@ Make multi-service scheduler orchestration resilient, traceable, and replay-safe
 
 ## Exit Criteria
 
-- [ ] Duplicate/reordered events do not corrupt scheduler state.
-- [ ] Pending message recovery succeeds after restart.
-- [ ] Reconciliation lineage is queryable end-to-end.
+- [x] Duplicate/reordered events do not corrupt scheduler state.
+- [x] Pending message recovery succeeds after restart.
+- [x] Reconciliation lineage is queryable end-to-end.

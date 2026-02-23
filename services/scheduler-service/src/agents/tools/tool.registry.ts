@@ -91,8 +91,9 @@ function validateValue(value: unknown, schema: IJsonSchema, path: string, errors
     }
 
     if (schema.items !== undefined) {
+      const itemSchema = schema.items;
       value.forEach((item, index) => {
-        validateValue(item, schema.items!, `${path}[${String(index)}]`, errors);
+        validateValue(item, itemSchema, `${path}[${String(index)}]`, errors);
       });
     }
 

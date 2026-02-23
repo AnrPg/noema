@@ -1137,7 +1137,10 @@ export class SchedulerService {
       ].sort((a, b) => (scores[b.cardId] ?? 0) - (scores[a.cardId] ?? 0));
 
       for (let i = 0; i < Math.min(remaining, allRemainder.length); i++) {
-        const entry = allRemainder[i]!;
+        const entry = allRemainder[i];
+        if (entry === undefined) {
+          continue;
+        }
         spilloverCards.push(entry);
 
         // Count spillover direction: retention card filling calibration slots, or vice-versa
@@ -1235,19 +1238,31 @@ export class SchedulerService {
         // Both lanes have cards remaining
         if (retentionCount >= retentionPerCalibration) {
           // Time for a calibration card
-          result.push(calibrationDetails[ci]!);
+          const calibrationCard = calibrationDetails[ci];
+          if (calibrationCard !== undefined) {
+            result.push(calibrationCard);
+          }
           ci++;
           retentionCount = 0;
         } else {
-          result.push(retentionDetails[ri]!);
+          const retentionCard = retentionDetails[ri];
+          if (retentionCard !== undefined) {
+            result.push(retentionCard);
+          }
           ri++;
           retentionCount++;
         }
       } else if (ri < retentionDetails.length) {
-        result.push(retentionDetails[ri]!);
+        const retentionCard = retentionDetails[ri];
+        if (retentionCard !== undefined) {
+          result.push(retentionCard);
+        }
         ri++;
       } else {
-        result.push(calibrationDetails[ci]!);
+        const calibrationCard = calibrationDetails[ci];
+        if (calibrationCard !== undefined) {
+          result.push(calibrationCard);
+        }
         ci++;
       }
     }

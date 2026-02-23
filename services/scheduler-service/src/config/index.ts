@@ -23,6 +23,9 @@ export interface IServiceConfig {
     consumerBatchSize: number;
     consumerRetryBaseDelayMs: number;
     consumerMaxProcessAttempts: number;
+    consumerPendingIdleMs: number;
+    consumerPendingBatchSize: number;
+    consumerDrainTimeoutMs: number;
     deadLetterStreamKey: string;
   };
   cors: {
@@ -110,6 +113,9 @@ export function loadConfig(): IServiceConfig {
       consumerBatchSize: optionalEnvInt('REDIS_CONSUMER_BATCH_SIZE', 20),
       consumerRetryBaseDelayMs: optionalEnvInt('REDIS_CONSUMER_RETRY_BASE_DELAY_MS', 250),
       consumerMaxProcessAttempts: optionalEnvInt('REDIS_CONSUMER_MAX_PROCESS_ATTEMPTS', 5),
+      consumerPendingIdleMs: optionalEnvInt('REDIS_CONSUMER_PENDING_IDLE_MS', 30000),
+      consumerPendingBatchSize: optionalEnvInt('REDIS_CONSUMER_PENDING_BATCH_SIZE', 50),
+      consumerDrainTimeoutMs: optionalEnvInt('REDIS_CONSUMER_DRAIN_TIMEOUT_MS', 15000),
       deadLetterStreamKey: optionalEnv(
         'REDIS_DEAD_LETTER_STREAM',
         'noema:events:scheduler-service:dlq'

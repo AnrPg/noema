@@ -1,10 +1,17 @@
-import type { CardId, UserId } from '@noema/types';
+import { createHash, randomUUID } from 'node:crypto';
+import type { CardId, CorrelationId, UserId } from '@noema/types';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 
 import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from '../../domain/scheduler-service/algorithms/fsrs.js';
 import { HLRModel, type Feature } from '../../domain/scheduler-service/algorithms/hlr.js';
+import type {
+  HandshakeState,
+  IConsumerLinkage,
+  ISchedulerEventReliabilityRepository,
+} from '../../domain/scheduler-service/scheduler.repository.js';
+import type { IEventPublisher } from '../../domain/shared/event-publisher.js';
 import type {
   ICalibrationDataRepository,
   IReviewRepository,
@@ -65,6 +72,52 @@ const ContentSeededPayloadSchema = z
   })
   .passthrough();
 
+const SessionCohortLinkageSchema = z.object({
+  proposalId: z.string().min(1),
+  decisionId: z.string().min(1),
+  sessionId: z.string().min(1),
+  sessionRevision: z.number().int().nonnegative(),
+  correlationId: z.string().min(1),
+});
+
+const SessionCohortProposedPayloadSchema = z
+  .object({
+    userId: z.string().min(1),
+    linkage: SessionCohortLinkageSchema,
+    candidateCardIds: z.array(z.string().min(1)).default([]),
+  })
+  .passthrough();
+
+const SessionCohortAcceptedPayloadSchema = z
+  .object({
+    userId: z.string().min(1),
+    linkage: SessionCohortLinkageSchema,
+    acceptedCardIds: z.array(z.string().min(1)).default([]),
+    excludedCardIds: z.array(z.string().min(1)).default([]),
+  })
+  .passthrough();
+
+const SessionCohortRevisedPayloadSchema = z
+  .object({
+    userId: z.string().min(1),
+    linkage: SessionCohortLinkageSchema,
+    revisionFrom: z.number().int().nonnegative(),
+    revisionTo: z.number().int().nonnegative(),
+    candidateCardIds: z.array(z.string().min(1)).default([]),
+    reason: z.string().optional(),
+  })
+  .passthrough();
+
+const SessionCohortCommittedPayloadSchema = z
+  .object({
+    userId: z.string().min(1),
+    linkage: SessionCohortLinkageSchema,
+    committedCardIds: z.array(z.string().min(1)).default([]),
+    rejectedCardIds: z.array(z.string().min(1)).default([]),
+    policyVersion: z.string().optional(),
+  })
+  .passthrough();
+
 export interface ISchedulerEventConsumerConfig {
   sourceStreamKey: string;
   consumerGroup: string;
@@ -73,6 +126,9 @@ export interface ISchedulerEventConsumerConfig {
   batchSize: number;
   retryBaseDelayMs: number;
   maxProcessAttempts: number;
+  pendingIdleMs: number;
+  pendingBatchSize: number;
+  drainTimeoutMs: number;
   deadLetterStreamKey: string;
 }
 
@@ -86,11 +142,14 @@ export interface ISchedulerEventConsumerDependencies {
   schedulerCardRepository: ISchedulerCardRepository;
   reviewRepository: IReviewRepository;
   calibrationDataRepository: ICalibrationDataRepository;
+  reliabilityRepository: ISchedulerEventReliabilityRepository;
+  eventPublisher: IEventPublisher;
 }
 
 export class SchedulerEventConsumer {
   private isRunning = false;
   private readonly logger: Logger;
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(
     private readonly redis: Redis,
@@ -104,6 +163,7 @@ export class SchedulerEventConsumer {
   async start(): Promise<void> {
     await this.ensureConsumerGroup();
     this.isRunning = true;
+    await this.recoverPendingMessages();
     this.logger.info(
       {
         stream: this.config.sourceStreamKey,
@@ -118,8 +178,23 @@ export class SchedulerEventConsumer {
 
   stop(): Promise<void> {
     this.isRunning = false;
+    return this.drainAndStop();
+  }
+
+  private async drainAndStop(): Promise<void> {
+    const startedAt = Date.now();
+    while (this.inFlight.size > 0 && Date.now() - startedAt < this.config.drainTimeoutMs) {
+      await Promise.race(this.inFlight);
+    }
+
+    if (this.inFlight.size > 0) {
+      this.logger.warn(
+        { remainingInFlight: this.inFlight.size, drainTimeoutMs: this.config.drainTimeoutMs },
+        'Consumer drain timeout reached before all in-flight messages completed'
+      );
+    }
+
     this.logger.info('Scheduler event consumer stopped');
-    return Promise.resolve();
   }
 
   private async ensureConsumerGroup(): Promise<void> {
@@ -171,14 +246,67 @@ export class SchedulerEventConsumer {
         const typedEntries = entries as [string, [string, string[]][]][];
 
         for (const [, streamEntries] of typedEntries) {
-          for (const [messageId, fields] of streamEntries) {
-            await this.handleStreamMessage(messageId, fields);
-          }
+          const tasks = streamEntries.map(([messageId, fields]) =>
+            this.trackInFlight(this.handleStreamMessage(messageId, fields))
+          );
+          await Promise.all(tasks);
         }
       } catch (error: unknown) {
         this.logger.error({ error }, 'Error in scheduler event consumer loop');
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
+    }
+  }
+
+  private trackInFlight<T>(promise: Promise<T>): Promise<T> {
+    const tracked = promise.finally(() => {
+      this.inFlight.delete(tracked as unknown as Promise<void>);
+    });
+    this.inFlight.add(tracked as unknown as Promise<void>);
+    return tracked;
+  }
+
+  private async recoverPendingMessages(): Promise<void> {
+    let startId = '0-0';
+    this.logger.info(
+      {
+        stream: this.config.sourceStreamKey,
+        group: this.config.consumerGroup,
+        consumer: this.config.consumerName,
+      },
+      'Starting pending-message recovery'
+    );
+
+    for (;;) {
+      const rawResult: unknown = await this.redis.xautoclaim(
+        this.config.sourceStreamKey,
+        this.config.consumerGroup,
+        this.config.consumerName,
+        this.config.pendingIdleMs,
+        startId,
+        'COUNT',
+        this.config.pendingBatchSize
+      );
+
+      if (!Array.isArray(rawResult)) {
+        break;
+      }
+
+      const [nextStartId, entries] = rawResult as [string, [string, string[]][]];
+
+      if (entries.length === 0) {
+        break;
+      }
+
+      for (const [messageId, fields] of entries) {
+        await this.handleStreamMessage(messageId, fields);
+      }
+
+      if (nextStartId === startId) {
+        break;
+      }
+
+      startId = nextStartId;
     }
   }
 
@@ -191,7 +319,41 @@ export class SchedulerEventConsumer {
 
     try {
       const envelope = JSON.parse(eventJson) as IStreamEventEnvelope;
+      const linkage = this.extractLinkage(envelope);
+      const idempotencyKey = this.buildIdempotencyKey(envelope, linkage);
+
+      const claimResult = await this.dependencies.reliabilityRepository.claimInbox({
+        idempotencyKey,
+        eventType: envelope.eventType,
+        streamMessageId: messageId,
+        linkage,
+        payload: envelope.payload,
+      });
+
+      if (claimResult.status !== 'claimed') {
+        await this.acknowledge(messageId);
+        return;
+      }
+
+      if (
+        linkage.sessionId !== undefined &&
+        linkage.proposalId !== undefined &&
+        typeof linkage.sessionRevision === 'number'
+      ) {
+        const latestRevision = await this.dependencies.reliabilityRepository.readLatestSessionRevision(
+          linkage.sessionId,
+          linkage.proposalId
+        );
+
+        if (latestRevision !== null && linkage.sessionRevision < latestRevision) {
+          await this.dependencies.reliabilityRepository.markInboxProcessed(idempotencyKey);
+          await this.acknowledge(messageId);
+          return;
+        }
+      }
+
       await this.dispatchEvent(envelope);
+      await this.dependencies.reliabilityRepository.markInboxProcessed(idempotencyKey);
       await this.acknowledge(messageId);
     } catch (error: unknown) {
       this.logger.error({ error, messageId }, 'Failed to process stream message');
@@ -213,6 +375,10 @@ export class SchedulerEventConsumer {
     const attempts = this.readAttempts(parsedEnvelope.metadata);
     const nextAttempt = attempts + 1;
     const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
+
+    const linkage = this.extractLinkage(parsedEnvelope);
+    const idempotencyKey = this.buildIdempotencyKey(parsedEnvelope, linkage);
+    await this.dependencies.reliabilityRepository.markInboxFailed(idempotencyKey, errorMessage);
 
     const metadata: IStreamEventEnvelope['metadata'] & IProcessingMetadata = {
       ...parsedEnvelope.metadata,
@@ -270,6 +436,18 @@ export class SchedulerEventConsumer {
       case 'session.started':
         await this.handleSessionStarted(envelope);
         break;
+      case 'session.cohort.proposed':
+        await this.handleSessionCohortTransition(envelope, 'proposed');
+        break;
+      case 'session.cohort.accepted':
+        await this.handleSessionCohortTransition(envelope, 'accepted');
+        break;
+      case 'session.cohort.revised':
+        await this.handleSessionCohortTransition(envelope, 'revised');
+        break;
+      case 'session.cohort.committed':
+        await this.handleSessionCohortTransition(envelope, 'committed');
+        break;
       case 'attempt.recorded':
       case 'review.submitted':
         await this.handleReviewRecorded(envelope);
@@ -280,6 +458,59 @@ export class SchedulerEventConsumer {
       default:
         break;
     }
+  }
+
+  private async handleSessionCohortTransition(
+    envelope: IStreamEventEnvelope,
+    state: HandshakeState
+  ): Promise<void> {
+    const parsed = this.parseCohortPayload(envelope);
+    if (parsed === null) {
+      this.logger.warn(
+        { eventType: envelope.eventType },
+        'Skipping invalid session cohort handshake payload'
+      );
+      return;
+    }
+
+    const linkage: IConsumerLinkage = {
+      correlationId: parsed.linkage.correlationId,
+      userId: parsed.userId as UserId,
+      proposalId: parsed.linkage.proposalId,
+      decisionId: parsed.linkage.decisionId,
+      sessionId: parsed.linkage.sessionId,
+      sessionRevision: parsed.linkage.sessionRevision,
+    };
+
+    await this.dependencies.reliabilityRepository.applyHandshakeTransition({
+      state,
+      eventType: envelope.eventType,
+      linkage,
+      metadata: {
+        aggregateType: envelope.aggregateType,
+        aggregateId: envelope.aggregateId,
+      },
+    });
+
+    await this.dependencies.eventPublisher.publish({
+      eventType: `schedule.handshake.${state}`,
+      aggregateType: 'Schedule',
+      aggregateId: parsed.linkage.sessionId,
+      payload: {
+        userId: parsed.userId,
+        proposalId: parsed.linkage.proposalId,
+        decisionId: parsed.linkage.decisionId,
+        sessionId: parsed.linkage.sessionId,
+        sessionRevision: parsed.linkage.sessionRevision,
+        correlationId: parsed.linkage.correlationId,
+        sourceEventType: envelope.eventType,
+        ...this.extractCohortCards(parsed),
+      },
+      metadata: {
+        correlationId: parsed.linkage.correlationId as CorrelationId,
+        userId: parsed.userId as UserId,
+      },
+    });
   }
 
   private async handleSessionStarted(envelope: IStreamEventEnvelope): Promise<void> {
@@ -740,6 +971,152 @@ export class SchedulerEventConsumer {
       } satisfies IStreamEventEnvelope)
     );
     await this.acknowledge(messageId);
+  }
+
+  private extractLinkage(envelope: IStreamEventEnvelope): IConsumerLinkage {
+    const payload = envelope.payload;
+    const payloadView = payload as {
+      linkage?: unknown;
+      proposalId?: unknown;
+      orchestrationProposalId?: unknown;
+      decisionId?: unknown;
+      sessionId?: unknown;
+      sessionRevision?: unknown;
+      userId?: unknown;
+      correlationId?: unknown;
+    };
+    const linkage = this.readRecord(payloadView.linkage);
+    const linkageView = linkage as
+      | {
+          proposalId?: unknown;
+          decisionId?: unknown;
+          sessionId?: unknown;
+          sessionRevision?: unknown;
+          correlationId?: unknown;
+        }
+      | null;
+
+    const proposalId = this.readString(
+      payloadView.proposalId ?? payloadView.orchestrationProposalId ?? linkageView?.proposalId
+    );
+    const decisionId = this.readString(payloadView.decisionId ?? linkageView?.decisionId);
+    const sessionId = this.readString(payloadView.sessionId ?? linkageView?.sessionId);
+    const sessionRevision = this.readNumber(
+      payloadView.sessionRevision ?? linkageView?.sessionRevision
+    );
+    const userId = this.readString(payloadView.userId ?? envelope.metadata?.userId);
+
+    const correlationFromPayload = this.readString(
+      payloadView.correlationId ?? linkageView?.correlationId
+    );
+    const correlationId =
+      correlationFromPayload ??
+      this.readString(envelope.metadata?.correlationId) ??
+      `cor_${randomUUID()}`;
+
+    return {
+      correlationId,
+      ...(userId !== undefined ? { userId: userId as UserId } : {}),
+      ...(proposalId !== undefined ? { proposalId } : {}),
+      ...(decisionId !== undefined ? { decisionId } : {}),
+      ...(sessionId !== undefined ? { sessionId } : {}),
+      ...(sessionRevision !== undefined ? { sessionRevision } : {}),
+    };
+  }
+
+  private buildIdempotencyKey(
+    envelope: IStreamEventEnvelope,
+    linkage: IConsumerLinkage
+  ): string {
+    const payload = envelope.payload;
+    const attemptId = this.readString(payload['attemptId']);
+
+    if (attemptId !== undefined) {
+      return `attempt:${attemptId}`;
+    }
+
+    if (
+      linkage.sessionId !== undefined &&
+      linkage.proposalId !== undefined &&
+      typeof linkage.sessionRevision === 'number'
+    ) {
+      return `cohort:${envelope.eventType}:${linkage.sessionId}:${linkage.proposalId}:${String(linkage.sessionRevision)}`;
+    }
+
+    const digest = createHash('sha256')
+      .update(JSON.stringify(envelope.payload))
+      .digest('hex')
+      .slice(0, 24);
+    return `evt:${envelope.eventType}:${envelope.aggregateId}:${linkage.correlationId}:${digest}`;
+  }
+
+  private parseCohortPayload(envelope: IStreamEventEnvelope): {
+    userId: string;
+    linkage: {
+      proposalId: string;
+      decisionId: string;
+      sessionId: string;
+      sessionRevision: number;
+      correlationId: string;
+    };
+    candidateCardIds?: string[];
+    acceptedCardIds?: string[];
+    excludedCardIds?: string[];
+    committedCardIds?: string[];
+    rejectedCardIds?: string[];
+  } | null {
+    if (envelope.eventType === 'session.cohort.proposed') {
+      const parsed = SessionCohortProposedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? parsed.data : null;
+    }
+
+    if (envelope.eventType === 'session.cohort.accepted') {
+      const parsed = SessionCohortAcceptedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? parsed.data : null;
+    }
+
+    if (envelope.eventType === 'session.cohort.revised') {
+      const parsed = SessionCohortRevisedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? parsed.data : null;
+    }
+
+    if (envelope.eventType === 'session.cohort.committed') {
+      const parsed = SessionCohortCommittedPayloadSchema.safeParse(envelope.payload);
+      return parsed.success ? parsed.data : null;
+    }
+
+    return null;
+  }
+
+  private extractCohortCards(payload: {
+    candidateCardIds?: string[];
+    acceptedCardIds?: string[];
+    excludedCardIds?: string[];
+    committedCardIds?: string[];
+    rejectedCardIds?: string[];
+  }): Record<string, unknown> {
+    return {
+      candidateCardIds: payload.candidateCardIds ?? [],
+      acceptedCardIds: payload.acceptedCardIds ?? [],
+      excludedCardIds: payload.excludedCardIds ?? [],
+      committedCardIds: payload.committedCardIds ?? [],
+      rejectedCardIds: payload.rejectedCardIds ?? [],
+    };
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    if (typeof value !== 'object' || value === null) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private readString(value: unknown): string | undefined {
+    return typeof value === 'string' && value !== '' ? value : undefined;
+  }
+
+  private readNumber(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 
   /**

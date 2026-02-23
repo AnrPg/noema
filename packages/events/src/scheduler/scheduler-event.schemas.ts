@@ -186,6 +186,37 @@ export const ScheduleWeightsPersonalizedPayloadSchema = z.object({
   improvementMetric: z.number().optional(),
 });
 
+export const ScheduleHandshakePayloadSchema = z.object({
+  userId: UserIdSchema,
+  proposalId: z.string().min(1),
+  decisionId: z.string().min(1),
+  sessionId: z.string().min(1),
+  sessionRevision: z.number().int().nonnegative(),
+  correlationId: z.string().min(1),
+  sourceEventType: z.string().min(1),
+});
+
+export const ScheduleHandshakeProposedPayloadSchema = ScheduleHandshakePayloadSchema.extend({
+  candidateCardIds: z.array(CardIdSchema),
+});
+
+export const ScheduleHandshakeAcceptedPayloadSchema = ScheduleHandshakePayloadSchema.extend({
+  acceptedCardIds: z.array(CardIdSchema),
+  excludedCardIds: z.array(CardIdSchema),
+});
+
+export const ScheduleHandshakeRevisedPayloadSchema = ScheduleHandshakePayloadSchema.extend({
+  revisionFrom: z.number().int().nonnegative(),
+  revisionTo: z.number().int().nonnegative(),
+  candidateCardIds: z.array(CardIdSchema),
+  reason: z.string().optional(),
+});
+
+export const ScheduleHandshakeCommittedPayloadSchema = ScheduleHandshakePayloadSchema.extend({
+  committedCardIds: z.array(CardIdSchema),
+  rejectedCardIds: z.array(CardIdSchema),
+});
+
 // ============================================================================
 // Full Event Schemas (Envelope + Payload)
 // ============================================================================
@@ -256,6 +287,30 @@ export const ScheduleWeightsPersonalizedEventSchema = createEventSchema(
   ScheduleWeightsPersonalizedPayloadSchema
 );
 
+export const ScheduleHandshakeProposedEventSchema = createEventSchema(
+  'schedule.handshake.proposed',
+  'Schedule',
+  ScheduleHandshakeProposedPayloadSchema
+);
+
+export const ScheduleHandshakeAcceptedEventSchema = createEventSchema(
+  'schedule.handshake.accepted',
+  'Schedule',
+  ScheduleHandshakeAcceptedPayloadSchema
+);
+
+export const ScheduleHandshakeRevisedEventSchema = createEventSchema(
+  'schedule.handshake.revised',
+  'Schedule',
+  ScheduleHandshakeRevisedPayloadSchema
+);
+
+export const ScheduleHandshakeCommittedEventSchema = createEventSchema(
+  'schedule.handshake.committed',
+  'Schedule',
+  ScheduleHandshakeCommittedPayloadSchema
+);
+
 // ============================================================================
 // Type Inference from Schemas
 // ============================================================================
@@ -275,3 +330,7 @@ export type ScheduleConfigUpdatedEventInput = z.input<typeof ScheduleConfigUpdat
 export type ScheduleWeightsPersonalizedEventInput = z.input<
   typeof ScheduleWeightsPersonalizedEventSchema
 >;
+export type ScheduleHandshakeProposedEventInput = z.input<typeof ScheduleHandshakeProposedEventSchema>;
+export type ScheduleHandshakeAcceptedEventInput = z.input<typeof ScheduleHandshakeAcceptedEventSchema>;
+export type ScheduleHandshakeRevisedEventInput = z.input<typeof ScheduleHandshakeRevisedEventSchema>;
+export type ScheduleHandshakeCommittedEventInput = z.input<typeof ScheduleHandshakeCommittedEventSchema>;

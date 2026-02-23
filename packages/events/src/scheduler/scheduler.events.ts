@@ -51,6 +51,12 @@ export const SchedulerEventType = {
   // Configuration
   SCHEDULE_CONFIG_UPDATED: 'schedule.config.updated',
   SCHEDULE_WEIGHTS_PERSONALIZED: 'schedule.weights.personalized',
+
+  // Session-scheduler handshake
+  SCHEDULE_HANDSHAKE_PROPOSED: 'schedule.handshake.proposed',
+  SCHEDULE_HANDSHAKE_ACCEPTED: 'schedule.handshake.accepted',
+  SCHEDULE_HANDSHAKE_REVISED: 'schedule.handshake.revised',
+  SCHEDULE_HANDSHAKE_COMMITTED: 'schedule.handshake.committed',
 } as const;
 
 export type SchedulerEventType = (typeof SchedulerEventType)[keyof typeof SchedulerEventType];
@@ -219,6 +225,41 @@ export interface IScheduleWeightsPersonalizedPayload {
 }
 
 // ============================================================================
+// Handshake Payloads
+// ============================================================================
+
+export interface IScheduleHandshakePayload {
+  userId: UserId;
+  proposalId: string;
+  decisionId: string;
+  sessionId: string;
+  sessionRevision: number;
+  correlationId: string;
+  sourceEventType: string;
+}
+
+export interface IScheduleHandshakeProposedPayload extends IScheduleHandshakePayload {
+  candidateCardIds: CardId[];
+}
+
+export interface IScheduleHandshakeAcceptedPayload extends IScheduleHandshakePayload {
+  acceptedCardIds: CardId[];
+  excludedCardIds: CardId[];
+}
+
+export interface IScheduleHandshakeRevisedPayload extends IScheduleHandshakePayload {
+  revisionFrom: number;
+  revisionTo: number;
+  candidateCardIds: CardId[];
+  reason?: string;
+}
+
+export interface IScheduleHandshakeCommittedPayload extends IScheduleHandshakePayload {
+  committedCardIds: CardId[];
+  rejectedCardIds: CardId[];
+}
+
+// ============================================================================
 // Typed Event Aliases
 // ============================================================================
 
@@ -283,6 +324,30 @@ export type ScheduleWeightsPersonalizedEvent = ITypedEvent<
   IScheduleWeightsPersonalizedPayload
 >;
 
+export type ScheduleHandshakeProposedEvent = ITypedEvent<
+  'schedule.handshake.proposed',
+  'Schedule',
+  IScheduleHandshakeProposedPayload
+>;
+
+export type ScheduleHandshakeAcceptedEvent = ITypedEvent<
+  'schedule.handshake.accepted',
+  'Schedule',
+  IScheduleHandshakeAcceptedPayload
+>;
+
+export type ScheduleHandshakeRevisedEvent = ITypedEvent<
+  'schedule.handshake.revised',
+  'Schedule',
+  IScheduleHandshakeRevisedPayload
+>;
+
+export type ScheduleHandshakeCommittedEvent = ITypedEvent<
+  'schedule.handshake.committed',
+  'Schedule',
+  IScheduleHandshakeCommittedPayload
+>;
+
 /** Union of all scheduler domain events */
 export type SchedulerDomainEvent =
   | ScheduleCreatedEvent
@@ -295,4 +360,8 @@ export type SchedulerDomainEvent =
   | ScheduleMaturedEvent
   | ScheduleRetentionPredictedEvent
   | ScheduleConfigUpdatedEvent
-  | ScheduleWeightsPersonalizedEvent;
+  | ScheduleWeightsPersonalizedEvent
+  | ScheduleHandshakeProposedEvent
+  | ScheduleHandshakeAcceptedEvent
+  | ScheduleHandshakeRevisedEvent
+  | ScheduleHandshakeCommittedEvent;

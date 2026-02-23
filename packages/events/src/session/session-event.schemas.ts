@@ -251,6 +251,45 @@ export const SessionCheckpointEvaluatedPayloadSchema = z.object({
   directives: z.array(SessionCheckpointEvaluatedDirectiveSchema),
 });
 
+export const SessionCohortLinkageSchema = z.object({
+  proposalId: z.string().min(1),
+  decisionId: z.string().min(1),
+  sessionId: SessionIdSchema,
+  sessionRevision: z.number().int().nonnegative(),
+  correlationId: z.string().min(1),
+});
+
+export const SessionCohortProposedPayloadSchema = z.object({
+  userId: UserIdSchema,
+  linkage: SessionCohortLinkageSchema,
+  candidateCardIds: z.array(CardIdSchema),
+  constraints: z.record(z.unknown()).optional(),
+});
+
+export const SessionCohortAcceptedPayloadSchema = z.object({
+  userId: UserIdSchema,
+  linkage: SessionCohortLinkageSchema,
+  acceptedCardIds: z.array(CardIdSchema),
+  excludedCardIds: z.array(CardIdSchema),
+});
+
+export const SessionCohortRevisedPayloadSchema = z.object({
+  userId: UserIdSchema,
+  linkage: SessionCohortLinkageSchema,
+  revisionFrom: z.number().int().nonnegative(),
+  revisionTo: z.number().int().nonnegative(),
+  candidateCardIds: z.array(CardIdSchema),
+  reason: z.string().min(1),
+});
+
+export const SessionCohortCommittedPayloadSchema = z.object({
+  userId: UserIdSchema,
+  linkage: SessionCohortLinkageSchema,
+  committedCardIds: z.array(CardIdSchema),
+  rejectedCardIds: z.array(CardIdSchema),
+  policyVersion: z.string().min(1).optional(),
+});
+
 export const SessionIntentTokenIssuedPayloadSchema = z.object({
   expiresAt: z.string().datetime(),
   nonce: z.string().min(1),
@@ -344,6 +383,30 @@ export const SessionIntentTokenIssuedEventSchema = createEventSchema(
   SessionIntentTokenIssuedPayloadSchema
 );
 
+export const SessionCohortProposedEventSchema = createEventSchema(
+  'session.cohort.proposed',
+  'Session',
+  SessionCohortProposedPayloadSchema
+);
+
+export const SessionCohortAcceptedEventSchema = createEventSchema(
+  'session.cohort.accepted',
+  'Session',
+  SessionCohortAcceptedPayloadSchema
+);
+
+export const SessionCohortRevisedEventSchema = createEventSchema(
+  'session.cohort.revised',
+  'Session',
+  SessionCohortRevisedPayloadSchema
+);
+
+export const SessionCohortCommittedEventSchema = createEventSchema(
+  'session.cohort.committed',
+  'Session',
+  SessionCohortCommittedPayloadSchema
+);
+
 // ============================================================================
 // Type Inference from Schemas
 // ============================================================================
@@ -366,3 +429,7 @@ export type SessionCheckpointEvaluatedEventInput = z.input<
 export type SessionIntentTokenIssuedEventInput = z.input<
   typeof SessionIntentTokenIssuedEventSchema
 >;
+export type SessionCohortProposedEventInput = z.input<typeof SessionCohortProposedEventSchema>;
+export type SessionCohortAcceptedEventInput = z.input<typeof SessionCohortAcceptedEventSchema>;
+export type SessionCohortRevisedEventInput = z.input<typeof SessionCohortRevisedEventSchema>;
+export type SessionCohortCommittedEventInput = z.input<typeof SessionCohortCommittedEventSchema>;

@@ -67,6 +67,12 @@ export const SessionEventType = {
   // Adaptive checkpoints
   SESSION_CHECKPOINT_EVALUATED: 'session.checkpoint.evaluated',
 
+  // Scheduler orchestration handshake
+  SESSION_COHORT_PROPOSED: 'session.cohort.proposed',
+  SESSION_COHORT_ACCEPTED: 'session.cohort.accepted',
+  SESSION_COHORT_REVISED: 'session.cohort.revised',
+  SESSION_COHORT_COMMITTED: 'session.cohort.committed',
+
   // Offline intent tokens
   SESSION_INTENT_TOKEN_ISSUED: 'session.intent_token.issued',
 } as const;
@@ -306,6 +312,49 @@ export interface ISessionCheckpointEvaluatedPayload {
 }
 
 // ============================================================================
+// Scheduler Handshake Payloads
+// ============================================================================
+
+export interface ISessionCohortLinkage {
+  proposalId: string;
+  decisionId: string;
+  sessionId: SessionId;
+  sessionRevision: number;
+  correlationId: string;
+}
+
+export interface ISessionCohortProposedPayload {
+  userId: UserId;
+  linkage: ISessionCohortLinkage;
+  candidateCardIds: CardId[];
+  constraints?: Record<string, unknown>;
+}
+
+export interface ISessionCohortAcceptedPayload {
+  userId: UserId;
+  linkage: ISessionCohortLinkage;
+  acceptedCardIds: CardId[];
+  excludedCardIds: CardId[];
+}
+
+export interface ISessionCohortRevisedPayload {
+  userId: UserId;
+  linkage: ISessionCohortLinkage;
+  revisionFrom: number;
+  revisionTo: number;
+  candidateCardIds: CardId[];
+  reason: string;
+}
+
+export interface ISessionCohortCommittedPayload {
+  userId: UserId;
+  linkage: ISessionCohortLinkage;
+  committedCardIds: CardId[];
+  rejectedCardIds: CardId[];
+  policyVersion?: string;
+}
+
+// ============================================================================
 // Offline Intent Token Payloads
 // ============================================================================
 
@@ -382,6 +431,30 @@ export type SessionIntentTokenIssuedEvent = ITypedEvent<
   ISessionIntentTokenIssuedPayload
 >;
 
+export type SessionCohortProposedEvent = ITypedEvent<
+  'session.cohort.proposed',
+  'Session',
+  ISessionCohortProposedPayload
+>;
+
+export type SessionCohortAcceptedEvent = ITypedEvent<
+  'session.cohort.accepted',
+  'Session',
+  ISessionCohortAcceptedPayload
+>;
+
+export type SessionCohortRevisedEvent = ITypedEvent<
+  'session.cohort.revised',
+  'Session',
+  ISessionCohortRevisedPayload
+>;
+
+export type SessionCohortCommittedEvent = ITypedEvent<
+  'session.cohort.committed',
+  'Session',
+  ISessionCohortCommittedPayload
+>;
+
 /** Union of all session domain events */
 export type SessionDomainEvent =
   | SessionStartedEvent
@@ -395,4 +468,10 @@ export type SessionDomainEvent =
   | SessionStrategyUpdatedEvent
   | SessionTeachingChangedEvent
   | AttemptRecordedEvent
-  | AttemptHintRequestedEvent;
+  | AttemptHintRequestedEvent
+  | SessionCheckpointEvaluatedEvent
+  | SessionIntentTokenIssuedEvent
+  | SessionCohortProposedEvent
+  | SessionCohortAcceptedEvent
+  | SessionCohortRevisedEvent
+  | SessionCohortCommittedEvent;

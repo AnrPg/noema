@@ -231,6 +231,56 @@ model ScheduleCohortLineage {
     @@map("schedule_cohort_lineage")
 }
 
+model SchedulerEventInbox {
+    id             String   @id @db.VarChar(120)
+    eventType      String   @map("event_type") @db.VarChar(120)
+    streamMessageId String? @map("stream_message_id") @db.VarChar(64)
+    processState   String   @default("PROCESSING") @map("process_state") @db.VarChar(20)
+
+    correlationId  String?  @map("correlation_id") @db.VarChar(100)
+    userId         String?  @map("user_id") @db.VarChar(50)
+    proposalId     String?  @map("proposal_id") @db.VarChar(50)
+    decisionId     String?  @map("decision_id") @db.VarChar(50)
+    sessionId      String?  @map("session_id") @db.VarChar(50)
+    sessionRevision Int?    @map("session_revision")
+
+    payload        Json
+    deliveryCount  Int      @default(1) @map("delivery_count")
+    lastError      String?  @map("last_error") @db.VarChar(1000)
+
+    firstSeenAt    DateTime @default(now()) @map("first_seen_at")
+    lastSeenAt     DateTime @default(now()) @map("last_seen_at")
+    processedAt    DateTime? @map("processed_at")
+
+    @@index([eventType, processState])
+    @@index([sessionId, proposalId, sessionRevision])
+    @@index([lastSeenAt])
+    @@map("scheduler_event_inbox")
+}
+
+model SchedulerHandshakeState {
+    id             String   @id @db.VarChar(100)
+    userId         String?  @map("user_id") @db.VarChar(50)
+    correlationId  String?  @map("correlation_id") @db.VarChar(100)
+    proposalId     String   @map("proposal_id") @db.VarChar(50)
+    decisionId     String?  @map("decision_id") @db.VarChar(50)
+    sessionId      String   @map("session_id") @db.VarChar(50)
+    sessionRevision Int     @map("session_revision")
+    state          String   @db.VarChar(20)
+    lastEventType  String   @map("last_event_type") @db.VarChar(120)
+    lastStreamMessageId String? @map("last_stream_message_id") @db.VarChar(64)
+    metadata       Json
+
+    createdAt      DateTime @default(now()) @map("created_at")
+    updatedAt      DateTime @updatedAt @map("updated_at")
+
+    @@unique([sessionId, proposalId])
+    @@index([decisionId])
+    @@index([correlationId])
+    @@index([sessionId, sessionRevision])
+    @@map("scheduler_handshake_state")
+}
+
 // ============================================================================
 // Enums
 // ============================================================================
