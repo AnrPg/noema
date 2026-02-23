@@ -3,11 +3,14 @@ import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 
+import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from '../../domain/scheduler-service/algorithms/fsrs.js';
+import { HLRModel, type Feature } from '../../domain/scheduler-service/algorithms/hlr.js';
 import type {
   ICalibrationDataRepository,
   IReviewRepository,
   ISchedulerCardRepository,
 } from '../../domain/scheduler-service/scheduler.repository.js';
+import { computeNextState } from '../../domain/scheduler-service/state-machine.js';
 import type { Rating, SchedulerLane } from '../../types/scheduler.types.js';
 
 interface IStreamEventEnvelope {
@@ -396,25 +399,61 @@ export class SchedulerEventConsumer {
 
     const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
     if (existing === null) {
+      // Initialize new card with algorithm-specific parameters
+      const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
+      let initialStability: number | null = null;
+      let initialDifficulty: number | null = null;
+      let initialHalfLife: number | null = null;
+      let initialInterval = 0;
+
+      if (lane === 'retention') {
+        // Initialize FSRS parameters
+        const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+        const initialState = fsrs.initState(rating);
+        initialStability = initialState.stability;
+        initialDifficulty = initialState.difficulty;
+        initialInterval = fsrs.nextInterval(initialState.stability);
+      } else {
+        // Initialize HLR parameters (calibration lane)
+        const hlr = new HLRModel();
+        const features = this.extractHLRFeatures({
+          reviewCount: 0,
+          lapseCount: 0,
+          consecutiveCorrect: 0,
+          cardType: null,
+        });
+        initialHalfLife = hlr.halflife(features);
+        initialInterval = Math.max(1, Math.round(initialHalfLife));
+      }
+
+      const nextState = computeNextState({
+        fromState: 'new',
+        rating,
+        consecutiveCorrect: rating === 'again' ? 0 : 1,
+      });
+
+      const nextReviewDate = new Date();
+      nextReviewDate.setDate(nextReviewDate.getDate() + initialInterval);
+
       await this.dependencies.schedulerCardRepository.create({
         id: `sc_${crypto.randomUUID()}`,
         cardId,
         userId,
         lane,
-        stability: null,
-        difficultyParameter: null,
-        halfLife: null,
-        interval: 0,
-        nextReviewDate: new Date().toISOString(),
+        stability: initialStability,
+        difficultyParameter: initialDifficulty,
+        halfLife: initialHalfLife,
+        interval: initialInterval,
+        nextReviewDate: nextReviewDate.toISOString(),
         lastReviewedAt: new Date().toISOString(),
         reviewCount: 1,
         lapseCount: rating === 'again' ? 1 : 0,
         consecutiveCorrect: rating === 'again' ? 0 : 1,
-        schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+        schedulingAlgorithm,
         cardType: null,
         difficulty: null,
         knowledgeNodeIds: [],
-        state: 'learning',
+        state: nextState,
         suspendedUntil: null,
         suspendedReason: null,
         version: 1,
@@ -422,16 +461,114 @@ export class SchedulerEventConsumer {
       return;
     }
 
+    // Update existing card with algorithm-specific computations
+    const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
+    const newReviewCount = existing.reviewCount + 1;
+    const newLapseCount = rating === 'again' ? existing.lapseCount + 1 : existing.lapseCount;
+    const newConsecutiveCorrect = rating === 'again' ? 0 : existing.consecutiveCorrect + 1;
+
+    let newStability = existing.stability;
+    let newDifficulty = existing.difficultyParameter;
+    let newHalfLife = existing.halfLife;
+    let newInterval = existing.interval;
+
+    // Compute elapsed days since last review
+    const deltaDays = parsed.data.deltaDays ?? this.computeDeltaDays(existing.lastReviewedAt);
+
+    if (lane === 'retention') {
+      // Apply FSRS algorithm
+      const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+
+      if (existing.stability !== null && existing.difficultyParameter !== null) {
+        // Update existing FSRS state
+        const currentState = {
+          stability: existing.stability,
+          difficulty: existing.difficultyParameter,
+        };
+
+        const prediction =
+          existing.state === 'learning' || existing.state === 'relearning'
+            ? fsrs.predictLearningState(currentState, rating)
+            : fsrs.predictReviewState(currentState, deltaDays, rating, existing.interval);
+
+        newStability = prediction.stability;
+        newDifficulty = prediction.difficulty;
+        newInterval = prediction.interval;
+      } else {
+        // Initialize FSRS state if missing
+        const initialState = fsrs.initState(rating);
+        newStability = initialState.stability;
+        newDifficulty = initialState.difficulty;
+        newInterval = fsrs.nextInterval(initialState.stability);
+      }
+    } else {
+      // Apply HLR algorithm (calibration lane)
+      const hlr = new HLRModel();
+      const features = this.extractHLRFeatures({
+        reviewCount: newReviewCount,
+        lapseCount: newLapseCount,
+        consecutiveCorrect: newConsecutiveCorrect,
+        cardType: existing.cardType,
+      });
+
+      // Compute actual recall from rating
+      const actualRecall = rating === 'again' ? 0.0 : rating === 'hard' ? 0.5 : 1.0;
+
+      // Train HLR model with new observation (per-review incremental update)
+      hlr.trainUpdate(features, deltaDays, actualRecall);
+
+      // Predict new half-life
+      const prediction = hlr.predict(features, 0);
+      newHalfLife = prediction.halfLifeDays;
+      newInterval = Math.max(1, Math.round(newHalfLife));
+
+      // Persist calibration data update (per-review incremental policy)
+      try {
+        const cardTypeValue = existing.cardType;
+        const cardIdForCalibration = cardTypeValue !== null && cardTypeValue !== '' ? null : cardId;
+
+        await this.dependencies.calibrationDataRepository.upsert(
+          userId,
+          cardIdForCalibration,
+          cardTypeValue,
+          {
+            parameters: hlr.getWeights(),
+            sampleCount: newReviewCount,
+            confidenceScore: Math.min(newReviewCount / 10, 1.0),
+            lastTrainedAt: new Date().toISOString(),
+          }
+        );
+      } catch (error: unknown) {
+        this.logger.warn({ userId, cardId, error }, 'Failed to update calibration data');
+      }
+    }
+
+    // Compute next state using state machine
+    const nextState = computeNextState({
+      fromState: existing.state,
+      rating,
+      consecutiveCorrect: newConsecutiveCorrect,
+    });
+
+    const nextReviewDate = new Date();
+    nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
+
     await this.dependencies.schedulerCardRepository.update(
       userId,
       cardId,
       {
         lane,
+        stability: newStability,
+        difficultyParameter: newDifficulty,
+        halfLife: newHalfLife,
+        interval: newInterval,
+        nextReviewDate: nextReviewDate.toISOString(),
         lastReviewedAt: new Date().toISOString(),
-        reviewCount: existing.reviewCount + 1,
-        lapseCount: rating === 'again' ? existing.lapseCount + 1 : existing.lapseCount,
-        consecutiveCorrect: rating === 'again' ? 0 : existing.consecutiveCorrect + 1,
-        schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+        reviewCount: newReviewCount,
+        lapseCount: newLapseCount,
+        consecutiveCorrect: newConsecutiveCorrect,
+        schedulingAlgorithm,
+        state: nextState,
       },
       existing.version
     );
@@ -603,5 +740,41 @@ export class SchedulerEventConsumer {
       } satisfies IStreamEventEnvelope)
     );
     await this.acknowledge(messageId);
+  }
+
+  /**
+   * Extract HLR feature vector from card metadata.
+   */
+  private extractHLRFeatures(cardMeta: {
+    reviewCount: number;
+    lapseCount: number;
+    consecutiveCorrect: number;
+    cardType: string | null;
+  }): Feature[] {
+    const features: Feature[] = [
+      ['bias', 1.0],
+      ['reviews', cardMeta.reviewCount],
+      ['lapses', cardMeta.lapseCount],
+      ['correct_streak', cardMeta.consecutiveCorrect],
+    ];
+
+    if (cardMeta.cardType !== null && cardMeta.cardType !== '') {
+      features.push([`type_${cardMeta.cardType}`, 1.0]);
+    }
+
+    return features;
+  }
+
+  /**
+   * Compute delta days since last review.
+   */
+  private computeDeltaDays(lastReviewedAt: string | null): number {
+    if (lastReviewedAt === null || lastReviewedAt === '') {
+      return 0;
+    }
+    const lastReview = new Date(lastReviewedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - lastReview.getTime();
+    return Math.max(0, diffMs / (1000 * 60 * 60 * 24));
   }
 }
