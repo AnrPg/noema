@@ -16,10 +16,18 @@ import type {
   IExecutionContext,
   IOrchestrationMetadata,
   IPolicyVersion,
+  IRetentionPrediction,
+  IRetentionPredictionInput,
+  IRetentionPredictionResult,
+  IReviewQueue,
+  IReviewQueueInput,
   IReviewWindowProposal,
   IReviewWindowProposalInput,
+  ISchedulerCard,
   ISchedulerLaneMix,
   IScoringBreakdown,
+  ISessionAdjustmentInput,
+  ISessionAdjustmentResult,
   ISessionCandidateCard,
   ISessionCandidateProposal,
   ISessionCandidateProposalInput,
@@ -42,7 +50,10 @@ import {
   BatchScheduleCommitInputSchema,
   CardScheduleCommitInputSchema,
   DualLanePlanInputSchema,
+  RetentionPredictionInputSchema,
+  ReviewQueueInputSchema,
   ReviewWindowProposalInputSchema,
+  SessionAdjustmentInputSchema,
   SessionCandidateProposalInputSchema,
   SessionCandidateSimulationInputSchema,
 } from './scheduler.schemas.js';
@@ -604,6 +615,234 @@ export class SchedulerService {
       ),
     };
   }
+
+  // ============================================================================
+  // Phase 4 Methods
+  // ============================================================================
+
+  /**
+   * Retrieve review queue (cards due for review).
+   * Implements get-srs-schedule tool (Phase 4, Gap #11).
+   */
+  async getReviewQueue(
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IReviewQueue>> {
+    const parsed = ReviewQueueInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new Error('Invalid review queue input');
+    }
+
+    const data = parsed.data as IReviewQueueInput;
+    if (data.userId !== ctx.userId) {
+      throw new Error('userId in payload must match authenticated user');
+    }
+
+    const asOf = data.asOf ?? new Date().toISOString();
+    const limit = data.limit ?? 500;
+
+    if (!this.repositories) {
+      throw new Error('Scheduler repositories not initialized');
+    }
+
+    const beforeDate = new Date(asOf);
+    const cards = await this.repositories.schedulerCardRepository.findDueCards(
+      data.userId,
+      beforeDate,
+      limit,
+      data.lane
+    );
+
+    const retentionDue = cards.filter((card: ISchedulerCard) => card.lane === 'retention').length;
+    const calibrationDue = cards.filter(
+      (card: ISchedulerCard) => card.lane === 'calibration'
+    ).length;
+
+    const result: IReviewQueue = {
+      cards,
+      totalDue: cards.length,
+      retentionDue,
+      calibrationDue,
+      asOf,
+      policyVersion: SchedulerService.POLICY_VERSION,
+    };
+
+    await this.eventPublisher.publish({
+      eventType: 'schedule.review_queue.retrieved',
+      aggregateType: 'Schedule',
+      aggregateId: data.userId,
+      payload: {
+        totalDue: cards.length,
+        retentionDue,
+        calibrationDue,
+        lane: data.lane ?? 'all',
+        limit,
+      },
+      metadata: {
+        correlationId: ctx.correlationId,
+        userId: ctx.userId,
+      },
+    });
+
+    return {
+      data: result,
+      agentHints: this.defaultHints(
+        'review_queue_retrieved',
+        `Retrieved ${String(cards.length)} cards due for review (${String(retentionDue)}R/${String(calibrationDue)}C)`
+      ),
+    };
+  }
+
+  /**
+   * Predict retention probability for cards.
+   * Implements predict-retention tool (Phase 4, Gap #11).
+   */
+  async predictRetention(
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IRetentionPredictionResult>> {
+    const parsed = RetentionPredictionInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new Error('Invalid retention prediction input');
+    }
+
+    const data = parsed.data as IRetentionPredictionInput;
+    if (data.userId !== ctx.userId) {
+      throw new Error('userId in payload must match authenticated user');
+    }
+
+    if (!this.repositories) {
+      throw new Error('Scheduler repositories not initialized');
+    }
+
+    const predictions: IRetentionPrediction[] = [];
+    const now = new Date();
+
+    for (const req of data.cards) {
+      const card = await this.repositories.schedulerCardRepository.findByCard(
+        data.userId,
+        req.cardId
+      );
+
+      if (!card) {
+        predictions.push({
+          cardId: req.cardId,
+          algorithm: req.algorithm,
+          retentionProbability: 0,
+          daysUntilDue: 0,
+          nextReviewAt: now.toISOString(),
+          confidence: 0,
+        });
+        continue;
+      }
+
+      const stability = card.stability ?? 1.0;
+      const intervalDays = this.deriveIntervalDays(req.algorithm, stability);
+      const nextReviewAt = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+
+      // Simplified retention calculation (forgetting curve approximation)
+      const retentionProbability = Math.exp(-intervalDays / (stability * 3));
+
+      predictions.push({
+        cardId: req.cardId,
+        algorithm: req.algorithm,
+        retentionProbability: this.clamp01(retentionProbability),
+        daysUntilDue: intervalDays,
+        nextReviewAt: nextReviewAt.toISOString(),
+        confidence: 0.85,
+      });
+    }
+
+    const result: IRetentionPredictionResult = {
+      predictions,
+      generatedAt: now.toISOString(),
+      policyVersion: SchedulerService.POLICY_VERSION,
+    };
+
+    await this.eventPublisher.publish({
+      eventType: 'schedule.retention.predicted',
+      aggregateType: 'Schedule',
+      aggregateId: data.userId,
+      payload: {
+        cardCount: data.cards.length,
+        averageRetention:
+          predictions.reduce((sum, p) => sum + p.retentionProbability, 0) / predictions.length,
+      },
+      metadata: {
+        correlationId: ctx.correlationId,
+        userId: ctx.userId,
+      },
+    });
+
+    return {
+      data: result,
+      agentHints: this.defaultHints(
+        'retention_predictions_ready',
+        `Generated retention predictions for ${String(predictions.length)} cards`
+      ),
+    };
+  }
+
+  /**
+   * Apply runtime session adjustments (add/remove/reprioritize cards).
+   * Implements apply-session-adjustments tool (Phase 4, Gap #11).
+   */
+  async applySessionAdjustments(
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISessionAdjustmentResult>> {
+    const parsed = SessionAdjustmentInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new Error('Invalid session adjustment input');
+    }
+
+    const data = parsed.data as ISessionAdjustmentInput;
+    if (data.userId !== ctx.userId) {
+      throw new Error('userId in payload must match authenticated user');
+    }
+
+    // Session adjustments are typically stored in session-service,
+    // scheduler-service just validates and emits the adjustment event
+    const appliedCount = data.adjustments.length;
+
+    const result: ISessionAdjustmentResult = {
+      sessionId: data.sessionId,
+      appliedCount,
+      adjustments: data.adjustments,
+      policyVersion: SchedulerService.POLICY_VERSION,
+      orchestration: {
+        ...data.orchestration,
+        correlationId: ctx.correlationId,
+      },
+    };
+
+    await this.eventPublisher.publish({
+      eventType: 'schedule.session.adjustments_applied',
+      aggregateType: 'Schedule',
+      aggregateId: data.userId,
+      payload: {
+        sessionId: data.sessionId,
+        appliedCount,
+        actions: data.adjustments.map((adj) => adj.action),
+      },
+      metadata: {
+        correlationId: ctx.correlationId,
+        userId: ctx.userId,
+      },
+    });
+
+    return {
+      data: result,
+      agentHints: this.defaultHints(
+        'session_adjustments_applied',
+        `Applied ${String(appliedCount)} session adjustments to session ${data.sessionId}`
+      ),
+    };
+  }
+
+  // ============================================================================
+  // Private Methods
+  // ============================================================================
 
   private normalizeLaneMix(mix?: ISchedulerLaneMix): ISchedulerLaneMix {
     if (!mix) {

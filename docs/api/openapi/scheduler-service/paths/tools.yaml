@@ -50,6 +50,36 @@ executeTool:
                   calibrationCardIds:
                     - card_calibration_000000001
                   maxCards: 2
+            getSrsSchedule:
+              value:
+                tool: get-srs-schedule
+                input:
+                  userId: usr_V1StGXR8_Z5jdHi6B-myT
+                  lane: retention
+                  limit: 50
+            predictRetention:
+              value:
+                tool: predict-retention
+                input:
+                  userId: usr_V1StGXR8_Z5jdHi6B-myT
+                  cards:
+                    - cardId: card_retention_00000000001
+                      algorithm: fsrs
+            applySessionAdjustments:
+              value:
+                tool: apply-session-adjustments
+                input:
+                  userId: usr_V1StGXR8_Z5jdHi6B-myT
+                  sessionId: ses_01HZZ9R2Q4N9D4A7YW7P8A2J9M
+                  adjustments:
+                    - cardId: card_retention_00000000001
+                      action: reprioritize
+                      reason: Learner struggled in prior attempt
+                      newPriority: 0.95
+                  orchestration:
+                    proposalId: prop_01HZZ9R2Q4N9D4A7YW7P8A2J9M
+                    decisionId: dec_01HZZ9R2Q4N9D4A7YW7P8A2J9M
+                    sessionRevision: 3
     responses:
       "200":
         description: Tool executed successfully.
@@ -57,6 +87,42 @@ executeTool:
           application/json:
             schema:
               $ref: ../openapi.yaml#/components/schemas/ToolExecuteResponse
+            examples:
+              successWithMetadata:
+                value:
+                  data:
+                    success: true
+                    data:
+                      totalDue: 25
+                    agentHints:
+                      suggestedNextActions: []
+                      relatedResources: []
+                      confidence: 1
+                      sourceQuality: high
+                      validityPeriod: long
+                      contextNeeded: []
+                      assumptions: []
+                      riskFactors: []
+                      dependencies: []
+                      estimatedImpact:
+                        benefit: 0
+                        effort: 0.1
+                        roi: 0
+                      preferenceAlignment: []
+                      reasoning: review queue retrieved
+                    metadata:
+                      toolVersion: 0.1.0
+                      timestamp: 2026-02-24T00:00:00.000Z
+                      executionTime: 8
+                      serviceVersion: 0.1.0
+                      correlationId: cor_123
+                      resultCode: SUCCESS
+                      retryClass: unknown
+                  metadata:
+                    requestId: req_123
+                    correlationId: cor_123
+                    timestamp: 2026-02-24T00:00:00.000Z
+                    processingTimeMs: 10
       "400":
         $ref: ../openapi.yaml#/components/responses/BadRequest
       "401":
@@ -73,5 +139,43 @@ executeTool:
           application/json:
             schema:
               $ref: ../openapi.yaml#/components/schemas/ToolExecuteResponse
+            examples:
+              inputValidationFailure:
+                value:
+                  data:
+                    success: false
+                    error:
+                      code: TOOL_INPUT_VALIDATION_FAILED
+                      message: input.userId is required
+                    agentHints:
+                      suggestedNextActions: []
+                      relatedResources: []
+                      confidence: 1
+                      sourceQuality: high
+                      validityPeriod: long
+                      contextNeeded: []
+                      assumptions: []
+                      riskFactors: []
+                      dependencies: []
+                      estimatedImpact:
+                        benefit: 0
+                        effort: 0.1
+                        roi: 0
+                      preferenceAlignment: []
+                      reasoning: Tool input does not match required schema
+                    metadata:
+                      toolVersion: 0.1.0
+                      timestamp: 2026-02-24T00:00:00.000Z
+                      executionTime: 0
+                      serviceVersion: 0.1.0
+                      correlationId: cor_123
+                      resultCode: TOOL_INPUT_VALIDATION_FAILED
+                      retryClass: permanent
+                      failureDomain: validation
+                  metadata:
+                    requestId: req_123
+                    correlationId: cor_123
+                    timestamp: 2026-02-24T00:00:00.000Z
+                    processingTimeMs: 1
       "500":
         $ref: ../openapi.yaml#/components/responses/InternalServerError

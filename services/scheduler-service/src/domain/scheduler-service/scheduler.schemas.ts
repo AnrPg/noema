@@ -109,3 +109,39 @@ export const BatchScheduleCommitInputSchema = z.object({
   orchestration: OrchestrationMetadataSchema,
   reason: z.string().min(1).optional(),
 });
+
+// ============================================================================
+// Phase 4 Tool Schemas
+// ============================================================================
+
+export const ReviewQueueInputSchema = z.object({
+  userId: UserIdSchema,
+  lane: SchedulerLaneSchema.optional(),
+  limit: z.number().int().min(1).max(500).optional(),
+  asOf: z.string().datetime().optional(),
+});
+
+export const RetentionPredictionRequestSchema = z.object({
+  cardId: CardIdSchema,
+  algorithm: SchedulerAlgorithmSchema,
+  asOf: z.string().datetime().optional(),
+});
+
+export const RetentionPredictionInputSchema = z.object({
+  userId: UserIdSchema,
+  cards: z.array(RetentionPredictionRequestSchema).min(1).max(500),
+});
+
+export const SessionCardAdjustmentSchema = z.object({
+  cardId: CardIdSchema,
+  action: z.enum(['add', 'remove', 'reprioritize']),
+  reason: z.string().min(1).max(500),
+  newPriority: z.number().min(0).max(1).optional(),
+});
+
+export const SessionAdjustmentInputSchema = z.object({
+  userId: UserIdSchema,
+  sessionId: z.string().min(1),
+  adjustments: z.array(SessionCardAdjustmentSchema).min(1).max(100),
+  orchestration: OrchestrationMetadataSchema,
+});

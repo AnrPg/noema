@@ -208,6 +208,101 @@ export interface IBatchScheduleCommitResult {
 }
 
 // ============================================================================
+// Phase 4 Tool Support Types
+// ============================================================================
+
+/**
+ * Input for get-srs-schedule tool (review queue retrieval).
+ */
+export interface IReviewQueueInput {
+  userId: UserId;
+  lane?: SchedulerLane;
+  limit?: number;
+  asOf?: string;
+}
+
+/**
+ * Output for get-srs-schedule tool.
+ */
+export interface IReviewQueue {
+  cards: ISchedulerCard[];
+  totalDue: number;
+  retentionDue: number;
+  calibrationDue: number;
+  asOf: string;
+  policyVersion: IPolicyVersion;
+}
+
+/**
+ * Single retention prediction request.
+ */
+export interface IRetentionPredictionRequest {
+  cardId: CardId;
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  asOf?: string;
+}
+
+/**
+ * Input for predict-retention tool.
+ */
+export interface IRetentionPredictionInput {
+  userId: UserId;
+  cards: IRetentionPredictionRequest[];
+}
+
+/**
+ * Single retention prediction result.
+ */
+export interface IRetentionPrediction {
+  cardId: CardId;
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  retentionProbability: number;
+  daysUntilDue: number;
+  nextReviewAt: string;
+  confidence: number;
+}
+
+/**
+ * Output for predict-retention tool.
+ */
+export interface IRetentionPredictionResult {
+  predictions: IRetentionPrediction[];
+  generatedAt: string;
+  policyVersion: IPolicyVersion;
+}
+
+/**
+ * Session card adjustment action.
+ */
+export interface ISessionCardAdjustment {
+  cardId: CardId;
+  action: 'add' | 'remove' | 'reprioritize';
+  reason: string;
+  newPriority?: number;
+}
+
+/**
+ * Input for apply-session-adjustments tool.
+ */
+export interface ISessionAdjustmentInput {
+  userId: UserId;
+  sessionId: string;
+  adjustments: ISessionCardAdjustment[];
+  orchestration: IOrchestrationMetadata;
+}
+
+/**
+ * Output for apply-session-adjustments tool.
+ */
+export interface ISessionAdjustmentResult {
+  sessionId: string;
+  appliedCount: number;
+  adjustments: ISessionCardAdjustment[];
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
+}
+
+// ============================================================================
 // Database Entity Types
 // ============================================================================
 

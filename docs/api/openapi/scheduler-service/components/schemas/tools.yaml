@@ -102,6 +102,18 @@ ToolExecutionMetadata:
     cached:
       type: boolean
       nullable: true
+    resultCode:
+      type: string
+      description: Machine-readable execution result classification.
+      example: SUCCESS
+    retryClass:
+      type: string
+      enum: [transient, permanent, unknown]
+      description: Retry behavior classification for orchestration clients.
+    failureDomain:
+      type: string
+      enum: [network, validation, auth, internal, dependency]
+      description: Primary failure domain for triage when success=false.
   required: [toolVersion, timestamp, executionTime, serviceVersion]
 
 ToolExecutionError:

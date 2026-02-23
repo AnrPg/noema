@@ -129,10 +129,10 @@ export function registerToolRoutes(
       }
 
       const definition = toolRegistry.getDefinition(body.tool);
-      if (definition) {
+      if (definition?.scopeRequirement) {
         const hasToolScopes = await requireScopes(request, reply, {
-          requiredScopes: definition.requiredScopes,
-          match: 'all',
+          requiredScopes: definition.scopeRequirement.requiredScopes,
+          match: definition.scopeRequirement.match,
         });
         if (!hasToolScopes) return;
       }
