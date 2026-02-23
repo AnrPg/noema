@@ -190,7 +190,7 @@ describe('Phase 3: Algorithm Integration', () => {
 
     it('should route calibration lane to HLR', () => {
       const lane = 'calibration';
-      const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
+      const schedulingAlgorithm = lane === 'calibration' ? 'hlr' : 'fsrs';
 
       expect(schedulingAlgorithm).toBe('hlr');
     });

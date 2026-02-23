@@ -4,7 +4,8 @@
 priority-aware, interleaved selection algorithm. These are improvements to the
 scheduler-service's pure computation layer — no agent code required.
 
-**File:** `services/scheduler-service/src/domain/scheduler-service/scheduler.service.ts`
+**File:**
+`services/scheduler-service/src/domain/scheduler-service/scheduler.service.ts`
 **Reference:** ADR-0022 (Dual-Lane Scheduler Planning)
 
 ---
@@ -31,8 +32,8 @@ scheduler-service's pure computation layer — no agent code required.
 - [x] Accept optional `cardPriorityScores` map (`Record<CardId, number>`) in
       `IDualLanePlanInput` — the agent (or service) can precompute urgency
       scores (e.g. overdueness ratio = daysSinceDue / interval)
-- [x] In `selectByLaneMix`, sort each pool by priority score (descending)
-      before slicing, so the most urgent cards are selected first
+- [x] In `selectByLaneMix`, sort each pool by priority score (descending) before
+      slicing, so the most urgent cards are selected first
 - [x] If no scores are provided, fall back to the original insertion order
       (backward compatible)
 
@@ -46,8 +47,8 @@ scheduler-service's pure computation layer — no agent code required.
 
 - [x] Accept optional `interleave` boolean (default `true`) in plan input
 - [x] When enabled, interleave retention and calibration cards using a
-      round-robin-by-ratio approach: for an 80/20 mix, produce sequences
-      like R R R R C R R R R C instead of RRRRRRRR CC
+      round-robin-by-ratio approach: for an 80/20 mix, produce sequences like R
+      R R R C R R R R C instead of RRRRRRRR CC
 - [x] When disabled, keep the current block ordering (retention then
       calibration)
 
