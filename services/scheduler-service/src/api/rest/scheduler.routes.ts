@@ -43,6 +43,22 @@ export function registerSchedulerRoutes(
   schedulerService: SchedulerService,
   authMiddleware: ReturnType<typeof createAuthMiddleware>
 ): void {
+  const authPreHandler = {
+    preHandler: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      done: (error?: Error) => void
+    ): void => {
+      authMiddleware(request, reply)
+        .then(() => {
+          done();
+        })
+        .catch((error: unknown) => {
+          done(error instanceof Error ? error : new Error('Authentication middleware failed'));
+        });
+    },
+  };
+
   fastify.addHook('onRequest', (request) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
   });
@@ -52,9 +68,6 @@ export function registerSchedulerRoutes(
     reply: FastifyReply
   ): Promise<void> => {
     try {
-      await authMiddleware(request, reply);
-      if (reply.sent) return;
-
       const userId = (request.user?.sub ?? 'anonymous') as UserId;
       const ctx = buildExecutionContext(userId, request.id as CorrelationId);
       const result = await schedulerService.planDualLaneQueue(request.body, ctx);
@@ -69,9 +82,6 @@ export function registerSchedulerRoutes(
     reply: FastifyReply
   ): Promise<void> => {
     try {
-      await authMiddleware(request, reply);
-      if (reply.sent) return;
-
       const userId = (request.user?.sub ?? 'anonymous') as UserId;
       const ctx = buildExecutionContext(userId, request.id as CorrelationId);
       const result = await schedulerService.issueOfflineIntentToken(request.body, ctx);
@@ -86,9 +96,6 @@ export function registerSchedulerRoutes(
     reply: FastifyReply
   ): Promise<void> => {
     try {
-      await authMiddleware(request, reply);
-      if (reply.sent) return;
-
       const userId = (request.user?.sub ?? 'anonymous') as UserId;
       const ctx = buildExecutionContext(userId, request.id as CorrelationId);
       const result = await schedulerService.verifyOfflineIntentToken(request.body, ctx);
@@ -98,20 +105,32 @@ export function registerSchedulerRoutes(
     }
   };
 
-  fastify.post<{ Body: unknown }>('/v1/scheduler/dual-lane/plan', {}, planDualLaneHandler);
-  fastify.post<{ Body: unknown }>('/v1/schedule/dual-lane-plan', {}, planDualLaneHandler);
+  fastify.post<{ Body: unknown }>(
+    '/v1/scheduler/dual-lane/plan',
+    authPreHandler,
+    planDualLaneHandler
+  );
+  fastify.post<{ Body: unknown }>(
+    '/v1/schedule/dual-lane-plan',
+    authPreHandler,
+    planDualLaneHandler
+  );
 
   fastify.post<{ Body: unknown }>(
     '/v1/scheduler/offline-intent/issue',
-    {},
+    authPreHandler,
     issueOfflineIntentHandler
   );
-  fastify.post<{ Body: unknown }>('/v1/offline-intents', {}, issueOfflineIntentHandler);
+  fastify.post<{ Body: unknown }>('/v1/offline-intents', authPreHandler, issueOfflineIntentHandler);
 
   fastify.post<{ Body: unknown }>(
     '/v1/scheduler/offline-intent/verify',
-    {},
+    authPreHandler,
     verifyOfflineIntentHandler
   );
-  fastify.post<{ Body: unknown }>('/v1/offline-intents/verify', {}, verifyOfflineIntentHandler);
+  fastify.post<{ Body: unknown }>(
+    '/v1/offline-intents/verify',
+    authPreHandler,
+    verifyOfflineIntentHandler
+  );
 }

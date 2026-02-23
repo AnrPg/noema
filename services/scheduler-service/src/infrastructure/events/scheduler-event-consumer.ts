@@ -4,9 +4,9 @@ import type { Logger } from 'pino';
 import { z } from 'zod';
 
 import type {
-    ICalibrationDataRepository,
-    IReviewRepository,
-    ISchedulerCardRepository,
+  ICalibrationDataRepository,
+  IReviewRepository,
+  ISchedulerCardRepository,
 } from '../../domain/scheduler-service/scheduler.repository.js';
 import type { Rating, SchedulerLane } from '../../types/scheduler.types.js';
 
@@ -18,6 +18,7 @@ interface IStreamEventEnvelope {
   metadata?: {
     userId?: string | null;
     correlationId?: string | null;
+    [key: string]: unknown;
   };
 }
 
@@ -67,6 +68,15 @@ export interface ISchedulerEventConsumerConfig {
   consumerName: string;
   blockMs: number;
   batchSize: number;
+  retryBaseDelayMs: number;
+  maxProcessAttempts: number;
+  deadLetterStreamKey: string;
+}
+
+interface IProcessingMetadata {
+  schedulerProcessingAttempts?: number;
+  schedulerLastError?: string;
+  schedulerDeadLetteredAt?: string;
 }
 
 export interface ISchedulerEventConsumerDependencies {
@@ -129,7 +139,7 @@ export class SchedulerEventConsumer {
   private async pollLoop(): Promise<void> {
     while (this.isRunning) {
       try {
-        const entries = await this.redis.xreadgroup(
+        const rawEntries: unknown = await this.redis.xreadgroup(
           'GROUP',
           this.config.consumerGroup,
           this.config.consumerName,
@@ -142,6 +152,15 @@ export class SchedulerEventConsumer {
           '>'
         );
 
+        if (rawEntries === null) {
+          continue;
+        }
+
+        if (!Array.isArray(rawEntries)) {
+          continue;
+        }
+
+        const entries = rawEntries;
         if (entries.length === 0) {
           continue;
         }
@@ -161,20 +180,86 @@ export class SchedulerEventConsumer {
   }
 
   private async handleStreamMessage(messageId: string, fields: string[]): Promise<void> {
-    try {
-      const eventJson = this.getFieldValue(fields, 'event');
-      if (eventJson === null) {
-        await this.acknowledge(messageId);
-        return;
-      }
+    const eventJson = this.getFieldValue(fields, 'event');
+    if (eventJson === null) {
+      await this.acknowledge(messageId);
+      return;
+    }
 
+    try {
       const envelope = JSON.parse(eventJson) as IStreamEventEnvelope;
       await this.dispatchEvent(envelope);
       await this.acknowledge(messageId);
     } catch (error: unknown) {
       this.logger.error({ error, messageId }, 'Failed to process stream message');
-      await this.acknowledge(messageId);
+      await this.handleProcessingFailure(messageId, eventJson, error);
     }
+  }
+
+  private async handleProcessingFailure(
+    messageId: string,
+    eventJson: string,
+    error: unknown
+  ): Promise<void> {
+    const parsedEnvelope = this.safeParseEnvelope(eventJson);
+    if (parsedEnvelope === null) {
+      await this.moveRawToDeadLetter(messageId, eventJson, error);
+      return;
+    }
+
+    const attempts = this.readAttempts(parsedEnvelope.metadata);
+    const nextAttempt = attempts + 1;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
+
+    const metadata: IStreamEventEnvelope['metadata'] & IProcessingMetadata = {
+      ...parsedEnvelope.metadata,
+      schedulerProcessingAttempts: nextAttempt,
+      schedulerLastError: errorMessage,
+    };
+
+    if (nextAttempt >= this.config.maxProcessAttempts) {
+      const deadLetterEnvelope: IStreamEventEnvelope = {
+        ...parsedEnvelope,
+        metadata: {
+          ...metadata,
+          schedulerDeadLetteredAt: new Date().toISOString(),
+        },
+      };
+
+      await this.redis.xadd(
+        this.config.deadLetterStreamKey,
+        'MAXLEN',
+        '~',
+        '100000',
+        '*',
+        'event',
+        JSON.stringify(deadLetterEnvelope)
+      );
+      await this.acknowledge(messageId);
+      this.logger.warn(
+        { messageId, attempts: nextAttempt, deadLetterStream: this.config.deadLetterStreamKey },
+        'Moved stream message to dead-letter after max retry attempts'
+      );
+      return;
+    }
+
+    const backoffMs = Math.min(this.config.retryBaseDelayMs * 2 ** (nextAttempt - 1), 30000);
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
+
+    await this.redis.xadd(
+      this.config.sourceStreamKey,
+      '*',
+      'event',
+      JSON.stringify({
+        ...parsedEnvelope,
+        metadata,
+      })
+    );
+    await this.acknowledge(messageId);
+    this.logger.warn(
+      { messageId, nextAttempt, backoffMs },
+      'Requeued failed stream message with retry metadata'
+    );
   }
 
   private async dispatchEvent(envelope: IStreamEventEnvelope): Promise<void> {
@@ -197,7 +282,10 @@ export class SchedulerEventConsumer {
   private async handleSessionStarted(envelope: IStreamEventEnvelope): Promise<void> {
     const parsed = SessionStartedPayloadSchema.safeParse(envelope.payload);
     if (!parsed.success) {
-      this.logger.warn({ eventType: envelope.eventType }, 'Skipping invalid session.started payload');
+      this.logger.warn(
+        { eventType: envelope.eventType },
+        'Skipping invalid session.started payload'
+      );
       return;
     }
 
@@ -213,13 +301,14 @@ export class SchedulerEventConsumer {
 
     await Promise.all(
       cardIds.map(async (cardId) => {
-        const existing = await this.dependencies.schedulerCardRepository.findById(cardId);
+        const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
         if (existing !== null) {
           return;
         }
 
         await this.dependencies.schedulerCardRepository.create({
-          id: cardId,
+          id: `sc_${crypto.randomUUID()}`,
+          cardId,
           userId,
           lane: 'retention',
           stability: null,
@@ -278,25 +367,25 @@ export class SchedulerEventConsumer {
 
     try {
       await this.dependencies.reviewRepository.create({
-      id: `rev_${attemptId}`,
-      cardId,
-      userId,
-      sessionId: parsed.data.sessionId,
-      attemptId,
-      rating,
-      ratingValue: parsed.data.ratingValue ?? 3,
-      outcome: parsed.data.outcome ?? 'correct',
-      deltaDays: parsed.data.deltaDays ?? 0,
-      responseTime: parsed.data.responseTimeMs ?? null,
-      reviewedAt: new Date().toISOString(),
-      priorState: parsed.data.priorSchedulingState ?? {},
-      newState: parsed.data.newSchedulingState ?? {},
-      schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
-      lane,
-      confidenceBefore: parsed.data.confidenceBefore ?? null,
-      confidenceAfter: parsed.data.confidenceAfter ?? null,
-      hintRequestCount: parsed.data.hintRequestCount ?? null,
-    });
+        id: `rev_${attemptId}`,
+        cardId,
+        userId,
+        sessionId: parsed.data.sessionId,
+        attemptId,
+        rating,
+        ratingValue: parsed.data.ratingValue ?? 3,
+        outcome: parsed.data.outcome ?? 'correct',
+        deltaDays: parsed.data.deltaDays ?? 0,
+        responseTime: parsed.data.responseTimeMs ?? null,
+        reviewedAt: new Date().toISOString(),
+        priorState: parsed.data.priorSchedulingState ?? {},
+        newState: parsed.data.newSchedulingState ?? {},
+        schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+        lane,
+        confidenceBefore: parsed.data.confidenceBefore ?? null,
+        confidenceAfter: parsed.data.confidenceAfter ?? null,
+        hintRequestCount: parsed.data.hintRequestCount ?? null,
+      });
     } catch (error: unknown) {
       if (this.isUniqueViolation(error)) {
         this.logger.debug({ attemptId }, 'Duplicate review insert prevented by unique key');
@@ -305,10 +394,11 @@ export class SchedulerEventConsumer {
       throw error;
     }
 
-    const existing = await this.dependencies.schedulerCardRepository.findById(cardId);
+    const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
     if (existing === null) {
       await this.dependencies.schedulerCardRepository.create({
-        id: cardId,
+        id: `sc_${crypto.randomUUID()}`,
+        cardId,
         userId,
         lane,
         stability: null,
@@ -333,6 +423,7 @@ export class SchedulerEventConsumer {
     }
 
     await this.dependencies.schedulerCardRepository.update(
+      userId,
       cardId,
       {
         lane,
@@ -349,13 +440,19 @@ export class SchedulerEventConsumer {
   private async handleContentSeeded(envelope: IStreamEventEnvelope): Promise<void> {
     const parsed = ContentSeededPayloadSchema.safeParse(envelope.payload);
     if (!parsed.success) {
-      this.logger.warn({ eventType: envelope.eventType }, 'Skipping invalid content.seeded payload');
+      this.logger.warn(
+        { eventType: envelope.eventType },
+        'Skipping invalid content.seeded payload'
+      );
       return;
     }
 
     const lane = this.readLane(parsed.data.lane);
     if (lane === null) {
-      this.logger.warn({ eventType: envelope.eventType }, 'Skipping content.seeded with invalid lane');
+      this.logger.warn(
+        { eventType: envelope.eventType },
+        'Skipping content.seeded with invalid lane'
+      );
       return;
     }
 
@@ -371,13 +468,14 @@ export class SchedulerEventConsumer {
 
     await Promise.all(
       cardIds.map(async (cardId) => {
-        const existing = await this.dependencies.schedulerCardRepository.findById(cardId);
+        const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
         if (existing !== null) {
           return;
         }
 
         await this.dependencies.schedulerCardRepository.create({
-          id: cardId,
+          id: `sc_${crypto.randomUUID()}`,
+          cardId,
           userId,
           lane,
           stability: null,
@@ -455,5 +553,55 @@ export class SchedulerEventConsumer {
       message.includes('duplicate key') ||
       message.includes('constraint')
     );
+  }
+
+  private safeParseEnvelope(eventJson: string): IStreamEventEnvelope | null {
+    try {
+      return JSON.parse(eventJson) as IStreamEventEnvelope;
+    } catch {
+      return null;
+    }
+  }
+
+  private readAttempts(metadata: IStreamEventEnvelope['metadata']): number {
+    const attempts =
+      metadata !== undefined &&
+      'schedulerProcessingAttempts' in metadata &&
+      typeof (metadata as IProcessingMetadata).schedulerProcessingAttempts === 'number'
+        ? (metadata as IProcessingMetadata).schedulerProcessingAttempts
+        : 0;
+
+    return attempts ?? 0;
+  }
+
+  private async moveRawToDeadLetter(
+    messageId: string,
+    eventJson: string,
+    error: unknown
+  ): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
+    await this.redis.xadd(
+      this.config.deadLetterStreamKey,
+      'MAXLEN',
+      '~',
+      '100000',
+      '*',
+      'event',
+      JSON.stringify({
+        eventType: 'scheduler.dead_letter.raw',
+        aggregateType: 'SchedulerConsumer',
+        aggregateId: messageId,
+        payload: {
+          rawEvent: eventJson,
+          messageId,
+        },
+        metadata: {
+          schedulerProcessingAttempts: this.config.maxProcessAttempts,
+          schedulerLastError: errorMessage,
+          schedulerDeadLetteredAt: new Date().toISOString(),
+        },
+      } satisfies IStreamEventEnvelope)
+    );
+    await this.acknowledge(messageId);
   }
 }

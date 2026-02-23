@@ -23,11 +23,11 @@ import type {
 export interface ISchedulerCardRepository {
   // ---------- Read ----------
 
-  /** Find a scheduler card by ID. Returns null if not found. */
-  findById(cardId: CardId): Promise<ISchedulerCard | null>;
+  /** Find a scheduler card by user/card identity. Returns null if not found. */
+  findByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard | null>;
 
-  /** Find a scheduler card by ID, throws if not found. */
-  getById(cardId: CardId): Promise<ISchedulerCard>;
+  /** Find a scheduler card by user/card identity, throws if not found. */
+  getByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard>;
 
   /** Find scheduler cards for a user. */
   findByUser(userId: UserId, filters?: ISchedulerCardFilters): Promise<ISchedulerCard[]>;
@@ -59,6 +59,7 @@ export interface ISchedulerCardRepository {
 
   /** Update an existing scheduler card with optimistic locking. */
   update(
+    userId: UserId,
     cardId: CardId,
     data: Partial<
       Pick<
@@ -83,7 +84,7 @@ export interface ISchedulerCardRepository {
   ): Promise<ISchedulerCard>;
 
   /** Delete a scheduler card. */
-  delete(cardId: CardId): Promise<void>;
+  delete(userId: UserId, cardId: CardId): Promise<void>;
 
   /** Batch create scheduler cards for efficiency. */
   createBatch(cards: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>[]): Promise<ISchedulerCard[]>;

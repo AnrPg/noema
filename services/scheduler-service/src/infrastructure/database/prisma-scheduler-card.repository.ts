@@ -6,18 +6,19 @@
  */
 
 import type { CardId, UserId } from '@noema/types';
+import { randomUUID } from 'node:crypto';
 import type {
-    PrismaClient,
-    SchedulerCard as PrismaSchedulerCard,
-    SchedulerCardState as PrismaSchedulerCardState,
-    SchedulerLane as PrismaSchedulerLane,
+  PrismaClient,
+  SchedulerCard as PrismaSchedulerCard,
+  SchedulerCardState as PrismaSchedulerCardState,
+  SchedulerLane as PrismaSchedulerLane,
 } from '../../../generated/prisma/index.js';
 import type { ISchedulerCardRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type {
-    ISchedulerCard,
-    ISchedulerCardFilters,
-    SchedulerCardState,
-    SchedulerLane,
+  ISchedulerCard,
+  ISchedulerCardFilters,
+  SchedulerCardState,
+  SchedulerLane,
 } from '../../types/scheduler.types.js';
 
 // ============================================================================
@@ -46,7 +47,8 @@ function fromPrismaState(state: PrismaSchedulerCardState): SchedulerCardState {
 
 function toDomain(row: PrismaSchedulerCard): ISchedulerCard {
   return {
-    id: row.id as CardId,
+    id: row.id,
+    cardId: row.cardId as CardId,
     userId: row.userId as UserId,
     lane: fromPrismaLane(row.lane),
     stability: row.stability,
@@ -78,17 +80,17 @@ function toDomain(row: PrismaSchedulerCard): ISchedulerCard {
 export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findById(cardId: CardId): Promise<ISchedulerCard | null> {
+  async findByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard | null> {
     const card = await this.prisma.schedulerCard.findUnique({
-      where: { id: cardId },
+      where: { userId_cardId: { userId, cardId } },
     });
     return card ? toDomain(card) : null;
   }
 
-  async getById(cardId: CardId): Promise<ISchedulerCard> {
-    const card = await this.findById(cardId);
+  async getByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard> {
+    const card = await this.findByCard(userId, cardId);
     if (!card) {
-      throw new Error(`SchedulerCard not found: ${cardId}`);
+      throw new Error(`SchedulerCard not found: user=${userId}, card=${cardId}`);
     }
     return card;
   }
@@ -217,7 +219,8 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   async create(card: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>): Promise<ISchedulerCard> {
     const created = await this.prisma.schedulerCard.create({
       data: {
-        id: card.id,
+        id: card.id !== '' ? card.id : `sc_${randomUUID()}`,
+        cardId: card.cardId,
         userId: card.userId,
         lane: toPrismaLane(card.lane),
         stability: card.stability,
@@ -250,6 +253,7 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   }
 
   async update(
+    userId: UserId,
     cardId: CardId,
     data: Partial<
       Pick<
@@ -274,11 +278,11 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   ): Promise<ISchedulerCard> {
     // First check version
     const existing = await this.prisma.schedulerCard.findUnique({
-      where: { id: cardId },
+      where: { userId_cardId: { userId, cardId } },
     });
 
     if (!existing) {
-      throw new Error(`SchedulerCard not found: ${cardId}`);
+      throw new Error(`SchedulerCard not found: user=${userId}, card=${cardId}`);
     }
 
     if (existing.version !== expectedVersion) {
@@ -358,20 +362,30 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     }
 
     const updated = await this.prisma.schedulerCard.update({
-      where: { id: cardId },
+      where: { id: existing.id },
       data: updateData,
     });
 
     return toDomain(updated);
   }
 
-  async delete(cardId: CardId): Promise<void> {
+  async delete(userId: UserId, cardId: CardId): Promise<void> {
+    const existing = await this.prisma.schedulerCard.findUnique({
+      where: { userId_cardId: { userId, cardId } },
+      select: { id: true },
+    });
+    if (!existing) {
+      return;
+    }
+
     await this.prisma.schedulerCard.delete({
-      where: { id: cardId },
+      where: { id: existing.id },
     });
   }
 
-  async createBatch(cards: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>[]): Promise<ISchedulerCard[]> {
+  async createBatch(
+    cards: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>[]
+  ): Promise<ISchedulerCard[]> {
     const created = await Promise.all(cards.map((card) => this.create(card)));
     return created;
   }

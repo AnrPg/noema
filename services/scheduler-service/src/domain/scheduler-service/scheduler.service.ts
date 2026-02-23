@@ -1,5 +1,6 @@
 import type { IAgentHints } from '@noema/contracts';
-import { jwtVerify, SignJWT } from 'jose';
+import { decodeProtectedHeader, jwtVerify, SignJWT } from 'jose';
+import { randomUUID } from 'node:crypto';
 
 import type {
   AdaptiveCheckpointSignal,
@@ -35,7 +36,8 @@ export interface IServiceResult<T> {
 
 export interface ISchedulerServiceConfig {
   serviceVersion: string;
-  offlineIntentTokenSecret: string;
+  offlineIntentTokenActiveKeyId: string;
+  offlineIntentTokenKeys: Record<string, string>;
   offlineIntentTokenIssuer: string;
   offlineIntentTokenAudience: string;
 }
@@ -47,14 +49,21 @@ export interface ISchedulerServiceRepositories {
 }
 
 export class SchedulerService {
-  private readonly jwtSecret: Uint8Array;
+  private readonly activeTokenKeyId: string;
+  private readonly tokenSecrets: Map<string, Uint8Array>;
 
   constructor(
     private readonly eventPublisher: IEventPublisher,
     private readonly config: ISchedulerServiceConfig,
     private readonly repositories?: ISchedulerServiceRepositories
   ) {
-    this.jwtSecret = new TextEncoder().encode(config.offlineIntentTokenSecret);
+    this.activeTokenKeyId = config.offlineIntentTokenActiveKeyId;
+    this.tokenSecrets = new Map(
+      Object.entries(config.offlineIntentTokenKeys).map(([keyId, secret]) => [
+        keyId,
+        new TextEncoder().encode(secret),
+      ])
+    );
   }
 
   async planDualLaneQueue(
@@ -67,6 +76,9 @@ export class SchedulerService {
     }
 
     const data = parsed.data as IDualLanePlanInput;
+    if (data.userId !== ctx.userId) {
+      throw new Error('userId in payload must match authenticated user');
+    }
     const laneMix = this.normalizeLaneMix(data.targetMix);
     const selected = this.selectByLaneMix(
       data.retentionCardIds,
@@ -126,6 +138,9 @@ export class SchedulerService {
     }
 
     const data = parsed.data as IOfflineIntentTokenInput;
+    if (data.userId !== ctx.userId) {
+      throw new Error('userId in payload must match authenticated user');
+    }
     const now = new Date();
     const expiresAt = new Date(now.getTime() + data.expiresInSeconds * 1000);
 
@@ -139,13 +154,13 @@ export class SchedulerService {
     };
 
     const token = await new SignJWT(claims as unknown as Record<string, unknown>)
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT', kid: this.activeTokenKeyId })
       .setIssuedAt(Math.floor(now.getTime() / 1000))
       .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
       .setIssuer(this.config.offlineIntentTokenIssuer)
       .setAudience(this.config.offlineIntentTokenAudience)
       .setJti(claims.nonce)
-      .sign(this.jwtSecret);
+      .sign(this.requireTokenSecret(this.activeTokenKeyId));
 
     await this.eventPublisher.publish({
       eventType: 'schedule.intent_token.issued',
@@ -175,7 +190,7 @@ export class SchedulerService {
 
   async verifyOfflineIntentToken(
     input: unknown,
-    _ctx: IExecutionContext
+    ctx: IExecutionContext
   ): Promise<IServiceResult<IVerifyOfflineIntentTokenResult>> {
     const parsed = VerifyOfflineIntentTokenInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -183,12 +198,42 @@ export class SchedulerService {
     }
 
     try {
-      const { payload } = await jwtVerify(parsed.data.token, this.jwtSecret, {
-        issuer: this.config.offlineIntentTokenIssuer,
-        audience: this.config.offlineIntentTokenAudience,
-      });
+      const protectedHeader = decodeProtectedHeader(parsed.data.token);
+      const candidateKeys = this.getVerificationKeys(protectedHeader.kid);
 
-      const claims = payload as unknown as IOfflineIntentTokenClaims;
+      let verifiedPayload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | undefined;
+      let lastError: unknown;
+
+      for (const key of candidateKeys) {
+        try {
+          const { payload } = await jwtVerify(parsed.data.token, key, {
+            issuer: this.config.offlineIntentTokenIssuer,
+            audience: this.config.offlineIntentTokenAudience,
+          });
+          verifiedPayload = payload;
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (verifiedPayload === undefined) {
+        throw lastError instanceof Error ? lastError : new Error('Token verification failed');
+      }
+
+      const claims = verifiedPayload as unknown as IOfflineIntentTokenClaims;
+      if (claims.userId !== ctx.userId) {
+        return {
+          data: {
+            valid: false,
+            reason: 'Token userId does not match authenticated user',
+          },
+          agentHints: this.defaultHints(
+            'request_new_intent_token',
+            'Token subject does not match authenticated user'
+          ),
+        };
+      }
       const checkpointSignals =
         (claims.sessionBlueprint as { checkpointSignals?: AdaptiveCheckpointSignal[] })
           .checkpointSignals ?? [];
@@ -212,6 +257,26 @@ export class SchedulerService {
         agentHints: this.defaultHints('request_new_intent_token', `Token invalid: ${message}`),
       };
     }
+  }
+
+  private requireTokenSecret(keyId: string): Uint8Array {
+    const secret = this.tokenSecrets.get(keyId);
+    if (secret === undefined) {
+      throw new Error(`Offline intent token secret missing for key id '${keyId}'`);
+    }
+    return secret;
+  }
+
+  private getVerificationKeys(tokenKid: unknown): Uint8Array[] {
+    if (typeof tokenKid === 'string' && tokenKid.length > 0) {
+      const selected = this.tokenSecrets.get(tokenKid);
+      if (selected === undefined) {
+        return [];
+      }
+      return [selected];
+    }
+
+    return [...this.tokenSecrets.values()];
   }
 
   private normalizeLaneMix(mix?: ISchedulerLaneMix): ISchedulerLaneMix {
@@ -298,11 +363,12 @@ export class SchedulerService {
             ? 'calibration'
             : 'retention';
 
-        const existing = await repositories.schedulerCardRepository.findById(cardId);
+        const existing = await repositories.schedulerCardRepository.findByCard(userId, cardId);
 
         if (existing === null) {
           await repositories.schedulerCardRepository.create({
-            id: cardId,
+            id: `sc_${randomUUID()}`,
+            cardId,
             userId,
             lane,
             stability: null,
@@ -327,6 +393,7 @@ export class SchedulerService {
         }
 
         await repositories.schedulerCardRepository.update(
+          userId,
           cardId,
           {
             lane,

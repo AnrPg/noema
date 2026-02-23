@@ -16,6 +16,7 @@ CREATE TYPE "rating" AS ENUM ('AGAIN', 'HARD', 'GOOD', 'EASY');
 
 CREATE TABLE "scheduler_cards" (
     "id" VARCHAR(50) NOT NULL,
+    "card_id" VARCHAR(50) NOT NULL,
     "user_id" VARCHAR(50) NOT NULL,
     "lane" "scheduler_lane" NOT NULL DEFAULT 'RETENTION',
     
@@ -57,10 +58,12 @@ CREATE TABLE "scheduler_cards" (
 
 -- Indexes for scheduler_cards
 CREATE INDEX "scheduler_cards_user_id_next_review_date_idx" ON "scheduler_cards"("user_id", "next_review_date");
+CREATE INDEX "scheduler_cards_card_id_idx" ON "scheduler_cards"("card_id");
 CREATE INDEX "scheduler_cards_user_id_lane_idx" ON "scheduler_cards"("user_id", "lane");
 CREATE INDEX "scheduler_cards_user_id_state_next_review_date_idx" ON "scheduler_cards"("user_id", "state", "next_review_date");
 CREATE INDEX "scheduler_cards_next_review_date_idx" ON "scheduler_cards"("next_review_date");
 CREATE INDEX "scheduler_cards_lane_state_idx" ON "scheduler_cards"("lane", "state");
+ALTER TABLE "scheduler_cards" ADD CONSTRAINT "scheduler_cards_user_id_card_id_key" UNIQUE ("user_id", "card_id");
 
 -- ============================================================================
 -- reviews table
@@ -105,7 +108,7 @@ CREATE TABLE "reviews" (
 );
 
 -- Foreign key constraint
-ALTER TABLE "reviews" ADD CONSTRAINT "reviews_card_id_fkey" FOREIGN KEY ("card_id") REFERENCES "scheduler_cards"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_user_id_card_id_fkey" FOREIGN KEY ("user_id", "card_id") REFERENCES "scheduler_cards"("user_id", "card_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- Indexes for reviews
 CREATE INDEX "reviews_card_id_reviewed_at_idx" ON "reviews"("card_id", "reviewed_at");
@@ -143,7 +146,7 @@ CREATE TABLE "calibration_data" (
 );
 
 -- Foreign key constraint (optional)
-ALTER TABLE "calibration_data" ADD CONSTRAINT "calibration_data_card_id_fkey" FOREIGN KEY ("card_id") REFERENCES "scheduler_cards"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "calibration_data" ADD CONSTRAINT "calibration_data_user_id_card_id_fkey" FOREIGN KEY ("user_id", "card_id") REFERENCES "scheduler_cards"("user_id", "card_id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Unique constraint
 ALTER TABLE "calibration_data" ADD CONSTRAINT "calibration_data_user_id_card_id_key" UNIQUE ("user_id", "card_id");

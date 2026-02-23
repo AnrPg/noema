@@ -16,33 +16,34 @@ datasource db {
 // ============================================================================
 
 model SchedulerCard {
-    id     String @id @db.VarChar(50) // CardId from content-service
+    id     String @id @db.VarChar(50) // Surrogate key
+    cardId String @map("card_id") @db.VarChar(50) // CardId from content-service
     userId String @map("user_id") @db.VarChar(50)
 
     // Lane assignment
     lane SchedulerLane @default(RETENTION)
 
     // FSRS parameters (retention lane)
-    stability  Float? // long-term memory stability in days
+    stability           Float? // long-term memory stability in days
     difficultyParameter Float? @map("difficulty_parameter") // intrinsic difficulty [1-10]
 
     // HLR parameters (calibration lane)
     halfLife Float? @map("half_life") // half-life in days from HLR model
 
     // Common scheduling state
-    interval           Float    @default(0) // current interval in days
-    nextReviewDate     DateTime @map("next_review_date")
+    interval           Float     @default(0) // current interval in days
+    nextReviewDate     DateTime  @map("next_review_date")
     lastReviewedAt     DateTime? @map("last_reviewed_at")
-    reviewCount        Int      @default(0) @map("review_count")
-    lapseCount         Int      @default(0) @map("lapse_count")
-    consecutiveCorrect Int      @default(0) @map("consecutive_correct")
+    reviewCount        Int       @default(0) @map("review_count")
+    lapseCount         Int       @default(0) @map("lapse_count")
+    consecutiveCorrect Int       @default(0) @map("consecutive_correct")
 
     // Algorithm selection
     schedulingAlgorithm String @default("fsrs") @map("scheduling_algorithm") @db.VarChar(20)
 
     // Metadata
-    cardType      String? @map("card_type") @db.VarChar(50)
-    difficulty    String? @db.VarChar(20) // difficulty level from content
+    cardType         String?  @map("card_type") @db.VarChar(50)
+    difficulty       String?  @db.VarChar(20) // difficulty level from content
     knowledgeNodeIds String[] @map("knowledge_node_ids") // for PKG-aware scheduling
 
     // State tracking
@@ -58,11 +59,13 @@ model SchedulerCard {
     version Int @default(1)
 
     // Relations
-    reviews           Review[]
-    calibrationData   CalibrationData[]
+    reviews         Review[]
+    calibrationData CalibrationData[]
 
+    @@unique([userId, cardId])
     // Indexes
     @@index([userId, nextReviewDate])
+    @@index([cardId])
     @@index([userId, lane])
     @@index([userId, state, nextReviewDate])
     @@index([nextReviewDate])
@@ -100,7 +103,7 @@ model Review {
     newState Json @map("new_state")
 
     // Algorithm used
-    schedulingAlgorithm String @map("scheduling_algorithm") @db.VarChar(20)
+    schedulingAlgorithm String        @map("scheduling_algorithm") @db.VarChar(20)
     lane                SchedulerLane
 
     // Metacognitive signals (denormalized from session-service Attempt)
@@ -112,13 +115,13 @@ model Review {
     createdAt DateTime @default(now()) @map("created_at")
 
     // Relation
-    card SchedulerCard @relation(fields: [cardId], references: [id])
+    schedulerCard SchedulerCard @relation(fields: [userId, cardId], references: [userId, cardId])
 
+    @@unique([attemptId])
     // Indexes
     @@index([cardId, reviewedAt])
     @@index([userId, reviewedAt])
     @@index([sessionId])
-    @@unique([attemptId])
     @@index([rating])
     @@index([lane, rating])
     @@map("reviews")
@@ -132,24 +135,24 @@ model CalibrationData {
     id String @id @db.VarChar(50)
 
     // Scope: per-user, per-card OR per-cardType
-    userId     String  @map("user_id") @db.VarChar(50)
-    cardId     String? @map("card_id") @db.VarChar(50) // null for type-level calibration
-    cardType   String? @map("card_type") @db.VarChar(50)
+    userId   String  @map("user_id") @db.VarChar(50)
+    cardId   String? @map("card_id") @db.VarChar(50) // null for type-level calibration
+    cardType String? @map("card_type") @db.VarChar(50)
 
     // Parameter estimates (JSON for flexibility as algorithms evolve)
     parameters Json // e.g. {fsrs: {w0: ..., w1: ...}, hlr: {theta: [...]}}
 
     // Confidence metrics
-    sampleCount      Int   @default(0) @map("sample_count")
-    confidenceScore  Float @default(0.5) @map("confidence_score")
-    lastTrainedAt    DateTime? @map("last_trained_at")
+    sampleCount     Int       @default(0) @map("sample_count")
+    confidenceScore Float     @default(0.5) @map("confidence_score")
+    lastTrainedAt   DateTime? @map("last_trained_at")
 
     // Audit
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
     // Relation (optional foreign key)
-    card SchedulerCard? @relation(fields: [cardId], references: [id])
+    card SchedulerCard? @relation(fields: [userId, cardId], references: [userId, cardId])
 
     // Indexes
     @@unique([userId, cardId])
@@ -170,9 +173,9 @@ enum SchedulerLane {
 }
 
 enum SchedulerCardState {
-    NEW       // Never reviewed
-    LEARNING  // In initial learning phase
-    REVIEW    // In spaced repetition
+    NEW // Never reviewed
+    LEARNING // In initial learning phase
+    REVIEW // In spaced repetition
     RELEARNING // After lapse
     SUSPENDED // Temporarily paused
     GRADUATED // Mastered (very long intervals)

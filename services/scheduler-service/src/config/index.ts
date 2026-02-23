@@ -20,6 +20,9 @@ export interface IServiceConfig {
     consumerName: string;
     consumerBlockMs: number;
     consumerBatchSize: number;
+    consumerRetryBaseDelayMs: number;
+    consumerMaxProcessAttempts: number;
+    deadLetterStreamKey: string;
   };
   cors: {
     origin: string[];
@@ -30,9 +33,84 @@ export interface IServiceConfig {
     pretty: boolean;
   };
   security: {
-    offlineIntentTokenSecret: string;
+    offlineIntentTokenActiveKeyId: string;
+    offlineIntentTokenKeys: Record<string, string>;
     offlineIntentTokenIssuer: string;
     offlineIntentTokenAudience: string;
+  };
+}
+
+const MIN_OFFLINE_INTENT_TOKEN_SECRET_LENGTH = 32;
+
+function ensureValidOfflineIntentTokenSecret(secret: string, keyId: string): string {
+  const normalizedSecret = secret.trim();
+  if (normalizedSecret.length < MIN_OFFLINE_INTENT_TOKEN_SECRET_LENGTH) {
+    throw new Error(
+      `OFFLINE_INTENT_TOKEN key '${keyId}' must be at least ${String(MIN_OFFLINE_INTENT_TOKEN_SECRET_LENGTH)} characters`
+    );
+  }
+  return normalizedSecret;
+}
+
+function parseOfflineIntentTokenKeyRing(): {
+  activeKeyId: string;
+  keys: Record<string, string>;
+} {
+  const keyRingRaw = process.env['OFFLINE_INTENT_TOKEN_KEYS'];
+  const activeKeyIdRaw = process.env['OFFLINE_INTENT_TOKEN_ACTIVE_KID'];
+
+  if (keyRingRaw !== undefined && keyRingRaw.trim() !== '') {
+    const entries = keyRingRaw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    const keys: Record<string, string> = {};
+
+    for (const entry of entries) {
+      const separatorIndex = entry.indexOf(':');
+      if (separatorIndex <= 0 || separatorIndex === entry.length - 1) {
+        throw new Error(
+          "Invalid OFFLINE_INTENT_TOKEN_KEYS format. Expected comma-separated 'kid:secret' pairs"
+        );
+      }
+
+      const keyId = entry.slice(0, separatorIndex).trim();
+      const secret = entry.slice(separatorIndex + 1).trim();
+      if (keyId.length === 0 || secret.length === 0) {
+        throw new Error('OFFLINE_INTENT_TOKEN_KEYS contains empty key id or secret');
+      }
+
+      keys[keyId] = ensureValidOfflineIntentTokenSecret(secret, keyId);
+    }
+
+    const activeKeyId = (activeKeyIdRaw ?? '').trim();
+    if (activeKeyId.length === 0) {
+      throw new Error(
+        'OFFLINE_INTENT_TOKEN_ACTIVE_KID is required when OFFLINE_INTENT_TOKEN_KEYS is set'
+      );
+    }
+
+    if (!(activeKeyId in keys)) {
+      throw new Error(
+        `OFFLINE_INTENT_TOKEN_ACTIVE_KID '${activeKeyId}' does not exist in OFFLINE_INTENT_TOKEN_KEYS`
+      );
+    }
+
+    return {
+      activeKeyId,
+      keys,
+    };
+  }
+
+  const legacySecret = requireEnv('OFFLINE_INTENT_TOKEN_SECRET');
+  const activeKeyId = (activeKeyIdRaw ?? 'default').trim();
+
+  return {
+    activeKeyId,
+    keys: {
+      [activeKeyId]: ensureValidOfflineIntentTokenSecret(legacySecret, activeKeyId),
+    },
   };
 }
 
@@ -66,6 +144,7 @@ function optionalEnvBool(name: string, defaultValue: boolean): boolean {
 
 export function loadConfig(): IServiceConfig {
   const env = optionalEnv('NODE_ENV', 'development') as 'development' | 'staging' | 'production';
+  const keyRing = parseOfflineIntentTokenKeyRing();
 
   return {
     service: {
@@ -89,6 +168,9 @@ export function loadConfig(): IServiceConfig {
       consumerName: optionalEnv('REDIS_CONSUMER_NAME', 'scheduler-service-1'),
       consumerBlockMs: optionalEnvInt('REDIS_CONSUMER_BLOCK_MS', 5000),
       consumerBatchSize: optionalEnvInt('REDIS_CONSUMER_BATCH_SIZE', 20),
+      consumerRetryBaseDelayMs: optionalEnvInt('REDIS_CONSUMER_RETRY_BASE_DELAY_MS', 250),
+      consumerMaxProcessAttempts: optionalEnvInt('REDIS_CONSUMER_MAX_PROCESS_ATTEMPTS', 5),
+      deadLetterStreamKey: optionalEnv('REDIS_DEAD_LETTER_STREAM', 'noema:events:scheduler-service:dlq'),
     },
     cors: {
       origin: optionalEnv(
@@ -104,7 +186,8 @@ export function loadConfig(): IServiceConfig {
       pretty: optionalEnvBool('LOG_PRETTY', env === 'development'),
     },
     security: {
-      offlineIntentTokenSecret: requireEnv('OFFLINE_INTENT_TOKEN_SECRET'),
+      offlineIntentTokenActiveKeyId: keyRing.activeKeyId,
+      offlineIntentTokenKeys: keyRing.keys,
       offlineIntentTokenIssuer: optionalEnv('OFFLINE_INTENT_TOKEN_ISSUER', 'noema.scheduler'),
       offlineIntentTokenAudience: optionalEnv('OFFLINE_INTENT_TOKEN_AUDIENCE', 'noema.mobile'),
     },

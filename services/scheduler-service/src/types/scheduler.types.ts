@@ -80,12 +80,19 @@ export interface IVerifyOfflineIntentTokenResult {
 
 export type SchedulerLane = 'retention' | 'calibration';
 
-export type SchedulerCardState = 'new' | 'learning' | 'review' | 'relearning' | 'suspended' | 'graduated';
+export type SchedulerCardState =
+  | 'new'
+  | 'learning'
+  | 'review'
+  | 'relearning'
+  | 'suspended'
+  | 'graduated';
 
 export type Rating = 'again' | 'hard' | 'good' | 'easy';
 
 export interface ISchedulerCard {
-  id: CardId;
+  id: string;
+  cardId: CardId;
   userId: UserId;
   lane: SchedulerLane;
   stability: number | null;

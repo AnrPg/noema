@@ -22,13 +22,26 @@ export function registerToolRoutes(
     };
   }
 
+  const authPreHandler = {
+    preHandler: (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      done: (error?: Error) => void
+    ): void => {
+      authMiddleware(request, reply)
+        .then(() => {
+          done();
+        })
+        .catch((error: unknown) => {
+          done(error instanceof Error ? error : new Error('Authentication middleware failed'));
+        });
+    },
+  };
+
   fastify.get(
     '/v1/tools',
-    {},
+    authPreHandler,
     async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-      await authMiddleware(request, reply);
-      if (reply.sent) return;
-
       const definitions = toolRegistry.listDefinitions();
 
       await reply.status(200).send({
@@ -43,11 +56,8 @@ export function registerToolRoutes(
 
   fastify.post(
     '/v1/tools/execute',
-    {},
+    authPreHandler,
     async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-      await authMiddleware(request, reply);
-      if (reply.sent) return;
-
       const body = request.body as { tool?: string; input?: unknown } | undefined;
 
       if (body?.tool === undefined || body.tool === '') {

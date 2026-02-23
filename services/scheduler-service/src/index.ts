@@ -9,14 +9,14 @@ import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes, registerSchedulerRoutes } from './api/rest/index.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import {
-    SchedulerService,
-    type ISchedulerServiceConfig,
+  SchedulerService,
+  type ISchedulerServiceConfig,
 } from './domain/scheduler-service/scheduler.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
-    PrismaCalibrationDataRepository,
-    PrismaReviewRepository,
-    PrismaSchedulerCardRepository,
+  PrismaCalibrationDataRepository,
+  PrismaReviewRepository,
+  PrismaSchedulerCardRepository,
 } from './infrastructure/database/index.js';
 import { SchedulerEventConsumer } from './infrastructure/events/index.js';
 
@@ -61,7 +61,8 @@ async function bootstrap(): Promise<void> {
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
   const serviceConfig: ISchedulerServiceConfig = {
     serviceVersion: config.service.version,
-    offlineIntentTokenSecret: config.security.offlineIntentTokenSecret,
+    offlineIntentTokenActiveKeyId: config.security.offlineIntentTokenActiveKeyId,
+    offlineIntentTokenKeys: config.security.offlineIntentTokenKeys,
     offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
     offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
   };
@@ -79,6 +80,9 @@ async function bootstrap(): Promise<void> {
       consumerName: config.redis.consumerName,
       blockMs: config.redis.consumerBlockMs,
       batchSize: config.redis.consumerBatchSize,
+      retryBaseDelayMs: config.redis.consumerRetryBaseDelayMs,
+      maxProcessAttempts: config.redis.consumerMaxProcessAttempts,
+      deadLetterStreamKey: config.redis.deadLetterStreamKey,
     },
     {
       schedulerCardRepository: schedulerCardRepo,
