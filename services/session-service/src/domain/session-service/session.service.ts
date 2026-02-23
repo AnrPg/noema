@@ -50,6 +50,7 @@ import { ID_PREFIXES, SessionTerminationReason } from '@noema/types';
 import { decodeProtectedHeader, jwtVerify, SignJWT } from 'jose';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
+import type { Prisma } from '../../../generated/prisma/index.js';
 
 import type {
   AdaptiveCheckpointSignal,
@@ -69,11 +70,12 @@ import {
   AttemptNotFoundError,
   AuthorizationError,
   InvalidSessionStateError,
+  OutboxDispatchError,
   QueueError,
-  SessionAlreadyActiveError,
   SessionNotFoundError,
   ValidationError,
 } from './errors/index.js';
+import type { IOutboxEventInput, IOutboxRepository } from './outbox.repository.js';
 import type { ISessionRepository } from './session.repository.js';
 import {
   ChangeTeachingInputSchema,
@@ -198,6 +200,8 @@ export class SessionService {
   constructor(
     private readonly repository: ISessionRepository,
     private readonly eventPublisher: IEventPublisher,
+    private readonly outboxRepository: IOutboxRepository,
+    private readonly prisma: import('../../../generated/prisma/index.js').PrismaClient,
     logger: Logger,
     options?: Partial<ISessionServiceOptions>
   ) {
@@ -228,7 +232,7 @@ export class SessionService {
   /**
    * Start a new study session.
    *
-   * Validates no active session exists, creates the session record,
+   * Creates the session record,
    * populates the queue, and publishes session.started.
    */
   async startSession(input: unknown, ctx: IExecutionContext): Promise<IServiceResult<ISession>> {
@@ -252,16 +256,10 @@ export class SessionService {
       }
     }
 
-    // Check for existing active session
-    const existing = await this.repository.findActiveSessionForUser(ctx.userId);
-    if (existing) {
-      throw new SessionAlreadyActiveError(existing.id);
-    }
-
     const sessionId = `${ID_PREFIXES.SessionId}${nanoid()}` as SessionId;
     const now = new Date().toISOString();
 
-    const session = await this.repository.createSession({
+    const sessionInput = {
       id: sessionId,
       userId: ctx.userId,
       deckQueryId: data.deckQueryId as DeckQueryLogId,
@@ -291,7 +289,7 @@ export class SessionService {
       completedAt: null,
       terminationReason: null,
       version: 1,
-    });
+    };
 
     // Populate queue
     const queueItems = data.initialCardIds.map((cardId, idx) => ({
@@ -303,41 +301,52 @@ export class SessionService {
       injectedBy: null,
       reason: null,
     }));
-    await this.repository.createQueueItemsBatch(queueItems);
-
-    // Publish event
-    const payload: ISessionStartedPayload = {
-      userId: ctx.userId,
-      deckQueryId: data.deckQueryId as DeckQueryLogId,
-      learningMode: data.learningMode as LearningMode,
-      teachingApproach: session.teachingApproach,
-      schedulingAlgorithm: session.schedulingAlgorithm,
-      ...(data.loadoutId !== undefined ? { loadoutId: data.loadoutId as LoadoutId } : {}),
-      ...(data.loadoutArchetype !== undefined
-        ? { loadoutArchetype: data.loadoutArchetype as LoadoutArchetype }
-        : {}),
-      config: {
-        sessionTimeoutHours: session.config.sessionTimeoutHours,
-        ...(session.config.maxCards !== undefined ? { maxCards: session.config.maxCards } : {}),
-        ...(session.config.maxDurationMinutes !== undefined
-          ? { maxDurationMinutes: session.config.maxDurationMinutes }
-          : {}),
-        ...(session.config.categoryIds !== undefined
-          ? { categoryIds: session.config.categoryIds as CategoryId[] }
-          : {}),
-        ...(session.config.cardTypes !== undefined
-          ? { cardTypes: session.config.cardTypes as (CardType | RemediationCardType)[] }
-          : {}),
-      },
-      initialQueueSize: data.initialCardIds.length,
-    };
-
-    await this.eventPublisher.publish({
-      eventType: 'session.started',
-      aggregateType: 'Session',
-      aggregateId: sessionId,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+    const session = await this.runInTransaction(async (tx) => {
+      const createdSession = await this.repository.createSession(sessionInput, tx);
+      await this.repository.createQueueItemsBatch(queueItems, tx);
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.started',
+          aggregateType: 'Session',
+          aggregateId: sessionId,
+          payload: {
+            userId: ctx.userId,
+            deckQueryId: data.deckQueryId as DeckQueryLogId,
+            learningMode: data.learningMode as LearningMode,
+            teachingApproach: createdSession.teachingApproach,
+            schedulingAlgorithm: createdSession.schedulingAlgorithm,
+            ...(data.loadoutId !== undefined ? { loadoutId: data.loadoutId as LoadoutId } : {}),
+            ...(data.loadoutArchetype !== undefined
+              ? { loadoutArchetype: data.loadoutArchetype as LoadoutArchetype }
+              : {}),
+            config: {
+              sessionTimeoutHours: createdSession.config.sessionTimeoutHours,
+              ...(createdSession.config.maxCards !== undefined
+                ? { maxCards: createdSession.config.maxCards }
+                : {}),
+              ...(createdSession.config.maxDurationMinutes !== undefined
+                ? { maxDurationMinutes: createdSession.config.maxDurationMinutes }
+                : {}),
+              ...(createdSession.config.categoryIds !== undefined
+                ? { categoryIds: createdSession.config.categoryIds as CategoryId[] }
+                : {}),
+              ...(createdSession.config.cardTypes !== undefined
+                ? {
+                    cardTypes: createdSession.config.cardTypes as (
+                      | CardType
+                      | RemediationCardType
+                    )[],
+                  }
+                : {}),
+            },
+            initialQueueSize: data.initialCardIds.length,
+          } satisfies ISessionStartedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
+      return createdSession;
     });
 
     this.logger.info({ sessionId, userId: ctx.userId }, 'Session started');
@@ -461,16 +470,22 @@ export class SessionService {
       });
     }
 
-    await this.eventPublisher.publish({
-      eventType: 'session.checkpoint.evaluated',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload: {
-        trigger: data.trigger,
-        shouldAdapt: directives.some((d) => d.action !== 'continue'),
-        directives,
-      },
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+    await this.runInTransaction(async (tx) => {
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.checkpoint.evaluated',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            trigger: data.trigger,
+            shouldAdapt: directives.some((d) => d.action !== 'continue'),
+            directives,
+          },
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
     });
 
     return {
@@ -508,31 +523,38 @@ export class SessionService {
       new Date(session.startedAt).getTime() -
       session.totalPausedDurationMs;
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        state: States.PAUSED,
-        pauseCount: session.pauseCount + 1,
-        lastPausedAt: now,
-        lastActivityAt: now,
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          state: States.PAUSED,
+          pauseCount: session.pauseCount + 1,
+          lastPausedAt: now,
+          lastActivityAt: now,
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionPausedPayload = {
-      userId: ctx.userId,
-      pauseCount: updated.pauseCount,
-      activeDurationMs,
-      attemptsCompleted: session.stats.totalAttempts,
-      ...(reason !== undefined && { reason }),
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.paused',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            pauseCount: next.pauseCount,
+            activeDurationMs,
+            attemptsCompleted: session.stats.totalAttempts,
+            ...(reason !== undefined && { reason }),
+          } satisfies ISessionPausedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.paused',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return next;
     });
 
     this.logger.info({ sessionId: session.id }, 'Session paused');
@@ -561,29 +583,36 @@ export class SessionService {
       ? new Date(now).getTime() - new Date(session.lastPausedAt).getTime()
       : 0;
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        state: States.ACTIVE,
-        totalPausedDurationMs: session.totalPausedDurationMs + pausedDurationMs,
-        lastPausedAt: null,
-        lastActivityAt: now,
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          state: States.ACTIVE,
+          totalPausedDurationMs: session.totalPausedDurationMs + pausedDurationMs,
+          lastPausedAt: null,
+          lastActivityAt: now,
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionResumedPayload = {
-      userId: ctx.userId,
-      pausedDurationMs,
-      totalPauseCount: updated.pauseCount,
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.resumed',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            pausedDurationMs,
+            totalPauseCount: next.pauseCount,
+          } satisfies ISessionResumedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.resumed',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return next;
     });
 
     this.logger.info({ sessionId: session.id }, 'Session resumed');
@@ -614,31 +643,38 @@ export class SessionService {
     const totalDurationMs = new Date(now).getTime() - new Date(session.startedAt).getTime();
     const activeDurationMs = totalDurationMs - session.totalPausedDurationMs;
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        state: States.COMPLETED,
-        completedAt: now,
-        lastActivityAt: now,
-        terminationReason: SessionTerminationReason.COMPLETED_NORMALLY,
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          state: States.COMPLETED,
+          completedAt: now,
+          lastActivityAt: now,
+          terminationReason: SessionTerminationReason.COMPLETED_NORMALLY,
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionCompletedPayload = {
-      userId: ctx.userId,
-      terminationReason: SessionTerminationReason.COMPLETED_NORMALLY,
-      stats: session.stats as ISessionCompletedPayload['stats'],
-      totalDurationMs,
-      activeDurationMs,
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.completed',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            terminationReason: SessionTerminationReason.COMPLETED_NORMALLY,
+            stats: session.stats as ISessionCompletedPayload['stats'],
+            totalDurationMs,
+            activeDurationMs,
+          } satisfies ISessionCompletedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.completed',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return next;
     });
 
     this.logger.info({ sessionId: session.id, stats: session.stats }, 'Session completed');
@@ -677,31 +713,38 @@ export class SessionService {
       session.totalPausedDurationMs;
     const cardsRemaining = await this.repository.countPendingQueueItems(session.id);
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        state: States.ABANDONED,
-        completedAt: now,
-        lastActivityAt: now,
-        terminationReason: SessionTerminationReason.USER_ENDED,
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          state: States.ABANDONED,
+          completedAt: now,
+          lastActivityAt: now,
+          terminationReason: SessionTerminationReason.USER_ENDED,
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionAbandonedPayload = {
-      userId: ctx.userId,
-      stats: session.stats as ISessionAbandonedPayload['stats'],
-      activeDurationMs,
-      cardsRemaining,
-      ...(reason !== undefined && { reason }),
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.abandoned',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            stats: session.stats as ISessionAbandonedPayload['stats'],
+            activeDurationMs,
+            cardsRemaining,
+            ...(reason !== undefined && { reason }),
+          } satisfies ISessionAbandonedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.abandoned',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return next;
     });
 
     this.logger.info({ sessionId: session.id, cardsRemaining }, 'Session abandoned');
@@ -732,29 +775,36 @@ export class SessionService {
     const session = await this.repository.getSessionById(sessionId as SessionId);
     this.assertActiveOrPaused(session, 'expire');
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        state: States.EXPIRED,
-        completedAt: new Date().toISOString(),
-        terminationReason: SessionTerminationReason.AUTO_EXPIRED,
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          state: States.EXPIRED,
+          completedAt: new Date().toISOString(),
+          terminationReason: SessionTerminationReason.AUTO_EXPIRED,
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionExpiredPayload = {
-      userId: session.userId,
-      timeoutHours: session.config.sessionTimeoutHours,
-      stats: session.stats as ISessionExpiredPayload['stats'],
-      lastActivityAt: session.lastActivityAt,
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.expired',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: session.userId,
+            timeoutHours: session.config.sessionTimeoutHours,
+            stats: session.stats as ISessionExpiredPayload['stats'],
+            lastActivityAt: session.lastActivityAt,
+          } satisfies ISessionExpiredPayload,
+          metadata: { correlationId: ctx.correlationId, userId: session.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.expired',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: session.userId },
+      return next;
     });
 
     this.logger.info({ sessionId: session.id }, 'Session expired');
@@ -847,7 +897,7 @@ export class SessionService {
         ? data.confidenceAfter - data.confidenceBefore
         : null;
 
-    const attempt = await this.repository.createAttempt({
+    const attemptInput = {
       id: attemptId,
       sessionId: session.id,
       cardId: data.cardId as CardId,
@@ -873,79 +923,85 @@ export class SessionService {
         null,
       traceId: null,
       diagnosisId: null,
-    });
-
-    const attemptsForCard = await this.repository.findAttemptsByCard(
-      session.id,
-      data.cardId as CardId
-    );
-    const isFirstAttemptForCard = attemptsForCard.length === 1;
-
-    // Update session stats
-    const updatedStats = this.computeUpdatedStats(session.stats, {
-      outcome: data.outcome,
-      rating: data.rating,
-      ratingValue: data.ratingValue,
-      responseTimeMs: data.responseTimeMs,
-      confidenceBefore: data.confidenceBefore ?? undefined,
-      confidenceAfter: data.confidenceAfter ?? undefined,
-      hintRequestCount: data.hintRequestCount ?? undefined,
-      isFirstAttemptForCard,
-    });
-    await this.repository.updateSession(
-      session.id,
-      {
-        stats: updatedStats,
-        lastActivityAt: new Date().toISOString(),
-      },
-      session.version
-    );
-
-    // Mark queue item as answered
-    try {
-      await this.repository.markQueueItemAnswered(session.id, data.cardId as CardId);
-    } catch {
-      // Queue item may not exist if card was dynamically presented
-      this.logger.debug(
-        { sessionId: session.id, cardId: data.cardId },
-        'Queue item not found for marking'
-      );
-    }
-
-    // Publish attempt.recorded
-    const payload: IAttemptRecordedPayload = {
-      attemptId,
-      sessionId: session.id,
-      cardId: data.cardId as CardId,
-      userId: ctx.userId,
-      sequenceNumber,
-      outcome: data.outcome as AttemptOutcome,
-      rating: data.rating as Rating,
-      ratingValue: data.ratingValue,
-      responseTimeMs: data.responseTimeMs,
-      dwellTimeMs: data.dwellTimeMs,
-      wasRevisedBeforeCommit: data.wasRevisedBeforeCommit,
-      revisionCount: data.revisionCount ?? 0,
-      hintRequestCount: data.hintRequestCount ?? 0,
-      hintDepthReached: data.hintDepthReached as HintDepth,
-      contextSnapshot: data.contextSnapshot as unknown as IAttemptContextSnapshot,
-      ...(data.timeToFirstInteractionMs !== undefined && {
-        timeToFirstInteractionMs: data.timeToFirstInteractionMs,
-      }),
-      ...(data.confidenceBefore !== undefined && { confidenceBefore: data.confidenceBefore }),
-      ...(data.confidenceAfter !== undefined && { confidenceAfter: data.confidenceAfter }),
-      ...(calibrationDelta !== null && { calibrationDelta }),
-      ...(data.priorSchedulingState !== undefined && {
-        priorSchedulingState: data.priorSchedulingState as unknown as IPriorSchedulingState,
-      }),
     };
 
-    await this.eventPublisher.publish({
-      eventType: 'attempt.recorded',
-      aggregateType: 'Attempt',
-      aggregateId: attemptId,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+    const attempt = await this.runInTransaction(async (tx) => {
+      const createdAttempt = await this.repository.createAttempt(attemptInput, tx);
+
+      const attemptsForCard = await this.repository.findAttemptsByCard(
+        session.id,
+        data.cardId as CardId
+      );
+      const isFirstAttemptForCard = attemptsForCard.length === 1;
+
+      const updatedStats = this.computeUpdatedStats(session.stats, {
+        outcome: data.outcome,
+        rating: data.rating,
+        ratingValue: data.ratingValue,
+        responseTimeMs: data.responseTimeMs,
+        confidenceBefore: data.confidenceBefore ?? undefined,
+        confidenceAfter: data.confidenceAfter ?? undefined,
+        hintRequestCount: data.hintRequestCount ?? undefined,
+        isFirstAttemptForCard,
+      });
+
+      await this.repository.updateSession(
+        session.id,
+        {
+          stats: updatedStats,
+          lastActivityAt: new Date().toISOString(),
+        },
+        session.version,
+        tx
+      );
+
+      try {
+        await this.repository.markQueueItemAnswered(session.id, data.cardId as CardId, tx);
+      } catch {
+        this.logger.debug(
+          { sessionId: session.id, cardId: data.cardId },
+          'Queue item not found for marking'
+        );
+      }
+
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'attempt.recorded',
+          aggregateType: 'Attempt',
+          aggregateId: attemptId,
+          payload: {
+            attemptId,
+            sessionId: session.id,
+            cardId: data.cardId as CardId,
+            userId: ctx.userId,
+            sequenceNumber,
+            outcome: data.outcome as AttemptOutcome,
+            rating: data.rating as Rating,
+            ratingValue: data.ratingValue,
+            responseTimeMs: data.responseTimeMs,
+            dwellTimeMs: data.dwellTimeMs,
+            wasRevisedBeforeCommit: data.wasRevisedBeforeCommit,
+            revisionCount: data.revisionCount ?? 0,
+            hintRequestCount: data.hintRequestCount ?? 0,
+            hintDepthReached: data.hintDepthReached as HintDepth,
+            contextSnapshot: data.contextSnapshot as unknown as IAttemptContextSnapshot,
+            ...(data.timeToFirstInteractionMs !== undefined && {
+              timeToFirstInteractionMs: data.timeToFirstInteractionMs,
+            }),
+            ...(data.confidenceBefore !== undefined && { confidenceBefore: data.confidenceBefore }),
+            ...(data.confidenceAfter !== undefined && { confidenceAfter: data.confidenceAfter }),
+            ...(calibrationDelta !== null && { calibrationDelta }),
+            ...(data.priorSchedulingState !== undefined && {
+              priorSchedulingState: data.priorSchedulingState as unknown as IPriorSchedulingState,
+            }),
+          } satisfies IAttemptRecordedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
+
+      return createdAttempt;
     });
 
     this.logger.info(
@@ -1008,12 +1064,18 @@ export class SessionService {
       responseTimeMsAtRequest: data.responseTimeMsAtRequest,
     };
 
-    await this.eventPublisher.publish({
-      eventType: 'attempt.hint.requested',
-      aggregateType: 'Attempt',
-      aggregateId: attemptId,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+    await this.runInTransaction(async (tx) => {
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'attempt.hint.requested',
+          aggregateType: 'Attempt',
+          aggregateId: attemptId,
+          payload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
     });
 
     this.logger.debug(
@@ -1101,13 +1163,16 @@ export class SessionService {
     this.assertActiveOrPaused(session, 'record dialogue turn');
 
     const recordedAt = new Date().toISOString();
-    await this.repository.updateSession(
-      session.id,
-      {
-        lastActivityAt: recordedAt,
-      },
-      session.version
-    );
+    await this.runInTransaction(async (tx) => {
+      await this.repository.updateSession(
+        session.id,
+        {
+          lastActivityAt: recordedAt,
+        },
+        session.version,
+        tx
+      );
+    });
 
     this.logger.debug(
       {
@@ -1216,30 +1281,39 @@ export class SessionService {
       throw new QueueError(`Card ${data.cardId} is already in the session queue`);
     }
 
-    const item = await this.repository.injectQueueItem({
-      id: nanoid(),
-      sessionId: session.id,
-      cardId: data.cardId as CardId,
-      position: data.position,
-      status: 'pending' as CardQueueStatus,
-      injectedBy: data.injectedBy ?? 'user',
-      reason: data.reason,
-    });
+    const item = await this.runInTransaction(async (tx) => {
+      const injected = await this.repository.injectQueueItem(
+        {
+          id: nanoid(),
+          sessionId: session.id,
+          cardId: data.cardId as CardId,
+          position: data.position,
+          status: 'pending' as CardQueueStatus,
+          injectedBy: data.injectedBy ?? 'user',
+          reason: data.reason,
+        },
+        tx
+      );
 
-    const payload: ISessionQueueInjectedPayload = {
-      userId: ctx.userId,
-      cardId: data.cardId as CardId,
-      position: data.position,
-      reason: data.reason,
-      injectedBy: data.injectedBy ?? 'user',
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.queue.injected',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            cardId: data.cardId as CardId,
+            position: data.position,
+            reason: data.reason,
+            injectedBy: data.injectedBy ?? 'user',
+          } satisfies ISessionQueueInjectedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.queue.injected',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return injected;
     });
 
     this.logger.info(
@@ -1281,21 +1355,25 @@ export class SessionService {
       throw new QueueError(`Card ${data.cardId} is not in the session queue`);
     }
 
-    await this.repository.removeQueueItem(session.id, data.cardId as CardId);
+    await this.runInTransaction(async (tx) => {
+      await this.repository.removeQueueItem(session.id, data.cardId as CardId, tx);
 
-    const payload: ISessionQueueRemovedPayload = {
-      userId: ctx.userId,
-      cardId: data.cardId as CardId,
-      reason: data.reason,
-      removedBy: data.removedBy ?? 'user',
-    };
-
-    await this.eventPublisher.publish({
-      eventType: 'session.queue.removed',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.queue.removed',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            cardId: data.cardId as CardId,
+            reason: data.reason,
+            removedBy: data.removedBy ?? 'user',
+          } satisfies ISessionQueueRemovedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
     });
 
     this.logger.info({ sessionId: session.id, cardId: data.cardId }, 'Queue item removed');
@@ -1335,32 +1413,39 @@ export class SessionService {
 
     const previousLoadoutId = session.loadoutId;
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        loadoutId: data.newLoadoutId as LoadoutId,
-        loadoutArchetype: data.newLoadoutArchetype as LoadoutArchetype,
-        forceLevel: data.newForceLevel as ForceLevel,
-        lastActivityAt: new Date().toISOString(),
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          loadoutId: data.newLoadoutId as LoadoutId,
+          loadoutArchetype: data.newLoadoutArchetype as LoadoutArchetype,
+          forceLevel: data.newForceLevel as ForceLevel,
+          lastActivityAt: new Date().toISOString(),
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionStrategyUpdatedPayload = {
-      userId: ctx.userId,
-      newLoadoutId: data.newLoadoutId as LoadoutId,
-      newLoadoutArchetype: data.newLoadoutArchetype as LoadoutArchetype,
-      newForceLevel: data.newForceLevel as ForceLevel,
-      trigger: data.trigger,
-      ...(previousLoadoutId !== null && { previousLoadoutId }),
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.strategy.updated',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            newLoadoutId: data.newLoadoutId as LoadoutId,
+            newLoadoutArchetype: data.newLoadoutArchetype as LoadoutArchetype,
+            newForceLevel: data.newForceLevel as ForceLevel,
+            trigger: data.trigger,
+            ...(previousLoadoutId !== null && { previousLoadoutId }),
+          } satisfies ISessionStrategyUpdatedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.strategy.updated',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return next;
     });
 
     this.logger.info(
@@ -1405,28 +1490,35 @@ export class SessionService {
 
     const previousApproach = session.teachingApproach;
 
-    const updated = await this.repository.updateSession(
-      session.id,
-      {
-        teachingApproach: data.newApproach as TeachingApproach,
-        lastActivityAt: new Date().toISOString(),
-      },
-      session.version
-    );
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          teachingApproach: data.newApproach as TeachingApproach,
+          lastActivityAt: new Date().toISOString(),
+        },
+        session.version,
+        tx
+      );
 
-    const payload: ISessionTeachingChangedPayload = {
-      userId: ctx.userId,
-      previousApproach,
-      newApproach: data.newApproach as TeachingApproach,
-      trigger: data.trigger,
-    };
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.teaching.changed',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            previousApproach,
+            newApproach: data.newApproach as TeachingApproach,
+            trigger: data.trigger,
+          } satisfies ISessionTeachingChangedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
 
-    await this.eventPublisher.publish({
-      eventType: 'session.teaching.changed',
-      aggregateType: 'Session',
-      aggregateId: session.id,
-      payload,
-      metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+      return next;
     });
 
     this.logger.info(
@@ -1560,18 +1652,24 @@ export class SessionService {
       .setJti(claims.nonce)
       .sign(activeSecret);
 
-    await this.eventPublisher.publish({
-      eventType: 'session.intent_token.issued',
-      aggregateType: 'Session',
-      aggregateId: data.userId,
-      payload: {
-        expiresAt: claims.expiresAt,
-        nonce: claims.nonce,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
+    await this.runInTransaction(async (tx) => {
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.intent_token.issued',
+          aggregateType: 'Session',
+          aggregateId: data.userId,
+          payload: {
+            expiresAt: claims.expiresAt,
+            nonce: claims.nonce,
+          },
+          metadata: {
+            correlationId: ctx.correlationId,
+            userId: ctx.userId,
+          },
+        },
+        tx
+      );
     });
 
     this.logger.info(
@@ -1769,6 +1867,42 @@ export class SessionService {
       return [selected];
     }
     return [...this.tokenSecrets.values()];
+  }
+
+  private async runInTransaction<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>
+  ): Promise<T> {
+    return this.prisma.$transaction(async (tx) => operation(tx));
+  }
+
+  private async publishThroughOutbox(
+    event: IOutboxEventInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    await this.outboxRepository.enqueue(event, tx);
+
+    if (tx !== undefined) {
+      return;
+    }
+
+    try {
+      await this.eventPublisher.publish({
+        eventType: event.eventType,
+        aggregateType: event.aggregateType,
+        aggregateId: event.aggregateId,
+        payload: event.payload,
+        metadata: event.metadata,
+      });
+      await this.outboxRepository.markPublished(event.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown outbox publish failure';
+      await this.outboxRepository.markFailed(event.id, message, tx);
+      throw new OutboxDispatchError('Failed to publish outbox event', {
+        eventId: event.id,
+        eventType: event.eventType,
+        error: message,
+      });
+    }
   }
 
   /**

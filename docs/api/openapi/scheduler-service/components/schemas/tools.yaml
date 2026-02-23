@@ -14,10 +14,33 @@ ToolDefinition:
       example: scheduler-service
     priority:
       $ref: "#/ToolPriority"
+    scopeRequirement:
+      $ref: ./common.yaml#/ScopeRequirement
+    capabilities:
+      type: object
+      properties:
+        idempotent:
+          type: boolean
+        sideEffects:
+          type: boolean
+        timeoutMs:
+          type: integer
+          minimum: 1
+        costClass:
+          type: string
+          enum: [low, medium, high]
+      required: [idempotent, sideEffects, timeoutMs, costClass]
     inputSchema:
       type: object
       additionalProperties: true
-  required: [name, description, service, priority, inputSchema]
+  required:
+    - name
+    - description
+    - service
+    - priority
+    - scopeRequirement
+    - capabilities
+    - inputSchema
 
 ToolListResponse:
   type: object

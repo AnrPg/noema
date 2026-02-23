@@ -52,8 +52,27 @@ paths:
     $ref: ./paths/scheduler.yaml#/getReviewQueuePlanned
   /v1/scheduler/cards/{cardId}/schedule:
     $ref: ./paths/scheduler.yaml#/updateCardSchedulePlanned
+  /v1/scheduler/cards/schedule/batch:
+    $ref: ./paths/scheduler.yaml#/updateCardScheduleBatchPlanned
+  /v1/scheduler/cards/{cardId}/projection:
+    $ref: ./paths/scheduler.yaml#/getCardProjectionPlanned
   /v1/scheduler/retention/predict:
     $ref: ./paths/scheduler.yaml#/predictRetentionPlanned
+
+  /v1/scheduler/proposals/review-windows:
+    $ref: ./paths/scheduler.yaml#/proposeReviewWindowsPlanned
+  /v1/scheduler/proposals/session-candidates:
+    $ref: ./paths/scheduler.yaml#/proposeSessionCandidatesPlanned
+  /v1/scheduler/simulations/session-candidates:
+    $ref: ./paths/scheduler.yaml#/simulateSessionCandidatesPlanned
+  /v1/scheduler/commits/cards/{cardId}/schedule:
+    $ref: ./paths/scheduler.yaml#/commitCardSchedulePlanned
+  /v1/scheduler/commits/cards/schedule/batch:
+    $ref: ./paths/scheduler.yaml#/commitCardScheduleBatchPlanned
+  /v1/scheduler/sessions/{sessionId}/reconcile:
+    $ref: ./paths/scheduler.yaml#/reconcileSessionCandidatesPlanned
+  /v1/scheduler/sessions/{sessionId}/apply-adjustments:
+    $ref: ./paths/scheduler.yaml#/applySessionAdjustmentsPlanned
 
 components:
   securitySchemes:
@@ -65,14 +84,28 @@ components:
   schemas:
     ErrorInfo:
       $ref: ./components/schemas/common.yaml#/ErrorInfo
+    ErrorEnvelope:
+      $ref: ./components/schemas/common.yaml#/ErrorEnvelope
     ApiResponseMetadata:
       $ref: ./components/schemas/common.yaml#/ApiResponseMetadata
+    PrincipalContext:
+      $ref: ./components/schemas/common.yaml#/PrincipalContext
+    ScopeRequirement:
+      $ref: ./components/schemas/common.yaml#/ScopeRequirement
     AgentHintAction:
       $ref: ./components/schemas/common.yaml#/AgentHintAction
     EstimatedImpact:
       $ref: ./components/schemas/common.yaml#/EstimatedImpact
     AgentHints:
       $ref: ./components/schemas/common.yaml#/AgentHints
+    OrchestrationMetadata:
+      $ref: ./components/schemas/common.yaml#/OrchestrationMetadata
+    ScoringBreakdown:
+      $ref: ./components/schemas/common.yaml#/ScoringBreakdown
+    PolicyVersion:
+      $ref: ./components/schemas/common.yaml#/PolicyVersion
+    BackpressureSignal:
+      $ref: ./components/schemas/common.yaml#/BackpressureSignal
 
     UserId:
       $ref: ./components/schemas/scheduler.yaml#/UserId
@@ -80,6 +113,8 @@ components:
       $ref: ./components/schemas/scheduler.yaml#/CardId
     CorrelationId:
       $ref: ./components/schemas/scheduler.yaml#/CorrelationId
+    SessionId:
+      $ref: ./components/schemas/scheduler.yaml#/SessionId
     SchedulerLaneMix:
       $ref: ./components/schemas/scheduler.yaml#/SchedulerLaneMix
     DualLanePlanRequest:
@@ -88,6 +123,62 @@ components:
       $ref: ./components/schemas/scheduler.yaml#/DualLanePlan
     DualLanePlanResponse:
       $ref: ./components/schemas/scheduler.yaml#/DualLanePlanResponse
+    SchedulerAlgorithm:
+      $ref: ./components/schemas/scheduler.yaml#/SchedulerAlgorithm
+    CardScheduleInput:
+      $ref: ./components/schemas/scheduler.yaml#/CardScheduleInput
+    CardScheduleDecision:
+      $ref: ./components/schemas/scheduler.yaml#/CardScheduleDecision
+    BatchScheduleUpdateRequest:
+      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleUpdateRequest
+    BatchScheduleUpdateResponse:
+      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleUpdateResponse
+    CardProjection:
+      $ref: ./components/schemas/scheduler.yaml#/CardProjection
+    CardProjectionResponse:
+      $ref: ./components/schemas/scheduler.yaml#/CardProjectionResponse
+    ReviewWindowProposalRequest:
+      $ref: ./components/schemas/scheduler.yaml#/ReviewWindowProposalRequest
+    ReviewWindowProposal:
+      $ref: ./components/schemas/scheduler.yaml#/ReviewWindowProposal
+    ReviewWindowProposalResponse:
+      $ref: ./components/schemas/scheduler.yaml#/ReviewWindowProposalResponse
+    SessionConstraints:
+      $ref: ./components/schemas/scheduler.yaml#/SessionConstraints
+    SessionCandidateCard:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateCard
+    SessionCandidateProposalRequest:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateProposalRequest
+    CandidateScore:
+      $ref: ./components/schemas/scheduler.yaml#/CandidateScore
+    SessionCandidateProposal:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateProposal
+    SessionCandidateProposalResponse:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateProposalResponse
+    SessionCandidateSimulationRequest:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateSimulationRequest
+    SessionCandidateSimulationResponse:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateSimulationResponse
+    SessionTelemetrySnapshot:
+      $ref: ./components/schemas/scheduler.yaml#/SessionTelemetrySnapshot
+    SessionReconcileRequest:
+      $ref: ./components/schemas/scheduler.yaml#/SessionReconcileRequest
+    SessionReconcileResponse:
+      $ref: ./components/schemas/scheduler.yaml#/SessionReconcileResponse
+    SessionCardAdjustment:
+      $ref: ./components/schemas/scheduler.yaml#/SessionCardAdjustment
+    SessionAdjustmentRequest:
+      $ref: ./components/schemas/scheduler.yaml#/SessionAdjustmentRequest
+    SessionAdjustmentResponse:
+      $ref: ./components/schemas/scheduler.yaml#/SessionAdjustmentResponse
+    CardScheduleCommitRequest:
+      $ref: ./components/schemas/scheduler.yaml#/CardScheduleCommitRequest
+    CardScheduleCommitResponse:
+      $ref: ./components/schemas/scheduler.yaml#/CardScheduleCommitResponse
+    BatchScheduleCommitRequest:
+      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleCommitRequest
+    BatchScheduleCommitResponse:
+      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleCommitResponse
 
     ToolPriority:
       $ref: ./components/schemas/tools.yaml#/ToolPriority
@@ -123,21 +214,18 @@ components:
       content:
         application/json:
           schema:
-            type: object
-            properties:
-              error:
-                $ref: "#/components/schemas/ErrorInfo"
-              metadata:
-                $ref: "#/components/schemas/ApiResponseMetadata"
-            required: [error, metadata]
+            $ref: "#/components/schemas/ErrorEnvelope"
           examples:
             invalidDualLaneInput:
               value:
                 error:
                   code: SCHEDULER_ERROR
                   message: Invalid dual-lane plan input
+                  retryable: false
+                  category: validation
                 metadata:
                   requestId: cor_abc123
+                  correlationId: cor_abc123
                   timestamp: "2026-02-23T12:00:00.000Z"
                   serviceName: scheduler-service
                   serviceVersion: 0.1.0
@@ -147,51 +235,125 @@ components:
       content:
         application/json:
           schema:
-            type: object
-            properties:
-              error:
-                $ref: "#/components/schemas/ErrorInfo"
-              metadata:
-                $ref: "#/components/schemas/ApiResponseMetadata"
-            required: [error, metadata]
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            missingBearerToken:
+              value:
+                error:
+                  code: AUTH_UNAUTHORIZED
+                  message: Missing or invalid bearer token
+                  retryable: false
+                  category: auth
+                metadata:
+                  requestId: cor_auth_unauthorized
+                  correlationId: cor_auth_unauthorized
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 1
+    Forbidden:
+      description: Principal is authenticated but lacks required scope.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            missingScope:
+              value:
+                error:
+                  code: AUTH_FORBIDDEN_SCOPE
+                  message: Missing required scope `scheduler:commit`
+                  retryable: false
+                  category: auth
+                metadata:
+                  requestId: cor_auth_forbidden
+                  correlationId: cor_auth_forbidden
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 2
+    TooManyRequests:
+      description: Principal exceeded quota or throttling policy.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            principalRateLimited:
+              value:
+                error:
+                  code: RATE_LIMIT_EXCEEDED
+                  message: Principal request quota exceeded
+                  retryable: true
+                  category: dependency
+                metadata:
+                  requestId: cor_rate_limited
+                  correlationId: cor_rate_limited
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 1
+                  additional:
+                    retryAfterMs: 500
+    InternalServerError:
+      description: Internal dependency or execution failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            dependencyFailure:
+              value:
+                error:
+                  code: SCHEDULER_INTERNAL_ERROR
+                  message: Failed to process scheduler request
+                  retryable: true
+                  category: internal
+                metadata:
+                  requestId: cor_internal_error
+                  correlationId: cor_internal_error
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 7
+    PlannedNotImplemented:
+      description: Planned operation contract exists but runtime implementation is pending.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          examples:
+            endpointPlanned:
+              value:
+                error:
+                  code: SCHEDULER_PLANNED_OPERATION
+                  message: Endpoint is documented but not implemented yet
+                  retryable: false
+                  category: conflict
+                metadata:
+                  requestId: cor_planned_operation
+                  correlationId: cor_planned_operation
+                  timestamp: "2026-02-23T12:00:00.000Z"
+                  serviceName: scheduler-service
+                  serviceVersion: 0.1.0
+                  executionTime: 0
     ToolNotFound:
       description: Requested tool is not registered.
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/ToolExecuteResponse"
+            $ref: "#/components/schemas/ErrorEnvelope"
           examples:
             notFound:
               value:
-                data:
-                  success: false
-                  error:
-                    code: TOOL_NOT_FOUND
-                    message: "Unknown tool: get-srs-schedule"
-                  agentHints:
-                    suggestedNextActions: []
-                    relatedResources: []
-                    confidence: 1
-                    sourceQuality: high
-                    validityPeriod: long
-                    contextNeeded: []
-                    assumptions: []
-                    riskFactors: []
-                    dependencies: []
-                    estimatedImpact:
-                      benefit: 0
-                      effort: 0.1
-                      roi: 0
-                    preferenceAlignment: []
-                    reasoning: Unknown tool
-                  metadata:
-                    toolVersion: 0.1.0
-                    timestamp: "2026-02-23T12:00:00.000Z"
-                    executionTime: 1
-                    serviceVersion: 0.1.0
-                    correlationId: cor_abc123
+                error:
+                  code: TOOL_NOT_FOUND
+                  message: "Unknown tool: get-srs-schedule"
+                  retryable: false
+                  category: validation
                 metadata:
                   requestId: cor_abc123
+                  correlationId: cor_abc123
                   timestamp: "2026-02-23T12:00:00.000Z"
                   serviceName: scheduler-service
                   serviceVersion: 0.1.0

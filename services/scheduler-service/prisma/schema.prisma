@@ -162,6 +162,76 @@ model CalibrationData {
 }
 
 // ============================================================================
+// Scheduler proposal/commit provenance and cohort lineage
+// ============================================================================
+
+model ScheduleProposal {
+    id String @id @db.VarChar(50)
+
+    decisionId    String  @map("decision_id") @db.VarChar(50)
+    userId        String  @map("user_id") @db.VarChar(50)
+    policyVersion String  @map("policy_version") @db.VarChar(100)
+    correlationId String  @map("correlation_id") @db.VarChar(100)
+    sessionId     String? @map("session_id") @db.VarChar(50)
+    sessionRevision Int   @map("session_revision")
+    kind          String  @db.VarChar(64)
+    payload       Json
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    @@index([userId, createdAt])
+    @@index([decisionId])
+    @@index([sessionId, sessionRevision])
+    @@map("schedule_proposals")
+}
+
+model ScheduleCommit {
+    id String @id @db.VarChar(50)
+
+    proposalId    String? @map("proposal_id") @db.VarChar(50)
+    decisionId    String  @map("decision_id") @db.VarChar(50)
+    userId        String  @map("user_id") @db.VarChar(50)
+    policyVersion String  @map("policy_version") @db.VarChar(100)
+    correlationId String  @map("correlation_id") @db.VarChar(100)
+    sessionId     String? @map("session_id") @db.VarChar(50)
+    sessionRevision Int   @map("session_revision")
+    kind          String  @db.VarChar(64)
+    accepted      Int
+    rejected      Int
+    payload       Json
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    @@index([userId, createdAt])
+    @@index([proposalId])
+    @@index([decisionId])
+    @@index([sessionId, sessionRevision])
+    @@map("schedule_commits")
+}
+
+model ScheduleCohortLineage {
+    id String @id @db.VarChar(50)
+
+    userId         String  @map("user_id") @db.VarChar(50)
+    proposalId     String? @map("proposal_id") @db.VarChar(50)
+    decisionId     String  @map("decision_id") @db.VarChar(50)
+    sessionId      String? @map("session_id") @db.VarChar(50)
+    sessionRevision Int    @map("session_revision")
+    operationKind  String  @map("operation_kind") @db.VarChar(64)
+    selectedCardIds String[] @map("selected_card_ids")
+    excludedCardIds String[] @map("excluded_card_ids")
+    metadata       Json
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    @@index([userId, createdAt])
+    @@index([proposalId])
+    @@index([decisionId])
+    @@index([sessionId, sessionRevision])
+    @@map("schedule_cohort_lineage")
+}
+
+// ============================================================================
 // Enums
 // ============================================================================
 

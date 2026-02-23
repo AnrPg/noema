@@ -17,7 +17,11 @@ import { registerSessionRoutes } from './api/rest/session.routes.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { SessionService } from './domain/session-service/session.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
-import { PrismaSessionRepository } from './infrastructure/database/prisma-session.repository.js';
+import {
+  PrismaOutboxRepository,
+  PrismaSessionRepository,
+} from './infrastructure/database/index.js';
+import { SessionOutboxWorker } from './infrastructure/events/index.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 // ============================================================================
@@ -62,18 +66,27 @@ async function bootstrap(): Promise<void> {
 
   // Create infrastructure
   const sessionRepository = new PrismaSessionRepository(prisma, logger);
+  const outboxRepository = new PrismaOutboxRepository(prisma);
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
+  const outboxWorker = new SessionOutboxWorker(outboxRepository, eventPublisher, logger);
 
   // Create domain service
-  const sessionService = new SessionService(sessionRepository, eventPublisher, logger, {
-    security: {
-      verifyOfflineIntentTokens: config.security.verifyOfflineIntentTokens,
-      offlineIntentTokenActiveKeyId: config.security.offlineIntentTokenActiveKeyId,
-      offlineIntentTokenKeys: config.security.offlineIntentTokenKeys,
-      offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
-      offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
-    },
-  });
+  const sessionService = new SessionService(
+    sessionRepository,
+    eventPublisher,
+    outboxRepository,
+    prisma,
+    logger,
+    {
+      security: {
+        verifyOfflineIntentTokens: config.security.verifyOfflineIntentTokens,
+        offlineIntentTokenActiveKeyId: config.security.offlineIntentTokenActiveKeyId,
+        offlineIntentTokenKeys: config.security.offlineIntentTokenKeys,
+        offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
+        offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
+      },
+    }
+  );
 
   // Create tool registry
   const toolRegistry = createToolRegistry(sessionService);
@@ -112,6 +125,7 @@ async function bootstrap(): Promise<void> {
     logger.info({ signal }, 'Received shutdown signal');
 
     await fastify.close();
+    await outboxWorker.stop();
     await redis.quit();
     await prisma.$disconnect();
 
@@ -124,6 +138,7 @@ async function bootstrap(): Promise<void> {
 
   // Start server
   try {
+    await outboxWorker.start();
     await fastify.listen({ host: config.server.host, port: config.server.port });
     logger.info({ host: config.server.host, port: config.server.port }, 'Service started');
   } catch (error) {

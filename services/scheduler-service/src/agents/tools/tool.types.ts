@@ -7,6 +7,7 @@ export interface IToolDefinition {
   description: string;
   service: string;
   priority: 'P0' | 'P1' | 'P2';
+  requiredScopes: string[];
   inputSchema: Record<string, unknown>;
 }
 

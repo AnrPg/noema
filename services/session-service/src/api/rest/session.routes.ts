@@ -16,7 +16,6 @@ import {
   DomainError,
   InvalidSessionStateError,
   QueueError,
-  SessionAlreadyActiveError,
   SessionNotFoundError,
   ValidationError,
   VersionConflictError,
@@ -113,11 +112,6 @@ export function registerSessionRoutes(
       });
     } else if (error instanceof SessionNotFoundError || error instanceof AttemptNotFoundError) {
       reply.status(404).send({
-        error: { code: error.code, message: error.message },
-        metadata,
-      });
-    } else if (error instanceof SessionAlreadyActiveError) {
-      reply.status(409).send({
         error: { code: error.code, message: error.message },
         metadata,
       });

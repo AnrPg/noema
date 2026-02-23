@@ -3,6 +3,7 @@ health:
     operationId: getSchedulerHealth
     summary: Service health with dependency checks
     description: Returns scheduler-service health status including Redis and PostgreSQL checks.
+    x-noema-lifecycle: active
     tags: [Health]
     security: []
     responses:
@@ -18,6 +19,7 @@ healthLive:
     operationId: getSchedulerLiveness
     summary: Liveness probe
     description: Lightweight liveness endpoint used by orchestration probes.
+    x-noema-lifecycle: active
     tags: [Health]
     security: []
     responses:
@@ -33,6 +35,7 @@ healthReady:
     operationId: getSchedulerReadiness
     summary: Readiness probe
     description: Readiness check against Redis and PostgreSQL connectivity.
+    x-noema-lifecycle: active
     tags: [Health]
     security: []
     responses:

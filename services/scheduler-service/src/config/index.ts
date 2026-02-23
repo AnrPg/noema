@@ -7,6 +7,7 @@ export interface IServiceConfig {
   server: {
     host: string;
     port: number;
+    bodyLimitBytes: number;
   };
   database: {
     url: string;
@@ -32,10 +33,29 @@ export interface IServiceConfig {
     level: string;
     pretty: boolean;
   };
+  security: {
+    authDisabled: boolean;
+    jwtSecret: string | undefined;
+    jwtIssuer: string;
+    jwksUrl: string | undefined;
+    jwtAudienceUser: string;
+    jwtAudienceAgent: string;
+    jwtAudienceService: string;
+  };
+  abuse: {
+    toolRateLimitPerMinute: number;
+    requestMaxPayloadBytes: number;
+  };
 }
 
 function optionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
+}
+
+function optionalEnvOrUndefined(name: string): string | undefined {
+  const value = process.env[name];
+  if (value === undefined || value.trim() === '') return undefined;
+  return value;
 }
 
 function requireEnv(name: string): string {
@@ -74,6 +94,7 @@ export function loadConfig(): IServiceConfig {
     server: {
       host: optionalEnv('HOST', '0.0.0.0'),
       port: optionalEnvInt('PORT', 3009),
+      bodyLimitBytes: optionalEnvInt('SERVER_BODY_LIMIT_BYTES', 1_048_576),
     },
     database: {
       url: requireEnv('DATABASE_URL'),
@@ -106,6 +127,20 @@ export function loadConfig(): IServiceConfig {
     logging: {
       level: optionalEnv('LOG_LEVEL', env === 'production' ? 'info' : 'debug'),
       pretty: optionalEnvBool('LOG_PRETTY', env === 'development'),
+    },
+    security: {
+      authDisabled: optionalEnvBool('AUTH_DISABLED', false),
+      jwtSecret:
+        optionalEnvOrUndefined('JWT_SECRET') ?? optionalEnvOrUndefined('ACCESS_TOKEN_SECRET'),
+      jwtIssuer: optionalEnv('JWT_ISSUER', 'noema.app'),
+      jwksUrl: optionalEnvOrUndefined('JWT_JWKS_URL'),
+      jwtAudienceUser: optionalEnv('JWT_AUDIENCE_USER', 'noema.user'),
+      jwtAudienceAgent: optionalEnv('JWT_AUDIENCE_AGENT', 'noema.agent'),
+      jwtAudienceService: optionalEnv('JWT_AUDIENCE_SERVICE', 'noema.service'),
+    },
+    abuse: {
+      toolRateLimitPerMinute: optionalEnvInt('TOOL_RATE_LIMIT_PER_MINUTE', 120),
+      requestMaxPayloadBytes: optionalEnvInt('REQUEST_MAX_PAYLOAD_BYTES', 262_144),
     },
   };
 }

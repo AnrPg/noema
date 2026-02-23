@@ -16,6 +16,53 @@ import type {
   SchedulerLane,
 } from '../../types/scheduler.types.js';
 
+export type ScheduleProvenanceKind =
+  | 'dual-lane-plan'
+  | 'review-window-proposal'
+  | 'session-candidate-proposal'
+  | 'single-card-commit'
+  | 'batch-card-commit';
+
+export interface IProposalProvenanceInput {
+  proposalId: string;
+  decisionId: string;
+  userId: UserId;
+  policyVersion: string;
+  correlationId: string;
+  sessionId?: string | undefined;
+  sessionRevision: number;
+  kind: ScheduleProvenanceKind;
+  payload: Record<string, unknown>;
+}
+
+export interface ICommitProvenanceInput {
+  commitId: string;
+  proposalId?: string | undefined;
+  decisionId: string;
+  userId: UserId;
+  policyVersion: string;
+  correlationId: string;
+  sessionId?: string | undefined;
+  sessionRevision: number;
+  kind: ScheduleProvenanceKind;
+  accepted: number;
+  rejected: number;
+  payload: Record<string, unknown>;
+}
+
+export interface ICohortLineageInput {
+  id: string;
+  userId: UserId;
+  proposalId?: string | undefined;
+  decisionId: string;
+  sessionId?: string | undefined;
+  sessionRevision: number;
+  operationKind: ScheduleProvenanceKind;
+  selectedCardIds: CardId[];
+  excludedCardIds: CardId[];
+  metadata: Record<string, unknown>;
+}
+
 // ============================================================================
 // SchedulerCard Operations
 // ============================================================================
@@ -171,4 +218,10 @@ export interface ICalibrationDataRepository {
 
   /** Delete calibration data. */
   delete(id: string): Promise<void>;
+}
+
+export interface ISchedulerProvenanceRepository {
+  recordProposal(input: IProposalProvenanceInput): Promise<void>;
+  recordCommit(input: ICommitProvenanceInput): Promise<void>;
+  recordCohortLineage(input: ICohortLineageInput): Promise<void>;
 }

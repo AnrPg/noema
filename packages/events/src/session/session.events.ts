@@ -63,6 +63,12 @@ export const SessionEventType = {
   // Attempts
   ATTEMPT_RECORDED: 'attempt.recorded',
   ATTEMPT_HINT_REQUESTED: 'attempt.hint.requested',
+
+  // Adaptive checkpoints
+  SESSION_CHECKPOINT_EVALUATED: 'session.checkpoint.evaluated',
+
+  // Offline intent tokens
+  SESSION_INTENT_TOKEN_ISSUED: 'session.intent_token.issued',
 } as const;
 
 export type SessionEventType = (typeof SessionEventType)[keyof typeof SessionEventType];
@@ -278,6 +284,37 @@ export interface IAttemptHintRequestedPayload {
 }
 
 // ============================================================================
+// Adaptive Checkpoint Payloads
+// ============================================================================
+
+export interface ISessionCheckpointEvaluatedDirective {
+  action:
+    | 'rebalance_queue'
+    | 'slowdown'
+    | 'increase_support'
+    | 'reduce_calibration_lane'
+    | 'switch_teaching_approach'
+    | 'continue';
+  reason: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+}
+
+export interface ISessionCheckpointEvaluatedPayload {
+  trigger: 'confidence_drift' | 'latency_spike' | 'error_cascade' | 'streak_break' | 'manual';
+  shouldAdapt: boolean;
+  directives: ISessionCheckpointEvaluatedDirective[];
+}
+
+// ============================================================================
+// Offline Intent Token Payloads
+// ============================================================================
+
+export interface ISessionIntentTokenIssuedPayload {
+  expiresAt: string;
+  nonce: string;
+}
+
+// ============================================================================
 // Typed Event Aliases
 // ============================================================================
 
@@ -331,6 +368,18 @@ export type AttemptHintRequestedEvent = ITypedEvent<
   'attempt.hint.requested',
   'Attempt',
   IAttemptHintRequestedPayload
+>;
+
+export type SessionCheckpointEvaluatedEvent = ITypedEvent<
+  'session.checkpoint.evaluated',
+  'Session',
+  ISessionCheckpointEvaluatedPayload
+>;
+
+export type SessionIntentTokenIssuedEvent = ITypedEvent<
+  'session.intent_token.issued',
+  'Session',
+  ISessionIntentTokenIssuedPayload
 >;
 
 /** Union of all session domain events */

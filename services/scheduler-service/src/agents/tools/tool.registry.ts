@@ -63,6 +63,11 @@ export class ToolRegistry {
   listDefinitions(): IToolDefinition[] {
     return [...this.tools.values()].map((entry) => entry.definition);
   }
+
+  getDefinition(name: string): IToolDefinition | undefined {
+    const entry = this.tools.get(name);
+    return entry?.definition;
+  }
 }
 
 export function createToolRegistry(service: SchedulerService): ToolRegistry {

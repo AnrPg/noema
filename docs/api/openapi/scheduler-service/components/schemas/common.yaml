@@ -7,10 +7,120 @@ ErrorInfo:
     message:
       type: string
       minLength: 1
+    retryable:
+      type: boolean
+      description: Whether retrying the same request may succeed without mutation changes.
+    category:
+      type: string
+      enum: [auth, validation, conflict, dependency, internal]
     details:
       description: Optional structured error context.
       nullable: true
-  required: [code, message]
+  required: [code, message, retryable, category]
+
+PrincipalContext:
+  type: object
+  properties:
+    principalType:
+      type: string
+      enum: [user, agent, service]
+    principalId:
+      type: string
+      minLength: 1
+    scopes:
+      type: array
+      items:
+        type: string
+      default: []
+    audienceClass:
+      type: string
+      description: Audience partition used for token verification.
+      enum: [user-client, agent-runtime, service-internal]
+  required: [principalType, principalId, scopes, audienceClass]
+
+ScopeRequirement:
+  type: object
+  properties:
+    match:
+      type: string
+      enum: [all, any]
+      default: all
+    requiredScopes:
+      type: array
+      minItems: 1
+      items:
+        type: string
+  required: [match, requiredScopes]
+
+OrchestrationMetadata:
+  type: object
+  properties:
+    proposalId:
+      type: string
+      minLength: 1
+    decisionId:
+      type: string
+      minLength: 1
+    sessionRevision:
+      type: integer
+      minimum: 0
+    sessionId:
+      type: string
+      nullable: true
+    correlationId:
+      type: string
+      nullable: true
+  required: [proposalId, decisionId, sessionRevision]
+
+ScoringBreakdown:
+  type: object
+  properties:
+    urgency:
+      type: number
+      minimum: 0
+      maximum: 1
+    retentionRisk:
+      type: number
+      minimum: 0
+      maximum: 1
+    calibrationValue:
+      type: number
+      minimum: 0
+      maximum: 1
+    composite:
+      type: number
+      minimum: 0
+      maximum: 1
+  required: [urgency, retentionRisk, calibrationValue, composite]
+
+PolicyVersion:
+  type: object
+  properties:
+    version:
+      type: string
+      minLength: 1
+      description: Deterministic scoring policy identifier.
+      example: scheduler.policy.v1
+    rulesetChecksum:
+      type: string
+      nullable: true
+      description: Optional immutable checksum for exact policy replay.
+  required: [version]
+
+BackpressureSignal:
+  type: object
+  properties:
+    state:
+      type: string
+      enum: [healthy, degraded, throttled]
+    reason:
+      type: string
+      nullable: true
+    retryAfterMs:
+      type: integer
+      minimum: 0
+      nullable: true
+  required: [state]
 
 ApiResponseMetadata:
   type: object
@@ -18,6 +128,9 @@ ApiResponseMetadata:
     requestId:
       type: string
       description: Correlation identifier for request tracing.
+    correlationId:
+      type: string
+      nullable: true
     timestamp:
       type: string
       format: date-time
@@ -48,6 +161,15 @@ ApiResponseMetadata:
     - serviceName
     - serviceVersion
     - executionTime
+
+ErrorEnvelope:
+  type: object
+  properties:
+    error:
+      $ref: "#/ErrorInfo"
+    metadata:
+      $ref: "#/ApiResponseMetadata"
+  required: [error, metadata]
 
 AgentHintAction:
   type: object

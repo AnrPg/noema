@@ -169,6 +169,31 @@ model SessionQueueItem {
 }
 
 // ============================================================================
+// Event Outbox — durable event staging for reliable publishing
+// ============================================================================
+
+model EventOutbox {
+    id String @id @db.VarChar(50)
+
+    eventType     String @map("event_type") @db.VarChar(100)
+    aggregateType String @map("aggregate_type") @db.VarChar(50)
+    aggregateId   String @map("aggregate_id") @db.VarChar(50)
+    payload       Json
+    metadata      Json
+
+    publishedAt DateTime? @map("published_at")
+    attempts    Int       @default(0)
+    lastError   String?   @map("last_error") @db.VarChar(1000)
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@index([publishedAt, createdAt])
+    @@index([attempts])
+    @@map("event_outbox")
+}
+
+// ============================================================================
 // Enums
 // ============================================================================
 

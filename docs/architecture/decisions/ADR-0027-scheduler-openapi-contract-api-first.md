@@ -19,8 +19,9 @@ project API-first requirement and created drift risk for:
 - route evolution planning.
 
 Additionally, scheduler roadmap endpoints existed conceptually in architecture
-artifacts (review queue retrieval, schedule updates, retention prediction) but
-had no canonical HTTP contract representation.
+artifacts (review queue retrieval, schedule updates, retention prediction,
+agent-facing proposal flows, and in-session cohort reconciliation) but had no
+canonical HTTP contract representation.
 
 ## Decision
 
@@ -48,10 +49,24 @@ Add planned endpoints to establish stable future contracts:
 
 - `GET /v1/scheduler/review-queue`
 - `PATCH /v1/scheduler/cards/{cardId}/schedule`
+- `POST /v1/scheduler/cards/schedule/batch`
+- `GET /v1/scheduler/cards/{cardId}/projection`
 - `POST /v1/scheduler/retention/predict`
+- `POST /v1/scheduler/proposals/review-windows`
+- `POST /v1/scheduler/proposals/session-candidates`
+- `POST /v1/scheduler/sessions/{sessionId}/reconcile`
+- `POST /v1/scheduler/sessions/{sessionId}/apply-adjustments`
 
 These are explicitly marked with `x-noema-lifecycle: planned` and `501`
 placeholder responses to avoid runtime ambiguity.
+
+The added operations model scheduler responsibility as a raw-calculation service
+for agents and session-service orchestration:
+
+- Scheduler computes proposals and scoring, but does not own final card cohort
+   decisions.
+- Agents can reconcile and adjust card cohorts during active sessions.
+- Session-service remains execution authority for accepted session cohorts.
 
 ### 3) Add contract validation check
 
@@ -69,6 +84,7 @@ resolution in CI/local workflows.
 
 - Scheduler API is now documented in a machine-verifiable contract.
 - Runtime and planned endpoint surfaces are explicit and discoverable.
+- Agent/session orchestration boundaries are now explicit in contract form.
 - Split specification structure improves maintainability and future extension.
 - Contract checks reduce silent drift risk across service, clients, and agents.
 

@@ -7,40 +7,41 @@
  */
 
 import type {
-    AttemptId,
-    AttemptOutcome,
-    CardId,
-    CardQueueStatus,
-    HintDepth,
-    LearningMode,
-    Rating,
-    SessionId,
-    UserId,
+  AttemptId,
+  AttemptOutcome,
+  CardId,
+  CardQueueStatus,
+  HintDepth,
+  LearningMode,
+  Rating,
+  SessionId,
+  UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
 import type {
-    AttemptOutcome as PrismaAttemptOutcome,
-    CardQueueStatus as PrismaCardQueueStatus,
-    PrismaClient,
-    HintDepth as PrismaHintDepth,
-    LearningMode as PrismaLearningMode,
-    Rating as PrismaRating,
-    SessionState as PrismaSessionState,
+  Prisma,
+  AttemptOutcome as PrismaAttemptOutcome,
+  CardQueueStatus as PrismaCardQueueStatus,
+  PrismaClient,
+  HintDepth as PrismaHintDepth,
+  LearningMode as PrismaLearningMode,
+  Rating as PrismaRating,
+  SessionState as PrismaSessionState,
 } from '../../../generated/prisma/index.js';
 
 import {
-    SessionNotFoundError,
-    VersionConflictError,
+  SessionNotFoundError,
+  VersionConflictError,
 } from '../../domain/session-service/errors/index.js';
 import type { ISessionRepository } from '../../domain/session-service/session.repository.js';
 import type {
-    IAttempt,
-    ISession,
-    ISessionConfig,
-    ISessionFilters,
-    ISessionQueueItem,
-    ISessionStats,
-    SessionState,
+  IAttempt,
+  ISession,
+  ISessionConfig,
+  ISessionFilters,
+  ISessionQueueItem,
+  ISessionStats,
+  SessionState,
 } from '../../types/index.js';
 
 // ============================================================================
@@ -184,6 +185,10 @@ export class PrismaSessionRepository implements ISessionRepository {
     // Logger available for future debug tracing
   }
 
+  private db(tx?: Prisma.TransactionClient): PrismaClient | Prisma.TransactionClient {
+    return tx ?? this.prisma;
+  }
+
   // ---------- Session read ----------
 
   async findSessionById(id: SessionId): Promise<ISession | null> {
@@ -244,8 +249,11 @@ export class PrismaSessionRepository implements ISessionRepository {
 
   // ---------- Session write ----------
 
-  async createSession(session: Omit<ISession, 'createdAt' | 'updatedAt'>): Promise<ISession> {
-    const row = await this.prisma.session.create({
+  async createSession(
+    session: Omit<ISession, 'createdAt' | 'updatedAt'>,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISession> {
+    const row = await this.db(tx).session.create({
       data: {
         id: session.id,
         userId: session.userId,
@@ -293,7 +301,8 @@ export class PrismaSessionRepository implements ISessionRepository {
         | 'terminationReason'
       >
     >,
-    expectedVersion: number
+    expectedVersion: number,
+    tx?: Prisma.TransactionClient
   ): Promise<ISession> {
     // Build update payload with enum mapping
     const update: Record<string, unknown> = { version: { increment: 1 } };
@@ -319,7 +328,7 @@ export class PrismaSessionRepository implements ISessionRepository {
     if (data.terminationReason !== undefined) update['terminationReason'] = data.terminationReason;
 
     try {
-      const row = await this.prisma.session.update({
+      const row = await this.db(tx).session.update({
         where: { id, version: expectedVersion },
         data: update,
       });
@@ -385,8 +394,11 @@ export class PrismaSessionRepository implements ISessionRepository {
 
   // ---------- Attempt write ----------
 
-  async createAttempt(attempt: Omit<IAttempt, 'createdAt'>): Promise<IAttempt> {
-    const row = await this.prisma.attempt.create({
+  async createAttempt(
+    attempt: Omit<IAttempt, 'createdAt'>,
+    tx?: Prisma.TransactionClient
+  ): Promise<IAttempt> {
+    const row = await this.db(tx).attempt.create({
       data: {
         id: attempt.id,
         sessionId: attempt.sessionId,
@@ -456,11 +468,12 @@ export class PrismaSessionRepository implements ISessionRepository {
   // ---------- Queue write ----------
 
   async createQueueItemsBatch(
-    items: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>[]
+    items: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>[],
+    tx?: Prisma.TransactionClient
   ): Promise<void> {
     if (items.length === 0) return;
 
-    await this.prisma.sessionQueueItem.createMany({
+    await this.db(tx).sessionQueueItem.createMany({
       data: items.map((item) => ({
         id: item.id,
         sessionId: item.sessionId,
@@ -474,10 +487,11 @@ export class PrismaSessionRepository implements ISessionRepository {
   }
 
   async injectQueueItem(
-    item: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>
+    item: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>,
+    tx?: Prisma.TransactionClient
   ): Promise<ISessionQueueItem> {
     // Shift existing items at >= position down by 1
-    await this.prisma.sessionQueueItem.updateMany({
+    await this.db(tx).sessionQueueItem.updateMany({
       where: {
         sessionId: item.sessionId,
         position: { gte: item.position },
@@ -486,7 +500,7 @@ export class PrismaSessionRepository implements ISessionRepository {
       data: { position: { increment: 1 } },
     });
 
-    const row = await this.prisma.sessionQueueItem.create({
+    const row = await this.db(tx).sessionQueueItem.create({
       data: {
         id: item.id,
         sessionId: item.sessionId,
@@ -500,28 +514,44 @@ export class PrismaSessionRepository implements ISessionRepository {
     return toQueueItemDomain(row);
   }
 
-  async removeQueueItem(sessionId: SessionId, cardId: CardId): Promise<void> {
-    await this.prisma.sessionQueueItem.delete({
+  async removeQueueItem(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    await this.db(tx).sessionQueueItem.delete({
       where: { sessionId_cardId: { sessionId, cardId } },
     });
   }
 
-  async markQueueItemPresented(sessionId: SessionId, cardId: CardId): Promise<void> {
-    await this.prisma.sessionQueueItem.update({
+  async markQueueItemPresented(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    await this.db(tx).sessionQueueItem.update({
       where: { sessionId_cardId: { sessionId, cardId } },
       data: { status: 'PRESENTED' },
     });
   }
 
-  async markQueueItemAnswered(sessionId: SessionId, cardId: CardId): Promise<void> {
-    await this.prisma.sessionQueueItem.update({
+  async markQueueItemAnswered(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    await this.db(tx).sessionQueueItem.update({
       where: { sessionId_cardId: { sessionId, cardId } },
       data: { status: 'COMPLETED' },
     });
   }
 
-  async markQueueItemSkipped(sessionId: SessionId, cardId: CardId): Promise<void> {
-    await this.prisma.sessionQueueItem.update({
+  async markQueueItemSkipped(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    await this.db(tx).sessionQueueItem.update({
       where: { sessionId_cardId: { sessionId, cardId } },
       data: { status: 'SKIPPED' },
     });

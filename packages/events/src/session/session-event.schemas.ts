@@ -232,6 +232,30 @@ export const AttemptHintRequestedPayloadSchema = z.object({
   responseTimeMsAtRequest: z.number().nonnegative(),
 });
 
+export const SessionCheckpointEvaluatedDirectiveSchema = z.object({
+  action: z.enum([
+    'rebalance_queue',
+    'slowdown',
+    'increase_support',
+    'reduce_calibration_lane',
+    'switch_teaching_approach',
+    'continue',
+  ]),
+  reason: z.string().min(1),
+  priority: z.enum(['critical', 'high', 'medium', 'low']),
+});
+
+export const SessionCheckpointEvaluatedPayloadSchema = z.object({
+  trigger: z.enum(['confidence_drift', 'latency_spike', 'error_cascade', 'streak_break', 'manual']),
+  shouldAdapt: z.boolean(),
+  directives: z.array(SessionCheckpointEvaluatedDirectiveSchema),
+});
+
+export const SessionIntentTokenIssuedPayloadSchema = z.object({
+  expiresAt: z.string().datetime(),
+  nonce: z.string().min(1),
+});
+
 // ============================================================================
 // Full Event Schemas (Envelope + Payload)
 // ============================================================================
@@ -308,6 +332,18 @@ export const AttemptHintRequestedEventSchema = createEventSchema(
   AttemptHintRequestedPayloadSchema
 );
 
+export const SessionCheckpointEvaluatedEventSchema = createEventSchema(
+  'session.checkpoint.evaluated',
+  'Session',
+  SessionCheckpointEvaluatedPayloadSchema
+);
+
+export const SessionIntentTokenIssuedEventSchema = createEventSchema(
+  'session.intent_token.issued',
+  'Session',
+  SessionIntentTokenIssuedPayloadSchema
+);
+
 // ============================================================================
 // Type Inference from Schemas
 // ============================================================================
@@ -324,3 +360,9 @@ export type SessionStrategyUpdatedEventInput = z.input<typeof SessionStrategyUpd
 export type SessionTeachingChangedEventInput = z.input<typeof SessionTeachingChangedEventSchema>;
 export type AttemptRecordedEventInput = z.input<typeof AttemptRecordedEventSchema>;
 export type AttemptHintRequestedEventInput = z.input<typeof AttemptHintRequestedEventSchema>;
+export type SessionCheckpointEvaluatedEventInput = z.input<
+  typeof SessionCheckpointEvaluatedEventSchema
+>;
+export type SessionIntentTokenIssuedEventInput = z.input<
+  typeof SessionIntentTokenIssuedEventSchema
+>;

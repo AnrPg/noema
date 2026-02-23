@@ -5,6 +5,7 @@ planDualLaneCanonical:
     description: |
       Generates a mixed review queue from retention and calibration card pools.
       The authenticated principal must match `body.userId`.
+    x-noema-lifecycle: active
     tags: [Scheduler]
     requestBody:
       required: true
@@ -36,12 +37,19 @@ planDualLaneCanonical:
         $ref: ../openapi.yaml#/components/responses/BadRequest
       "401":
         $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
 
 planDualLaneAlias:
   post:
     operationId: planSchedulerDualLaneLegacyAlias
     summary: Plan dual-lane scheduler queue (legacy alias)
     description: Backward-compatible alias for the canonical dual-lane planning endpoint.
+    x-noema-lifecycle: active
     tags: [Scheduler]
     deprecated: true
     requestBody:
@@ -61,6 +69,12 @@ planDualLaneAlias:
         $ref: ../openapi.yaml#/components/responses/BadRequest
       "401":
         $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
 
 getReviewQueuePlanned:
   get:
@@ -92,8 +106,18 @@ getReviewQueuePlanned:
           maximum: 200
           default: 50
     responses:
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
       "501":
-        description: Planned operation not implemented yet.
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
 
 updateCardSchedulePlanned:
   patch:
@@ -132,8 +156,89 @@ updateCardSchedulePlanned:
                 type: string
             required: [userId, nextReviewDate, interval, schedulingAlgorithm]
     responses:
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
       "501":
-        description: Planned operation not implemented yet.
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+updateCardScheduleBatchPlanned:
+  post:
+    operationId: updateSchedulerCardScheduleBatch
+    summary: Apply schedule decisions in bulk
+    description: |
+      Persists agent-approved schedule decisions for multiple cards after
+      session execution or reconciliation.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/BatchScheduleUpdateRequest
+    responses:
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+getCardProjectionPlanned:
+  get:
+    operationId: getSchedulerCardProjection
+    summary: Get card review projection
+    description: |
+      Returns scheduler projection details for a single card, including
+      next review estimate and forgetting risk snapshot.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    parameters:
+      - name: cardId
+        in: path
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/CardId
+      - name: userId
+        in: query
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/UserId
+      - name: asOf
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+    responses:
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
 
 predictRetentionPlanned:
   post:
@@ -170,5 +275,579 @@ predictRetentionPlanned:
                   required: [cardId, algorithm]
             required: [userId, cards]
     responses:
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
       "501":
-        description: Planned operation not implemented yet.
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+proposeReviewWindowsPlanned:
+  post:
+    operationId: proposeSchedulerReviewWindows
+    summary: Propose next review windows for card pool
+    description: |
+      Computes raw schedule decisions for a card pool without committing them.
+      Intended for agent orchestration prior to session creation.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/ReviewWindowProposalRequest
+          examples:
+            reviewWindowProposal:
+              value:
+                userId: usr_V1StGXR8_Z5jdHi6B-myT
+                cards:
+                  - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                    algorithm: fsrs
+                    lastReviewAt: "2026-02-22T10:00:00.000Z"
+                    stability: 5.3
+                    difficulty: 4.8
+                asOf: "2026-02-23T12:00:00.000Z"
+    responses:
+      "200":
+        description: Review-window proposal generated (no commit).
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/ReviewWindowProposalResponse
+            examples:
+              proposalResult:
+                value:
+                  data:
+                    generatedAt: "2026-02-23T12:00:00.000Z"
+                    decisions:
+                      - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                        nextReviewAt: "2026-02-28T12:00:00.000Z"
+                        intervalDays: 5
+                        lane: retention
+                        algorithm: fsrs
+                        rationale: Deterministic review-window proposal
+                    policyVersion:
+                      version: scheduler.policy.v1
+                    orchestration:
+                      proposalId: prop_20260223_abc
+                      decisionId: dec_20260223_abc
+                      sessionRevision: 0
+                  agentHints:
+                    suggestedNextActions: []
+                    relatedResources: []
+                    confidence: 0.9
+                    sourceQuality: high
+                    validityPeriod: short
+                    contextNeeded: []
+                    assumptions: []
+                    riskFactors: []
+                    dependencies: []
+                    estimatedImpact:
+                      benefit: 0.7
+                      effort: 0.2
+                      roi: 3.5
+                    preferenceAlignment: []
+                    reasoning: Proposal computed without side effects
+                  metadata:
+                    requestId: cor_prop_001
+                    correlationId: cor_prop_001
+                    timestamp: "2026-02-23T12:00:00.000Z"
+                    serviceName: scheduler-service
+                    serviceVersion: 0.1.0
+                    executionTime: 4
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+proposeSessionCandidatesPlanned:
+  post:
+    operationId: proposeSchedulerSessionCandidates
+    summary: Score and propose session candidates
+    description: |
+      Scores input card candidates and returns a scheduler proposal of
+      selected/excluded cards for agent review before forwarding to
+      session-service.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/SessionCandidateProposalRequest
+          examples:
+            candidateProposal:
+              value:
+                userId: usr_V1StGXR8_Z5jdHi6B-myT
+                cards:
+                  - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                    lane: retention
+                    dueAt: "2026-02-23T08:00:00.000Z"
+                    retentionProbability: 0.63
+                  - cardId: card_V1StGXR8_Z5jdHi6B-myB
+                    lane: calibration
+                    dueAt: "2026-02-23T09:00:00.000Z"
+                    retentionProbability: 0.55
+                constraints:
+                  targetCards: 1
+                  includeCalibration: true
+    responses:
+      "200":
+        description: Session candidate proposal generated (no commit).
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/SessionCandidateProposalResponse
+            examples:
+              candidateProposalResult:
+                value:
+                  data:
+                    selectedCardIds:
+                      - card_V1StGXR8_Z5jdHi6B-myA
+                    excludedCardIds:
+                      - card_V1StGXR8_Z5jdHi6B-myB
+                    scores:
+                      - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                        score:
+                          urgency: 0.82
+                          retentionRisk: 0.37
+                          calibrationValue: 0.11
+                          composite: 0.71
+                    scoringBreakdown:
+                      urgency: 0.82
+                      retentionRisk: 0.37
+                      calibrationValue: 0.11
+                      composite: 0.71
+                    policyVersion:
+                      version: scheduler.policy.v1
+                    orchestration:
+                      proposalId: prop_20260223_candidates
+                      decisionId: dec_20260223_candidates
+                      sessionRevision: 0
+                    rationale: Highest deterministic composite score selected
+                  agentHints:
+                    suggestedNextActions: []
+                    relatedResources: []
+                    confidence: 0.88
+                    sourceQuality: high
+                    validityPeriod: short
+                    contextNeeded: []
+                    assumptions: []
+                    riskFactors: []
+                    dependencies: []
+                    estimatedImpact:
+                      benefit: 0.75
+                      effort: 0.25
+                      roi: 3
+                    preferenceAlignment: []
+                    reasoning: Proposal computed without side effects
+                  metadata:
+                    requestId: cor_prop_candidates_001
+                    correlationId: cor_prop_candidates_001
+                    timestamp: "2026-02-23T12:00:00.000Z"
+                    serviceName: scheduler-service
+                    serviceVersion: 0.1.0
+                    executionTime: 5
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+simulateSessionCandidatesPlanned:
+  post:
+    operationId: simulateSchedulerSessionCandidates
+    summary: Simulate session candidates
+    description: |
+      Runs deterministic what-if scoring over candidate pools without persistence.
+      Explicitly side-effect free and intended for orchestration previews.
+      Planned endpoint for scheduler-service Phase 2.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/SessionCandidateSimulationRequest
+          examples:
+            candidateSimulation:
+              value:
+                userId: usr_V1StGXR8_Z5jdHi6B-myT
+                cards:
+                  - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                    lane: retention
+                    dueAt: "2026-02-23T08:00:00.000Z"
+                constraints:
+                  targetCards: 1
+                  includeCalibration: true
+                whatIfAdjustments:
+                  urgencyWeightBoost: 1.1
+    responses:
+      "200":
+        description: Session candidate simulation completed.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/SessionCandidateSimulationResponse
+            examples:
+              simulationResult:
+                value:
+                  data:
+                    selectedCardIds:
+                      - card_V1StGXR8_Z5jdHi6B-myA
+                    excludedCardIds: []
+                    scores:
+                      - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                        score:
+                          urgency: 0.84
+                          retentionRisk: 0.34
+                          calibrationValue: 0.12
+                          composite: 0.73
+                    scoringBreakdown:
+                      urgency: 0.84
+                      retentionRisk: 0.34
+                      calibrationValue: 0.12
+                      composite: 0.73
+                    policyVersion:
+                      version: scheduler.policy.v1
+                    sideEffectFree: true
+                  agentHints:
+                    suggestedNextActions: []
+                    relatedResources: []
+                    confidence: 0.86
+                    sourceQuality: high
+                    validityPeriod: short
+                    contextNeeded: []
+                    assumptions: []
+                    riskFactors: []
+                    dependencies: []
+                    estimatedImpact:
+                      benefit: 0.7
+                      effort: 0.2
+                      roi: 3.5
+                    preferenceAlignment: []
+                    reasoning: Simulation output generated without persistence
+                  metadata:
+                    requestId: cor_sim_001
+                    correlationId: cor_sim_001
+                    timestamp: "2026-02-23T12:00:00.000Z"
+                    serviceName: scheduler-service
+                    serviceVersion: 0.1.0
+                    executionTime: 4
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+commitCardSchedulePlanned:
+  patch:
+    operationId: commitSchedulerCardSchedule
+    summary: Commit a single schedule decision
+    description: |
+      Persists an explicitly approved schedule decision for one card.
+      Commit boundary is explicit and decoupled from proposal/simulation operations.
+      Planned endpoint for scheduler-service Phase 2.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    parameters:
+      - name: cardId
+        in: path
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/CardId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/CardScheduleCommitRequest
+          examples:
+            commitSingle:
+              value:
+                userId: usr_V1StGXR8_Z5jdHi6B-myT
+                decision:
+                  cardId: card_V1StGXR8_Z5jdHi6B-myA
+                  nextReviewAt: "2026-02-28T12:00:00.000Z"
+                  intervalDays: 5
+                  lane: retention
+                  algorithm: fsrs
+                  rationale: Approved by orchestration workflow
+                policyVersion:
+                  version: scheduler.policy.v1
+                orchestration:
+                  proposalId: prop_20260223_commit
+                  decisionId: dec_20260223_commit
+                  sessionRevision: 1
+                reason: Agent approved final commit
+    responses:
+      "200":
+        description: Schedule decision committed.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/CardScheduleCommitResponse
+            examples:
+              commitSingleResult:
+                value:
+                  data:
+                    commitId: com_20260223_single
+                    cardId: card_V1StGXR8_Z5jdHi6B-myA
+                    status: committed
+                    policyVersion:
+                      version: scheduler.policy.v1
+                    orchestration:
+                      proposalId: prop_20260223_commit
+                      decisionId: dec_20260223_commit
+                      sessionRevision: 1
+                  agentHints:
+                    suggestedNextActions: []
+                    relatedResources: []
+                    confidence: 0.95
+                    sourceQuality: high
+                    validityPeriod: medium
+                    contextNeeded: []
+                    assumptions: []
+                    riskFactors: []
+                    dependencies: []
+                    estimatedImpact:
+                      benefit: 0.8
+                      effort: 0.15
+                      roi: 5.3
+                    preferenceAlignment: []
+                    reasoning: Commit boundary executed explicitly
+                  metadata:
+                    requestId: cor_commit_single_001
+                    correlationId: cor_commit_single_001
+                    timestamp: "2026-02-23T12:00:00.000Z"
+                    serviceName: scheduler-service
+                    serviceVersion: 0.1.0
+                    executionTime: 6
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+commitCardScheduleBatchPlanned:
+  post:
+    operationId: commitSchedulerCardScheduleBatch
+    summary: Commit schedule decisions in bulk
+    description: |
+      Persists explicit batch schedule decisions as a dedicated commit operation.
+      Planned endpoint for scheduler-service Phase 2.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/BatchScheduleCommitRequest
+          examples:
+            commitBatch:
+              value:
+                userId: usr_V1StGXR8_Z5jdHi6B-myT
+                decisions:
+                  - cardId: card_V1StGXR8_Z5jdHi6B-myA
+                    nextReviewAt: "2026-02-28T12:00:00.000Z"
+                    intervalDays: 5
+                    lane: retention
+                    algorithm: fsrs
+                    rationale: Batch commit candidate A
+                  - cardId: card_V1StGXR8_Z5jdHi6B-myB
+                    nextReviewAt: "2026-03-01T12:00:00.000Z"
+                    intervalDays: 7
+                    lane: calibration
+                    algorithm: hlr
+                    rationale: Batch commit candidate B
+                source: agent
+                policyVersion:
+                  version: scheduler.policy.v1
+                orchestration:
+                  proposalId: prop_20260223_batch
+                  decisionId: dec_20260223_batch
+                  sessionRevision: 2
+                reason: Agent approved bulk commit
+    responses:
+      "200":
+        description: Batch schedule decisions committed.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/BatchScheduleCommitResponse
+            examples:
+              commitBatchResult:
+                value:
+                  data:
+                    commitId: com_20260223_batch
+                    accepted: 2
+                    rejected: 0
+                    updatedCardIds:
+                      - card_V1StGXR8_Z5jdHi6B-myA
+                      - card_V1StGXR8_Z5jdHi6B-myB
+                    policyVersion:
+                      version: scheduler.policy.v1
+                    orchestration:
+                      proposalId: prop_20260223_batch
+                      decisionId: dec_20260223_batch
+                      sessionRevision: 2
+                  agentHints:
+                    suggestedNextActions: []
+                    relatedResources: []
+                    confidence: 0.95
+                    sourceQuality: high
+                    validityPeriod: medium
+                    contextNeeded: []
+                    assumptions: []
+                    riskFactors: []
+                    dependencies: []
+                    estimatedImpact:
+                      benefit: 0.85
+                      effort: 0.2
+                      roi: 4.25
+                    preferenceAlignment: []
+                    reasoning: Batch commit completed with explicit lineage
+                  metadata:
+                    requestId: cor_commit_batch_001
+                    correlationId: cor_commit_batch_001
+                    timestamp: "2026-02-23T12:00:00.000Z"
+                    serviceName: scheduler-service
+                    serviceVersion: 0.1.0
+                    executionTime: 8
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+reconcileSessionCandidatesPlanned:
+  post:
+    operationId: reconcileSchedulerSessionCandidates
+    summary: Reconcile in-session card cohort
+    description: |
+      Recomputes keep/add/drop recommendations for an active session using
+      live session telemetry and updated candidate pools from collaborating agents.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/SessionId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/SessionReconcileRequest
+    responses:
+      "200":
+        description: Session cohort reconciliation computed.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/SessionReconcileResponse
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
+
+applySessionAdjustmentsPlanned:
+  post:
+    operationId: applySchedulerSessionAdjustments
+    summary: Apply explicit in-session card adjustments
+    description: |
+      Applies agent-approved add/remove/keep adjustments to current session
+      cohort and returns resulting card set plus scheduler rationale.
+      Planned endpoint for scheduler-service Phase 4.
+    x-noema-lifecycle: planned
+    tags: [Scheduler]
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          $ref: ../openapi.yaml#/components/schemas/SessionId
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: ../openapi.yaml#/components/schemas/SessionAdjustmentRequest
+    responses:
+      "200":
+        description: Session adjustments applied.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/SessionAdjustmentResponse
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
+      "401":
+        $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
+      "501":
+        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented

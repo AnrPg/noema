@@ -6,6 +6,7 @@
  */
 
 import type { AttemptId, CardId, SessionId, UserId } from '@noema/types';
+import type { Prisma } from '../../../generated/prisma/index.js';
 
 import type {
   IAttempt,
@@ -45,7 +46,10 @@ export interface ISessionRepository {
   // ---------- Session write ----------
 
   /** Create a new session. Returns the created entity. */
-  createSession(session: Omit<ISession, 'createdAt' | 'updatedAt'>): Promise<ISession>;
+  createSession(
+    session: Omit<ISession, 'createdAt' | 'updatedAt'>,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISession>;
 
   /** Update an existing session with optimistic locking. */
   updateSession(
@@ -68,7 +72,8 @@ export interface ISessionRepository {
         | 'terminationReason'
       >
     >,
-    expectedVersion: number
+    expectedVersion: number,
+    tx?: Prisma.TransactionClient
   ): Promise<ISession>;
 
   // ---------- Attempt read ----------
@@ -95,7 +100,10 @@ export interface ISessionRepository {
   // ---------- Attempt write ----------
 
   /** Record a new attempt. Returns the created entity. */
-  createAttempt(attempt: Omit<IAttempt, 'createdAt'>): Promise<IAttempt>;
+  createAttempt(
+    attempt: Omit<IAttempt, 'createdAt'>,
+    tx?: Prisma.TransactionClient
+  ): Promise<IAttempt>;
 
   // ---------- Queue read ----------
 
@@ -114,24 +122,40 @@ export interface ISessionRepository {
   // ---------- Queue write ----------
 
   /** Add initial queue items in bulk. */
-  createQueueItemsBatch(items: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>[]): Promise<void>;
+  createQueueItemsBatch(
+    items: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>[],
+    tx?: Prisma.TransactionClient
+  ): Promise<void>;
 
   /** Inject a single item at a given position, shifting others down. */
   injectQueueItem(
-    item: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>
+    item: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>,
+    tx?: Prisma.TransactionClient
   ): Promise<ISessionQueueItem>;
 
   /** Remove a queue item by session and card. */
-  removeQueueItem(sessionId: SessionId, cardId: CardId): Promise<void>;
+  removeQueueItem(sessionId: SessionId, cardId: CardId, tx?: Prisma.TransactionClient): Promise<void>;
 
   /** Mark a queue item as presented (status transition). */
-  markQueueItemPresented(sessionId: SessionId, cardId: CardId): Promise<void>;
+  markQueueItemPresented(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void>;
 
   /** Mark a queue item as answered (status transition). */
-  markQueueItemAnswered(sessionId: SessionId, cardId: CardId): Promise<void>;
+  markQueueItemAnswered(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void>;
 
   /** Mark a queue item as skipped (status transition). */
-  markQueueItemSkipped(sessionId: SessionId, cardId: CardId): Promise<void>;
+  markQueueItemSkipped(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void>;
 }
 
 /**

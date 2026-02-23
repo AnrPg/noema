@@ -75,7 +75,7 @@ contextually appropriate, pedagogically sound cards.
 | `get-user-performance-summary` | Overall accuracy, retention, calibration            | analytics-service | NOT_BUILT | P1       |
 | `get-concept-mastery`          | Mastery level per concept/node                      | analytics-service | NOT_BUILT | P1       |
 | `get-card-performance-stats`   | Per-card accuracy, response time, attempt count     | analytics-service | NOT_BUILT | P1       |
-| `get-session-history`          | Recent session summaries (mode, duration, outcomes) | session-service   | NOT_BUILT | P2       |
+| `get-session-history`          | Recent session summaries (mode, duration, outcomes) | session-service   | EXISTS    | P2       |
 | `get-calibration-data`         | Brier score, ECE, over/underconfidence              | analytics-service | NOT_BUILT | P2       |
 | `get-srs-schedule`             | Due dates, intervals, FSRS params for cards         | scheduler-service | NOT_BUILT | P2       |
 | `get-learning-velocity`        | Rate of new concept acquisition                     | analytics-service | NOT_BUILT | P2       |
@@ -118,7 +118,7 @@ Selects next card based on learning mode, KG context, and SRS schedule.
 | `get-metacognitive-stage`   | Adapt card selection to user's stage   | metacognition-service   | NOT_BUILT | P1       |
 | `get-concept-mastery`       | Mastery levels to inform selection     | analytics-service       | NOT_BUILT | P1       |
 | `get-calibration-data`      | Confidence calibration for card choice | analytics-service       | NOT_BUILT | P2       |
-| `record-attempt`            | Record card review result              | session-service         | NOT_BUILT | P0       |
+| `record-attempt`            | Record card review result              | session-service         | EXISTS    | P0       |
 | `update-card-scheduling`    | Update SRS params after review         | scheduler-service       | NOT_BUILT | P0       |
 | `get-teaching-approach`     | Current pedagogical method             | strategy-service        | NOT_BUILT | P1       |
 
@@ -130,8 +130,8 @@ Analyzes 7-frame thinking traces, classifies failures, generates patch plans.
 
 | Tool                         | Description                                 | Owner                    | Status    | Priority |
 | ---------------------------- | ------------------------------------------- | ------------------------ | --------- | -------- |
-| `get-attempt-history`        | Get recent attempts with thinking traces    | session-service          | NOT_BUILT | P0       |
-| `get-thinking-trace`         | Get full 7-frame trace for an attempt       | session-service          | NOT_BUILT | P0       |
+| `get-attempt-history`        | Get recent attempts with thinking traces    | session-service          | EXISTS    | P0       |
+| `get-thinking-trace`         | Get full 7-frame trace for an attempt       | session-service          | STUB      | P0       |
 | `get-card-by-id`             | Get card content for analysis               | content-service          | BUILDING  | P0       |
 | `get-kg-node-context`        | Get concept context for the card            | knowledge-graph-service  | NOT_BUILT | P0       |
 | `get-confusable-concepts`    | Get confusable siblings                     | knowledge-graph-service  | NOT_BUILT | P0       |
@@ -204,7 +204,7 @@ Conducts dialogue-based learning sessions.
 | `get-metacognitive-stage`   | How much scaffolding to provide           | metacognition-service   | NOT_BUILT | P0       |
 | `get-student-model`         | Composite student knowledge model         | analytics-service       | NOT_BUILT | P0       |
 | `generate-hint`             | Produce progressive hints                 | content-service         | PLANNED   | P1       |
-| `record-dialogue-turn`      | Log tutoring interaction                  | session-service         | NOT_BUILT | P1       |
+| `record-dialogue-turn`      | Log tutoring interaction                  | session-service         | STUB      | P1       |
 
 ---
 
@@ -218,7 +218,7 @@ Evaluates and recommends strategy loadouts.
 | `get-all-archetypes`           | List canonical archetypes   | strategy-service      | NOT_BUILT | P0       |
 | `evaluate-loadout-performance` | Stats per loadout           | analytics-service     | NOT_BUILT | P0       |
 | `update-loadout`               | Switch/modify loadout       | strategy-service      | NOT_BUILT | P0       |
-| `get-session-history`          | Sessions to evaluate        | session-service       | NOT_BUILT | P1       |
+| `get-session-history`          | Sessions to evaluate        | session-service       | EXISTS    | P1       |
 | `get-metacognitive-stage`      | Inform strategy suggestions | metacognition-service | NOT_BUILT | P1       |
 
 ---
@@ -261,7 +261,7 @@ Maintains and improves the knowledge graph structure.
 | knowledge-graph-service | 19          | 0      | 0        | 0       | 19        |
 | analytics-service       | 10          | 0      | 0        | 0       | 10        |
 | metacognition-service   | 9           | 0      | 0        | 0       | 9         |
-| session-service         | 5           | 0      | 0        | 0       | 5         |
+| session-service         | 5           | 3      | 0        | 0       | 0         |
 | strategy-service        | 6           | 0      | 0        | 0       | 6         |
 | scheduler-service       | 3           | 0      | 0        | 0       | 3         |
 | vector-service          | 3           | 0      | 0        | 0       | 3         |

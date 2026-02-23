@@ -699,15 +699,11 @@ paths:
                   data:
                     type: object
                     properties:
-                      items:
+                      sessions:
                         type: array
                         items:
                           $ref: "#/components/schemas/Session"
                       total:
-                        type: integer
-                      offset:
-                        type: integer
-                      limit:
                         type: integer
                   agentHints:
                     $ref: "#/components/schemas/AgentHints"
@@ -829,15 +825,6 @@ paths:
           required: true
           schema:
             $ref: "#/components/schemas/SessionId"
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                terminationReason:
-                  $ref: "#/components/schemas/SessionTerminationReason"
-              required: [terminationReason]
       responses:
         "200":
           description: Session completed
@@ -977,15 +964,11 @@ paths:
                   data:
                     type: object
                     properties:
-                      items:
+                      attempts:
                         type: array
                         items:
                           $ref: "#/components/schemas/Attempt"
                       total:
-                        type: integer
-                      offset:
-                        type: integer
-                      limit:
                         type: integer
                   agentHints:
                     $ref: "#/components/schemas/AgentHints"
@@ -1029,7 +1012,7 @@ paths:
                   data:
                     type: object
                     properties:
-                      recorded:
+                      acknowledged:
                         type: boolean
                   agentHints:
                     $ref: "#/components/schemas/AgentHints"
@@ -1157,6 +1140,138 @@ paths:
           description: Unauthorized
         "404":
           description: Session or card not found
+
+  /v1/sessions/blueprint/validate:
+    post:
+      operationId: validateSessionBlueprint
+      tags: [Sessions]
+      summary: Validate agent-generated session blueprint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                blueprint:
+                  type: object
+              required: [blueprint]
+      responses:
+        "200":
+          description: Blueprint validation result
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /v1/sessions/{sessionId}/checkpoints/evaluate:
+    post:
+      operationId: evaluateAdaptiveCheckpoint
+      tags: [Sessions]
+      summary: Evaluate adaptive checkpoint signals
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                trigger:
+                  type: string
+                  enum: [confidence_drift, latency_spike, error_cascade, streak_break, manual]
+                lastAttemptResponseTimeMs:
+                  type: integer
+                rollingAverageResponseTimeMs:
+                  type: integer
+                recentIncorrectStreak:
+                  type: integer
+                confidenceDrift:
+                  type: number
+              required: [trigger]
+      responses:
+        "200":
+          description: Adaptive checkpoint directives
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/sessions/{sessionId}/expire:
+    post:
+      operationId: expireSession
+      tags: [Sessions]
+      summary: Force-expire an active or paused session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      responses:
+        "200":
+          description: Session expired
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+
+  /v1/offline-intents:
+    post:
+      operationId: issueOfflineIntentToken
+      tags: [Sessions]
+      summary: Issue a signed offline intent token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId:
+                  type: string
+                sessionBlueprint:
+                  type: object
+                expiresInSeconds:
+                  type: integer
+              required: [userId, sessionBlueprint, expiresInSeconds]
+      responses:
+        "201":
+          description: Token issued
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /v1/offline-intents/verify:
+    post:
+      operationId: verifyOfflineIntentToken
+      tags: [Sessions]
+      summary: Verify a signed offline intent token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+              required: [token]
+      responses:
+        "200":
+          description: Token verification result
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
 
   # ---------- Strategy & Teaching ----------
   /v1/sessions/{sessionId}/strategy:

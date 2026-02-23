@@ -22,15 +22,189 @@ export interface IDualLanePlanInput {
   calibrationCardIds: CardId[];
   targetMix?: ISchedulerLaneMix;
   maxCards: number;
+  /** Optional per-card priority scores (higher = more urgent). */
+  cardPriorityScores?: Record<string, number>;
+  /** Interleave retention/calibration cards in the output (default true). */
+  interleave?: boolean;
+  /** Explicit commit gate: default false for side-effect-free planning. */
+  commit?: boolean;
+}
+
+/** Per-card metadata in the plan output. */
+export interface ICardDetail {
+  cardId: CardId;
+  lane: SchedulerLane;
+  /** Priority score used for selection (0 if none provided). */
+  score: number;
+  /** 0-based position in the final interleaved sequence. */
+  position: number;
+  /** True if this card was selected via spillover from the other lane. */
+  isSpillover: boolean;
 }
 
 export interface IDualLanePlan {
-  planVersion: 'v1';
+  planVersion: 'v2';
+  policyVersion: string;
   laneMix: ISchedulerLaneMix;
   selectedCardIds: CardId[];
   retentionSelected: number;
   calibrationSelected: number;
+  /** Retention-lane cards that filled calibration slots via spillover. */
+  retentionSpillover: number;
+  /** Calibration-lane cards that filled retention slots via spillover. */
+  calibrationSpillover: number;
+  /** Per-card selection metadata. */
+  cardDetails: ICardDetail[];
+  orchestration: IOrchestrationMetadata;
   rationale: string;
+}
+
+export interface IPolicyVersion {
+  version: string;
+  rulesetChecksum?: string;
+}
+
+export interface IOrchestrationMetadata {
+  proposalId: string;
+  decisionId: string;
+  sessionRevision: number;
+  sessionId?: string;
+  correlationId?: string;
+}
+
+export interface IScoringBreakdown {
+  urgency: number;
+  retentionRisk: number;
+  calibrationValue: number;
+  composite: number;
+}
+
+export interface ICardScheduleInput {
+  cardId: CardId;
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  lastReviewAt?: string | null;
+  stability?: number | null;
+  difficulty?: number | null;
+  lapses?: number | null;
+}
+
+export interface ICardScheduleDecision {
+  cardId: CardId;
+  nextReviewAt: string;
+  intervalDays: number;
+  lane: SchedulerLane;
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  rationale: string;
+}
+
+export interface IReviewWindowProposalInput {
+  userId: UserId;
+  cards: ICardScheduleInput[];
+  asOf?: string | null;
+}
+
+export interface IReviewWindowProposal {
+  generatedAt: string;
+  decisions: ICardScheduleDecision[];
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
+}
+
+export interface ISessionConstraints {
+  targetCards: number;
+  maxSessionDurationMinutes?: number;
+  includeCalibration?: boolean;
+  laneMix?: ISchedulerLaneMix;
+}
+
+export interface ISessionCandidateCard {
+  cardId: CardId;
+  lane: SchedulerLane;
+  dueAt?: string | null;
+  retentionProbability?: number | null;
+  estimatedSeconds?: number | null;
+}
+
+export interface ICandidateScore {
+  urgency: number;
+  retentionRisk: number;
+  calibrationValue: number;
+  composite: number;
+}
+
+export interface ISessionCandidateProposalInput {
+  userId: UserId;
+  cards: ISessionCandidateCard[];
+  constraints: ISessionConstraints;
+  sourceDeckId?: string | null;
+  sessionContext?: Record<string, unknown> | null;
+}
+
+export interface ISessionCandidateProposal {
+  selectedCardIds: CardId[];
+  excludedCardIds: CardId[];
+  scores: {
+    cardId: CardId;
+    score: ICandidateScore;
+  }[];
+  scoringBreakdown: IScoringBreakdown;
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
+  rationale: string;
+}
+
+export interface ISessionCandidateSimulationInput {
+  userId: UserId;
+  cards: ISessionCandidateCard[];
+  constraints: ISessionConstraints;
+  whatIfAdjustments?: Record<string, unknown> | null;
+  sessionContext?: Record<string, unknown> | null;
+}
+
+export interface ISessionCandidateSimulation {
+  selectedCardIds: CardId[];
+  excludedCardIds: CardId[];
+  scores: {
+    cardId: CardId;
+    score: ICandidateScore;
+  }[];
+  scoringBreakdown: IScoringBreakdown;
+  policyVersion: IPolicyVersion;
+  sideEffectFree: true;
+}
+
+export interface ICardScheduleCommitInput {
+  userId: UserId;
+  decision: ICardScheduleDecision;
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
+  reason?: string;
+}
+
+export interface ICardScheduleCommitResult {
+  commitId: string;
+  cardId: CardId;
+  status: 'committed';
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
+}
+
+export interface IBatchScheduleCommitInput {
+  userId: UserId;
+  decisions: ICardScheduleDecision[];
+  source: 'agent' | 'session-service' | 'scheduler-service';
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
+  reason?: string;
+}
+
+export interface IBatchScheduleCommitResult {
+  commitId: string;
+  accepted: number;
+  rejected: number;
+  updatedCardIds: CardId[];
+  policyVersion: IPolicyVersion;
+  orchestration: IOrchestrationMetadata;
 }
 
 // ============================================================================

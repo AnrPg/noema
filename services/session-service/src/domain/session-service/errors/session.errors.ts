@@ -141,6 +141,7 @@ export class InvalidSessionStateError extends DomainError {
 /**
  * Thrown when a user already has an active session and concurrent sessions
  * are not permitted (business rule).
+ * @deprecated Concurrent sessions are now allowed by policy.
  */
 export class SessionAlreadyActiveError extends DomainError {
   public readonly existingSessionId: string;
@@ -194,6 +195,12 @@ export class BusinessRuleError extends DomainError {
 export class QueueError extends DomainError {
   constructor(message: string, details?: Record<string, unknown>) {
     super('QUEUE_ERROR', message, details);
+  }
+}
+
+export class OutboxDispatchError extends DomainError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('OUTBOX_DISPATCH_ERROR', message, details);
   }
 }
 

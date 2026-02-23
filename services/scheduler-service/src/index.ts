@@ -12,6 +12,7 @@ import { SchedulerService } from './domain/scheduler-service/scheduler.service.j
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaCalibrationDataRepository,
+  PrismaProvenanceRepository,
   PrismaReviewRepository,
   PrismaSchedulerCardRepository,
 } from './infrastructure/database/index.js';
@@ -33,6 +34,14 @@ async function bootstrap(): Promise<void> {
     'Starting service'
   );
 
+  if (config.security.authDisabled && config.service.environment !== 'development') {
+    throw new Error('AUTH_DISABLED=true is not allowed outside development environment');
+  }
+
+  if (config.security.authDisabled && config.service.environment === 'development') {
+    logger.warn('AUTH_DISABLED=true is enabled for development environment');
+  }
+
   const redis = new Redis(config.redis.url, {
     maxRetriesPerRequest: 3,
     lazyConnect: true,
@@ -52,6 +61,7 @@ async function bootstrap(): Promise<void> {
   const schedulerCardRepo = new PrismaSchedulerCardRepository(prisma);
   const reviewRepo = new PrismaReviewRepository(prisma);
   const calibrationDataRepo = new PrismaCalibrationDataRepository(prisma);
+  const provenanceRepo = new PrismaProvenanceRepository(prisma);
 
   logger.info('Initialized database repositories');
 
@@ -60,6 +70,7 @@ async function bootstrap(): Promise<void> {
     schedulerCardRepository: schedulerCardRepo,
     reviewRepository: reviewRepo,
     calibrationDataRepository: calibrationDataRepo,
+    provenanceRepository: provenanceRepo,
   });
 
   const eventConsumer = new SchedulerEventConsumer(
@@ -87,6 +98,7 @@ async function bootstrap(): Promise<void> {
 
   const fastify = Fastify({
     loggerInstance: logger,
+    bodyLimit: config.server.bodyLimitBytes,
     requestIdHeader: 'x-correlation-id',
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
@@ -99,11 +111,16 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-User-Id'],
   });
 
-  const jwtSecret = process.env['JWT_SECRET'] ?? process.env['ACCESS_TOKEN_SECRET'] ?? '';
   const authMiddleware = createAuthMiddleware({
-    jwtSecret,
-    issuer: process.env['JWT_ISSUER'] ?? 'noema.app',
-    audience: process.env['JWT_AUDIENCE'] ?? 'noema.app',
+    authDisabled: config.security.authDisabled,
+    jwtSecret: config.security.jwtSecret,
+    jwksUrl: config.security.jwksUrl,
+    issuer: config.security.jwtIssuer,
+    expectedAudiences: {
+      user: config.security.jwtAudienceUser,
+      agent: config.security.jwtAudienceAgent,
+      service: config.security.jwtAudienceService,
+    },
   });
 
   registerHealthRoutes(fastify as unknown as FastifyInstance, redis, prisma);

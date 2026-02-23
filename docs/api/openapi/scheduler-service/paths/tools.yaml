@@ -3,6 +3,7 @@ listTools:
     operationId: listSchedulerTools
     summary: List available scheduler tools
     description: Returns scheduler MCP tool definitions available for execution.
+    x-noema-lifecycle: active
     tags: [Tools]
     responses:
       "200":
@@ -11,8 +12,16 @@ listTools:
           application/json:
             schema:
               $ref: ../openapi.yaml#/components/schemas/ToolListResponse
+      "400":
+        $ref: ../openapi.yaml#/components/responses/BadRequest
       "401":
         $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError
 
 executeTool:
   post:
@@ -21,6 +30,7 @@ executeTool:
     description: |
       Executes a registered scheduler tool in the caller's security context.
       Returns structured tool success/failure result in `data`.
+    x-noema-lifecycle: active
     tags: [Tools]
     requestBody:
       required: true
@@ -51,11 +61,17 @@ executeTool:
         $ref: ../openapi.yaml#/components/responses/BadRequest
       "401":
         $ref: ../openapi.yaml#/components/responses/Unauthorized
+      "403":
+        $ref: ../openapi.yaml#/components/responses/Forbidden
       "404":
         $ref: ../openapi.yaml#/components/responses/ToolNotFound
+      "429":
+        $ref: ../openapi.yaml#/components/responses/TooManyRequests
       "422":
         description: Tool execution failed validation or business constraints.
         content:
           application/json:
             schema:
               $ref: ../openapi.yaml#/components/schemas/ToolExecuteResponse
+      "500":
+        $ref: ../openapi.yaml#/components/responses/InternalServerError

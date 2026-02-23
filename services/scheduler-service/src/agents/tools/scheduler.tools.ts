@@ -45,9 +45,12 @@ export function createPlanDualLaneHandler(service: SchedulerService): ToolHandle
 export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] = [
   {
     name: 'plan-dual-lane',
-    description: 'Build a dual-lane scheduler plan from retention and calibration card pools.',
+    description:
+      'Build a dual-lane scheduler plan from retention and calibration card pools. ' +
+      'Supports priority-based selection, urgency-aware spillover, and interleaved ordering.',
     service: 'scheduler-service',
     priority: 'P0',
+    requiredScopes: ['scheduler:plan', 'scheduler:tools:execute'],
     inputSchema: {
       type: 'object',
       required: ['userId', 'retentionCardIds', 'calibrationCardIds', 'maxCards'],
@@ -63,6 +66,15 @@ export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] = [
           },
         },
         maxCards: { type: 'number', minimum: 1, maximum: 500 },
+        cardPriorityScores: {
+          type: 'object',
+          description: 'Per-card priority scores (higher = more urgent). Keys are card IDs.',
+          additionalProperties: { type: 'number' },
+        },
+        interleave: {
+          type: 'boolean',
+          description: 'Interleave retention/calibration cards in output (default true).',
+        },
       },
     },
   },
