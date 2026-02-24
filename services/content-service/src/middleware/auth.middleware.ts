@@ -5,6 +5,7 @@
  */
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { buildErrorMetadata } from '../api/shared/route-helpers.js';
 import type {
   ITokenPayload,
   JwtTokenVerifier,
@@ -22,9 +23,13 @@ export function createAuthMiddleware(tokenVerifier: JwtTokenVerifier) {
     const authHeader = request.headers.authorization;
 
     if (authHeader?.startsWith('Bearer ') !== true) {
+      const metadata = buildErrorMetadata(request);
       return reply.status(401).send({
-        error: 'Unauthorized',
-        message: 'Missing or invalid authorization header',
+        error: {
+          code: 'AUTHENTICATION_ERROR',
+          message: 'Missing or invalid authorization header',
+        },
+        metadata,
       });
     }
 
@@ -34,9 +39,13 @@ export function createAuthMiddleware(tokenVerifier: JwtTokenVerifier) {
       const payload = await tokenVerifier.verifyAccessToken(token);
       request.user = payload;
     } catch {
+      const metadata = buildErrorMetadata(request);
       return reply.status(401).send({
-        error: 'Unauthorized',
-        message: 'Invalid or expired token',
+        error: {
+          code: 'AUTHENTICATION_ERROR',
+          message: 'Invalid or expired token',
+        },
+        metadata,
       });
     }
   };

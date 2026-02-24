@@ -25,8 +25,8 @@ export interface ITemplateRepository {
 
   // Write Operations
   create(input: ICreateTemplateInput & { id: TemplateId; userId: UserId }): Promise<ITemplate>;
-  update(id: TemplateId, input: IUpdateTemplateInput, version: number): Promise<ITemplate>;
+  update(id: TemplateId, input: IUpdateTemplateInput, version: number, userId?: UserId): Promise<ITemplate>;
   incrementUsageCount(id: TemplateId): Promise<void>;
-  softDelete(id: TemplateId, version: number): Promise<void>;
+  softDelete(id: TemplateId, version: number, userId?: UserId): Promise<void>;
   hardDelete(id: TemplateId): Promise<void>;
 }

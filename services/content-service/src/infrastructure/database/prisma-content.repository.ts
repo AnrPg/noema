@@ -175,7 +175,7 @@ export class PrismaContentRepository implements IContentRepository {
     };
   }
 
-  async update(id: CardId, input: IUpdateCardInput, version: number): Promise<ICard> {
+  async update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId): Promise<ICard> {
     const existing = await this.prisma.card.findUnique({ where: { id } });
     if (!existing) {
       throw new Error(`Card not found: ${id}`);
@@ -187,6 +187,10 @@ export class PrismaContentRepository implements IContentRepository {
     const data: Prisma.CardUpdateInput = {
       version: { increment: 1 },
     };
+
+    if (userId !== undefined) {
+      data.updatedBy = userId;
+    }
 
     if (input.content !== undefined) {
       data.content = input.content as unknown as Prisma.JsonObject;
@@ -214,7 +218,7 @@ export class PrismaContentRepository implements IContentRepository {
     return this.toDomain(card);
   }
 
-  async changeState(id: CardId, input: IChangeCardStateInput, version: number): Promise<ICard> {
+  async changeState(id: CardId, input: IChangeCardStateInput, version: number, userId?: UserId): Promise<ICard> {
     const existing = await this.prisma.card.findUnique({ where: { id } });
     if (!existing) {
       throw new Error(`Card not found: ${id}`);
@@ -228,13 +232,14 @@ export class PrismaContentRepository implements IContentRepository {
       data: {
         state: this.toDbState(input.state),
         version: { increment: 1 },
+        ...(userId !== undefined ? { updatedBy: userId } : {}),
       },
     });
 
     return this.toDomain(card);
   }
 
-  async softDelete(id: CardId, version: number): Promise<void> {
+  async softDelete(id: CardId, version: number, userId?: UserId): Promise<void> {
     const existing = await this.prisma.card.findUnique({ where: { id } });
     if (!existing) {
       throw new Error(`Card not found: ${id}`);
@@ -249,6 +254,7 @@ export class PrismaContentRepository implements IContentRepository {
         deletedAt: new Date(),
         state: 'ARCHIVED',
         version: { increment: 1 },
+        ...(userId !== undefined ? { updatedBy: userId } : {}),
       },
     });
   }
@@ -257,7 +263,7 @@ export class PrismaContentRepository implements IContentRepository {
     await this.prisma.card.delete({ where: { id } });
   }
 
-  async updateTags(id: CardId, tags: string[], version: number): Promise<ICard> {
+  async updateTags(id: CardId, tags: string[], version: number, userId?: UserId): Promise<ICard> {
     const existing = await this.prisma.card.findUnique({ where: { id } });
     if (!existing) {
       throw new Error(`Card not found: ${id}`);
@@ -271,6 +277,7 @@ export class PrismaContentRepository implements IContentRepository {
       data: {
         tags,
         version: { increment: 1 },
+        ...(userId !== undefined ? { updatedBy: userId } : {}),
       },
     });
 
@@ -280,7 +287,8 @@ export class PrismaContentRepository implements IContentRepository {
   async updateKnowledgeNodeIds(
     id: CardId,
     knowledgeNodeIds: string[],
-    version: number
+    version: number,
+    userId?: UserId,
   ): Promise<ICard> {
     const existing = await this.prisma.card.findUnique({ where: { id } });
     if (!existing) {
@@ -295,6 +303,7 @@ export class PrismaContentRepository implements IContentRepository {
       data: {
         knowledgeNodeIds,
         version: { increment: 1 },
+        ...(userId !== undefined ? { updatedBy: userId } : {}),
       },
     });
 

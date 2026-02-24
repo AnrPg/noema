@@ -55,10 +55,9 @@ function withContractDefaults(definition: IBaseToolDefinition): IToolDefinition 
       supportsDryRun: definition.name === 'validate-card-content',
       supportsAsync: false,
       supportsStreaming: false,
-      maxBatchSize:
-        definition.name === 'batch-create-cards' || definition.name === 'batch-change-card-state'
-          ? 100
-          : undefined,
+      ...(definition.name === 'batch-create-cards' || definition.name === 'batch-change-card-state'
+        ? { maxBatchSize: 100 }
+        : {}),
       consistency: sideEffects ? 'strong' : 'eventual',
     },
   };

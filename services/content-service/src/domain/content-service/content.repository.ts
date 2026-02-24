@@ -81,19 +81,19 @@ export interface IContentRepository {
    * Uses optimistic locking.
    * @returns Updated card
    */
-  update(id: CardId, input: IUpdateCardInput, version: number): Promise<ICard>;
+  update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId): Promise<ICard>;
 
   /**
    * Change card state.
    * Uses optimistic locking.
    * @returns Updated card
    */
-  changeState(id: CardId, input: IChangeCardStateInput, version: number): Promise<ICard>;
+  changeState(id: CardId, input: IChangeCardStateInput, version: number, userId?: UserId): Promise<ICard>;
 
   /**
    * Soft-delete a card.
    */
-  softDelete(id: CardId, version: number): Promise<void>;
+  softDelete(id: CardId, version: number, userId?: UserId): Promise<void>;
 
   /**
    * Hard-delete a card (permanent, admin only).
@@ -105,12 +105,12 @@ export interface IContentRepository {
    * Uses optimistic locking.
    * @returns Updated card
    */
-  updateTags(id: CardId, tags: string[], version: number): Promise<ICard>;
+  updateTags(id: CardId, tags: string[], version: number, userId?: UserId): Promise<ICard>;
 
   /**
    * Update node linkage on a card.
    * Uses optimistic locking.
    * @returns Updated card
    */
-  updateKnowledgeNodeIds(id: CardId, knowledgeNodeIds: string[], version: number): Promise<ICard>;
+  updateKnowledgeNodeIds(id: CardId, knowledgeNodeIds: string[], version: number, userId?: UserId): Promise<ICard>;
 }

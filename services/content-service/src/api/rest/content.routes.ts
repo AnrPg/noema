@@ -5,23 +5,9 @@
  * Follows the same patterns as user-service routes.
  */
 
-import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CardState, CorrelationId, UserId } from '@noema/types';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type {
-  ContentService,
-  IExecutionContext,
-} from '../../domain/content-service/content.service.js';
-import {
-  AuthenticationError,
-  AuthorizationError,
-  BatchLimitExceededError,
-  BusinessRuleError,
-  CardNotFoundError,
-  DomainError,
-  ValidationError,
-  VersionConflictError,
-} from '../../domain/content-service/errors/index.js';
+import type { CardId, CardState } from '@noema/types';
+import type { FastifyInstance } from 'fastify';
+import type { ContentService } from '../../domain/content-service/content.service.js';
 import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type {
   IChangeCardStateInput,
@@ -30,6 +16,12 @@ import type {
   ISessionSeedInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
+import {
+  attachStartTimeHook,
+  buildContext,
+  handleError,
+  wrapResponse,
+} from '../shared/route-helpers.js';
 
 // ============================================================================
 // Request/Response Types
@@ -66,155 +58,7 @@ export function registerContentRoutes(
   authMiddleware: ReturnType<typeof createAuthMiddleware>
 ): void {
   // Attach startTime for executionTime computation
-  fastify.addHook('onRequest', (request) => {
-    (request as FastifyRequest & { startTime: number }).startTime = Date.now();
-  });
-
-  // ============================================================================
-  // Helper Functions
-  // ============================================================================
-
-  /**
-   * Build execution context from request.
-   */
-  function buildContext(request: FastifyRequest): IExecutionContext {
-    const user = request.user as { sub?: string; roles?: string[] } | undefined;
-    const userAgent = request.headers['user-agent'];
-    const context: IExecutionContext = {
-      userId: (user?.sub ?? null) as UserId | null,
-      correlationId: request.id as CorrelationId,
-      roles: user?.roles ?? [],
-      clientIp: request.ip,
-    };
-    if (userAgent !== undefined) {
-      context.userAgent = userAgent;
-    }
-    return context;
-  }
-
-  /**
-   * Standard response wrapper.
-   */
-  function wrapResponse<T>(data: T, agentHints: unknown, request: FastifyRequest): IApiResponse<T> {
-    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
-    return {
-      data,
-      agentHints: agentHints as IApiResponse<T>['agentHints'],
-      metadata: {
-        requestId: request.id,
-        timestamp: new Date().toISOString(),
-        serviceName: 'content-service',
-        serviceVersion: '0.1.0',
-        executionTime: Date.now() - startTime,
-      },
-    };
-  }
-
-  /**
-   * Build response metadata for error responses.
-   */
-  function buildErrorMetadata(request: FastifyRequest): Record<string, unknown> {
-    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
-    return {
-      requestId: request.id,
-      timestamp: new Date().toISOString(),
-      serviceName: 'content-service',
-      serviceVersion: '0.1.0',
-      executionTime: Date.now() - startTime,
-    };
-  }
-
-  /**
-   * Error handler — maps domain errors to HTTP status codes.
-   * Includes metadata per IApiErrorResponse contract.
-   */
-  function handleError(error: unknown, request: FastifyRequest, reply: FastifyReply): void {
-    const metadata = buildErrorMetadata(request);
-
-    if (error instanceof ValidationError) {
-      reply.status(400).send({
-        error: {
-          code: error.code,
-          message: error.message,
-          fieldErrors: error.fieldErrors,
-        },
-        metadata,
-      });
-    } else if (error instanceof CardNotFoundError) {
-      reply.status(404).send({
-        error: {
-          code: error.code,
-          message: error.message,
-        },
-        metadata,
-      });
-    } else if (error instanceof VersionConflictError) {
-      reply.status(409).send({
-        error: {
-          code: error.code,
-          message: error.message,
-          details: {
-            expectedVersion: error.expectedVersion,
-            actualVersion: error.actualVersion,
-          },
-        },
-        metadata,
-      });
-    } else if (error instanceof AuthenticationError) {
-      reply.status(401).send({
-        error: {
-          code: (error as DomainError).code,
-          message: error.message,
-        },
-        metadata,
-      });
-    } else if (error instanceof AuthorizationError) {
-      reply.status(403).send({
-        error: {
-          code: error.code,
-          message: error.message,
-        },
-        metadata,
-      });
-    } else if (error instanceof BatchLimitExceededError) {
-      reply.status(422).send({
-        error: {
-          code: error.code,
-          message: error.message,
-          details: {
-            limit: error.limit,
-            requested: error.requested,
-          },
-        },
-        metadata,
-      });
-    } else if (error instanceof BusinessRuleError) {
-      reply.status(422).send({
-        error: {
-          code: (error as DomainError).code,
-          message: error.message,
-        },
-        metadata,
-      });
-    } else if (error instanceof DomainError) {
-      reply.status(400).send({
-        error: {
-          code: error.code,
-          message: error.message,
-        },
-        metadata,
-      });
-    } else {
-      fastify.log.error(error);
-      reply.status(500).send({
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'An unexpected error occurred',
-        },
-        metadata,
-      });
-    }
-  }
+  attachStartTimeHook(fastify);
 
   // ============================================================================
   // Card CRUD Routes
@@ -260,7 +104,7 @@ export function registerContentRoutes(
         const result = await contentService.create(request.body, context);
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -308,7 +152,7 @@ export function registerContentRoutes(
         const result = await contentService.createBatch(request.body.cards, context);
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -338,7 +182,7 @@ export function registerContentRoutes(
         const result = await contentService.findById(request.params.id as CardId, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -397,7 +241,7 @@ export function registerContentRoutes(
         (response.metadata as { count?: number }).count = result.data.items.length;
         reply.send(response);
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -463,7 +307,7 @@ export function registerContentRoutes(
         const result = await contentService.buildSessionSeed(request.body, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -519,7 +363,7 @@ export function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -566,7 +410,7 @@ export function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -609,7 +453,7 @@ export function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -662,7 +506,7 @@ export function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -706,7 +550,7 @@ export function registerContentRoutes(
         const result = await contentService.count(request.body, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -743,7 +587,7 @@ export function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -790,7 +634,7 @@ export function registerContentRoutes(
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );
@@ -832,7 +676,7 @@ export function registerContentRoutes(
         await contentService.delete(request.params.id as CardId, soft, context);
         reply.status(204).send();
       } catch (error) {
-        handleError(error, request, reply);
+        handleError(error, request, reply, fastify.log);
       }
     }
   );

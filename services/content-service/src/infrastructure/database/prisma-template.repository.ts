@@ -175,7 +175,7 @@ export class PrismaTemplateRepository implements ITemplateRepository {
     return toDomain(row);
   }
 
-  async update(id: TemplateId, input: IUpdateTemplateInput, version: number): Promise<ITemplate> {
+  async update(id: TemplateId, input: IUpdateTemplateInput, version: number, userId?: UserId): Promise<ITemplate> {
     const data: Prisma.TemplateUpdateInput = {};
 
     if (input.name !== undefined) data.name = input.name;
@@ -188,6 +188,10 @@ export class PrismaTemplateRepository implements ITemplateRepository {
     if (input.metadata !== undefined)
       data.metadata = input.metadata as unknown as Prisma.JsonObject;
     if (input.visibility !== undefined) data.visibility = toDbVisibility(input.visibility);
+
+    if (userId !== undefined) {
+      data.updatedBy = userId;
+    }
 
     data.version = { increment: 1 };
 
@@ -212,11 +216,14 @@ export class PrismaTemplateRepository implements ITemplateRepository {
     });
   }
 
-  async softDelete(id: TemplateId, version: number): Promise<void> {
+  async softDelete(id: TemplateId, version: number, userId?: UserId): Promise<void> {
     try {
       await this.prisma.template.update({
         where: { id, version },
-        data: { deletedAt: new Date() },
+        data: {
+          deletedAt: new Date(),
+          ...(userId !== undefined ? { updatedBy: userId } : {}),
+        },
       });
     } catch (error) {
       if (error instanceof Error && error.message.includes('Record to update not found')) {

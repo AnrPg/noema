@@ -525,7 +525,7 @@ describe('ContentService', () => {
 
       await service.delete(existing.id, true, ctx);
 
-      expect(repo.softDelete).toHaveBeenCalledWith(existing.id, existing.version);
+      expect(repo.softDelete).toHaveBeenCalledWith(existing.id, existing.version, ctx.userId ?? undefined);
       expect(events.publish).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'card.deleted' })
       );

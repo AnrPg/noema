@@ -370,7 +370,7 @@ export class ContentService {
 
     let card: ICard;
     try {
-      card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version);
+      card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version, context.userId ?? undefined);
     } catch (error) {
       if (error instanceof VersionConflictError) throw error;
       throw error;
@@ -430,7 +430,8 @@ export class ContentService {
     const card = await this.repository.changeState(
       id,
       parseResult.data as IChangeCardStateInput,
-      version
+      version,
+      context.userId ?? undefined,
     );
 
     // Publish event
@@ -488,7 +489,7 @@ export class ContentService {
     // Verify ownership
     await this.requireCardOwnership(id, context);
 
-    const card = await this.repository.updateTags(id, tags, version);
+    const card = await this.repository.updateTags(id, tags, version, context.userId ?? undefined);
 
     // Publish event
     await this.eventPublisher.publish({
@@ -530,7 +531,7 @@ export class ContentService {
     // Verify ownership
     await this.requireCardOwnership(id, context);
 
-    const card = await this.repository.updateKnowledgeNodeIds(id, knowledgeNodeIds, version);
+    const card = await this.repository.updateKnowledgeNodeIds(id, knowledgeNodeIds, version, context.userId ?? undefined);
 
     // Publish event
     await this.eventPublisher.publish({
@@ -893,7 +894,7 @@ export class ContentService {
     const existing = await this.requireCardOwnership(id, context);
 
     if (soft) {
-      await this.repository.softDelete(id, existing.version);
+      await this.repository.softDelete(id, existing.version, context.userId ?? undefined);
     } else {
       // Hard delete requires admin
       if (!this.isAdmin(context)) {

@@ -198,7 +198,8 @@ export class TemplateService {
     const template = await this.repository.update(
       id,
       parseResult.data as IUpdateTemplateInput,
-      version
+      version,
+      context.userId ?? undefined,
     );
 
     await this.eventPublisher.publish({
@@ -229,7 +230,7 @@ export class TemplateService {
     const existing = await this.requireTemplateOwnership(id, context);
 
     if (soft) {
-      await this.repository.softDelete(id, existing.version);
+      await this.repository.softDelete(id, existing.version, context.userId ?? undefined);
     } else {
       if (!this.isAdmin(context)) {
         throw new AuthorizationError('Hard delete requires admin role');
