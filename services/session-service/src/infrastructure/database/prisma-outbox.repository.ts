@@ -238,4 +238,29 @@ export class PrismaOutboxRepository implements IOutboxRepository {
       throw new Error(`Failed to mark claimed outbox event ${id} as failed`);
     }
   }
+
+  async markDeadLettered(
+    id: EventId,
+    claimOwner: string,
+    errorMessage: string,
+  ): Promise<void> {
+    const result = await this.prisma.eventOutbox.updateMany({
+      where: {
+        id,
+        claimOwner,
+        publishedAt: null,
+      },
+      data: {
+        attempts: { increment: 1 },
+        lastError: `DEAD_LETTERED: ${errorMessage}`.slice(0, 1000),
+        nextAttemptAt: null,
+        claimOwner: null,
+        claimUntil: null,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new Error(`Failed to dead-letter outbox event ${id}`);
+    }
+  }
 }

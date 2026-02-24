@@ -145,30 +145,74 @@ export class SessionOutboxWorker {
             payload: event.payload,
             metadata: event.metadata,
           });
-          await this.outboxRepository.markPublishedClaimed(event.id, this.workerId);
+          try {
+            await this.outboxRepository.markPublishedClaimed(event.id, this.workerId);
+          } catch (claimError) {
+            if (!this.running) {
+              // Worker is stopping — claims may have been released during drain
+              // timeout. Fall back to unclaimed mark to still record success.
+              await this.outboxRepository.markPublished(event.id);
+              this.logger.warn(
+                {
+                  outboxEventId: event.id,
+                  eventType: event.eventType,
+                  workerId: this.workerId,
+                },
+                'Claim lost during drain; marked published via fallback'
+              );
+            } else {
+              throw claimError;
+            }
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown publish error';
-          const nextAttemptAt = new Date(Date.now() + this.computeRetryDelayMs(event.attempts + 1));
+          const newAttemptCount = event.attempts + 1;
+          const isExhausted = newAttemptCount >= this.config.maxAttempts;
 
-          await this.outboxRepository.markFailedClaimed(
-            event.id,
-            this.workerId,
-            message,
-            nextAttemptAt
-          );
+          if (isExhausted) {
+            await this.outboxRepository.markDeadLettered(
+              event.id,
+              this.workerId,
+              message
+            );
 
-          this.logger.warn(
-            {
-              outboxEventId: event.id,
-              eventType: event.eventType,
-              attempts: event.attempts + 1,
-              maxAttempts: this.config.maxAttempts,
-              nextAttemptAt: nextAttemptAt.toISOString(),
-              workerId: this.workerId,
-              error: message,
-            },
-            'Failed to publish outbox event'
-          );
+            this.logger.error(
+              {
+                outboxEventId: event.id,
+                eventType: event.eventType,
+                aggregateId: event.aggregateId,
+                attempts: newAttemptCount,
+                maxAttempts: this.config.maxAttempts,
+                workerId: this.workerId,
+                error: message,
+              },
+              'Outbox event dead-lettered after exhausting all retry attempts'
+            );
+          } else {
+            const nextAttemptAt = new Date(
+              Date.now() + this.computeRetryDelayMs(newAttemptCount)
+            );
+
+            await this.outboxRepository.markFailedClaimed(
+              event.id,
+              this.workerId,
+              message,
+              nextAttemptAt
+            );
+
+            this.logger.warn(
+              {
+                outboxEventId: event.id,
+                eventType: event.eventType,
+                attempts: newAttemptCount,
+                maxAttempts: this.config.maxAttempts,
+                nextAttemptAt: nextAttemptAt.toISOString(),
+                workerId: this.workerId,
+                error: message,
+              },
+              'Failed to publish outbox event'
+            );
+          }
         }
       }
     } finally {
@@ -179,6 +223,8 @@ export class SessionOutboxWorker {
   private computeRetryDelayMs(nextAttemptNumber: number): number {
     const exponent = Math.max(0, nextAttemptNumber - 1);
     const delay = this.config.retryBaseDelayMs * 2 ** exponent;
-    return Math.min(delay, this.config.retryMaxDelayMs);
+    const capped = Math.min(delay, this.config.retryMaxDelayMs);
+    const jitter = 0.5 + Math.random() * 0.5;
+    return Math.round(capped * jitter);
   }
 }

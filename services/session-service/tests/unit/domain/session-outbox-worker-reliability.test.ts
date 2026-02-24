@@ -201,6 +201,27 @@ class InMemoryOutboxRepository implements IOutboxRepository {
     await this.markFailed(id, errorMessage, undefined, nextAttemptAt);
   }
 
+  async markDeadLettered(
+    id: IOutboxEventRecord['id'],
+    claimOwner: string,
+    errorMessage: string,
+  ): Promise<void> {
+    const event = this.events.get(id);
+    if (!event || event.claimOwner !== claimOwner) {
+      throw new Error('Invalid claim owner');
+    }
+
+    this.events.set(id, {
+      ...event,
+      attempts: event.attempts + 1,
+      lastError: `DEAD_LETTERED: ${errorMessage}`,
+      nextAttemptAt: null,
+      claimOwner: null,
+      claimUntil: null,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   getById(id: string): IOutboxEventRecord | undefined {
     const event = this.events.get(id);
     return event ? { ...event } : undefined;
@@ -313,6 +334,7 @@ describe('SessionOutboxWorker reliability hardening', () => {
       markPublishedClaimed: vi.fn(async () => undefined),
       markFailed: vi.fn(async () => undefined),
       markFailedClaimed: vi.fn(async () => undefined),
+      markDeadLettered: vi.fn(async () => undefined),
     } as unknown as IOutboxRepository;
 
     const publisher = {
@@ -348,7 +370,8 @@ describe('SessionOutboxWorker reliability hardening', () => {
     expect(markFailedCall[2]).toContain('broker unavailable');
 
     const nextAttemptAt = markFailedCall[3] as Date;
-    expect(nextAttemptAt.getTime()).toBeGreaterThanOrEqual(beforeStart + 90);
+    // With jitter (0.5–1.0×), delay for attempt 2 with base=50 cap=100 is 50–100ms
+    expect(nextAttemptAt.getTime()).toBeGreaterThanOrEqual(beforeStart + 40);
     expect(nextAttemptAt.getTime()).toBeLessThanOrEqual(Date.now() + 200);
   });
 
@@ -365,6 +388,7 @@ describe('SessionOutboxWorker reliability hardening', () => {
       markPublishedClaimed: vi.fn(async () => undefined),
       markFailed: vi.fn(async () => undefined),
       markFailedClaimed: vi.fn(async () => undefined),
+      markDeadLettered: vi.fn(async () => undefined),
     } as unknown as IOutboxRepository;
 
     const publisher = {
@@ -397,5 +421,131 @@ describe('SessionOutboxWorker reliability hardening', () => {
     expect((repository.releaseClaims as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe(
       'drain-worker'
     );
+  });
+
+  it('dead-letters event after exhausting all retry attempts', async () => {
+    // Event with attempts = 4 (one more failure → 5 = maxAttempts)
+    const event = createOutboxEventRecord({ attempts: 4 });
+
+    const repository = {
+      enqueue: vi.fn(),
+      enqueueBatch: vi.fn(),
+      listPending: vi.fn(async () => []),
+      claimPending: vi.fn(async () => [event]),
+      releaseClaims: vi.fn(async () => 0),
+      markPublished: vi.fn(async () => undefined),
+      markPublishedClaimed: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      markFailedClaimed: vi.fn(async () => undefined),
+      markDeadLettered: vi.fn(async () => undefined),
+    } as unknown as IOutboxRepository;
+
+    const publisher = {
+      publish: vi.fn(async () => {
+        throw new Error('permanent failure');
+      }),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const logger = createLoggerMock();
+
+    const worker = new SessionOutboxWorker(repository, publisher, logger, {
+      workerId: 'dead-letter-worker',
+      pollIntervalMs: 10_000,
+      batchSize: 1,
+      leaseMs: 100,
+      maxAttempts: 5,
+      retryBaseDelayMs: 50,
+      retryMaxDelayMs: 100,
+      drainTimeoutMs: 50,
+    });
+
+    await worker.start();
+    await sleep(20);
+    await worker.stop();
+
+    // Should call markDeadLettered instead of markFailedClaimed
+    expect(
+      (repository.markDeadLettered as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+    const deadLetterCall = (repository.markDeadLettered as unknown as ReturnType<typeof vi.fn>)
+      .mock.calls[0];
+    expect(deadLetterCall[0]).toBe(event.id);
+    expect(deadLetterCall[1]).toBe('dead-letter-worker');
+    expect(deadLetterCall[2]).toContain('permanent failure');
+
+    // Should NOT have called markFailedClaimed
+    expect(
+      (repository.markFailedClaimed as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
+
+    // Should log at error level, not warn
+    expect((logger.error as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
+    const errorLog = (logger.error as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(errorLog[1]).toContain('dead-lettered');
+  });
+
+  it('falls back to unclaimed markPublished when claim is lost during drain', async () => {
+    const event = createOutboxEventRecord();
+
+    let publishResolve: (() => void) | null = null;
+    const publishPromise = new Promise<void>((resolve) => {
+      publishResolve = resolve;
+    });
+
+    const repository = {
+      enqueue: vi.fn(),
+      enqueueBatch: vi.fn(),
+      listPending: vi.fn(async () => []),
+      claimPending: vi.fn(async () => [event]),
+      releaseClaims: vi.fn(async () => 1),
+      markPublished: vi.fn(async () => undefined),
+      markPublishedClaimed: vi.fn(async () => {
+        throw new Error('Invalid claim owner');
+      }),
+      markFailed: vi.fn(async () => undefined),
+      markFailedClaimed: vi.fn(async () => undefined),
+      markDeadLettered: vi.fn(async () => undefined),
+    } as unknown as IOutboxRepository;
+
+    // Publish will succeed but only after we trigger it
+    const publisher = {
+      publish: vi.fn(async () => {
+        // Wait briefly to let stop() run and release claims
+        await publishPromise;
+      }),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const logger = createLoggerMock();
+
+    const worker = new SessionOutboxWorker(repository, publisher, logger, {
+      workerId: 'drain-fallback-worker',
+      pollIntervalMs: 10_000,
+      batchSize: 1,
+      leaseMs: 100,
+      maxAttempts: 5,
+      retryBaseDelayMs: 1,
+      retryMaxDelayMs: 10,
+      drainTimeoutMs: 10,
+    });
+
+    await worker.start();
+    await sleep(10);
+
+    // Start stopping (sets running = false)
+    const stopPromise = worker.stop();
+    // Now resolve the publish — the worker is no longer 'running'
+    publishResolve!();
+
+    await stopPromise;
+
+    // markPublishedClaimed threw, but markPublished should have been called as fallback
+    expect(
+      (repository.markPublished as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+    expect(
+      (repository.markPublished as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    ).toBe(event.id);
   });
 });

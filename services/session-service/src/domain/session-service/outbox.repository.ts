@@ -61,4 +61,9 @@ export interface IOutboxRepository {
     errorMessage: string,
     nextAttemptAt: Date,
   ): Promise<void>;
+  markDeadLettered(
+    id: EventId,
+    claimOwner: string,
+    errorMessage: string,
+  ): Promise<void>;
 }
