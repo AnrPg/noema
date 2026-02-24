@@ -69,6 +69,7 @@ import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
   AttemptNotFoundError,
   AuthorizationError,
+  BusinessRuleError,
   InvalidSessionStateError,
   OutboxDispatchError,
   QueueError,
@@ -130,6 +131,9 @@ export interface ISessionServiceSecurityConfig {
 
 export interface ISessionServiceOptions {
   security: ISessionServiceSecurityConfig;
+  session: {
+    maxConcurrentSessions: number;
+  };
 }
 
 // ============================================================================
@@ -214,6 +218,9 @@ export class SessionService {
         offlineIntentTokenKeys: options?.security?.offlineIntentTokenKeys ?? {},
         offlineIntentTokenIssuer: options?.security?.offlineIntentTokenIssuer ?? 'noema.session',
         offlineIntentTokenAudience: options?.security?.offlineIntentTokenAudience ?? 'noema.mobile',
+      },
+      session: {
+        maxConcurrentSessions: Math.max(1, options?.session?.maxConcurrentSessions ?? 1),
       },
     };
     this.activeTokenKeyId = this.options.security.offlineIntentTokenActiveKeyId;
@@ -302,6 +309,22 @@ export class SessionService {
       reason: null,
     }));
     const session = await this.runInTransaction(async (tx) => {
+      const activeSessionCount = await this.repository.countSessionsByUser(
+        ctx.userId,
+        States.ACTIVE,
+        tx
+      );
+
+      if (activeSessionCount >= this.options.session.maxConcurrentSessions) {
+        throw new BusinessRuleError(
+          `User already has ${String(activeSessionCount)} active session(s); max concurrent sessions is ${String(this.options.session.maxConcurrentSessions)}`,
+          {
+            activeSessionCount,
+            maxConcurrentSessions: this.options.session.maxConcurrentSessions,
+          }
+        );
+      }
+
       const createdSession = await this.repository.createSession(sessionInput, tx);
       await this.repository.createQueueItemsBatch(queueItems, tx);
       await this.publishThroughOutbox(
@@ -772,7 +795,7 @@ export class SessionService {
     sessionId: string,
     ctx: IExecutionContext
   ): Promise<IServiceResult<ISession>> {
-    const session = await this.repository.getSessionById(sessionId as SessionId);
+    const session = await this.getAuthorizedSession(sessionId, ctx);
     this.assertActiveOrPaused(session, 'expire');
 
     const updated = await this.runInTransaction(async (tx) => {

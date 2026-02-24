@@ -239,12 +239,16 @@ export class PrismaSessionRepository implements ISessionRepository {
     return row ? toSessionDomain(row) : null;
   }
 
-  async countSessionsByUser(userId: UserId, state?: SessionState): Promise<number> {
+  async countSessionsByUser(
+    userId: UserId,
+    state?: SessionState,
+    tx?: Prisma.TransactionClient
+  ): Promise<number> {
     const where: Record<string, unknown> = { userId };
     if (state) {
       where['state'] = toPrismaSessionState(state);
     }
-    return this.prisma.session.count({ where });
+    return this.db(tx).session.count({ where });
   }
 
   // ---------- Session write ----------

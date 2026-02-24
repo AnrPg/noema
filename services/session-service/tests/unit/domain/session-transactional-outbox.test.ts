@@ -65,6 +65,7 @@ describe('SessionService transactional outbox guarantees', () => {
     } as unknown as PrismaClient;
 
     const repository = {
+      countSessionsByUser: vi.fn(async () => 0),
       createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
         ...sessionInput,
         createdAt: new Date().toISOString(),

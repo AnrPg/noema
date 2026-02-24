@@ -46,6 +46,19 @@ async function bootstrap(): Promise<void> {
     'Starting service'
   );
 
+  const authDisabled = process.env['AUTH_DISABLED'] === 'true';
+  const jwtSecret = process.env['JWT_SECRET'] || process.env['ACCESS_TOKEN_SECRET'] || '';
+  const isDevLikeEnvironment =
+    config.service.environment === 'development' || config.service.environment === 'test';
+
+  if (authDisabled && !isDevLikeEnvironment) {
+    throw new Error('AUTH_DISABLED=true is only allowed in development or test environments');
+  }
+
+  if (!authDisabled && jwtSecret.trim().length === 0) {
+    throw new Error('JWT_SECRET or ACCESS_TOKEN_SECRET is required when authentication is enabled');
+  }
+
   // Initialize Prisma
   const prisma = new PrismaClient({
     log:
@@ -85,6 +98,9 @@ async function bootstrap(): Promise<void> {
         offlineIntentTokenIssuer: config.security.offlineIntentTokenIssuer,
         offlineIntentTokenAudience: config.security.offlineIntentTokenAudience,
       },
+      session: {
+        maxConcurrentSessions: config.session.maxConcurrentSessions,
+      },
     }
   );
 
@@ -108,7 +124,6 @@ async function bootstrap(): Promise<void> {
   });
 
   // Create auth middleware
-  const jwtSecret = process.env['JWT_SECRET'] || process.env['ACCESS_TOKEN_SECRET'] || '';
   const authMiddleware = createAuthMiddleware({
     jwtSecret,
     issuer: process.env['JWT_ISSUER'] || 'noema.app',

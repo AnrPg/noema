@@ -41,7 +41,11 @@ export interface ISessionRepository {
   findActiveSessionForUser(userId: UserId): Promise<ISession | null>;
 
   /** Count sessions for a user, optionally filtered by state. */
-  countSessionsByUser(userId: UserId, state?: SessionState): Promise<number>;
+  countSessionsByUser(
+    userId: UserId,
+    state?: SessionState,
+    tx?: Prisma.TransactionClient
+  ): Promise<number>;
 
   // ---------- Session write ----------
 
@@ -134,7 +138,11 @@ export interface ISessionRepository {
   ): Promise<ISessionQueueItem>;
 
   /** Remove a queue item by session and card. */
-  removeQueueItem(sessionId: SessionId, cardId: CardId, tx?: Prisma.TransactionClient): Promise<void>;
+  removeQueueItem(
+    sessionId: SessionId,
+    cardId: CardId,
+    tx?: Prisma.TransactionClient
+  ): Promise<void>;
 
   /** Mark a queue item as presented (status transition). */
   markQueueItemPresented(
