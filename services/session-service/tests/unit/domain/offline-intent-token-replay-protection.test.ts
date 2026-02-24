@@ -163,6 +163,7 @@ function createService(prismaOverride?: PrismaClient): SessionService {
     markPublishedClaimed: vi.fn(async () => undefined),
     markFailed: vi.fn(async () => undefined),
     markFailedClaimed: vi.fn(async () => undefined),
+    markDeadLettered: vi.fn(async () => undefined),
   } as unknown as IOutboxRepository;
 
   const eventPublisher = {
@@ -275,5 +276,39 @@ describe('Offline intent token replay protection', () => {
     } finally {
       randomUuidSpy.mockRestore();
     }
+  });
+
+  it('yields exactly one success when two consumers race on the same token', async () => {
+    const service = createService();
+    const ctx = {
+      userId: 'user_aaaaaaaaaaaaaaaaaaaaa' as never,
+      correlationId: 'cor_aaaaaaaaaaaaaaaaaaaaa' as never,
+    };
+
+    const issued = await service.issueOfflineIntentToken(
+      {
+        userId: ctx.userId,
+        sessionBlueprint: { checkpointSignals: ['confidence_drift'] },
+        expiresInSeconds: 300,
+      },
+      ctx
+    );
+
+    // Fire two simultaneous verification attempts
+    const [resultA, resultB] = await Promise.all([
+      service.verifyOfflineIntentTokenPublic({ token: issued.data.token }, ctx),
+      service.verifyOfflineIntentTokenPublic({ token: issued.data.token }, ctx),
+    ]);
+
+    const outcomes = [resultA.data.valid, resultB.data.valid];
+    const successCount = outcomes.filter(Boolean).length;
+    const failureCount = outcomes.filter((v) => !v).length;
+
+    expect(successCount).toBe(1);
+    expect(failureCount).toBe(1);
+
+    // The failed one should report replay
+    const failed = resultA.data.valid ? resultB : resultA;
+    expect(failed.data.reason).toBe('Offline intent token replay detected');
   });
 });

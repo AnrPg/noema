@@ -758,9 +758,7 @@ export class SessionService {
         );
       }
 
-      if (
-        current.status !== CohortHandshakeStatuses.ACCEPTED
-      ) {
+      if (current.status !== CohortHandshakeStatuses.ACCEPTED) {
         throw new BusinessRuleError(
           `Cannot revise cohort from status ${current.status}; expected accepted`
         );
@@ -2127,51 +2125,57 @@ export class SessionService {
     let token: string | null = null;
 
     await this.runInTransaction(async (tx) => {
+      // Register JTI first, then sign JWT once — avoids crypto work on retry
+      let registeredNonce: string | null = null;
+
       for (
         let attempt = 1;
         attempt <= OFFLINE_INTENT_TOKEN_REPLAY_GUARD_INSERT_RETRIES;
         attempt += 1
       ) {
-        const candidateClaims: IOfflineIntentTokenClaims = {
-          tokenVersion: 'v1',
-          userId: data.userId as UserId,
-          sessionBlueprint: data.sessionBlueprint as IOfflineIntentTokenClaims['sessionBlueprint'],
-          issuedAt: now.toISOString(),
-          expiresAt: expiresAt.toISOString(),
-          nonce: crypto.randomUUID(),
-        };
-
-        const candidateToken = await new SignJWT(
-          candidateClaims as unknown as Record<string, unknown>
-        )
-          .setProtectedHeader({ alg: 'HS256', typ: 'JWT', kid: this.activeTokenKeyId })
-          .setIssuedAt(Math.floor(now.getTime() / 1000))
-          .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
-          .setSubject(data.userId)
-          .setIssuer(this.options.security.offlineIntentTokenIssuer)
-          .setAudience(this.options.security.offlineIntentTokenAudience)
-          .setJti(candidateClaims.nonce)
-          .sign(activeSecret);
+        const candidateNonce = crypto.randomUUID();
 
         const inserted = await this.registerOfflineIntentTokenReplayGuard(tx, {
-          jti: candidateClaims.nonce,
+          jti: candidateNonce,
           userId: data.userId as UserId,
           issuedAt: now,
           expiresAt,
         });
 
         if (inserted) {
-          claims = candidateClaims;
-          token = candidateToken;
+          registeredNonce = candidateNonce;
           break;
         }
       }
 
-      if (claims === null || token === null) {
+      if (registeredNonce === null) {
         throw new ValidationError('Failed to issue offline intent token', {
           offlineIntentToken: ['Unable to allocate unique token nonce'],
         });
       }
+
+      const registeredClaims: IOfflineIntentTokenClaims = {
+        tokenVersion: 'v1',
+        userId: data.userId as UserId,
+        sessionBlueprint: data.sessionBlueprint as IOfflineIntentTokenClaims['sessionBlueprint'],
+        issuedAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        nonce: registeredNonce,
+      };
+
+      token = await new SignJWT(
+        registeredClaims as unknown as Record<string, unknown>
+      )
+        .setProtectedHeader({ alg: 'HS256', typ: 'JWT', kid: this.activeTokenKeyId })
+        .setIssuedAt(Math.floor(now.getTime() / 1000))
+        .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+        .setSubject(data.userId)
+        .setIssuer(this.options.security.offlineIntentTokenIssuer)
+        .setAudience(this.options.security.offlineIntentTokenAudience)
+        .setJti(registeredNonce)
+        .sign(activeSecret);
+
+      claims = registeredClaims;
 
       await this.publishThroughOutbox(
         {
@@ -2443,7 +2447,9 @@ export class SessionService {
       ON CONFLICT (jti) DO NOTHING
     `;
 
-    await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, input.issuedAt);
+    if (inserted === 1) {
+      await this.maybeCleanupExpiredReplayGuards(tx, input.issuedAt);
+    }
     return inserted === 1;
   }
 
@@ -2461,7 +2467,7 @@ export class SessionService {
     const execute = async (tx: Prisma.TransactionClient) => {
       const now = new Date();
 
-      await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, now);
+      await this.maybeCleanupExpiredReplayGuards(tx, now);
 
       const consumed = await tx.$executeRaw`
         UPDATE offline_intent_token_replay_guard
@@ -2517,6 +2523,20 @@ export class SessionService {
       return execute(outerTx);
     }
     return this.prisma.$transaction(async (tx) => execute(tx));
+  }
+
+  /**
+   * Probabilistic gate: run cleanup ~10% of the time to avoid
+   * two UPDATE/DELETE statements on every single token operation.
+   */
+  private async maybeCleanupExpiredReplayGuards(
+    tx: Prisma.TransactionClient,
+    now: Date
+  ): Promise<void> {
+    if (Math.random() >= 0.1) {
+      return;
+    }
+    await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, now);
   }
 
   private async cleanupExpiredOfflineIntentTokenReplayGuards(
