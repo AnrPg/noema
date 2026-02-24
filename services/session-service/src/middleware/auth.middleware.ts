@@ -28,11 +28,23 @@ export interface IAuthConfig {
  * For development, tokens can be skipped with AUTH_DISABLED=true.
  */
 export function createAuthMiddleware(config: IAuthConfig) {
+  const authDisabled = process.env['AUTH_DISABLED'] === 'true';
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const isDevLikeEnvironment = nodeEnv === 'development' || nodeEnv === 'test';
+
+  if (authDisabled && !isDevLikeEnvironment) {
+    throw new Error('AUTH_DISABLED=true is only allowed in development or test environments');
+  }
+
+  if (!authDisabled && config.jwtSecret.trim().length === 0) {
+    throw new Error('JWT secret is required when authentication is enabled');
+  }
+
   const secret = new TextEncoder().encode(config.jwtSecret);
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // Skip auth if disabled (development only)
-    if (process.env['AUTH_DISABLED'] === 'true') {
+    if (authDisabled) {
       request.user = {
         sub: (request.headers['x-user-id'] as string) || 'dev-user',
         roles: ['user'],

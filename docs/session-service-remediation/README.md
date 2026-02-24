@@ -35,6 +35,9 @@ This plan aligns with:
 - Keep backward compatibility where feasible; if not feasible, provide migration
   notes.
 - Never skip tests for touched behavior.
+- `AUTH_DISABLED=true` is allowed only in development/test workflows.
+- Production-like deployments must provide `JWT_SECRET` or
+  `ACCESS_TOKEN_SECRET`.
 
 ## Phase Files
 

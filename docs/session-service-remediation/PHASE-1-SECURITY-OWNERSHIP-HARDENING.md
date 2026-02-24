@@ -47,7 +47,18 @@ weak startup auth configuration. This is a P0 safety issue.
 
 3. **Auth bootstrap hardening**
    - If `AUTH_DISABLED` is not `true`, require non-empty signing key material.
+   - Allow `AUTH_DISABLED=true` only in `development` or `test`.
    - Fail service startup with clear error message when misconfigured.
+
+## Operational Notes
+
+- `AUTH_DISABLED=true` is intended for local/test workflows only and must not be
+  used in production-like environments.
+- In production-like environments, set either `JWT_SECRET` or
+  `ACCESS_TOKEN_SECRET`.
+- Recommended deployment policy:
+  - `NODE_ENV=production` + `AUTH_DISABLED=false` + non-empty signing secret
+  - health checks should fail fast if auth preflight fails
 
 4. **Error semantics**
    - Preserve current domain error classes and HTTP status conventions.
