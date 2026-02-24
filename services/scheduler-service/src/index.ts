@@ -1,5 +1,5 @@
 import cors from '@fastify/cors';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
@@ -18,6 +18,7 @@ import {
   PrismaSchedulerCardRepository,
 } from './infrastructure/database/index.js';
 import { SchedulerEventConsumer } from './infrastructure/events/index.js';
+import { schedulerObservability } from './infrastructure/observability/scheduler-observability.js';
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -111,6 +112,31 @@ async function bootstrap(): Promise<void> {
     genReqId: () => `cor_${Date.now().toString(36)}`,
   });
 
+  fastify.addHook('onRequest', (request, _reply, done) => {
+    (request as FastifyRequest & { startTime?: number }).startTime = Date.now();
+    const span = schedulerObservability.startSpan('route.request', {
+      traceId: request.id,
+      correlationId: request.id,
+      component: 'route',
+    });
+    (
+      request as FastifyRequest & { __routeSpan?: { end: (success?: boolean) => number } }
+    ).__routeSpan = span;
+    done();
+  });
+
+  fastify.addHook('onResponse', (request, reply, done) => {
+    const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
+    const durationMs = Date.now() - startTime;
+    schedulerObservability.recordRequestLatency(durationMs);
+
+    const routeSpan = (
+      request as FastifyRequest & { __routeSpan?: { end: (success?: boolean) => number } }
+    ).__routeSpan;
+    routeSpan?.end(reply.statusCode < 500);
+    done();
+  });
+
   await fastify.register(cors, {
     origin: config.cors.origin,
     credentials: config.cors.credentials,
@@ -130,7 +156,11 @@ async function bootstrap(): Promise<void> {
     },
   });
 
-  registerHealthRoutes(fastify as unknown as FastifyInstance, redis, prisma);
+  registerHealthRoutes(fastify as unknown as FastifyInstance, redis, prisma, {
+    sourceStreamKey: config.redis.sourceStreamKey,
+    consumerGroup: config.redis.consumerGroup,
+    deadLetterStreamKey: config.redis.deadLetterStreamKey,
+  });
   registerSchedulerRoutes(fastify as unknown as FastifyInstance, schedulerService, authMiddleware);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 

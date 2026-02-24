@@ -1,6 +1,7 @@
 import type { CorrelationId, UserId } from '@noema/types';
 import type { SchedulerService } from '../../domain/scheduler-service/scheduler.service.js';
 import { buildExecutionContext } from '../../domain/scheduler-service/scheduler.service.js';
+import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';
 import type { IExecutionContext } from '../../types/scheduler.types.js';
 import type { IToolDefinition, IToolResult, ToolHandler } from './tool.types.js';
 
@@ -34,115 +35,194 @@ function errorResult(error: unknown): IToolResult {
   };
 }
 
+async function executeObserved(
+  spanName: string,
+  traceId: string,
+  operation: () => Promise<IToolResult>,
+  throughput?: 'proposal' | 'commit'
+): Promise<IToolResult> {
+  const span = schedulerObservability.startSpan(spanName, {
+    traceId,
+    correlationId: traceId,
+    component: 'domain',
+  });
+
+  let success = false;
+  try {
+    const result = await operation();
+    success = result.success;
+
+    if (result.success && throughput === 'proposal') {
+      schedulerObservability.recordProposalThroughput(1);
+    }
+
+    if (result.success && throughput === 'commit') {
+      schedulerObservability.recordCommitThroughput(1);
+    }
+
+    return result;
+  } finally {
+    span.end(success);
+  }
+}
+
 // ============================================================================
 // Tool Handlers
 // ============================================================================
 
 export function createPlanDualLaneHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.planDualLaneQueue(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(`domain.scheduler.planDualLaneQueue`, correlationId, async () => {
+      try {
+        const ctx = toContext(userId, correlationId);
+        const result = await service.planDualLaneQueue(input, ctx);
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
   };
 }
 
 export function createGetSRSScheduleHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.getReviewQueue(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(`domain.scheduler.getReviewQueue`, correlationId, async () => {
+      try {
+        const ctx = toContext(userId, correlationId);
+        const result = await service.getReviewQueue(input, ctx);
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
   };
 }
 
 export function createPredictRetentionHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.predictRetention(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(`domain.scheduler.predictRetention`, correlationId, async () => {
+      try {
+        const ctx = toContext(userId, correlationId);
+        const result = await service.predictRetention(input, ctx);
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
   };
 }
 
 export function createProposeReviewWindowsHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.proposeReviewWindows(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(
+      `domain.scheduler.proposeReviewWindows`,
+      correlationId,
+      async () => {
+        try {
+          const ctx = toContext(userId, correlationId);
+          const result = await service.proposeReviewWindows(input, ctx);
+          return { success: true, data: result.data, agentHints: result.agentHints };
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+      'proposal'
+    );
   };
 }
 
 export function createProposeSessionCandidatesHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.proposeSessionCandidates(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(
+      `domain.scheduler.proposeSessionCandidates`,
+      correlationId,
+      async () => {
+        try {
+          const ctx = toContext(userId, correlationId);
+          const result = await service.proposeSessionCandidates(input, ctx);
+          return { success: true, data: result.data, agentHints: result.agentHints };
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+      'proposal'
+    );
   };
 }
 
 export function createReconcileSessionCandidatesHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.simulateSessionCandidates(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(
+      `domain.scheduler.simulateSessionCandidates`,
+      correlationId,
+      async () => {
+        try {
+          const ctx = toContext(userId, correlationId);
+          const result = await service.simulateSessionCandidates(input, ctx);
+          return { success: true, data: result.data, agentHints: result.agentHints };
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+      'proposal'
+    );
   };
 }
 
 export function createApplySessionAdjustmentsHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.applySessionAdjustments(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(
+      `domain.scheduler.applySessionAdjustments`,
+      correlationId,
+      async () => {
+        try {
+          const ctx = toContext(userId, correlationId);
+          const result = await service.applySessionAdjustments(input, ctx);
+          return { success: true, data: result.data, agentHints: result.agentHints };
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+      'commit'
+    );
   };
 }
 
 export function createUpdateCardSchedulingHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.commitCardSchedule(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(
+      `domain.scheduler.commitCardSchedule`,
+      correlationId,
+      async () => {
+        try {
+          const ctx = toContext(userId, correlationId);
+          const result = await service.commitCardSchedule(input, ctx);
+          return { success: true, data: result.data, agentHints: result.agentHints };
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+      'commit'
+    );
   };
 }
 
 export function createBatchUpdateCardSchedulingHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const ctx = toContext(userId, correlationId);
-      const result = await service.commitCardScheduleBatch(input, ctx);
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
+    return executeObserved(
+      `domain.scheduler.commitCardScheduleBatch`,
+      correlationId,
+      async () => {
+        try {
+          const ctx = toContext(userId, correlationId);
+          const result = await service.commitCardScheduleBatch(input, ctx);
+          return { success: true, data: result.data, agentHints: result.agentHints };
+        } catch (error) {
+          return errorResult(error);
+        }
+      },
+      'commit'
+    );
   };
 }
 

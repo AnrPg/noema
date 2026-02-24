@@ -17,15 +17,15 @@ Expose operational state that agents can consume and operators can act on.
 
 ## Tasks
 
-- [ ] Define and emit core scheduler metrics:
+- [x] Define and emit core scheduler metrics:
   - request latency (p50/p95/p99)
   - error rates by category and code
   - queue lag and DLQ depth
   - proposal/commit throughput
   - recompute latency
-- [ ] Add trace propagation and span naming convention.
-- [ ] Add backpressure signal computation and API exposure.
-- [ ] Add operational guide in `docs/guides/operations/`:
+- [x] Add trace propagation and span naming convention.
+- [x] Add backpressure signal computation and API exposure.
+- [x] Add operational guide in `docs/guides/operations/`:
   - DLQ triage flow
   - replay safety checklist
   - queue-lag response playbook
@@ -38,6 +38,6 @@ Expose operational state that agents can consume and operators can act on.
 
 ## Exit Criteria
 
-- [ ] Agents can query and react to scheduler health/backpressure signals.
-- [ ] Traces show end-to-end orchestration chains with linkage IDs.
-- [ ] Runbook is complete and actionable.
+- [x] Agents can query and react to scheduler health/backpressure signals.
+- [x] Traces show end-to-end orchestration chains with linkage IDs.
+- [x] Runbook is complete and actionable.

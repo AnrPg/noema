@@ -51,3 +51,35 @@ healthReady:
           application/json:
             schema:
               $ref: ../openapi.yaml#/components/schemas/HealthReadyResponse
+
+operationsState:
+  get:
+    operationId: getSchedulerOperationsState
+    summary: Scheduler operations state and backpressure signal
+    description: Returns machine-readable scheduler backpressure signal, SLI snapshot, and recent trace span summary.
+    x-noema-lifecycle: active
+    tags: [Health]
+    security: []
+    responses:
+      "200":
+        description: Operations state returned.
+        content:
+          application/json:
+            schema:
+              $ref: ../openapi.yaml#/components/schemas/SchedulerOperationsStateResponse
+
+metrics:
+  get:
+    operationId: getSchedulerMetrics
+    summary: Prometheus metrics export
+    description: Returns Prometheus-compatible metrics for scheduler SLIs and backpressure state.
+    x-noema-lifecycle: active
+    tags: [Health]
+    security: []
+    responses:
+      "200":
+        description: Prometheus metrics payload.
+        content:
+          text/plain:
+            schema:
+              type: string

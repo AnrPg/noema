@@ -37,6 +37,10 @@ paths:
     $ref: ./paths/health.yaml#/healthLive
   /health/ready:
     $ref: ./paths/health.yaml#/healthReady
+  /v1/scheduler/operations/state:
+    $ref: ./paths/health.yaml#/operationsState
+  /metrics:
+    $ref: ./paths/health.yaml#/metrics
 
   /v1/scheduler/dual-lane/plan:
     $ref: ./paths/scheduler.yaml#/planDualLaneCanonical
@@ -207,6 +211,8 @@ components:
       $ref: ./components/schemas/common.yaml#/HealthLiveResponse
     HealthReadyResponse:
       $ref: ./components/schemas/common.yaml#/HealthReadyResponse
+    SchedulerOperationsStateResponse:
+      $ref: ./components/schemas/common.yaml#/SchedulerOperationsStateResponse
 
   responses:
     BadRequest:

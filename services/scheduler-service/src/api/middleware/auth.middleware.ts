@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
+import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';
 
 declare module 'fastify' {
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -64,6 +65,7 @@ export async function sendErrorEnvelope(
     retryable: boolean;
   }
 ): Promise<void> {
+  schedulerObservability.recordError(options.category, options.code);
   await reply.status(options.statusCode).send({
     error: {
       code: options.code,

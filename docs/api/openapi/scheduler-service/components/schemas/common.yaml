@@ -305,3 +305,129 @@ HealthReadyResponse:
       type: string
       enum: [ready, not_ready]
   required: [status]
+
+LatencyPercentiles:
+  type: object
+  properties:
+    p50:
+      type: number
+      minimum: 0
+    p95:
+      type: number
+      minimum: 0
+    p99:
+      type: number
+      minimum: 0
+  required: [p50, p95, p99]
+
+ErrorRateEntry:
+  type: object
+  properties:
+    category:
+      type: string
+      enum: [auth, validation, conflict, dependency, internal]
+    code:
+      type: string
+      minLength: 1
+    count:
+      type: integer
+      minimum: 0
+    rate:
+      type: number
+      minimum: 0
+  required: [category, code, count, rate]
+
+ProposalCommitThroughput:
+  type: object
+  properties:
+    proposals:
+      type: integer
+      minimum: 0
+    commits:
+      type: integer
+      minimum: 0
+  required: [proposals, commits]
+
+SchedulerSliSnapshot:
+  type: object
+  properties:
+    requestLatencyMs:
+      $ref: "#/LatencyPercentiles"
+    errorRatesByCategoryCode:
+      type: array
+      items:
+        $ref: "#/ErrorRateEntry"
+    queueLag:
+      type: integer
+      minimum: 0
+    dlqDepth:
+      type: integer
+      minimum: 0
+    proposalCommitThroughput:
+      $ref: "#/ProposalCommitThroughput"
+    recomputeLatencyMs:
+      $ref: "#/LatencyPercentiles"
+  required:
+    - requestLatencyMs
+    - errorRatesByCategoryCode
+    - queueLag
+    - dlqDepth
+    - proposalCommitThroughput
+    - recomputeLatencyMs
+
+TraceSpanSummaryEntry:
+  type: object
+  properties:
+    name:
+      type: string
+    traceId:
+      type: string
+    correlationId:
+      type: string
+      nullable: true
+    component:
+      type: string
+      nullable: true
+    durationMs:
+      type: number
+      minimum: 0
+    success:
+      type: boolean
+    timestamp:
+      type: string
+      format: date-time
+  required: [name, traceId, durationMs, success, timestamp]
+
+TraceSummary:
+  type: object
+  properties:
+    spanCount:
+      type: integer
+      minimum: 0
+    recentSpans:
+      type: array
+      items:
+        $ref: "#/TraceSpanSummaryEntry"
+  required: [spanCount, recentSpans]
+
+SchedulerOperationsStateData:
+  type: object
+  properties:
+    backpressure:
+      $ref: "#/BackpressureSignal"
+    sli:
+      $ref: "#/SchedulerSliSnapshot"
+    traces:
+      $ref: "#/TraceSummary"
+  required: [backpressure, sli, traces]
+
+SchedulerOperationsStateResponse:
+  type: object
+  properties:
+    data:
+      $ref: "#/SchedulerOperationsStateData"
+    agentHints:
+      $ref: "#/AgentHints"
+    metadata:
+      $ref: "#/ApiResponseMetadata"
+  required: [data, agentHints, metadata]

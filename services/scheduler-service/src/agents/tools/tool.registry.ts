@@ -1,4 +1,5 @@
 import type { SchedulerService } from '../../domain/scheduler-service/scheduler.service.js';
+import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';
 import {
   createApplySessionAdjustmentsHandler,
   createBatchUpdateCardSchedulingHandler,
@@ -139,153 +140,168 @@ export class ToolRegistry {
     userId: string,
     correlationId: string
   ): Promise<IToolResult> {
-    const tool = this.tools.get(name);
-    if (!tool) {
-      const metadata: IToolResultMetadataExtended = {
-        toolVersion: '0.1.0',
-        timestamp: new Date().toISOString(),
-        executionTime: 0,
-        serviceVersion: '0.1.0',
-        correlationId,
-        resultCode: 'TOOL_NOT_FOUND',
-        retryClass: 'permanent',
-        failureDomain: 'validation',
-      };
-
-      return {
-        success: false,
-        error: { code: 'TOOL_NOT_FOUND', message: `Unknown tool: ${name}` },
-        agentHints: {
-          suggestedNextActions: [],
-          relatedResources: [],
-          confidence: 1,
-          sourceQuality: 'high',
-          validityPeriod: 'long',
-          contextNeeded: [],
-          assumptions: [],
-          riskFactors: [],
-          dependencies: [],
-          estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
-          preferenceAlignment: [],
-          reasoning: 'Unknown tool',
-        },
-        metadata: metadata as IToolResultMetadata,
-      };
-    }
-
-    const validationErrors = validateInputAgainstSchema(input, tool.definition.inputSchema);
-    if (validationErrors.length > 0) {
-      const metadata: IToolResultMetadataExtended = {
-        toolVersion: '0.1.0',
-        timestamp: new Date().toISOString(),
-        executionTime: 0,
-        serviceVersion: '0.1.0',
-        correlationId,
-        resultCode: 'TOOL_INPUT_VALIDATION_FAILED',
-        retryClass: 'permanent',
-        failureDomain: 'validation',
-      };
-
-      return {
-        success: false,
-        error: {
-          code: 'TOOL_INPUT_VALIDATION_FAILED',
-          message: validationErrors.join('; '),
-        },
-        agentHints: {
-          suggestedNextActions: [],
-          relatedResources: [],
-          confidence: 1,
-          sourceQuality: 'high',
-          validityPeriod: 'long',
-          contextNeeded: [],
-          assumptions: [],
-          riskFactors: [],
-          dependencies: [],
-          estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
-          preferenceAlignment: [],
-          reasoning: 'Tool input does not match required schema',
-        },
-        metadata: metadata as IToolResultMetadata,
-      };
-    }
-
-    const started = Date.now();
-    let result: IToolResult;
-    let resultCode = 'SUCCESS';
-    let retryClass: 'transient' | 'permanent' | 'unknown' = 'unknown';
-    let failureDomain: 'network' | 'validation' | 'auth' | 'internal' | 'dependency' | undefined;
+    const span = schedulerObservability.startSpan('tool.registry.execute', {
+      traceId: correlationId,
+      correlationId,
+      component: 'tool',
+    });
+    let spanSuccess = false;
 
     try {
-      result = await tool.handler(input, userId, correlationId);
+      const tool = this.tools.get(name);
+      if (!tool) {
+        const metadata: IToolResultMetadataExtended = {
+          toolVersion: '0.1.0',
+          timestamp: new Date().toISOString(),
+          executionTime: 0,
+          serviceVersion: '0.1.0',
+          correlationId,
+          resultCode: 'TOOL_NOT_FOUND',
+          retryClass: 'permanent',
+          failureDomain: 'validation',
+        };
 
-      if (!result.success) {
-        // Categorize failure
-        const errorCode = result.error?.code ?? 'UNKNOWN_ERROR';
-        resultCode = errorCode;
-
-        // Determine retry class and failure domain based on error code
-        if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
-          retryClass = 'permanent';
-          failureDomain = 'validation';
-        } else if (
-          errorCode.includes('AUTH') ||
-          errorCode.includes('FORBIDDEN') ||
-          errorCode.includes('UNAUTHORIZED')
-        ) {
-          retryClass = 'permanent';
-          failureDomain = 'auth';
-        } else if (errorCode.includes('TIMEOUT') || errorCode.includes('UNAVAILABLE')) {
-          retryClass = 'transient';
-          failureDomain = 'network';
-        } else if (errorCode.includes('DEPENDENCY') || errorCode.includes('EXTERNAL')) {
-          retryClass = 'transient';
-          failureDomain = 'dependency';
-        } else {
-          retryClass = 'unknown';
-          failureDomain = 'internal';
-        }
+        return {
+          success: false,
+          error: { code: 'TOOL_NOT_FOUND', message: `Unknown tool: ${name}` },
+          agentHints: {
+            suggestedNextActions: [],
+            relatedResources: [],
+            confidence: 1,
+            sourceQuality: 'high',
+            validityPeriod: 'long',
+            contextNeeded: [],
+            assumptions: [],
+            riskFactors: [],
+            dependencies: [],
+            estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+            preferenceAlignment: [],
+            reasoning: 'Unknown tool',
+          },
+          metadata: metadata as IToolResultMetadata,
+        };
       }
-    } catch (error) {
-      // Handler threw an exception
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      resultCode = 'HANDLER_EXCEPTION';
-      retryClass = 'unknown';
-      failureDomain = 'internal';
 
-      result = {
-        success: false,
-        error: { code: 'HANDLER_EXCEPTION', message },
-        agentHints: {
-          suggestedNextActions: [],
-          relatedResources: [],
-          confidence: 0.5,
-          sourceQuality: 'low',
-          validityPeriod: 'short',
-          contextNeeded: [],
-          assumptions: [],
-          riskFactors: [],
-          dependencies: [],
-          estimatedImpact: { benefit: 0, effort: 0.2, roi: 0 },
-          preferenceAlignment: [],
-          reasoning: message,
-        },
+      const validationErrors = validateInputAgainstSchema(input, tool.definition.inputSchema);
+      if (validationErrors.length > 0) {
+        const metadata: IToolResultMetadataExtended = {
+          toolVersion: '0.1.0',
+          timestamp: new Date().toISOString(),
+          executionTime: 0,
+          serviceVersion: '0.1.0',
+          correlationId,
+          resultCode: 'TOOL_INPUT_VALIDATION_FAILED',
+          retryClass: 'permanent',
+          failureDomain: 'validation',
+        };
+
+        return {
+          success: false,
+          error: {
+            code: 'TOOL_INPUT_VALIDATION_FAILED',
+            message: validationErrors.join('; '),
+          },
+          agentHints: {
+            suggestedNextActions: [],
+            relatedResources: [],
+            confidence: 1,
+            sourceQuality: 'high',
+            validityPeriod: 'long',
+            contextNeeded: [],
+            assumptions: [],
+            riskFactors: [],
+            dependencies: [],
+            estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+            preferenceAlignment: [],
+            reasoning: 'Tool input does not match required schema',
+          },
+          metadata: metadata as IToolResultMetadata,
+        };
+      }
+
+      const started = Date.now();
+      let result: IToolResult;
+      let resultCode = 'SUCCESS';
+      let retryClass: 'transient' | 'permanent' | 'unknown' = 'unknown';
+      let failureDomain: 'network' | 'validation' | 'auth' | 'internal' | 'dependency' | undefined;
+
+      try {
+        result = await tool.handler(input, userId, correlationId);
+
+        if (!result.success) {
+          // Categorize failure
+          const errorCode = result.error?.code ?? 'UNKNOWN_ERROR';
+          resultCode = errorCode;
+
+          // Determine retry class and failure domain based on error code
+          if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
+            retryClass = 'permanent';
+            failureDomain = 'validation';
+          } else if (
+            errorCode.includes('AUTH') ||
+            errorCode.includes('FORBIDDEN') ||
+            errorCode.includes('UNAUTHORIZED')
+          ) {
+            retryClass = 'permanent';
+            failureDomain = 'auth';
+          } else if (errorCode.includes('TIMEOUT') || errorCode.includes('UNAVAILABLE')) {
+            retryClass = 'transient';
+            failureDomain = 'network';
+          } else if (errorCode.includes('DEPENDENCY') || errorCode.includes('EXTERNAL')) {
+            retryClass = 'transient';
+            failureDomain = 'dependency';
+          } else {
+            retryClass = 'unknown';
+            failureDomain = 'internal';
+          }
+        }
+      } catch (error) {
+        // Handler threw an exception
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        resultCode = 'HANDLER_EXCEPTION';
+        retryClass = 'unknown';
+        failureDomain = 'internal';
+
+        result = {
+          success: false,
+          error: { code: 'HANDLER_EXCEPTION', message },
+          agentHints: {
+            suggestedNextActions: [],
+            relatedResources: [],
+            confidence: 0.5,
+            sourceQuality: 'low',
+            validityPeriod: 'short',
+            contextNeeded: [],
+            assumptions: [],
+            riskFactors: [],
+            dependencies: [],
+            estimatedImpact: { benefit: 0, effort: 0.2, roi: 0 },
+            preferenceAlignment: [],
+            reasoning: message,
+          },
+        };
+      }
+
+      const metadata: IToolResultMetadataExtended = {
+        toolVersion: '0.1.0',
+        timestamp: new Date().toISOString(),
+        executionTime: Date.now() - started,
+        serviceVersion: '0.1.0',
+        correlationId,
+        resultCode,
+        retryClass,
+        ...(failureDomain !== undefined ? { failureDomain } : {}),
       };
+
+      result.metadata = metadata as IToolResultMetadata;
+      if (!result.success && result.error !== undefined) {
+        schedulerObservability.recordError('validation', result.error.code);
+      }
+      spanSuccess = result.success;
+      return result;
+    } finally {
+      span.end(spanSuccess);
     }
-
-    const metadata: IToolResultMetadataExtended = {
-      toolVersion: '0.1.0',
-      timestamp: new Date().toISOString(),
-      executionTime: Date.now() - started,
-      serviceVersion: '0.1.0',
-      correlationId,
-      resultCode,
-      retryClass,
-      ...(failureDomain !== undefined ? { failureDomain } : {}),
-    };
-
-    result.metadata = metadata as IToolResultMetadata;
-    return result;
   }
 
   listDefinitions(): IToolDefinition[] {

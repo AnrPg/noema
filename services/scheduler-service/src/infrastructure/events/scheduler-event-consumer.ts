@@ -1,6 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
 import type { CardId, CorrelationId, UserId } from '@noema/types';
 import type { Redis } from 'ioredis';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 
@@ -8,17 +8,16 @@ import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from '../../domain/scheduler-service/
 import { HLRModel, type Feature } from '../../domain/scheduler-service/algorithms/hlr.js';
 import type {
   HandshakeState,
-  IConsumerLinkage,
-  ISchedulerEventReliabilityRepository,
-} from '../../domain/scheduler-service/scheduler.repository.js';
-import type { IEventPublisher } from '../../domain/shared/event-publisher.js';
-import type {
   ICalibrationDataRepository,
+  IConsumerLinkage,
   IReviewRepository,
   ISchedulerCardRepository,
+  ISchedulerEventReliabilityRepository,
 } from '../../domain/scheduler-service/scheduler.repository.js';
 import { computeNextState } from '../../domain/scheduler-service/state-machine.js';
+import type { IEventPublisher } from '../../domain/shared/event-publisher.js';
 import type { Rating, SchedulerLane } from '../../types/scheduler.types.js';
+import { schedulerObservability } from '../observability/scheduler-observability.js';
 
 interface IStreamEventEnvelope {
   eventType: string;
@@ -311,9 +310,17 @@ export class SchedulerEventConsumer {
   }
 
   private async handleStreamMessage(messageId: string, fields: string[]): Promise<void> {
+    const span = schedulerObservability.startSpan('event.consumer.handleStreamMessage', {
+      traceId: messageId,
+      correlationId: messageId,
+      component: 'event',
+    });
+    let spanSuccess = false;
+
     const eventJson = this.getFieldValue(fields, 'event');
     if (eventJson === null) {
       await this.acknowledge(messageId);
+      span.end(true);
       return;
     }
 
@@ -340,10 +347,11 @@ export class SchedulerEventConsumer {
         linkage.proposalId !== undefined &&
         typeof linkage.sessionRevision === 'number'
       ) {
-        const latestRevision = await this.dependencies.reliabilityRepository.readLatestSessionRevision(
-          linkage.sessionId,
-          linkage.proposalId
-        );
+        const latestRevision =
+          await this.dependencies.reliabilityRepository.readLatestSessionRevision(
+            linkage.sessionId,
+            linkage.proposalId
+          );
 
         if (latestRevision !== null && linkage.sessionRevision < latestRevision) {
           await this.dependencies.reliabilityRepository.markInboxProcessed(idempotencyKey);
@@ -355,9 +363,12 @@ export class SchedulerEventConsumer {
       await this.dispatchEvent(envelope);
       await this.dependencies.reliabilityRepository.markInboxProcessed(idempotencyKey);
       await this.acknowledge(messageId);
+      spanSuccess = true;
     } catch (error: unknown) {
       this.logger.error({ error, messageId }, 'Failed to process stream message');
       await this.handleProcessingFailure(messageId, eventJson, error);
+    } finally {
+      span.end(spanSuccess);
     }
   }
 
@@ -568,241 +579,276 @@ export class SchedulerEventConsumer {
   }
 
   private async handleReviewRecorded(envelope: IStreamEventEnvelope): Promise<void> {
-    const parsed = AttemptRecordedPayloadSchema.safeParse(envelope.payload);
-    if (!parsed.success) {
-      this.logger.warn(
-        { eventType: envelope.eventType },
-        'Skipping invalid attempt.recorded/review.submitted payload'
-      );
-      return;
+    const traceId =
+      envelope.metadata?.correlationId ??
+      (typeof envelope.aggregateId === 'string' && envelope.aggregateId.length > 0
+        ? envelope.aggregateId
+        : `evt_${randomUUID()}`);
+    const spanContext: { traceId: string; correlationId?: string; component?: string } = {
+      traceId,
+      component: 'event',
+    };
+    if (
+      typeof envelope.metadata?.correlationId === 'string' &&
+      envelope.metadata.correlationId.length > 0
+    ) {
+      spanContext.correlationId = envelope.metadata.correlationId;
     }
-
-    const rating = this.readRating(parsed.data.rating);
-    if (rating === null) {
-      this.logger.warn({ eventType: envelope.eventType }, 'Skipping payload with invalid rating');
-      return;
-    }
-
-    const lane = this.readLane(parsed.data.lane);
-    if (lane === null) {
-      this.logger.warn({ eventType: envelope.eventType }, 'Skipping payload with invalid lane');
-      return;
-    }
-
-    const userId = parsed.data.userId as UserId;
-    const cardId = parsed.data.cardId as CardId;
-    const attemptId = parsed.data.attemptId;
-
-    const existingReview = await this.dependencies.reviewRepository.findByAttemptId(attemptId);
-    if (existingReview !== null) {
-      this.logger.debug({ attemptId }, 'Skipping duplicate review event');
-      return;
-    }
+    const span = schedulerObservability.startSpan('event.consumer.handleReviewRecorded', {
+      ...spanContext,
+    });
+    const startedAt = Date.now();
+    let spanSuccess = false;
 
     try {
-      await this.dependencies.reviewRepository.create({
-        id: `rev_${attemptId}`,
-        cardId,
-        userId,
-        sessionId: parsed.data.sessionId,
-        attemptId,
-        rating,
-        ratingValue: parsed.data.ratingValue ?? 3,
-        outcome: parsed.data.outcome ?? 'correct',
-        deltaDays: parsed.data.deltaDays ?? 0,
-        responseTime: parsed.data.responseTimeMs ?? null,
-        reviewedAt: new Date().toISOString(),
-        priorState: parsed.data.priorSchedulingState ?? {},
-        newState: parsed.data.newSchedulingState ?? {},
-        schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
-        lane,
-        confidenceBefore: parsed.data.confidenceBefore ?? null,
-        confidenceAfter: parsed.data.confidenceAfter ?? null,
-        hintRequestCount: parsed.data.hintRequestCount ?? null,
-      });
-    } catch (error: unknown) {
-      if (this.isUniqueViolation(error)) {
-        this.logger.debug({ attemptId }, 'Duplicate review insert prevented by unique key');
+      const parsed = AttemptRecordedPayloadSchema.safeParse(envelope.payload);
+      if (!parsed.success) {
+        this.logger.warn(
+          { eventType: envelope.eventType },
+          'Skipping invalid attempt.recorded/review.submitted payload'
+        );
+        spanSuccess = true;
         return;
       }
-      throw error;
-    }
 
-    const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
-    if (existing === null) {
-      // Initialize new card with algorithm-specific parameters
-      const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
-      let initialStability: number | null = null;
-      let initialDifficulty: number | null = null;
-      let initialHalfLife: number | null = null;
-      let initialInterval = 0;
-
-      if (lane === 'retention') {
-        // Initialize FSRS parameters
-        const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
-        const initialState = fsrs.initState(rating);
-        initialStability = initialState.stability;
-        initialDifficulty = initialState.difficulty;
-        initialInterval = fsrs.nextInterval(initialState.stability);
-      } else {
-        // Initialize HLR parameters (calibration lane)
-        const hlr = new HLRModel();
-        const features = this.extractHLRFeatures({
-          reviewCount: 0,
-          lapseCount: 0,
-          consecutiveCorrect: 0,
-          cardType: null,
-        });
-        initialHalfLife = hlr.halflife(features);
-        initialInterval = Math.max(1, Math.round(initialHalfLife));
+      const rating = this.readRating(parsed.data.rating);
+      if (rating === null) {
+        this.logger.warn({ eventType: envelope.eventType }, 'Skipping payload with invalid rating');
+        spanSuccess = true;
+        return;
       }
 
+      const lane = this.readLane(parsed.data.lane);
+      if (lane === null) {
+        this.logger.warn({ eventType: envelope.eventType }, 'Skipping payload with invalid lane');
+        spanSuccess = true;
+        return;
+      }
+
+      const userId = parsed.data.userId as UserId;
+      const cardId = parsed.data.cardId as CardId;
+      const attemptId = parsed.data.attemptId;
+
+      const existingReview = await this.dependencies.reviewRepository.findByAttemptId(attemptId);
+      if (existingReview !== null) {
+        this.logger.debug({ attemptId }, 'Skipping duplicate review event');
+        spanSuccess = true;
+        return;
+      }
+
+      try {
+        await this.dependencies.reviewRepository.create({
+          id: `rev_${attemptId}`,
+          cardId,
+          userId,
+          sessionId: parsed.data.sessionId,
+          attemptId,
+          rating,
+          ratingValue: parsed.data.ratingValue ?? 3,
+          outcome: parsed.data.outcome ?? 'correct',
+          deltaDays: parsed.data.deltaDays ?? 0,
+          responseTime: parsed.data.responseTimeMs ?? null,
+          reviewedAt: new Date().toISOString(),
+          priorState: parsed.data.priorSchedulingState ?? {},
+          newState: parsed.data.newSchedulingState ?? {},
+          schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+          lane,
+          confidenceBefore: parsed.data.confidenceBefore ?? null,
+          confidenceAfter: parsed.data.confidenceAfter ?? null,
+          hintRequestCount: parsed.data.hintRequestCount ?? null,
+        });
+      } catch (error: unknown) {
+        if (this.isUniqueViolation(error)) {
+          this.logger.debug({ attemptId }, 'Duplicate review insert prevented by unique key');
+          spanSuccess = true;
+          return;
+        }
+        throw error;
+      }
+
+      const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
+      if (existing === null) {
+        // Initialize new card with algorithm-specific parameters
+        const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
+        let initialStability: number | null = null;
+        let initialDifficulty: number | null = null;
+        let initialHalfLife: number | null = null;
+        let initialInterval = 0;
+
+        if (lane === 'retention') {
+          // Initialize FSRS parameters
+          const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+          const initialState = fsrs.initState(rating);
+          initialStability = initialState.stability;
+          initialDifficulty = initialState.difficulty;
+          initialInterval = fsrs.nextInterval(initialState.stability);
+        } else {
+          // Initialize HLR parameters (calibration lane)
+          const hlr = new HLRModel();
+          const features = this.extractHLRFeatures({
+            reviewCount: 0,
+            lapseCount: 0,
+            consecutiveCorrect: 0,
+            cardType: null,
+          });
+          initialHalfLife = hlr.halflife(features);
+          initialInterval = Math.max(1, Math.round(initialHalfLife));
+        }
+
+        const nextState = computeNextState({
+          fromState: 'new',
+          rating,
+          consecutiveCorrect: rating === 'again' ? 0 : 1,
+        });
+
+        const nextReviewDate = new Date();
+        nextReviewDate.setDate(nextReviewDate.getDate() + initialInterval);
+
+        await this.dependencies.schedulerCardRepository.create({
+          id: `sc_${crypto.randomUUID()}`,
+          cardId,
+          userId,
+          lane,
+          stability: initialStability,
+          difficultyParameter: initialDifficulty,
+          halfLife: initialHalfLife,
+          interval: initialInterval,
+          nextReviewDate: nextReviewDate.toISOString(),
+          lastReviewedAt: new Date().toISOString(),
+          reviewCount: 1,
+          lapseCount: rating === 'again' ? 1 : 0,
+          consecutiveCorrect: rating === 'again' ? 0 : 1,
+          schedulingAlgorithm,
+          cardType: null,
+          difficulty: null,
+          knowledgeNodeIds: [],
+          state: nextState,
+          suspendedUntil: null,
+          suspendedReason: null,
+          version: 1,
+        });
+        spanSuccess = true;
+        schedulerObservability.recordRecomputeLatency(Date.now() - startedAt);
+        return;
+      }
+
+      // Update existing card with algorithm-specific computations
+      const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
+      const newReviewCount = existing.reviewCount + 1;
+      const newLapseCount = rating === 'again' ? existing.lapseCount + 1 : existing.lapseCount;
+      const newConsecutiveCorrect = rating === 'again' ? 0 : existing.consecutiveCorrect + 1;
+
+      let newStability = existing.stability;
+      let newDifficulty = existing.difficultyParameter;
+      let newHalfLife = existing.halfLife;
+      let newInterval = existing.interval;
+
+      // Compute elapsed days since last review
+      const deltaDays = parsed.data.deltaDays ?? this.computeDeltaDays(existing.lastReviewedAt);
+
+      if (lane === 'retention') {
+        // Apply FSRS algorithm
+        const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+
+        if (existing.stability !== null && existing.difficultyParameter !== null) {
+          // Update existing FSRS state
+          const currentState = {
+            stability: existing.stability,
+            difficulty: existing.difficultyParameter,
+          };
+
+          const prediction =
+            existing.state === 'learning' || existing.state === 'relearning'
+              ? fsrs.predictLearningState(currentState, rating)
+              : fsrs.predictReviewState(currentState, deltaDays, rating, existing.interval);
+
+          newStability = prediction.stability;
+          newDifficulty = prediction.difficulty;
+          newInterval = prediction.interval;
+        } else {
+          // Initialize FSRS state if missing
+          const initialState = fsrs.initState(rating);
+          newStability = initialState.stability;
+          newDifficulty = initialState.difficulty;
+          newInterval = fsrs.nextInterval(initialState.stability);
+        }
+      } else {
+        // Apply HLR algorithm (calibration lane)
+        const hlr = new HLRModel();
+        const features = this.extractHLRFeatures({
+          reviewCount: newReviewCount,
+          lapseCount: newLapseCount,
+          consecutiveCorrect: newConsecutiveCorrect,
+          cardType: existing.cardType,
+        });
+
+        // Compute actual recall from rating
+        const actualRecall = rating === 'again' ? 0.0 : rating === 'hard' ? 0.5 : 1.0;
+
+        // Train HLR model with new observation (per-review incremental update)
+        hlr.trainUpdate(features, deltaDays, actualRecall);
+
+        // Predict new half-life
+        const prediction = hlr.predict(features, 0);
+        newHalfLife = prediction.halfLifeDays;
+        newInterval = Math.max(1, Math.round(newHalfLife));
+
+        // Persist calibration data update (per-review incremental policy)
+        try {
+          const cardTypeValue = existing.cardType;
+          const cardIdForCalibration =
+            cardTypeValue !== null && cardTypeValue !== '' ? null : cardId;
+
+          await this.dependencies.calibrationDataRepository.upsert(
+            userId,
+            cardIdForCalibration,
+            cardTypeValue,
+            {
+              parameters: hlr.getWeights(),
+              sampleCount: newReviewCount,
+              confidenceScore: Math.min(newReviewCount / 10, 1.0),
+              lastTrainedAt: new Date().toISOString(),
+            }
+          );
+        } catch (error: unknown) {
+          this.logger.warn({ userId, cardId, error }, 'Failed to update calibration data');
+        }
+      }
+
+      // Compute next state using state machine
       const nextState = computeNextState({
-        fromState: 'new',
+        fromState: existing.state,
         rating,
-        consecutiveCorrect: rating === 'again' ? 0 : 1,
+        consecutiveCorrect: newConsecutiveCorrect,
       });
 
       const nextReviewDate = new Date();
-      nextReviewDate.setDate(nextReviewDate.getDate() + initialInterval);
+      nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
 
-      await this.dependencies.schedulerCardRepository.create({
-        id: `sc_${crypto.randomUUID()}`,
-        cardId,
+      await this.dependencies.schedulerCardRepository.update(
         userId,
-        lane,
-        stability: initialStability,
-        difficultyParameter: initialDifficulty,
-        halfLife: initialHalfLife,
-        interval: initialInterval,
-        nextReviewDate: nextReviewDate.toISOString(),
-        lastReviewedAt: new Date().toISOString(),
-        reviewCount: 1,
-        lapseCount: rating === 'again' ? 1 : 0,
-        consecutiveCorrect: rating === 'again' ? 0 : 1,
-        schedulingAlgorithm,
-        cardType: null,
-        difficulty: null,
-        knowledgeNodeIds: [],
-        state: nextState,
-        suspendedUntil: null,
-        suspendedReason: null,
-        version: 1,
-      });
-      return;
+        cardId,
+        {
+          lane,
+          stability: newStability,
+          difficultyParameter: newDifficulty,
+          halfLife: newHalfLife,
+          interval: newInterval,
+          nextReviewDate: nextReviewDate.toISOString(),
+          lastReviewedAt: new Date().toISOString(),
+          reviewCount: newReviewCount,
+          lapseCount: newLapseCount,
+          consecutiveCorrect: newConsecutiveCorrect,
+          schedulingAlgorithm,
+          state: nextState,
+        },
+        existing.version
+      );
+      spanSuccess = true;
+      schedulerObservability.recordRecomputeLatency(Date.now() - startedAt);
+    } finally {
+      span.end(spanSuccess);
     }
-
-    // Update existing card with algorithm-specific computations
-    const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
-    const newReviewCount = existing.reviewCount + 1;
-    const newLapseCount = rating === 'again' ? existing.lapseCount + 1 : existing.lapseCount;
-    const newConsecutiveCorrect = rating === 'again' ? 0 : existing.consecutiveCorrect + 1;
-
-    let newStability = existing.stability;
-    let newDifficulty = existing.difficultyParameter;
-    let newHalfLife = existing.halfLife;
-    let newInterval = existing.interval;
-
-    // Compute elapsed days since last review
-    const deltaDays = parsed.data.deltaDays ?? this.computeDeltaDays(existing.lastReviewedAt);
-
-    if (lane === 'retention') {
-      // Apply FSRS algorithm
-      const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
-
-      if (existing.stability !== null && existing.difficultyParameter !== null) {
-        // Update existing FSRS state
-        const currentState = {
-          stability: existing.stability,
-          difficulty: existing.difficultyParameter,
-        };
-
-        const prediction =
-          existing.state === 'learning' || existing.state === 'relearning'
-            ? fsrs.predictLearningState(currentState, rating)
-            : fsrs.predictReviewState(currentState, deltaDays, rating, existing.interval);
-
-        newStability = prediction.stability;
-        newDifficulty = prediction.difficulty;
-        newInterval = prediction.interval;
-      } else {
-        // Initialize FSRS state if missing
-        const initialState = fsrs.initState(rating);
-        newStability = initialState.stability;
-        newDifficulty = initialState.difficulty;
-        newInterval = fsrs.nextInterval(initialState.stability);
-      }
-    } else {
-      // Apply HLR algorithm (calibration lane)
-      const hlr = new HLRModel();
-      const features = this.extractHLRFeatures({
-        reviewCount: newReviewCount,
-        lapseCount: newLapseCount,
-        consecutiveCorrect: newConsecutiveCorrect,
-        cardType: existing.cardType,
-      });
-
-      // Compute actual recall from rating
-      const actualRecall = rating === 'again' ? 0.0 : rating === 'hard' ? 0.5 : 1.0;
-
-      // Train HLR model with new observation (per-review incremental update)
-      hlr.trainUpdate(features, deltaDays, actualRecall);
-
-      // Predict new half-life
-      const prediction = hlr.predict(features, 0);
-      newHalfLife = prediction.halfLifeDays;
-      newInterval = Math.max(1, Math.round(newHalfLife));
-
-      // Persist calibration data update (per-review incremental policy)
-      try {
-        const cardTypeValue = existing.cardType;
-        const cardIdForCalibration = cardTypeValue !== null && cardTypeValue !== '' ? null : cardId;
-
-        await this.dependencies.calibrationDataRepository.upsert(
-          userId,
-          cardIdForCalibration,
-          cardTypeValue,
-          {
-            parameters: hlr.getWeights(),
-            sampleCount: newReviewCount,
-            confidenceScore: Math.min(newReviewCount / 10, 1.0),
-            lastTrainedAt: new Date().toISOString(),
-          }
-        );
-      } catch (error: unknown) {
-        this.logger.warn({ userId, cardId, error }, 'Failed to update calibration data');
-      }
-    }
-
-    // Compute next state using state machine
-    const nextState = computeNextState({
-      fromState: existing.state,
-      rating,
-      consecutiveCorrect: newConsecutiveCorrect,
-    });
-
-    const nextReviewDate = new Date();
-    nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
-
-    await this.dependencies.schedulerCardRepository.update(
-      userId,
-      cardId,
-      {
-        lane,
-        stability: newStability,
-        difficultyParameter: newDifficulty,
-        halfLife: newHalfLife,
-        interval: newInterval,
-        nextReviewDate: nextReviewDate.toISOString(),
-        lastReviewedAt: new Date().toISOString(),
-        reviewCount: newReviewCount,
-        lapseCount: newLapseCount,
-        consecutiveCorrect: newConsecutiveCorrect,
-        schedulingAlgorithm,
-        state: nextState,
-      },
-      existing.version
-    );
   }
 
   private async handleContentSeeded(envelope: IStreamEventEnvelope): Promise<void> {
@@ -986,15 +1032,13 @@ export class SchedulerEventConsumer {
       correlationId?: unknown;
     };
     const linkage = this.readRecord(payloadView.linkage);
-    const linkageView = linkage as
-      | {
-          proposalId?: unknown;
-          decisionId?: unknown;
-          sessionId?: unknown;
-          sessionRevision?: unknown;
-          correlationId?: unknown;
-        }
-      | null;
+    const linkageView = linkage as {
+      proposalId?: unknown;
+      decisionId?: unknown;
+      sessionId?: unknown;
+      sessionRevision?: unknown;
+      correlationId?: unknown;
+    } | null;
 
     const proposalId = this.readString(
       payloadView.proposalId ?? payloadView.orchestrationProposalId ?? linkageView?.proposalId
@@ -1024,10 +1068,7 @@ export class SchedulerEventConsumer {
     };
   }
 
-  private buildIdempotencyKey(
-    envelope: IStreamEventEnvelope,
-    linkage: IConsumerLinkage
-  ): string {
+  private buildIdempotencyKey(envelope: IStreamEventEnvelope, linkage: IConsumerLinkage): string {
     const payload = envelope.payload;
     const attemptId = this.readString(payload['attemptId']);
 
