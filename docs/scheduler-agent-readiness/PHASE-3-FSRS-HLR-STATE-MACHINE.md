@@ -19,12 +19,12 @@ explicit scheduler card state transitions.
 
 ## Tasks
 
-- [ ] Add/complete FSRS algorithm module and tests.
-- [ ] Integrate FSRS updates in event consumer review handling.
-- [ ] Integrate HLR prediction/update in proposal and review paths.
-- [ ] Implement state transition guard module for `SchedulerCard.state`.
-- [ ] Add calibration loop trigger(s) and persistence updates.
-- [ ] Add tests for illegal transitions and algorithm-specific updates.
+- [x] Add/complete FSRS algorithm module and tests.
+- [x] Integrate FSRS updates in event consumer review handling.
+- [x] Integrate HLR prediction/update in proposal and review paths.
+- [x] Implement state transition guard module for `SchedulerCard.state`.
+- [x] Add calibration loop trigger(s) and persistence updates.
+- [x] Add tests for illegal transitions and algorithm-specific updates.
 
 ## Constraints
 
@@ -33,6 +33,6 @@ explicit scheduler card state transitions.
 
 ## Exit Criteria
 
-- [ ] Review events produce deterministic algorithm-specific schedule updates.
-- [ ] Illegal transitions are rejected with clear machine-readable errors.
-- [ ] Calibration data is actively refreshed from runtime outcomes.
+- [x] Review events produce deterministic algorithm-specific schedule updates.
+- [x] Illegal transitions are rejected with clear machine-readable errors.
+- [x] Calibration data is actively refreshed from runtime outcomes.

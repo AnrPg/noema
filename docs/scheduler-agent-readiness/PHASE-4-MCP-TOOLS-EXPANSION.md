@@ -32,11 +32,11 @@ capability metadata, deep input validation, and bulk-friendly semantics.
 
 ## Tasks
 
-- [ ] Extend tool definition types and registry behavior.
-- [ ] Add route-level and registry-level validation checkpoints.
-- [ ] Add/expand handlers in `scheduler.tools.ts`.
-- [ ] Add tests for invalid input, scope failures, partial failures.
-- [ ] Update tool OpenAPI components and examples.
+- [x] Extend tool definition types and registry behavior.
+- [x] Add route-level and registry-level validation checkpoints.
+- [x] Add/expand handlers in `scheduler.tools.ts`.
+- [x] Add tests for invalid input, scope failures, partial failures.
+- [x] Update tool OpenAPI components and examples.
 
 ## Constraints
 
@@ -45,6 +45,6 @@ capability metadata, deep input validation, and bulk-friendly semantics.
 
 ## Exit Criteria
 
-- [ ] Tool registry covers required scheduler P0/P1 orchestration tools.
-- [ ] Invalid input is rejected before domain execution.
-- [ ] Tool responses include machine-usable observability metadata.
+- [x] Tool registry covers required scheduler P0/P1 orchestration tools.
+- [x] Invalid input is rejected before domain execution.
+- [x] Tool responses include machine-usable observability metadata.

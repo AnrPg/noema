@@ -2,8 +2,8 @@
 
 ## Objective
 
-Lock all scheduler agent-readiness contracts before implementation:
-OpenAPI schemas, endpoint lifecycle, and architecture ADR.
+Lock all scheduler agent-readiness contracts before implementation: OpenAPI
+schemas, endpoint lifecycle, and architecture ADR.
 
 ## Covers Gaps
 
@@ -27,11 +27,11 @@ OpenAPI schemas, endpoint lifecycle, and architecture ADR.
 
 ## Tasks
 
-- [ ] Add/update ADR in `docs/architecture/decisions/`.
-- [ ] Update `docs/api/openapi/scheduler-service/openapi.yaml`.
-- [ ] Update scheduler and tools path specs.
-- [ ] Update component schemas in common/scheduler/tools files.
-- [ ] Ensure auth errors and tool errors share common envelope schema.
+- [x] Add/update ADR in `docs/architecture/decisions/`.
+- [x] Update `docs/api/openapi/scheduler-service/openapi.yaml`.
+- [x] Update scheduler and tools path specs.
+- [x] Update component schemas in common/scheduler/tools files.
+- [x] Ensure auth errors and tool errors share common envelope schema.
 
 ## Constraints
 
@@ -40,6 +40,6 @@ OpenAPI schemas, endpoint lifecycle, and architecture ADR.
 
 ## Exit Criteria
 
-- [ ] OpenAPI spec validates cleanly.
-- [ ] ADR is committed and references concrete changed contracts.
-- [ ] Every planned endpoint has explicit lifecycle metadata.
+- [x] OpenAPI spec validates cleanly.
+- [x] ADR is committed and references concrete changed contracts.
+- [x] Every planned endpoint has explicit lifecycle metadata.

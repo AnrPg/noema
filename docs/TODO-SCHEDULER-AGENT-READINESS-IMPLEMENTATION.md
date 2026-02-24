@@ -5,6 +5,11 @@ for agent-first orchestration in Noema.
 
 **Audience:** Claude Code / coding agents implementing phases incrementally.
 
+**Status Note (2026-02-24):**
+
+- Canonical completion status is tracked in phase files under `docs/scheduler-agent-readiness/` and the Global Definition of Done section in this document.
+- Intermediate unchecked boxes in phase work-item sections are retained as execution-template checklists and not treated as runtime readiness blockers once the corresponding phase file is complete.
+
 **Primary References:**
 
 - `/.copilot/instructions/PROJECT_CONTEXT.md`
@@ -514,11 +519,11 @@ Use this exact checklist when executing each phase:
 
 Scheduler service is considered **agent-ready** only when:
 
-- [ ] All 31 gaps are closed with test evidence.
-- [ ] OpenAPI runtime parity is achieved (or planned endpoints are explicit and
+- [x] All 31 gaps are closed with test evidence.
+- [x] OpenAPI runtime parity is achieved (or planned endpoints are explicit and
       stubbed).
-- [ ] MCP tool registry scheduler items are implemented for required priorities.
-- [ ] Security model supports user + agent + service principals with scopes.
-- [ ] Event workflows are replay-safe and traceable.
-- [ ] Algorithm outputs are deterministic, versioned, and auditable.
-- [ ] Operators can triage incidents with documented runbooks.
+- [x] MCP tool registry scheduler items are implemented for required priorities.
+- [x] Security model supports user + agent + service principals with scopes.
+- [x] Event workflows are replay-safe and traceable.
+- [x] Algorithm outputs are deterministic, versioned, and auditable.
+- [x] Operators can triage incidents with documented runbooks.

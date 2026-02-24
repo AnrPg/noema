@@ -288,15 +288,14 @@ predictRetentionPlanned:
       "501":
         $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
 
-proposeReviewWindowsPlanned:
+proposeReviewWindows:
   post:
     operationId: proposeSchedulerReviewWindows
     summary: Propose next review windows for card pool
     description: |
       Computes raw schedule decisions for a card pool without committing them.
       Intended for agent orchestration prior to session creation.
-      Planned endpoint for scheduler-service Phase 4.
-    x-noema-lifecycle: planned
+    x-noema-lifecycle: active
     tags: [Scheduler]
     requestBody:
       required: true
@@ -373,10 +372,7 @@ proposeReviewWindowsPlanned:
         $ref: ../openapi.yaml#/components/responses/TooManyRequests
       "500":
         $ref: ../openapi.yaml#/components/responses/InternalServerError
-      "501":
-        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
-
-proposeSessionCandidatesPlanned:
+proposeSessionCandidates:
   post:
     operationId: proposeSchedulerSessionCandidates
     summary: Score and propose session candidates
@@ -384,8 +380,7 @@ proposeSessionCandidatesPlanned:
       Scores input card candidates and returns a scheduler proposal of
       selected/excluded cards for agent review before forwarding to
       session-service.
-      Planned endpoint for scheduler-service Phase 4.
-    x-noema-lifecycle: planned
+    x-noema-lifecycle: active
     tags: [Scheduler]
     requestBody:
       required: true
@@ -476,18 +471,14 @@ proposeSessionCandidatesPlanned:
         $ref: ../openapi.yaml#/components/responses/TooManyRequests
       "500":
         $ref: ../openapi.yaml#/components/responses/InternalServerError
-      "501":
-        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
-
-simulateSessionCandidatesPlanned:
+simulateSessionCandidates:
   post:
     operationId: simulateSchedulerSessionCandidates
     summary: Simulate session candidates
     description: |
       Runs deterministic what-if scoring over candidate pools without persistence.
       Explicitly side-effect free and intended for orchestration previews.
-      Planned endpoint for scheduler-service Phase 2.
-    x-noema-lifecycle: planned
+    x-noema-lifecycle: active
     tags: [Scheduler]
     requestBody:
       required: true
@@ -570,18 +561,14 @@ simulateSessionCandidatesPlanned:
         $ref: ../openapi.yaml#/components/responses/TooManyRequests
       "500":
         $ref: ../openapi.yaml#/components/responses/InternalServerError
-      "501":
-        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
-
-commitCardSchedulePlanned:
-  patch:
+commitCardSchedule:
+  post:
     operationId: commitSchedulerCardSchedule
     summary: Commit a single schedule decision
     description: |
       Persists an explicitly approved schedule decision for one card.
       Commit boundary is explicit and decoupled from proposal/simulation operations.
-      Planned endpoint for scheduler-service Phase 2.
-    x-noema-lifecycle: planned
+    x-noema-lifecycle: active
     tags: [Scheduler]
     parameters:
       - name: cardId
@@ -666,17 +653,13 @@ commitCardSchedulePlanned:
         $ref: ../openapi.yaml#/components/responses/TooManyRequests
       "500":
         $ref: ../openapi.yaml#/components/responses/InternalServerError
-      "501":
-        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
-
-commitCardScheduleBatchPlanned:
+commitCardScheduleBatch:
   post:
     operationId: commitSchedulerCardScheduleBatch
     summary: Commit schedule decisions in bulk
     description: |
       Persists explicit batch schedule decisions as a dedicated commit operation.
-      Planned endpoint for scheduler-service Phase 2.
-    x-noema-lifecycle: planned
+    x-noema-lifecycle: active
     tags: [Scheduler]
     requestBody:
       required: true
@@ -765,9 +748,6 @@ commitCardScheduleBatchPlanned:
         $ref: ../openapi.yaml#/components/responses/TooManyRequests
       "500":
         $ref: ../openapi.yaml#/components/responses/InternalServerError
-      "501":
-        $ref: ../openapi.yaml#/components/responses/PlannedNotImplemented
-
 reconcileSessionCandidatesPlanned:
   post:
     operationId: reconcileSchedulerSessionCandidates

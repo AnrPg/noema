@@ -64,15 +64,15 @@ paths:
     $ref: ./paths/scheduler.yaml#/predictRetentionPlanned
 
   /v1/scheduler/proposals/review-windows:
-    $ref: ./paths/scheduler.yaml#/proposeReviewWindowsPlanned
+    $ref: ./paths/scheduler.yaml#/proposeReviewWindows
   /v1/scheduler/proposals/session-candidates:
-    $ref: ./paths/scheduler.yaml#/proposeSessionCandidatesPlanned
+    $ref: ./paths/scheduler.yaml#/proposeSessionCandidates
   /v1/scheduler/simulations/session-candidates:
-    $ref: ./paths/scheduler.yaml#/simulateSessionCandidatesPlanned
+    $ref: ./paths/scheduler.yaml#/simulateSessionCandidates
   /v1/scheduler/commits/cards/{cardId}/schedule:
-    $ref: ./paths/scheduler.yaml#/commitCardSchedulePlanned
+    $ref: ./paths/scheduler.yaml#/commitCardSchedule
   /v1/scheduler/commits/cards/schedule/batch:
-    $ref: ./paths/scheduler.yaml#/commitCardScheduleBatchPlanned
+    $ref: ./paths/scheduler.yaml#/commitCardScheduleBatch
   /v1/scheduler/sessions/{sessionId}/reconcile:
     $ref: ./paths/scheduler.yaml#/reconcileSessionCandidatesPlanned
   /v1/scheduler/sessions/{sessionId}/apply-adjustments:

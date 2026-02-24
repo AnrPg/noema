@@ -24,15 +24,15 @@ propose/simulate vs commit behavior and persistent decision provenance.
 
 ## Tasks
 
-- [ ] Implement scoring service and scoring breakdown DTOs.
-- [ ] Add simulation endpoint handlers:
+- [x] Implement scoring service and scoring breakdown DTOs.
+- [x] Add simulation endpoint handlers:
   - review-window proposal
   - session-candidate proposal
-- [ ] Add explicit schedule commit handlers (single + batch).
-- [ ] Refactor `planDualLaneQueue` so persistence is not implicit by default.
-- [ ] Add Prisma models + migrations for decision/commit/lineage history.
-- [ ] Emit lineage metadata with all schedule proposal/commit outputs.
-- [ ] Add determinism tests (same input + same policyVersion => same result).
+- [x] Add explicit schedule commit handlers (single + batch).
+- [x] Refactor `planDualLaneQueue` so persistence is not implicit by default.
+- [x] Add Prisma models + migrations for decision/commit/lineage history.
+- [x] Emit lineage metadata with all schedule proposal/commit outputs.
+- [x] Add determinism tests (same input + same policyVersion => same result).
 
 ## Constraints
 
@@ -41,6 +41,6 @@ propose/simulate vs commit behavior and persistent decision provenance.
 
 ## Exit Criteria
 
-- [ ] Proposal endpoints produce no state mutation.
-- [ ] Commit endpoints are explicit and auditable.
-- [ ] Every proposal/commit stores policy and provenance metadata.
+- [x] Proposal endpoints produce no state mutation.
+- [x] Commit endpoints are explicit and auditable.
+- [x] Every proposal/commit stores policy and provenance metadata.

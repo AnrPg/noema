@@ -11,7 +11,8 @@ principal-aware authorization and consistent error responses.
 
 ## Required Outputs
 
-- Canonical error envelope used by auth middleware, REST routes, and tool routes.
+- Canonical error envelope used by auth middleware, REST routes, and tool
+  routes.
 - Service-principal claim model:
   - `principalType`: `user | agent | service`
   - `principalId`
@@ -24,12 +25,12 @@ principal-aware authorization and consistent error responses.
 
 ## Tasks
 
-- [ ] Update auth middleware to parse principal context and scopes.
-- [ ] Add scope policies per route/tool and enforce deny-by-default.
-- [ ] Normalize all unauthorized/forbidden responses to shared contract.
-- [ ] Add startup config checks for auth bypass safety.
-- [ ] Add basic abuse controls at route/tool boundaries.
-- [ ] Add tests for scope matrix and error envelope conformance.
+- [x] Update auth middleware to parse principal context and scopes.
+- [x] Add scope policies per route/tool and enforce deny-by-default.
+- [x] Normalize all unauthorized/forbidden responses to shared contract.
+- [x] Add startup config checks for auth bypass safety.
+- [x] Add basic abuse controls at route/tool boundaries.
+- [x] Add tests for scope matrix and error envelope conformance.
 
 ## Constraints
 
@@ -38,6 +39,6 @@ principal-aware authorization and consistent error responses.
 
 ## Exit Criteria
 
-- [ ] Scope tests pass for user, agent, and service principals.
-- [ ] All auth-related errors conform to single machine-readable shape.
-- [ ] Non-dev startup fails fast if insecure auth mode is enabled.
+- [x] Scope tests pass for user, agent, and service principals.
+- [x] All auth-related errors conform to single machine-readable shape.
+- [x] Non-dev startup fails fast if insecure auth mode is enabled.
