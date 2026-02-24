@@ -29,8 +29,19 @@ function createLoggerMock() {
   return logger;
 }
 
-function createPrismaReplayGuardMock(): PrismaClient {
+function createPrismaReplayGuardMock(seedJtis: string[] = []): PrismaClient {
   const replayGuards = new Map<string, ReplayGuardRecord>();
+
+  for (const seedJti of seedJtis) {
+    replayGuards.set(seedJti, {
+      jti: seedJti,
+      userId: 'user_aaaaaaaaaaaaaaaaaaaaa',
+      issuedAt: new Date('2026-02-24T11:00:00.000Z'),
+      expiresAt: new Date('2026-02-24T13:00:00.000Z'),
+      consumedAt: null,
+      status: 'ISSUED',
+    });
+  }
 
   const tx = {
     $executeRaw: vi.fn(async (query: unknown, ...values: unknown[]) => {
@@ -60,7 +71,7 @@ function createPrismaReplayGuardMock(): PrismaClient {
         const [now] = values as [Date];
         let updated = 0;
         for (const guard of replayGuards.values()) {
-          if (guard.status === 'ISSUED' && guard.expiresAt.getTime() <= now.getTime()) {
+          if (guard.status !== 'EXPIRED' && guard.expiresAt.getTime() <= now.getTime()) {
             guard.status = 'EXPIRED';
             updated += 1;
           }
@@ -124,7 +135,7 @@ function createPrismaReplayGuardMock(): PrismaClient {
   return prisma;
 }
 
-function createService(): SessionService {
+function createService(prismaOverride?: PrismaClient): SessionService {
   const repository = {} as ISessionRepository;
 
   const outboxRepository = {
@@ -159,7 +170,7 @@ function createService(): SessionService {
     publishBatch: vi.fn(async () => undefined),
   } as unknown as IEventPublisher;
 
-  const prisma = createPrismaReplayGuardMock();
+  const prisma = prismaOverride ?? createPrismaReplayGuardMock();
   const logger = createLoggerMock();
 
   return new SessionService(repository, eventPublisher, outboxRepository, prisma, logger as never, {
@@ -231,6 +242,38 @@ describe('Offline intent token replay protection', () => {
       expect(result.data.reason?.toLowerCase()).toContain('exp');
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('retries JTI registration on collision and still issues a token', async () => {
+    const randomUuidSpy = vi.spyOn(crypto, 'randomUUID');
+    randomUuidSpy.mockReturnValueOnce('jti_collision').mockReturnValueOnce('jti_after_retry');
+
+    try {
+      const service = createService(createPrismaReplayGuardMock(['jti_collision']));
+      const ctx = {
+        userId: 'user_aaaaaaaaaaaaaaaaaaaaa' as never,
+        correlationId: 'cor_aaaaaaaaaaaaaaaaaaaaa' as never,
+      };
+
+      const issued = await service.issueOfflineIntentToken(
+        {
+          userId: ctx.userId,
+          sessionBlueprint: { checkpointSignals: [] },
+          expiresInSeconds: 120,
+        },
+        ctx
+      );
+
+      expect(issued.data.token.length).toBeGreaterThan(0);
+
+      const verified = await service.verifyOfflineIntentTokenPublic(
+        { token: issued.data.token },
+        ctx
+      );
+      expect(verified.data.valid).toBe(true);
+    } finally {
+      randomUuidSpy.mockRestore();
     }
   });
 });
