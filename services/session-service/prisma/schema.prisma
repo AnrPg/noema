@@ -229,6 +229,27 @@ model EventOutbox {
 }
 
 // ============================================================================
+// Offline Intent Token Replay Guard — durable single-use protection
+// ============================================================================
+
+model OfflineIntentTokenReplayGuard {
+    jti String @id @db.VarChar(100)
+    userId String @map("user_id") @db.VarChar(50)
+    issuedAt DateTime @map("issued_at")
+    expiresAt DateTime @map("expires_at")
+    consumedAt DateTime? @map("consumed_at")
+    status OfflineIntentTokenReplayGuardStatus @default(ISSUED)
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@index([userId, status])
+    @@index([expiresAt, status])
+    @@index([consumedAt])
+    @@map("offline_intent_token_replay_guard")
+}
+
+// ============================================================================
 // Enums
 // ============================================================================
 
@@ -296,4 +317,12 @@ enum SessionCohortHandshakeStatus {
     CANCELLED
 
     @@map("session_cohort_handshake_status")
+}
+
+enum OfflineIntentTokenReplayGuardStatus {
+    ISSUED
+    CONSUMED
+    EXPIRED
+
+    @@map("offline_intent_token_replay_guard_status")
 }

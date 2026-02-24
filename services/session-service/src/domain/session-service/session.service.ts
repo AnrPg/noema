@@ -27,7 +27,7 @@ import type {
   ISessionResumedPayload,
   ISessionStartedPayload,
   ISessionStrategyUpdatedPayload,
-  ISessionTeachingChangedPayload
+  ISessionTeachingChangedPayload,
 } from '@noema/events';
 import type {
   AttemptId,
@@ -71,12 +71,12 @@ import type {
   ISessionQueueItem,
   ISessionStats,
   IValidateSessionBlueprintResult,
-  SessionState
+  SessionState,
 } from '../../types/index.js';
 import {
   SessionCohortHandshakeStatus as CohortHandshakeStatuses,
   createEmptyStats,
-  SessionState as States
+  SessionState as States,
 } from '../../types/index.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
@@ -108,7 +108,7 @@ import {
   StartSessionInputSchema,
   UpdateStrategyInputSchema,
   ValidateSessionBlueprintInputSchema,
-  VerifyOfflineIntentTokenInputSchema
+  VerifyOfflineIntentTokenInputSchema,
 } from './session.schemas.js';
 
 // ============================================================================
@@ -653,7 +653,10 @@ export class SessionService {
           data.linkage.proposalId,
           tx
         );
-        throw new VersionConflictError(data.expectedRevision, latest?.revision ?? data.expectedRevision + 1);
+        throw new VersionConflictError(
+          data.expectedRevision,
+          latest?.revision ?? data.expectedRevision + 1
+        );
       }
 
       if (
@@ -750,7 +753,10 @@ export class SessionService {
           data.linkage.proposalId,
           tx
         );
-        throw new VersionConflictError(data.expectedRevision, latest?.revision ?? data.expectedRevision + 1);
+        throw new VersionConflictError(
+          data.expectedRevision,
+          latest?.revision ?? data.expectedRevision + 1
+        );
       }
 
       if (
@@ -856,7 +862,10 @@ export class SessionService {
           data.linkage.proposalId,
           tx
         );
-        throw new VersionConflictError(data.expectedRevision, latest?.revision ?? data.expectedRevision + 1);
+        throw new VersionConflictError(
+          data.expectedRevision,
+          latest?.revision ?? data.expectedRevision + 1
+        );
       }
 
       if (current.status !== CohortHandshakeStatuses.ACCEPTED) {
@@ -2070,6 +2079,13 @@ export class SessionService {
       .sign(activeSecret);
 
     await this.runInTransaction(async (tx) => {
+      await this.registerOfflineIntentTokenReplayGuard(tx, {
+        jti: claims.nonce,
+        userId: data.userId as UserId,
+        issuedAt: now,
+        expiresAt,
+      });
+
       await this.publishThroughOutbox(
         {
           id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
@@ -2167,6 +2183,31 @@ export class SessionService {
         };
       }
 
+      const jti =
+        typeof verifiedPayload.jti === 'string' && verifiedPayload.jti.length > 0
+          ? verifiedPayload.jti
+          : claims.nonce;
+      const replayGuard = await this.consumeOfflineIntentTokenReplayGuard({
+        jti,
+        userId: claims.userId,
+      });
+
+      if (!replayGuard.valid) {
+        return {
+          data: { valid: false, reason: replayGuard.reason },
+          agentHints: buildHints(
+            [
+              {
+                action: 'request_new_intent_token',
+                description: replayGuard.reason,
+                priority: 'high',
+              },
+            ],
+            'Token replay guard rejected token'
+          ),
+        };
+      }
+
       const checkpointSignals =
         (claims.sessionBlueprint as { checkpointSignals?: AdaptiveCheckpointSignal[] })
           .checkpointSignals ?? [];
@@ -2252,6 +2293,20 @@ export class SessionService {
       if (verifiedPayload.sub !== ctx.userId) {
         throw new AuthorizationError('Offline intent token does not match authenticated user');
       }
+
+      const claims = verifiedPayload as unknown as IOfflineIntentTokenClaims;
+      const jti =
+        typeof verifiedPayload.jti === 'string' && verifiedPayload.jti.length > 0
+          ? verifiedPayload.jti
+          : claims.nonce;
+      const replayGuard = await this.consumeOfflineIntentTokenReplayGuard({
+        jti,
+        userId: ctx.userId,
+      });
+
+      if (!replayGuard.valid) {
+        throw new AuthorizationError(replayGuard.reason);
+      }
     } catch (error) {
       if (error instanceof AuthorizationError) {
         throw error;
@@ -2266,6 +2321,122 @@ export class SessionService {
   // --------------------------------------------------------------------------
   // Token Helpers
   // --------------------------------------------------------------------------
+
+  private async registerOfflineIntentTokenReplayGuard(
+    tx: Prisma.TransactionClient,
+    input: { jti: string; userId: UserId; issuedAt: Date; expiresAt: Date }
+  ): Promise<void> {
+    const inserted = await tx.$executeRaw`
+      INSERT INTO offline_intent_token_replay_guard (
+        jti,
+        user_id,
+        issued_at,
+        expires_at,
+        consumed_at,
+        status
+      )
+      VALUES (
+        ${input.jti},
+        ${input.userId},
+        ${input.issuedAt},
+        ${input.expiresAt},
+        NULL,
+        'ISSUED'::offline_intent_token_replay_guard_status
+      )
+      ON CONFLICT (jti) DO NOTHING
+    `;
+
+    if (inserted !== 1) {
+      throw new Error('Failed to register offline intent token replay guard');
+    }
+
+    await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, input.issuedAt);
+  }
+
+  private async consumeOfflineIntentTokenReplayGuard(input: {
+    jti: string;
+    userId: UserId;
+  }): Promise<{ valid: true } | { valid: false; reason: string }> {
+    if (input.jti.trim().length === 0) {
+      return { valid: false, reason: 'Offline intent token missing nonce' };
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+
+      await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, now);
+
+      const consumed = await tx.$executeRaw`
+        UPDATE offline_intent_token_replay_guard
+        SET
+          consumed_at = ${now},
+          status = 'CONSUMED'::offline_intent_token_replay_guard_status,
+          updated_at = NOW()
+        WHERE jti = ${input.jti}
+          AND user_id = ${input.userId}
+          AND status = 'ISSUED'::offline_intent_token_replay_guard_status
+          AND consumed_at IS NULL
+          AND expires_at > ${now}
+      `;
+
+      if (consumed === 1) {
+        return { valid: true };
+      }
+
+      const records = await tx.$queryRaw<
+        Array<{
+          expiresAt: Date;
+          consumedAt: Date | null;
+          status: 'ISSUED' | 'CONSUMED' | 'EXPIRED';
+        }>
+      >`
+        SELECT
+          expires_at AS "expiresAt",
+          consumed_at AS "consumedAt",
+          status::text AS "status"
+        FROM offline_intent_token_replay_guard
+        WHERE jti = ${input.jti}
+          AND user_id = ${input.userId}
+        LIMIT 1
+      `;
+
+      const record = records[0];
+      if (!record) {
+        return { valid: false, reason: 'Offline intent token not registered' };
+      }
+
+      if (record.expiresAt.getTime() <= now.getTime() || record.status === 'EXPIRED') {
+        return { valid: false, reason: 'Offline intent token expired' };
+      }
+
+      if (record.consumedAt !== null || record.status === 'CONSUMED') {
+        return { valid: false, reason: 'Offline intent token replay detected' };
+      }
+
+      return { valid: false, reason: 'Offline intent token is not usable' };
+    });
+  }
+
+  private async cleanupExpiredOfflineIntentTokenReplayGuards(
+    tx: Prisma.TransactionClient,
+    now: Date
+  ): Promise<void> {
+    const retentionCutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    await tx.$executeRaw`
+      UPDATE offline_intent_token_replay_guard
+      SET
+        status = 'EXPIRED'::offline_intent_token_replay_guard_status,
+        updated_at = NOW()
+      WHERE status = 'ISSUED'::offline_intent_token_replay_guard_status
+        AND expires_at <= ${now}
+    `;
+
+    await tx.$executeRaw`
+      DELETE FROM offline_intent_token_replay_guard
+      WHERE expires_at < ${retentionCutoff}
+    `;
+  }
 
   private requireTokenSecret(keyId: string): Uint8Array {
     const secret = this.tokenSecrets.get(keyId);
