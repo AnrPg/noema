@@ -18,12 +18,17 @@ The following gaps were unresolved:
 
 - session cohort orchestration events were not explicitly modeled across
   propose/accept/revise/commit transitions;
-- event consumers lacked a durable inbox dedupe mechanism for replay/duplication;
+- event consumers lacked a durable inbox dedupe mechanism for
+  replay/duplication;
 - startup pending recovery was not explicitly reclaiming orphaned consumer-group
   pending entries;
 - shutdown behavior did not guarantee bounded drain of in-flight event work;
 - handshake lineage state for reconciliation was not persisted as a first-class
   read model.
+
+Additionally, downstream orchestration required a more granular, shared failure
+classification contract to keep retry and routing behavior consistent across
+service tool surfaces.
 
 ## Decision
 
@@ -74,8 +79,8 @@ Consumer applies monotonic state transitions with revision guard:
 
 ### 4) Add Startup Pending Recovery (Claim/Replay)
 
-Consumer startup now runs `XAUTOCLAIM` recovery against the configured stream and
-consumer group:
+Consumer startup now runs `XAUTOCLAIM` recovery against the configured stream
+and consumer group:
 
 - claims idle pending messages assigned to inactive consumers;
 - reprocesses claimed entries through normal idempotency pipeline.
@@ -102,6 +107,8 @@ This reduces partial-processing risk during rolling restarts.
 - Restart resilience improves via explicit pending reclaim.
 - Shutdown behavior is operationally safer for in-flight work.
 - Contracts are explicit and reusable for future Kafka consumers.
+- Reliability workflows can align with a shared granular tool failure taxonomy
+  for better cross-service retry behavior.
 
 ### Negative
 
@@ -112,6 +119,8 @@ This reduces partial-processing risk during rolling restarts.
 
 - Existing review/content/session event processing remains intact and is now
   wrapped by stronger reliability guards.
+- Cross-service MCP contract standardization complements (but does not replace)
+  event-level reliability controls from this ADR.
 
 ## References
 

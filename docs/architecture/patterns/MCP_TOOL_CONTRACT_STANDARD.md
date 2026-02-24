@@ -34,6 +34,8 @@ shape below (or language-equivalent representation).
 interface IScopeRequirement {
   match: 'all' | 'any';
   requiredScopes: string[];
+  optionalScopes?: string[];
+  deniedScopes?: string[];
 }
 
 interface IToolCapabilities {
@@ -41,16 +43,65 @@ interface IToolCapabilities {
   sideEffects: boolean;
   timeoutMs: number;
   costClass: 'low' | 'medium' | 'high';
+  supportsDryRun?: boolean;
+  supportsAsync?: boolean;
+  supportsStreaming?: boolean;
+  maxBatchSize?: number;
+  consistency?: 'eventual' | 'strong';
+}
+
+interface IRateLimitPolicy {
+  requestsPerMinute?: number;
+  burst?: number;
+  concurrency?: number;
+}
+
+interface IToolDeprecation {
+  deprecated: boolean;
+  sunsetAt?: string; // ISO-8601
+  replacementTool?: string;
 }
 
 interface IToolDefinition {
   name: string; // kebab-case, unique per service
+  version: string; // semver for tool contract evolution
   description: string;
   service: string; // owning service identifier
+  ownerTeam?: string;
+  tags?: string[];
   priority: 'P0' | 'P1' | 'P2';
   scopeRequirement: IScopeRequirement;
   capabilities: IToolCapabilities;
   inputSchema: Record<string, unknown>; // JSON-schema-compatible payload shape
+  outputSchema?: Record<string, unknown>;
+  rateLimit?: IRateLimitPolicy;
+  deprecation?: IToolDeprecation;
+  examples?: {
+    input?: Record<string, unknown>;
+    successOutput?: Record<string, unknown>;
+    failureOutput?: Record<string, unknown>;
+  };
+}
+
+interface IToolExecutionContext {
+  userId: string;
+  correlationId: string;
+  requestId?: string;
+  principalType?: 'user' | 'agent' | 'service';
+  callerService?: string;
+  tenantId?: string;
+  traceId?: string;
+  deadlineMs?: number;
+  dryRun?: boolean;
+}
+
+interface IToolExecutionError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  failureClass?: FailureClass;
+  retryable?: boolean;
+  retryAfterMs?: number;
 }
 ```
 
@@ -61,11 +112,17 @@ interface IToolDefinition {
 - `scopeRequirement` **MUST** define authorization policy per tool:
   - `match='all'`: caller must have all scopes in `requiredScopes`.
   - `match='any'`: caller must have at least one listed scope.
+  - `optionalScopes` **MAY** be used to unlock best-effort enhancements.
+  - `deniedScopes` **MAY** be used for explicit deny rules.
 - `capabilities` **MUST** be provided for planner/runtime policy:
   - `idempotent` drives retry safety and dedup policy.
   - `sideEffects` drives dry-run and guarded execution policy.
   - `timeoutMs` drives execution budgets and cancellation thresholds.
   - `costClass` drives budgeting/rate policies.
+- `version` **MUST** be bumped when tool input/output contract changes.
+- `outputSchema` **SHOULD** be declared for contract-first consumers.
+- `rateLimit` **SHOULD** be declared for budgeting and orchestration throttling.
+- `deprecation` **MUST** be provided when a tool is being sunset.
 - `inputSchema` **MUST** be declared for every tool.
 
 ---
@@ -127,6 +184,38 @@ resolved tool's `scopeRequirement`.
 
 This ensures policy behavior matches each tool contract.
 
+### 3.1 Scopes and Scope Requirements (Practical Guide)
+
+**What is a scope?**
+
+A scope is a permission string attached to a caller identity token. It answers:
+"what operation is this caller allowed to perform?"
+
+Examples:
+
+- `scheduler:read`
+- `scheduler:plan`
+- `scheduler:tools:execute`
+- `scheduler:admin`
+
+**What is `scopeRequirement`?**
+
+It is the per-tool authorization contract that tells the runtime how to evaluate
+scopes for that tool.
+
+Examples:
+
+- strict execution gate:
+  - `match='all'`, `requiredScopes=['scheduler:plan','scheduler:tools:execute']`
+- flexible read gate:
+  - `match='any'`, `requiredScopes=['scheduler:read','scheduler:admin']`
+
+Interpretation rules:
+
+- `requiredScopes`: minimum mandatory scopes for authorization
+- `optionalScopes`: non-blocking scopes that enable optional behavior
+- `deniedScopes`: explicit deny list that overrides allows
+
 ---
 
 ## 4) Mandatory Observability Classification
@@ -135,35 +224,94 @@ Tool result metadata **MUST** include:
 
 ```ts
 type RetryClass = 'transient' | 'permanent' | 'unknown';
+type FailureClass =
+  | 'input.schema.invalid'
+  | 'input.constraint.violation'
+  | 'input.unsupported'
+  | 'auth.missing_scope'
+  | 'auth.invalid_token'
+  | 'auth.forbidden'
+  | 'rate.limit.exceeded'
+  | 'quota.exceeded'
+  | 'network.timeout'
+  | 'network.unavailable'
+  | 'dependency.timeout'
+  | 'dependency.unavailable'
+  | 'dependency.contract_mismatch'
+  | 'state.conflict'
+  | 'state.not_found'
+  | 'idempotency.duplicate'
+  | 'internal.invariant_violation'
+  | 'internal.exception'
+  | 'internal.unknown';
+
 type FailureDomain =
   | 'network'
   | 'validation'
   | 'auth'
   | 'internal'
-  | 'dependency';
+  | 'dependency'
+  | 'state'
+  | 'abuse';
 
 interface IToolResultMetadataExtended {
   resultCode?: string;
   retryClass?: RetryClass;
+  failureClass?: FailureClass;
   failureDomain?: FailureDomain;
+  httpStatusHint?: number;
+  retryAfterMs?: number;
+  isTimeout?: boolean;
+  isCircuitOpen?: boolean;
+  dependencyName?: string;
+  validationErrors?: string[];
+  scopeEvaluation?: {
+    match: 'all' | 'any';
+    requiredScopes: string[];
+    grantedScopes?: string[];
+    missingScopes?: string[];
+  };
   // plus existing base metadata fields
 }
 ```
 
-### Classification Rules
+### Classification Rules (Granular)
 
 - Success:
   - `resultCode=SUCCESS` (or service-specific success code)
   - `retryClass=unknown` (or omitted if your base schema allows)
-- Validation-like errors (e.g., contains `VALIDATION` / `INVALID`):
+- Input schema mismatch:
+  - `failureClass=input.schema.invalid`
   - `retryClass=permanent`, `failureDomain=validation`
-- Auth-like errors (e.g., `AUTH`, `FORBIDDEN`, `UNAUTHORIZED`):
+- Input business-rule rejection:
+  - `failureClass=input.constraint.violation`
+  - `retryClass=permanent`, `failureDomain=validation`
+- Missing required scope:
+  - `failureClass=auth.missing_scope`
   - `retryClass=permanent`, `failureDomain=auth`
-- Availability/timeouts (e.g., `TIMEOUT`, `UNAVAILABLE`):
+- Invalid/expired token:
+  - `failureClass=auth.invalid_token`
+  - `retryClass=permanent`, `failureDomain=auth`
+- Rate limiting / quota:
+  - `failureClass=rate.limit.exceeded` or `quota.exceeded`
+  - `retryClass=transient`, `failureDomain=abuse`
+  - `retryAfterMs` **SHOULD** be set
+- Network timeout/unavailable:
+  - `failureClass=network.timeout` or `network.unavailable`
   - `retryClass=transient`, `failureDomain=network`
-- Dependency/external failures:
+- Dependency timeout/unavailable:
+  - `failureClass=dependency.timeout` or `dependency.unavailable`
   - `retryClass=transient`, `failureDomain=dependency`
-- Unknown/uncategorized failures:
+- State conflict/not-found:
+  - `failureClass=state.conflict` or `state.not_found`
+  - `retryClass=permanent` (or `transient` if service-specific semantics
+    justify)
+  - `failureDomain=state`
+- Duplicate idempotency key:
+  - `failureClass=idempotency.duplicate`
+  - `retryClass=permanent`, `failureDomain=state`
+- Unhandled exception:
+  - `failureClass=internal.exception`
   - `retryClass=unknown`, `failureDomain=internal`
 
 ### Minimum Base Metadata
@@ -175,6 +323,10 @@ All tool results **MUST** carry base metadata fields equivalent to:
 - `timestamp`
 - `executionTime`
 - `correlationId`
+- `toolName`
+- `toolVersion`
+- `attemptCount`
+- `requestId` (if available)
 
 ---
 
@@ -214,6 +366,9 @@ A service is conformant only if all answers are "Yes":
 7. Are discovery (`list tools`) and execution routes aligned with same
    definitions?
 8. Are OpenAPI schemas aligned with runtime contract fields and semantics?
+9. Are `failureClass` values emitted from a bounded, documented enum?
+10. Are scope evaluation outcomes surfaced in metadata for denied requests?
+11. Are `version`, `outputSchema`, and deprecation fields maintained?
 
 ---
 

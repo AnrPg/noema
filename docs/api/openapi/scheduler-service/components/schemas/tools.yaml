@@ -110,10 +110,58 @@ ToolExecutionMetadata:
       type: string
       enum: [transient, permanent, unknown]
       description: Retry behavior classification for orchestration clients.
+    failureClass:
+      $ref: ../../../shared/components/schemas/tooling.yaml#/ToolFailureClass
     failureDomain:
       type: string
-      enum: [network, validation, auth, internal, dependency]
+      enum: [network, validation, auth, internal, dependency, state, abuse]
       description: Primary failure domain for triage when success=false.
+    httpStatusHint:
+      type: integer
+      minimum: 100
+      maximum: 599
+      description: Suggested HTTP status classification for clients.
+    retryAfterMs:
+      type: integer
+      minimum: 0
+      description: Suggested delay before retry when retryClass=transient.
+    isTimeout:
+      type: boolean
+      description: Indicates timeout-driven failure.
+      nullable: true
+    isCircuitOpen:
+      type: boolean
+      description: Indicates dependency circuit-breaker open state.
+      nullable: true
+    dependencyName:
+      type: string
+      description: Optional dependency identifier for dependency failures.
+      nullable: true
+    validationErrors:
+      type: array
+      items:
+        type: string
+      description: Optional field-level validation failures.
+    scopeEvaluation:
+      type: object
+      description: Optional authorization evaluation diagnostics.
+      properties:
+        match:
+          type: string
+          enum: [all, any]
+        requiredScopes:
+          type: array
+          items:
+            type: string
+        grantedScopes:
+          type: array
+          items:
+            type: string
+        missingScopes:
+          type: array
+          items:
+            type: string
+      required: [match, requiredScopes]
   required: [toolVersion, timestamp, executionTime, serviceVersion]
 
 ToolExecutionError:
@@ -123,7 +171,16 @@ ToolExecutionError:
       type: string
     message:
       type: string
+    failureClass:
+      $ref: ../../../shared/components/schemas/tooling.yaml#/ToolFailureClass
+    retryable:
+      type: boolean
+    retryAfterMs:
+      type: integer
+      minimum: 0
     details:
+      type: object
+      additionalProperties: true
       nullable: true
   required: [code, message]
 
@@ -150,3 +207,46 @@ ToolExecuteResponse:
     metadata:
       $ref: ./common.yaml#/ApiResponseMetadata
   required: [data, metadata]
+
+ToolFailureClass:
+  $ref: ../../../shared/components/schemas/tooling.yaml#/ToolFailureClass
+
+ToolFailureClassificationEntry:
+  $ref: ../../../shared/components/schemas/tooling.yaml#/ToolFailureClassificationEntry
+
+ToolFailureClassificationCatalog:
+  allOf:
+    - $ref: ../../../shared/components/schemas/tooling.yaml#/ToolFailureClassificationCatalog
+  example:
+    version: 1.0.0
+    entries:
+      - resultCode: TOOL_INPUT_VALIDATION_FAILED
+        failureClass: input.schema.invalid
+        retryClass: permanent
+        failureDomain: validation
+        retryable: false
+        notes: Input does not match declared tool inputSchema.
+      - resultCode: FORBIDDEN_MISSING_SCOPE
+        failureClass: auth.missing_scope
+        retryClass: permanent
+        failureDomain: auth
+        retryable: false
+        notes: Caller token lacks one or more requiredScopes.
+      - resultCode: RATE_LIMIT_EXCEEDED
+        failureClass: rate.limit.exceeded
+        retryClass: transient
+        failureDomain: abuse
+        retryable: true
+        notes: Caller should retry after retryAfterMs.
+      - resultCode: DEPENDENCY_TIMEOUT
+        failureClass: dependency.timeout
+        retryClass: transient
+        failureDomain: dependency
+        retryable: true
+        notes: Upstream dependency timed out.
+      - resultCode: HANDLER_EXCEPTION
+        failureClass: internal.exception
+        retryClass: unknown
+        failureDomain: internal
+        retryable: false
+        notes: Unhandled exception in tool handler.

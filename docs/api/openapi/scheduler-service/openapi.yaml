@@ -200,6 +200,12 @@ components:
       $ref: ./components/schemas/tools.yaml#/ToolExecutionResult
     ToolExecuteResponse:
       $ref: ./components/schemas/tools.yaml#/ToolExecuteResponse
+    ToolFailureClass:
+      $ref: ../shared/components/schemas/tooling.yaml#/ToolFailureClass
+    ToolFailureClassificationEntry:
+      $ref: ../shared/components/schemas/tooling.yaml#/ToolFailureClassificationEntry
+    ToolFailureClassificationCatalog:
+      $ref: ../shared/components/schemas/tooling.yaml#/ToolFailureClassificationCatalog
 
     HealthStatus:
       $ref: ./components/schemas/common.yaml#/HealthStatus

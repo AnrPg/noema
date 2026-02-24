@@ -23,6 +23,8 @@ The following gaps blocked full orchestration:
 - input validation at tool registry boundary was not strict enough;
 - observability metadata did not include machine-classified result and retry
   semantics;
+- failure semantics were not granular enough for precise retry and routing
+  policies;
 - orchestration-critical scheduler tools were missing from the registered tool
   surface.
 
@@ -34,6 +36,11 @@ The following gaps blocked full orchestration:
 
 - `scopeRequirement`: `{ match: 'all' | 'any', requiredScopes: string[] }`
 - `capabilities`: `{ idempotent, sideEffects, timeoutMs, costClass }`
+
+Follow-up cross-service standardization further expands practical fields
+(`version`, ownership/tags, rate-limit policy, deprecation metadata,
+`outputSchema`, optional capability flags) for stronger tool lifecycle
+governance.
 
 This provides a stable control-plane contract for agent runtimes and policy
 engines.
@@ -78,12 +85,27 @@ Tool result metadata is extended with:
 - `failureDomain` (`network` | `validation` | `auth` | `internal` |
   `dependency`)
 
+Follow-up standardization introduces granular `failureClass` categories (e.g.
+schema invalidation, missing scope, quota/rate-limit, timeout, dependency
+contract mismatch, state conflict, duplicate idempotency key, internal
+exception) and optional structured metadata (`retryAfterMs`, `validationErrors`,
+scope evaluation details).
+
 The registry classifies both handler-returned failures and thrown exceptions.
 
 ### 5) Align Route Authorization with Scope Requirements
 
 Tool execution routes now evaluate per-tool `scopeRequirement` dynamically
 instead of a fixed all-scopes behavior.
+
+Follow-up standardization clarifies scope semantics and supports explicit
+allow/deny composition for practical policy enforcement.
+
+### 6) Normalize as Cross-Service Contract Standard
+
+The phase-4 scheduler contract is promoted into `MCP_TOOL_CONTRACT_STANDARD.md`
+as a mandatory cross-service standard to ensure uniform tool interfaces, failure
+taxonomy, and authorization semantics.
 
 ## Consequences
 
@@ -94,6 +116,9 @@ instead of a fixed all-scopes behavior.
 - Invalid requests fail early with deterministic machine-readable semantics.
 - Tool-level authorization is policy-complete and matches contract definitions.
 - OpenAPI artifacts now reflect runtime metadata semantics.
+- Granular failure classes enable more accurate retries, incident triage, and
+  orchestration fallback routing.
+- Scope semantics are explicit and easier to apply consistently across services.
 
 ### Negative
 
@@ -101,6 +126,7 @@ instead of a fixed all-scopes behavior.
   extension for advanced schema keywords.
 - Metadata classification relies on error-code conventions and may need
   centralization across services for perfect consistency.
+- Richer interfaces require disciplined contract versioning and governance.
 
 ### Neutral
 
@@ -112,6 +138,7 @@ instead of a fixed all-scopes behavior.
 - [ADR-0028: Scheduler Agent Readiness Hardening](./ADR-0028-scheduler-agent-readiness-hardening.md)
 - [ADR-0029: Scheduler FSRS/HLR Runtime Integration and State Machine](./ADR-0029-scheduler-fsrs-hlr-runtime-integration-phase-3.md)
 - [AGENT_MCP_TOOL_REGISTRY](../AGENT_MCP_TOOL_REGISTRY.md)
+- [MCP_TOOL_CONTRACT_STANDARD](../patterns/MCP_TOOL_CONTRACT_STANDARD.md)
 
 ## Related Changes
 

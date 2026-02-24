@@ -30,6 +30,29 @@ executeTool:
     description: |
       Executes a registered scheduler tool in the caller's security context.
       Returns structured tool success/failure result in `data`.
+
+      ### Failure Classification Mapping
+
+      | `error.code` / condition | `failureClass` | `retryClass` | `failureDomain` |
+      | --- | --- | --- | --- |
+      | `TOOL_INPUT_VALIDATION_FAILED` | `input.schema.invalid` | `permanent` | `validation` |
+      | missing required scope | `auth.missing_scope` | `permanent` | `auth` |
+      | invalid/expired token | `auth.invalid_token` | `permanent` | `auth` |
+      | rate limit exceeded | `rate.limit.exceeded` | `transient` | `abuse` |
+      | dependency timeout | `dependency.timeout` | `transient` | `dependency` |
+      | upstream unavailable | `dependency.unavailable` | `transient` | `dependency` |
+      | tool state conflict | `state.conflict` | `permanent` | `state` |
+      | duplicate idempotency key | `idempotency.duplicate` | `permanent` | `state` |
+      | unhandled exception | `internal.exception` | `unknown` | `internal` |
+
+      For transient failures, clients SHOULD honor `data.metadata.retryAfterMs`
+      when present.
+    x-noema-failure-catalog:
+      schema:
+        $ref: ../openapi.yaml#/components/schemas/ToolFailureClassificationCatalog
+      version: 1.0.0
+      source: shared-tooling-catalog
+      notes: Canonical mapping for error.code to failureClass/retryClass/failureDomain.
     x-noema-lifecycle: active
     tags: [Tools]
     requestBody:
@@ -170,8 +193,61 @@ executeTool:
                       serviceVersion: 0.1.0
                       correlationId: cor_123
                       resultCode: TOOL_INPUT_VALIDATION_FAILED
+                      failureClass: input.schema.invalid
                       retryClass: permanent
                       failureDomain: validation
+                      httpStatusHint: 422
+                      validationErrors:
+                        - input.userId is required
+                  metadata:
+                    requestId: req_123
+                    correlationId: cor_123
+                    timestamp: 2026-02-24T00:00:00.000Z
+                    processingTimeMs: 1
+              missingScopeFailure:
+                value:
+                  data:
+                    success: false
+                    error:
+                      code: FORBIDDEN_MISSING_SCOPE
+                      message: "Missing required scopes: scheduler:plan"
+                      failureClass: auth.missing_scope
+                    agentHints:
+                      suggestedNextActions: []
+                      relatedResources: []
+                      confidence: 1
+                      sourceQuality: high
+                      validityPeriod: long
+                      contextNeeded: []
+                      assumptions: []
+                      riskFactors: []
+                      dependencies: []
+                      estimatedImpact:
+                        benefit: 0
+                        effort: 0.1
+                        roi: 0
+                      preferenceAlignment: []
+                      reasoning: Caller lacks required tool scopes
+                    metadata:
+                      toolVersion: 0.1.0
+                      timestamp: 2026-02-24T00:00:00.000Z
+                      executionTime: 1
+                      serviceVersion: 0.1.0
+                      correlationId: cor_123
+                      resultCode: FORBIDDEN_MISSING_SCOPE
+                      failureClass: auth.missing_scope
+                      retryClass: permanent
+                      failureDomain: auth
+                      httpStatusHint: 403
+                      scopeEvaluation:
+                        match: all
+                        requiredScopes:
+                          - scheduler:plan
+                          - scheduler:tools:execute
+                        grantedScopes:
+                          - scheduler:tools:execute
+                        missingScopes:
+                          - scheduler:plan
                   metadata:
                     requestId: req_123
                     correlationId: cor_123

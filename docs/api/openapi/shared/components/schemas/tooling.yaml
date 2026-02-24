@@ -1,0 +1,60 @@
+ToolFailureClass:
+  type: string
+  description: Granular execution failure class used for orchestration policy.
+  enum:
+    - input.schema.invalid
+    - input.constraint.violation
+    - input.unsupported
+    - auth.missing_scope
+    - auth.invalid_token
+    - auth.forbidden
+    - rate.limit.exceeded
+    - quota.exceeded
+    - network.timeout
+    - network.unavailable
+    - dependency.timeout
+    - dependency.unavailable
+    - dependency.contract_mismatch
+    - state.conflict
+    - state.not_found
+    - idempotency.duplicate
+    - internal.invariant_violation
+    - internal.exception
+    - internal.unknown
+
+ToolRetryClass:
+  type: string
+  enum: [transient, permanent, unknown]
+
+ToolFailureDomain:
+  type: string
+  enum: [network, validation, auth, internal, dependency, state, abuse]
+
+ToolFailureClassificationEntry:
+  type: object
+  properties:
+    resultCode:
+      type: string
+    failureClass:
+      $ref: "#/ToolFailureClass"
+    retryClass:
+      $ref: "#/ToolRetryClass"
+    failureDomain:
+      $ref: "#/ToolFailureDomain"
+    retryable:
+      type: boolean
+    notes:
+      type: string
+  required: [resultCode, failureClass, retryClass, failureDomain, retryable]
+
+ToolFailureClassificationCatalog:
+  type: object
+  properties:
+    version:
+      type: string
+      example: 1.0.0
+    entries:
+      type: array
+      items:
+        $ref: "#/ToolFailureClassificationEntry"
+  required: [version, entries]
