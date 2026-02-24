@@ -217,4 +217,237 @@ describe('SessionService active session concurrency policy', () => {
       (outboxRepository.enqueue as unknown as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(1);
   });
+
+  it('allows startSession when policy=1 and 0 active sessions (happy path)', async () => {
+    const userId = makeId('user_');
+    const deckQueryId = makeId('deck_');
+    const cardId = makeId('card_');
+    const correlationId = makeId('cor_');
+
+    const txClient = { __tx: 'happy-path' };
+    const prisma = {
+      $transaction: vi.fn(async (operation: (tx: unknown) => Promise<unknown>) =>
+        operation(txClient)
+      ),
+    } as unknown as PrismaClient;
+
+    const repository = {
+      countActiveSessionsForUpdate: vi.fn(async () => 0),
+      createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
+        ...sessionInput,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })),
+      createQueueItemsBatch: vi.fn(async () => undefined),
+    } as unknown as ISessionRepository;
+
+    const outboxRepository = {
+      enqueue: vi.fn(async () => undefined),
+      markPublished: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      enqueueBatch: vi.fn(async () => undefined),
+      listPending: vi.fn(async () => []),
+    } as unknown as IOutboxRepository;
+
+    const eventPublisher = {
+      publish: vi.fn(async () => undefined),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const service = new SessionService(
+      repository,
+      eventPublisher,
+      outboxRepository,
+      prisma,
+      createLoggerMock() as never,
+      {
+        security: {
+          verifyOfflineIntentTokens: false,
+          offlineIntentTokenActiveKeyId: 'default',
+          offlineIntentTokenKeys: {},
+          offlineIntentTokenIssuer: 'noema.session',
+          offlineIntentTokenAudience: 'noema.mobile',
+        },
+        session: {
+          maxConcurrentSessions: 1,
+        },
+      }
+    );
+
+    const result = await service.startSession(
+      {
+        deckQueryId,
+        learningMode: 'goal_driven',
+        config: { sessionTimeoutHours: 24 },
+        initialCardIds: [cardId],
+      },
+      {
+        userId: userId as never,
+        correlationId: correlationId as never,
+      }
+    );
+
+    expect(result.data.state).toBe('active');
+    expect(
+      (repository.countActiveSessionsForUpdate as unknown as ReturnType<typeof vi.fn>).mock
+        .calls[0]
+    ).toEqual([userId, txClient]);
+    expect(
+      (repository.createSession as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+    expect(
+      (outboxRepository.enqueue as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+  });
+
+  it('allows startSession at boundary: policy=3, 2 active sessions', async () => {
+    const userId = makeId('user_');
+    const deckQueryId = makeId('deck_');
+    const cardId = makeId('card_');
+    const correlationId = makeId('cor_');
+
+    const txClient = { __tx: 'boundary-allow' };
+    const prisma = {
+      $transaction: vi.fn(async (operation: (tx: unknown) => Promise<unknown>) =>
+        operation(txClient)
+      ),
+    } as unknown as PrismaClient;
+
+    const repository = {
+      countActiveSessionsForUpdate: vi.fn(async () => 2),
+      createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
+        ...sessionInput,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })),
+      createQueueItemsBatch: vi.fn(async () => undefined),
+    } as unknown as ISessionRepository;
+
+    const outboxRepository = {
+      enqueue: vi.fn(async () => undefined),
+      markPublished: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      enqueueBatch: vi.fn(async () => undefined),
+      listPending: vi.fn(async () => []),
+    } as unknown as IOutboxRepository;
+
+    const eventPublisher = {
+      publish: vi.fn(async () => undefined),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const service = new SessionService(
+      repository,
+      eventPublisher,
+      outboxRepository,
+      prisma,
+      createLoggerMock() as never,
+      {
+        security: {
+          verifyOfflineIntentTokens: false,
+          offlineIntentTokenActiveKeyId: 'default',
+          offlineIntentTokenKeys: {},
+          offlineIntentTokenIssuer: 'noema.session',
+          offlineIntentTokenAudience: 'noema.mobile',
+        },
+        session: {
+          maxConcurrentSessions: 3,
+        },
+      }
+    );
+
+    const result = await service.startSession(
+      {
+        deckQueryId,
+        learningMode: 'goal_driven',
+        config: { sessionTimeoutHours: 24 },
+        initialCardIds: [cardId],
+      },
+      {
+        userId: userId as never,
+        correlationId: correlationId as never,
+      }
+    );
+
+    expect(result.data.state).toBe('active');
+    expect(
+      (repository.createSession as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+  });
+
+  it('rejects startSession at boundary: policy=3, 3 active sessions', async () => {
+    const userId = makeId('user_');
+    const deckQueryId = makeId('deck_');
+    const cardId = makeId('card_');
+    const correlationId = makeId('cor_');
+
+    const txClient = { __tx: 'boundary-reject' };
+    const prisma = {
+      $transaction: vi.fn(async (operation: (tx: unknown) => Promise<unknown>) =>
+        operation(txClient)
+      ),
+    } as unknown as PrismaClient;
+
+    const repository = {
+      countActiveSessionsForUpdate: vi.fn(async () => 3),
+      createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
+        ...sessionInput,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })),
+      createQueueItemsBatch: vi.fn(async () => undefined),
+    } as unknown as ISessionRepository;
+
+    const outboxRepository = {
+      enqueue: vi.fn(async () => undefined),
+      markPublished: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      enqueueBatch: vi.fn(async () => undefined),
+      listPending: vi.fn(async () => []),
+    } as unknown as IOutboxRepository;
+
+    const eventPublisher = {
+      publish: vi.fn(async () => undefined),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const service = new SessionService(
+      repository,
+      eventPublisher,
+      outboxRepository,
+      prisma,
+      createLoggerMock() as never,
+      {
+        security: {
+          verifyOfflineIntentTokens: false,
+          offlineIntentTokenActiveKeyId: 'default',
+          offlineIntentTokenKeys: {},
+          offlineIntentTokenIssuer: 'noema.session',
+          offlineIntentTokenAudience: 'noema.mobile',
+        },
+        session: {
+          maxConcurrentSessions: 3,
+        },
+      }
+    );
+
+    await expect(
+      service.startSession(
+        {
+          deckQueryId,
+          learningMode: 'goal_driven',
+          config: { sessionTimeoutHours: 24 },
+          initialCardIds: [cardId],
+        },
+        {
+          userId: userId as never,
+          correlationId: correlationId as never,
+        }
+      )
+    ).rejects.toBeInstanceOf(BusinessRuleError);
+
+    expect(
+      (repository.createSession as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(0);
+  });
 });
