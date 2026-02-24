@@ -21,10 +21,7 @@ import type {
 import type { SessionState } from '../../types/index.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
-type IBaseToolDefinition = Omit<
-  IToolDefinition,
-  'version' | 'scopeRequirement' | 'capabilities'
->;
+type IBaseToolDefinition = Omit<IToolDefinition, 'version' | 'scopeRequirement' | 'capabilities'>;
 
 function inferSideEffects(name: string): boolean {
   return (
@@ -366,7 +363,7 @@ const SESSION_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
         cardId: { type: 'string', description: 'Card ID being reviewed' },
         outcome: {
           type: 'string',
-          enum: ['correct', 'incorrect', 'partial', 'timeout', 'skipped'],
+          enum: ['correct', 'incorrect', 'partial', 'skipped'],
         },
         rating: { type: 'string', enum: ['again', 'hard', 'good', 'easy'] },
         ratingValue: { type: 'number', minimum: 1, maximum: 4 },
@@ -501,9 +498,8 @@ const SESSION_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   },
 ];
 
-export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = SESSION_TOOL_DEFINITIONS_BASE.map(
-  withContractDefaults
-);
+export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] =
+  SESSION_TOOL_DEFINITIONS_BASE.map(withContractDefaults);
 
 // ============================================================================
 // Handler Map Factory

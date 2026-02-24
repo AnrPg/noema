@@ -1607,13 +1607,17 @@ export class SessionService {
     const errors: string[] = [];
     if (blueprintCardIds.length !== requestedCardIds.length) {
       errors.push('Blueprint card list length does not match initialCardIds length');
+      return { valid: false, errors };
     }
 
-    const requestedSet = new Set(requestedCardIds);
-    for (const cardId of blueprintCardIds) {
-      if (!requestedSet.has(cardId)) {
-        errors.push(`Blueprint card ${cardId} not present in initialCardIds`);
-        break;
+    for (let index = 0; index < blueprintCardIds.length; index += 1) {
+      const blueprintCardId = blueprintCardIds[index];
+      const requestedCardId = requestedCardIds[index];
+
+      if (blueprintCardId !== requestedCardId) {
+        errors.push(
+          `Blueprint card order mismatch at index ${String(index)}: expected ${requestedCardId}, got ${blueprintCardId}`
+        );
       }
     }
 

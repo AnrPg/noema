@@ -46,6 +46,28 @@ describe('session tool registry contract', () => {
     );
   });
 
+  it('keeps record-attempt outcome enum aligned with domain contract', () => {
+    const recordAttemptDefinition = SESSION_TOOL_DEFINITIONS.find(
+      (definition) => definition.name === 'record-attempt'
+    );
+
+    expect(recordAttemptDefinition).toBeDefined();
+
+    const outcomeEnum = (
+      recordAttemptDefinition as {
+        inputSchema: {
+          properties: {
+            outcome: {
+              enum: string[];
+            };
+          };
+        };
+      }
+    ).inputSchema.properties.outcome.enum;
+
+    expect(outcomeEnum).toEqual(['correct', 'incorrect', 'partial', 'skipped']);
+  });
+
   it('returns TOOL_NOT_FOUND metadata for unknown tool', async () => {
     const registry = new ToolRegistry();
 
