@@ -33,7 +33,7 @@ describe('SessionService blueprint fidelity', () => {
     } as unknown as PrismaClient;
 
     const repository = {
-      countSessionsByUser: vi.fn(async () => 0),
+      countActiveSessionsForUpdate: vi.fn(async () => 0),
       createSession: vi.fn(),
       createQueueItemsBatch: vi.fn(),
     } as unknown as ISessionRepository;
@@ -132,7 +132,7 @@ describe('SessionService blueprint fidelity', () => {
     } as unknown as PrismaClient;
 
     const repository = {
-      countSessionsByUser: vi.fn(async () => 0),
+      countActiveSessionsForUpdate: vi.fn(async () => 0),
       createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
         ...sessionInput,
         createdAt: new Date().toISOString(),
@@ -216,8 +216,8 @@ describe('SessionService blueprint fidelity', () => {
 
     expect(result.data.state).toBe('active');
     expect(
-      (repository.countSessionsByUser as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
-    ).toEqual([expect.any(String), 'active', txClient]);
+      (repository.countActiveSessionsForUpdate as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    ).toEqual([expect.any(String), txClient]);
     expect(
       (repository.createSession as unknown as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(1);

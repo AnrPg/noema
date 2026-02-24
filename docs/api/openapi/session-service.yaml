@@ -820,10 +820,47 @@ components:
         failureDomain:
           type: string
           enum: [network, validation, auth, internal, dependency, state, abuse]
+        httpStatusHint:
+          type: integer
+          minimum: 100
+          maximum: 599
+          nullable: true
         retryAfterMs:
           type: integer
           minimum: 0
           nullable: true
+        isTimeout:
+          type: boolean
+          nullable: true
+        isCircuitOpen:
+          type: boolean
+          nullable: true
+        dependencyName:
+          type: string
+          nullable: true
+        validationErrors:
+          type: array
+          items:
+            type: string
+        scopeEvaluation:
+          type: object
+          properties:
+            match:
+              type: string
+              enum: [all, any]
+            requiredScopes:
+              type: array
+              items:
+                type: string
+            grantedScopes:
+              type: array
+              items:
+                type: string
+            missingScopes:
+              type: array
+              items:
+                type: string
+          required: [match, requiredScopes]
       required: [toolVersion, timestamp, executionTime, serviceVersion]
 
     ToolExecutionError:
@@ -903,7 +940,13 @@ components:
             retryClass: transient
             failureDomain: dependency
             retryable: true
-            notes: Upstream dependency timed out.
+            notes: Downstream dependency timed out.
+          - resultCode: TOOL_NOT_FOUND
+            failureClass: state.not_found
+            retryClass: permanent
+            failureDomain: state
+            retryable: false
+            notes: Requested tool does not exist in the registry.
           - resultCode: HANDLER_EXCEPTION
             failureClass: internal.exception
             retryClass: unknown

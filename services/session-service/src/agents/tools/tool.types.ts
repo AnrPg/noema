@@ -14,6 +14,7 @@ export type ToolRetryClass = 'transient' | 'permanent' | 'unknown';
 export type ToolFailureClass =
   | 'input.schema.invalid'
   | 'input.constraint.violation'
+  | 'input.unsupported'
   | 'auth.missing_scope'
   | 'auth.invalid_token'
   | 'auth.forbidden'
@@ -23,9 +24,11 @@ export type ToolFailureClass =
   | 'network.unavailable'
   | 'dependency.timeout'
   | 'dependency.unavailable'
+  | 'dependency.contract_mismatch'
   | 'state.conflict'
   | 'state.not_found'
   | 'idempotency.duplicate'
+  | 'internal.invariant_violation'
   | 'internal.exception'
   | 'internal.unknown';
 
@@ -65,6 +68,15 @@ export interface IToolResultMetadataExtended extends IToolResultMetadata {
   validationErrors?: string[];
   retryAfterMs?: number;
   httpStatusHint?: number;
+  isTimeout?: boolean;
+  isCircuitOpen?: boolean;
+  dependencyName?: string;
+  scopeEvaluation?: {
+    match: 'all' | 'any';
+    requiredScopes: string[];
+    grantedScopes?: string[];
+    missingScopes?: string[];
+  };
   toolName?: string;
   attemptCount?: number;
   requestId?: string;

@@ -243,7 +243,13 @@ ToolFailureClassificationCatalog:
         retryClass: transient
         failureDomain: dependency
         retryable: true
-        notes: Upstream dependency timed out.
+        notes: Downstream dependency timed out.
+      - resultCode: TOOL_NOT_FOUND
+        failureClass: state.not_found
+        retryClass: permanent
+        failureDomain: state
+        retryable: false
+        notes: Requested tool does not exist in the registry.
       - resultCode: HANDLER_EXCEPTION
         failureClass: internal.exception
         retryClass: unknown

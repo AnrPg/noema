@@ -89,14 +89,19 @@ function validateValue(value: unknown, schema: IJsonSchema, path: string, errors
     }
     if (schema.items) {
       const itemSchema = schema.items;
-      value.forEach((item, index) => { validateValue(item, itemSchema, `${path}[${String(index)}]`, errors); });
+      value.forEach((item, index) => {
+        validateValue(item, itemSchema, `${path}[${String(index)}]`, errors);
+      });
     }
     return;
   }
 
-  if (schema.type === 'string' && typeof value !== 'string') errors.push(`${path} must be a string`);
-  if (schema.type === 'number' && typeof value !== 'number') errors.push(`${path} must be a number`);
-  if (schema.type === 'boolean' && typeof value !== 'boolean') errors.push(`${path} must be a boolean`);
+  if (schema.type === 'string' && typeof value !== 'string')
+    errors.push(`${path} must be a string`);
+  if (schema.type === 'number' && typeof value !== 'number')
+    errors.push(`${path} must be a number`);
+  if (schema.type === 'boolean' && typeof value !== 'boolean')
+    errors.push(`${path} must be a boolean`);
 }
 
 function validateInputAgainstSchema(input: unknown, schema: Record<string, unknown>): string[] {
@@ -107,49 +112,75 @@ function validateInputAgainstSchema(input: unknown, schema: Record<string, unkno
   return errors;
 }
 
-function classifyError(
-  errorCode: string
-): { retryClass: ToolRetryClass; failureClass: ToolFailureClass; failureDomain: ToolFailureDomain } {
-  if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
+function classifyError(errorCode: string): {
+  retryClass: ToolRetryClass;
+  failureClass: ToolFailureClass;
+  failureDomain: ToolFailureDomain;
+} {
+  const normalizedCode = errorCode.toUpperCase();
+
+  if (normalizedCode.includes('VALIDATION') || normalizedCode.includes('INVALID')) {
     return {
       retryClass: 'permanent',
       failureClass: 'input.schema.invalid',
       failureDomain: 'validation',
     };
   }
-  if (errorCode.includes('SCOPE')) {
+  if (normalizedCode.includes('SCOPE')) {
     return {
       retryClass: 'permanent',
       failureClass: 'auth.missing_scope',
       failureDomain: 'auth',
     };
   }
-  if (errorCode.includes('AUTH') || errorCode.includes('FORBIDDEN') || errorCode.includes('UNAUTHORIZED')) {
+  if (
+    normalizedCode.includes('AUTH') ||
+    normalizedCode.includes('FORBIDDEN') ||
+    normalizedCode.includes('UNAUTHORIZED')
+  ) {
     return {
       retryClass: 'permanent',
       failureClass: 'auth.invalid_token',
       failureDomain: 'auth',
     };
   }
-  if (errorCode.includes('RATE_LIMIT')) {
+  if (normalizedCode.includes('RATE_LIMIT') || normalizedCode.includes('QUOTA')) {
     return {
       retryClass: 'transient',
       failureClass: 'rate.limit.exceeded',
       failureDomain: 'abuse',
     };
   }
-  if (errorCode.includes('TIMEOUT')) {
+  if (normalizedCode.includes('NOT_FOUND') || normalizedCode.includes('CONFLICT')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: normalizedCode.includes('CONFLICT') ? 'state.conflict' : 'state.not_found',
+      failureDomain: 'state',
+    };
+  }
+  if (normalizedCode.includes('IDEMPOTENCY') || normalizedCode.includes('DUPLICATE')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'idempotency.duplicate',
+      failureDomain: 'state',
+    };
+  }
+  if (
+    normalizedCode.includes('DEPENDENCY') ||
+    normalizedCode.includes('EXTERNAL') ||
+    normalizedCode.includes('UPSTREAM')
+  ) {
     return {
       retryClass: 'transient',
-      failureClass: 'dependency.timeout',
+      failureClass: 'dependency.unavailable',
       failureDomain: 'dependency',
     };
   }
-  if (errorCode.includes('NOT_FOUND')) {
+  if (normalizedCode.includes('TIMEOUT') || normalizedCode.includes('UNAVAILABLE')) {
     return {
-      retryClass: 'permanent',
-      failureClass: 'state.not_found',
-      failureDomain: 'state',
+      retryClass: 'transient',
+      failureClass: 'network.timeout',
+      failureDomain: 'network',
     };
   }
   return {
@@ -358,13 +389,19 @@ export class ToolRegistry {
 // Factory
 // ============================================================================
 
-function getDefinition(index: number): IToolDefinition {
-  const def = CONTENT_TOOL_DEFINITIONS[index];
-  if (def === undefined) {
-    throw new Error(`Missing tool definition at index ${String(index)}`);
-  }
-  return def;
-}
+const EXPECTED_CONTENT_TOOL_NAMES = [
+  'create-card',
+  'batch-create-cards',
+  'validate-card-content',
+  'query-cards',
+  'build-session-seed',
+  'get-card-by-id',
+  'update-card',
+  'change-card-state',
+  'count-cards',
+  'update-card-node-links',
+  'batch-change-card-state',
+] as const;
 
 /**
  * Create a tool registry bound to the given service instances.
@@ -372,20 +409,59 @@ function getDefinition(index: number): IToolDefinition {
 export function createToolRegistry(contentService: ContentService): ToolRegistry {
   const registry = new ToolRegistry();
 
+  if (CONTENT_TOOL_DEFINITIONS.length !== EXPECTED_CONTENT_TOOL_NAMES.length) {
+    throw new Error(
+      `Expected ${String(EXPECTED_CONTENT_TOOL_NAMES.length)} content tool definitions, found ${String(CONTENT_TOOL_DEFINITIONS.length)}`
+    );
+  }
+
+  const definitionsByName = new Map(
+    CONTENT_TOOL_DEFINITIONS.map((definition) => [definition.name, definition])
+  );
+  const requireDefinition = (name: string): IToolDefinition => {
+    const definition = definitionsByName.get(name);
+    if (definition === undefined) {
+      throw new Error(`Content tool definition missing: ${name}`);
+    }
+    return definition;
+  };
+
+  for (const name of EXPECTED_CONTENT_TOOL_NAMES) {
+    requireDefinition(name);
+  }
+
   // P0 tools
-  registry.register(getDefinition(0), createCreateCardHandler(contentService));
-  registry.register(getDefinition(1), createBatchCreateCardsHandler(contentService));
-  registry.register(getDefinition(2), createValidateCardContentHandler(contentService));
-  registry.register(getDefinition(3), createQueryCardsHandler(contentService));
-  registry.register(getDefinition(4), createBuildSessionSeedHandler(contentService));
+  registry.register(requireDefinition('create-card'), createCreateCardHandler(contentService));
+  registry.register(
+    requireDefinition('batch-create-cards'),
+    createBatchCreateCardsHandler(contentService)
+  );
+  registry.register(
+    requireDefinition('validate-card-content'),
+    createValidateCardContentHandler(contentService)
+  );
+  registry.register(requireDefinition('query-cards'), createQueryCardsHandler(contentService));
+  registry.register(
+    requireDefinition('build-session-seed'),
+    createBuildSessionSeedHandler(contentService)
+  );
 
   // P1 tools
-  registry.register(getDefinition(5), createGetCardByIdHandler(contentService));
-  registry.register(getDefinition(6), createUpdateCardHandler(contentService));
-  registry.register(getDefinition(7), createChangeCardStateHandler(contentService));
-  registry.register(getDefinition(8), createCountCardsHandler(contentService));
-  registry.register(getDefinition(9), createUpdateCardNodeLinksHandler(contentService));
-  registry.register(getDefinition(10), createBatchChangeCardStateHandler(contentService));
+  registry.register(requireDefinition('get-card-by-id'), createGetCardByIdHandler(contentService));
+  registry.register(requireDefinition('update-card'), createUpdateCardHandler(contentService));
+  registry.register(
+    requireDefinition('change-card-state'),
+    createChangeCardStateHandler(contentService)
+  );
+  registry.register(requireDefinition('count-cards'), createCountCardsHandler(contentService));
+  registry.register(
+    requireDefinition('update-card-node-links'),
+    createUpdateCardNodeLinksHandler(contentService)
+  );
+  registry.register(
+    requireDefinition('batch-change-card-state'),
+    createBatchChangeCardStateHandler(contentService)
+  );
 
   return registry;
 }

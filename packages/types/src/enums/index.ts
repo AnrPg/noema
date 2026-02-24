@@ -163,8 +163,6 @@ export const AttemptOutcome = {
   INCORRECT: 'incorrect',
   /** Partially correct */
   PARTIAL: 'partial',
-  /** Time ran out */
-  TIMEOUT: 'timeout',
   /** User gave up */
   SKIPPED: 'skipped',
 } as const;

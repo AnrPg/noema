@@ -270,8 +270,6 @@ export class SessionService {
     }
     const data = parsed.data;
 
-    await this.verifyOfflineIntentToken(data.offlineIntentToken, ctx);
-
     if (data.blueprint !== undefined) {
       const consistency = this.validateBlueprintConsistency(
         data.blueprint.initialCardIds,
@@ -330,9 +328,10 @@ export class SessionService {
       reason: null,
     }));
     const session = await this.runInTransaction(async (tx) => {
-      const activeSessionCount = await this.repository.countSessionsByUser(
+      await this.verifyOfflineIntentToken(data.offlineIntentToken, ctx, tx);
+
+      const activeSessionCount = await this.repository.countActiveSessionsForUpdate(
         ctx.userId,
-        States.ACTIVE,
         tx
       );
 
@@ -1246,6 +1245,76 @@ export class SessionService {
           { action: 'start_new_session', description: 'Start a new study session' },
         ],
         `Session expired after ${session.config.sessionTimeoutHours}h of inactivity`
+      ),
+    };
+  }
+
+  // ==========================================================================
+  // Session Queries
+  // ==========================================================================
+
+  /**
+   * Expire a session from a system context (e.g. background job / sidecar).
+   *
+   * Unlike {@link expireSession}, this does NOT enforce ownership — the caller
+   * is trusted system infrastructure. Access control is delegated to the route
+   * layer (e.g. scope guard or internal-only network policy).
+   */
+  async expireSessionSystem(
+    sessionId: string,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISession>> {
+    const session = await this.repository.findSessionById(sessionId as SessionId);
+    if (!session) {
+      throw new SessionNotFoundError(sessionId);
+    }
+    this.assertActiveOrPaused(session, 'expire');
+
+    const updated = await this.runInTransaction(async (tx) => {
+      const next = await this.repository.updateSession(
+        session.id,
+        {
+          state: States.EXPIRED,
+          completedAt: new Date().toISOString(),
+          terminationReason: SessionTerminationReason.AUTO_EXPIRED,
+        },
+        session.version,
+        tx
+      );
+
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.expired',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: session.userId,
+            timeoutHours: session.config.sessionTimeoutHours,
+            stats: session.stats as ISessionExpiredPayload['stats'],
+            lastActivityAt: session.lastActivityAt,
+          } satisfies ISessionExpiredPayload,
+          metadata: { correlationId: ctx.correlationId, userId: session.userId },
+        },
+        tx
+      );
+
+      return next;
+    });
+
+    this.logger.info({ sessionId: session.id, system: true }, 'Session expired (system)');
+
+    return {
+      data: updated,
+      agentHints: buildHints(
+        [
+          {
+            action: 'notify_user',
+            description: 'Notify user of session expiration',
+            priority: 'high',
+          },
+        ],
+        `Session expired by system after ${session.config.sessionTimeoutHours}h timeout`
       ),
     };
   }
@@ -2285,7 +2354,8 @@ export class SessionService {
    */
   private async verifyOfflineIntentToken(
     offlineIntentToken: string | undefined,
-    ctx: IExecutionContext
+    ctx: IExecutionContext,
+    tx?: Prisma.TransactionClient
   ): Promise<void> {
     if (!this.options.security.verifyOfflineIntentTokens || offlineIntentToken === undefined) {
       return;
@@ -2334,7 +2404,7 @@ export class SessionService {
       const replayGuard = await this.consumeOfflineIntentTokenReplayGuard({
         jti,
         userId: ctx.userId,
-      });
+      }, tx);
 
       if (!replayGuard.valid) {
         throw new AuthorizationError(replayGuard.reason);
@@ -2382,15 +2452,18 @@ export class SessionService {
     return inserted === 1;
   }
 
-  private async consumeOfflineIntentTokenReplayGuard(input: {
-    jti: string;
-    userId: UserId;
-  }): Promise<{ valid: true } | { valid: false; reason: string }> {
+  private async consumeOfflineIntentTokenReplayGuard(
+    input: {
+      jti: string;
+      userId: UserId;
+    },
+    outerTx?: Prisma.TransactionClient
+  ): Promise<{ valid: true } | { valid: false; reason: string }> {
     if (input.jti.trim().length === 0) {
       return { valid: false, reason: 'Offline intent token missing nonce' };
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const execute = async (tx: Prisma.TransactionClient) => {
       const now = new Date();
 
       await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, now);
@@ -2409,7 +2482,7 @@ export class SessionService {
       `;
 
       if (consumed === 1) {
-        return { valid: true };
+        return { valid: true as const };
       }
 
       const records = await tx.$queryRaw<
@@ -2431,26 +2504,33 @@ export class SessionService {
 
       const record = records[0];
       if (!record) {
-        return { valid: false, reason: 'Offline intent token not registered' };
+        return { valid: false as const, reason: 'Offline intent token not registered' };
       }
 
       if (record.expiresAt.getTime() <= now.getTime() || record.status === 'EXPIRED') {
-        return { valid: false, reason: 'Offline intent token expired' };
+        return { valid: false as const, reason: 'Offline intent token expired' };
       }
 
       if (record.consumedAt !== null || record.status === 'CONSUMED') {
-        return { valid: false, reason: 'Offline intent token replay detected' };
+        return { valid: false as const, reason: 'Offline intent token replay detected' };
       }
 
-      return { valid: false, reason: 'Offline intent token is not usable' };
-    });
+      return { valid: false as const, reason: 'Offline intent token is not usable' };
+    };
+
+    if (outerTx) {
+      return execute(outerTx);
+    }
+    return this.prisma.$transaction(async (tx) => execute(tx));
   }
 
   private async cleanupExpiredOfflineIntentTokenReplayGuards(
     tx: Prisma.TransactionClient,
     now: Date
   ): Promise<void> {
-    const retentionCutoff = new Date(now.getTime() - OFFLINE_INTENT_TOKEN_REPLAY_GUARD_RETENTION_MS);
+    const retentionCutoff = new Date(
+      now.getTime() - OFFLINE_INTENT_TOKEN_REPLAY_GUARD_RETENTION_MS
+    );
 
     await tx.$executeRaw`
       UPDATE offline_intent_token_replay_guard

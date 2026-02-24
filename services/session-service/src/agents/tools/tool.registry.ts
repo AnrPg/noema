@@ -90,14 +90,19 @@ function validateValue(value: unknown, schema: IJsonSchema, path: string, errors
       return;
     }
     if (schema.items) {
-      value.forEach((item, index) => validateValue(item, schema.items!, `${path}[${String(index)}]`, errors));
+      value.forEach((item, index) =>
+        validateValue(item, schema.items!, `${path}[${String(index)}]`, errors)
+      );
     }
     return;
   }
 
-  if (schema.type === 'string' && typeof value !== 'string') errors.push(`${path} must be a string`);
-  if (schema.type === 'number' && typeof value !== 'number') errors.push(`${path} must be a number`);
-  if (schema.type === 'boolean' && typeof value !== 'boolean') errors.push(`${path} must be a boolean`);
+  if (schema.type === 'string' && typeof value !== 'string')
+    errors.push(`${path} must be a string`);
+  if (schema.type === 'number' && typeof value !== 'number')
+    errors.push(`${path} must be a number`);
+  if (schema.type === 'boolean' && typeof value !== 'boolean')
+    errors.push(`${path} must be a boolean`);
 }
 
 function validateInputAgainstSchema(input: unknown, schema: Record<string, unknown>): string[] {
@@ -108,49 +113,75 @@ function validateInputAgainstSchema(input: unknown, schema: Record<string, unkno
   return errors;
 }
 
-function classifyError(
-  errorCode: string
-): { retryClass: ToolRetryClass; failureClass: ToolFailureClass; failureDomain: ToolFailureDomain } {
-  if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
+function classifyError(errorCode: string): {
+  retryClass: ToolRetryClass;
+  failureClass: ToolFailureClass;
+  failureDomain: ToolFailureDomain;
+} {
+  const normalizedCode = errorCode.toUpperCase();
+
+  if (normalizedCode.includes('VALIDATION') || normalizedCode.includes('INVALID')) {
     return {
       retryClass: 'permanent',
       failureClass: 'input.schema.invalid',
       failureDomain: 'validation',
     };
   }
-  if (errorCode.includes('SCOPE')) {
+  if (normalizedCode.includes('SCOPE')) {
     return {
       retryClass: 'permanent',
       failureClass: 'auth.missing_scope',
       failureDomain: 'auth',
     };
   }
-  if (errorCode.includes('AUTH') || errorCode.includes('FORBIDDEN') || errorCode.includes('UNAUTHORIZED')) {
+  if (
+    normalizedCode.includes('AUTH') ||
+    normalizedCode.includes('FORBIDDEN') ||
+    normalizedCode.includes('UNAUTHORIZED')
+  ) {
     return {
       retryClass: 'permanent',
       failureClass: 'auth.invalid_token',
       failureDomain: 'auth',
     };
   }
-  if (errorCode.includes('RATE_LIMIT')) {
+  if (normalizedCode.includes('RATE_LIMIT') || normalizedCode.includes('QUOTA')) {
     return {
       retryClass: 'transient',
       failureClass: 'rate.limit.exceeded',
       failureDomain: 'abuse',
     };
   }
-  if (errorCode.includes('TIMEOUT')) {
+  if (normalizedCode.includes('NOT_FOUND') || normalizedCode.includes('CONFLICT')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: normalizedCode.includes('CONFLICT') ? 'state.conflict' : 'state.not_found',
+      failureDomain: 'state',
+    };
+  }
+  if (normalizedCode.includes('IDEMPOTENCY') || normalizedCode.includes('DUPLICATE')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'idempotency.duplicate',
+      failureDomain: 'state',
+    };
+  }
+  if (
+    normalizedCode.includes('DEPENDENCY') ||
+    normalizedCode.includes('EXTERNAL') ||
+    normalizedCode.includes('UPSTREAM')
+  ) {
     return {
       retryClass: 'transient',
-      failureClass: 'dependency.timeout',
+      failureClass: 'dependency.unavailable',
       failureDomain: 'dependency',
     };
   }
-  if (errorCode.includes('NOT_FOUND')) {
+  if (normalizedCode.includes('TIMEOUT') || normalizedCode.includes('UNAVAILABLE')) {
     return {
-      retryClass: 'permanent',
-      failureClass: 'state.not_found',
-      failureDomain: 'state',
+      retryClass: 'transient',
+      failureClass: 'network.timeout',
+      failureDomain: 'network',
     };
   }
   return {
@@ -367,16 +398,48 @@ function getDefinition(name: string): IToolDefinition {
   return def;
 }
 
+const EXPECTED_SESSION_TOOL_NAMES = [
+  'record-attempt',
+  'get-attempt-history',
+  'get-thinking-trace',
+  'validate-session-blueprint',
+  'evaluate-session-checkpoint',
+  'propose-cohort',
+  'accept-cohort',
+  'revise-cohort',
+  'commit-cohort',
+  'issue-offline-intent-token',
+  'verify-offline-intent-token',
+  'record-dialogue-turn',
+  'get-session-history',
+] as const;
+
 /**
  * Create a tool registry bound to the given service instances.
  */
 export function createToolRegistry(sessionService: SessionService): ToolRegistry {
   const registry = new ToolRegistry();
 
+  if (SESSION_TOOL_DEFINITIONS.length !== EXPECTED_SESSION_TOOL_NAMES.length) {
+    throw new Error(
+      `Expected ${String(EXPECTED_SESSION_TOOL_NAMES.length)} session tool definitions, found ${String(SESSION_TOOL_DEFINITIONS.length)}`
+    );
+  }
+
+  for (const name of EXPECTED_SESSION_TOOL_NAMES) {
+    getDefinition(name);
+  }
+
   // P0 tools
   registry.register(getDefinition('record-attempt'), createRecordAttemptHandler(sessionService));
-  registry.register(getDefinition('get-attempt-history'), createGetAttemptHistoryHandler(sessionService));
-  registry.register(getDefinition('get-thinking-trace'), createGetThinkingTraceHandler(sessionService));
+  registry.register(
+    getDefinition('get-attempt-history'),
+    createGetAttemptHistoryHandler(sessionService)
+  );
+  registry.register(
+    getDefinition('get-thinking-trace'),
+    createGetThinkingTraceHandler(sessionService)
+  );
   registry.register(
     getDefinition('validate-session-blueprint'),
     createValidateSessionBlueprintHandler(sessionService)
@@ -399,10 +462,16 @@ export function createToolRegistry(sessionService: SessionService): ToolRegistry
   );
 
   // P1 tools
-  registry.register(getDefinition('record-dialogue-turn'), createRecordDialogueTurnHandler(sessionService));
+  registry.register(
+    getDefinition('record-dialogue-turn'),
+    createRecordDialogueTurnHandler(sessionService)
+  );
 
   // P2 tools
-  registry.register(getDefinition('get-session-history'), createGetSessionHistoryHandler(sessionService));
+  registry.register(
+    getDefinition('get-session-history'),
+    createGetSessionHistoryHandler(sessionService)
+  );
 
   return registry;
 }

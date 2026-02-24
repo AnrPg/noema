@@ -68,6 +68,21 @@ export function registerToolRoutes(
     '/v1/tools',
     { preHandler: authMiddleware },
     async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      const readAuthorized = hasRequiredScopes(request.user as IScopeUser | undefined, {
+        requiredScopes: ['content:tools:read'],
+        match: 'any',
+      });
+      if (!readAuthorized) {
+        await reply.status(403).send({
+          error: {
+            code: 'FORBIDDEN_MISSING_SCOPE',
+            message: 'Missing required scope for tool discovery',
+          },
+          metadata: buildMetadata(request),
+        });
+        return;
+      }
+
       const definitions = toolRegistry.listDefinitions();
 
       await reply.status(200).send({
@@ -89,6 +104,21 @@ export function registerToolRoutes(
     '/v1/tools/execute',
     { preHandler: authMiddleware },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      const executeAuthorized = hasRequiredScopes(request.user as IScopeUser | undefined, {
+        requiredScopes: ['content:tools:execute'],
+        match: 'any',
+      });
+      if (!executeAuthorized) {
+        await reply.status(403).send({
+          error: {
+            code: 'FORBIDDEN_MISSING_SCOPE',
+            message: 'Missing required scope for tool execution',
+          },
+          metadata: buildMetadata(request),
+        });
+        return;
+      }
+
       const body = request.body as { tool: string; input?: unknown } | undefined;
 
       if (body?.tool === undefined || body.tool === '') {

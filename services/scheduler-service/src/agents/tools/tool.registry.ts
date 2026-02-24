@@ -135,14 +135,16 @@ function classifyError(errorCode: string): {
   failureClass: ToolFailureClass;
   failureDomain: ToolFailureDomain;
 } {
-  if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
+  const normalizedCode = errorCode.toUpperCase();
+
+  if (normalizedCode.includes('VALIDATION') || normalizedCode.includes('INVALID')) {
     return {
       retryClass: 'permanent',
       failureClass: 'input.schema.invalid',
       failureDomain: 'validation',
     };
   }
-  if (errorCode.includes('SCOPE')) {
+  if (normalizedCode.includes('SCOPE')) {
     return {
       retryClass: 'permanent',
       failureClass: 'auth.missing_scope',
@@ -150,9 +152,9 @@ function classifyError(errorCode: string): {
     };
   }
   if (
-    errorCode.includes('AUTH') ||
-    errorCode.includes('FORBIDDEN') ||
-    errorCode.includes('UNAUTHORIZED')
+    normalizedCode.includes('AUTH') ||
+    normalizedCode.includes('FORBIDDEN') ||
+    normalizedCode.includes('UNAUTHORIZED')
   ) {
     return {
       retryClass: 'permanent',
@@ -160,25 +162,43 @@ function classifyError(errorCode: string): {
       failureDomain: 'auth',
     };
   }
-  if (errorCode.includes('RATE_LIMIT')) {
+  if (normalizedCode.includes('RATE_LIMIT') || normalizedCode.includes('QUOTA')) {
     return {
       retryClass: 'transient',
       failureClass: 'rate.limit.exceeded',
       failureDomain: 'abuse',
     };
   }
-  if (errorCode.includes('TIMEOUT')) {
+  if (normalizedCode.includes('NOT_FOUND') || normalizedCode.includes('CONFLICT')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: normalizedCode.includes('CONFLICT') ? 'state.conflict' : 'state.not_found',
+      failureDomain: 'state',
+    };
+  }
+  if (normalizedCode.includes('IDEMPOTENCY') || normalizedCode.includes('DUPLICATE')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'idempotency.duplicate',
+      failureDomain: 'state',
+    };
+  }
+  if (
+    normalizedCode.includes('DEPENDENCY') ||
+    normalizedCode.includes('EXTERNAL') ||
+    normalizedCode.includes('UPSTREAM')
+  ) {
     return {
       retryClass: 'transient',
-      failureClass: 'dependency.timeout',
+      failureClass: 'dependency.unavailable',
       failureDomain: 'dependency',
     };
   }
-  if (errorCode.includes('NOT_FOUND')) {
+  if (normalizedCode.includes('TIMEOUT') || normalizedCode.includes('UNAVAILABLE')) {
     return {
-      retryClass: 'permanent',
-      failureClass: 'state.not_found',
-      failureDomain: 'state',
+      retryClass: 'transient',
+      failureClass: 'network.timeout',
+      failureDomain: 'network',
     };
   }
   return {

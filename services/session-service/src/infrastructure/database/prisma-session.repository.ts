@@ -288,6 +288,20 @@ export class PrismaSessionRepository implements ISessionRepository {
     return this.db(tx).session.count({ where });
   }
 
+  async countActiveSessionsForUpdate(
+    userId: UserId,
+    tx: Prisma.TransactionClient
+  ): Promise<number> {
+    const result = await tx.$queryRaw<[{ count: bigint }]>`
+      SELECT count(*) AS count
+      FROM sessions
+      WHERE user_id = ${userId}
+        AND state = 'ACTIVE'
+      FOR UPDATE
+    `;
+    return Number(result[0].count);
+  }
+
   // ---------- Session write ----------
 
   async createSession(

@@ -69,7 +69,7 @@ describe('SessionService active session concurrency policy', () => {
     } as unknown as PrismaClient;
 
     const repository = {
-      countSessionsByUser: vi.fn(async () => 1),
+      countActiveSessionsForUpdate: vi.fn(async () => 1),
       createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
         ...sessionInput,
         createdAt: new Date().toISOString(),
@@ -127,8 +127,8 @@ describe('SessionService active session concurrency policy', () => {
     ).rejects.toBeInstanceOf(BusinessRuleError);
 
     expect(
-      (repository.countSessionsByUser as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
-    ).toEqual([userId, 'active', txClient]);
+      (repository.countActiveSessionsForUpdate as unknown as ReturnType<typeof vi.fn>).mock.calls[0]
+    ).toEqual([userId, txClient]);
     expect(
       (repository.createSession as unknown as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(0);
@@ -151,7 +151,7 @@ describe('SessionService active session concurrency policy', () => {
     } as unknown as PrismaClient;
 
     const repository = {
-      countSessionsByUser: vi.fn(async () => 1),
+      countActiveSessionsForUpdate: vi.fn(async () => 1),
       createSession: vi.fn(async (sessionInput: Omit<ISession, 'createdAt' | 'updatedAt'>) => ({
         ...sessionInput,
         createdAt: new Date().toISOString(),
@@ -208,7 +208,7 @@ describe('SessionService active session concurrency policy', () => {
 
     expect(result.data.state).toBe('active');
     expect(
-      (repository.countSessionsByUser as unknown as ReturnType<typeof vi.fn>).mock.calls
+      (repository.countActiveSessionsForUpdate as unknown as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(1);
     expect(
       (repository.createSession as unknown as ReturnType<typeof vi.fn>).mock.calls

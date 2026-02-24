@@ -302,6 +302,32 @@ export function registerSessionRoutes(
     }
   );
 
+  // POST /v1/internal/sessions/:sessionId/expire — System-level expiration
+  // Used by background jobs / HLR sidecar; requires session:system:expire scope.
+  fastify.post<{ Params: SessionIdParams }>(
+    '/v1/internal/sessions/:sessionId/expire',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const scopes = (request.user as { scopes?: string[] } | undefined)?.scopes ?? [];
+        if (!scopes.includes('session:system:expire')) {
+          return reply.status(403).send({
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Missing required scope: session:system:expire',
+            },
+            metadata: buildMetadata(request),
+          });
+        }
+        const ctx = buildContext(request);
+        const result = await sessionService.expireSessionSystem(request.params.sessionId, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
   // POST /v1/sessions/:sessionId/abandon
   fastify.post<{ Params: SessionIdParams; Body: { reason?: string } }>(
     '/v1/sessions/:sessionId/abandon',

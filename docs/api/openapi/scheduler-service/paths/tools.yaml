@@ -39,10 +39,9 @@ executeTool:
       | missing required scope | `auth.missing_scope` | `permanent` | `auth` |
       | invalid/expired token | `auth.invalid_token` | `permanent` | `auth` |
       | rate limit exceeded | `rate.limit.exceeded` | `transient` | `abuse` |
-      | dependency timeout | `dependency.timeout` | `transient` | `dependency` |
-      | upstream unavailable | `dependency.unavailable` | `transient` | `dependency` |
-      | tool state conflict | `state.conflict` | `permanent` | `state` |
-      | duplicate idempotency key | `idempotency.duplicate` | `permanent` | `state` |
+      | `TOOL_NOT_FOUND` / state conflict | `state.not_found` / `state.conflict` | `permanent` | `state` |
+      | dependency or upstream failure | `dependency.unavailable` | `transient` | `dependency` |
+      | timeout / unavailable | `network.timeout` | `transient` | `network` |
       | unhandled exception | `internal.exception` | `unknown` | `internal` |
 
       For transient failures, clients SHOULD honor `data.metadata.retryAfterMs`
