@@ -5,6 +5,22 @@ import { schedulerObservability } from '../../infrastructure/observability/sched
 import type { IExecutionContext } from '../../types/scheduler.types.js';
 import type { IToolDefinition, IToolResult, ToolHandler } from './tool.types.js';
 
+type IBaseToolDefinition = Omit<IToolDefinition, 'version'>;
+
+function withContractDefaults(definition: IBaseToolDefinition): IToolDefinition {
+  return {
+    ...definition,
+    version: '1.0.0',
+    capabilities: {
+      supportsDryRun: !definition.capabilities.sideEffects,
+      supportsAsync: false,
+      supportsStreaming: false,
+      consistency: definition.capabilities.sideEffects ? 'strong' : 'eventual',
+      ...definition.capabilities,
+    },
+  };
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -230,7 +246,7 @@ export function createBatchUpdateCardSchedulingHandler(service: SchedulerService
 // Tool Definitions (Phase 4)
 // ============================================================================
 
-export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] = [
+const SCHEDULER_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   {
     name: 'plan-dual-lane',
     description:
@@ -619,3 +635,6 @@ export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] = [
     },
   },
 ];
+
+export const SCHEDULER_TOOL_DEFINITIONS: IToolDefinition[] =
+  SCHEDULER_TOOL_DEFINITIONS_BASE.map(withContractDefaults);

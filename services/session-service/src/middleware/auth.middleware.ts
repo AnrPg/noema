@@ -11,7 +11,7 @@ import * as jose from 'jose';
 
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: { sub: string; roles?: string[] };
+    user?: { sub: string; roles?: string[]; scopes?: string[] };
   }
 }
 
@@ -36,6 +36,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
       request.user = {
         sub: (request.headers['x-user-id'] as string) || 'dev-user',
         roles: ['user'],
+        scopes: ['session:tools:execute'],
       };
       return;
     }
@@ -60,6 +61,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
       request.user = {
         sub: payload.sub ?? '',
         roles: (payload['roles'] as string[]) ?? ['user'],
+        scopes: (payload['scopes'] as string[]) ?? [],
       };
     } catch {
       return reply.status(401).send({

@@ -2,6 +2,37 @@ import type { IToolExecutionResult, IToolResultMetadata } from '@noema/contracts
 
 export type { IToolResultMetadata };
 
+export type ToolRetryClass = 'transient' | 'permanent' | 'unknown';
+
+export type ToolFailureClass =
+  | 'input.schema.invalid'
+  | 'input.constraint.violation'
+  | 'auth.missing_scope'
+  | 'auth.invalid_token'
+  | 'auth.forbidden'
+  | 'rate.limit.exceeded'
+  | 'quota.exceeded'
+  | 'network.timeout'
+  | 'network.unavailable'
+  | 'dependency.timeout'
+  | 'dependency.unavailable'
+  | 'dependency.contract_mismatch'
+  | 'state.conflict'
+  | 'state.not_found'
+  | 'idempotency.duplicate'
+  | 'internal.invariant_violation'
+  | 'internal.exception'
+  | 'internal.unknown';
+
+export type ToolFailureDomain =
+  | 'network'
+  | 'validation'
+  | 'auth'
+  | 'internal'
+  | 'dependency'
+  | 'state'
+  | 'abuse';
+
 // ============================================================================
 // Tool Capabilities (Phase 4)
 // ============================================================================
@@ -19,6 +50,11 @@ export interface IToolCapabilities {
   timeoutMs: number;
   /** Cost class for rate limiting and budget planning */
   costClass: 'low' | 'medium' | 'high';
+  supportsDryRun?: boolean;
+  supportsAsync?: boolean;
+  supportsStreaming?: boolean;
+  maxBatchSize?: number;
+  consistency?: 'eventual' | 'strong';
 }
 
 /**
@@ -30,6 +66,8 @@ export interface IScopeRequirement {
   match: 'all' | 'any';
   /** List of required scope strings */
   requiredScopes: string[];
+  optionalScopes?: string[];
+  deniedScopes?: string[];
 }
 
 /**
@@ -39,9 +77,15 @@ export interface IToolResultMetadataExtended extends IToolResultMetadata {
   /** Machine-readable result code for categorization */
   resultCode?: string;
   /** Retry classification (transient, permanent, unknown) */
-  retryClass?: 'transient' | 'permanent' | 'unknown';
-  /** Failure domain for incident triage (network, validation, auth, internal) */
-  failureDomain?: 'network' | 'validation' | 'auth' | 'internal' | 'dependency';
+  retryClass?: ToolRetryClass;
+  failureClass?: ToolFailureClass;
+  failureDomain?: ToolFailureDomain;
+  validationErrors?: string[];
+  retryAfterMs?: number;
+  httpStatusHint?: number;
+  toolName?: string;
+  attemptCount?: number;
+  requestId?: string;
 }
 
 // ============================================================================
@@ -55,6 +99,8 @@ export interface IToolResultMetadataExtended extends IToolResultMetadata {
 export interface IToolDefinition {
   /** Unique tool name (kebab-case) */
   name: string;
+  /** Tool contract version (semver) */
+  version: string;
   /** Human-readable description */
   description: string;
   /** Owning service name */
@@ -67,6 +113,7 @@ export interface IToolDefinition {
   capabilities: IToolCapabilities;
   /** JSON Schema describing the tool's expected input */
   inputSchema: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
 }
 
 // ============================================================================

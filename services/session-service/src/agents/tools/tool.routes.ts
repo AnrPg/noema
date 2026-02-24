@@ -13,6 +13,26 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type { ToolRegistry } from './tool.registry.js';
 
+interface IScopeUser {
+  sub?: string;
+  roles?: string[];
+  scopes?: string[];
+}
+
+function hasRequiredScopes(
+  user: IScopeUser | undefined,
+  requirement: { match: 'all' | 'any'; requiredScopes: string[] }
+): boolean {
+  if (process.env['AUTH_DISABLED'] === 'true') return true;
+  const granted = new Set(user?.scopes ?? []);
+  if (user?.roles?.includes('admin') === true) return true;
+  if (requirement.requiredScopes.length === 0) return true;
+  if (requirement.match === 'all') {
+    return requirement.requiredScopes.every((scope) => granted.has(scope));
+  }
+  return requirement.requiredScopes.some((scope) => granted.has(scope));
+}
+
 // ============================================================================
 // Route Plugin
 // ============================================================================
@@ -31,6 +51,7 @@ export function registerToolRoutes(
     const startTime = (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
     return {
       requestId: request.id,
+      correlationId: request.id,
       timestamp: new Date().toISOString(),
       serviceName: 'session-service',
       serviceVersion: '0.1.0',
@@ -79,6 +100,22 @@ export function registerToolRoutes(
       const user = request.user as { sub?: string } | undefined;
       const userId = user?.sub ?? '';
       const correlationId = request.id;
+
+      const definition = toolRegistry.getDefinition(body.tool);
+      if (definition !== undefined) {
+        const authUser = request.user as IScopeUser | undefined;
+        const authorized = hasRequiredScopes(authUser, definition.scopeRequirement);
+        if (!authorized) {
+          await reply.status(403).send({
+            error: {
+              code: 'FORBIDDEN_MISSING_SCOPE',
+              message: 'Missing required scope for tool execution',
+            },
+            metadata: buildMetadata(request),
+          });
+          return;
+        }
+      }
 
       const result = await toolRegistry.execute(body.tool, body.input ?? {}, userId, correlationId);
 

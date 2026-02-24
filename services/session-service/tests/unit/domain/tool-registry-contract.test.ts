@@ -1,13 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { SCHEDULER_TOOL_DEFINITIONS } from '../../../src/agents/tools/scheduler.tools.js';
+import { SESSION_TOOL_DEFINITIONS } from '../../../src/agents/tools/session.tools.js';
 import { createToolRegistry, ToolRegistry } from '../../../src/agents/tools/tool.registry.js';
 import type { IToolDefinition } from '../../../src/agents/tools/tool.types.js';
-import type { SchedulerService } from '../../../src/domain/scheduler-service/scheduler.service.js';
+import type { SessionService } from '../../../src/domain/session-service/session.service.js';
 
-describe('tool registry phase 4', () => {
-  it('registers full scheduler tool surface', () => {
-    const service = {} as SchedulerService;
+function buildAgentHints(reasoning: string) {
+  return {
+    suggestedNextActions: [],
+    relatedResources: [],
+    confidence: 1,
+    sourceQuality: 'high' as const,
+    validityPeriod: 'long' as const,
+    contextNeeded: [],
+    assumptions: [],
+    riskFactors: [],
+    dependencies: [],
+    estimatedImpact: { benefit: 0, effort: 0, roi: 0 },
+    preferenceAlignment: [],
+    reasoning,
+  };
+}
+
+describe('session tool registry contract', () => {
+  it('registers full session tool surface', () => {
+    const service = {} as SessionService;
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
@@ -16,15 +33,15 @@ describe('tool registry phase 4', () => {
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
       expect.arrayContaining([
-        'plan-dual-lane',
-        'get-srs-schedule',
-        'predict-retention',
-        'propose-review-windows',
-        'propose-session-candidates',
-        'reconcile-session-candidates',
-        'apply-session-adjustments',
-        'update-card-scheduling',
-        'batch-update-card-scheduling',
+        'get-session-history',
+        'record-attempt',
+        'get-attempt-history',
+        'get-thinking-trace',
+        'record-dialogue-turn',
+        'validate-session-blueprint',
+        'evaluate-session-checkpoint',
+        'issue-offline-intent-token',
+        'verify-offline-intent-token',
       ])
     );
   });
@@ -51,31 +68,18 @@ describe('tool registry phase 4', () => {
     const handler = vi.fn().mockResolvedValue({
       success: true,
       data: { ok: true },
-      agentHints: {
-        suggestedNextActions: [],
-        relatedResources: [],
-        confidence: 1,
-        sourceQuality: 'high',
-        validityPeriod: 'long',
-        contextNeeded: [],
-        assumptions: [],
-        riskFactors: [],
-        dependencies: [],
-        estimatedImpact: { benefit: 0, effort: 0, roi: 0 },
-        preferenceAlignment: [],
-        reasoning: 'ok',
-      },
+      agentHints: buildAgentHints('ok'),
     });
 
     const definition: IToolDefinition = {
       name: 'test-tool',
       version: '1.0.0',
       description: 'test',
-      service: 'scheduler-service',
+      service: 'session-service',
       priority: 'P1',
       scopeRequirement: {
         match: 'all',
-        requiredScopes: ['scheduler:tools:execute'],
+        requiredScopes: ['session:tools:execute'],
       },
       capabilities: {
         idempotent: true,
@@ -106,37 +110,14 @@ describe('tool registry phase 4', () => {
   it('attaches observability metadata for successful execution', async () => {
     const registry = new ToolRegistry();
 
-    const definition = SCHEDULER_TOOL_DEFINITIONS[0] as IToolDefinition;
+    const definition = SESSION_TOOL_DEFINITIONS[0] as IToolDefinition;
     registry.register(definition, async () => ({
       success: true,
       data: { ok: true },
-      agentHints: {
-        suggestedNextActions: [],
-        relatedResources: [],
-        confidence: 1,
-        sourceQuality: 'high',
-        validityPeriod: 'long',
-        contextNeeded: [],
-        assumptions: [],
-        riskFactors: [],
-        dependencies: [],
-        estimatedImpact: { benefit: 0, effort: 0, roi: 0 },
-        preferenceAlignment: [],
-        reasoning: 'ok',
-      },
+      agentHints: buildAgentHints('ok'),
     }));
 
-    const result = await registry.execute(
-      'plan-dual-lane',
-      {
-        userId: 'usr_1',
-        retentionCardIds: [],
-        calibrationCardIds: [],
-        maxCards: 10,
-      },
-      'usr_1',
-      'cor_1'
-    );
+    const result = await registry.execute('get-session-history', {}, 'usr_1', 'cor_1');
 
     const metadata = result.metadata as {
       resultCode?: string;
@@ -153,40 +134,17 @@ describe('tool registry phase 4', () => {
   it('categorizes handler failures for retry and domain', async () => {
     const registry = new ToolRegistry();
 
-    const definition = SCHEDULER_TOOL_DEFINITIONS[0] as IToolDefinition;
+    const definition = SESSION_TOOL_DEFINITIONS[0] as IToolDefinition;
     registry.register(definition, async () => ({
       success: false,
       error: {
         code: 'VALIDATION_FAILED',
         message: 'bad input',
       },
-      agentHints: {
-        suggestedNextActions: [],
-        relatedResources: [],
-        confidence: 1,
-        sourceQuality: 'high',
-        validityPeriod: 'long',
-        contextNeeded: [],
-        assumptions: [],
-        riskFactors: [],
-        dependencies: [],
-        estimatedImpact: { benefit: 0, effort: 0, roi: 0 },
-        preferenceAlignment: [],
-        reasoning: 'bad input',
-      },
+      agentHints: buildAgentHints('bad input'),
     }));
 
-    const result = await registry.execute(
-      'plan-dual-lane',
-      {
-        userId: 'usr_1',
-        retentionCardIds: [],
-        calibrationCardIds: [],
-        maxCards: 10,
-      },
-      'usr_1',
-      'cor_1'
-    );
+    const result = await registry.execute('get-session-history', {}, 'usr_1', 'cor_1');
 
     const metadata = result.metadata as {
       resultCode?: string;

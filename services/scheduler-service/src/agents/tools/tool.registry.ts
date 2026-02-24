@@ -17,7 +17,10 @@ import type {
   IToolResult,
   IToolResultMetadata,
   IToolResultMetadataExtended,
+  ToolFailureClass,
+  ToolFailureDomain,
   ToolHandler,
+  ToolRetryClass,
 } from './tool.types.js';
 
 export interface IRegisteredTool {
@@ -127,6 +130,64 @@ function validateInputAgainstSchema(input: unknown, schema: Record<string, unkno
   return errors;
 }
 
+function classifyError(errorCode: string): {
+  retryClass: ToolRetryClass;
+  failureClass: ToolFailureClass;
+  failureDomain: ToolFailureDomain;
+} {
+  if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'input.schema.invalid',
+      failureDomain: 'validation',
+    };
+  }
+  if (errorCode.includes('SCOPE')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'auth.missing_scope',
+      failureDomain: 'auth',
+    };
+  }
+  if (
+    errorCode.includes('AUTH') ||
+    errorCode.includes('FORBIDDEN') ||
+    errorCode.includes('UNAUTHORIZED')
+  ) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'auth.invalid_token',
+      failureDomain: 'auth',
+    };
+  }
+  if (errorCode.includes('RATE_LIMIT')) {
+    return {
+      retryClass: 'transient',
+      failureClass: 'rate.limit.exceeded',
+      failureDomain: 'abuse',
+    };
+  }
+  if (errorCode.includes('TIMEOUT')) {
+    return {
+      retryClass: 'transient',
+      failureClass: 'dependency.timeout',
+      failureDomain: 'dependency',
+    };
+  }
+  if (errorCode.includes('NOT_FOUND')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'state.not_found',
+      failureDomain: 'state',
+    };
+  }
+  return {
+    retryClass: 'unknown',
+    failureClass: 'internal.unknown',
+    failureDomain: 'internal',
+  };
+}
+
 export class ToolRegistry {
   private readonly tools = new Map<string, IRegisteredTool>();
 
@@ -150,15 +211,21 @@ export class ToolRegistry {
     try {
       const tool = this.tools.get(name);
       if (!tool) {
+        const classification = classifyError('TOOL_NOT_FOUND');
         const metadata: IToolResultMetadataExtended = {
-          toolVersion: '0.1.0',
+          toolVersion: '1.0.0',
           timestamp: new Date().toISOString(),
           executionTime: 0,
           serviceVersion: '0.1.0',
           correlationId,
+          requestId: correlationId,
+          toolName: name,
+          attemptCount: 1,
           resultCode: 'TOOL_NOT_FOUND',
-          retryClass: 'permanent',
-          failureDomain: 'validation',
+          retryClass: classification.retryClass,
+          failureClass: classification.failureClass,
+          failureDomain: classification.failureDomain,
+          httpStatusHint: 404,
         };
 
         return {
@@ -185,14 +252,20 @@ export class ToolRegistry {
       const validationErrors = validateInputAgainstSchema(input, tool.definition.inputSchema);
       if (validationErrors.length > 0) {
         const metadata: IToolResultMetadataExtended = {
-          toolVersion: '0.1.0',
+          toolVersion: tool.definition.version,
           timestamp: new Date().toISOString(),
           executionTime: 0,
           serviceVersion: '0.1.0',
           correlationId,
+          requestId: correlationId,
+          toolName: tool.definition.name,
+          attemptCount: 1,
           resultCode: 'TOOL_INPUT_VALIDATION_FAILED',
           retryClass: 'permanent',
+          failureClass: 'input.schema.invalid',
           failureDomain: 'validation',
+          validationErrors,
+          httpStatusHint: 422,
         };
 
         return {
@@ -222,8 +295,9 @@ export class ToolRegistry {
       const started = Date.now();
       let result: IToolResult;
       let resultCode = 'SUCCESS';
-      let retryClass: 'transient' | 'permanent' | 'unknown' = 'unknown';
-      let failureDomain: 'network' | 'validation' | 'auth' | 'internal' | 'dependency' | undefined;
+      let retryClass: ToolRetryClass = 'unknown';
+      let failureClass: ToolFailureClass | undefined;
+      let failureDomain: ToolFailureDomain | undefined;
 
       try {
         result = await tool.handler(input, userId, correlationId);
@@ -232,34 +306,17 @@ export class ToolRegistry {
           // Categorize failure
           const errorCode = result.error?.code ?? 'UNKNOWN_ERROR';
           resultCode = errorCode;
-
-          // Determine retry class and failure domain based on error code
-          if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
-            retryClass = 'permanent';
-            failureDomain = 'validation';
-          } else if (
-            errorCode.includes('AUTH') ||
-            errorCode.includes('FORBIDDEN') ||
-            errorCode.includes('UNAUTHORIZED')
-          ) {
-            retryClass = 'permanent';
-            failureDomain = 'auth';
-          } else if (errorCode.includes('TIMEOUT') || errorCode.includes('UNAVAILABLE')) {
-            retryClass = 'transient';
-            failureDomain = 'network';
-          } else if (errorCode.includes('DEPENDENCY') || errorCode.includes('EXTERNAL')) {
-            retryClass = 'transient';
-            failureDomain = 'dependency';
-          } else {
-            retryClass = 'unknown';
-            failureDomain = 'internal';
-          }
+          const classification = classifyError(errorCode);
+          retryClass = classification.retryClass;
+          failureClass = classification.failureClass;
+          failureDomain = classification.failureDomain;
         }
       } catch (error) {
         // Handler threw an exception
         const message = error instanceof Error ? error.message : 'Unknown error';
         resultCode = 'HANDLER_EXCEPTION';
         retryClass = 'unknown';
+        failureClass = 'internal.exception';
         failureDomain = 'internal';
 
         result = {
@@ -283,13 +340,17 @@ export class ToolRegistry {
       }
 
       const metadata: IToolResultMetadataExtended = {
-        toolVersion: '0.1.0',
+        toolVersion: tool.definition.version,
         timestamp: new Date().toISOString(),
         executionTime: Date.now() - started,
         serviceVersion: '0.1.0',
         correlationId,
+        requestId: correlationId,
+        toolName: tool.definition.name,
+        attemptCount: 1,
         resultCode,
         retryClass,
+        ...(failureClass !== undefined ? { failureClass } : {}),
         ...(failureDomain !== undefined ? { failureDomain } : {}),
       };
 

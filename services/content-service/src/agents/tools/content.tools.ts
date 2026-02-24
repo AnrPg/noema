@@ -17,6 +17,53 @@ import type {
 import { DomainError } from '../../domain/content-service/errors/index.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
+type IBaseToolDefinition = Omit<
+  IToolDefinition,
+  'version' | 'scopeRequirement' | 'capabilities'
+>;
+
+function inferSideEffects(name: string): boolean {
+  return (
+    name.startsWith('create-') ||
+    name.startsWith('batch-create-') ||
+    name.startsWith('update-') ||
+    name.startsWith('change-') ||
+    name.startsWith('batch-change-')
+  );
+}
+
+function inferCostClass(priority: 'P0' | 'P1' | 'P2'): 'low' | 'medium' | 'high' {
+  if (priority === 'P0') return 'medium';
+  if (priority === 'P1') return 'low';
+  return 'low';
+}
+
+function withContractDefaults(definition: IBaseToolDefinition): IToolDefinition {
+  const sideEffects = inferSideEffects(definition.name);
+  return {
+    ...definition,
+    version: '1.0.0',
+    scopeRequirement: {
+      match: 'any',
+      requiredScopes: ['content:tools:execute'],
+    },
+    capabilities: {
+      idempotent: !sideEffects,
+      sideEffects,
+      timeoutMs: 5000,
+      costClass: inferCostClass(definition.priority),
+      supportsDryRun: definition.name === 'validate-card-content',
+      supportsAsync: false,
+      supportsStreaming: false,
+      maxBatchSize:
+        definition.name === 'batch-create-cards' || definition.name === 'batch-change-card-state'
+          ? 100
+          : undefined,
+      consistency: sideEffects ? 'strong' : 'eventual',
+    },
+  };
+}
+
 // ============================================================================
 // Helper
 // ============================================================================
@@ -312,7 +359,7 @@ export function createBatchChangeCardStateHandler(contentService: ContentService
 // Tool Definitions (for registration / discovery)
 // ============================================================================
 
-export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
+const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   {
     name: 'create-card',
     description:
@@ -566,3 +613,7 @@ export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = [
     },
   },
 ];
+
+export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = CONTENT_TOOL_DEFINITIONS_BASE.map(
+  withContractDefaults
+);

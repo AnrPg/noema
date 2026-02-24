@@ -21,6 +21,48 @@ import type {
 import type { SessionState } from '../../types/index.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
+type IBaseToolDefinition = Omit<
+  IToolDefinition,
+  'version' | 'scopeRequirement' | 'capabilities'
+>;
+
+function inferSideEffects(name: string): boolean {
+  return (
+    name.startsWith('record-') ||
+    name.startsWith('issue-') ||
+    name.startsWith('verify-') ||
+    name.startsWith('evaluate-')
+  );
+}
+
+function inferCostClass(priority: 'P0' | 'P1' | 'P2'): 'low' | 'medium' | 'high' {
+  if (priority === 'P0') return 'medium';
+  if (priority === 'P1') return 'medium';
+  return 'low';
+}
+
+function withContractDefaults(definition: IBaseToolDefinition): IToolDefinition {
+  const sideEffects = inferSideEffects(definition.name);
+  return {
+    ...definition,
+    version: '1.0.0',
+    scopeRequirement: {
+      match: 'any',
+      requiredScopes: ['session:tools:execute'],
+    },
+    capabilities: {
+      idempotent: !sideEffects,
+      sideEffects,
+      timeoutMs: 5000,
+      costClass: inferCostClass(definition.priority),
+      supportsDryRun: definition.name === 'validate-session-blueprint',
+      supportsAsync: false,
+      supportsStreaming: false,
+      consistency: sideEffects ? 'strong' : 'eventual',
+    },
+  };
+}
+
 // ============================================================================
 // Helper
 // ============================================================================
@@ -284,7 +326,7 @@ export function createVerifyOfflineIntentTokenHandler(service: SessionService) {
 // Tool Definitions
 // ============================================================================
 
-export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
+const SESSION_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   {
     name: 'get-session-history',
     description: 'Get session history for the current user, optionally filtered by state',
@@ -458,6 +500,10 @@ export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = [
     },
   },
 ];
+
+export const SESSION_TOOL_DEFINITIONS: IToolDefinition[] = SESSION_TOOL_DEFINITIONS_BASE.map(
+  withContractDefaults
+);
 
 // ============================================================================
 // Handler Map Factory

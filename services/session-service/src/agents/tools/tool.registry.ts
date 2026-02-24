@@ -26,8 +26,135 @@ import type {
   IToolDefinition,
   IToolResult,
   IToolResultMetadata,
+  IToolResultMetadataExtended,
+  ToolFailureClass,
+  ToolFailureDomain,
   ToolHandler,
+  ToolRetryClass,
 } from './tool.types.js';
+
+interface IJsonSchema {
+  type?: string;
+  required?: string[];
+  properties?: Record<string, IJsonSchema>;
+  items?: IJsonSchema;
+  enum?: unknown[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function toSchema(value: unknown): IJsonSchema | undefined {
+  if (!isRecord(value)) return undefined;
+  return value as IJsonSchema;
+}
+
+function validateValue(value: unknown, schema: IJsonSchema, path: string, errors: string[]): void {
+  if (Array.isArray(schema.enum) && !schema.enum.some((entry) => entry === value)) {
+    errors.push(`${path} must be one of: ${schema.enum.map((entry) => String(entry)).join(', ')}`);
+    return;
+  }
+
+  if (schema.type === undefined) return;
+
+  if (schema.type === 'object') {
+    if (!isRecord(value)) {
+      errors.push(`${path} must be an object`);
+      return;
+    }
+    if (schema.required) {
+      for (const key of schema.required) {
+        if (!(key in value)) {
+          errors.push(`${path}.${key} is required`);
+        }
+      }
+    }
+    if (schema.properties) {
+      for (const [key, nested] of Object.entries(schema.properties)) {
+        if (key in value) {
+          validateValue(value[key], nested, `${path}.${key}`, errors);
+        }
+      }
+    }
+    return;
+  }
+
+  if (schema.type === 'array') {
+    if (!Array.isArray(value)) {
+      errors.push(`${path} must be an array`);
+      return;
+    }
+    if (schema.items) {
+      value.forEach((item, index) => validateValue(item, schema.items!, `${path}[${String(index)}]`, errors));
+    }
+    return;
+  }
+
+  if (schema.type === 'string' && typeof value !== 'string') errors.push(`${path} must be a string`);
+  if (schema.type === 'number' && typeof value !== 'number') errors.push(`${path} must be a number`);
+  if (schema.type === 'boolean' && typeof value !== 'boolean') errors.push(`${path} must be a boolean`);
+}
+
+function validateInputAgainstSchema(input: unknown, schema: Record<string, unknown>): string[] {
+  const resolved = toSchema(schema);
+  if (!resolved) return ['Tool definition has invalid input schema'];
+  const errors: string[] = [];
+  validateValue(input, resolved, 'input', errors);
+  return errors;
+}
+
+function classifyError(
+  errorCode: string
+): { retryClass: ToolRetryClass; failureClass: ToolFailureClass; failureDomain: ToolFailureDomain } {
+  if (errorCode.includes('VALIDATION') || errorCode.includes('INVALID')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'input.schema.invalid',
+      failureDomain: 'validation',
+    };
+  }
+  if (errorCode.includes('SCOPE')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'auth.missing_scope',
+      failureDomain: 'auth',
+    };
+  }
+  if (errorCode.includes('AUTH') || errorCode.includes('FORBIDDEN') || errorCode.includes('UNAUTHORIZED')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'auth.invalid_token',
+      failureDomain: 'auth',
+    };
+  }
+  if (errorCode.includes('RATE_LIMIT')) {
+    return {
+      retryClass: 'transient',
+      failureClass: 'rate.limit.exceeded',
+      failureDomain: 'abuse',
+    };
+  }
+  if (errorCode.includes('TIMEOUT')) {
+    return {
+      retryClass: 'transient',
+      failureClass: 'dependency.timeout',
+      failureDomain: 'dependency',
+    };
+  }
+  if (errorCode.includes('NOT_FOUND')) {
+    return {
+      retryClass: 'permanent',
+      failureClass: 'state.not_found',
+      failureDomain: 'state',
+    };
+  }
+  return {
+    retryClass: 'unknown',
+    failureClass: 'internal.unknown',
+    failureDomain: 'internal',
+  };
+}
 
 // ============================================================================
 // Tool Registry
@@ -59,6 +186,10 @@ export class ToolRegistry {
     return [...this.tools.values()].map((t) => t.definition);
   }
 
+  getDefinition(name: string): IToolDefinition | undefined {
+    return this.tools.get(name)?.definition;
+  }
+
   async execute(
     name: string,
     input: unknown,
@@ -67,6 +198,22 @@ export class ToolRegistry {
   ): Promise<IToolResult> {
     const tool = this.tools.get(name);
     if (!tool) {
+      const classification = classifyError('TOOL_NOT_FOUND');
+      const metadata: IToolResultMetadataExtended = {
+        toolVersion: '1.0.0',
+        timestamp: new Date().toISOString(),
+        executionTime: 0,
+        serviceVersion: '0.1.0',
+        correlationId,
+        requestId: correlationId,
+        toolName: name,
+        attemptCount: 1,
+        resultCode: 'TOOL_NOT_FOUND',
+        retryClass: classification.retryClass,
+        failureClass: classification.failureClass,
+        failureDomain: classification.failureDomain,
+        httpStatusHint: 404,
+      };
       return {
         success: false,
         error: { code: 'TOOL_NOT_FOUND', message: `Unknown tool: ${name}` },
@@ -91,27 +238,110 @@ export class ToolRegistry {
           preferenceAlignment: [],
           reasoning: `Tool "${name}" not found — available: ${[...this.tools.keys()].join(', ')}`,
         },
-        metadata: {
-          toolVersion: '0.1.0',
-          timestamp: new Date().toISOString(),
-          executionTime: 0,
-          serviceVersion: '0.1.0',
-          correlationId,
+        metadata: metadata as IToolResultMetadata,
+      };
+    }
+
+    const validationErrors = validateInputAgainstSchema(input, tool.definition.inputSchema);
+    if (validationErrors.length > 0) {
+      const metadata: IToolResultMetadataExtended = {
+        toolVersion: tool.definition.version,
+        timestamp: new Date().toISOString(),
+        executionTime: 0,
+        serviceVersion: '0.1.0',
+        correlationId,
+        requestId: correlationId,
+        toolName: tool.definition.name,
+        attemptCount: 1,
+        resultCode: 'TOOL_INPUT_VALIDATION_FAILED',
+        retryClass: 'permanent',
+        failureClass: 'input.schema.invalid',
+        failureDomain: 'validation',
+        validationErrors,
+        httpStatusHint: 422,
+      };
+
+      return {
+        success: false,
+        error: {
+          code: 'TOOL_INPUT_VALIDATION_FAILED',
+          message: validationErrors.join('; '),
         },
+        agentHints: {
+          suggestedNextActions: [],
+          relatedResources: [],
+          confidence: 1,
+          sourceQuality: 'high',
+          validityPeriod: 'long',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+          preferenceAlignment: [],
+          reasoning: 'Tool input does not match required schema',
+        },
+        metadata: metadata as IToolResultMetadata,
       };
     }
 
     const startTime = Date.now();
-    const result = await tool.handler(input, userId, correlationId);
+    let result: IToolResult;
+    let resultCode = 'SUCCESS';
+    let retryClass: ToolRetryClass = 'unknown';
+    let failureClass: ToolFailureClass | undefined;
+    let failureDomain: ToolFailureDomain | undefined;
 
-    const metadata: IToolResultMetadata = {
-      toolVersion: '0.1.0',
+    try {
+      result = await tool.handler(input, userId, correlationId);
+      if (!result.success) {
+        resultCode = result.error?.code ?? 'UNKNOWN_ERROR';
+        const classification = classifyError(resultCode);
+        retryClass = classification.retryClass;
+        failureClass = classification.failureClass;
+        failureDomain = classification.failureDomain;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      resultCode = 'HANDLER_EXCEPTION';
+      retryClass = 'unknown';
+      failureClass = 'internal.exception';
+      failureDomain = 'internal';
+      result = {
+        success: false,
+        error: { code: 'HANDLER_EXCEPTION', message },
+        agentHints: {
+          suggestedNextActions: [],
+          relatedResources: [],
+          confidence: 0.5,
+          sourceQuality: 'low',
+          validityPeriod: 'short',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+          preferenceAlignment: [],
+          reasoning: message,
+        },
+      };
+    }
+
+    const metadata: IToolResultMetadataExtended = {
+      toolVersion: tool.definition.version,
       timestamp: new Date().toISOString(),
       executionTime: Date.now() - startTime,
       serviceVersion: '0.1.0',
       correlationId,
+      requestId: correlationId,
+      toolName: tool.definition.name,
+      attemptCount: 1,
+      resultCode,
+      retryClass,
+      ...(failureClass !== undefined ? { failureClass } : {}),
+      ...(failureDomain !== undefined ? { failureDomain } : {}),
     };
-    result.metadata = metadata;
+    result.metadata = metadata as IToolResultMetadata;
 
     return result;
   }

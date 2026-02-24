@@ -15,6 +15,7 @@ import { InvalidTokenError } from '../../domain/content-service/errors/index.js'
 export interface ITokenPayload extends JWTPayload {
   sub: string;
   roles: string[];
+  scopes?: string[];
   type: 'access' | 'refresh';
 }
 
