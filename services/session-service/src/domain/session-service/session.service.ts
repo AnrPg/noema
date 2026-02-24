@@ -330,10 +330,7 @@ export class SessionService {
     const session = await this.runInTransaction(async (tx) => {
       await this.verifyOfflineIntentToken(data.offlineIntentToken, ctx, tx);
 
-      const activeSessionCount = await this.repository.countActiveSessionsForUpdate(
-        ctx.userId,
-        tx
-      );
+      const activeSessionCount = await this.repository.countActiveSessionsForUpdate(ctx.userId, tx);
 
       if (activeSessionCount >= this.options.session.maxConcurrentSessions) {
         throw new BusinessRuleError(
@@ -1248,10 +1245,6 @@ export class SessionService {
       ),
     };
   }
-
-  // ==========================================================================
-  // Session Queries
-  // ==========================================================================
 
   /**
    * Expire a session from a system context (e.g. background job / sidecar).
@@ -2401,10 +2394,13 @@ export class SessionService {
         typeof verifiedPayload.jti === 'string' && verifiedPayload.jti.length > 0
           ? verifiedPayload.jti
           : claims.nonce;
-      const replayGuard = await this.consumeOfflineIntentTokenReplayGuard({
-        jti,
-        userId: ctx.userId,
-      }, tx);
+      const replayGuard = await this.consumeOfflineIntentTokenReplayGuard(
+        {
+          jti,
+          userId: ctx.userId,
+        },
+        tx
+      );
 
       if (!replayGuard.valid) {
         throw new AuthorizationError(replayGuard.reason);

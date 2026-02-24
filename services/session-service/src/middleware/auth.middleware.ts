@@ -40,6 +40,12 @@ export function createAuthMiddleware(config: IAuthConfig) {
     throw new Error('JWT secret is required when authentication is enabled');
   }
 
+  if (!authDisabled && config.jwtSecret.trim().length < 32) {
+    throw new Error(
+      'JWT secret must be at least 32 characters for adequate cryptographic strength'
+    );
+  }
+
   const secret = new TextEncoder().encode(config.jwtSecret);
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {

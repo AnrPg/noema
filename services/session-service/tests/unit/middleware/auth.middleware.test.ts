@@ -69,12 +69,24 @@ describe('createAuthMiddleware', () => {
     ).not.toThrow();
   });
 
-  it('allows non-empty jwtSecret when auth is enabled', () => {
+  it('throws when jwtSecret is shorter than 32 characters', () => {
     process.env['AUTH_DISABLED'] = 'false';
 
     expect(() =>
       createAuthMiddleware({
-        jwtSecret: 'super-secret-signing-key',
+        jwtSecret: 'short-but-not-empty-secret',
+        issuer: 'noema.app',
+        audience: 'noema.app',
+      })
+    ).toThrow('JWT secret must be at least 32 characters');
+  });
+
+  it('allows jwtSecret of 32+ characters when auth is enabled', () => {
+    process.env['AUTH_DISABLED'] = 'false';
+
+    expect(() =>
+      createAuthMiddleware({
+        jwtSecret: 'this-is-a-secure-32-char-secret!',
         issuer: 'noema.app',
         audience: 'noema.app',
       })
@@ -98,7 +110,7 @@ describe('createAuthMiddleware', () => {
 
     expect(() =>
       createAuthMiddleware({
-        jwtSecret: 'super-secret-signing-key',
+        jwtSecret: 'this-is-a-secure-32-char-secret!',
         issuer: 'noema.app',
         audience: 'noema.app',
       })
@@ -108,7 +120,7 @@ describe('createAuthMiddleware', () => {
   it('ignores bearer validation path setup for factory creation', async () => {
     process.env['AUTH_DISABLED'] = 'false';
     const middleware = createAuthMiddleware({
-      jwtSecret: 'super-secret-signing-key',
+      jwtSecret: 'this-is-a-secure-32-char-secret!',
       issuer: 'noema.app',
       audience: 'noema.app',
     });

@@ -110,4 +110,134 @@ describe('SessionService expireSession authorization', () => {
       (outboxRepository.enqueue as unknown as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(0);
   });
+
+  it('allows the session owner to expire their own session', async () => {
+    const session = createSessionFixture();
+    const expiredSession = {
+      ...session,
+      state: 'expired' as ISession['state'],
+      completedAt: new Date().toISOString(),
+      terminationReason: 'auto_expired',
+      version: 2,
+    };
+
+    const repository = {
+      findSessionById: vi.fn(async () => session),
+      updateSession: vi.fn(async () => expiredSession),
+    } as unknown as ISessionRepository;
+
+    const outboxRepository = {
+      enqueue: vi.fn(async () => undefined),
+      markPublished: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      enqueueBatch: vi.fn(async () => undefined),
+      listPending: vi.fn(async () => []),
+    } as unknown as IOutboxRepository;
+
+    const eventPublisher = {
+      publish: vi.fn(async () => undefined),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const prisma = {
+      $transaction: vi.fn(async (operation: (tx: unknown) => Promise<unknown>) => operation({})),
+    } as unknown as PrismaClient;
+
+    const service = new SessionService(
+      repository,
+      eventPublisher,
+      outboxRepository,
+      prisma,
+      createLoggerMock() as never,
+      {
+        security: {
+          verifyOfflineIntentTokens: false,
+          offlineIntentTokenActiveKeyId: 'default',
+          offlineIntentTokenKeys: {},
+          offlineIntentTokenIssuer: 'noema.session',
+          offlineIntentTokenAudience: 'noema.mobile',
+        },
+      }
+    );
+
+    const result = await service.expireSession(session.id, {
+      userId: session.userId as never,
+      correlationId: 'cor_aaaaaaaaaaaaaaaaaaaaa' as never,
+    });
+
+    expect(result.data.state).toBe('expired');
+    expect(
+      (repository.updateSession as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+    expect(
+      (outboxRepository.enqueue as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+  });
+
+  it('allows system expiration without ownership via expireSessionSystem', async () => {
+    const session = createSessionFixture();
+    const expiredSession = {
+      ...session,
+      state: 'expired' as ISession['state'],
+      completedAt: new Date().toISOString(),
+      terminationReason: 'auto_expired',
+      version: 2,
+    };
+
+    const repository = {
+      findSessionById: vi.fn(async () => session),
+      updateSession: vi.fn(async () => expiredSession),
+    } as unknown as ISessionRepository;
+
+    const outboxRepository = {
+      enqueue: vi.fn(async () => undefined),
+      markPublished: vi.fn(async () => undefined),
+      markFailed: vi.fn(async () => undefined),
+      enqueueBatch: vi.fn(async () => undefined),
+      listPending: vi.fn(async () => []),
+    } as unknown as IOutboxRepository;
+
+    const eventPublisher = {
+      publish: vi.fn(async () => undefined),
+      publishBatch: vi.fn(async () => undefined),
+    } as unknown as IEventPublisher;
+
+    const prisma = {
+      $transaction: vi.fn(async (operation: (tx: unknown) => Promise<unknown>) => operation({})),
+    } as unknown as PrismaClient;
+
+    const service = new SessionService(
+      repository,
+      eventPublisher,
+      outboxRepository,
+      prisma,
+      createLoggerMock() as never,
+      {
+        security: {
+          verifyOfflineIntentTokens: false,
+          offlineIntentTokenActiveKeyId: 'default',
+          offlineIntentTokenKeys: {},
+          offlineIntentTokenIssuer: 'noema.session',
+          offlineIntentTokenAudience: 'noema.mobile',
+        },
+      }
+    );
+
+    // Call as a completely different user — system expiration skips ownership
+    const result = await service.expireSessionSystem(session.id, {
+      userId: 'usr_system_serviceaaaaaa' as never,
+      correlationId: 'cor_aaaaaaaaaaaaaaaaaaaaa' as never,
+    });
+
+    expect(result.data.state).toBe('expired');
+    expect(
+      (repository.findSessionById as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+    expect(
+      (repository.updateSession as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+    expect(
+      (outboxRepository.enqueue as unknown as ReturnType<typeof vi.fn>).mock.calls
+    ).toHaveLength(1);
+  });
 });
