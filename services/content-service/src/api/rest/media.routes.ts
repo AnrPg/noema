@@ -11,6 +11,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { MediaService } from '../../domain/content-service/media.service.js';
 import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import {
+  type IRouteOptions,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -32,10 +33,16 @@ interface IIdParams {
 export function registerMediaRoutes(
   fastify: FastifyInstance,
   mediaService: MediaService,
-  authMiddleware: ReturnType<typeof createAuthMiddleware>
+  authMiddleware: ReturnType<typeof createAuthMiddleware>,
+  options?: IRouteOptions
 ): void {
   // Attach startTime for executionTime computation
   attachStartTimeHook(fastify);
+
+  // Per-route rate-limit overrides (@fastify/rate-limit convention)
+  const writeRouteConfig = options?.rateLimit
+    ? { rateLimit: { max: options.rateLimit.writeMax, timeWindow: options.rateLimit.timeWindow } }
+    : {};
 
   // ============================================================================
   // POST /v1/media/upload-url — Request presigned upload URL
@@ -43,7 +50,7 @@ export function registerMediaRoutes(
 
   fastify.post(
     '/v1/media/upload-url',
-    { preHandler: authMiddleware },
+    { preHandler: authMiddleware, config: writeRouteConfig },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const context = buildContext(request);
@@ -61,7 +68,7 @@ export function registerMediaRoutes(
 
   fastify.post<{ Params: IIdParams }>(
     '/v1/media/:id/confirm',
-    { preHandler: authMiddleware },
+    { preHandler: authMiddleware, config: writeRouteConfig },
     async (request: FastifyRequest<{ Params: IIdParams }>, reply: FastifyReply) => {
       try {
         const context = buildContext(request);
@@ -151,7 +158,7 @@ export function registerMediaRoutes(
 
   fastify.delete<{ Params: IIdParams }>(
     '/v1/media/:id',
-    { preHandler: authMiddleware },
+    { preHandler: authMiddleware, config: writeRouteConfig },
     async (request: FastifyRequest<{ Params: IIdParams }>, reply: FastifyReply) => {
       try {
         const context = buildContext(request);

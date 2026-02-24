@@ -96,6 +96,9 @@ export interface ICard extends IAuditedEntity {
 
   /** Extensible metadata (scheduling hints, generation params, agent trace) */
   metadata: Record<string, JsonValue>;
+
+  /** Content deduplication hash (SHA-256 of cardType + content). Null for pre-existing cards. */
+  contentHash?: string | null;
 }
 
 // ============================================================================

@@ -157,15 +157,19 @@ export class VersionConflictError extends DomainError {
 
 /**
  * Thrown when a duplicate card is detected (same content hash).
+ * Carries the existing card so the error handler can return it in the
+ * 409 response, avoiding a second round-trip for the caller.
  */
 export class DuplicateCardError extends DomainError {
   public readonly existingCardId: string;
+  public readonly existingCard: Record<string, unknown> | undefined;
 
-  constructor(existingCardId: string) {
+  constructor(existingCardId: string, existingCard?: Record<string, unknown>) {
     super('DUPLICATE_CARD', `A card with identical content already exists: ${existingCardId}`, {
       existingCardId,
     });
     this.existingCardId = existingCardId;
+    this.existingCard = existingCard;
   }
 }
 

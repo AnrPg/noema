@@ -27,6 +27,8 @@ import type {
   ISessionSeedInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
+import { generateContentHash } from '../../utils/content-hash.js';
+import { sanitizeCardContent } from '../../utils/content-sanitizer.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import { validateCardContent } from './card-content.schemas.js';
 import type { IContentRepository } from './content.repository.js';
@@ -43,6 +45,7 @@ import {
   BatchLimitExceededError,
   BusinessRuleError,
   CardNotFoundError,
+  DuplicateCardError,
   InvalidCardStateError,
   ValidationError,
   VersionConflictError,
@@ -124,8 +127,22 @@ export class ContentService {
     this.requireAuth(context);
     this.logger.info({ cardType: input.cardType }, 'Creating card');
 
+    // Sanitize content (XSS prevention)
+    const sanitizedInput = {
+      ...input,
+      content: sanitizeCardContent(input.content),
+    };
+
     // Validate input
-    const validated = this.validateCreateInput(input);
+    const validated = this.validateCreateInput(sanitizedInput);
+
+    // Content deduplication (per-user, SHA-256)
+    const contentHash = generateContentHash(validated.cardType, validated.content);
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const existingCard = await this.repository.findByContentHash(context.userId!, contentHash);
+    if (existingCard) {
+      throw new DuplicateCardError(existingCard.id, existingCard as unknown as Record<string, unknown>);
+    }
 
     // Generate ID
     const id = `${ID_PREFIXES.CardId}${nanoid(21)}` as CardId;
@@ -135,6 +152,7 @@ export class ContentService {
       id,
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       userId: context.userId!,
+      contentHash,
       ...validated,
     });
 
@@ -193,23 +211,91 @@ export class ContentService {
       );
     }
 
+    // Sanitize content for each card (XSS prevention)
+    const sanitizedCards = parseResult.data.cards.map((card) => ({
+      ...card,
+      content: sanitizeCardContent(card.content),
+    }));
+
     // Generate batch correlation ID
     const batchId = `batch_${nanoid(21)}`;
 
-    // Prepare cards with IDs and batchId in metadata
-    const cardsWithIds = parseResult.data.cards.map((card) => ({
-      ...card,
-      id: `${ID_PREFIXES.CardId}${nanoid(21)}` as CardId,
+    // Compute content hashes for deduplication
+    const cardHashes = sanitizedCards.map((card) =>
+      generateContentHash(card.cardType, card.content)
+    );
+
+    // Batch dedup check — find all hashes that already exist for this user
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const existingCards = await this.repository.findByContentHashes(context.userId!, cardHashes);
+    const existingHashSet = new Set(
+      existingCards
+        .map((c) => c.contentHash)
+        .filter((h): h is string => h !== null && h !== undefined)
+    );
+
+    // Also detect intra-batch duplicates (first occurrence wins)
+    const seenHashes = new Set<string>();
+    const duplicateIndices = new Set<number>();
+
+    for (let i = 0; i < cardHashes.length; i++) {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      userId: context.userId!,
-      metadata: {
-        ...card.metadata,
-        _batchId: batchId,
-      },
-    })) as unknown as (ICreateCardInput & { id: CardId; userId: UserId })[];
+      const hash = cardHashes[i]!;
+      if (existingHashSet.has(hash) || seenHashes.has(hash)) {
+        duplicateIndices.add(i);
+      } else {
+        seenHashes.add(hash);
+      }
+    }
+
+    // Build failed array for duplicates detected pre-create
+    const preFailed: { index: number; error: string; input: ICreateCardInput }[] = [];
+    for (const idx of duplicateIndices) {
+      preFailed.push({
+        index: idx,
+        error: `Duplicate content detected (contentHash: ${String(cardHashes[idx])})`,
+        input: sanitizedCards[idx] as unknown as ICreateCardInput,
+      });
+    }
+
+    // Prepare non-duplicate cards with IDs, batchId, and contentHash
+    const cardsToCreate = sanitizedCards
+      .map((card, i) => ({ card, index: i }))
+      .filter(({ index }) => !duplicateIndices.has(index))
+      .map(({ card, index }) => ({
+        ...card,
+        id: `${ID_PREFIXES.CardId}${nanoid(21)}` as CardId,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        userId: context.userId!,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        contentHash: cardHashes[index]!,
+        metadata: {
+          ...card.metadata,
+          _batchId: batchId,
+        },
+      })) as unknown as (ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string })[];
 
     // Batch create within a transaction (handled by repository)
-    const result = await this.repository.createBatch(cardsWithIds);
+    let result: IBatchCreateResult;
+    if (cardsToCreate.length > 0) {
+      result = await this.repository.createBatch(cardsToCreate);
+      // Merge pre-create duplicate failures with repo failures
+      result = {
+        ...result,
+        failed: [...preFailed, ...result.failed],
+        total: cards.length,
+        failureCount: preFailed.length + result.failureCount,
+      };
+    } else {
+      result = {
+        batchId,
+        created: [],
+        failed: preFailed,
+        total: cards.length,
+        successCount: 0,
+        failureCount: preFailed.length,
+      };
+    }
 
     // Publish events for successfully created cards
     if (result.created.length > 0) {
@@ -352,8 +438,13 @@ export class ContentService {
     this.requireAuth(context);
     this.logger.info({ cardId: id }, 'Updating card');
 
+    // Sanitize content if present (XSS prevention)
+    const sanitizedInput = input.content
+      ? { ...input, content: sanitizeCardContent(input.content) }
+      : input;
+
     // Validate input
-    const parseResult = UpdateCardInputSchema.safeParse(input);
+    const parseResult = UpdateCardInputSchema.safeParse(sanitizedInput);
     if (!parseResult.success) {
       const errors = parseResult.error.flatten();
       throw new ValidationError(
@@ -382,9 +473,14 @@ export class ContentService {
       }
     }
 
+    // Recompute content hash when content changes
+    const contentHash = parseResult.data.content
+      ? generateContentHash(existing.cardType, parseResult.data.content)
+      : undefined;
+
     let card: ICard;
     try {
-      card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version, context.userId ?? undefined);
+      card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version, context.userId ?? undefined, contentHash);
     } catch (error) {
       if (error instanceof VersionConflictError) throw error;
       throw error;

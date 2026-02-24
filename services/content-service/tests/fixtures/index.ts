@@ -144,6 +144,7 @@ export function card(overrides: Partial<ICard> = {}): ICard {
     tags: [],
     source: 'user' as EventSource,
     metadata: {},
+    contentHash: null,
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
     deletedAt: null,

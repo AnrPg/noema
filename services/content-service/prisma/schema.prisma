@@ -40,6 +40,9 @@ model Card {
     // Extensible metadata (scheduling hints, generation params, etc.)
     metadata Json @default("{}")
 
+    // Content deduplication hash (SHA-256 of cardType + content)
+    contentHash String? @map("content_hash") @db.VarChar(64)
+
     // Audit fields
     createdAt DateTime  @default(now()) @map("created_at")
     updatedAt DateTime  @updatedAt @map("updated_at")
@@ -60,6 +63,7 @@ model Card {
     @@index([deletedAt])
     @@index([knowledgeNodeIds], type: Gin)
     @@index([tags], type: Gin)
+    @@index([contentHash])
     @@map("cards")
 }
 

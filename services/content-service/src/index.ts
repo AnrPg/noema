@@ -6,6 +6,7 @@
  */
 
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
@@ -105,6 +106,7 @@ async function bootstrap(): Promise<void> {
     requestIdHeader: 'x-correlation-id',
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
+    bodyLimit: config.server.bodyLimit,
   });
 
   // Register CORS
@@ -119,6 +121,41 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
   });
 
+  // Register rate limiting
+  await fastify.register(rateLimit, {
+    max: config.rateLimit.max,
+    timeWindow: config.rateLimit.timeWindow,
+    redis,
+    keyGenerator: (request) => {
+      // Try to extract userId from JWT (fast base64 decode — no crypto)
+      // for user-scoped rate limiting. Falls back to IP for unauthenticated requests.
+      const authHeader = request.headers.authorization;
+      if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        try {
+          const token = authHeader.slice(7);
+          const parts = token.split('.');
+          if (parts[1] !== undefined && parts[1] !== '') {
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as { sub?: string };
+            if (typeof payload.sub === 'string') return `user:${payload.sub}`;
+          }
+        } catch { /* fall through to IP */ }
+      }
+      return `ip:${request.ip}`;
+    },
+    errorResponseBuilder: (_request, context) => ({
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: `Rate limit exceeded. Retry after ${String(Math.ceil(context.ttl / 1000))} seconds.`,
+        details: {
+          limit: context.max,
+          remaining: 0,
+          retryAfterMs: context.ttl,
+        },
+      },
+    }),
+  });
+  logger.info({ max: config.rateLimit.max, timeWindow: config.rateLimit.timeWindow }, 'Rate limiting registered');
+
   // Create auth middleware
   const authMiddleware = createAuthMiddleware(tokenVerifier);
 
@@ -126,11 +163,24 @@ async function bootstrap(): Promise<void> {
   const toolRegistry = createToolRegistry(contentService);
   logger.info({ toolCount: toolRegistry.size }, 'MCP tool registry initialized');
 
+  // Shared route options
+  const routeOptions = {
+    rateLimit: {
+      writeMax: config.rateLimit.writeMax,
+      batchMax: config.rateLimit.batchMax,
+      timeWindow: config.rateLimit.timeWindow,
+    },
+    bodyLimits: {
+      defaultLimit: config.server.bodyLimit,
+      batchLimit: config.server.batchBodyLimit,
+    },
+  };
+
   // Register routes
   registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware);
-  registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware);
-  registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware);
+  registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware, routeOptions);
+  registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware, routeOptions);
+  registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware, routeOptions);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown

@@ -138,11 +138,30 @@ export class PrismaContentRepository implements IContentRepository {
     return cards.map((c) => this.toDomain(c));
   }
 
+  async findByContentHash(userId: UserId, contentHash: string): Promise<ICard | null> {
+    const card = await this.prisma.card.findFirst({
+      where: { userId, contentHash, deletedAt: null },
+    });
+    return card ? this.toDomain(card) : null;
+  }
+
+  async findByContentHashes(userId: UserId, contentHashes: string[]): Promise<ICard[]> {
+    if (contentHashes.length === 0) return [];
+    const cards = await this.prisma.card.findMany({
+      where: {
+        userId,
+        contentHash: { in: contentHashes },
+        deletedAt: null,
+      },
+    });
+    return cards.map((c) => this.toDomain(c));
+  }
+
   // ============================================================================
   // Write Operations
   // ============================================================================
 
-  async create(input: ICreateCardInput & { id: CardId; userId: UserId }): Promise<ICard> {
+  async create(input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }): Promise<ICard> {
     const card = await this.prisma.card.create({
       data: {
         id: input.id,
@@ -155,6 +174,7 @@ export class PrismaContentRepository implements IContentRepository {
         tags: input.tags ?? [],
         source: this.toDbSource(input.source ?? 'user'),
         metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
+        contentHash: input.contentHash ?? null,
         createdBy: input.userId,
         version: 1,
       },
@@ -164,7 +184,7 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   async createBatch(
-    inputs: (ICreateCardInput & { id: CardId; userId: UserId })[]
+    inputs: (ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string })[]
   ): Promise<IBatchCreateResult> {
     const created: ICard[] = [];
     const failed: { index: number; error: string; input: ICreateCardInput }[] = [];
@@ -191,6 +211,7 @@ export class PrismaContentRepository implements IContentRepository {
               tags: input.tags ?? [],
               source: this.toDbSource(input.source ?? 'user'),
               metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
+              contentHash: input.contentHash ?? null,
               createdBy: input.userId,
               version: 1,
             },
@@ -220,7 +241,7 @@ export class PrismaContentRepository implements IContentRepository {
     };
   }
 
-  async update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId): Promise<ICard> {
+  async update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId, contentHash?: string): Promise<ICard> {
     // For metadata merge we need the current record
     let mergedMetadata: Prisma.JsonObject | undefined;
     if (input.metadata !== undefined) {
@@ -241,6 +262,9 @@ export class PrismaContentRepository implements IContentRepository {
 
     if (input.content !== undefined) {
       data.content = input.content as unknown as Prisma.JsonObject;
+    }
+    if (contentHash !== undefined) {
+      data.contentHash = contentHash;
     }
     if (input.difficulty !== undefined) {
       data.difficulty = this.toDbDifficulty(input.difficulty);
@@ -559,6 +583,7 @@ export class PrismaContentRepository implements IContentRepository {
       tags: card.tags,
       source: card.source.toLowerCase() as EventSource,
       metadata: card.metadata as Record<string, JsonValue>,
+      contentHash: card.contentHash ?? null,
       createdAt: card.createdAt.toISOString(),
       updatedAt: card.updatedAt.toISOString(),
       deletedAt: card.deletedAt?.toISOString() ?? null,

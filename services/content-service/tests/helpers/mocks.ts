@@ -26,6 +26,8 @@ export function mockContentRepository(): {
     query: vi.fn(),
     count: vi.fn(),
     findByIds: vi.fn(),
+    findByContentHash: vi.fn().mockResolvedValue(null),
+    findByContentHashes: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
     createBatch: vi.fn(),
     update: vi.fn(),

@@ -18,6 +18,7 @@ import type {
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import {
+  type IRouteOptions,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -56,10 +57,19 @@ interface IDeleteQuery {
 export function registerContentRoutes(
   fastify: FastifyInstance,
   contentService: ContentService,
-  authMiddleware: ReturnType<typeof createAuthMiddleware>
+  authMiddleware: ReturnType<typeof createAuthMiddleware>,
+  options?: IRouteOptions
 ): void {
   // Attach startTime for executionTime computation
   attachStartTimeHook(fastify);
+
+  // Per-route rate-limit overrides (@fastify/rate-limit convention)
+  const writeRouteConfig = options?.rateLimit
+    ? { rateLimit: { max: options.rateLimit.writeMax, timeWindow: options.rateLimit.timeWindow } }
+    : {};
+  const batchRouteConfig = options?.rateLimit
+    ? { rateLimit: { max: options.rateLimit.batchMax, timeWindow: options.rateLimit.timeWindow } }
+    : {};
 
   // ============================================================================
   // Card CRUD Routes
@@ -72,6 +82,7 @@ export function registerContentRoutes(
     '/v1/cards',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Create a new card',
@@ -117,6 +128,8 @@ export function registerContentRoutes(
     '/v1/cards/batch',
     {
       preHandler: authMiddleware,
+      bodyLimit: options?.bodyLimits?.batchLimit ?? 5_242_880,
+      config: batchRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Batch create cards',
@@ -324,6 +337,7 @@ export function registerContentRoutes(
     '/v1/cards/:id',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Update a card',
@@ -376,6 +390,7 @@ export function registerContentRoutes(
     '/v1/cards/:id/state',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Change card state',
@@ -423,6 +438,7 @@ export function registerContentRoutes(
     '/v1/cards/:id/tags',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Update card tags',
@@ -470,6 +486,7 @@ export function registerContentRoutes(
     '/v1/cards/:id/node-links',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Update card knowledge node links',
@@ -606,6 +623,7 @@ export function registerContentRoutes(
     '/v1/cards/batch/state',
     {
       preHandler: authMiddleware,
+      config: batchRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Batch change card state',
@@ -660,6 +678,7 @@ export function registerContentRoutes(
     '/v1/cards/:id',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Delete a card',
@@ -734,6 +753,7 @@ export function registerContentRoutes(
     '/v1/cards/batch/:batchId',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Cards'],
         summary: 'Rollback a batch',

@@ -58,6 +58,19 @@ export interface IContentRepository {
    */
   findByIds(ids: CardId[], userId: UserId): Promise<ICard[]>;
 
+  /**
+   * Find a card by its content hash (per-user deduplication).
+   * @returns Card or null if no card matches
+   */
+  findByContentHash(userId: UserId, contentHash: string): Promise<ICard | null>;
+
+  /**
+   * Find cards matching any of the given content hashes (per-user).
+   * Used for efficient batch deduplication.
+   * @returns Cards matching any of the hashes
+   */
+  findByContentHashes(userId: UserId, contentHashes: string[]): Promise<ICard[]>;
+
   // ============================================================================
   // Write Operations
   // ============================================================================
@@ -66,14 +79,14 @@ export interface IContentRepository {
    * Create a new card.
    * @returns Created card
    */
-  create(input: ICreateCardInput & { id: CardId; userId: UserId }): Promise<ICard>;
+  create(input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }): Promise<ICard>;
 
   /**
    * Create multiple cards in a batch.
    * Uses a transaction; individual failures don't roll back the entire batch.
    */
   createBatch(
-    inputs: (ICreateCardInput & { id: CardId; userId: UserId })[]
+    inputs: (ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string })[]
   ): Promise<IBatchCreateResult>;
 
   /**
@@ -81,7 +94,7 @@ export interface IContentRepository {
    * Uses optimistic locking.
    * @returns Updated card
    */
-  update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId): Promise<ICard>;
+  update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId, contentHash?: string): Promise<ICard>;
 
   /**
    * Change card state.

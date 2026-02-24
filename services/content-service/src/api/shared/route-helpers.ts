@@ -17,6 +17,7 @@ import {
   BusinessRuleError,
   CardNotFoundError,
   DomainError,
+  DuplicateCardError,
   ValidationError,
   VersionConflictError,
 } from '../../domain/content-service/errors/index.js';
@@ -29,6 +30,26 @@ import { TemplateNotFoundError } from '../../domain/content-service/template.ser
 
 const SERVICE_NAME = 'content-service';
 const SERVICE_VERSION = '0.1.0';
+
+// ============================================================================
+// Route Options
+// ============================================================================
+
+/**
+ * Shared options passed to route registrars from the bootstrap.
+ * Contains rate-limit and body-size configuration.
+ */
+export interface IRouteOptions {
+  rateLimit?: {
+    writeMax: number;
+    batchMax: number;
+    timeWindow: number;
+  };
+  bodyLimits?: {
+    defaultLimit: number;
+    batchLimit: number;
+  };
+}
 
 // ============================================================================
 // Request Augmentation
@@ -171,6 +192,22 @@ export function handleError(
       error: {
         code: 'MEDIA_NOT_FOUND',
         message: error.message,
+      },
+      metadata,
+    });
+    return;
+  }
+
+  // 409 — Duplicate content
+  if (error instanceof DuplicateCardError) {
+    reply.status(409).send({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: {
+          existingCardId: error.existingCardId,
+          existingCard: error.existingCard ?? null,
+        },
       },
       metadata,
     });

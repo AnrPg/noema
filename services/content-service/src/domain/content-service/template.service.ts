@@ -17,6 +17,7 @@ import type {
   ITemplateSummary,
   IUpdateTemplateInput,
 } from '../../types/content.types.js';
+import { sanitizeCardContent } from '../../utils/content-sanitizer.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { IExecutionContext, IServiceResult } from './content.service.js';
 import { AuthorizationError, TemplateNotFoundError, ValidationError } from './errors/index.js';
@@ -59,7 +60,13 @@ export class TemplateService {
     this.requireAuth(context);
     this.logger.info({ templateName: input.name, cardType: input.cardType }, 'Creating template');
 
-    const parseResult = CreateTemplateInputSchema.safeParse(input);
+    // Sanitize content (XSS prevention)
+    const sanitizedInput = {
+      ...input,
+      content: sanitizeCardContent(input.content),
+    };
+
+    const parseResult = CreateTemplateInputSchema.safeParse(sanitizedInput);
     if (!parseResult.success) {
       const errors = parseResult.error.flatten();
       throw new ValidationError(
@@ -178,7 +185,12 @@ export class TemplateService {
     this.requireAuth(context);
     this.logger.info({ templateId: id }, 'Updating template');
 
-    const parseResult = UpdateTemplateInputSchema.safeParse(input);
+    // Sanitize content if present (XSS prevention)
+    const sanitizedInput = input.content
+      ? { ...input, content: sanitizeCardContent(input.content) }
+      : input;
+
+    const parseResult = UpdateTemplateInputSchema.safeParse(sanitizedInput);
     if (!parseResult.success) {
       const errors = parseResult.error.flatten();
       throw new ValidationError(

@@ -12,8 +12,10 @@ import {
   BatchLimitExceededError,
   BusinessRuleError,
   CardNotFoundError,
+  DuplicateCardError,
   ValidationError,
 } from '../../../src/domain/content-service/errors/index.js';
+import { generateContentHash } from '../../../src/utils/content-hash.js';
 import {
   adminContext,
   atomicContent,
@@ -102,6 +104,63 @@ describe('ContentService', () => {
       const createCall = repo.create.mock.calls[0]![0] as { id: string };
       expect(createCall.id).toMatch(/^card_/);
     });
+
+    it('throws DuplicateCardError when content hash already exists', async () => {
+      const input = createCardInput();
+      const ctx = executionContext();
+      const existingCard = card({ userId: ctx.userId! });
+      repo.findByContentHash.mockResolvedValue(existingCard);
+
+      await expect(service.create(input, ctx)).rejects.toThrow(DuplicateCardError);
+      expect(repo.create).not.toHaveBeenCalled();
+    });
+
+    it('includes existing card in DuplicateCardError', async () => {
+      const input = createCardInput();
+      const ctx = executionContext();
+      const existingCard = card({ userId: ctx.userId! });
+      repo.findByContentHash.mockResolvedValue(existingCard);
+
+      try {
+        await service.create(input, ctx);
+        expect.unreachable('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(DuplicateCardError);
+        const dupError = error as DuplicateCardError;
+        expect(dupError.existingCardId).toBe(existingCard.id);
+        expect(dupError.existingCard).toBeDefined();
+      }
+    });
+
+    it('passes contentHash to repository on create', async () => {
+      const input = createCardInput();
+      const ctx = executionContext();
+      repo.create.mockImplementation(async (data) => card({ id: data.id, userId: data.userId }));
+
+      await service.create(input, ctx);
+
+      const createCall = repo.create.mock.calls[0]![0] as { contentHash?: string };
+      expect(createCall.contentHash).toBeDefined();
+      expect(typeof createCall.contentHash).toBe('string');
+      expect(createCall.contentHash!.length).toBe(64); // SHA-256 hex
+    });
+
+    it('sanitizes HTML in card content before creation', async () => {
+      const input = createCardInput({
+        content: {
+          front: '<p>What is 2+2?</p><script>alert("xss")</script>',
+          back: '<b>4</b>',
+        } as any,
+      });
+      const ctx = executionContext();
+      repo.create.mockImplementation(async (data) => card({ id: data.id, userId: data.userId, content: data.content }));
+
+      await service.create(input, ctx);
+
+      const createCall = repo.create.mock.calls[0]![0] as { content: { front: string; back: string } };
+      expect(createCall.content.front).not.toContain('<script>');
+      expect(createCall.content.back).toContain('<b>4</b>');
+    });
   });
 
   // ==========================================================================
@@ -110,7 +169,10 @@ describe('ContentService', () => {
 
   describe('createBatch()', () => {
     it('creates a batch of cards', async () => {
-      const inputs = [createCardInput(), createCardInput()];
+      const inputs = [
+        createCardInput({ content: atomicContent({ front: 'Batch Q1', back: 'Batch A1' }) }),
+        createCardInput({ content: atomicContent({ front: 'Batch Q2', back: 'Batch A2' }) }),
+      ];
       const ctx = executionContext();
       repo.createBatch.mockResolvedValue({
         batchId: 'batch_test123',
@@ -139,6 +201,59 @@ describe('ContentService', () => {
       await expect(service.createBatch([], unauthenticatedContext())).rejects.toThrow(
         AuthorizationError
       );
+    });
+
+    it('filters out duplicate cards in batch (existing in DB)', async () => {
+      const inputs = [
+        createCardInput({ content: atomicContent({ front: 'Q1', back: 'A1' }) }),
+        createCardInput({ content: atomicContent({ front: 'Q2', back: 'A2' }) }),
+      ];
+      const ctx = executionContext();
+
+      // First card's hash "already exists" in the DB
+      const contentHash = generateContentHash(
+        inputs[0]!.cardType,
+        inputs[0]!.content as Record<string, unknown>
+      );
+      const existingCard = card({ userId: ctx.userId!, content: inputs[0]!.content, contentHash });
+      repo.findByContentHashes.mockResolvedValue([existingCard]);
+
+      repo.createBatch.mockResolvedValue({
+        batchId: 'batch_test',
+        created: [card()],
+        failed: [],
+        total: 1,
+        successCount: 1,
+        failureCount: 0,
+      });
+
+      const result = await service.createBatch(inputs, ctx);
+
+      // One card should be filtered as duplicate and show in failed
+      expect(result.data.failureCount).toBeGreaterThanOrEqual(1);
+    });
+
+    it('detects intra-batch duplicates (same content in batch)', async () => {
+      const sameContent = atomicContent({ front: 'Duplicate', back: 'Same' });
+      const inputs = [
+        createCardInput({ content: sameContent }),
+        createCardInput({ content: sameContent }),
+      ];
+      const ctx = executionContext();
+
+      repo.createBatch.mockResolvedValue({
+        batchId: 'batch_test',
+        created: [card()],
+        failed: [],
+        total: 1,
+        successCount: 1,
+        failureCount: 0,
+      });
+
+      const result = await service.createBatch(inputs, ctx);
+
+      // Second card should be rejected as intra-batch duplicate
+      expect(result.data.failureCount).toBeGreaterThanOrEqual(1);
     });
   });
 

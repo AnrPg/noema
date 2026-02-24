@@ -14,6 +14,7 @@ import type {
   IUpdateTemplateInput,
 } from '../../types/content.types.js';
 import {
+  type IRouteOptions,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -44,10 +45,16 @@ interface IDeleteQuery {
 export function registerTemplateRoutes(
   fastify: FastifyInstance,
   templateService: TemplateService,
-  authMiddleware: ReturnType<typeof createAuthMiddleware>
+  authMiddleware: ReturnType<typeof createAuthMiddleware>,
+  options?: IRouteOptions
 ): void {
   // Attach startTime for executionTime computation
   attachStartTimeHook(fastify);
+
+  // Per-route rate-limit overrides (@fastify/rate-limit convention)
+  const writeRouteConfig = options?.rateLimit
+    ? { rateLimit: { max: options.rateLimit.writeMax, timeWindow: options.rateLimit.timeWindow } }
+    : {};
 
   // ============================================================================
   // Template CRUD Routes
@@ -58,6 +65,7 @@ export function registerTemplateRoutes(
     '/v1/templates',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Templates'],
         summary: 'Create a card template',
@@ -158,6 +166,7 @@ export function registerTemplateRoutes(
     '/v1/templates/:id',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Templates'],
         summary: 'Update a template',
@@ -193,6 +202,7 @@ export function registerTemplateRoutes(
     '/v1/templates/:id',
     {
       preHandler: authMiddleware,
+      config: writeRouteConfig,
       schema: {
         tags: ['Templates'],
         summary: 'Delete a template',

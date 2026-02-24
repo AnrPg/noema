@@ -20,6 +20,10 @@ export interface IServiceConfig {
   server: {
     host: string;
     port: number;
+    /** Global request body size limit in bytes (default: 1 MB) */
+    bodyLimit: number;
+    /** Max body size for batch endpoints in bytes (default: 5 MB) */
+    batchBodyLimit: number;
   };
   database: {
     url: string;
@@ -43,6 +47,16 @@ export interface IServiceConfig {
     secretKey: string;
     bucket: string;
     presignedUrlExpiry: number;
+  };
+  rateLimit: {
+    /** Global max requests per window */
+    max: number;
+    /** Time window in milliseconds */
+    timeWindow: number;
+    /** Max requests for write endpoints (POST/PUT/PATCH/DELETE) */
+    writeMax: number;
+    /** Max requests for batch endpoints */
+    batchMax: number;
   };
   cors: {
     origin: string[];
@@ -117,6 +131,8 @@ export function loadConfig(): IServiceConfig {
     server: {
       host: optionalEnv('HOST', '0.0.0.0'),
       port: optionalEnvInt('PORT', 3005),
+      bodyLimit: optionalEnvInt('BODY_LIMIT', 1_048_576), // 1 MB
+      batchBodyLimit: optionalEnvInt('BATCH_BODY_LIMIT', 5_242_880), // 5 MB
     },
     database: {
       url: requireEnv('DATABASE_URL'),
@@ -139,6 +155,12 @@ export function loadConfig(): IServiceConfig {
       secretKey: optionalEnv('MINIO_SECRET_KEY', 'noema_minio_password'),
       bucket: optionalEnv('MINIO_BUCKET', 'content'),
       presignedUrlExpiry: optionalEnvInt('MINIO_PRESIGNED_EXPIRY', 3600),
+    },
+    rateLimit: {
+      max: optionalEnvInt('RATE_LIMIT_MAX', 100),
+      timeWindow: optionalEnvInt('RATE_LIMIT_WINDOW_MS', 60_000), // 1 minute
+      writeMax: optionalEnvInt('RATE_LIMIT_WRITE_MAX', 30),
+      batchMax: optionalEnvInt('RATE_LIMIT_BATCH_MAX', 10),
     },
     cors: {
       origin: parseCorsOrigin(
