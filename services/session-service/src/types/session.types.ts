@@ -84,11 +84,23 @@ export interface IAdaptiveCheckpointDirective {
   priority: 'critical' | 'high' | 'medium' | 'low';
 }
 
+/**
+ * Cohort handshake state machine:
+ *
+ *   PROPOSED  ──► ACCEPTED ──► COMMITTED  (terminal)
+ *       ▲             │
+ *       └── REVISED ◄─┘
+ *
+ * CANCELLED is reserved for future use (e.g. user- or system-initiated
+ * cancellation before commit). It exists in the Prisma enum to avoid a
+ * migration when the feature is implemented but has no transition path today.
+ */
 export const SessionCohortHandshakeStatus = {
   PROPOSED: 'proposed',
   ACCEPTED: 'accepted',
   REVISED: 'revised',
   COMMITTED: 'committed',
+  /** @reserved — no transition path implemented yet. */
   CANCELLED: 'cancelled',
 } as const;
 

@@ -759,11 +759,10 @@ export class SessionService {
       }
 
       if (
-        current.status !== CohortHandshakeStatuses.ACCEPTED &&
-        current.status !== CohortHandshakeStatuses.COMMITTED
+        current.status !== CohortHandshakeStatuses.ACCEPTED
       ) {
         throw new BusinessRuleError(
-          `Cannot revise cohort from status ${current.status}; expected accepted or committed`
+          `Cannot revise cohort from status ${current.status}; expected accepted`
         );
       }
 
