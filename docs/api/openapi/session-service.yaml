@@ -366,6 +366,69 @@ components:
         - createdAt
         - updatedAt
 
+    SessionCohortHandshakeStatus:
+      type: string
+      enum: [proposed, accepted, revised, committed, cancelled]
+
+    SessionCohortLinkage:
+      type: object
+      properties:
+        proposalId:
+          type: string
+        decisionId:
+          type: string
+      required: [proposalId, decisionId]
+
+    SessionCohortHandshake:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionId:
+          $ref: "#/components/schemas/SessionId"
+        proposalId:
+          type: string
+        decisionId:
+          type: string
+        revision:
+          type: integer
+        status:
+          $ref: "#/components/schemas/SessionCohortHandshakeStatus"
+        candidateCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        acceptedCardIds:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/CardId"
+        rejectedCardIds:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/CardId"
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sessionId
+        - proposalId
+        - decisionId
+        - revision
+        - status
+        - candidateCardIds
+        - metadata
+        - createdAt
+        - updatedAt
+
     # ---------- Request Bodies ----------
     StartSessionInput:
       type: object
@@ -530,6 +593,89 @@ components:
       required:
         - newApproach
         - trigger
+
+    ProposeCohortInput:
+      type: object
+      properties:
+        linkage:
+          $ref: "#/components/schemas/SessionCohortLinkage"
+        revision:
+          type: integer
+          minimum: 1
+        candidateCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [linkage, revision, candidateCardIds]
+
+    AcceptCohortInput:
+      type: object
+      properties:
+        linkage:
+          $ref: "#/components/schemas/SessionCohortLinkage"
+        expectedRevision:
+          type: integer
+          minimum: 1
+        acceptedCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        rejectedCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [linkage, expectedRevision, acceptedCardIds, rejectedCardIds]
+
+    ReviseCohortInput:
+      type: object
+      properties:
+        linkage:
+          $ref: "#/components/schemas/SessionCohortLinkage"
+        expectedRevision:
+          type: integer
+          minimum: 1
+        newRevision:
+          type: integer
+          minimum: 1
+        candidateCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        reason:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [linkage, expectedRevision, newRevision, candidateCardIds, reason]
+
+    CommitCohortInput:
+      type: object
+      properties:
+        linkage:
+          $ref: "#/components/schemas/SessionCohortLinkage"
+        expectedRevision:
+          type: integer
+          minimum: 1
+        committedCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        rejectedCardIds:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardId"
+        policyVersion:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [linkage, expectedRevision, committedCardIds, rejectedCardIds]
 
     # ---------- Response Wrappers ----------
     AgentHints:
@@ -1365,6 +1511,172 @@ paths:
           description: Unauthorized
         "404":
           description: Session not found
+
+  /v1/sessions/{sessionId}/cohort/propose:
+    post:
+      operationId: proposeCohort
+      tags: [Sessions]
+      summary: Propose cohort handshake revision
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposeCohortInput"
+      responses:
+        "201":
+          description: Cohort proposal persisted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SessionCohortHandshake"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "409":
+          description: Revision conflict
+
+  /v1/sessions/{sessionId}/cohort/accept:
+    post:
+      operationId: acceptCohort
+      tags: [Sessions]
+      summary: Accept proposed/revised cohort handshake revision
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptCohortInput"
+      responses:
+        "200":
+          description: Cohort accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SessionCohortHandshake"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "409":
+          description: Revision conflict
+        "422":
+          description: Invalid lifecycle transition
+
+  /v1/sessions/{sessionId}/cohort/revise:
+    post:
+      operationId: reviseCohort
+      tags: [Sessions]
+      summary: Revise cohort handshake to next revision
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviseCohortInput"
+      responses:
+        "200":
+          description: Cohort revised
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SessionCohortHandshake"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "409":
+          description: Revision conflict
+        "422":
+          description: Invalid lifecycle transition
+
+  /v1/sessions/{sessionId}/cohort/commit:
+    post:
+      operationId: commitCohort
+      tags: [Sessions]
+      summary: Commit accepted cohort and materialize queue
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitCohortInput"
+      responses:
+        "200":
+          description: Cohort committed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SessionCohortHandshake"
+                  agentHints:
+                    $ref: "#/components/schemas/AgentHints"
+                  metadata:
+                    $ref: "#/components/schemas/ApiMetadata"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "409":
+          description: Revision conflict
+        "422":
+          description: Invalid lifecycle transition
 
   /v1/sessions/{sessionId}/expire:
     post:

@@ -465,6 +465,66 @@ export function registerSessionRoutes(
     }
   );
 
+  // POST /v1/sessions/:sessionId/cohort/propose
+  fastify.post<{ Params: SessionIdParams; Body: unknown }>(
+    '/v1/sessions/:sessionId/cohort/propose',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.proposeCohort(request.params.sessionId, request.body, ctx);
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // POST /v1/sessions/:sessionId/cohort/accept
+  fastify.post<{ Params: SessionIdParams; Body: unknown }>(
+    '/v1/sessions/:sessionId/cohort/accept',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.acceptCohort(request.params.sessionId, request.body, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // POST /v1/sessions/:sessionId/cohort/revise
+  fastify.post<{ Params: SessionIdParams; Body: unknown }>(
+    '/v1/sessions/:sessionId/cohort/revise',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.reviseCohort(request.params.sessionId, request.body, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  // POST /v1/sessions/:sessionId/cohort/commit
+  fastify.post<{ Params: SessionIdParams; Body: unknown }>(
+    '/v1/sessions/:sessionId/cohort/commit',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const ctx = buildContext(request);
+        const result = await sessionService.commitCohort(request.params.sessionId, request.body, ctx);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
   // ==========================================================================
   // Strategy & Teaching
   // ==========================================================================

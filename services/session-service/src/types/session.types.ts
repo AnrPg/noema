@@ -84,6 +84,70 @@ export interface IAdaptiveCheckpointDirective {
   priority: 'critical' | 'high' | 'medium' | 'low';
 }
 
+export const SessionCohortHandshakeStatus = {
+  PROPOSED: 'proposed',
+  ACCEPTED: 'accepted',
+  REVISED: 'revised',
+  COMMITTED: 'committed',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type SessionCohortHandshakeStatus =
+  (typeof SessionCohortHandshakeStatus)[keyof typeof SessionCohortHandshakeStatus];
+
+export interface ISessionCohortLinkage {
+  proposalId: string;
+  decisionId: string;
+}
+
+export interface ISessionCohortHandshake {
+  id: string;
+  sessionId: SessionId;
+  proposalId: string;
+  decisionId: string;
+  revision: number;
+  status: SessionCohortHandshakeStatus;
+  candidateCardIds: CardId[];
+  acceptedCardIds: CardId[] | null;
+  rejectedCardIds: CardId[] | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IProposeCohortInput {
+  linkage: ISessionCohortLinkage;
+  revision: number;
+  candidateCardIds: CardId[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface IAcceptCohortInput {
+  linkage: ISessionCohortLinkage;
+  expectedRevision: number;
+  acceptedCardIds: CardId[];
+  rejectedCardIds: CardId[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface IReviseCohortInput {
+  linkage: ISessionCohortLinkage;
+  expectedRevision: number;
+  newRevision: number;
+  candidateCardIds: CardId[];
+  reason: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ICommitCohortInput {
+  linkage: ISessionCohortLinkage;
+  expectedRevision: number;
+  committedCardIds: CardId[];
+  rejectedCardIds: CardId[];
+  policyVersion?: string;
+  metadata?: Record<string, unknown>;
+}
+
 // ============================================================================
 // Session State Enum (service-internal FSM state)
 // ============================================================================

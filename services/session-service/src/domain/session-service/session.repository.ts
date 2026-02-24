@@ -9,10 +9,16 @@ import type { AttemptId, CardId, SessionId, UserId } from '@noema/types';
 import type { Prisma } from '../../../generated/prisma/index.js';
 
 import type {
+  IAcceptCohortInput,
   IAttempt,
+  ICommitCohortInput,
+  IProposeCohortInput,
+  IReviseCohortInput,
   ISession,
+  ISessionCohortHandshake,
   ISessionFilters,
   ISessionQueueItem,
+  SessionCohortHandshakeStatus,
   SessionState,
 } from '../../types/index.js';
 
@@ -164,6 +170,47 @@ export interface ISessionRepository {
     cardId: CardId,
     tx?: Prisma.TransactionClient
   ): Promise<void>;
+
+  /** Replace all pending queue items with a materialized committed cohort queue. */
+  replacePendingQueueItems(
+    sessionId: SessionId,
+    committedCardIds: CardId[],
+    tx?: Prisma.TransactionClient
+  ): Promise<void>;
+
+  // ---------- Cohort handshake read ----------
+
+  findLatestCohortHandshake(
+    sessionId: SessionId,
+    proposalId: string,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake | null>;
+
+  findCohortHandshake(
+    sessionId: SessionId,
+    proposalId: string,
+    revision: number,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake | null>;
+
+  // ---------- Cohort handshake write ----------
+
+  createCohortHandshake(
+    sessionId: SessionId,
+    input: IProposeCohortInput | IReviseCohortInput,
+    status: SessionCohortHandshakeStatus,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake>;
+
+  updateCohortHandshake(
+    sessionId: SessionId,
+    proposalId: string,
+    revision: number,
+    expectedStatus: SessionCohortHandshakeStatus,
+    input: IAcceptCohortInput | ICommitCohortInput,
+    nextStatus: SessionCohortHandshakeStatus,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake>;
 }
 
 /**

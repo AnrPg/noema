@@ -67,6 +67,7 @@ model Session {
     // Relations
     attempts   Attempt[]
     queueItems SessionQueueItem[]
+    cohortHandshakes SessionCohortHandshake[]
 
     // Indexes
     @@index([userId])
@@ -169,6 +170,35 @@ model SessionQueueItem {
 }
 
 // ============================================================================
+// Session Cohort Handshake — auditable proposal/decision lineage
+// ============================================================================
+
+model SessionCohortHandshake {
+    id String @id @db.VarChar(50)
+
+    sessionId   String @map("session_id") @db.VarChar(50)
+    proposalId  String @map("proposal_id") @db.VarChar(100)
+    decisionId  String @map("decision_id") @db.VarChar(100)
+    revision    Int
+    status      SessionCohortHandshakeStatus
+
+    candidateCardIds Json @map("candidate_card_ids")
+    acceptedCardIds  Json? @map("accepted_card_ids")
+    rejectedCardIds  Json? @map("rejected_card_ids")
+    metadata         Json  @default("{}")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    session Session @relation(fields: [sessionId], references: [id])
+
+    @@unique([sessionId, proposalId, revision])
+    @@index([sessionId, status])
+    @@index([sessionId, proposalId, revision])
+    @@map("session_cohort_handshakes")
+}
+
+// ============================================================================
 // Event Outbox — durable event staging for reliable publishing
 // ============================================================================
 
@@ -251,4 +281,14 @@ enum CardQueueStatus {
     INJECTED
 
     @@map("card_queue_status")
+}
+
+enum SessionCohortHandshakeStatus {
+    PROPOSED
+    ACCEPTED
+    REVISED
+    COMMITTED
+    CANCELLED
+
+    @@map("session_cohort_handshake_status")
 }

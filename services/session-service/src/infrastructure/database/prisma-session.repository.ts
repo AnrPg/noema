@@ -26,6 +26,7 @@ import type {
   HintDepth as PrismaHintDepth,
   LearningMode as PrismaLearningMode,
   Rating as PrismaRating,
+  SessionCohortHandshakeStatus as PrismaSessionCohortHandshakeStatus,
   SessionState as PrismaSessionState,
 } from '../../../generated/prisma/index.js';
 
@@ -35,13 +36,19 @@ import {
 } from '../../domain/session-service/errors/index.js';
 import type { ISessionRepository } from '../../domain/session-service/session.repository.js';
 import type {
+  IAcceptCohortInput,
   IAttempt,
+  ICommitCohortInput,
+  IProposeCohortInput,
+  IReviseCohortInput,
   ISession,
+  ISessionCohortHandshake,
   ISessionConfig,
   ISessionFilters,
   ISessionQueueItem,
   ISessionStats,
-  SessionState,
+  SessionCohortHandshakeStatus,
+  SessionState
 } from '../../types/index.js';
 
 // ============================================================================
@@ -94,6 +101,18 @@ function toPrismaCardQueueStatus(s: string): PrismaCardQueueStatus {
 
 function fromPrismaCardQueueStatus(s: PrismaCardQueueStatus): CardQueueStatus {
   return s.toLowerCase() as CardQueueStatus;
+}
+
+function toPrismaSessionCohortHandshakeStatus(
+  s: SessionCohortHandshakeStatus
+): PrismaSessionCohortHandshakeStatus {
+  return s.toUpperCase() as PrismaSessionCohortHandshakeStatus;
+}
+
+function fromPrismaSessionCohortHandshakeStatus(
+  s: PrismaSessionCohortHandshakeStatus
+): SessionCohortHandshakeStatus {
+  return s.toLowerCase() as SessionCohortHandshakeStatus;
 }
 
 // ============================================================================
@@ -168,6 +187,24 @@ function toQueueItemDomain(row: any): ISessionQueueItem {
     status: fromPrismaCardQueueStatus(row.status),
     injectedBy: row.injectedBy ?? null,
     reason: row.reason ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toCohortHandshakeDomain(row: any): ISessionCohortHandshake {
+  return {
+    id: row.id,
+    sessionId: row.sessionId as SessionId,
+    proposalId: row.proposalId,
+    decisionId: row.decisionId,
+    revision: row.revision,
+    status: fromPrismaSessionCohortHandshakeStatus(row.status),
+    candidateCardIds: row.candidateCardIds as CardId[],
+    acceptedCardIds: (row.acceptedCardIds as CardId[] | null) ?? null,
+    rejectedCardIds: (row.rejectedCardIds as CardId[] | null) ?? null,
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -559,5 +596,137 @@ export class PrismaSessionRepository implements ISessionRepository {
       where: { sessionId_cardId: { sessionId, cardId } },
       data: { status: 'SKIPPED' },
     });
+  }
+
+  async replacePendingQueueItems(
+    sessionId: SessionId,
+    committedCardIds: CardId[],
+    tx?: Prisma.TransactionClient
+  ): Promise<void> {
+    await this.db(tx).sessionQueueItem.deleteMany({
+      where: {
+        sessionId,
+        status: {
+          in: ['PENDING', 'PRESENTED', 'INJECTED'],
+        },
+      },
+    });
+
+    if (committedCardIds.length === 0) {
+      return;
+    }
+
+    await this.db(tx).sessionQueueItem.createMany({
+      data: committedCardIds.map((cardId, index) => ({
+        id: crypto.randomUUID(),
+        sessionId,
+        cardId,
+        position: index,
+        status: 'PENDING',
+        injectedBy: 'cohort_commit',
+        reason: 'Materialized from committed cohort handshake',
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  async findLatestCohortHandshake(
+    sessionId: SessionId,
+    proposalId: string,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake | null> {
+    const row = await this.db(tx).sessionCohortHandshake.findFirst({
+      where: { sessionId, proposalId },
+      orderBy: { revision: 'desc' },
+    });
+    return row ? toCohortHandshakeDomain(row) : null;
+  }
+
+  async findCohortHandshake(
+    sessionId: SessionId,
+    proposalId: string,
+    revision: number,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake | null> {
+    const row = await this.db(tx).sessionCohortHandshake.findUnique({
+      where: {
+        sessionId_proposalId_revision: {
+          sessionId,
+          proposalId,
+          revision,
+        },
+      },
+    });
+
+    return row ? toCohortHandshakeDomain(row) : null;
+  }
+
+  async createCohortHandshake(
+    sessionId: SessionId,
+    input: IProposeCohortInput | IReviseCohortInput,
+    status: SessionCohortHandshakeStatus,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake> {
+    const row = await this.db(tx).sessionCohortHandshake.create({
+      data: {
+        id: crypto.randomUUID(),
+        sessionId,
+        proposalId: input.linkage.proposalId,
+        decisionId: input.linkage.decisionId,
+        revision: 'newRevision' in input ? input.newRevision : input.revision,
+        status: toPrismaSessionCohortHandshakeStatus(status),
+        candidateCardIds: input.candidateCardIds as unknown as object,
+        acceptedCardIds: null,
+        rejectedCardIds: null,
+        metadata: (input.metadata ?? {}) as object,
+      },
+    });
+
+    return toCohortHandshakeDomain(row);
+  }
+
+  async updateCohortHandshake(
+    sessionId: SessionId,
+    proposalId: string,
+    revision: number,
+    expectedStatus: SessionCohortHandshakeStatus,
+    input: IAcceptCohortInput | ICommitCohortInput,
+    nextStatus: SessionCohortHandshakeStatus,
+    tx?: Prisma.TransactionClient
+  ): Promise<ISessionCohortHandshake> {
+    const updated = await this.db(tx).sessionCohortHandshake.updateMany({
+      where: {
+        sessionId,
+        proposalId,
+        revision,
+        status: toPrismaSessionCohortHandshakeStatus(expectedStatus),
+      },
+      data: {
+        status: toPrismaSessionCohortHandshakeStatus(nextStatus),
+        acceptedCardIds: input.acceptedCardIds as unknown as object,
+        rejectedCardIds: input.rejectedCardIds as unknown as object,
+        metadata: (input.metadata ?? {}) as object,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new VersionConflictError(revision, revision + 1);
+    }
+
+    const row = await this.db(tx).sessionCohortHandshake.findUnique({
+      where: {
+        sessionId_proposalId_revision: {
+          sessionId,
+          proposalId,
+          revision,
+        },
+      },
+    });
+
+    if (!row) {
+      throw new SessionNotFoundError(sessionId);
+    }
+
+    return toCohortHandshakeDomain(row);
   }
 }

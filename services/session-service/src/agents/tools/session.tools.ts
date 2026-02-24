@@ -1,7 +1,7 @@
 /**
  * @noema/session-service - Session MCP Tool Handlers
  *
- * 5 MCP tools registered per AGENT_MCP_TOOL_REGISTRY.md:
+ * MCP tools registered per AGENT_MCP_TOOL_REGISTRY.md:
  * - get-session-history (P2)
  * - record-attempt (P0)
  * - get-attempt-history (P0)
@@ -21,7 +21,10 @@ import type {
 import type { SessionState } from '../../types/index.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
-type IBaseToolDefinition = Omit<IToolDefinition, 'version' | 'scopeRequirement' | 'capabilities'>;
+type IBaseToolDefinition = Omit<IToolDefinition, 'version' | 'scopeRequirement' | 'capabilities'> & {
+  requiredScopes?: string[];
+  scopeMatch?: 'all' | 'any';
+};
 
 function inferSideEffects(name: string): boolean {
   return (
@@ -44,8 +47,8 @@ function withContractDefaults(definition: IBaseToolDefinition): IToolDefinition 
     ...definition,
     version: '1.0.0',
     scopeRequirement: {
-      match: 'any',
-      requiredScopes: ['session:tools:execute'],
+      match: definition.scopeMatch ?? 'any',
+      requiredScopes: definition.requiredScopes ?? ['session:tools:execute'],
     },
     capabilities: {
       idempotent: !sideEffects,
@@ -287,6 +290,90 @@ export function createEvaluateSessionCheckpointHandler(service: SessionService) 
   };
 }
 
+export function createProposeCohortHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
+      if (!sessionId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.proposeCohort(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createAcceptCohortHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
+      if (!sessionId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.acceptCohort(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createReviseCohortHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
+      if (!sessionId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.reviseCohort(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createCommitCohortHandler(service: SessionService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const ctx = buildContext(userId, correlationId);
+      const body = input as Record<string, unknown>;
+      const sessionId = body['sessionId'] as string;
+      if (!sessionId) {
+        return {
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: 'sessionId is required' },
+          agentHints: createEmptyAgentHints(),
+        };
+      }
+      const result = await service.commitCohort(sessionId, input, ctx);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
 /**
  * issue-offline-intent-token — Issue a signed offline intent token.
  * P0 tool — session-service is the single authority for token lifecycle (ADR-0023).
@@ -484,6 +571,122 @@ const SESSION_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
     },
   },
   {
+    name: 'propose-cohort',
+    description: 'Propose a cohort handshake revision for a session.',
+    service: 'session-service',
+    priority: 'P0',
+    scopeMatch: 'all',
+    requiredScopes: ['session:tools:execute', 'session:cohort:write'],
+    inputSchema: {
+      type: 'object',
+      required: ['sessionId', 'linkage', 'revision', 'candidateCardIds'],
+      properties: {
+        sessionId: { type: 'string', description: 'Session ID' },
+        linkage: {
+          type: 'object',
+          required: ['proposalId', 'decisionId'],
+          properties: {
+            proposalId: { type: 'string' },
+            decisionId: { type: 'string' },
+          },
+        },
+        revision: { type: 'number' },
+        candidateCardIds: { type: 'array', items: { type: 'string' } },
+        metadata: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'accept-cohort',
+    description: 'Accept the current cohort handshake revision.',
+    service: 'session-service',
+    priority: 'P0',
+    scopeMatch: 'all',
+    requiredScopes: ['session:tools:execute', 'session:cohort:write'],
+    inputSchema: {
+      type: 'object',
+      required: ['sessionId', 'linkage', 'expectedRevision', 'acceptedCardIds', 'rejectedCardIds'],
+      properties: {
+        sessionId: { type: 'string', description: 'Session ID' },
+        linkage: {
+          type: 'object',
+          required: ['proposalId', 'decisionId'],
+          properties: {
+            proposalId: { type: 'string' },
+            decisionId: { type: 'string' },
+          },
+        },
+        expectedRevision: { type: 'number' },
+        acceptedCardIds: { type: 'array', items: { type: 'string' } },
+        rejectedCardIds: { type: 'array', items: { type: 'string' } },
+        metadata: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'revise-cohort',
+    description: 'Create a revised cohort handshake revision.',
+    service: 'session-service',
+    priority: 'P0',
+    scopeMatch: 'all',
+    requiredScopes: ['session:tools:execute', 'session:cohort:write'],
+    inputSchema: {
+      type: 'object',
+      required: [
+        'sessionId',
+        'linkage',
+        'expectedRevision',
+        'newRevision',
+        'candidateCardIds',
+        'reason',
+      ],
+      properties: {
+        sessionId: { type: 'string', description: 'Session ID' },
+        linkage: {
+          type: 'object',
+          required: ['proposalId', 'decisionId'],
+          properties: {
+            proposalId: { type: 'string' },
+            decisionId: { type: 'string' },
+          },
+        },
+        expectedRevision: { type: 'number' },
+        newRevision: { type: 'number' },
+        candidateCardIds: { type: 'array', items: { type: 'string' } },
+        reason: { type: 'string' },
+        metadata: { type: 'object' },
+      },
+    },
+  },
+  {
+    name: 'commit-cohort',
+    description: 'Commit the accepted cohort revision and materialize queue state.',
+    service: 'session-service',
+    priority: 'P0',
+    scopeMatch: 'all',
+    requiredScopes: ['session:tools:execute', 'session:cohort:write'],
+    inputSchema: {
+      type: 'object',
+      required: ['sessionId', 'linkage', 'expectedRevision', 'committedCardIds', 'rejectedCardIds'],
+      properties: {
+        sessionId: { type: 'string', description: 'Session ID' },
+        linkage: {
+          type: 'object',
+          required: ['proposalId', 'decisionId'],
+          properties: {
+            proposalId: { type: 'string' },
+            decisionId: { type: 'string' },
+          },
+        },
+        expectedRevision: { type: 'number' },
+        committedCardIds: { type: 'array', items: { type: 'string' } },
+        rejectedCardIds: { type: 'array', items: { type: 'string' } },
+        policyVersion: { type: 'string' },
+        metadata: { type: 'object' },
+      },
+    },
+  },
+  {
     name: 'verify-offline-intent-token',
     description: 'Verify signed offline intent token authenticity and extract replay claims.',
     service: 'session-service',
@@ -519,6 +722,10 @@ export function createSessionToolHandlers(
   handlers.set('record-dialogue-turn', createRecordDialogueTurnHandler(service));
   handlers.set('validate-session-blueprint', createValidateSessionBlueprintHandler(service));
   handlers.set('evaluate-session-checkpoint', createEvaluateSessionCheckpointHandler(service));
+  handlers.set('propose-cohort', createProposeCohortHandler(service));
+  handlers.set('accept-cohort', createAcceptCohortHandler(service));
+  handlers.set('revise-cohort', createReviseCohortHandler(service));
+  handlers.set('commit-cohort', createCommitCohortHandler(service));
   handlers.set('issue-offline-intent-token', createIssueOfflineIntentTokenHandler(service));
   handlers.set('verify-offline-intent-token', createVerifyOfflineIntentTokenHandler(service));
   return handlers;

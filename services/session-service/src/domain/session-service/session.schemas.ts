@@ -34,6 +34,11 @@ const AdaptiveCheckpointSignalSchema = z.enum([
   'manual',
 ]);
 
+const CohortLinkageSchema = z.object({
+  proposalId: z.string().min(1),
+  decisionId: z.string().min(1),
+});
+
 export const SessionBlueprintSchema: z.ZodType<ISessionBlueprint> = z.object({
   blueprintVersion: z.literal('v1'),
   generatedAt: z.string().datetime(),
@@ -121,7 +126,44 @@ export const EvaluateAdaptiveCheckpointInputSchema = z.object({
   confidenceDrift: z.number().min(-1).max(1).optional(),
 });
 
+export const ProposeCohortInputSchema = z.object({
+  linkage: CohortLinkageSchema,
+  revision: z.number().int().positive(),
+  candidateCardIds: z.array(CardIdSchema).min(1),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export const AcceptCohortInputSchema = z.object({
+  linkage: CohortLinkageSchema,
+  expectedRevision: z.number().int().positive(),
+  acceptedCardIds: z.array(CardIdSchema).min(1),
+  rejectedCardIds: z.array(CardIdSchema).default([]),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export const ReviseCohortInputSchema = z.object({
+  linkage: CohortLinkageSchema,
+  expectedRevision: z.number().int().positive(),
+  newRevision: z.number().int().positive(),
+  candidateCardIds: z.array(CardIdSchema).min(1),
+  reason: z.string().min(1).max(500),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export const CommitCohortInputSchema = z.object({
+  linkage: CohortLinkageSchema,
+  expectedRevision: z.number().int().positive(),
+  committedCardIds: z.array(CardIdSchema).min(1),
+  rejectedCardIds: z.array(CardIdSchema).default([]),
+  policyVersion: z.string().min(1).max(100).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
 export type EvaluateAdaptiveCheckpointInput = z.input<typeof EvaluateAdaptiveCheckpointInputSchema>;
+export type ProposeCohortInput = z.input<typeof ProposeCohortInputSchema>;
+export type AcceptCohortInput = z.input<typeof AcceptCohortInputSchema>;
+export type ReviseCohortInput = z.input<typeof ReviseCohortInputSchema>;
+export type CommitCohortInput = z.input<typeof CommitCohortInputSchema>;
 
 export type ValidateSessionBlueprintInput = z.input<typeof ValidateSessionBlueprintInputSchema>;
 

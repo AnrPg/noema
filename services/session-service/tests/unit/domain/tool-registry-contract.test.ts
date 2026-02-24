@@ -28,7 +28,7 @@ describe('session tool registry contract', () => {
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(9);
+    expect(definitions).toHaveLength(13);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
@@ -40,10 +40,31 @@ describe('session tool registry contract', () => {
         'record-dialogue-turn',
         'validate-session-blueprint',
         'evaluate-session-checkpoint',
+        'propose-cohort',
+        'accept-cohort',
+        'revise-cohort',
+        'commit-cohort',
         'issue-offline-intent-token',
         'verify-offline-intent-token',
       ])
     );
+  });
+
+  it('requires cohort-specific write scope for cohort lifecycle tools', () => {
+    const cohortTools = SESSION_TOOL_DEFINITIONS.filter((definition) =>
+      ['propose-cohort', 'accept-cohort', 'revise-cohort', 'commit-cohort'].includes(
+        definition.name
+      )
+    );
+
+    expect(cohortTools).toHaveLength(4);
+    for (const definition of cohortTools) {
+      expect(definition.scopeRequirement.match).toBe('all');
+      expect(definition.scopeRequirement.requiredScopes).toEqual([
+        'session:tools:execute',
+        'session:cohort:write',
+      ]);
+    }
   });
 
   it('keeps record-attempt outcome enum aligned with domain contract', () => {
@@ -54,7 +75,7 @@ describe('session tool registry contract', () => {
     expect(recordAttemptDefinition).toBeDefined();
 
     const outcomeEnum = (
-      recordAttemptDefinition as {
+      recordAttemptDefinition as unknown as {
         inputSchema: {
           properties: {
             outcome: {

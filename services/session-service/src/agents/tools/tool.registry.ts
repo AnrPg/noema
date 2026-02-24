@@ -11,13 +11,17 @@
 
 import type { SessionService } from '../../domain/session-service/session.service.js';
 import {
+  createAcceptCohortHandler,
+  createCommitCohortHandler,
   createEvaluateSessionCheckpointHandler,
   createGetAttemptHistoryHandler,
   createGetSessionHistoryHandler,
   createGetThinkingTraceHandler,
   createIssueOfflineIntentTokenHandler,
+  createProposeCohortHandler,
   createRecordAttemptHandler,
   createRecordDialogueTurnHandler,
+  createReviseCohortHandler,
   createValidateSessionBlueprintHandler,
   createVerifyOfflineIntentTokenHandler,
   SESSION_TOOL_DEFINITIONS,
@@ -355,10 +359,10 @@ export class ToolRegistry {
 // Factory
 // ============================================================================
 
-function getDefinition(index: number): IToolDefinition {
-  const def = SESSION_TOOL_DEFINITIONS[index];
+function getDefinition(name: string): IToolDefinition {
+  const def = SESSION_TOOL_DEFINITIONS.find((candidate) => candidate.name === name);
   if (def === undefined) {
-    throw new Error(`Missing tool definition at index ${String(index)}`);
+    throw new Error(`Missing tool definition for name ${name}`);
   }
   return def;
 }
@@ -370,19 +374,35 @@ export function createToolRegistry(sessionService: SessionService): ToolRegistry
   const registry = new ToolRegistry();
 
   // P0 tools
-  registry.register(getDefinition(1), createRecordAttemptHandler(sessionService));
-  registry.register(getDefinition(2), createGetAttemptHistoryHandler(sessionService));
-  registry.register(getDefinition(3), createGetThinkingTraceHandler(sessionService));
-  registry.register(getDefinition(5), createValidateSessionBlueprintHandler(sessionService));
-  registry.register(getDefinition(6), createEvaluateSessionCheckpointHandler(sessionService));
-  registry.register(getDefinition(7), createIssueOfflineIntentTokenHandler(sessionService));
-  registry.register(getDefinition(8), createVerifyOfflineIntentTokenHandler(sessionService));
+  registry.register(getDefinition('record-attempt'), createRecordAttemptHandler(sessionService));
+  registry.register(getDefinition('get-attempt-history'), createGetAttemptHistoryHandler(sessionService));
+  registry.register(getDefinition('get-thinking-trace'), createGetThinkingTraceHandler(sessionService));
+  registry.register(
+    getDefinition('validate-session-blueprint'),
+    createValidateSessionBlueprintHandler(sessionService)
+  );
+  registry.register(
+    getDefinition('evaluate-session-checkpoint'),
+    createEvaluateSessionCheckpointHandler(sessionService)
+  );
+  registry.register(getDefinition('propose-cohort'), createProposeCohortHandler(sessionService));
+  registry.register(getDefinition('accept-cohort'), createAcceptCohortHandler(sessionService));
+  registry.register(getDefinition('revise-cohort'), createReviseCohortHandler(sessionService));
+  registry.register(getDefinition('commit-cohort'), createCommitCohortHandler(sessionService));
+  registry.register(
+    getDefinition('issue-offline-intent-token'),
+    createIssueOfflineIntentTokenHandler(sessionService)
+  );
+  registry.register(
+    getDefinition('verify-offline-intent-token'),
+    createVerifyOfflineIntentTokenHandler(sessionService)
+  );
 
   // P1 tools
-  registry.register(getDefinition(4), createRecordDialogueTurnHandler(sessionService));
+  registry.register(getDefinition('record-dialogue-turn'), createRecordDialogueTurnHandler(sessionService));
 
   // P2 tools
-  registry.register(getDefinition(0), createGetSessionHistoryHandler(sessionService));
+  registry.register(getDefinition('get-session-history'), createGetSessionHistoryHandler(sessionService));
 
   return registry;
 }

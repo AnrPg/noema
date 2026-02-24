@@ -15,6 +15,10 @@ import type {
   IAttemptRecordedPayload,
   IPriorSchedulingState,
   ISessionAbandonedPayload,
+  ISessionCohortAcceptedPayload,
+  ISessionCohortCommittedPayload,
+  ISessionCohortProposedPayload,
+  ISessionCohortRevisedPayload,
   ISessionCompletedPayload,
   ISessionExpiredPayload,
   ISessionPausedPayload,
@@ -23,7 +27,7 @@ import type {
   ISessionResumedPayload,
   ISessionStartedPayload,
   ISessionStrategyUpdatedPayload,
-  ISessionTeachingChangedPayload,
+  ISessionTeachingChangedPayload
 } from '@noema/events';
 import type {
   AttemptId,
@@ -54,17 +58,26 @@ import type { Prisma } from '../../../generated/prisma/index.js';
 
 import type {
   AdaptiveCheckpointSignal,
+  IAcceptCohortInput,
   IAttempt,
+  ICommitCohortInput,
   IEvaluateAdaptiveCheckpointInput,
   IEvaluateAdaptiveCheckpointResult,
+  IProposeCohortInput,
+  IReviseCohortInput,
   ISession,
+  ISessionCohortHandshake,
   ISessionFilters,
   ISessionQueueItem,
   ISessionStats,
   IValidateSessionBlueprintResult,
-  SessionState,
+  SessionState
 } from '../../types/index.js';
-import { createEmptyStats, SessionState as States } from '../../types/index.js';
+import {
+  SessionCohortHandshakeStatus as CohortHandshakeStatuses,
+  createEmptyStats,
+  SessionState as States
+} from '../../types/index.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
   AttemptNotFoundError,
@@ -75,22 +88,27 @@ import {
   QueueError,
   SessionNotFoundError,
   ValidationError,
+  VersionConflictError,
 } from './errors/index.js';
 import type { IOutboxEventInput, IOutboxRepository } from './outbox.repository.js';
 import type { ISessionRepository } from './session.repository.js';
 import {
+  AcceptCohortInputSchema,
   ChangeTeachingInputSchema,
+  CommitCohortInputSchema,
   EvaluateAdaptiveCheckpointInputSchema,
   InjectQueueInputSchema,
   IssueOfflineIntentTokenInputSchema,
+  ProposeCohortInputSchema,
   RecordAttemptInputSchema,
   RecordDialogueTurnInputSchema,
   RemoveQueueInputSchema,
   RequestHintInputSchema,
+  ReviseCohortInputSchema,
   StartSessionInputSchema,
   UpdateStrategyInputSchema,
   ValidateSessionBlueprintInputSchema,
-  VerifyOfflineIntentTokenInputSchema,
+  VerifyOfflineIntentTokenInputSchema
 } from './session.schemas.js';
 
 // ============================================================================
@@ -525,6 +543,378 @@ export class SessionService {
             directive.priority === 'critical' || directive.priority === 'high' ? 'high' : 'medium',
         })),
         `Checkpoint evaluated for trigger ${data.trigger}`
+      ),
+    };
+  }
+
+  async proposeCohort(
+    sessionId: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISessionCohortHandshake>> {
+    const parsed = ProposeCohortInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid propose cohort input', parsed.error.flatten().fieldErrors);
+    }
+
+    const data = parsed.data as IProposeCohortInput;
+    if (data.revision !== 1) {
+      throw new ValidationError('Invalid cohort proposal revision', {
+        revision: ['Initial proposal revision must be 1'],
+      });
+    }
+
+    const session = await this.getAuthorizedSession(sessionId, ctx);
+    this.assertActiveOrPaused(session, 'propose cohort');
+
+    const handshake = await this.runInTransaction(async (tx) => {
+      const existing = await this.repository.findLatestCohortHandshake(
+        session.id,
+        data.linkage.proposalId,
+        tx
+      );
+      if (existing) {
+        throw new VersionConflictError(data.revision, existing.revision);
+      }
+
+      const created = await this.repository.createCohortHandshake(
+        session.id,
+        data,
+        CohortHandshakeStatuses.PROPOSED,
+        tx
+      );
+
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.cohort.proposed',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            linkage: {
+              proposalId: created.proposalId,
+              decisionId: created.decisionId,
+              sessionId: session.id,
+              sessionRevision: created.revision,
+              correlationId: ctx.correlationId,
+            },
+            candidateCardIds: created.candidateCardIds,
+            ...(Object.keys(created.metadata).length > 0 ? { constraints: created.metadata } : {}),
+          } satisfies ISessionCohortProposedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
+
+      return created;
+    });
+
+    return {
+      data: handshake,
+      agentHints: buildHints(
+        [
+          {
+            action: 'accept_cohort',
+            description: 'Accept or revise the proposed cohort before commit',
+            priority: 'high',
+          },
+        ],
+        `Cohort proposed for revision ${String(handshake.revision)}`
+      ),
+    };
+  }
+
+  async acceptCohort(
+    sessionId: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISessionCohortHandshake>> {
+    const parsed = AcceptCohortInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid accept cohort input', parsed.error.flatten().fieldErrors);
+    }
+
+    const data = parsed.data as IAcceptCohortInput;
+    const session = await this.getAuthorizedSession(sessionId, ctx);
+    this.assertActiveOrPaused(session, 'accept cohort');
+
+    const handshake = await this.runInTransaction(async (tx) => {
+      const current = await this.repository.findCohortHandshake(
+        session.id,
+        data.linkage.proposalId,
+        data.expectedRevision,
+        tx
+      );
+
+      if (!current) {
+        const latest = await this.repository.findLatestCohortHandshake(
+          session.id,
+          data.linkage.proposalId,
+          tx
+        );
+        throw new VersionConflictError(data.expectedRevision, latest?.revision ?? data.expectedRevision + 1);
+      }
+
+      if (
+        current.status !== CohortHandshakeStatuses.PROPOSED &&
+        current.status !== CohortHandshakeStatuses.REVISED
+      ) {
+        throw new BusinessRuleError(
+          `Cannot accept cohort from status ${current.status}; expected proposed or revised`
+        );
+      }
+
+      const updated = await this.repository.updateCohortHandshake(
+        session.id,
+        current.proposalId,
+        current.revision,
+        current.status,
+        data,
+        CohortHandshakeStatuses.ACCEPTED,
+        tx
+      );
+
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.cohort.accepted',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            linkage: {
+              proposalId: updated.proposalId,
+              decisionId: updated.decisionId,
+              sessionId: session.id,
+              sessionRevision: updated.revision,
+              correlationId: ctx.correlationId,
+            },
+            acceptedCardIds: updated.acceptedCardIds ?? [],
+            excludedCardIds: updated.rejectedCardIds ?? [],
+          } satisfies ISessionCohortAcceptedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
+
+      return updated;
+    });
+
+    return {
+      data: handshake,
+      agentHints: buildHints(
+        [
+          {
+            action: 'commit_cohort',
+            description: 'Commit accepted cohort to materialize queue state',
+            priority: 'high',
+          },
+        ],
+        `Cohort accepted for revision ${String(handshake.revision)}`
+      ),
+    };
+  }
+
+  async reviseCohort(
+    sessionId: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISessionCohortHandshake>> {
+    const parsed = ReviseCohortInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid revise cohort input', parsed.error.flatten().fieldErrors);
+    }
+
+    const data = parsed.data as IReviseCohortInput;
+    const session = await this.getAuthorizedSession(sessionId, ctx);
+    this.assertActiveOrPaused(session, 'revise cohort');
+
+    if (data.newRevision !== data.expectedRevision + 1) {
+      throw new ValidationError('Invalid cohort revision sequence', {
+        newRevision: ['newRevision must equal expectedRevision + 1'],
+      });
+    }
+
+    const handshake = await this.runInTransaction(async (tx) => {
+      const current = await this.repository.findCohortHandshake(
+        session.id,
+        data.linkage.proposalId,
+        data.expectedRevision,
+        tx
+      );
+
+      if (!current) {
+        const latest = await this.repository.findLatestCohortHandshake(
+          session.id,
+          data.linkage.proposalId,
+          tx
+        );
+        throw new VersionConflictError(data.expectedRevision, latest?.revision ?? data.expectedRevision + 1);
+      }
+
+      if (
+        current.status !== CohortHandshakeStatuses.ACCEPTED &&
+        current.status !== CohortHandshakeStatuses.COMMITTED
+      ) {
+        throw new BusinessRuleError(
+          `Cannot revise cohort from status ${current.status}; expected accepted or committed`
+        );
+      }
+
+      const existingNext = await this.repository.findCohortHandshake(
+        session.id,
+        data.linkage.proposalId,
+        data.newRevision,
+        tx
+      );
+      if (existingNext) {
+        throw new VersionConflictError(data.newRevision, existingNext.revision);
+      }
+
+      const created = await this.repository.createCohortHandshake(
+        session.id,
+        {
+          ...data,
+          metadata: {
+            ...(data.metadata ?? {}),
+            reason: data.reason,
+          },
+        },
+        CohortHandshakeStatuses.REVISED,
+        tx
+      );
+
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.cohort.revised',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            linkage: {
+              proposalId: created.proposalId,
+              decisionId: created.decisionId,
+              sessionId: session.id,
+              sessionRevision: created.revision,
+              correlationId: ctx.correlationId,
+            },
+            revisionFrom: data.expectedRevision,
+            revisionTo: data.newRevision,
+            candidateCardIds: created.candidateCardIds,
+            reason: data.reason,
+          } satisfies ISessionCohortRevisedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
+
+      return created;
+    });
+
+    return {
+      data: handshake,
+      agentHints: buildHints(
+        [
+          {
+            action: 'accept_cohort',
+            description: 'Accept revised cohort before committing',
+            priority: 'high',
+          },
+        ],
+        `Cohort revised from ${String(data.expectedRevision)} to ${String(handshake.revision)}`
+      ),
+    };
+  }
+
+  async commitCohort(
+    sessionId: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISessionCohortHandshake>> {
+    const parsed = CommitCohortInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError('Invalid commit cohort input', parsed.error.flatten().fieldErrors);
+    }
+
+    const data = parsed.data as ICommitCohortInput;
+    const session = await this.getAuthorizedSession(sessionId, ctx);
+    this.assertActiveOrPaused(session, 'commit cohort');
+
+    const handshake = await this.runInTransaction(async (tx) => {
+      const current = await this.repository.findCohortHandshake(
+        session.id,
+        data.linkage.proposalId,
+        data.expectedRevision,
+        tx
+      );
+
+      if (!current) {
+        const latest = await this.repository.findLatestCohortHandshake(
+          session.id,
+          data.linkage.proposalId,
+          tx
+        );
+        throw new VersionConflictError(data.expectedRevision, latest?.revision ?? data.expectedRevision + 1);
+      }
+
+      if (current.status !== CohortHandshakeStatuses.ACCEPTED) {
+        throw new BusinessRuleError(
+          `Cannot commit cohort from status ${current.status}; expected accepted`
+        );
+      }
+
+      const updated = await this.repository.updateCohortHandshake(
+        session.id,
+        current.proposalId,
+        current.revision,
+        CohortHandshakeStatuses.ACCEPTED,
+        data,
+        CohortHandshakeStatuses.COMMITTED,
+        tx
+      );
+
+      await this.repository.replacePendingQueueItems(session.id, data.committedCardIds, tx);
+
+      await this.publishThroughOutbox(
+        {
+          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
+          eventType: 'session.cohort.committed',
+          aggregateType: 'Session',
+          aggregateId: session.id,
+          payload: {
+            userId: ctx.userId,
+            linkage: {
+              proposalId: updated.proposalId,
+              decisionId: updated.decisionId,
+              sessionId: session.id,
+              sessionRevision: updated.revision,
+              correlationId: ctx.correlationId,
+            },
+            committedCardIds: data.committedCardIds,
+            rejectedCardIds: data.rejectedCardIds,
+            ...(data.policyVersion !== undefined ? { policyVersion: data.policyVersion } : {}),
+          } satisfies ISessionCohortCommittedPayload,
+          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
+        },
+        tx
+      );
+
+      return updated;
+    });
+
+    return {
+      data: handshake,
+      agentHints: buildHints(
+        [
+          {
+            action: 'run_committed_queue',
+            description: 'Run session using the committed cohort queue',
+            priority: 'high',
+          },
+        ],
+        `Cohort committed at revision ${String(handshake.revision)}`
       ),
     };
   }
