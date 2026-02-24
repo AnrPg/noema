@@ -81,7 +81,15 @@ async function bootstrap(): Promise<void> {
   const sessionRepository = new PrismaSessionRepository(prisma, logger);
   const outboxRepository = new PrismaOutboxRepository(prisma);
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
-  const outboxWorker = new SessionOutboxWorker(outboxRepository, eventPublisher, logger);
+  const outboxWorker = new SessionOutboxWorker(outboxRepository, eventPublisher, logger, {
+    pollIntervalMs: config.redis.outboxPollIntervalMs,
+    batchSize: config.redis.outboxBatchSize,
+    leaseMs: config.redis.outboxLeaseMs,
+    maxAttempts: config.redis.outboxMaxAttempts,
+    retryBaseDelayMs: config.redis.outboxRetryBaseDelayMs,
+    retryMaxDelayMs: config.redis.outboxRetryMaxDelayMs,
+    drainTimeoutMs: config.redis.outboxDrainTimeoutMs,
+  });
 
   // Create domain service
   const sessionService = new SessionService(

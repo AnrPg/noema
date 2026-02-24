@@ -27,6 +27,13 @@ export interface IServiceConfig {
     url: string;
     eventStreamKey: string;
     maxStreamLen: number;
+    outboxPollIntervalMs: number;
+    outboxBatchSize: number;
+    outboxLeaseMs: number;
+    outboxMaxAttempts: number;
+    outboxRetryBaseDelayMs: number;
+    outboxRetryMaxDelayMs: number;
+    outboxDrainTimeoutMs: number;
   };
   session: {
     defaultTimeoutHours: number;
@@ -185,6 +192,13 @@ export function loadConfig(): IServiceConfig {
       url: requireEnv('REDIS_URL'),
       eventStreamKey: optionalEnv('REDIS_EVENT_STREAM', 'noema:events:session-service'),
       maxStreamLen: optionalEnvInt('REDIS_STREAM_MAX_LEN', 10000),
+      outboxPollIntervalMs: optionalEnvInt('OUTBOX_POLL_INTERVAL_MS', 2000),
+      outboxBatchSize: optionalEnvInt('OUTBOX_BATCH_SIZE', 100),
+      outboxLeaseMs: optionalEnvInt('OUTBOX_LEASE_MS', 10000),
+      outboxMaxAttempts: optionalEnvInt('OUTBOX_MAX_ATTEMPTS', 10),
+      outboxRetryBaseDelayMs: optionalEnvInt('OUTBOX_RETRY_BASE_DELAY_MS', 1000),
+      outboxRetryMaxDelayMs: optionalEnvInt('OUTBOX_RETRY_MAX_DELAY_MS', 60000),
+      outboxDrainTimeoutMs: optionalEnvInt('OUTBOX_DRAIN_TIMEOUT_MS', 15000),
     },
     session: {
       defaultTimeoutHours: optionalEnvInt('SESSION_TIMEOUT_HOURS', 24),

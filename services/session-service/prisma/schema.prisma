@@ -212,6 +212,9 @@ model EventOutbox {
     metadata      Json
 
     publishedAt DateTime? @map("published_at")
+    claimOwner String? @map("claim_owner") @db.VarChar(100)
+    claimUntil DateTime? @map("claim_until")
+    nextAttemptAt DateTime? @map("next_attempt_at")
     attempts    Int       @default(0)
     lastError   String?   @map("last_error") @db.VarChar(1000)
 
@@ -220,6 +223,8 @@ model EventOutbox {
 
     @@index([publishedAt, createdAt])
     @@index([attempts])
+    @@index([publishedAt, claimUntil, nextAttemptAt, createdAt])
+    @@index([claimOwner, claimUntil])
     @@map("event_outbox")
 }
 
