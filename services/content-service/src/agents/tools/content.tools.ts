@@ -15,6 +15,7 @@ import type {
   IExecutionContext,
 } from '../../domain/content-service/content.service.js';
 import { DomainError } from '../../domain/content-service/errors/index.js';
+import type { IBatchChangeStateItem } from '../../types/content.types.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
 type IBaseToolDefinition = Omit<
@@ -339,14 +340,49 @@ export function createBatchChangeCardStateHandler(contentService: ContentService
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { ids: string[]; state: string; reason?: string; version: number };
+      const body = input as {
+        items: { id: string; version: number }[];
+        state: string;
+        reason?: string;
+      };
       const result = await contentService.batchChangeState(
-        body.ids as CardId[],
+        body.items as IBatchChangeStateItem[],
         body.state as CardState,
         body.reason,
-        body.version,
         context
       );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * recover-batch — Find all cards created in a specific batch.
+ */
+export function createRecoverBatchHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { batchId: string };
+      const result = await contentService.findByBatchId(body.batchId, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * rollback-batch — Soft-delete all cards created in a specific batch.
+ */
+export function createRollbackBatchHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { batchId: string };
+      const result = await contentService.rollbackBatch(body.batchId, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
@@ -593,21 +629,55 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   {
     name: 'batch-change-card-state',
     description:
-      'Change state of multiple cards at once. Used after batch creation to activate drafts.',
+      'Change state of multiple cards at once. Each item carries its own version for per-card optimistic locking.',
     service: 'content-service',
     priority: 'P1',
     inputSchema: {
       type: 'object',
-      required: ['ids', 'state', 'version'],
+      required: ['items', 'state'],
       properties: {
-        ids: {
+        items: {
           type: 'array',
-          items: { type: 'string' },
-          description: 'Card IDs to update (max 100)',
+          items: {
+            type: 'object',
+            required: ['id', 'version'],
+            properties: {
+              id: { type: 'string', description: 'Card ID' },
+              version: { type: 'number', description: 'Expected version for optimistic locking' },
+            },
+          },
+          description: 'Cards to update with per-card versions (max 100)',
         },
         state: { type: 'string', enum: ['draft', 'active', 'suspended', 'archived'] },
         reason: { type: 'string' },
-        version: { type: 'number' },
+      },
+    },
+  },
+  {
+    name: 'recover-batch',
+    description:
+      'Find all cards created in a specific batch. Used for orphan recovery after partial failures.',
+    service: 'content-service',
+    priority: 'P2',
+    inputSchema: {
+      type: 'object',
+      required: ['batchId'],
+      properties: {
+        batchId: { type: 'string', description: 'Batch correlation ID from batch-create-cards result' },
+      },
+    },
+  },
+  {
+    name: 'rollback-batch',
+    description:
+      'Soft-delete all cards created in a batch. Provides undo capability for batch creates.',
+    service: 'content-service',
+    priority: 'P2',
+    inputSchema: {
+      type: 'object',
+      required: ['batchId'],
+      properties: {
+        batchId: { type: 'string', description: 'Batch correlation ID to rollback' },
       },
     },
   },

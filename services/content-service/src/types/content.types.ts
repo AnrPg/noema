@@ -209,6 +209,17 @@ export interface IChangeCardStateInput {
   reason?: string;
 }
 
+/**
+ * Per-card item for batch state change.
+ * Each item carries its own version to enable per-card optimistic locking.
+ */
+export interface IBatchChangeStateItem {
+  /** Card ID */
+  id: CardId;
+  /** Expected version for optimistic locking */
+  version: number;
+}
+
 // ============================================================================
 // Query Types (ADR-0010 Decision 2 — Dynamic Deck Queries)
 // ============================================================================
@@ -311,6 +322,8 @@ export interface ISessionSeed {
  * Batch creation result.
  */
 export interface IBatchCreateResult {
+  /** Correlation ID for batch tracking, orphan recovery, and rollback */
+  batchId: string;
   /** Successfully created cards */
   created: ICard[];
   /** Failed items with error details */

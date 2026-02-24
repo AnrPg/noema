@@ -19,7 +19,7 @@ import type {
 } from '../../types/content.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { IExecutionContext, IServiceResult } from './content.service.js';
-import { AuthorizationError, BusinessRuleError, ValidationError } from './errors/index.js';
+import { AuthorizationError, TemplateNotFoundError, ValidationError } from './errors/index.js';
 import type { ITemplateRepository } from './template.repository.js';
 import {
   CreateTemplateInputSchema,
@@ -28,16 +28,10 @@ import {
 } from './template.schemas.js';
 
 // ============================================================================
-// Template Not Found Error (reuses CardNotFoundError pattern)
+// Re-export TemplateNotFoundError for backward compatibility
 // ============================================================================
 
-export class TemplateNotFoundError extends BusinessRuleError {
-  public readonly templateId: string;
-  constructor(templateId: string) {
-    super(`Template not found: ${templateId}`, { templateId });
-    this.templateId = templateId;
-  }
-}
+export { TemplateNotFoundError };
 
 // ============================================================================
 // Template Service

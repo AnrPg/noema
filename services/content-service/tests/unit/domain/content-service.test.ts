@@ -113,6 +113,7 @@ describe('ContentService', () => {
       const inputs = [createCardInput(), createCardInput()];
       const ctx = executionContext();
       repo.createBatch.mockResolvedValue({
+        batchId: 'batch_test123',
         created: [card(), card()],
         failed: [],
         total: 2,
@@ -454,7 +455,7 @@ describe('ContentService', () => {
   // ==========================================================================
 
   describe('batchChangeState()', () => {
-    it('changes state for multiple cards', async () => {
+    it('changes state for multiple cards with per-card versions', async () => {
       const ctx = executionContext();
       const id1 = cardId();
       const id2 = cardId();
@@ -468,10 +469,12 @@ describe('ContentService', () => {
         .mockResolvedValueOnce(card({ ...existing2, state: 'active' as CardState }));
 
       const result = await service.batchChangeState(
-        [id1, id2],
+        [
+          { id: id1, version: 1 },
+          { id: id2, version: 1 },
+        ],
         'active' as CardState,
         undefined,
-        1,
         ctx
       );
 
@@ -481,10 +484,10 @@ describe('ContentService', () => {
 
     it('rejects batch exceeding 100 cards', async () => {
       const ctx = executionContext();
-      const ids = Array.from({ length: 101 }, () => cardId());
+      const items = Array.from({ length: 101 }, () => ({ id: cardId(), version: 1 }));
 
       await expect(
-        service.batchChangeState(ids, 'active' as CardState, undefined, 1, ctx)
+        service.batchChangeState(items, 'active' as CardState, undefined, ctx)
       ).rejects.toThrow(BatchLimitExceededError);
     });
 
@@ -499,10 +502,12 @@ describe('ContentService', () => {
       repo.changeState.mockResolvedValueOnce(card({ ...existing1, state: 'active' as CardState }));
 
       const result = await service.batchChangeState(
-        [id1, id2],
+        [
+          { id: id1, version: 1 },
+          { id: id2, version: 1 },
+        ],
         'active' as CardState,
         undefined,
-        1,
         ctx
       );
 

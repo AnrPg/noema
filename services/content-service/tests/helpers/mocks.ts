@@ -34,6 +34,8 @@ export function mockContentRepository(): {
     hardDelete: vi.fn(),
     updateTags: vi.fn(),
     updateKnowledgeNodeIds: vi.fn(),
+    findByBatchId: vi.fn(),
+    softDeleteByBatchId: vi.fn(),
   };
 }
 

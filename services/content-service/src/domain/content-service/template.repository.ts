@@ -6,11 +6,11 @@
 
 import type { IPaginatedResponse, TemplateId, UserId } from '@noema/types';
 import type {
-    ICreateTemplateInput,
-    ITemplate,
-    ITemplateQuery,
-    ITemplateSummary,
-    IUpdateTemplateInput,
+  ICreateTemplateInput,
+  ITemplate,
+  ITemplateQuery,
+  ITemplateSummary,
+  IUpdateTemplateInput,
 } from '../../types/content.types.js';
 
 // ============================================================================

@@ -26,7 +26,7 @@ import type {
   EventSource as PrismaEventSource,
 } from '../../../generated/prisma/index.js';
 import type { IContentRepository } from '../../domain/content-service/content.repository.js';
-import { VersionConflictError } from '../../domain/content-service/errors/index.js';
+import { CardNotFoundError, VersionConflictError } from '../../domain/content-service/errors/index.js';
 import { generatePreview } from '../../domain/content-service/value-objects/content.value-objects.js';
 import type {
   IBatchCreateResult,
@@ -67,9 +67,39 @@ export class PrismaContentRepository implements IContentRepository {
   async query(query: IDeckQuery, userId: UserId): Promise<IPaginatedResponse<ICardSummary>> {
     const where = this.buildWhereClause(query, userId);
     const orderBy = this.buildOrderBy(query);
+    const isExact = this.isExactNodeMode(query);
 
     const offset = query.offset ?? 0;
     const limit = query.limit ?? 20;
+
+    if (isExact) {
+      // For exact mode, we over-fetch then post-filter because Prisma has
+      // no native "array set equals" operator. We use hasEvery in the WHERE
+      // clause which returns supersets; the post-filter removes those.
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by isExactNodeMode()
+      const expectedLen = query.knowledgeNodeIds!.length;
+      const overfetchMultiplier = 3;
+      const overfetchLimit = limit * overfetchMultiplier;
+
+      const [allMatches, rawTotal] = await Promise.all([
+        this.prisma.card.findMany({
+          where,
+          skip: offset,
+          take: overfetchLimit,
+          orderBy,
+        }),
+        this.countExactNodeMode(where, expectedLen),
+      ]);
+
+      const filtered = allMatches.filter((c) => c.knowledgeNodeIds.length === expectedLen);
+      const items = filtered.slice(0, limit);
+
+      return {
+        items: items.map((c) => this.toSummary(c)),
+        total: rawTotal,
+        hasMore: offset + limit < rawTotal,
+      };
+    }
 
     const [cards, total] = await Promise.all([
       this.prisma.card.findMany({
@@ -90,6 +120,10 @@ export class PrismaContentRepository implements IContentRepository {
 
   async count(query: IDeckQuery, userId: UserId): Promise<number> {
     const where = this.buildWhereClause(query, userId);
+    if (this.isExactNodeMode(query)) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by isExactNodeMode()
+      return this.countExactNodeMode(where, query.knowledgeNodeIds!.length);
+    }
     return this.prisma.card.count({ where });
   }
 
@@ -135,38 +169,49 @@ export class PrismaContentRepository implements IContentRepository {
     const created: ICard[] = [];
     const failed: { index: number; error: string; input: ICreateCardInput }[] = [];
 
-    // Use individual creates within a transaction for partial success
-    for (let i = 0; i < inputs.length; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const input = inputs[i]!;
-      try {
-        const card = await this.prisma.card.create({
-          data: {
-            id: input.id,
-            userId: input.userId,
-            cardType: this.toDbCardType(input.cardType),
-            state: 'DRAFT',
-            difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
-            content: input.content as unknown as Prisma.JsonObject,
-            knowledgeNodeIds: input.knowledgeNodeIds as string[],
-            tags: input.tags ?? [],
-            source: this.toDbSource(input.source ?? 'user'),
-            metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
-            createdBy: input.userId,
-            version: 1,
-          },
-        });
-        created.push(this.toDomain(card));
-      } catch (error) {
-        failed.push({
-          index: i,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          input,
-        });
+    // Use an interactive transaction for atomicity per successful create.
+    // Each input is attempted individually within the transaction so that
+    // individual validation failures don't roll back sibling successes.
+    // The batchId is expected to already be injected into each input's
+    // metadata by the service layer.
+    await this.prisma.$transaction(async (tx) => {
+      for (let i = 0; i < inputs.length; i++) {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const input = inputs[i]!;
+        try {
+          const card = await tx.card.create({
+            data: {
+              id: input.id,
+              userId: input.userId,
+              cardType: this.toDbCardType(input.cardType),
+              state: 'DRAFT',
+              difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
+              content: input.content as unknown as Prisma.JsonObject,
+              knowledgeNodeIds: input.knowledgeNodeIds as string[],
+              tags: input.tags ?? [],
+              source: this.toDbSource(input.source ?? 'user'),
+              metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
+              createdBy: input.userId,
+              version: 1,
+            },
+          });
+          created.push(this.toDomain(card));
+        } catch (error) {
+          failed.push({
+            index: i,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            input,
+          });
+        }
       }
-    }
+    });
+
+    // Extract batchId from first input metadata (injected by service layer)
+    const firstMeta = inputs[0]?.metadata as Record<string, unknown> | undefined;
+    const batchId = (firstMeta?.['_batchId'] as string | undefined) ?? '';
 
     return {
+      batchId,
       created,
       failed,
       total: inputs.length,
@@ -176,12 +221,14 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   async update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId): Promise<ICard> {
-    const existing = await this.prisma.card.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Card not found: ${id}`);
-    }
-    if (existing.version !== version) {
-      throw new VersionConflictError(version, existing.version);
+    // For metadata merge we need the current record
+    let mergedMetadata: Prisma.JsonObject | undefined;
+    if (input.metadata !== undefined) {
+      const existing = await this.prisma.card.findUnique({ where: { id } });
+      if (existing) {
+        const currentMeta = existing.metadata as Record<string, unknown>;
+        mergedMetadata = { ...currentMeta, ...input.metadata } as unknown as Prisma.JsonObject;
+      }
     }
 
     const data: Prisma.CardUpdateInput = {
@@ -204,59 +251,51 @@ export class PrismaContentRepository implements IContentRepository {
     if (input.tags !== undefined) {
       data.tags = input.tags;
     }
-    if (input.metadata !== undefined) {
-      // Merge metadata
-      const currentMeta = existing.metadata as Record<string, unknown>;
-      data.metadata = { ...currentMeta, ...input.metadata } as unknown as Prisma.JsonObject;
+    if (mergedMetadata !== undefined) {
+      data.metadata = mergedMetadata;
     }
 
-    const card = await this.prisma.card.update({
-      where: { id },
-      data,
-    });
-
-    return this.toDomain(card);
+    try {
+      const card = await this.prisma.card.update({
+        where: { id, version },
+        data,
+      });
+      return this.toDomain(card);
+    } catch (error) {
+      return this.handleOptimisticLockError(error, id, version);
+    }
   }
 
   async changeState(id: CardId, input: IChangeCardStateInput, version: number, userId?: UserId): Promise<ICard> {
-    const existing = await this.prisma.card.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Card not found: ${id}`);
+    try {
+      const card = await this.prisma.card.update({
+        where: { id, version },
+        data: {
+          state: this.toDbState(input.state),
+          version: { increment: 1 },
+          ...(userId !== undefined ? { updatedBy: userId } : {}),
+        },
+      });
+      return this.toDomain(card);
+    } catch (error) {
+      return this.handleOptimisticLockError(error, id, version);
     }
-    if (existing.version !== version) {
-      throw new VersionConflictError(version, existing.version);
-    }
-
-    const card = await this.prisma.card.update({
-      where: { id },
-      data: {
-        state: this.toDbState(input.state),
-        version: { increment: 1 },
-        ...(userId !== undefined ? { updatedBy: userId } : {}),
-      },
-    });
-
-    return this.toDomain(card);
   }
 
   async softDelete(id: CardId, version: number, userId?: UserId): Promise<void> {
-    const existing = await this.prisma.card.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Card not found: ${id}`);
+    try {
+      await this.prisma.card.update({
+        where: { id, version },
+        data: {
+          deletedAt: new Date(),
+          state: 'ARCHIVED',
+          version: { increment: 1 },
+          ...(userId !== undefined ? { updatedBy: userId } : {}),
+        },
+      });
+    } catch (error) {
+      return this.handleOptimisticLockError(error, id, version);
     }
-    if (existing.version !== version) {
-      throw new VersionConflictError(version, existing.version);
-    }
-
-    await this.prisma.card.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        state: 'ARCHIVED',
-        version: { increment: 1 },
-        ...(userId !== undefined ? { updatedBy: userId } : {}),
-      },
-    });
   }
 
   async hardDelete(id: CardId): Promise<void> {
@@ -264,24 +303,19 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   async updateTags(id: CardId, tags: string[], version: number, userId?: UserId): Promise<ICard> {
-    const existing = await this.prisma.card.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Card not found: ${id}`);
+    try {
+      const card = await this.prisma.card.update({
+        where: { id, version },
+        data: {
+          tags,
+          version: { increment: 1 },
+          ...(userId !== undefined ? { updatedBy: userId } : {}),
+        },
+      });
+      return this.toDomain(card);
+    } catch (error) {
+      return this.handleOptimisticLockError(error, id, version);
     }
-    if (existing.version !== version) {
-      throw new VersionConflictError(version, existing.version);
-    }
-
-    const card = await this.prisma.card.update({
-      where: { id },
-      data: {
-        tags,
-        version: { increment: 1 },
-        ...(userId !== undefined ? { updatedBy: userId } : {}),
-      },
-    });
-
-    return this.toDomain(card);
   }
 
   async updateKnowledgeNodeIds(
@@ -290,29 +324,119 @@ export class PrismaContentRepository implements IContentRepository {
     version: number,
     userId?: UserId,
   ): Promise<ICard> {
-    const existing = await this.prisma.card.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Card not found: ${id}`);
+    try {
+      const card = await this.prisma.card.update({
+        where: { id, version },
+        data: {
+          knowledgeNodeIds,
+          version: { increment: 1 },
+          ...(userId !== undefined ? { updatedBy: userId } : {}),
+        },
+      });
+      return this.toDomain(card);
+    } catch (error) {
+      return this.handleOptimisticLockError(error, id, version);
     }
-    if (existing.version !== version) {
-      throw new VersionConflictError(version, existing.version);
-    }
+  }
 
-    const card = await this.prisma.card.update({
-      where: { id },
-      data: {
-        knowledgeNodeIds,
-        version: { increment: 1 },
-        ...(userId !== undefined ? { updatedBy: userId } : {}),
+  // ============================================================================
+  // Batch Recovery Operations
+  // ============================================================================
+
+  async findByBatchId(batchId: string, userId: UserId): Promise<ICard[]> {
+    const cards = await this.prisma.card.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        metadata: {
+          path: ['_batchId'],
+          equals: batchId,
+        },
       },
     });
+    return cards.map((c) => this.toDomain(c));
+  }
 
-    return this.toDomain(card);
+  async softDeleteByBatchId(batchId: string, userId: UserId): Promise<number> {
+    const result = await this.prisma.card.updateMany({
+      where: {
+        userId,
+        deletedAt: null,
+        metadata: {
+          path: ['_batchId'],
+          equals: batchId,
+        },
+      },
+      data: {
+        deletedAt: new Date(),
+        state: 'ARCHIVED',
+        updatedBy: userId,
+      },
+    });
+    return result.count;
+  }
+
+  // ============================================================================
+  // Private Optimistic Lock Error Handler
+  // ============================================================================
+
+  /**
+   * Handle Prisma P2025 "Record to update not found" errors by distinguishing
+   * between a true not-found and a version conflict via a follow-up query.
+   * This catch-and-re-query approach keeps the happy path atomic (single UPDATE
+   * with WHERE id + version) while providing precise error reporting.
+   */
+  private async handleOptimisticLockError(error: unknown, id: CardId, expectedVersion: number): Promise<never> {
+    if (
+      error instanceof Error &&
+      (error.message.includes('Record to update not found') ||
+        (error as { code?: string }).code === 'P2025')
+    ) {
+      // Re-query to distinguish not-found from version conflict
+      const current = await this.prisma.card.findUnique({ where: { id } });
+      if (!current) {
+        throw new CardNotFoundError(id);
+      }
+      throw new VersionConflictError(expectedVersion, current.version);
+    }
+    throw error;
   }
 
   // ============================================================================
   // Private Query Builders
   // ============================================================================
+
+  /**
+   * Check if a query uses the 'exact' knowledgeNodeIdMode.
+   */
+  private isExactNodeMode(query: IDeckQuery): boolean {
+    return (
+      query.knowledgeNodeIdMode === 'exact' &&
+      query.knowledgeNodeIds !== undefined &&
+      query.knowledgeNodeIds.length > 0
+    );
+  }
+
+  /**
+   * Count cards matching the WHERE clause with an additional array-length
+   * constraint for exact knowledgeNodeId matching.
+   *
+   * Since Prisma has no native array-length filter, we use a pragmatic
+   * two-step approach: findMany with select to get candidate IDs from the
+   * Prisma WHERE (which includes hasEvery), then post-filter by array length.
+   * This is acceptable because exact-mode queries are rare and hasEvery
+   * pre-filters the candidate set significantly.
+   */
+  private async countExactNodeMode(
+    where: Prisma.CardWhereInput,
+    expectedLength: number,
+  ): Promise<number> {
+    const candidates = await this.prisma.card.findMany({
+      where,
+      select: { id: true, knowledgeNodeIds: true },
+    });
+    return candidates.filter((c) => c.knowledgeNodeIds.length === expectedLength).length;
+  }
 
   private buildWhereClause(query: IDeckQuery, userId: UserId): Prisma.CardWhereInput {
     const where: Prisma.CardWhereInput = {

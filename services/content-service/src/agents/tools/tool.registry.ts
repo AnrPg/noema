@@ -20,6 +20,8 @@ import {
   createCreateCardHandler,
   createGetCardByIdHandler,
   createQueryCardsHandler,
+  createRecoverBatchHandler,
+  createRollbackBatchHandler,
   createUpdateCardHandler,
   createUpdateCardNodeLinksHandler,
   createValidateCardContentHandler,
@@ -401,6 +403,8 @@ const EXPECTED_CONTENT_TOOL_NAMES = [
   'count-cards',
   'update-card-node-links',
   'batch-change-card-state',
+  'recover-batch',
+  'rollback-batch',
 ] as const;
 
 /**
@@ -461,6 +465,13 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
   registry.register(
     requireDefinition('batch-change-card-state'),
     createBatchChangeCardStateHandler(contentService)
+  );
+
+  // P2 tools
+  registry.register(requireDefinition('recover-batch'), createRecoverBatchHandler(contentService));
+  registry.register(
+    requireDefinition('rollback-batch'),
+    createRollbackBatchHandler(contentService)
   );
 
   return registry;

@@ -28,7 +28,7 @@ describe('content tool registry contract', () => {
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(11);
+    expect(definitions).toHaveLength(13);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
@@ -44,6 +44,8 @@ describe('content tool registry contract', () => {
         'count-cards',
         'update-card-node-links',
         'batch-change-card-state',
+        'recover-batch',
+        'rollback-batch',
       ])
     );
   });

@@ -22,7 +22,7 @@ import type {
   Template as PrismaTemplate,
   TemplateVisibility as PrismaTemplateVisibility,
 } from '../../../generated/prisma/index.js';
-import { VersionConflictError } from '../../domain/content-service/errors/index.js';
+import { TemplateNotFoundError, VersionConflictError } from '../../domain/content-service/errors/index.js';
 import type { ITemplateRepository } from '../../domain/content-service/template.repository.js';
 import type {
   ICreateTemplateInput,
@@ -175,7 +175,12 @@ export class PrismaTemplateRepository implements ITemplateRepository {
     return toDomain(row);
   }
 
-  async update(id: TemplateId, input: IUpdateTemplateInput, version: number, userId?: UserId): Promise<ITemplate> {
+  async update(
+    id: TemplateId,
+    input: IUpdateTemplateInput,
+    version: number,
+    userId?: UserId
+  ): Promise<ITemplate> {
     const data: Prisma.TemplateUpdateInput = {};
 
     if (input.name !== undefined) data.name = input.name;
@@ -202,10 +207,7 @@ export class PrismaTemplateRepository implements ITemplateRepository {
       });
       return toDomain(row);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Record to update not found')) {
-        throw new VersionConflictError(version, -1);
-      }
-      throw error;
+      return this.handleOptimisticLockError(error, id, version);
     }
   }
 
@@ -226,15 +228,39 @@ export class PrismaTemplateRepository implements ITemplateRepository {
         },
       });
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Record to update not found')) {
-        throw new VersionConflictError(version, -1);
-      }
-      throw error;
+      return this.handleOptimisticLockError(error, id, version);
     }
   }
 
   async hardDelete(id: TemplateId): Promise<void> {
     await this.prisma.template.delete({ where: { id } });
+  }
+
+  // ============================================================================
+  // Private Optimistic Lock Error Handler
+  // ============================================================================
+
+  /**
+   * Handle Prisma P2025 "Record to update not found" errors by distinguishing
+   * between a true not-found and a version conflict via a follow-up query.
+   */
+  private async handleOptimisticLockError(
+    error: unknown,
+    id: TemplateId,
+    expectedVersion: number,
+  ): Promise<never> {
+    if (
+      error instanceof Error &&
+      (error.message.includes('Record to update not found') ||
+        (error as { code?: string }).code === 'P2025')
+    ) {
+      const current = await this.prisma.template.findUnique({ where: { id } });
+      if (!current) {
+        throw new TemplateNotFoundError(id);
+      }
+      throw new VersionConflictError(expectedVersion, current.version);
+    }
+    throw error;
   }
 
   // ============================================================================

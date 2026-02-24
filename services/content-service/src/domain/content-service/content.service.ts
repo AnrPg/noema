@@ -16,6 +16,7 @@ import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import type {
+  IBatchChangeStateItem,
   IBatchCreateResult,
   ICard,
   ICardSummary,
@@ -163,6 +164,11 @@ export class ContentService {
   /**
    * Create multiple cards in a batch.
    * Used by Content Generation Agent for bulk imports.
+   *
+   * Each card gets tagged with a batchId in metadata._batchId for:
+   * - Batch correlation tracking (easier to reason about state)
+   * - Orphan recovery (find cards from a partially-failed batch)
+   * - Batch rollback (undo an entire batch via rollbackBatch)
    */
   async createBatch(
     cards: ICreateCardInput[],
@@ -187,15 +193,22 @@ export class ContentService {
       );
     }
 
-    // Prepare cards with IDs
+    // Generate batch correlation ID
+    const batchId = `batch_${nanoid(21)}`;
+
+    // Prepare cards with IDs and batchId in metadata
     const cardsWithIds = parseResult.data.cards.map((card) => ({
       ...card,
       id: `${ID_PREFIXES.CardId}${nanoid(21)}` as CardId,
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       userId: context.userId!,
-    })) as (ICreateCardInput & { id: CardId; userId: UserId })[];
+      metadata: {
+        ...card.metadata,
+        _batchId: batchId,
+      },
+    })) as unknown as (ICreateCardInput & { id: CardId; userId: UserId })[];
 
-    // Batch create
+    // Batch create within a transaction (handled by repository)
     const result = await this.repository.createBatch(cardsWithIds);
 
     // Publish events for successfully created cards
@@ -208,6 +221,7 @@ export class ContentService {
           entity: card,
           source: card.source,
           batchOperation: true,
+          batchId,
         },
         metadata: {
           correlationId: context.correlationId,
@@ -219,7 +233,7 @@ export class ContentService {
     }
 
     this.logger.info(
-      { total: result.total, success: result.successCount, failed: result.failureCount },
+      { total: result.total, success: result.successCount, failed: result.failureCount, batchId },
       'Batch creation completed'
     );
 
@@ -796,35 +810,35 @@ export class ContentService {
 
   /**
    * Batch state transition — change state of multiple cards at once.
+   * Each item carries its own version for per-card optimistic locking.
    */
   async batchChangeState(
-    ids: CardId[],
+    items: IBatchChangeStateItem[],
     state: CardState,
     reason: string | undefined,
-    version: number,
     context: IExecutionContext
   ): Promise<IServiceResult<{ succeeded: CardId[]; failed: { id: CardId; error: string }[] }>> {
     this.requireAuth(context);
-    this.logger.info({ count: ids.length, targetState: state }, 'Batch changing card state');
+    this.logger.info({ count: items.length, targetState: state }, 'Batch changing card state');
 
-    if (ids.length > 100) {
-      throw new BatchLimitExceededError(100, ids.length);
+    if (items.length > 100) {
+      throw new BatchLimitExceededError(100, items.length);
     }
 
     const succeeded: CardId[] = [];
     const failed: { id: CardId; error: string }[] = [];
 
-    for (const id of ids) {
+    for (const item of items) {
       try {
         const stateInput: IChangeCardStateInput = { state };
         if (reason !== undefined) {
           stateInput.reason = reason;
         }
-        await this.changeState(id, stateInput, version, context);
-        succeeded.push(id);
+        await this.changeState(item.id, stateInput, item.version, context);
+        succeeded.push(item.id);
       } catch (error) {
         failed.push({
-          id,
+          id: item.id,
           error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
@@ -850,7 +864,7 @@ export class ContentService {
           label: `Card ${id}`,
           relevance: 0.9,
         })),
-        confidence: failed.length === 0 ? 1.0 : succeeded.length / ids.length,
+        confidence: failed.length === 0 ? 1.0 : succeeded.length / items.length,
         sourceQuality: 'high',
         validityPeriod: 'medium',
         contextNeeded: [],
@@ -863,7 +877,7 @@ export class ContentService {
                   severity: 'medium' as const,
                   description: `${String(failed.length)} state transitions failed`,
                   probability: 1.0,
-                  impact: failed.length / ids.length,
+                  impact: failed.length / items.length,
                   mitigation: 'Review errors and retry individually',
                 },
               ]
@@ -875,7 +889,7 @@ export class ContentService {
           roi: succeeded.length > 0 ? (succeeded.length * 0.1) / 0.2 : 0,
         },
         preferenceAlignment: [],
-        reasoning: `Batch state change: ${String(succeeded.length)}/${String(ids.length)} succeeded`,
+        reasoning: `Batch state change: ${String(succeeded.length)}/${String(items.length)} succeeded`,
       },
     };
   }
@@ -919,6 +933,112 @@ export class ContentService {
     });
 
     this.logger.info({ cardId: id, soft }, 'Card deleted');
+  }
+
+  // ============================================================================
+  // Batch Recovery & Rollback
+  // ============================================================================
+
+  /**
+   * Find all cards created in a specific batch.
+   * Used for orphan recovery — discover what was created in a partially-failed batch.
+   */
+  async findByBatchId(
+    batchId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard[]>> {
+    this.requireAuth(context);
+    this.logger.info({ batchId }, 'Finding cards by batch ID');
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const cards = await this.repository.findByBatchId(batchId, context.userId!);
+
+    return {
+      data: cards,
+      agentHints: {
+        suggestedNextActions: cards.length > 0
+          ? [
+              {
+                action: 'rollback_batch',
+                description: `Rollback batch ${batchId} (${String(cards.length)} cards)`,
+                priority: 'low',
+                category: 'correction',
+              },
+            ]
+          : [],
+        relatedResources: cards.map((c) => ({
+          type: 'Card',
+          id: c.id as string,
+          label: `Card ${c.id}`,
+          relevance: 0.9,
+        })),
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'medium',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.2, effort: 0.1, roi: 2.0 },
+        preferenceAlignment: [],
+        reasoning: `Found ${String(cards.length)} cards in batch ${batchId}`,
+      },
+    };
+  }
+
+  /**
+   * Rollback an entire batch — soft-delete all cards created in the batch.
+   * Provides batch-level undo capability to mitigate the "no rollback path" risk
+   * of partial-success batch creates.
+   */
+  async rollbackBatch(
+    batchId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ batchId: string; deletedCount: number }>> {
+    this.requireAuth(context);
+    this.logger.info({ batchId }, 'Rolling back batch');
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const deletedCount = await this.repository.softDeleteByBatchId(batchId, context.userId!);
+
+    // Publish rollback event
+    await this.eventPublisher.publish({
+      eventType: 'card.batch.rolledback',
+      aggregateType: 'Card',
+      aggregateId: batchId,
+      payload: {
+        batchId,
+        deletedCount,
+      },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    this.logger.info({ batchId, deletedCount }, 'Batch rolled back');
+
+    return {
+      data: { batchId, deletedCount },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'medium',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: {
+          benefit: deletedCount * 0.1,
+          effort: 0.1,
+          roi: deletedCount > 0 ? (deletedCount * 0.1) / 0.1 : 0,
+        },
+        preferenceAlignment: [],
+        reasoning: `Rolled back batch ${batchId}: ${String(deletedCount)} cards soft-deleted`,
+      },
+    };
   }
 
   // ============================================================================

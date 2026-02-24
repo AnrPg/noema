@@ -121,6 +121,18 @@ export class CardNotFoundError extends DomainError {
   }
 }
 
+/**
+ * Thrown when a template is not found.
+ */
+export class TemplateNotFoundError extends DomainError {
+  public readonly templateId: string;
+
+  constructor(identifier: string) {
+    super('TEMPLATE_NOT_FOUND', `Template not found: ${identifier}`, { identifier });
+    this.templateId = identifier;
+  }
+}
+
 // ============================================================================
 // Conflict Errors
 // ============================================================================

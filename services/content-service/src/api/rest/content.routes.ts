@@ -10,6 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ContentService } from '../../domain/content-service/content.service.js';
 import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type {
+  IBatchChangeStateItem,
   IChangeCardStateInput,
   ICreateCardInput,
   IDeckQuery,
@@ -596,7 +597,11 @@ export function registerContentRoutes(
    * POST /v1/cards/batch/state - Batch state transition
    */
   fastify.post<{
-    Body: { ids: string[]; state: string; reason?: string; version: number };
+    Body: {
+      items: { id: string; version: number }[];
+      state: string;
+      reason?: string;
+    };
   }>(
     '/v1/cards/batch/state',
     {
@@ -605,19 +610,25 @@ export function registerContentRoutes(
         tags: ['Cards'],
         summary: 'Batch change card state',
         description:
-          'Change state of multiple cards at once. Used after batch creation to activate drafts.',
+          'Change state of multiple cards at once. Each item carries its own version for per-card optimistic locking.',
         body: {
           type: 'object',
-          required: ['ids', 'state', 'version'],
+          required: ['items', 'state'],
           properties: {
-            ids: {
+            items: {
               type: 'array',
-              items: { type: 'string' },
+              items: {
+                type: 'object',
+                required: ['id', 'version'],
+                properties: {
+                  id: { type: 'string' },
+                  version: { type: 'number' },
+                },
+              },
               maxItems: 100,
             },
             state: { type: 'string', enum: ['draft', 'active', 'suspended', 'archived'] },
             reason: { type: 'string' },
-            version: { type: 'number' },
           },
         },
       },
@@ -626,10 +637,9 @@ export function registerContentRoutes(
       try {
         const context = buildContext(request);
         const result = await contentService.batchChangeState(
-          request.body.ids as CardId[],
+          request.body.items as IBatchChangeStateItem[],
           request.body.state as CardState,
           request.body.reason,
-          request.body.version,
           context
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
@@ -675,6 +685,74 @@ export function registerContentRoutes(
         const soft = request.query.soft !== 'false';
         await contentService.delete(request.params.id as CardId, soft, context);
         reply.status(204).send();
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Batch Recovery & Rollback Routes
+  // ============================================================================
+
+  /**
+   * GET /v1/cards/batch/:batchId - Recover/discover batch cards
+   */
+  fastify.get<{ Params: { batchId: string } }>(
+    '/v1/cards/batch/:batchId',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Find cards by batch ID',
+        description:
+          'Discover all cards created in a specific batch. Used for orphan recovery after partial failures.',
+        params: {
+          type: 'object',
+          required: ['batchId'],
+          properties: {
+            batchId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.findByBatchId(request.params.batchId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
+   * DELETE /v1/cards/batch/:batchId - Rollback an entire batch
+   */
+  fastify.delete<{ Params: { batchId: string } }>(
+    '/v1/cards/batch/:batchId',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Rollback a batch',
+        description:
+          'Soft-delete all cards created in a batch. Provides undo capability for batch creates.',
+        params: {
+          type: 'object',
+          required: ['batchId'],
+          properties: {
+            batchId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.rollbackBatch(request.params.batchId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

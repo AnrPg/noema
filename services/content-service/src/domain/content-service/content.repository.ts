@@ -113,4 +113,25 @@ export interface IContentRepository {
    * @returns Updated card
    */
   updateKnowledgeNodeIds(id: CardId, knowledgeNodeIds: string[], version: number, userId?: UserId): Promise<ICard>;
+
+  // ============================================================================
+  // Batch Recovery Operations
+  // ============================================================================
+
+  /**
+   * Find all cards created in a specific batch.
+   * @param batchId - The batch correlation ID stored in metadata._batchId
+   * @param userId - Owner user ID
+   * @returns Cards belonging to the batch
+   */
+  findByBatchId(batchId: string, userId: UserId): Promise<ICard[]>;
+
+  /**
+   * Soft-delete all cards created in a specific batch.
+   * Used for batch rollback when a client needs to undo a batch create.
+   * @param batchId - The batch correlation ID
+   * @param userId - Owner user ID
+   * @returns Number of cards soft-deleted
+   */
+  softDeleteByBatchId(batchId: string, userId: UserId): Promise<number>;
 }
