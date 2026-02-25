@@ -35,9 +35,40 @@ import type {
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
+  ICursorPaginatedResponse,
   IDeckQuery,
   IUpdateCardInput,
 } from '../../types/content.types.js';
+import { decodeCursor, encodeCursor } from '../../utils/cursor.js';
+
+// ============================================================================
+// Raw SQL Row Type (for full-text search queries)
+// ============================================================================
+
+/**
+ * Shape of a raw SQL row from the cards table.
+ * Column names use snake_case (PostgreSQL convention).
+ */
+interface IRawCardRow {
+  id: string;
+  user_id: string;
+  card_type: string;
+  state: string;
+  difficulty: string;
+  content: unknown;
+  knowledge_node_ids: string[];
+  tags: string[];
+  source: string;
+  metadata: unknown;
+  content_hash: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+  deleted_at: Date | string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  version: number;
+  rank?: number;
+}
 
 // ============================================================================
 // Repository Implementation
@@ -65,12 +96,17 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   async query(query: IDeckQuery, userId: UserId): Promise<IPaginatedResponse<ICardSummary>> {
+    const offset = query.offset ?? 0;
+    const limit = query.limit ?? 20;
+
+    // If search is active, use full-text search with raw SQL
+    if (query.search !== undefined && query.search.trim() !== '') {
+      return this.queryWithSearch(query, userId, query.search, offset, limit);
+    }
+
     const where = this.buildWhereClause(query, userId);
     const orderBy = this.buildOrderBy(query);
     const isExact = this.isExactNodeMode(query);
-
-    const offset = query.offset ?? 0;
-    const limit = query.limit ?? 20;
 
     if (isExact) {
       // For exact mode, we over-fetch then post-filter because Prisma has
@@ -462,6 +498,287 @@ export class PrismaContentRepository implements IContentRepository {
     return candidates.filter((c) => c.knowledgeNodeIds.length === expectedLength).length;
   }
 
+  // ============================================================================
+  // Full-Text Search (Raw SQL)
+  // ============================================================================
+
+  /**
+   * Build a PostgreSQL tsquery from a user's search string.
+   *
+   * Features:
+   * - Multi-word AND: "neural network" → "neural & network"
+   * - Prefix matching for short terms (≤ 3 chars): "neu" → "neu:*"
+   * - Strips non-alphanumeric chars (preserves hyphens and apostrophes)
+   */
+  private buildTsQuery(searchTerm: string): string {
+    const words = searchTerm
+      .trim()
+      .split(/\s+/)
+      .map((word) => word.replace(/[^a-zA-Z0-9'-]/g, ''))
+      .filter(Boolean);
+
+    if (words.length === 0) return '';
+
+    return words
+      .map((word) => (word.length <= 3 ? `${word}:*` : word))
+      .join(' & ');
+  }
+
+  /**
+   * Execute a full-text search query using raw SQL with ts_rank ranking.
+   * Falls back to empty results when the tsquery is empty.
+   */
+  private async queryWithSearch(
+    query: IDeckQuery,
+    userId: UserId,
+    searchTerm: string,
+    offset: number,
+    limit: number,
+  ): Promise<IPaginatedResponse<ICardSummary>> {
+    const tsQuery = this.buildTsQuery(searchTerm);
+    if (tsQuery === '') {
+      return { items: [], total: 0, hasMore: false };
+    }
+
+    // Build WHERE conditions and parameterized values
+    const conditions: string[] = [
+      `"user_id" = $1`,
+      `"deleted_at" IS NULL`,
+      `"search_vector" @@ to_tsquery('english', $2)`,
+    ];
+    const params: unknown[] = [userId, tsQuery];
+    let paramIdx = 3;
+
+    if (query.cardTypes && query.cardTypes.length > 0) {
+      const dbTypes = query.cardTypes.map((t) => t.toUpperCase());
+      conditions.push(`"card_type"::text = ANY($${paramIdx.toString()}::text[])`);
+      params.push(dbTypes);
+      paramIdx++;
+    }
+    if (query.states && query.states.length > 0) {
+      const dbStates = query.states.map((s) => s.toUpperCase());
+      conditions.push(`"state"::text = ANY($${paramIdx.toString()}::text[])`);
+      params.push(dbStates);
+      paramIdx++;
+    }
+    if (query.difficulties && query.difficulties.length > 0) {
+      const dbDiffs = query.difficulties.map((d) => d.toUpperCase());
+      conditions.push(`"difficulty"::text = ANY($${paramIdx.toString()}::text[])`);
+      params.push(dbDiffs);
+      paramIdx++;
+    }
+    if (query.tags && query.tags.length > 0) {
+      conditions.push(`"tags" && $${paramIdx.toString()}::text[]`);
+      params.push(query.tags);
+      paramIdx++;
+    }
+    if (query.sources && query.sources.length > 0) {
+      const dbSources = query.sources.map((s) => s.toUpperCase());
+      conditions.push(`"source"::text = ANY($${paramIdx.toString()}::text[])`);
+      params.push(dbSources);
+      paramIdx++;
+    }
+    if (query.knowledgeNodeIds && query.knowledgeNodeIds.length > 0) {
+      const mode = query.knowledgeNodeIdMode ?? 'any';
+      if (mode === 'any' || mode === 'subtree' || mode === 'prerequisites' || mode === 'related') {
+        conditions.push(`"knowledge_node_ids" && $${paramIdx.toString()}::text[]`);
+        params.push(query.knowledgeNodeIds);
+        paramIdx++;
+      } else {
+        conditions.push(`"knowledge_node_ids" @> $${paramIdx.toString()}::text[]`);
+        params.push(query.knowledgeNodeIds);
+        paramIdx++;
+      }
+    }
+    if (query.createdAfter !== undefined && query.createdAfter !== '') {
+      conditions.push(`"created_at" >= $${paramIdx.toString()}::timestamptz`);
+      params.push(new Date(query.createdAfter));
+      paramIdx++;
+    }
+    if (query.createdBefore !== undefined && query.createdBefore !== '') {
+      conditions.push(`"created_at" <= $${paramIdx.toString()}::timestamptz`);
+      params.push(new Date(query.createdBefore));
+      paramIdx++;
+    }
+    if (query.updatedAfter !== undefined && query.updatedAfter !== '') {
+      conditions.push(`"updated_at" >= $${paramIdx.toString()}::timestamptz`);
+      params.push(new Date(query.updatedAfter));
+      paramIdx++;
+    }
+    if (query.updatedBefore !== undefined && query.updatedBefore !== '') {
+      conditions.push(`"updated_at" <= $${paramIdx.toString()}::timestamptz`);
+      params.push(new Date(query.updatedBefore));
+      paramIdx++;
+    }
+
+    const whereClause = conditions.join(' AND ');
+    const isExact = this.isExactNodeMode(query);
+
+    // Count query
+    const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT COUNT(*) as count FROM "cards" WHERE ${whereClause}`,
+      ...params,
+    );
+    let total = Number(countResult[0]?.count ?? 0);
+
+    // For exact mode, the count from raw SQL includes supersets — we must
+    // post-filter. For simplicity, fetch all candidates and count accurate matches.
+    if (isExact) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded by isExactNodeMode()
+      const expectedLen = query.knowledgeNodeIds!.length;
+      const allRows = await this.prisma.$queryRawUnsafe<IRawCardRow[]>(
+        `SELECT *, ts_rank("search_vector", to_tsquery('english', $2)) AS rank
+         FROM "cards"
+         WHERE ${whereClause}
+         ORDER BY rank DESC, "created_at" DESC`,
+        ...params,
+      );
+      const filtered = allRows.filter((r) => {
+        return r.knowledge_node_ids.length === expectedLen;
+      });
+      total = filtered.length;
+      const items = filtered.slice(offset, offset + limit);
+      return {
+        items: items.map((r) => this.rawRowToSummary(r)),
+        total,
+        hasMore: offset + limit < total,
+      };
+    }
+
+    // Ranked results query
+    const rows = await this.prisma.$queryRawUnsafe<IRawCardRow[]>(
+      `SELECT *, ts_rank("search_vector", to_tsquery('english', $2)) AS rank
+       FROM "cards"
+       WHERE ${whereClause}
+       ORDER BY rank DESC, "created_at" DESC
+       OFFSET $${paramIdx.toString()} LIMIT $${(paramIdx + 1).toString()}`,
+      ...params,
+      offset,
+      limit,
+    );
+
+    return {
+      items: rows.map((r) => this.rawRowToSummary(r)),
+      total,
+      hasMore: offset + limit < total,
+    };
+  }
+
+  /**
+   * Map a raw SQL row to ICardSummary.
+   */
+  private rawRowToSummary(row: IRawCardRow): ICardSummary {
+    const content = (typeof row.content === 'string' ? JSON.parse(row.content) : row.content) as ICardContent;
+    const front = typeof content.front === 'string' ? content.front : '';
+
+    return {
+      id: row.id as CardId,
+      userId: row.user_id as UserId,
+      cardType: row.card_type.toLowerCase() as CardType | RemediationCardType,
+      state: row.state.toLowerCase() as CardState,
+      difficulty: row.difficulty.toLowerCase() as DifficultyLevel,
+      preview: generatePreview(front),
+      knowledgeNodeIds: row.knowledge_node_ids as NodeId[],
+      tags: row.tags,
+      source: row.source.toLowerCase() as EventSource,
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+      updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+      version: row.version,
+    };
+  }
+
+  // ============================================================================
+  // Cursor-Based Pagination
+  // ============================================================================
+
+  async queryCursor(
+    query: IDeckQuery,
+    userId: UserId,
+    cursor?: string,
+    limit = 20,
+    direction: 'forward' | 'backward' = 'forward',
+  ): Promise<ICursorPaginatedResponse<ICardSummary>> {
+    const where = this.buildWhereClause(query, userId);
+    const sortField = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    // Map domain sort field to Prisma column name
+    const dbSortField = sortField === 'createdAt' ? 'createdAt'
+      : sortField === 'updatedAt' ? 'updatedAt'
+      : 'difficulty';
+
+    // Parse cursor if provided
+    if (cursor !== undefined && cursor !== '') {
+      const cursorData = decodeCursor(cursor);
+      if (cursorData) {
+        const comparison = (direction === 'forward')
+          ? (sortOrder === 'desc' ? 'lt' : 'gt')
+          : (sortOrder === 'desc' ? 'gt' : 'lt');
+
+        const cursorSortValue = (dbSortField === 'createdAt' || dbSortField === 'updatedAt')
+          ? new Date(cursorData.sortValue)
+          : cursorData.sortValue;
+
+        where.AND = [
+          ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+          {
+            OR: [
+              { [dbSortField]: { [comparison]: cursorSortValue } },
+              {
+                [dbSortField]: cursorSortValue,
+                id: { [comparison]: cursorData.id },
+              },
+            ],
+          },
+        ];
+      }
+    }
+
+    // Fetch one extra to detect hasMore
+    const fetchLimit = limit + 1;
+    const cards = await this.prisma.card.findMany({
+      where,
+      take: fetchLimit,
+      orderBy: [
+        { [dbSortField]: sortOrder },
+        { id: sortOrder },
+      ],
+    });
+
+    const hasMore = cards.length > limit;
+    const pageCards = hasMore ? cards.slice(0, limit) : cards;
+
+    // Build cursors
+    const firstCard = pageCards[0];
+    const lastCard = pageCards[pageCards.length - 1];
+
+    const getSortValue = (card: PrismaCard): string => {
+      if (dbSortField === 'difficulty') {
+        return card.difficulty;
+      }
+      return (card[dbSortField] as unknown as Date).toISOString();
+    };
+
+    return {
+      items: pageCards.map((c) => this.toSummary(c)),
+      nextCursor: hasMore && lastCard
+        ? encodeCursor({
+            id: lastCard.id,
+            sortValue: getSortValue(lastCard),
+            sortField,
+          })
+        : null,
+      prevCursor: cursor !== undefined && cursor !== '' && firstCard
+        ? encodeCursor({
+            id: firstCard.id,
+            sortValue: getSortValue(firstCard),
+            sortField,
+          })
+        : null,
+      hasMore,
+    };
+  }
+
   private buildWhereClause(query: IDeckQuery, userId: UserId): Prisma.CardWhereInput {
     const where: Prisma.CardWhereInput = {
       userId,
@@ -518,14 +835,8 @@ export class PrismaContentRepository implements IContentRepository {
     if (query.sources && query.sources.length > 0) {
       where.source = { in: query.sources.map((s) => this.toDbSource(s)) };
     }
-    if (query.search !== undefined && query.search !== '') {
-      // Use Prisma JSON filtering for content search
-      // This is a basic implementation; full-text search would use pg_trgm
-      where.OR = [
-        { content: { path: ['front'], string_contains: query.search } },
-        { content: { path: ['back'], string_contains: query.search } },
-      ];
-    }
+    // Full-text search is handled by queryWithSearch() via raw SQL.
+    // No search filter in the Prisma WHERE clause.
     if (query.createdAfter !== undefined && query.createdAfter !== '') {
       const existing = (where.createdAt ?? {}) as Prisma.DateTimeFilter;
       where.createdAt = {

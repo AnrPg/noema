@@ -261,6 +261,91 @@ export function registerContentRoutes(
   );
 
   /**
+   * GET /v1/cards/cursor - Cursor-based paginated card query.
+   * More efficient than offset pagination for large result sets.
+   */
+  fastify.get<{
+    Querystring: {
+      cursor?: string;
+      limit?: number;
+      cardTypes?: string;
+      states?: string;
+      difficulties?: string;
+      tags?: string;
+      sources?: string;
+      sortBy?: string;
+      sortOrder?: string;
+      direction?: string;
+    };
+  }>(
+    '/v1/cards/cursor',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Query cards with cursor-based pagination',
+        description:
+          'Cursor-based pagination using keyset (seek) method. More efficient than offset for large datasets.',
+        querystring: {
+          type: 'object',
+          properties: {
+            cursor: { type: 'string', description: 'Opaque cursor string from previous response' },
+            limit: { type: 'number', minimum: 1, maximum: 100, default: 20 },
+            cardTypes: { type: 'string', description: 'Comma-separated card types' },
+            states: { type: 'string', description: 'Comma-separated states' },
+            difficulties: { type: 'string', description: 'Comma-separated difficulties' },
+            tags: { type: 'string', description: 'Comma-separated tags' },
+            sources: { type: 'string', description: 'Comma-separated sources' },
+            sortBy: { type: 'string', enum: ['createdAt', 'updatedAt', 'difficulty'], default: 'createdAt' },
+            sortOrder: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
+            direction: { type: 'string', enum: ['forward', 'backward'], default: 'forward' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const { cursor, limit, direction, ...queryParams } = request.query;
+
+        const deckQuery: IDeckQuery = {};
+        if (queryParams.cardTypes !== undefined && queryParams.cardTypes !== '') {
+          deckQuery.cardTypes = queryParams.cardTypes.split(',') as NonNullable<IDeckQuery['cardTypes']>;
+        }
+        if (queryParams.states !== undefined && queryParams.states !== '') {
+          deckQuery.states = queryParams.states.split(',') as NonNullable<IDeckQuery['states']>;
+        }
+        if (queryParams.difficulties !== undefined && queryParams.difficulties !== '') {
+          deckQuery.difficulties = queryParams.difficulties.split(',') as NonNullable<IDeckQuery['difficulties']>;
+        }
+        if (queryParams.tags !== undefined && queryParams.tags !== '') {
+          deckQuery.tags = queryParams.tags.split(',');
+        }
+        if (queryParams.sources !== undefined && queryParams.sources !== '') {
+          deckQuery.sources = queryParams.sources.split(',') as NonNullable<IDeckQuery['sources']>;
+        }
+        if (queryParams.sortBy !== undefined && queryParams.sortBy !== '') {
+          deckQuery.sortBy = queryParams.sortBy as NonNullable<IDeckQuery['sortBy']>;
+        }
+        if (queryParams.sortOrder !== undefined && queryParams.sortOrder !== '') {
+          deckQuery.sortOrder = queryParams.sortOrder as NonNullable<IDeckQuery['sortOrder']>;
+        }
+
+        const result = await contentService.queryCursor(
+          deckQuery,
+          context,
+          cursor,
+          limit,
+          direction as 'forward' | 'backward' | undefined,
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
    * POST /v1/cards/session-seed - Build initial card IDs for session start.
    */
   fastify.post<{ Body: ISessionSeedInput }>(

@@ -18,6 +18,7 @@ import {
   createChangeCardStateHandler,
   createCountCardsHandler,
   createCreateCardHandler,
+  createCursorQueryCardsHandler,
   createGetCardByIdHandler,
   createQueryCardsHandler,
   createRecoverBatchHandler,
@@ -405,6 +406,7 @@ const EXPECTED_CONTENT_TOOL_NAMES = [
   'batch-change-card-state',
   'recover-batch',
   'rollback-batch',
+  'cursor-query-cards',
 ] as const;
 
 /**
@@ -472,6 +474,12 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
   registry.register(
     requireDefinition('rollback-batch'),
     createRollbackBatchHandler(contentService)
+  );
+
+  // Cursor pagination tool
+  registry.register(
+    requireDefinition('cursor-query-cards'),
+    createCursorQueryCardsHandler(contentService)
   );
 
   return registry;

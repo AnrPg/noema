@@ -389,7 +389,33 @@ export function createRollbackBatchHandler(contentService: ContentService) {
     }
   };
 }
-
+/**
+ * cursor-query-cards — Query cards with cursor-based pagination.
+ * P1 tool for efficient large-result navigation.
+ */
+export function createCursorQueryCardsHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as {
+        query?: Record<string, unknown>;
+        cursor?: string;
+        limit?: number;
+        direction?: 'forward' | 'backward';
+      };
+      const result = await contentService.queryCursor(
+        (body.query ?? {}) as Parameters<typeof contentService.queryCursor>[0],
+        context,
+        body.cursor,
+        body.limit,
+        body.direction,
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
 // ============================================================================
 // Tool Definitions (for registration / discovery)
 // ============================================================================
@@ -678,6 +704,29 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       required: ['batchId'],
       properties: {
         batchId: { type: 'string', description: 'Batch correlation ID to rollback' },
+      },
+    },
+  },
+  {
+    name: 'cursor-query-cards',
+    description:
+      'Query cards with cursor-based pagination. More efficient than offset for large datasets. Returns nextCursor/prevCursor for page navigation.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'object',
+          description: 'DeckQuery filter object (cardTypes, states, difficulties, tags, sortBy, sortOrder)',
+        },
+        cursor: { type: 'string', description: 'Opaque cursor from previous response' },
+        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Items per page (default: 20)' },
+        direction: {
+          type: 'string',
+          enum: ['forward', 'backward'],
+          description: 'Pagination direction (default: forward)',
+        },
       },
     },
   },

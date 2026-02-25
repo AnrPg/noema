@@ -327,6 +327,54 @@ describe('ContentService', () => {
   });
 
   // ==========================================================================
+  // queryCursor()
+  // ==========================================================================
+
+  describe('queryCursor()', () => {
+    it('returns cursor-paginated results', async () => {
+      const ctx = executionContext();
+      const summaries = [cardSummary(), cardSummary()];
+      repo.queryCursor.mockResolvedValue({
+        items: summaries,
+        nextCursor: 'abc123',
+        prevCursor: null,
+        hasMore: true,
+      });
+
+      const result = await service.queryCursor({}, ctx, undefined, 20);
+
+      expect(result.data.items).toHaveLength(2);
+      expect(result.data.nextCursor).toBe('abc123');
+      expect(result.data.hasMore).toBe(true);
+    });
+
+    it('passes cursor and direction to the repository', async () => {
+      const ctx = executionContext();
+      repo.queryCursor.mockResolvedValue({
+        items: [],
+        nextCursor: null,
+        prevCursor: null,
+        hasMore: false,
+      });
+
+      await service.queryCursor({}, ctx, 'my_cursor', 10, 'backward');
+
+      expect(repo.queryCursor).toHaveBeenCalledWith(
+        expect.anything(),
+        ctx.userId,
+        'my_cursor',
+        10,
+        'backward',
+      );
+    });
+
+    it('rejects unauthenticated requests', async () => {
+      const ctx = unauthenticatedContext();
+      await expect(service.queryCursor({}, ctx)).rejects.toThrow(AuthorizationError);
+    });
+  });
+
+  // ==========================================================================
   // update()
   // ==========================================================================
 

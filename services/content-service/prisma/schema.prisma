@@ -43,6 +43,9 @@ model Card {
     // Content deduplication hash (SHA-256 of cardType + content)
     contentHash String? @map("content_hash") @db.VarChar(64)
 
+    // Full-text search vector (auto-populated by PostgreSQL trigger)
+    searchVector Unsupported("tsvector")? @map("search_vector")
+
     // Audit fields
     createdAt DateTime  @default(now()) @map("created_at")
     updatedAt DateTime  @updatedAt @map("updated_at")

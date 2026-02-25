@@ -281,6 +281,35 @@ export interface IDeckQuery {
   limit?: number;
 }
 
+// ============================================================================
+// Cursor-Based Pagination (Phase 4)
+// ============================================================================
+
+/**
+ * Cursor-based pagination input.
+ */
+export interface ICursorPaginationInput {
+  /** Cursor string (opaque to client, typically a base64-encoded compound key) */
+  cursor?: string;
+  /** Number of items to return */
+  limit?: number;
+  /** Direction: 'forward' (next page) or 'backward' (prev page) */
+  direction?: 'forward' | 'backward';
+}
+
+/**
+ * Cursor-based pagination result.
+ */
+export interface ICursorPaginatedResponse<T> {
+  items: T[];
+  /** Cursor for the next page (null if no more pages) */
+  nextCursor: string | null;
+  /** Cursor for the previous page (null if on first page) */
+  prevCursor: string | null;
+  /** Whether there are more items */
+  hasMore: boolean;
+}
+
 /**
  * Session seed generation input.
  * Used to derive deterministic initialCardIds for session-service startSession.

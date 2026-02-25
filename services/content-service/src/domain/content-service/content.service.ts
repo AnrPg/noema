@@ -22,6 +22,7 @@ import type {
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
+  ICursorPaginatedResponse,
   IDeckQuery,
   ISessionSeed,
   ISessionSeedInput,
@@ -418,6 +419,62 @@ export class ContentService {
         estimatedImpact: { benefit: 0.5, effort: 0.2, roi: 2.5 },
         preferenceAlignment: [],
         reasoning: `Query returned ${String(result.total)} cards`,
+      },
+    };
+  }
+
+  /**
+   * Query cards using cursor-based pagination.
+   * More efficient than offset for large result sets.
+   */
+  async queryCursor(
+    queryInput: IDeckQuery,
+    context: IExecutionContext,
+    cursor?: string,
+    limit?: number,
+    direction?: 'forward' | 'backward',
+  ): Promise<IServiceResult<ICursorPaginatedResponse<ICardSummary>>> {
+    this.requireAuth(context);
+    this.logger.debug({ query: queryInput, cursor, limit, direction }, 'Cursor query cards');
+
+    // Validate query
+    const parseResult = DeckQuerySchema.safeParse(queryInput);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError('Invalid query', errors.fieldErrors as Record<string, string[]>);
+    }
+
+    const validated = parseResult.data as IDeckQuery;
+
+    // Non-admins can only query their own cards
+    const effectiveUserId =
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      this.isAdmin(context) && validated.userId ? validated.userId : context.userId!;
+
+    const result = await this.repository.queryCursor(validated, effectiveUserId, cursor, limit, direction);
+
+    return {
+      data: result,
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'next_page',
+            description: result.hasMore ? 'Fetch next page with nextCursor' : 'No more pages',
+            priority: result.hasMore ? 'medium' : 'low',
+            category: 'exploration',
+          },
+        ],
+        relatedResources: [],
+        confidence: 0.9,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.5, effort: 0.2, roi: 2.5 },
+        preferenceAlignment: [],
+        reasoning: `Cursor query returned ${String(result.items.length)} cards, hasMore: ${String(result.hasMore)}`,
       },
     };
   }

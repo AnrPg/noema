@@ -12,6 +12,7 @@ import type {
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
+  ICursorPaginatedResponse,
   IDeckQuery,
   IUpdateCardInput,
 } from '../../types/content.types.js';
@@ -46,6 +47,18 @@ export interface IContentRepository {
    * Returns lightweight summaries for list views.
    */
   query(query: IDeckQuery, userId: UserId): Promise<IPaginatedResponse<ICardSummary>>;
+
+  /**
+   * Query cards using cursor-based pagination.
+   * More efficient than offset for large result sets (seek method, O(log n)).
+   */
+  queryCursor(
+    query: IDeckQuery,
+    userId: UserId,
+    cursor?: string,
+    limit?: number,
+    direction?: 'forward' | 'backward'
+  ): Promise<ICursorPaginatedResponse<ICardSummary>>;
 
   /**
    * Count cards matching a DeckQuery.

@@ -27,6 +27,8 @@ import {
 import { ContentService } from './domain/content-service/content.service.js';
 import { MediaService } from './domain/content-service/media.service.js';
 import { TemplateService } from './domain/content-service/template.service.js';
+import { CachedContentRepository } from './infrastructure/cache/cached-content.repository.js';
+import { RedisCacheProvider } from './infrastructure/cache/redis-cache.provider.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import { PrismaContentRepository } from './infrastructure/database/prisma-content.repository.js';
 import { PrismaMediaRepository } from './infrastructure/database/prisma-media.repository.js';
@@ -76,11 +78,31 @@ async function bootstrap(): Promise<void> {
   logger.info('Connected to Redis');
 
   // Create infrastructure instances
-  const contentRepository = new PrismaContentRepository(prisma);
+  const baseContentRepository = new PrismaContentRepository(prisma);
   const templateRepository = new PrismaTemplateRepository(prisma);
   const mediaRepository = new PrismaMediaRepository(prisma);
   const tokenVerifier = new JwtTokenVerifier(getTokenVerifierConfig(config));
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
+
+  // Wrap content repository with read-through cache (conditional)
+  const cacheProvider = new RedisCacheProvider(
+    redis,
+    {
+      cardTtl: config.cache.cardTtl,
+      queryTtl: config.cache.queryTtl,
+      prefix: config.cache.prefix,
+    },
+    logger,
+  );
+  const contentRepository = config.cache.enabled
+    ? new CachedContentRepository(
+        baseContentRepository,
+        cacheProvider,
+        config.cache.cardTtl,
+        config.cache.queryTtl,
+      )
+    : baseContentRepository;
+  logger.info({ cacheEnabled: config.cache.enabled }, 'Content repository initialized');
 
   // Initialize MinIO storage
   const minioConfig = getMinioConfig(config);

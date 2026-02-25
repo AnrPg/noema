@@ -24,6 +24,7 @@ export function mockContentRepository(): {
     findById: vi.fn(),
     findByIdForUser: vi.fn(),
     query: vi.fn(),
+    queryCursor: vi.fn(),
     count: vi.fn(),
     findByIds: vi.fn(),
     findByContentHash: vi.fn().mockResolvedValue(null),

@@ -58,6 +58,16 @@ export interface IServiceConfig {
     /** Max requests for batch endpoints */
     batchMax: number;
   };
+  cache: {
+    /** TTL for individual card lookups in seconds */
+    cardTtl: number;
+    /** TTL for query result pages in seconds */
+    queryTtl: number;
+    /** Cache key prefix */
+    prefix: string;
+    /** Whether caching is enabled */
+    enabled: boolean;
+  };
   cors: {
     origin: string[];
     credentials: boolean;
@@ -161,6 +171,12 @@ export function loadConfig(): IServiceConfig {
       timeWindow: optionalEnvInt('RATE_LIMIT_WINDOW_MS', 60_000), // 1 minute
       writeMax: optionalEnvInt('RATE_LIMIT_WRITE_MAX', 30),
       batchMax: optionalEnvInt('RATE_LIMIT_BATCH_MAX', 10),
+    },
+    cache: {
+      cardTtl: optionalEnvInt('CACHE_CARD_TTL', 300),        // 5 minutes
+      queryTtl: optionalEnvInt('CACHE_QUERY_TTL', 60),        // 1 minute
+      prefix: optionalEnv('CACHE_PREFIX', 'cs'),               // content-service
+      enabled: optionalEnvBool('CACHE_ENABLED', true),
     },
     cors: {
       origin: parseCorsOrigin(
