@@ -153,6 +153,16 @@ export type RequiredBy<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
 export type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T[P]> } : T;
 
 /**
+ * Deep readonly (all nested properties recursively immutable).
+ * Arrays become ReadonlyArray, objects get readonly properties.
+ */
+export type DeepReadonly<T> = T extends (infer U)[]
+  ? ReadonlyArray<DeepReadonly<U>>
+  : T extends object
+    ? { readonly [P in keyof T]: DeepReadonly<T[P]> }
+    : T;
+
+/**
  * Non-nullable version of a type.
  */
 export type NonNullableFields<T> = {
