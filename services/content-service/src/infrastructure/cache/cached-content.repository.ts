@@ -20,6 +20,7 @@ import type { IContentRepository } from '../../domain/content-service/content.re
 import type {
   IBatchCreateResult,
   ICard,
+  ICardStats,
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
@@ -166,6 +167,13 @@ export class CachedContentRepository implements IContentRepository {
     if (card) await this.invalidateForUser(card.userId);
   }
 
+  async restore(id: CardId, userId: UserId): Promise<ICard> {
+    const card = await this.inner.restore(id, userId);
+    await this.cache.del(this.cache.cardKey(id));
+    await this.invalidateForUser(card.userId);
+    return card;
+  }
+
   async updateTags(
     id: CardId,
     tags: string[],
@@ -188,6 +196,16 @@ export class CachedContentRepository implements IContentRepository {
     await this.cache.del(this.cache.cardKey(id));
     await this.invalidateForUser(card.userId);
     return card;
+  }
+
+  // ============================================================================
+  // Statistics (Cache with short TTL)
+  // ============================================================================
+
+  async getStats(userId: UserId): Promise<ICardStats> {
+    const statsKey = `stats:${userId}`;
+    const STATS_TTL = 60; // 60 seconds
+    return this.cache.getOrLoad(statsKey, STATS_TTL, () => this.inner.getStats(userId));
   }
 
   // ============================================================================

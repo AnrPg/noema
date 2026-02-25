@@ -32,6 +32,7 @@ import type {
   IBatchCreateResult,
   ICard,
   ICardContent,
+  ICardStats,
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
@@ -362,6 +363,32 @@ export class PrismaContentRepository implements IContentRepository {
     await this.prisma.card.delete({ where: { id } });
   }
 
+  async restore(id: CardId, userId: UserId): Promise<ICard> {
+    // Find the card including soft-deleted
+    const existing = await this.prisma.card.findUnique({ where: { id } });
+    if (!existing) {
+      throw new CardNotFoundError(id);
+    }
+    if (existing.userId !== userId) {
+      throw new CardNotFoundError(id); // Don't leak existence
+    }
+    if (existing.deletedAt === null) {
+      throw new CardNotFoundError(id); // Not deleted — nothing to restore
+    }
+
+    const card = await this.prisma.card.update({
+      where: { id },
+      data: {
+        deletedAt: null,
+        state: 'DRAFT',
+        version: { increment: 1 },
+        updatedBy: userId,
+      },
+    });
+
+    return this.toDomain(card);
+  }
+
   async updateTags(id: CardId, tags: string[], version: number, userId?: UserId): Promise<ICard> {
     try {
       const card = await this.prisma.card.update({
@@ -397,6 +424,103 @@ export class PrismaContentRepository implements IContentRepository {
     } catch (error) {
       return this.handleOptimisticLockError(error, id, version);
     }
+  }
+
+  // ============================================================================
+  // Statistics
+  // ============================================================================
+
+  async getStats(userId: UserId): Promise<ICardStats> {
+    // Run all aggregate queries in parallel
+    const [
+      totalCards,
+      totalDeleted,
+      byStateResult,
+      byDifficultyResult,
+      byCardTypeResult,
+      bySourceResult,
+      dateRange,
+      recentlyUpdated,
+    ] = await Promise.all([
+      // Total active cards
+      this.prisma.card.count({
+        where: { userId, deletedAt: null },
+      }),
+      // Total soft-deleted cards
+      this.prisma.card.count({
+        where: { userId, deletedAt: { not: null } },
+      }),
+      // By state
+      this.prisma.card.groupBy({
+        by: ['state'],
+        where: { userId, deletedAt: null },
+        _count: true,
+      }),
+      // By difficulty
+      this.prisma.card.groupBy({
+        by: ['difficulty'],
+        where: { userId, deletedAt: null },
+        _count: true,
+      }),
+      // By card type
+      this.prisma.card.groupBy({
+        by: ['cardType'],
+        where: { userId, deletedAt: null },
+        _count: true,
+      }),
+      // By source
+      this.prisma.card.groupBy({
+        by: ['source'],
+        where: { userId, deletedAt: null },
+        _count: true,
+      }),
+      // Date range (oldest/newest)
+      this.prisma.card.aggregate({
+        where: { userId, deletedAt: null },
+        _min: { createdAt: true },
+        _max: { createdAt: true },
+      }),
+      // Recently updated (last 7 days)
+      this.prisma.card.count({
+        where: {
+          userId,
+          deletedAt: null,
+          updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+    ]);
+
+    const byState: Record<string, number> = {};
+    for (const row of byStateResult) {
+      byState[row.state.toLowerCase()] = row._count;
+    }
+
+    const byDifficulty: Record<string, number> = {};
+    for (const row of byDifficultyResult) {
+      byDifficulty[row.difficulty.toLowerCase()] = row._count;
+    }
+
+    const byCardType: Record<string, number> = {};
+    for (const row of byCardTypeResult) {
+      byCardType[row.cardType.toLowerCase()] = row._count;
+    }
+
+    const bySource: Record<string, number> = {};
+    for (const row of bySourceResult) {
+      bySource[row.source.toLowerCase()] = row._count;
+    }
+
+    return {
+      totalCards,
+      totalDeleted,
+      byState,
+      byDifficulty,
+      byCardType,
+      bySource,
+      oldestCard: dateRange._min.createdAt?.toISOString() ?? null,
+      newestCard: dateRange._max.createdAt?.toISOString() ?? null,
+      recentlyUpdated,
+    };
   }
 
   // ============================================================================

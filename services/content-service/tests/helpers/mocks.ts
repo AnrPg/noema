@@ -39,6 +39,8 @@ export function mockContentRepository(): {
     updateKnowledgeNodeIds: vi.fn(),
     findByBatchId: vi.fn(),
     softDeleteByBatchId: vi.fn(),
+    restore: vi.fn(),
+    getStats: vi.fn(),
   };
 }
 

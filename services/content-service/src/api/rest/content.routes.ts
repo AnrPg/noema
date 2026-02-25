@@ -172,6 +172,31 @@ export function registerContentRoutes(
   );
 
   /**
+   * GET /v1/cards/stats - Get aggregate card statistics
+   */
+  fastify.get(
+    '/v1/cards/stats',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Get aggregate card statistics',
+        description:
+          'Returns aggregate statistics for the authenticated user\'s card collection, including counts by state, difficulty, type, and source.',
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getStats(context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
    * GET /v1/cards/:id - Get card by ID
    */
   fastify.get<{ Params: IIdParams }>(
@@ -789,6 +814,134 @@ export function registerContentRoutes(
         const soft = request.query.soft !== 'false';
         await contentService.delete(request.params.id as CardId, soft, context);
         reply.status(204).send();
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Restore Route
+  // ============================================================================
+
+  /**
+   * POST /v1/cards/:id/restore - Restore a soft-deleted card
+   */
+  fastify.post<{ Params: IIdParams }>(
+    '/v1/cards/:id/restore',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Restore a soft-deleted card',
+        description:
+          'Restores a soft-deleted card by clearing deletedAt and setting state to DRAFT. Returns the restored card.',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.restore(request.params.id as CardId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Version History Routes
+  // ============================================================================
+
+  /**
+   * GET /v1/cards/:id/history - Get version history for a card
+   */
+  fastify.get<{ Params: IIdParams; Querystring: { limit?: number; offset?: number } }>(
+    '/v1/cards/:id/history',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Get card version history',
+        description:
+          'Returns point-in-time snapshots captured before each mutation. Ordered newest first.',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', minimum: 1, maximum: 100, default: 50 },
+            offset: { type: 'number', minimum: 0, default: 0 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getHistory(
+          request.params.id as CardId,
+          context,
+          request.query.limit,
+          request.query.offset
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
+   * GET /v1/cards/:id/history/:version - Get a specific version snapshot
+   */
+  fastify.get<{ Params: { id: string; version: string } }>(
+    '/v1/cards/:id/history/:version',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Get specific card version',
+        description: 'Returns the full card snapshot at the specified version number.',
+        params: {
+          type: 'object',
+          required: ['id', 'version'],
+          properties: {
+            id: { type: 'string' },
+            version: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const versionNum = parseInt(request.params.version, 10);
+        if (isNaN(versionNum) || versionNum < 1) {
+          reply.status(400).send({
+            error: { code: 'VALIDATION_ERROR', message: 'Version must be a positive integer' },
+          });
+          return;
+        }
+        const result = await contentService.getVersion(
+          request.params.id as CardId,
+          versionNum,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

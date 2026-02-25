@@ -9,6 +9,7 @@ import type { CardId, IPaginatedResponse, UserId } from '@noema/types';
 import type {
   IBatchCreateResult,
   ICard,
+  ICardStats,
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
@@ -122,6 +123,12 @@ export interface IContentRepository {
   softDelete(id: CardId, version: number, userId?: UserId): Promise<void>;
 
   /**
+   * Restore a soft-deleted card (clear deletedAt, set state to DRAFT).
+   * @returns Restored card
+   */
+  restore(id: CardId, userId: UserId): Promise<ICard>;
+
+  /**
    * Hard-delete a card (permanent, admin only).
    */
   hardDelete(id: CardId): Promise<void>;
@@ -139,6 +146,15 @@ export interface IContentRepository {
    * @returns Updated card
    */
   updateKnowledgeNodeIds(id: CardId, knowledgeNodeIds: string[], version: number, userId?: UserId): Promise<ICard>;
+
+  // ============================================================================
+  // Statistics
+  // ============================================================================
+
+  /**
+   * Get aggregate statistics for a user's card collection.
+   */
+  getStats(userId: UserId): Promise<ICardStats>;
 
   // ============================================================================
   // Batch Recovery Operations

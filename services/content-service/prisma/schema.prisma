@@ -156,6 +156,42 @@ model MediaFile {
 }
 
 // ============================================================================
+// CardHistory Entity — Version history snapshots
+// ============================================================================
+
+model CardHistory {
+    id     String @id @db.VarChar(50)
+    cardId String @map("card_id") @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Snapshot version number (monotonically increasing per card)
+    version Int
+
+    // Snapshot of card state at point-in-time
+    cardType   CardType
+    state      CardState
+    difficulty DifficultyLevel
+    content    Json    @default("{}")
+    tags       String[] @default([])
+    knowledgeNodeIds String[] @default([]) @map("knowledge_node_ids")
+    metadata   Json    @default("{}")
+
+    // Change metadata
+    changeType String @map("change_type") @db.VarChar(50) // update, state_change, tags_update, node_links_update
+    changedBy  String @map("changed_by") @db.VarChar(50)
+
+    // Audit
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Indexes
+    @@index([cardId])
+    @@index([cardId, version])
+    @@index([userId])
+    @@index([createdAt])
+    @@map("card_history")
+}
+
+// ============================================================================
 // Enums
 // ============================================================================
 

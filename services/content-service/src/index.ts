@@ -7,6 +7,8 @@
 
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import fastifySwagger from '@fastify/swagger';
+import fastifySwaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
@@ -31,11 +33,18 @@ import { CachedContentRepository } from './infrastructure/cache/cached-content.r
 import { RedisCacheProvider } from './infrastructure/cache/redis-cache.provider.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import { PrismaContentRepository } from './infrastructure/database/prisma-content.repository.js';
+import { PrismaHistoryRepository } from './infrastructure/database/prisma-history.repository.js';
 import { PrismaMediaRepository } from './infrastructure/database/prisma-media.repository.js';
 import { PrismaTemplateRepository } from './infrastructure/database/prisma-template.repository.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
 import { MinioStorageProvider } from './infrastructure/storage/minio-storage.provider.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+const SERVICE_VERSION = '0.1.0';
 
 // ============================================================================
 // Bootstrap
@@ -111,7 +120,8 @@ async function bootstrap(): Promise<void> {
   logger.info({ bucket: minioConfig.bucket }, 'Connected to object storage');
 
   // Create services
-  const contentService = new ContentService(contentRepository, eventPublisher, logger);
+  const historyRepository = new PrismaHistoryRepository(prisma);
+  const contentService = new ContentService(contentRepository, eventPublisher, logger, historyRepository);
   const templateService = new TemplateService(templateRepository, eventPublisher, logger);
   const mediaService = new MediaService(
     mediaRepository,
@@ -178,6 +188,45 @@ async function bootstrap(): Promise<void> {
   });
   logger.info({ max: config.rateLimit.max, timeWindow: config.rateLimit.timeWindow }, 'Rate limiting registered');
 
+  // Register OpenAPI / Swagger
+  await fastify.register(fastifySwagger, {
+    openapi: {
+      openapi: '3.1.0',
+      info: {
+        title: 'Noema Content Service API',
+        description:
+          'Pure card archive with polymorphic JSONB content. Provides CRUD, DeckQuery, batch operations, version history, and statistics.',
+        version: SERVICE_VERSION,
+      },
+      tags: [
+        { name: 'Health', description: 'Health check endpoints' },
+        { name: 'Cards', description: 'Card CRUD, query, and management endpoints' },
+        { name: 'Templates', description: 'Reusable card blueprint endpoints' },
+        { name: 'Media', description: 'Media file management endpoints' },
+        { name: 'Tools', description: 'MCP tool execution endpoints' },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'JWT token issued by user-service',
+          },
+        },
+      },
+      security: [{ bearerAuth: [] }],
+    },
+  });
+  await fastify.register(fastifySwaggerUi, {
+    routePrefix: '/docs',
+    uiConfig: {
+      docExpansion: 'list',
+      deepLinking: true,
+    },
+  });
+  logger.info('OpenAPI documentation registered at /docs');
+
   // Create auth middleware
   const authMiddleware = createAuthMiddleware(tokenVerifier);
 
@@ -199,7 +248,7 @@ async function bootstrap(): Promise<void> {
   };
 
   // Register routes
-  registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
+  registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis, storageProvider);
   registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware, routeOptions);
   registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware, routeOptions);
   registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware, routeOptions);

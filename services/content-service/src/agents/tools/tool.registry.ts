@@ -20,8 +20,11 @@ import {
   createCreateCardHandler,
   createCursorQueryCardsHandler,
   createGetCardByIdHandler,
+  createGetCardHistoryHandler,
+  createGetCardStatsHandler,
   createQueryCardsHandler,
   createRecoverBatchHandler,
+  createRestoreCardHandler,
   createRollbackBatchHandler,
   createUpdateCardHandler,
   createUpdateCardNodeLinksHandler,
@@ -407,6 +410,9 @@ const EXPECTED_CONTENT_TOOL_NAMES = [
   'recover-batch',
   'rollback-batch',
   'cursor-query-cards',
+  'restore-card',
+  'get-card-history',
+  'get-card-stats',
 ] as const;
 
 /**
@@ -480,6 +486,17 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
   registry.register(
     requireDefinition('cursor-query-cards'),
     createCursorQueryCardsHandler(contentService)
+  );
+
+  // Phase 5 tools
+  registry.register(requireDefinition('restore-card'), createRestoreCardHandler(contentService));
+  registry.register(
+    requireDefinition('get-card-history'),
+    createGetCardHistoryHandler(contentService)
+  );
+  registry.register(
+    requireDefinition('get-card-stats'),
+    createGetCardStatsHandler(contentService)
   );
 
   return registry;

@@ -105,4 +105,21 @@ export class MinioStorageProvider implements IStorageProvider {
       throw error;
     }
   }
+
+  /**
+   * Health check: verify MinIO connectivity by listing buckets.
+   */
+  async healthCheck(): Promise<{ status: 'up' | 'down'; latencyMs: number; error?: string }> {
+    const start = Date.now();
+    try {
+      await this.client.bucketExists(this.bucket);
+      return { status: 'up', latencyMs: Date.now() - start };
+    } catch (err) {
+      return {
+        status: 'down',
+        latencyMs: Date.now() - start,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
+  }
 }

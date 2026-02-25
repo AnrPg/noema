@@ -718,4 +718,61 @@ describe('ContentService', () => {
       expect(repo.hardDelete).toHaveBeenCalledWith(existing.id);
     });
   });
+
+  // ==========================================================================
+  // restore()
+  // ==========================================================================
+
+  describe('restore()', () => {
+    it('restores a soft-deleted card and publishes event', async () => {
+      const ctx = executionContext();
+      const restored = card({ userId: ctx.userId!, state: 'DRAFT' as CardState });
+      repo.restore.mockResolvedValue(restored);
+
+      const result = await service.restore(restored.id, ctx);
+
+      expect(repo.restore).toHaveBeenCalledWith(restored.id, ctx.userId ?? undefined);
+      expect(events.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'card.restored' })
+      );
+      expect(result.data.id).toBe(restored.id);
+    });
+
+    it('requires authentication', async () => {
+      const ctx = unauthenticatedContext();
+      await expect(service.restore(cardId(), ctx)).rejects.toThrow(AuthorizationError);
+    });
+  });
+
+  // ==========================================================================
+  // getStats()
+  // ==========================================================================
+
+  describe('getStats()', () => {
+    it('returns stats from repository', async () => {
+      const ctx = executionContext();
+      const stats = {
+        totalCards: 42,
+        totalDeleted: 3,
+        byState: { DRAFT: 10, ACTIVE: 30, SUSPENDED: 2, RETIRED: 0 },
+        byDifficulty: { EASY: 5, MEDIUM: 20, HARD: 15, EXPERT: 2 },
+        byCardType: { ATOMIC: 30, CLOZE: 10, MULTIPLE_CHOICE: 2 },
+        bySource: { MANUAL: 20, AI_GENERATED: 22 },
+        oldestCard: new Date('2024-01-01'),
+        newestCard: new Date('2025-01-01'),
+        recentlyUpdated: 5,
+      };
+      repo.getStats.mockResolvedValue(stats);
+
+      const result = await service.getStats(ctx);
+
+      expect(repo.getStats).toHaveBeenCalledWith(ctx.userId ?? undefined);
+      expect(result.data).toEqual(stats);
+    });
+
+    it('requires authentication', async () => {
+      const ctx = unauthenticatedContext();
+      await expect(service.getStats(ctx)).rejects.toThrow(AuthorizationError);
+    });
+  });
 });

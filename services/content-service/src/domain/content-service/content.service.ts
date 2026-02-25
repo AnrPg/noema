@@ -19,6 +19,8 @@ import type {
   IBatchChangeStateItem,
   IBatchCreateResult,
   ICard,
+  ICardHistory,
+  ICardStats,
   ICardSummary,
   IChangeCardStateInput,
   ICreateCardInput,
@@ -28,11 +30,13 @@ import type {
   ISessionSeedInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
+import type { CardHistoryChangeType } from '../../types/content.types.js';
 import { generateContentHash } from '../../utils/content-hash.js';
 import { sanitizeCardContent } from '../../utils/content-sanitizer.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import { validateCardContent } from './card-content.schemas.js';
 import type { IContentRepository } from './content.repository.js';
+import type { IHistoryRepository } from './history.repository.js';
 import {
   BatchCreateCardInputSchema,
   ChangeCardStateInputSchema,
@@ -109,7 +113,8 @@ export class ContentService {
   constructor(
     private readonly repository: IContentRepository,
     private readonly eventPublisher: IEventPublisher,
-    logger: Logger
+    logger: Logger,
+    private readonly historyRepository?: IHistoryRepository
   ) {
     this.logger = logger.child({ service: 'ContentService' });
   }
@@ -535,6 +540,9 @@ export class ContentService {
       ? generateContentHash(existing.cardType, parseResult.data.content)
       : undefined;
 
+    // Snapshot before mutation (version history)
+    await this.snapshotBeforeChange(existing, 'update', context);
+
     let card: ICard;
     try {
       card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version, context.userId ?? undefined, contentHash);
@@ -593,6 +601,9 @@ export class ContentService {
 
     // Validate state transition
     this.validateStateTransition(existing.state, parseResult.data.state as CardState);
+
+    // Snapshot before mutation (version history)
+    await this.snapshotBeforeChange(existing, 'state_change', context);
 
     const card = await this.repository.changeState(
       id,
@@ -656,6 +667,12 @@ export class ContentService {
     // Verify ownership
     await this.requireCardOwnership(id, context);
 
+    // Snapshot before mutation (version history)
+    const existingForTags = await this.repository.findById(id);
+    if (existingForTags) {
+      await this.snapshotBeforeChange(existingForTags, 'tags_update', context);
+    }
+
     const card = await this.repository.updateTags(id, tags, version, context.userId ?? undefined);
 
     // Publish event
@@ -697,6 +714,12 @@ export class ContentService {
 
     // Verify ownership
     await this.requireCardOwnership(id, context);
+
+    // Snapshot before mutation (version history)
+    const existingForNodes = await this.repository.findById(id);
+    if (existingForNodes) {
+      await this.snapshotBeforeChange(existingForNodes, 'node_links_update', context);
+    }
 
     const card = await this.repository.updateKnowledgeNodeIds(id, knowledgeNodeIds, version, context.userId ?? undefined);
 
@@ -1048,6 +1071,223 @@ export class ContentService {
   }
 
   // ============================================================================
+  // Restore Operations
+  // ============================================================================
+
+  /**
+   * Restore a soft-deleted card (clear deletedAt, set state to DRAFT).
+   */
+  async restore(
+    id: CardId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard>> {
+    this.requireAuth(context);
+    this.logger.info({ cardId: id }, 'Restoring card');
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const card = await this.repository.restore(id, context.userId!);
+
+    // Publish event
+    await this.eventPublisher.publish({
+      eventType: 'card.restored',
+      aggregateType: 'Card',
+      aggregateId: id,
+      payload: {
+        cardType: card.cardType,
+      },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    this.logger.info({ cardId: id }, 'Card restored successfully');
+
+    return {
+      data: card,
+      agentHints: this.createAgentHints('restored', card),
+    };
+  }
+
+  // ============================================================================
+  // Version History Operations
+  // ============================================================================
+
+  /**
+   * Get version history for a card.
+   */
+  async getHistory(
+    id: CardId,
+    context: IExecutionContext,
+    limit?: number,
+    offset?: number
+  ): Promise<IServiceResult<{ entries: ICardHistory[]; total: number }>> {
+    this.requireAuth(context);
+    this.logger.info({ cardId: id }, 'Getting card history');
+
+    // Verify ownership
+    await this.requireCardOwnership(id, context);
+
+    if (!this.historyRepository) {
+      return {
+        data: { entries: [], total: 0 },
+        agentHints: {
+          suggestedNextActions: [],
+          relatedResources: [],
+          confidence: 1.0,
+          sourceQuality: 'high',
+          validityPeriod: 'medium',
+          contextNeeded: [],
+          assumptions: ['Version history is not enabled'],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0, effort: 0, roi: 0 },
+          preferenceAlignment: [],
+          reasoning: 'History repository not configured',
+        },
+      };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const result = await this.historyRepository.getHistory(id, context.userId!, limit, offset);
+
+    return {
+      data: result,
+      agentHints: {
+        suggestedNextActions: result.entries.length > 0
+          ? [{
+              action: 'compare_versions',
+              description: 'Compare version snapshots to see what changed',
+              priority: 'low',
+              category: 'exploration',
+            }]
+          : [],
+        relatedResources: [{
+          type: 'Card',
+          id: id as string,
+          label: `Card ${id} history`,
+          relevance: 1.0,
+        }],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'medium',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+        preferenceAlignment: [],
+        reasoning: `Found ${String(result.total)} history entries for card ${id}`,
+      },
+    };
+  }
+
+  /**
+   * Get a specific version snapshot of a card.
+   */
+  async getVersion(
+    id: CardId,
+    version: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICardHistory>> {
+    this.requireAuth(context);
+    this.logger.info({ cardId: id, version }, 'Getting card version');
+
+    // Verify ownership
+    await this.requireCardOwnership(id, context);
+
+    if (!this.historyRepository) {
+      throw new CardNotFoundError(id);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const entry = await this.historyRepository.getVersion(id, version, context.userId!);
+    if (!entry) {
+      throw new CardNotFoundError(`${id}@v${String(version)}`);
+    }
+
+    return {
+      data: entry,
+      agentHints: {
+        suggestedNextActions: [{
+          action: 'restore_version',
+          description: `Restore card to version ${String(version)}`,
+          priority: 'low',
+          category: 'correction',
+        }],
+        relatedResources: [{
+          type: 'Card',
+          id: id as string,
+          label: `Card ${id} v${String(version)}`,
+          relevance: 1.0,
+        }],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'long',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+        preferenceAlignment: [],
+        reasoning: `Retrieved version ${String(version)} snapshot for card ${id}`,
+      },
+    };
+  }
+
+  // ============================================================================
+  // Statistics Operations
+  // ============================================================================
+
+  /**
+   * Get aggregate statistics for a user's card collection.
+   */
+  async getStats(
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICardStats>> {
+    this.requireAuth(context);
+    this.logger.info('Getting card statistics');
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const stats = await this.repository.getStats(context.userId!);
+
+    return {
+      data: stats,
+      agentHints: {
+        suggestedNextActions: [
+          ...(stats.totalCards === 0
+            ? [{
+                action: 'create_cards',
+                description: 'No cards found — start by creating cards',
+                priority: 'high' as const,
+                category: 'learning' as const,
+              }]
+            : []),
+          ...(stats.byState['draft'] !== undefined && stats.byState['draft'] > 0
+            ? [{
+                action: 'activate_drafts',
+                description: `${String(stats.byState['draft'])} draft cards can be activated`,
+                priority: 'medium' as const,
+                category: 'optimization' as const,
+              }]
+            : []),
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.2, effort: 0.1, roi: 2.0 },
+        preferenceAlignment: [],
+        reasoning: `Card collection has ${String(stats.totalCards)} active cards across ${String(Object.keys(stats.byCardType).length)} types`,
+      },
+    };
+  }
+
+  // ============================================================================
   // Delete Operations
   // ============================================================================
 
@@ -1254,6 +1494,37 @@ export class ContentService {
   }
 
   // ============================================================================
+  // Private History Methods
+  // ============================================================================
+
+  /**
+   * Capture a point-in-time snapshot of a card before a mutation.
+   * No-op if history repository is not configured.
+   */
+  private async snapshotBeforeChange(
+    card: ICard,
+    changeType: CardHistoryChangeType,
+    context: IExecutionContext
+  ): Promise<void> {
+    if (!this.historyRepository) return;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      await this.historyRepository.createSnapshot(card, changeType, context.userId!);
+      this.logger.debug(
+        { cardId: card.id, version: card.version, changeType },
+        'History snapshot created'
+      );
+    } catch (error) {
+      // History snapshot failure should not block the mutation
+      this.logger.warn(
+        { error, cardId: card.id, changeType },
+        'Failed to create history snapshot — continuing without it'
+      );
+    }
+  }
+
+  // ============================================================================
   // Private Agent Hints Methods
   // ============================================================================
 
@@ -1342,6 +1613,14 @@ export class ContentService {
             category: 'learning',
           });
         }
+        break;
+      case 'restored':
+        hints.suggestedNextActions.push({
+          action: 'activate_card',
+          description: 'Restored card is in draft state — activate it for reviews',
+          priority: 'high',
+          category: 'optimization',
+        });
         break;
     }
 

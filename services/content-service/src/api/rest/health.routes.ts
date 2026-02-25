@@ -14,12 +14,13 @@ import type {
 import type { FastifyInstance } from 'fastify';
 import type { Redis } from 'ioredis';
 import type { PrismaClient } from '../../../generated/prisma/index.js';
+import type { MinioStorageProvider } from '../../infrastructure/storage/minio-storage.provider.js';
 
 // Module augmentation to extend FastifySchema with OpenAPI properties
 declare module 'fastify' {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   interface FastifySchema {
-    tags?: string[];
+    tags?: readonly string[];
     summary?: string;
     description?: string;
     deprecated?: boolean;
@@ -55,7 +56,8 @@ async function checkDependency(
 export function registerHealthRoutes(
   fastify: FastifyInstance,
   prisma: PrismaClient,
-  redis: Redis
+  redis: Redis,
+  storageProvider?: MinioStorageProvider
 ): void {
   const startTime = Date.now();
 
@@ -95,7 +97,18 @@ export function registerHealthRoutes(
         await redis.ping();
       });
 
-      const anyDown = dbCheck.status === 'down' || redisCheck.status === 'down';
+      const minioCheck = storageProvider
+        ? await (async () => {
+            const result = await storageProvider.healthCheck();
+            return {
+              status: result.status === 'up' ? ('up' as DependencyStatus) : ('down' as DependencyStatus),
+              latencyMs: result.latencyMs,
+              ...(result.error !== undefined ? { error: result.error } : {}),
+            };
+          })()
+        : undefined;
+
+      const anyDown = dbCheck.status === 'down' || redisCheck.status === 'down' || minioCheck?.status === 'down';
       const status = anyDown ? 'unhealthy' : 'healthy';
 
       const response: IHealthCheckResponse = {
@@ -117,6 +130,16 @@ export function registerHealthRoutes(
             checkedAt: now,
             ...(redisCheck.error !== undefined ? { error: redisCheck.error } : {}),
           },
+          ...(minioCheck !== undefined
+            ? {
+                minio: {
+                  status: minioCheck.status,
+                  latencyMs: minioCheck.latencyMs,
+                  checkedAt: now,
+                  ...(minioCheck.error !== undefined ? { error: minioCheck.error } : {}),
+                },
+              }
+            : {}),
         },
       };
 
@@ -209,6 +232,19 @@ export function registerHealthRoutes(
           reason: 'Redis unavailable',
         });
         return;
+      }
+
+      if (storageProvider) {
+        const minioResult = await storageProvider.healthCheck();
+        if (minioResult.status === 'down') {
+          reply.status(503).send({
+            ready: false,
+            service: SERVICE_NAME,
+            timestamp: now,
+            reason: 'Object storage unavailable',
+          });
+          return;
+        }
       }
 
       reply.send({

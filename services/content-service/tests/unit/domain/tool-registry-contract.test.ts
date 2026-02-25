@@ -28,7 +28,7 @@ describe('content tool registry contract', () => {
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(14);
+    expect(definitions).toHaveLength(17);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
@@ -47,6 +47,9 @@ describe('content tool registry contract', () => {
         'recover-batch',
         'rollback-batch',
         'cursor-query-cards',
+        'restore-card',
+        'get-card-history',
+        'get-card-stats',
       ])
     );
   });

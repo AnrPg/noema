@@ -373,6 +373,81 @@ export interface IBatchCreateResult {
 }
 
 // ============================================================================
+// Card History (Version Snapshots)
+// ============================================================================
+
+/**
+ * Change type discriminator for card history entries.
+ */
+export type CardHistoryChangeType =
+  | 'update'
+  | 'state_change'
+  | 'tags_update'
+  | 'node_links_update';
+
+/**
+ * A point-in-time snapshot of a card, captured before each mutation.
+ */
+export interface ICardHistory {
+  /** Unique history entry ID */
+  id: string;
+  /** ID of the card this snapshot belongs to */
+  cardId: CardId;
+  /** Owner user ID */
+  userId: UserId;
+  /** Snapshot version number (monotonically increasing per card) */
+  version: number;
+  /** Card type at time of snapshot */
+  cardType: CardType | RemediationCardType;
+  /** Card state at time of snapshot */
+  state: CardState;
+  /** Difficulty at time of snapshot */
+  difficulty: DifficultyLevel;
+  /** Content blob at time of snapshot */
+  content: ICardContent;
+  /** Tags at time of snapshot */
+  tags: string[];
+  /** Knowledge node IDs at time of snapshot */
+  knowledgeNodeIds: NodeId[];
+  /** Metadata at time of snapshot */
+  metadata: Record<string, JsonValue>;
+  /** What type of change triggered this snapshot */
+  changeType: CardHistoryChangeType;
+  /** Who made the change */
+  changedBy: string;
+  /** When this snapshot was created */
+  createdAt: string;
+}
+
+// ============================================================================
+// Card Statistics
+// ============================================================================
+
+/**
+ * Extended aggregate statistics for a user's card collection.
+ */
+export interface ICardStats {
+  /** Total number of active (non-deleted) cards */
+  totalCards: number;
+  /** Total number of soft-deleted cards */
+  totalDeleted: number;
+  /** Breakdown by card state */
+  byState: Record<string, number>;
+  /** Breakdown by difficulty level */
+  byDifficulty: Record<string, number>;
+  /** Breakdown by card type (top types) */
+  byCardType: Record<string, number>;
+  /** Breakdown by event source */
+  bySource: Record<string, number>;
+  /** ISO timestamp of oldest card */
+  oldestCard: string | null;
+  /** ISO timestamp of newest card */
+  newestCard: string | null;
+  /** Number of cards updated in last 7 days */
+  recentlyUpdated: number;
+}
+
+// ============================================================================
 // Template Entity — Reusable Card Blueprints
 // ============================================================================
 

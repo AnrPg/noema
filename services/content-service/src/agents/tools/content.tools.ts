@@ -29,7 +29,8 @@ function inferSideEffects(name: string): boolean {
     name.startsWith('batch-create-') ||
     name.startsWith('update-') ||
     name.startsWith('change-') ||
-    name.startsWith('batch-change-')
+    name.startsWith('batch-change-') ||
+    name.startsWith('restore-')
   );
 }
 
@@ -416,6 +417,61 @@ export function createCursorQueryCardsHandler(contentService: ContentService) {
     }
   };
 }
+
+/**
+ * restore-card — Restore a soft-deleted card.
+ * P1 tool for undoing deletions.
+ */
+export function createRestoreCardHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { cardId: string };
+      const result = await contentService.restore(body.cardId as CardId, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * get-card-history — Retrieve version history for a card.
+ * P1 tool for auditing and version comparison.
+ */
+export function createGetCardHistoryHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { cardId: string; limit?: number; offset?: number };
+      const result = await contentService.getHistory(
+        body.cardId as CardId,
+        context,
+        body.limit,
+        body.offset
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * get-card-stats — Get aggregate statistics for a user's card collection.
+ * P1 tool for planning and reporting.
+ */
+export function createGetCardStatsHandler(contentService: ContentService) {
+  return async (_input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = await contentService.getStats(context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
 // ============================================================================
 // Tool Definitions (for registration / discovery)
 // ============================================================================
@@ -728,6 +784,47 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           description: 'Pagination direction (default: forward)',
         },
       },
+    },
+  },
+  {
+    name: 'restore-card',
+    description:
+      'Restore a soft-deleted card back to DRAFT state. Reverses a previous deletion.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: {
+      type: 'object',
+      required: ['cardId'],
+      properties: {
+        cardId: { type: 'string', description: 'ID of the soft-deleted card to restore' },
+      },
+    },
+  },
+  {
+    name: 'get-card-history',
+    description:
+      'Retrieve the version history of a card. Returns snapshots of the card at each version, ordered newest first.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: {
+      type: 'object',
+      required: ['cardId'],
+      properties: {
+        cardId: { type: 'string', description: 'ID of the card to get history for' },
+        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Max entries to return (default: 20)' },
+        offset: { type: 'number', minimum: 0, description: 'Number of entries to skip (default: 0)' },
+      },
+    },
+  },
+  {
+    name: 'get-card-stats',
+    description:
+      'Get aggregate statistics for the user\'s card collection. Returns counts by state, difficulty, card type, source, plus date ranges.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
 ];
