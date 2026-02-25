@@ -22,7 +22,10 @@ import type {
   Template as PrismaTemplate,
   TemplateVisibility as PrismaTemplateVisibility,
 } from '../../../generated/prisma/index.js';
-import { TemplateNotFoundError, VersionConflictError } from '../../domain/content-service/errors/index.js';
+import {
+  TemplateNotFoundError,
+  VersionConflictError,
+} from '../../domain/content-service/errors/index.js';
 import type { ITemplateRepository } from '../../domain/content-service/template.repository.js';
 import type {
   ICreateTemplateInput,
@@ -247,7 +250,7 @@ export class PrismaTemplateRepository implements ITemplateRepository {
   private async handleOptimisticLockError(
     error: unknown,
     id: TemplateId,
-    expectedVersion: number,
+    expectedVersion: number
   ): Promise<never> {
     if (
       error instanceof Error &&

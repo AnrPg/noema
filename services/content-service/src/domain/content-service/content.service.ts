@@ -16,6 +16,7 @@ import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import type {
+  CardHistoryChangeType,
   IBatchChangeStateItem,
   IBatchCreateResult,
   ICard,
@@ -30,13 +31,11 @@ import type {
   ISessionSeedInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
-import type { CardHistoryChangeType } from '../../types/content.types.js';
 import { generateContentHash } from '../../utils/content-hash.js';
 import { sanitizeCardContent } from '../../utils/content-sanitizer.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import { validateCardContent } from './card-content.schemas.js';
 import type { IContentRepository } from './content.repository.js';
-import type { IHistoryRepository } from './history.repository.js';
 import {
   BatchCreateCardInputSchema,
   ChangeCardStateInputSchema,
@@ -55,6 +54,7 @@ import {
   ValidationError,
   VersionConflictError,
 } from './errors/index.js';
+import type { IHistoryRepository } from './history.repository.js';
 
 // ============================================================================
 // Types

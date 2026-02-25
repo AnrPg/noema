@@ -48,9 +48,5 @@ export interface IHistoryRepository {
    * @param userId - Owner user ID (authorization)
    * @returns History entry or null
    */
-  getVersion(
-    cardId: CardId,
-    version: number,
-    userId: UserId
-  ): Promise<ICardHistory | null>;
+  getVersion(cardId: CardId, version: number, userId: UserId): Promise<ICardHistory | null>;
 }

@@ -68,6 +68,18 @@ export interface IServiceConfig {
     /** Whether caching is enabled */
     enabled: boolean;
   };
+  consumers: {
+    /** Whether event consumers are enabled */
+    enabled: boolean;
+    /** Unique consumer name within the group (typically hostname + pid) */
+    consumerName: string;
+    /** Stream keys for the source services */
+    streams: {
+      userService: string;
+      knowledgeGraphService: string;
+      sessionService: string;
+    };
+  };
   cors: {
     origin: string[];
     credentials: boolean;
@@ -122,7 +134,10 @@ function parseCorsOrigin(raw: string): string[] {
     // Wildcard mode — Fastify CORS accepts '*' as a string origin
     return ['*'];
   }
-  return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+  return trimmed
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // ============================================================================
@@ -173,10 +188,22 @@ export function loadConfig(): IServiceConfig {
       batchMax: optionalEnvInt('RATE_LIMIT_BATCH_MAX', 10),
     },
     cache: {
-      cardTtl: optionalEnvInt('CACHE_CARD_TTL', 300),        // 5 minutes
-      queryTtl: optionalEnvInt('CACHE_QUERY_TTL', 60),        // 1 minute
-      prefix: optionalEnv('CACHE_PREFIX', 'cs'),               // content-service
+      cardTtl: optionalEnvInt('CACHE_CARD_TTL', 300), // 5 minutes
+      queryTtl: optionalEnvInt('CACHE_QUERY_TTL', 60), // 1 minute
+      prefix: optionalEnv('CACHE_PREFIX', 'cs'), // content-service
       enabled: optionalEnvBool('CACHE_ENABLED', true),
+    },
+    consumers: {
+      enabled: optionalEnvBool('EVENT_CONSUMERS_ENABLED', true),
+      consumerName: optionalEnv('CONSUMER_NAME', `content-service-${String(process.pid)}`),
+      streams: {
+        userService: optionalEnv('EVENT_STREAM_USER', 'noema:events:user-service'),
+        knowledgeGraphService: optionalEnv(
+          'EVENT_STREAM_KG',
+          'noema:events:knowledge-graph-service'
+        ),
+        sessionService: optionalEnv('EVENT_STREAM_SESSION', 'noema:events:session-service'),
+      },
     },
     cors: {
       origin: parseCorsOrigin(
@@ -220,7 +247,11 @@ export function loadConfig(): IServiceConfig {
 // Helper Functions
 // ============================================================================
 
-export function getTokenVerifierConfig(config: IServiceConfig): { accessTokenSecret: string; issuer: string; audience: string } {
+export function getTokenVerifierConfig(config: IServiceConfig): {
+  accessTokenSecret: string;
+  issuer: string;
+  audience: string;
+} {
   return {
     accessTokenSecret: config.auth.accessTokenSecret,
     issuer: config.auth.issuer,
@@ -228,7 +259,13 @@ export function getTokenVerifierConfig(config: IServiceConfig): { accessTokenSec
   };
 }
 
-export function getEventPublisherConfig(config: IServiceConfig): { streamKey: string; maxLen: number; serviceName: string; serviceVersion: string; environment: Environment } {
+export function getEventPublisherConfig(config: IServiceConfig): {
+  streamKey: string;
+  maxLen: number;
+  serviceName: string;
+  serviceVersion: string;
+  environment: Environment;
+} {
   return {
     streamKey: config.redis.eventStreamKey,
     maxLen: config.redis.maxStreamLen,
@@ -238,7 +275,15 @@ export function getEventPublisherConfig(config: IServiceConfig): { streamKey: st
   };
 }
 
-export function getMinioConfig(config: IServiceConfig): { endPoint: string; port: number; useSSL: boolean; accessKey: string; secretKey: string; bucket: string; presignedUrlExpiry: number } {
+export function getMinioConfig(config: IServiceConfig): {
+  endPoint: string;
+  port: number;
+  useSSL: boolean;
+  accessKey: string;
+  secretKey: string;
+  bucket: string;
+  presignedUrlExpiry: number;
+} {
   return {
     endPoint: config.minio.endPoint,
     port: config.minio.port,

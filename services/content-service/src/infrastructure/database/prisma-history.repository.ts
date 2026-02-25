@@ -6,23 +6,23 @@
  */
 
 import type {
-  CardId,
-  CardState,
-  CardType,
-  DifficultyLevel,
-  JsonValue,
-  NodeId,
-  RemediationCardType,
-  UserId,
+    CardId,
+    CardState,
+    CardType,
+    DifficultyLevel,
+    JsonValue,
+    NodeId,
+    RemediationCardType,
+    UserId,
 } from '@noema/types';
 import { nanoid } from 'nanoid';
-import type { PrismaClient, Prisma } from '../../../generated/prisma/index.js';
+import type { Prisma, PrismaClient } from '../../../generated/prisma/index.js';
 import type { IHistoryRepository } from '../../domain/content-service/history.repository.js';
 import type {
-  CardHistoryChangeType,
-  ICard,
-  ICardContent,
-  ICardHistory,
+    CardHistoryChangeType,
+    ICard,
+    ICardContent,
+    ICardHistory,
 } from '../../types/content.types.js';
 
 // ============================================================================

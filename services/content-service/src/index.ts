@@ -29,6 +29,10 @@ import {
 import { ContentService } from './domain/content-service/content.service.js';
 import { MediaService } from './domain/content-service/media.service.js';
 import { TemplateService } from './domain/content-service/template.service.js';
+import { AttemptRecordedConsumer } from './events/consumers/attempt-recorded.consumer.js';
+import type { BaseEventConsumer } from './events/consumers/base-consumer.js';
+import { KgNodeDeletedConsumer } from './events/consumers/kg-node-deleted.consumer.js';
+import { UserDeletedConsumer } from './events/consumers/user-deleted.consumer.js';
 import { CachedContentRepository } from './infrastructure/cache/cached-content.repository.js';
 import { RedisCacheProvider } from './infrastructure/cache/redis-cache.provider.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
@@ -101,14 +105,14 @@ async function bootstrap(): Promise<void> {
       queryTtl: config.cache.queryTtl,
       prefix: config.cache.prefix,
     },
-    logger,
+    logger
   );
   const contentRepository = config.cache.enabled
     ? new CachedContentRepository(
         baseContentRepository,
         cacheProvider,
         config.cache.cardTtl,
-        config.cache.queryTtl,
+        config.cache.queryTtl
       )
     : baseContentRepository;
   logger.info({ cacheEnabled: config.cache.enabled }, 'Content repository initialized');
@@ -121,7 +125,12 @@ async function bootstrap(): Promise<void> {
 
   // Create services
   const historyRepository = new PrismaHistoryRepository(prisma);
-  const contentService = new ContentService(contentRepository, eventPublisher, logger, historyRepository);
+  const contentService = new ContentService(
+    contentRepository,
+    eventPublisher,
+    logger,
+    historyRepository
+  );
   const templateService = new TemplateService(templateRepository, eventPublisher, logger);
   const mediaService = new MediaService(
     mediaRepository,
@@ -167,10 +176,14 @@ async function bootstrap(): Promise<void> {
           const token = authHeader.slice(7);
           const parts = token.split('.');
           if (parts[1] !== undefined && parts[1] !== '') {
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as { sub?: string };
+            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as {
+              sub?: string;
+            };
             if (typeof payload.sub === 'string') return `user:${payload.sub}`;
           }
-        } catch { /* fall through to IP */ }
+        } catch {
+          /* fall through to IP */
+        }
       }
       return `ip:${request.ip}`;
     },
@@ -186,7 +199,10 @@ async function bootstrap(): Promise<void> {
       },
     }),
   });
-  logger.info({ max: config.rateLimit.max, timeWindow: config.rateLimit.timeWindow }, 'Rate limiting registered');
+  logger.info(
+    { max: config.rateLimit.max, timeWindow: config.rateLimit.timeWindow },
+    'Rate limiting registered'
+  );
 
   // Register OpenAPI / Swagger
   await fastify.register(fastifySwagger, {
@@ -249,14 +265,79 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis, storageProvider);
-  registerContentRoutes(fastify as unknown as FastifyInstance, contentService, authMiddleware, routeOptions);
-  registerTemplateRoutes(fastify as unknown as FastifyInstance, templateService, authMiddleware, routeOptions);
-  registerMediaRoutes(fastify as unknown as FastifyInstance, mediaService, authMiddleware, routeOptions);
+  registerContentRoutes(
+    fastify as unknown as FastifyInstance,
+    contentService,
+    authMiddleware,
+    routeOptions
+  );
+  registerTemplateRoutes(
+    fastify as unknown as FastifyInstance,
+    templateService,
+    authMiddleware,
+    routeOptions
+  );
+  registerMediaRoutes(
+    fastify as unknown as FastifyInstance,
+    mediaService,
+    authMiddleware,
+    routeOptions
+  );
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
+
+  // ==========================================================================
+  // Event Consumers
+  // ==========================================================================
+
+  const consumers: BaseEventConsumer[] = [];
+
+  if (config.consumers.enabled) {
+    const userDeletedConsumer = new UserDeletedConsumer(
+      redis,
+      prisma,
+      logger,
+      config.consumers.consumerName,
+      config.consumers.streams.userService
+    );
+    const kgNodeDeletedConsumer = new KgNodeDeletedConsumer(
+      redis,
+      prisma,
+      logger,
+      config.consumers.consumerName,
+      config.consumers.streams.knowledgeGraphService
+    );
+    const attemptRecordedConsumer = new AttemptRecordedConsumer(
+      redis,
+      prisma,
+      logger,
+      config.consumers.consumerName,
+      config.consumers.streams.sessionService
+    );
+
+    consumers.push(userDeletedConsumer, kgNodeDeletedConsumer, attemptRecordedConsumer);
+
+    // Initialize consumer groups (idempotent)
+    await Promise.all(consumers.map((c) => c.initialize()));
+
+    // Start consumers (non-blocking — they run in background loops)
+    for (const consumer of consumers) {
+      consumer.start().catch((error: unknown) => {
+        logger.error({ error, consumer: consumer.constructor.name }, 'Consumer crashed');
+      });
+    }
+
+    logger.info({ consumerCount: consumers.length }, 'Event consumers started');
+  }
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');
+
+    // Stop consumers first and drain in-flight messages
+    for (const consumer of consumers) {
+      consumer.stop();
+    }
+    await Promise.all(consumers.map((c) => c.drain()));
 
     await fastify.close();
     await redis.quit();
