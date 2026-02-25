@@ -322,6 +322,12 @@ export const MutationState = {
   VALIDATING: 'validating',
   /** Passed validation */
   VALIDATED: 'validated',
+  /** Proof generation in progress */
+  PROVING: 'proving',
+  /** Proof verified */
+  PROVEN: 'proven',
+  /** Commit in progress */
+  COMMITTING: 'committing',
   /** Committed to graph */
   COMMITTED: 'committed',
   /** Rejected with reason */
@@ -797,3 +803,283 @@ export const TeachingApproachCategory = {
 
 export type TeachingApproachCategory =
   (typeof TeachingApproachCategory)[keyof typeof TeachingApproachCategory];
+
+// ============================================================================
+// Knowledge Graph — Graph Type
+// ============================================================================
+
+/**
+ * Distinguishes which graph a node or edge lives in.
+ * The PKG (Personal Knowledge Graph) is per-user.
+ * The CKG (Canonical Knowledge Graph) is the shared ground truth.
+ */
+export const GraphType = {
+  /** Personal Knowledge Graph (per-user) */
+  PKG: 'pkg',
+  /** Canonical Knowledge Graph (shared) */
+  CKG: 'ckg',
+} as const;
+
+export type GraphType = (typeof GraphType)[keyof typeof GraphType];
+
+// ============================================================================
+// Knowledge Graph — Misconception Taxonomy (ADR-004)
+// ============================================================================
+
+/**
+ * The 27 misconception types organized into 5 families.
+ * Different families are detected by different mechanisms:
+ * structural → graph topology, semantic → vector similarity,
+ * temporal → learning sequence, metacognitive → calibration data.
+ */
+export const MisconceptionType = {
+  // ── Structural family ───────────────────────────────────────────────────
+  /** Circular dependency between concepts */
+  CIRCULAR_DEPENDENCY: 'circular_dependency',
+  /** Concept with no connections (isolated) */
+  ORPHAN_CONCEPT: 'orphan_concept',
+  /** Concept applied too broadly */
+  OVER_GENERALIZATION: 'over_generalization',
+  /** Concept not specified precisely enough */
+  UNDER_SPECIFICATION: 'under_specification',
+  /** Incorrect hierarchical relationship */
+  FALSE_HIERARCHY: 'false_hierarchy',
+  /** Critical prerequisite link missing */
+  MISSING_PREREQUISITE: 'missing_prerequisite',
+  /** Edge to a non-existent or invalid concept */
+  PHANTOM_LINK: 'phantom_link',
+
+  // ── Relational family ──────────────────────────────────────────────────
+  /** Two distinct concepts treated as equivalent */
+  FALSE_EQUIVALENCE: 'false_equivalence',
+  /** Dependency direction is reversed */
+  INVERTED_DEPENDENCY: 'inverted_dependency',
+  /** Two distinct concepts merged into one */
+  CONFLATION: 'conflation',
+  /** Important distinction between concepts not recognized */
+  MISSING_DISTINCTION: 'missing_distinction',
+  /** Analogy drawn between fundamentally different concepts */
+  SPURIOUS_ANALOGY: 'spurious_analogy',
+  /** Concept applied outside its valid scope */
+  SCOPE_CONFUSION: 'scope_confusion',
+  /** Concept boundary incorrectly drawn */
+  BOUNDARY_ERROR: 'boundary_error',
+
+  // ── Temporal family ────────────────────────────────────────────────────
+  /** Concepts ordered incorrectly in learning sequence */
+  ANACHRONISTIC_ORDERING: 'anachronistic_ordering',
+  /** Abstract concept introduced before prerequisites mastered */
+  PREMATURE_ABSTRACTION: 'premature_abstraction',
+  /** Related concepts not connected when they should be */
+  DELAYED_INTEGRATION: 'delayed_integration',
+  /** Refusal to update understanding despite new evidence */
+  REVISION_RESISTANCE: 'revision_resistance',
+
+  // ── Semantic family ────────────────────────────────────────────────────
+  /** Focus on label rather than underlying concept */
+  LABEL_FIXATION: 'label_fixation',
+  /** Concepts confused due to surface-level similarity */
+  SURFACE_SIMILARITY_BIAS: 'surface_similarity_bias',
+  /** Definition of concept has drifted from correct meaning */
+  DEFINITIONAL_DRIFT: 'definitional_drift',
+  /** Context-dependent meaning collapsed into single meaning */
+  CONTEXT_COLLAPSE: 'context_collapse',
+  /** Multiple meanings of a term not recognized */
+  POLYSEMY_BLINDNESS: 'polysemy_blindness',
+
+  // ── Metacognitive family ───────────────────────────────────────────────
+  /** Belief in mastery without actual understanding */
+  ILLUSORY_MASTERY: 'illusory_mastery',
+  /** Significant gap between perceived and actual performance */
+  CALIBRATION_FAILURE: 'calibration_failure',
+  /** Using wrong learning strategy for the material */
+  STRATEGY_MISMATCH: 'strategy_mismatch',
+  /** Inability to apply knowledge in new contexts */
+  TRANSFER_BLINDNESS: 'transfer_blindness',
+} as const;
+
+export type MisconceptionType = (typeof MisconceptionType)[keyof typeof MisconceptionType];
+
+// ============================================================================
+// Knowledge Graph — Misconception Pattern Kind
+// ============================================================================
+
+/**
+ * Categories of misconception detection patterns.
+ * Each kind uses a different detection mechanism.
+ */
+export const MisconceptionPatternKind = {
+  /** Analyzes graph topology (cycles, orphans, hierarchy) */
+  STRUCTURAL: 'structural',
+  /** Analyzes learning metrics across a population */
+  STATISTICAL: 'statistical',
+  /** Uses vector similarity on node content */
+  SEMANTIC: 'semantic',
+  /** Combines multiple detection signals */
+  HYBRID: 'hybrid',
+} as const;
+
+export type MisconceptionPatternKind =
+  (typeof MisconceptionPatternKind)[keyof typeof MisconceptionPatternKind];
+
+// ============================================================================
+// Knowledge Graph — Intervention Type
+// ============================================================================
+
+/**
+ * Remediation action types the system can take in response to misconceptions.
+ * Each maps to a content generation strategy.
+ */
+export const InterventionType = {
+  /** Generate a counterexample to disprove the misconception */
+  COUNTEREXAMPLE_CARD: 'counterexample_card',
+  /** Exercise to distinguish confusable concepts */
+  DISAMBIGUATION_EXERCISE: 'disambiguation_exercise',
+  /** Review missing prerequisite material */
+  PREREQUISITE_REVIEW: 'prerequisite_review',
+  /** Visual representation of correct structure */
+  STRUCTURAL_VISUALIZATION: 'structural_visualization',
+  /** Side-by-side comparison of related concepts */
+  GUIDED_COMPARISON: 'guided_comparison',
+  /** Direct corrective feedback on the error */
+  CORRECTIVE_FEEDBACK: 'corrective_feedback',
+  /** Prompt to reorganize knowledge structure */
+  REORGANIZATION_PROMPT: 'reorganization_prompt',
+  /** Prompt for metacognitive reflection */
+  METACOGNITIVE_PROMPT: 'metacognitive_prompt',
+} as const;
+
+export type InterventionType = (typeof InterventionType)[keyof typeof InterventionType];
+
+// ============================================================================
+// Knowledge Graph — Misconception Status
+// ============================================================================
+
+/**
+ * Lifecycle states of a misconception instance.
+ * Tracks from first detection through remediation to resolution.
+ */
+export const MisconceptionStatus = {
+  /** Pattern match detected the misconception */
+  DETECTED: 'detected',
+  /** Misconception confirmed after further analysis */
+  CONFIRMED: 'confirmed',
+  /** Intervention applied but not yet resolved */
+  ADDRESSED: 'addressed',
+  /** Misconception successfully remediated */
+  RESOLVED: 'resolved',
+  /** Previously resolved misconception re-emerged */
+  RECURRING: 'recurring',
+} as const;
+
+export type MisconceptionStatus = (typeof MisconceptionStatus)[keyof typeof MisconceptionStatus];
+
+// ============================================================================
+// Knowledge Graph — Promotion Band (PKG→CKG Pipeline)
+// ============================================================================
+
+/**
+ * Confidence levels for the PKG→CKG aggregation pipeline (ADR-005).
+ * Determines how much evidence is required before promoting
+ * a concept pattern from individual PKGs to the canonical CKG.
+ */
+export const PromotionBand = {
+  /** No promotion signal */
+  NONE: 'none',
+  /** Weak evidence, insufficient for promotion */
+  WEAK: 'weak',
+  /** Moderate evidence, approaching threshold */
+  MODERATE: 'moderate',
+  /** Strong evidence, recommended for promotion */
+  STRONG: 'strong',
+  /** Definitive evidence, automatic promotion */
+  DEFINITIVE: 'definitive',
+} as const;
+
+export type PromotionBand = (typeof PromotionBand)[keyof typeof PromotionBand];
+
+// ============================================================================
+// Knowledge Graph — Metacognitive Stage
+// ============================================================================
+
+/**
+ * The 4-stage metacognitive progression model from FEATURE_OVERVIEW.
+ * Determines how much structural scaffolding the system provides
+ * vs. how much autonomy the user gets in each graph region.
+ */
+export const MetacognitiveStage = {
+  /** System provides full scaffolding and guidance */
+  SYSTEM_GUIDED: 'system_guided',
+  /** User becomes aware of knowledge structure */
+  STRUCTURE_SALIENT: 'structure_salient',
+  /** User and system share control of learning path */
+  SHARED_CONTROL: 'shared_control',
+  /** User has full autonomy over learning structure */
+  USER_OWNED: 'user_owned',
+} as const;
+
+export type MetacognitiveStage = (typeof MetacognitiveStage)[keyof typeof MetacognitiveStage];
+
+// ============================================================================
+// Knowledge Graph — Aggregation Stage
+// ============================================================================
+
+/**
+ * The 7 stages of the PKG→CKG aggregation pipeline.
+ * Tracks where in the pipeline an aggregation run currently is.
+ */
+export const AggregationStage = {
+  /** Collecting signals from individual PKGs */
+  SIGNAL_COLLECTION: 'signal_collection',
+  /** Extracting patterns from collected signals */
+  PATTERN_EXTRACTION: 'pattern_extraction',
+  /** Detecting consensus across users */
+  CONSENSUS_DETECTION: 'consensus_detection',
+  /** Resolving conflicts between signals */
+  CONFLICT_RESOLUTION: 'conflict_resolution',
+  /** Proposing a CKG mutation from aggregated data */
+  MUTATION_PROPOSAL: 'mutation_proposal',
+  /** Validating the proposed mutation */
+  VALIDATION: 'validation',
+  /** Committing the validated mutation */
+  COMMITMENT: 'commitment',
+} as const;
+
+export type AggregationStage = (typeof AggregationStage)[keyof typeof AggregationStage];
+
+// ============================================================================
+// Knowledge Graph — Structural Metric Type
+// ============================================================================
+
+/**
+ * The 11 structural metrics measuring knowledge graph health.
+ * These diagnostics feed the metacognitive engine and drive
+ * stage transitions and intervention decisions.
+ */
+export const StructuralMetricType = {
+  /** Drift between abstraction levels in the graph */
+  ABSTRACTION_DRIFT: 'abstraction_drift',
+  /** Gradient measuring depth calibration quality */
+  DEPTH_CALIBRATION_GRADIENT: 'depth_calibration_gradient',
+  /** Index measuring concept scope leakage across boundaries */
+  SCOPE_LEAKAGE_INDEX: 'scope_leakage_index',
+  /** Entropy of sibling confusion patterns */
+  SIBLING_CONFUSION_ENTROPY: 'sibling_confusion_entropy',
+  /** Strength of upward links in the hierarchy */
+  UPWARD_LINK_STRENGTH: 'upward_link_strength',
+  /** Breadth score for graph traversal patterns */
+  TRAVERSAL_BREADTH_SCORE: 'traversal_breadth_score',
+  /** Fit between learning strategy and graph depth */
+  STRATEGY_DEPTH_FIT: 'strategy_depth_fit',
+  /** Entropy of structural strategy alignment */
+  STRUCTURAL_STRATEGY_ENTROPY: 'structural_strategy_entropy',
+  /** Accuracy of structural attribution */
+  STRUCTURAL_ATTRIBUTION_ACCURACY: 'structural_attribution_accuracy',
+  /** Gain in structural stability over time */
+  STRUCTURAL_STABILITY_GAIN: 'structural_stability_gain',
+  /** Improvement in boundary detection sensitivity */
+  BOUNDARY_SENSITIVITY_IMPROVEMENT: 'boundary_sensitivity_improvement',
+} as const;
+
+export type StructuralMetricType =
+  (typeof StructuralMetricType)[keyof typeof StructuralMetricType];

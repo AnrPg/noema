@@ -56,6 +56,12 @@ export const AlgorithmConfigIdSchema = createIdSchema(
   ID_PREFIXES.AlgorithmConfigId,
   'Algorithm Config ID'
 );
+export const MutationIdSchema = createIdSchema(ID_PREFIXES.MutationId, 'Mutation ID');
+export const MisconceptionPatternIdSchema = createIdSchema(
+  ID_PREFIXES.MisconceptionPatternId,
+  'Misconception Pattern ID'
+);
+export const InterventionIdSchema = createIdSchema(ID_PREFIXES.InterventionId, 'Intervention ID');
 
 // ============================================================================
 // ID Schema Registry
@@ -91,6 +97,9 @@ export const IdSchemas = {
   [ID_PREFIXES.ScheduleId]: ScheduleIdSchema,
   [ID_PREFIXES.ReviewLogId]: ReviewLogIdSchema,
   [ID_PREFIXES.AlgorithmConfigId]: AlgorithmConfigIdSchema,
+  [ID_PREFIXES.MutationId]: MutationIdSchema,
+  [ID_PREFIXES.MisconceptionPatternId]: MisconceptionPatternIdSchema,
+  [ID_PREFIXES.InterventionId]: InterventionIdSchema,
 } as const;
 
 // ============================================================================
@@ -123,3 +132,6 @@ export type RoomIdInput = z.input<typeof RoomIdSchema>;
 export type ScheduleIdInput = z.input<typeof ScheduleIdSchema>;
 export type ReviewLogIdInput = z.input<typeof ReviewLogIdSchema>;
 export type AlgorithmConfigIdInput = z.input<typeof AlgorithmConfigIdSchema>;
+export type MutationIdInput = z.input<typeof MutationIdSchema>;
+export type MisconceptionPatternIdInput = z.input<typeof MisconceptionPatternIdSchema>;
+export type InterventionIdInput = z.input<typeof InterventionIdSchema>;

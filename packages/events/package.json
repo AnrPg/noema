@@ -29,6 +29,10 @@
     "./publisher": {
       "types": "./dist/publisher/index.d.ts",
       "import": "./dist/publisher/index.js"
+    },
+    "./knowledge-graph": {
+      "types": "./dist/knowledge-graph/index.d.ts",
+      "import": "./dist/knowledge-graph/index.js"
     }
   },
   "files": [

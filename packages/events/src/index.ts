@@ -54,3 +54,9 @@ export type * from './content/content.events.js';
 // ============================================================================
 export * from './user/user-event.schemas.js';
 export type * from './user/user.events.js';
+
+// ============================================================================
+// Knowledge Graph Domain Events
+// ============================================================================
+export * from './knowledge-graph/knowledge-graph-event.schemas.js';
+export type * from './knowledge-graph/knowledge-graph.events.js';

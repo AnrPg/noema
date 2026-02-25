@@ -112,6 +112,15 @@ export type ReviewLogId = Brand<string, 'ReviewLogId'>;
 /** Algorithm configuration identifier - prefix: algcfg_ */
 export type AlgorithmConfigId = Brand<string, 'AlgorithmConfigId'>;
 
+/** CKG mutation lifecycle identifier - prefix: mut_ */
+export type MutationId = Brand<string, 'MutationId'>;
+
+/** Misconception detection pattern identifier - prefix: mpat_ */
+export type MisconceptionPatternId = Brand<string, 'MisconceptionPatternId'>;
+
+/** Remediation intervention identifier - prefix: intv_ */
+export type InterventionId = Brand<string, 'InterventionId'>;
+
 // ============================================================================
 // ID Prefix Registry
 // ============================================================================
@@ -148,6 +157,9 @@ export const ID_PREFIXES = {
   ScheduleId: 'sched_',
   ReviewLogId: 'rlog_',
   AlgorithmConfigId: 'algcfg_',
+  MutationId: 'mut_',
+  MisconceptionPatternId: 'mpat_',
+  InterventionId: 'intv_',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
@@ -388,6 +400,36 @@ export const AlgorithmConfigId = {
   prefix: ID_PREFIXES.AlgorithmConfigId,
 } as const;
 
+// Mutation ID
+export const MutationId = {
+  create: (value: string): MutationId =>
+    createId<'MutationId'>(value, ID_PREFIXES.MutationId, 'MutationId'),
+  isValid: (value: unknown): value is MutationId => isValidId(value, ID_PREFIXES.MutationId),
+  prefix: ID_PREFIXES.MutationId,
+} as const;
+
+// Misconception Pattern ID
+export const MisconceptionPatternId = {
+  create: (value: string): MisconceptionPatternId =>
+    createId<'MisconceptionPatternId'>(
+      value,
+      ID_PREFIXES.MisconceptionPatternId,
+      'MisconceptionPatternId'
+    ),
+  isValid: (value: unknown): value is MisconceptionPatternId =>
+    isValidId(value, ID_PREFIXES.MisconceptionPatternId),
+  prefix: ID_PREFIXES.MisconceptionPatternId,
+} as const;
+
+// Intervention ID
+export const InterventionId = {
+  create: (value: string): InterventionId =>
+    createId<'InterventionId'>(value, ID_PREFIXES.InterventionId, 'InterventionId'),
+  isValid: (value: unknown): value is InterventionId =>
+    isValidId(value, ID_PREFIXES.InterventionId),
+  prefix: ID_PREFIXES.InterventionId,
+} as const;
+
 // ============================================================================
 // Union Types for Generic Handling
 // ============================================================================
@@ -421,7 +463,10 @@ export type AnyBrandedId =
   | RoomId
   | ScheduleId
   | ReviewLogId
-  | AlgorithmConfigId;
+  | AlgorithmConfigId
+  | MutationId
+  | MisconceptionPatternId
+  | InterventionId;
 
 /**
  * Map of ID type names to their prefixes.

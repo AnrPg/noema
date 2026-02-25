@@ -7,6 +7,7 @@
 
 import {
   AchievementRarity,
+  AggregationStage,
   AttemptOutcome,
   CardLearningState,
   CardQueueStatus,
@@ -21,18 +22,26 @@ import {
   ForceLevel,
   GraphEdgeType,
   GraphNodeType,
+  GraphType,
   HintDepth,
   IngestionState,
+  InterventionType,
   LearningMode,
   LoadoutArchetype,
+  MetacognitiveStage,
+  MisconceptionPatternKind,
+  MisconceptionStatus,
+  MisconceptionType,
   MotivationSignal,
   MutationState,
+  PromotionBand,
   Rating,
   RemediationCardType,
   SchedulingAlgorithm,
   SessionState,
   SessionTerminationReason,
   StreakType,
+  StructuralMetricType,
   TeachingApproach,
   TeachingApproachCategory,
   ToolCategory,
@@ -102,6 +111,24 @@ export const TeachingApproachCategorySchema = createEnumSchema(
   TeachingApproachCategory,
   'Teaching approach category'
 );
+export const GraphTypeSchema = createEnumSchema(GraphType, 'Graph type');
+export const MisconceptionTypeSchema = createEnumSchema(MisconceptionType, 'Misconception type');
+export const MisconceptionPatternKindSchema = createEnumSchema(
+  MisconceptionPatternKind,
+  'Misconception pattern kind'
+);
+export const InterventionTypeSchema = createEnumSchema(InterventionType, 'Intervention type');
+export const MisconceptionStatusSchema = createEnumSchema(
+  MisconceptionStatus,
+  'Misconception status'
+);
+export const PromotionBandSchema = createEnumSchema(PromotionBand, 'Promotion band');
+export const MetacognitiveStageSchema = createEnumSchema(MetacognitiveStage, 'Metacognitive stage');
+export const AggregationStageSchema = createEnumSchema(AggregationStage, 'Aggregation stage');
+export const StructuralMetricTypeSchema = createEnumSchema(
+  StructuralMetricType,
+  'Structural metric type'
+);
 
 // ============================================================================
 // Type Inference
@@ -138,3 +165,12 @@ export type MotivationSignalInput = z.input<typeof MotivationSignalSchema>;
 export type HintDepthInput = z.input<typeof HintDepthSchema>;
 export type TeachingApproachInput = z.input<typeof TeachingApproachSchema>;
 export type TeachingApproachCategoryInput = z.input<typeof TeachingApproachCategorySchema>;
+export type GraphTypeInput = z.input<typeof GraphTypeSchema>;
+export type MisconceptionTypeInput = z.input<typeof MisconceptionTypeSchema>;
+export type MisconceptionPatternKindInput = z.input<typeof MisconceptionPatternKindSchema>;
+export type InterventionTypeInput = z.input<typeof InterventionTypeSchema>;
+export type MisconceptionStatusInput = z.input<typeof MisconceptionStatusSchema>;
+export type PromotionBandInput = z.input<typeof PromotionBandSchema>;
+export type MetacognitiveStageInput = z.input<typeof MetacognitiveStageSchema>;
+export type AggregationStageInput = z.input<typeof AggregationStageSchema>;
+export type StructuralMetricTypeInput = z.input<typeof StructuralMetricTypeSchema>;
