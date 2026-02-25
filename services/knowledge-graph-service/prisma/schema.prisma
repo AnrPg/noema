@@ -1,0 +1,337 @@
+// Prisma schema for knowledge-graph-service
+// Database: PostgreSQL
+// Design: Workflow data for CKG mutation pipeline, structural metrics,
+//         misconception patterns, and aggregation evidence.
+// Graph data (PKG/CKG nodes, edges, traversals) lives in Neo4j.
+
+generator client {
+    provider = "prisma-client-js"
+    output   = "../generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// CKG Mutation — Formally guarded canonical graph mutation pipeline
+// ============================================================================
+// Every CKG mutation follows the typestate protocol:
+//   Proposed → Validating → Validated → Proving → Proven → Committing → Committed
+//   Any state can transition to Rejected.
+// Mutations are expressed in a constrained DSL — no direct raw writes.
+
+model CkgMutation {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Typestate — current position in the mutation pipeline
+    state CkgMutationState @default(PROPOSED)
+
+    // Mutation type discriminator
+    mutationType String @map("mutation_type") @db.VarChar(100)
+
+    // DSL operation payload — the mutation expressed in the constrained DSL
+    operation Json
+
+    // Validation results accumulated during the pipeline
+    validationResult Json? @map("validation_result")
+
+    // Evidence references — links to aggregation evidence or external sources
+    evidenceRefs Json? @map("evidence_refs")
+
+    // Target graph location context (CKG node/edge IDs affected)
+    targetNodeIds String[] @default([]) @map("target_node_ids")
+    targetEdgeIds String[] @default([]) @map("target_edge_ids")
+
+    // Processing results from each pipeline stage
+    proofResult     Json?   @map("proof_result")
+    commitResult    Json?   @map("commit_result")
+    rejectionReason String? @map("rejection_reason") @db.VarChar(2000)
+
+    // Priority for processing queue
+    priority Int @default(0)
+
+    // Extensible metadata
+    metadata Json @default("{}")
+
+    // Optimistic locking
+    version Int @default(1)
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+    createdBy String?  @map("created_by") @db.VarChar(50)
+    updatedBy String?  @map("updated_by") @db.VarChar(50)
+
+    // Relations
+    auditLog            CkgMutationAuditLog[]
+    aggregationEvidence AggregationEvidence[]
+
+    // Indexes
+    @@index([state])
+    @@index([userId])
+    @@index([mutationType])
+    @@index([priority])
+    @@index([createdAt])
+    @@index([state, priority])
+    @@index([userId, state])
+    @@index([userId, createdAt])
+    @@map("ckg_mutations")
+}
+
+// ============================================================================
+// CKG Mutation Audit Log — Immutable append-only state transition log
+// ============================================================================
+// Every state transition in the mutation pipeline is recorded here.
+// This table is append-only — no updates or deletes permitted.
+
+model CkgMutationAuditLog {
+    id         String @id @db.VarChar(50)
+    mutationId String @map("mutation_id") @db.VarChar(50)
+
+    // State transition
+    fromState CkgMutationState @map("from_state")
+    toState   CkgMutationState @map("to_state")
+
+    // Who/what triggered the transition
+    triggeredBy String  @map("triggered_by") @db.VarChar(100)
+    reason      String? @db.VarChar(2000)
+
+    // Snapshot of relevant data at transition time
+    snapshot Json? @default("{}")
+
+    // Correlation for distributed tracing
+    correlationId String? @map("correlation_id") @db.VarChar(100)
+
+    // Audit — no updatedAt because this table is append-only
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Relations
+    mutation CkgMutation @relation(fields: [mutationId], references: [id], onDelete: Cascade)
+
+    // Indexes
+    @@index([mutationId])
+    @@index([mutationId, createdAt])
+    @@index([fromState, toState])
+    @@index([triggeredBy])
+    @@index([correlationId])
+    @@index([createdAt])
+    @@map("ckg_mutation_audit_log")
+}
+
+// ============================================================================
+// Structural Metric Snapshot — Periodic per-user structural metric cache
+// ============================================================================
+// Snapshots of computed structural metrics (AD, DCG, SLI, SCE, ULS, TBS, SDF,
+// SSE, SAA) stored periodically for longitudinal tracking and agent reasoning.
+// Actual computation happens in Neo4j; these are cached results.
+
+model StructuralMetricSnapshot {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Optional scope: metrics can be global or domain-specific
+    domain String? @db.VarChar(200)
+
+    // The computed metrics as a JSON object
+    // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, ... }
+    metrics Json
+
+    // Optional graph region identifier (for per-region staging)
+    graphRegion String? @map("graph_region") @db.VarChar(200)
+
+    // Metacognitive stage at snapshot time (STAGE_1..STAGE_4)
+    metacognitiveStage Int? @map("metacognitive_stage")
+
+    // Number of PKG nodes at snapshot time (for context)
+    nodeCount Int? @map("node_count")
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Indexes
+    @@index([userId])
+    @@index([userId, domain])
+    @@index([userId, createdAt])
+    @@index([domain])
+    @@index([createdAt])
+    @@index([metacognitiveStage])
+    @@map("structural_metric_snapshots")
+}
+
+// ============================================================================
+// Aggregation Evidence — PKG → CKG aggregation pipeline records
+// ============================================================================
+// Records which PKG signals contributed to which CKG mutation proposals.
+// This provides auditability for the crowdsourced aggregation process.
+
+model AggregationEvidence {
+    id         String @id @db.VarChar(50)
+    mutationId String @map("mutation_id") @db.VarChar(50)
+
+    // Source PKG information
+    sourceUserId    String @map("source_user_id") @db.VarChar(50)
+    sourcePkgNodeId String @map("source_pkg_node_id") @db.VarChar(200)
+
+    // Type of evidence (e.g., "edge_agreement", "misconception_signal", "confidence_data")
+    evidenceType String @map("evidence_type") @db.VarChar(100)
+
+    // Evidence payload — the actual signal data
+    payload Json
+
+    // Strength/weight of this evidence in the aggregation
+    weight Float @default(1.0)
+
+    // Whether this evidence supported or opposed the mutation
+    direction String @default("support") @db.VarChar(20) // support, oppose, neutral
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Relations
+    mutation CkgMutation @relation(fields: [mutationId], references: [id], onDelete: Cascade)
+
+    // Indexes
+    @@index([mutationId])
+    @@index([sourceUserId])
+    @@index([evidenceType])
+    @@index([mutationId, sourceUserId])
+    @@index([createdAt])
+    @@map("aggregation_evidence")
+}
+
+// ============================================================================
+// Misconception Pattern — Executable pattern definitions
+// ============================================================================
+// Defines patterns that detect misconceptions in PKGs. These are the
+// executable specifications used by the diagnostic agent and reasoning layers.
+
+model MisconceptionPattern {
+    id String @id @db.VarChar(50)
+
+    // Human-readable identification
+    name        String  @db.VarChar(200)
+    description String? @db.VarChar(2000)
+
+    // Pattern kind discriminator
+    patternKind String @map("pattern_kind") @db.VarChar(100)
+
+    // Pattern specification — the executable pattern definition
+    // Structure depends on patternKind (graph pattern, statistical, heuristic)
+    spec Json
+
+    // Scoring model configuration
+    scoringModel Json @default("{}") @map("scoring_model")
+
+    // Domain scope — which knowledge domains this pattern applies to
+    domains String[] @default([])
+
+    // Severity level (how critical is this misconception type)
+    severity MisconceptionSeverity @default(MODERATE)
+
+    // Whether this pattern is currently active
+    active Boolean @default(true)
+
+    // Extensible metadata
+    metadata Json @default("{}")
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+    createdBy String?  @map("created_by") @db.VarChar(50)
+    updatedBy String?  @map("updated_by") @db.VarChar(50)
+
+    // Relations
+    interventions InterventionTemplate[]
+
+    // Indexes
+    @@index([patternKind])
+    @@index([active])
+    @@index([severity])
+    @@index([domains], type: Gin)
+    @@index([createdAt])
+    @@map("misconception_patterns")
+}
+
+// ============================================================================
+// Intervention Template — Remediation templates linked to misconceptions
+// ============================================================================
+// Defines intervention/remediation strategies that can be applied when a
+// misconception pattern matches. Used by strategy and content generation agents.
+
+model InterventionTemplate {
+    id String @id @db.VarChar(50)
+
+    // Link to the misconception this intervention addresses
+    misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
+
+    // Human-readable identification
+    name        String  @db.VarChar(200)
+    description String? @db.VarChar(2000)
+
+    // Intervention type (e.g., "contrastive_pair", "boundary_case", "retrieval_cue")
+    interventionType String @map("intervention_type") @db.VarChar(100)
+
+    // Template specification — how to generate the intervention
+    spec Json
+
+    // Priority relative to other interventions for the same misconception
+    priority Int @default(0)
+
+    // Effectiveness tracking
+    useCount    Int   @default(0) @map("use_count")
+    successRate Float @default(0.0) @map("success_rate")
+
+    // Whether this template is currently active
+    active Boolean @default(true)
+
+    // Extensible metadata
+    metadata Json @default("{}")
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+    createdBy String?  @map("created_by") @db.VarChar(50)
+    updatedBy String?  @map("updated_by") @db.VarChar(50)
+
+    // Relations
+    misconceptionPattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id], onDelete: Cascade)
+
+    // Indexes
+    @@index([misconceptionPatternId])
+    @@index([interventionType])
+    @@index([active])
+    @@index([priority])
+    @@index([createdAt])
+    @@map("intervention_templates")
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum CkgMutationState {
+    PROPOSED
+    VALIDATING
+    VALIDATED
+    PROVING
+    PROVEN
+    COMMITTING
+    COMMITTED
+    REJECTED
+
+    @@map("ckg_mutation_state")
+}
+
+enum MisconceptionSeverity {
+    LOW
+    MODERATE
+    HIGH
+    CRITICAL
+
+    @@map("misconception_severity")
+}

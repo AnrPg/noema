@@ -129,6 +129,32 @@ services:
       - noema-network
 
   # ===========================================================================
+  # Neo4j - Graph Database for Knowledge Graphs (PKG/CKG)
+  # ===========================================================================
+  neo4j:
+    image: neo4j:5-community
+    container_name: noema-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-noema_neo4j_dev}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - noema-network
+
+  # ===========================================================================
   # HLR Sidecar - Half-Life Regression (Python)
   # ===========================================================================
   hlr-sidecar:
@@ -176,3 +202,5 @@ volumes:
     name: noema-qdrant-data
   minio_data:
     name: noema-minio-data
+  neo4j_data:
+    name: noema-neo4j-data

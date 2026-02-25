@@ -83,8 +83,11 @@ export interface IHealthCheckResponse {
 
   /** Individual dependency checks */
   checks: {
-    /** Primary database connection */
+    /** Primary database connection (PostgreSQL) */
     database?: IDependencyCheck;
+
+    /** Graph database connection (Neo4j) */
+    graphDatabase?: IDependencyCheck;
 
     /** Redis cache connection */
     redis?: IDependencyCheck;

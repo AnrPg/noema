@@ -22,7 +22,6 @@ export default tseslint.config(
       'services/collaboration-service/**',
       'services/gamification-service/**',
       'services/ingestion-service/**',
-      'services/knowledge-graph-service/**',
       'services/media-service/**',
       'services/metacognition-service/**',
       'services/notification-service/**',
