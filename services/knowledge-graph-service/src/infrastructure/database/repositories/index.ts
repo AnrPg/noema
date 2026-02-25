@@ -1,0 +1,9 @@
+/**
+ * @noema/knowledge-graph-service — Infrastructure Repository Barrel Export
+ */
+
+export { PrismaAggregationEvidenceRepository } from './prisma-aggregation-evidence.repository.js';
+export { PrismaMetricsRepository } from './prisma-metrics.repository.js';
+export { PrismaMisconceptionRepository } from './prisma-misconception.repository.js';
+export { PrismaMutationRepository } from './prisma-mutation.repository.js';
+export { PrismaOperationLogRepository } from './prisma-operation-log.repository.js';

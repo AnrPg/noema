@@ -53,6 +53,12 @@ model CkgMutation {
     // Priority for processing queue
     priority Int @default(0)
 
+    // Proposer's rationale for the mutation
+    rationale String? @db.VarChar(2000)
+
+    // Denormalized evidence count for promotion band lookup
+    evidenceCount Int @default(0) @map("evidence_count")
+
     // Extensible metadata
     metadata Json @default("{}")
 
@@ -170,18 +176,27 @@ model StructuralMetricSnapshot {
 // This provides auditability for the crowdsourced aggregation process.
 
 model AggregationEvidence {
-    id         String @id @db.VarChar(50)
-    mutationId String @map("mutation_id") @db.VarChar(50)
+    id         String  @id @db.VarChar(50)
+    mutationId String? @map("mutation_id") @db.VarChar(50)
 
     // Source PKG information
     sourceUserId    String @map("source_user_id") @db.VarChar(50)
     sourcePkgNodeId String @map("source_pkg_node_id") @db.VarChar(200)
+
+    // CKG target — the canonical node this evidence supports (null before linkage)
+    ckgTargetNodeId String? @map("ckg_target_node_id") @db.VarChar(200)
+
+    // Label proposed by the PKG observation
+    proposedLabel String? @map("proposed_label") @db.VarChar(500)
 
     // Type of evidence (e.g., "edge_agreement", "misconception_signal", "confidence_data")
     evidenceType String @map("evidence_type") @db.VarChar(100)
 
     // Evidence payload — the actual signal data
     payload Json
+
+    // Confidence score of this evidence (branded ConfidenceScore at domain layer)
+    confidence Float @default(0.0)
 
     // Strength/weight of this evidence in the aggregation
     weight Float @default(1.0)
@@ -193,14 +208,16 @@ model AggregationEvidence {
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations
-    mutation CkgMutation @relation(fields: [mutationId], references: [id], onDelete: Cascade)
+    // Relations (optional — evidence can exist before mutation is proposed)
+    mutation CkgMutation? @relation(fields: [mutationId], references: [id], onDelete: Cascade)
 
     // Indexes
     @@index([mutationId])
     @@index([sourceUserId])
     @@index([evidenceType])
     @@index([mutationId, sourceUserId])
+    @@index([ckgTargetNodeId])
+    @@index([ckgTargetNodeId, sourceUserId])
     @@index([createdAt])
     @@map("aggregation_evidence")
 }
@@ -218,6 +235,9 @@ model MisconceptionPattern {
     name        String  @db.VarChar(200)
     description String? @db.VarChar(2000)
 
+    // Which misconception type this pattern detects (maps to MisconceptionType enum)
+    misconceptionType String @map("misconception_type") @db.VarChar(100)
+
     // Pattern kind discriminator
     patternKind String @map("pattern_kind") @db.VarChar(100)
 
@@ -234,6 +254,9 @@ model MisconceptionPattern {
     // Severity level (how critical is this misconception type)
     severity MisconceptionSeverity @default(MODERATE)
 
+    // Minimum confidence to trigger detection (per-pattern configurable)
+    threshold Float @default(0.5)
+
     // Whether this pattern is currently active
     active Boolean @default(true)
 
@@ -248,8 +271,10 @@ model MisconceptionPattern {
 
     // Relations
     interventions InterventionTemplate[]
+    detections    MisconceptionDetection[]
 
     // Indexes
+    @@index([misconceptionType])
     @@index([patternKind])
     @@index([active])
     @@index([severity])
@@ -309,6 +334,51 @@ model InterventionTemplate {
     @@index([priority])
     @@index([createdAt])
     @@map("intervention_templates")
+}
+
+// ============================================================================
+// Misconception Detection — Runtime detection instances
+// ============================================================================
+// Records actual misconception detections for a user. Created when patterns
+// match against a user's PKG. Tracks the detection → resolution lifecycle.
+// Read by Strategy Agent (adjust strategy), Diagnostic Agent (pattern analysis).
+
+model MisconceptionDetection {
+    id                     String @id @db.VarChar(50)
+    userId                 String @map("user_id") @db.VarChar(50)
+    misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
+
+    // Which misconception type was detected (denormalized from pattern for querying)
+    misconceptionType String @map("misconception_type") @db.VarChar(100)
+
+    // Graph nodes affected by this misconception
+    affectedNodeIds String[] @default([]) @map("affected_node_ids")
+
+    // Detection confidence (branded ConfidenceScore at domain layer)
+    confidence Float @default(0.0)
+
+    // Status lifecycle: detected → confirmed → addressed → resolved → recurring
+    status String @default("detected") @map("status") @db.VarChar(50)
+
+    // Extensible metadata (evidence details, agent reasoning, etc.)
+    metadata Json @default("{}")
+
+    // Lifecycle timestamps
+    detectedAt DateTime  @default(now()) @map("detected_at")
+    resolvedAt DateTime? @map("resolved_at")
+
+    // Relations
+    pattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id])
+
+    // Indexes
+    @@index([userId])
+    @@index([userId, status])
+    @@index([misconceptionType])
+    @@index([misconceptionPatternId])
+    @@index([status])
+    @@index([affectedNodeIds], type: Gin)
+    @@index([detectedAt])
+    @@map("misconception_detections")
 }
 
 // ============================================================================

@@ -95,27 +95,46 @@ const NODE_INDEXES = [
 /**
  * Performance indexes for relationship (edge) lookups.
  * Neo4j 5 supports relationship property indexes.
+ *
+ * Design decision D1 (Phase 4): Use type-specific relationship types
+ * (PREREQUISITE, PART_OF, etc.) instead of a generic :EDGE with a type
+ * property. This enables O(1) type dispatch per hop during variable-length
+ * traversals, native multi-type syntax ([:PREREQUISITE|PART_OF]), and
+ * precise cycle detection. Each GraphEdgeType maps to an uppercase Neo4j
+ * relationship type.
+ *
+ * Indexes cover edgeId (primary lookup), userId (PKG scoping), and weight
+ * (threshold-based queries) per relationship type.
  */
-const RELATIONSHIP_INDEXES = [
-  // Index on relationship type property for edge-filtered traversals
+const RELATIONSHIP_TYPES = [
+  'PREREQUISITE',
+  'PART_OF',
+  'IS_A',
+  'RELATED_TO',
+  'CONTRADICTS',
+  'EXEMPLIFIES',
+  'CAUSES',
+  'DERIVED_FROM',
+] as const;
+
+const RELATIONSHIP_INDEXES = RELATIONSHIP_TYPES.flatMap((relType) => [
   {
-    name: 'rel_type_idx',
+    name: `rel_${relType.toLowerCase()}_edgeid_idx`,
     statement: `
-      CREATE INDEX rel_type_idx IF NOT EXISTS
-      FOR ()-[r:EDGE]-()
-      ON (r.type)
+      CREATE INDEX rel_${relType.toLowerCase()}_edgeid_idx IF NOT EXISTS
+      FOR ()-[r:${relType}]-()
+      ON (r.edgeId)
     `,
   },
-  // Index on userId property for PKG edge scoping
   {
-    name: 'rel_userid_idx',
+    name: `rel_${relType.toLowerCase()}_userid_idx`,
     statement: `
-      CREATE INDEX rel_userid_idx IF NOT EXISTS
-      FOR ()-[r:EDGE]-()
+      CREATE INDEX rel_${relType.toLowerCase()}_userid_idx IF NOT EXISTS
+      FOR ()-[r:${relType}]-()
       ON (r.userId)
     `,
   },
-] as const;
+]);
 
 /**
  * Full-text search indexes.

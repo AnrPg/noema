@@ -12,67 +12,27 @@
  */
 
 import type {
-  CorrelationId,
-  IMisconceptionDetection,
-  IPaginatedResponse,
   IGraphEdge,
   IGraphNode,
+  IMisconceptionDetection,
+  IPaginatedResponse,
   IStructuralMetrics,
   ISubgraph,
   NodeId,
   UserId,
 } from '@noema/types';
 
-import type { IAgentHints } from '@noema/contracts';
-
+import type { ICreateEdgeInput, ICreateNodeInput, IUpdateNodeInput } from './graph.repository.js';
+import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
   INodeFilter,
   ITraversalOptions,
   IValidationOptions,
 } from './value-objects/graph.value-objects.js';
-import type { ICreateEdgeInput, ICreateNodeInput, IUpdateNodeInput } from './graph.repository.js';
-import type { IMetricsHistoryOptions } from './metrics.repository.js';
 
-// ============================================================================
-// Execution Context
-// ============================================================================
-
-/**
- * Execution context for service operations.
- * Follows the content-service pattern.
- */
-export interface IExecutionContext {
-  /** Current user ID (null for anonymous) */
-  userId: UserId | null;
-  /** Request correlation ID */
-  correlationId: CorrelationId;
-  /** User roles for authorization */
-  roles: string[];
-  /** Client IP for audit */
-  clientIp?: string;
-  /** User agent */
-  userAgent?: string;
-}
-
-// ============================================================================
-// Service Result
-// ============================================================================
-
-/**
- * Service result wrapper — every service method returns this.
- *
- * Bundles the response data with `IAgentHints`. For example, a
- * `createEdge` response might hint "this node now has 8 prerequisites,
- * which is unusually high — consider reviewing if all are truly
- * necessary."
- */
-export interface IServiceResult<T> {
-  /** Result data */
-  data: T;
-  /** Agent hints for next actions */
-  agentHints: IAgentHints;
-}
+import type { IExecutionContext, IServiceResult } from './execution-context.js';
+export type { IExecutionContext, IServiceResult } from './execution-context.js';
 
 // ============================================================================
 // IKnowledgeGraphService

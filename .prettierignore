@@ -15,6 +15,7 @@ coverage/
 *.generated.*
 **/prisma/client/
 **/*.prisma.d.ts
+*.prisma
 
 # Lock files
 pnpm-lock.yaml
