@@ -15,15 +15,16 @@
 
 import type {
   EdgeId,
+  EdgeWeight,
   GraphEdgeType,
   IGraphEdge,
   IGraphNode,
   ISubgraph,
+  MasteryLevel,
   NodeId,
 } from '@noema/types';
 
 import type { INodeFilter, ITraversalOptions } from './value-objects/graph.value-objects.js';
-import type { IValidationOptions } from './value-objects/graph.value-objects.js';
 
 // ============================================================================
 // Input Types
@@ -38,7 +39,7 @@ export interface ICreateNodeInput {
   readonly domain: string;
   readonly description?: string;
   readonly properties?: Record<string, unknown>;
-  readonly masteryLevel?: number;
+  readonly masteryLevel?: MasteryLevel;
 }
 
 /**
@@ -49,7 +50,7 @@ export interface IUpdateNodeInput {
   readonly description?: string;
   readonly domain?: string;
   readonly properties?: Record<string, unknown>;
-  readonly masteryLevel?: number;
+  readonly masteryLevel?: MasteryLevel;
 }
 
 /**
@@ -59,7 +60,7 @@ export interface ICreateEdgeInput {
   readonly sourceNodeId: NodeId;
   readonly targetNodeId: NodeId;
   readonly edgeType: GraphEdgeType;
-  readonly weight?: number;
+  readonly weight?: EdgeWeight;
   readonly properties?: Record<string, unknown>;
 }
 
@@ -147,14 +148,12 @@ export interface IEdgeRepository {
    * @param graphType Which graph (pkg or ckg).
    * @param input Edge creation data.
    * @param userId Owner user ID (required for PKG).
-   * @param validationOptions Optional validation overrides for the service layer.
    * @returns The created edge.
    */
   createEdge(
     graphType: string,
     input: ICreateEdgeInput,
-    userId?: string,
-    validationOptions?: IValidationOptions
+    userId?: string
   ): Promise<IGraphEdge>;
 
   /**

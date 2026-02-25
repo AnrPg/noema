@@ -7,7 +7,7 @@
  * aggregation.
  */
 
-import type { Metadata, NodeId, PromotionBand, UserId } from '@noema/types';
+import type { ConfidenceScore, Metadata, NodeId, PromotionBand, UserId } from '@noema/types';
 
 // ============================================================================
 // Evidence Types
@@ -37,7 +37,7 @@ export interface IAggregationEvidence {
   readonly evidenceType: string;
 
   /** Confidence of the evidence signal (0–1) */
-  readonly confidence: number;
+  readonly confidence: ConfidenceScore;
 
   /** Additional evidence context */
   readonly metadata: Metadata;
@@ -57,7 +57,7 @@ export interface IEvidenceSummary {
   readonly contributingUserCount: number;
 
   /** Average confidence across all evidence records */
-  readonly averageConfidence: number;
+  readonly averageConfidence: ConfidenceScore;
 
   /** Distribution of confidence scores */
   readonly confidenceDistribution: {
@@ -92,7 +92,7 @@ export interface IAggregationEvidenceRepository {
     ckgTargetNodeId?: NodeId;
     proposedLabel?: string;
     evidenceType: string;
-    confidence: number;
+    confidence: ConfidenceScore;
     metadata?: Metadata;
   }): Promise<IAggregationEvidence>;
 

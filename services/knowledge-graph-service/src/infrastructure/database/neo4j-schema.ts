@@ -93,6 +93,31 @@ const NODE_INDEXES = [
 ] as const;
 
 /**
+ * Performance indexes for relationship (edge) lookups.
+ * Neo4j 5 supports relationship property indexes.
+ */
+const RELATIONSHIP_INDEXES = [
+  // Index on relationship type property for edge-filtered traversals
+  {
+    name: 'rel_type_idx',
+    statement: `
+      CREATE INDEX rel_type_idx IF NOT EXISTS
+      FOR ()-[r:EDGE]-()
+      ON (r.type)
+    `,
+  },
+  // Index on userId property for PKG edge scoping
+  {
+    name: 'rel_userid_idx',
+    statement: `
+      CREATE INDEX rel_userid_idx IF NOT EXISTS
+      FOR ()-[r:EDGE]-()
+      ON (r.userId)
+    `,
+  },
+] as const;
+
+/**
  * Full-text search indexes.
  * Neo4j full-text indexes are created with a different syntax.
  */
@@ -132,6 +157,7 @@ export async function initializeNeo4jSchema(
   const allStatements = [
     ...CONSTRAINTS.map((c) => ({ ...c, kind: 'constraint' as const })),
     ...NODE_INDEXES.map((i) => ({ ...i, kind: 'index' as const })),
+    ...RELATIONSHIP_INDEXES.map((i) => ({ ...i, kind: 'relationship-index' as const })),
     ...FULLTEXT_INDEXES.map((i) => ({ ...i, kind: 'fulltext-index' as const })),
   ];
 

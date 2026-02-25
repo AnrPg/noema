@@ -12,6 +12,7 @@
  */
 
 import type {
+  ConfidenceScore,
   InterventionId,
   InterventionType,
   Metadata,
@@ -115,7 +116,7 @@ export interface IMisconceptionRecord {
   readonly affectedNodeIds: readonly NodeId[];
 
   /** Detection confidence (0–1) */
-  readonly confidence: number;
+  readonly confidence: ConfidenceScore;
 
   /** Current lifecycle status */
   status: MisconceptionStatus;
@@ -164,7 +165,7 @@ export interface IRecordDetectionInput {
   readonly patternId: MisconceptionPatternId;
   readonly misconceptionType: MisconceptionType;
   readonly affectedNodeIds: readonly NodeId[];
-  readonly confidence: number;
+  readonly confidence: ConfidenceScore;
 }
 
 // ============================================================================

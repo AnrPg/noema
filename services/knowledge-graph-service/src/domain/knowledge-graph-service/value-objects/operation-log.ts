@@ -10,7 +10,7 @@
  * access to operation-specific fields.
  */
 
-import type { EdgeId, GraphEdgeType, GraphNodeType, Metadata, NodeId } from '@noema/types';
+import type { EdgeId, EdgeWeight, GraphEdgeType, GraphNodeType, Metadata, NodeId } from '@noema/types';
 
 // ============================================================================
 // Operation Type Discriminator
@@ -90,7 +90,7 @@ export interface IPkgEdgeCreatedOp extends IPkgOperationBase {
   readonly edgeType: GraphEdgeType;
   readonly sourceNodeId: NodeId;
   readonly targetNodeId: NodeId;
-  readonly weight: number;
+  readonly weight: EdgeWeight;
 }
 
 /**

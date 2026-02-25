@@ -6,6 +6,7 @@
  */
 
 import type { EdgeId, MisconceptionPatternId, NodeId } from '../branded-ids/index.js';
+import type { EdgeWeight, MasteryLevel, ConfidenceScore } from '../branded-numerics/index.js';
 import type {
   GraphEdgeType,
   GraphNodeType,
@@ -51,7 +52,7 @@ export interface IGraphNode {
   properties: Metadata;
 
   /** Mastery level (0–1) — present only for PKG nodes */
-  masteryLevel?: number;
+  masteryLevel?: MasteryLevel;
 
   /** When this node was created (ISO 8601) */
   readonly createdAt: string;
@@ -86,7 +87,7 @@ export interface IGraphEdge {
   userId?: string;
 
   /** Relationship strength (0–1) */
-  weight: number;
+  weight: EdgeWeight;
 
   /** Extensible key-value properties */
   properties: Metadata;
@@ -182,7 +183,7 @@ export interface IMisconceptionDetection {
   readonly affectedNodeIds: readonly NodeId[];
 
   /** Detection confidence (0–1) */
-  readonly confidence: number;
+  readonly confidence: ConfidenceScore;
 
   /** The pattern that detected this misconception */
   readonly patternId: MisconceptionPatternId;

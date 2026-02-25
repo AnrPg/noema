@@ -125,7 +125,8 @@ model CkgMutationAuditLog {
 // Structural Metric Snapshot — Periodic per-user structural metric cache
 // ============================================================================
 // Snapshots of computed structural metrics (AD, DCG, SLI, SCE, ULS, TBS, SDF,
-// SSE, SAA) stored periodically for longitudinal tracking and agent reasoning.
+// SSE, SAA, SSG, BSI) stored periodically for longitudinal tracking and agent
+// reasoning.
 // Actual computation happens in Neo4j; these are cached results.
 
 model StructuralMetricSnapshot {
@@ -136,7 +137,7 @@ model StructuralMetricSnapshot {
     domain String? @db.VarChar(200)
 
     // The computed metrics as a JSON object
-    // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, ... }
+    // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, SSG, BSI }
     metrics Json
 
     // Optional graph region identifier (for per-region staging)
@@ -308,6 +309,52 @@ model InterventionTemplate {
     @@index([priority])
     @@index([createdAt])
     @@map("intervention_templates")
+}
+
+// ============================================================================
+// PKG Operation Log — Append-only per-user PKG mutation changelog
+// ============================================================================
+// Records every PKG write operation for undo/redo, aggregation pipeline input,
+// and offline sync reconciliation. This table is append-only — no updates or
+// deletes permitted (soft-deletes on the operations themselves are separate
+// log entries). Each user has a monotonically increasing sequence number.
+
+model PkgOperationLog {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Monotonically increasing per-user sequence for ordering guarantees
+    // Used by offline sync reconciliation to detect gaps
+    sequenceNumber Int @map("sequence_number")
+
+    // Operation type discriminator (matches PkgOperationType enum in domain layer)
+    operationType String @map("operation_type") @db.VarChar(50)
+
+    // The full operation payload as a JSON discriminated union
+    // Structure depends on operationType (node_created, edge_deleted, etc.)
+    operation Json
+
+    // Affected entity IDs for indexed lookups
+    affectedNodeIds String[] @default([]) @map("affected_node_ids")
+    affectedEdgeIds String[] @default([]) @map("affected_edge_ids")
+
+    // Correlation for distributed tracing
+    correlationId String? @map("correlation_id") @db.VarChar(100)
+
+    // Audit — no updatedAt because this table is append-only
+    createdAt DateTime @default(now()) @map("created_at")
+
+    // Indexes
+    @@unique([userId, sequenceNumber])
+    @@index([userId])
+    @@index([userId, createdAt])
+    @@index([userId, operationType])
+    @@index([operationType])
+    @@index([affectedNodeIds], type: Gin)
+    @@index([affectedEdgeIds], type: Gin)
+    @@index([createdAt])
+    @@index([correlationId])
+    @@map("pkg_operation_log")
 }
 
 // ============================================================================
