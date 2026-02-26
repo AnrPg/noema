@@ -127,6 +127,7 @@ This reduces partial-processing risk during rolling restarts.
 - [ADR-0028: Scheduler Agent Readiness Hardening](./ADR-0028-scheduler-agent-readiness-hardening.md)
 - [ADR-0029: Scheduler FSRS/HLR Runtime Integration and State Machine](./ADR-0029-scheduler-fsrs-hlr-runtime-integration-phase-3.md)
 - [ADR-0030: Scheduler MCP Tool Surface Expansion (Phase 4)](./ADR-0030-scheduler-mcp-tool-surface-expansion-phase-4.md)
+- [ADR-0039: Scheduler Event Consumer Decomposition](./ADR-0039-scheduler-event-consumer-decomposition.md)
 - [MCP_TOOL_CONTRACT_STANDARD](../patterns/MCP_TOOL_CONTRACT_STANDARD.md)
 - [Phase 5 — Event Handshake and Consumer Reliability](../../scheduler-agent-readiness/PHASE-5-EVENT-HANDSHAKE-RELIABILITY.md)
 
@@ -141,6 +142,8 @@ This reduces partial-processing risk during rolling restarts.
 - `services/scheduler-service/src/domain/scheduler-service/scheduler.repository.ts`
 - `services/scheduler-service/src/infrastructure/database/prisma-event-reliability.repository.ts`
 - `services/scheduler-service/src/infrastructure/events/scheduler-event-consumer.ts`
+  (now a thin facade — reliability logic moved to `consumers/base-consumer.ts`
+  per ADR-0039)
 - `services/scheduler-service/src/config/index.ts`
 - `services/scheduler-service/src/index.ts`
 - `services/scheduler-service/tests/unit/domain/scheduler-event-consumer-phase5.test.ts`

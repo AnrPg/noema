@@ -41,7 +41,8 @@ gives per-card granularity: `cardId`, `rating`, `outcome`, `responseTimeMs`.
 ### 2. Production-grade consumer infrastructure (scheduler-aligned)
 
 We build a `BaseEventConsumer` abstract class modelled on the
-scheduler-service's `SchedulerEventConsumer`, providing:
+scheduler-service's `SchedulerEventConsumer` (which was later decomposed into
+its own `BaseEventConsumer` hierarchy per ADR-0039), providing:
 
 - **Redis Streams XREADGROUP** with consumer groups
 - **Idempotent group creation** (handles `BUSYGROUP`)

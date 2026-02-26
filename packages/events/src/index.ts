@@ -60,3 +60,4 @@ export type * from './user/user.events.js';
 // ============================================================================
 export * from './knowledge-graph/knowledge-graph-event.schemas.js';
 export * from './knowledge-graph/knowledge-graph.events.js';
+

@@ -96,6 +96,7 @@ Added scheduler incident runbook covering:
 ## References
 
 - [ADR-0031: Scheduler Event Handshake and Consumer Reliability (Phase 5)](./ADR-0031-scheduler-event-handshake-and-consumer-reliability-phase-5.md)
+- [ADR-0039: Scheduler Event Consumer Decomposition](./ADR-0039-scheduler-event-consumer-decomposition.md)
 - [Phase 6 — Observability, Backpressure, and Operations Runbook](../../scheduler-agent-readiness/PHASE-6-OBSERVABILITY-BACKPRESSURE-RUNBOOK.md)
 - [Scheduler Incident Runbook](../../guides/operations/scheduler-incident-runbook.md)
 
@@ -108,6 +109,8 @@ Added scheduler incident runbook covering:
 - `services/scheduler-service/src/agents/tools/scheduler.tools.ts`
 - `services/scheduler-service/src/agents/tools/tool.registry.ts`
 - `services/scheduler-service/src/infrastructure/events/scheduler-event-consumer.ts`
+  (now a thin facade — span instrumentation lives in `consumers/base-consumer.ts`
+  per ADR-0039)
 - `services/scheduler-service/src/infrastructure/database/prisma-event-reliability.repository.ts`
 - `docs/api/openapi/scheduler-service/openapi.yaml`
 - `docs/api/openapi/scheduler-service/paths/health.yaml`

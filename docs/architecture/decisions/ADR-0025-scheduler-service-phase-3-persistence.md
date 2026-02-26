@@ -101,7 +101,8 @@ Event consumer ingestion is connected to repositories for durable updates.
   - `src/domain/scheduler-service/scheduler.repository.ts`
   - `src/infrastructure/database/*.repository.ts`
 - Event consumer hardening:
-  - `src/infrastructure/events/scheduler-event-consumer.ts`
+  - `src/infrastructure/events/scheduler-event-consumer.ts` (now a thin facade;
+    event handling decomposed into per-stream consumers per ADR-0039)
 - Runtime/config integration:
   - `src/index.ts`, `src/config/index.ts`, `.env.example`
 

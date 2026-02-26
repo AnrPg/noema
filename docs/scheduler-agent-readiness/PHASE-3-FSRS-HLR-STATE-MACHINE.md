@@ -21,6 +21,7 @@ explicit scheduler card state transitions.
 
 - [x] Add/complete FSRS algorithm module and tests.
 - [x] Integrate FSRS updates in event consumer review handling.
+      *(now in `ReviewRecordedConsumer` — see ADR-0039)*
 - [x] Integrate HLR prediction/update in proposal and review paths.
 - [x] Implement state transition guard module for `SchedulerCard.state`.
 - [x] Add calibration loop trigger(s) and persistence updates.

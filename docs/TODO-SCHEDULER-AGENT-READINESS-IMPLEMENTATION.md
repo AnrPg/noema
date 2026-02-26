@@ -308,7 +308,8 @@ Apply real algorithm updates after attempts and in proposal/commit flow.
 ### File Targets
 
 - `services/scheduler-service/src/domain/scheduler-service/algorithms/*`
-- `services/scheduler-service/src/infrastructure/events/scheduler-event-consumer.ts`
+- `services/scheduler-service/src/infrastructure/events/consumers/review-recorded.consumer.ts`
+  (decomposed from monolithic consumer per ADR-0039)
 - `services/scheduler-service/src/domain/scheduler-service/scheduler.service.ts`
 
 ### Acceptance
@@ -402,18 +403,26 @@ Make cross-service orchestration resilient and traceable.
 
 #### 5D. Consumer Idempotency and Recovery
 
-- [ ] Add inbox dedupe storage and checks.
-- [ ] Add startup pending recovery via claim strategy.
-- [ ] Ensure retries cannot cause semantic duplicates.
+- [x] Add inbox dedupe storage and checks.
+- [x] Add startup pending recovery via claim strategy.
+- [x] Ensure retries cannot cause semantic duplicates.
+
+> **Note:** Consumer infrastructure has been decomposed into
+> `BaseEventConsumer` + per-stream concrete consumers (ADR-0039).
 
 #### 5E. Graceful Drain
 
-- [ ] Implement bounded shutdown for in-flight messages.
-- [ ] Stop intake before shutdown and flush processing.
+- [x] Implement bounded shutdown for in-flight messages.
+- [x] Stop intake before shutdown and flush processing.
 
 ### File Targets
 
+- `services/scheduler-service/src/infrastructure/events/consumers/base-consumer.ts`
+  (reliability infrastructure — ADR-0039)
+- `services/scheduler-service/src/infrastructure/events/consumers/session-cohort.consumer.ts`
+  (handshake event handling — ADR-0039)
 - `services/scheduler-service/src/infrastructure/events/scheduler-event-consumer.ts`
+  (thin facade — ADR-0039)
 - `services/scheduler-service/src/domain/shared/event-publisher.ts`
 - `services/scheduler-service/src/infrastructure/cache/redis-event-publisher.ts`
 - `services/scheduler-service/src/index.ts`

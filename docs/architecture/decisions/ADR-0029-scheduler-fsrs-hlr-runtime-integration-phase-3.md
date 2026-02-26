@@ -21,8 +21,8 @@ runtime gaps:
 - SchedulerCard state transitions were implicit and lacked validation;
 - Calibration training loop was planned but not wired into runtime review
   processing;
-- Event consumer (scheduler-event-consumer.ts) updated counters but did not
-  invoke algorithm computations.
+- Event consumer (`scheduler-event-consumer.ts`, later decomposed per ADR-0039)
+  updated counters but did not invoke algorithm computations.
 
 This prevented the scheduler from producing deterministic, algorithm-driven
 scheduling decisions based on actual review outcomes.
@@ -86,7 +86,8 @@ machine-readable errors) per user requirements.
 
 ### 3) Integrate FSRS and HLR in Event Consumer
 
-Updated `scheduler-event-consumer.ts` `handleReviewRecorded()`:
+Updated `handleReviewRecorded()` (now in `ReviewRecordedConsumer` — see
+ADR-0039):
 
 - **New card initialization**:
   - Retention lane: Invoke `FSRSModel.initState(rating)` to compute initial
@@ -204,6 +205,7 @@ All tests pass (115 total tests in scheduler-service).
 - [PHASE-3-FSRS-HLR-STATE-MACHINE.md](../scheduler-agent-readiness/PHASE-3-FSRS-HLR-STATE-MACHINE.md)
 - [ADR-0022: Dual-Lane Scheduler](./ADR-0022-dual-lane-scheduler.md)
 - [ADR-0025: Scheduler Phase 3 Persistence](./ADR-0025-scheduler-service-phase-3-persistence.md)
+- [ADR-0039: Scheduler Event Consumer Decomposition](./ADR-0039-scheduler-event-consumer-decomposition.md)
 - FSRS Paper: Jarrett Ye et al., "A Stochastic Shortest Path Algorithm for
   Optimizing Spaced Repetition Scheduling" (KDD 2024)
 - HLR Paper: Settles & Meeder, "A Trainable Spaced Repetition Model for Language
@@ -215,8 +217,9 @@ All tests pass (115 total tests in scheduler-service).
   (428 lines)
 - `src/domain/scheduler-service/state-machine.ts`: New state transition guard
   (313 lines)
-- `src/infrastructure/events/scheduler-event-consumer.ts`: Integrated algorithms
-  in handleReviewRecorded (193 lines modified)
+- `src/infrastructure/events/consumers/review-recorded.consumer.ts`: FSRS/HLR
+  algorithm integration in `handleReviewRecorded()` (decomposed from monolithic
+  consumer per ADR-0039)
 - `tests/unit/domain/fsrs.test.ts`: New test suite (343 lines, 27 tests)
 - `tests/unit/domain/state-machine.test.ts`: New test suite (428 lines, 31
   tests)

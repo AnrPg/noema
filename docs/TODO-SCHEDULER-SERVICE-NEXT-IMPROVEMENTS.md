@@ -6,7 +6,8 @@ FSRS integration, testing, and observability.
 
 **Architecture reference:**
 ADR-0022 (Dual-Lane), ADR-0024 (Phase 1), ADR-0025 (Phase 3 Persistence),
-ADR-0026 (Identity & Auth), ADR-0027 (OpenAPI Contract)
+ADR-0026 (Identity & Auth), ADR-0027 (OpenAPI Contract),
+ADR-0039 (Event Consumer Decomposition)
 
 **Current state:** Phase 1 (HTTP+Auth+Health+Tools) ✅, Phase 2 (Event
 Consumer) ✅, Phase 3 (Prisma persistence) ✅, Dual-Lane v2
@@ -256,8 +257,11 @@ implementation yet — card state updates rely on agent-provided values.
 
 ## Phase 7 — Event Consumer Hardening
 
-The event consumer handles `session.started`, `attempt.recorded`, and
-`content.seeded`. It needs enrichment for real scheduling use.
+The event consumer has been decomposed into per-stream concrete consumers
+(ADR-0039): `SessionStartedConsumer`, `ReviewRecordedConsumer`,
+`ContentSeededConsumer`, and `SessionCohortConsumer`, all extending
+`BaseEventConsumer`. The original `SchedulerEventConsumer` class is now a thin
+facade that delegates to these consumers.
 
 ### 7A. Post-Review Scheduling via Event Consumer
 
@@ -346,15 +350,24 @@ tests. Critical to validate against the reference Python implementation.
 
 ### 9B. Event Consumer Unit Tests
 
-`scheduler-event-consumer.ts` (608 lines) has zero unit tests. All three
-event handlers + retry/dead-letter logic need coverage.
+The monolithic `scheduler-event-consumer.ts` (formerly 1 200 lines) has been
+decomposed into `BaseEventConsumer` + 4 concrete consumers (ADR-0039). Phase-5
+reliability tests (`scheduler-event-consumer-phase5.test.ts`, 3 tests) now
+target the concrete consumers directly. Additional per-consumer test coverage
+is recommended.
 
-- [ ] `tests/unit/events/scheduler-event-consumer.test.ts`
+- [ ] `tests/unit/events/session-started.consumer.test.ts`
   - `handleSessionStarted` — creates SchedulerCard records for initial cards
+- [ ] `tests/unit/events/review-recorded.consumer.test.ts`
   - `handleReviewRecorded` — creates Review + updates card counters
   - `handleReviewRecorded` — idempotency (duplicate attemptId ignored)
+- [ ] `tests/unit/events/content-seeded.consumer.test.ts`
   - `handleContentSeeded` — creates SchedulerCard for new cards
-  - Invalid payload rejection for each event type
+  - Invalid payload rejection
+- [ ] `tests/unit/events/session-cohort.consumer.test.ts`
+  - `handleCohort*` — handshake state transitions
+  - Stale revision guard
+- [ ] `tests/unit/events/base-consumer.test.ts`
   - Retry logic: backoff timing, requeue to source stream
   - Dead-letter: moves to DL stream after max attempts
   - `ensureConsumerGroup` BUSYGROUP handling
@@ -432,7 +445,7 @@ Three Prisma repositories have zero integration tests.
 1. Phase 4A (Review Queue) — Learning Agent P0 dependency
 2. Phase 4B (Card Schedule Update) — Learning Agent P0 dependency
 3. Phase 9A (HLR unit tests) — de-risk existing algorithm code
-4. Phase 9B (Event consumer tests) — de-risk 608 lines of untested code
+4. Phase 9B (Per-consumer unit tests) — cover decomposed consumers (ADR-0039)
 
 **Priority 2 — Scheduling engine completeness:**
 5. Phase 4D (Retention Prediction) — stateless, self-contained
