@@ -996,17 +996,44 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     this.requireAuth(context);
     this.logger.info({ userId, domain }, 'Computing structural metrics');
 
+    // I-1: Staleness guard — return cached metrics if they are still fresh
+    // (no structural changes since the last snapshot was computed).
+    const existingSnapshot = await this.metricsRepository.getLatestSnapshot(userId, domain);
+    if (existingSnapshot) {
+      const isStale = await this.metricsStalenessRepository.isStale(
+        userId,
+        domain,
+        existingSnapshot.computedAt
+      );
+      if (!isStale) {
+        this.logger.debug({ userId, domain }, 'Metrics are fresh — returning cached snapshot');
+        return {
+          data: existingSnapshot.metrics,
+          agentHints: this.createMetricsHints(existingSnapshot.metrics, domain),
+        };
+      }
+    }
+
     // Fetch subgraphs in parallel
     const [pkgSubgraph, ckgSubgraph] = await Promise.all([
       this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
       this.fetchDomainSubgraph(GraphType.CKG, domain),
     ]);
 
+    // Detect CKG unavailability (empty CKG subgraph)
+    const ckgUnavailable = ckgSubgraph.nodes.length === 0;
+    if (ckgUnavailable) {
+      this.logger.warn(
+        { userId, domain },
+        'CKG subgraph is empty — CKG-dependent metrics will default to 0.0'
+      );
+    }
+
     // Build comparison
     const comparison = buildGraphComparison(pkgSubgraph, ckgSubgraph);
 
-    // Get previous snapshot for delta metrics
-    const previousSnapshot = await this.metricsRepository.getLatestSnapshot(userId, domain);
+    // Re-use the snapshot fetched during staleness check (or null for first run)
+    const previousSnapshot = existingSnapshot;
 
     // Build computation context
     const ctx = buildMetricComputationContext(
@@ -1024,21 +1051,44 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     // Save snapshot
     await this.metricsRepository.saveSnapshot(userId, domain, metrics);
 
-    // Publish event
-    await this.eventPublisher.publish({
-      eventType: KnowledgeGraphEventType.PKG_STRUCTURAL_METRICS_UPDATED,
-      aggregateType: 'PersonalKnowledgeGraph',
-      aggregateId: userId,
-      payload: { userId, domain, metrics },
-      metadata: {
-        correlationId: context.correlationId,
-        userId: context.userId,
-      },
-    });
+    // Publish event only when metrics changed significantly (>0.05 on any
+    // metric or crossed a concerning threshold). Spec: Phase 7 L78-79.
+    const hasSignificantChange = this.detectSignificantMetricChange(
+      metrics,
+      previousSnapshot?.metrics ?? null
+    );
+
+    if (hasSignificantChange) {
+      await this.eventPublisher.publish({
+        eventType: KnowledgeGraphEventType.PKG_STRUCTURAL_METRICS_UPDATED,
+        aggregateType: 'PersonalKnowledgeGraph',
+        aggregateId: userId,
+        payload: { userId, domain, metrics },
+        metadata: {
+          correlationId: context.correlationId,
+          userId: context.userId,
+        },
+      });
+    }
+
+    // Build hints — include CKG unavailability warning if applicable
+    const hints = this.createMetricsHints(metrics, domain);
+    if (ckgUnavailable) {
+      hints.riskFactors.push({
+        type: 'accuracy',
+        severity: 'medium',
+        description:
+          'CKG unavailable for this domain — CKG-dependent metrics ' +
+          '(AD, DCG, SLI, SCE, ULS) defaulted to 0.0. Results are partial.',
+        probability: 1.0,
+        impact: 0.6,
+      });
+      hints.assumptions.push('CKG subgraph was empty — CKG-dependent metrics are not meaningful');
+    }
 
     return {
       data: metrics,
-      agentHints: this.createMetricsHints(metrics, domain),
+      agentHints: hints,
     };
   }
 
@@ -1111,6 +1161,15 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     // Get active patterns
     const patterns = await this.misconceptionRepository.getActivePatterns();
 
+    // I-3: Fetch currently active misconceptions to deduplicate detections.
+    // We skip re-recording a misconception if an active one already exists
+    // for the same (userId, patternId) pair.
+    const activeMisconceptions = await this.misconceptionRepository.getActiveMisconceptions(
+      userId,
+      domain
+    );
+    const activePatternIds = new Set(activeMisconceptions.map((m) => m.patternId));
+
     // Build detection context
     const detectionCtx: IMisconceptionDetectionContext = {
       pkgSubgraph,
@@ -1133,6 +1192,15 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       const pattern = patterns.find((p) => p.patternId === result.patternId);
       if (!pattern) continue;
 
+      // I-3: Skip if an active detection already exists for this pattern
+      if (activePatternIds.has(result.patternId as MisconceptionPatternId)) {
+        this.logger.debug(
+          { patternId: result.patternId },
+          'Skipping duplicate misconception — active detection already exists'
+        );
+        continue;
+      }
+
       const record = await this.misconceptionRepository.recordDetection({
         userId,
         patternId: result.patternId as MisconceptionPatternId,
@@ -1150,6 +1218,28 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         patternId: record.patternId,
         detectedAt: record.detectedAt,
         resolvedAt: record.resolvedAt,
+      });
+
+      // Publish MisconceptionDetected event (Phase 7 spec requirement)
+      await this.eventPublisher.publish({
+        eventType: KnowledgeGraphEventType.MISCONCEPTION_DETECTED,
+        aggregateType: 'PersonalKnowledgeGraph',
+        aggregateId: userId,
+        payload: {
+          userId,
+          misconceptionType: record.misconceptionType,
+          affectedNodeIds: record.affectedNodeIds,
+          confidence: record.confidence,
+          patternId: record.patternId,
+          evidence: {
+            detectionMethod: pattern.kind,
+            domain,
+          } satisfies Record<string, string>,
+        },
+        metadata: {
+          correlationId: context.correlationId,
+          userId: context.userId,
+        },
       });
     }
 
@@ -2195,6 +2285,48 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       preferenceAlignment: [],
       reasoning: `Found ${String(mutations.length)} mutation(s): ${stateBreakdown}`,
     };
+  }
+
+  // ========================================================================
+  // Private — Phase 7 Helpers
+  // ========================================================================
+
+  /**
+   * Significant-change threshold for metric event publishing (Phase 7 spec).
+   * An event is published only when *any* metric changes by more than this
+   * absolute delta, or when there is no previous snapshot (first computation).
+   */
+  private static readonly SIGNIFICANT_CHANGE_THRESHOLD = 0.05;
+
+  /**
+   * Determines whether any metric changed significantly compared to a
+   * previous snapshot. Returns true when there is no previous data (always
+   * publish on first computation) or when any metric's absolute delta
+   * exceeds `SIGNIFICANT_CHANGE_THRESHOLD`.
+   */
+  private detectSignificantMetricChange(
+    current: IStructuralMetrics,
+    previous: IStructuralMetrics | null
+  ): boolean {
+    if (!previous) return true; // first computation — always significant
+
+    const fields: readonly (keyof IStructuralMetrics)[] = [
+      'abstractionDrift',
+      'depthCalibrationGradient',
+      'scopeLeakageIndex',
+      'siblingConfusionEntropy',
+      'upwardLinkStrength',
+      'traversalBreadthScore',
+      'strategyDepthFit',
+      'structuralStrategyEntropy',
+      'structuralAttributionAccuracy',
+      'structuralStabilityGain',
+      'boundarySensitivityImprovement',
+    ];
+
+    return fields.some(
+      (f) => Math.abs(current[f] - previous[f]) > KnowledgeGraphService.SIGNIFICANT_CHANGE_THRESHOLD
+    );
   }
 
   // ========================================================================

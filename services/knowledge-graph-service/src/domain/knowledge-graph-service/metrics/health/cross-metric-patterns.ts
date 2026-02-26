@@ -4,6 +4,9 @@
  * Detects compound patterns formed by combinations of structural metric
  * values. These patterns surface higher-order issues that individual
  * metrics cannot capture alone.
+ *
+ * The six patterns below are specified in STRUCTURAL-METRICS-SPECIFICATION.md
+ * §Cross-Metric Interaction Patterns (L1048-1107).
  */
 
 import type { IStructuralMetrics } from '@noema/types';
@@ -27,6 +30,9 @@ export interface ICrossMetricPattern {
 
   /** Which metric abbreviations participate in this pattern */
   readonly participatingMetrics: readonly string[];
+
+  /** Recommended action from the spec */
+  readonly suggestedAction: string;
 }
 
 // ============================================================================
@@ -35,101 +41,115 @@ export interface ICrossMetricPattern {
 
 /**
  * Detect cross-metric interaction patterns in the current metrics.
+ *
+ * All six patterns and their semantics are drawn from the structural-metrics
+ * specification document.
  */
 export function detectCrossMetricPatterns(metrics: IStructuralMetrics): ICrossMetricPattern[] {
   const patterns: ICrossMetricPattern[] = [];
 
-  // ── Pattern 1: Orphaned Depth ─────────────────────────────────────
-  // High depth calibration gradient + low upward link strength
-  // → student adds deep nodes but doesn't connect them to abstractions
-  if (metrics.depthCalibrationGradient > 0.4 && metrics.upwardLinkStrength < 0.4) {
+  // ── Pattern 1: Double Misframing (High AD + High DCG) ─────────────
+  // The student's hierarchy is wrong AND at the wrong depth — a
+  // fundamental misorganisation of the domain.
+  if (metrics.abstractionDrift > 0.5 && metrics.depthCalibrationGradient > 0.5) {
     patterns.push({
-      id: 'orphaned_depth',
-      name: 'Orphaned Depth',
-      severity: 'warning',
-      description:
-        'Deep concepts exist but lack proper hierarchical connections. ' +
-        'The student may be memorising specifics without understanding their place in the broader structure.',
-      participatingMetrics: ['DCG', 'ULS'],
-    });
-  }
-
-  // ── Pattern 2: Shallow Breadth Without Depth ──────────────────────
-  // High traversal breadth + low strategy depth fit + shallow bias
-  if (metrics.traversalBreadthScore > 0.6 && metrics.strategyDepthFit < 0.4) {
-    patterns.push({
-      id: 'shallow_breadth',
-      name: 'Shallow Breadth Without Depth',
-      severity: 'info',
-      description:
-        'The graph has diverse edge types but the depth profile does not match the learning strategy. ' +
-        'Consider deepening understanding in a few areas rather than expanding breadth.',
-      participatingMetrics: ['TBS', 'SDF'],
-    });
-  }
-
-  // ── Pattern 3: Structural Confusion ───────────────────────────────
-  // High sibling confusion + high abstraction drift
-  // → student confuses related concepts AND misplaces them in the hierarchy
-  if (metrics.siblingConfusionEntropy > 0.4 && metrics.abstractionDrift > 0.4) {
-    patterns.push({
-      id: 'structural_confusion',
-      name: 'Structural Confusion',
+      id: 'double_misframing',
+      name: 'Double Misframing',
       severity: 'critical',
       description:
-        'The student both confuses sibling concepts and misplaces them in the hierarchy. ' +
-        'This compound pattern suggests fundamental conceptual misunderstanding that needs targeted remediation.',
-      participatingMetrics: ['SCE', 'AD'],
+        'Conceptual hierarchy is wrong AND at the wrong depth — the student is ' +
+        'fundamentally misorganising the domain.',
+      participatingMetrics: ['AD', 'DCG'],
+      suggestedAction:
+        'Scaffolded restructuring from the top down. Do not add new content; fix ' +
+        'the existing hierarchy first.',
     });
   }
 
-  // ── Pattern 4: Leaking Despite Accuracy ───────────────────────────
-  // High scope leakage + high attribution accuracy
-  // → student understands concepts correctly but connects them across domains inappropriately
-  if (metrics.scopeLeakageIndex > 0.3 && metrics.structuralAttributionAccuracy > 0.6) {
+  // ── Pattern 2: Interdisciplinary Thinking (High SLI + Low SCE) ────
+  // Cross-domain edges exist but siblings are not confused. This may
+  // indicate creative interdisciplinary thinking rather than confusion.
+  if (metrics.scopeLeakageIndex > 0.4 && metrics.siblingConfusionEntropy < 0.3) {
     patterns.push({
-      id: 'accurate_but_leaking',
-      name: 'Accurate but Leaking',
+      id: 'interdisciplinary_thinking',
+      name: 'Interdisciplinary Thinking',
       severity: 'info',
       description:
-        'Concepts are correctly attributed but inappropriately connected across domains. ' +
-        'This may reflect genuine interdisciplinary thinking or domain boundary confusion.',
-      participatingMetrics: ['SLI', 'SAA'],
+        'The student crosses domain boundaries but does not confuse sibling ' +
+        'concepts. This may indicate genuine interdisciplinary reasoning rather ' +
+        'than confusion.',
+      participatingMetrics: ['SLI', 'SCE'],
+      suggestedAction:
+        'Validate cross-domain connections; reduce SLI penalty if they are ' +
+        'pedagogically sound.',
     });
   }
 
-  // ── Pattern 5: Unstable Despite Progress ──────────────────────────
-  // Low structural stability + improving attribution accuracy
-  // → student is restructuring (good) but creating churn (risky)
-  if (metrics.structuralStabilityGain < 0.3 && metrics.structuralAttributionAccuracy > 0.5) {
+  // ── Pattern 3: Weak Hierarchy (Low ULS + High TBS) ────────────────
+  // Diverse relationship types but weak hierarchical links. The student
+  // knows "how things relate" but not "what things are."
+  if (metrics.upwardLinkStrength < 0.4 && metrics.traversalBreadthScore > 0.6) {
     patterns.push({
-      id: 'productive_instability',
-      name: 'Productive Instability',
-      severity: 'info',
+      id: 'weak_hierarchy',
+      name: 'Weak Hierarchy',
+      severity: 'warning',
       description:
-        'The graph is undergoing significant restructuring while attribution accuracy remains good. ' +
-        'This may indicate healthy conceptual reorganisation.',
-      participatingMetrics: ['SSG', 'SAA'],
+        'Diverse relationship types exist but hierarchical connections are weak. ' +
+        'The student understands associations but not classifications.',
+      participatingMetrics: ['ULS', 'TBS'],
+      suggestedAction:
+        'Focus on explicit is_a and part_of exercises to build conceptual scaffolding.',
     });
   }
 
-  // ── Pattern 6: Stagnant Despite Good Structure ────────────────────
-  // High overall scores but no stability gain or boundary improvement
-  // → student has stopped growing
-  if (
-    metrics.upwardLinkStrength > 0.7 &&
-    metrics.abstractionDrift < 0.2 &&
-    metrics.structuralStabilityGain > 0.8 &&
-    metrics.boundarySensitivityImprovement < 0.05
-  ) {
+  // ── Pattern 4: Structural Neglect (High SSE + Low SAA) ────────────
+  // The graph is structurally uneven AND the student does not realise it
+  // — unintentional neglect of some regions.
+  if (metrics.structuralStrategyEntropy > 0.5 && metrics.structuralAttributionAccuracy < 0.4) {
     patterns.push({
-      id: 'structural_plateau',
-      name: 'Structural Plateau',
+      id: 'structural_neglect',
+      name: 'Structural Neglect',
+      severity: 'warning',
+      description:
+        'The graph is structurally uneven and the student does not understand ' +
+        'why. Some areas are developed while others are forgotten.',
+      participatingMetrics: ['SSE', 'SAA'],
+      suggestedAction:
+        'Draw attention to underdeveloped regions. Use a territory-map visualisation.',
+    });
+  }
+
+  // ── Pattern 5: Consolidating Wrong Boundaries (+ SSG + − BSI) ────
+  // The graph is stabilising but boundary sensitivity is worsening. The
+  // student is locking in incorrect domain boundaries.
+  if (metrics.structuralStabilityGain > 0 && metrics.boundarySensitivityImprovement < 0) {
+    patterns.push({
+      id: 'consolidating_wrong_boundaries',
+      name: 'Consolidating Wrong Boundaries',
+      severity: 'critical',
+      description:
+        'The graph is stabilising overall but boundary sensitivity is worsening. ' +
+        'The student is consolidating incorrect boundaries into a steady state.',
+      participatingMetrics: ['SSG', 'BSI'],
+      suggestedAction: 'Urgent boundary remediation before the wrong model becomes entrenched.',
+    });
+  }
+
+  // ── Pattern 6: One-Dimensional Depth (High SDF + Low TBS) ────────
+  // Strategy matches depth well but only one relationship type is used.
+  // Effective for depth but creating one-dimensional understanding.
+  if (metrics.strategyDepthFit > 0.6 && metrics.traversalBreadthScore < 0.3) {
+    patterns.push({
+      id: 'one_dimensional_depth',
+      name: 'One-Dimensional Depth',
       severity: 'info',
       description:
-        'The graph is well-structured and stable but shows no recent improvement. ' +
-        'The student may benefit from more challenging material or new domains.',
-      participatingMetrics: ['ULS', 'AD', 'SSG', 'BSI'],
+        'Strategy matches depth well but the student primarily uses one type of ' +
+        'relationship, creating limited understanding.',
+      participatingMetrics: ['SDF', 'TBS'],
+      suggestedAction:
+        'Diversify relationship types; introduce exercises requiring classification, ' +
+        'contrast, or composition reasoning.',
     });
   }
 

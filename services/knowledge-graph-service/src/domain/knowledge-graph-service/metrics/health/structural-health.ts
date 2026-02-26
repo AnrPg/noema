@@ -17,6 +17,7 @@ import type {
 import { MetricHealthStatus as HealthStatus, TrendDirection as Trend } from '@noema/types';
 
 import type { IMetricSnapshot } from '../../metrics.repository.js';
+import { detectCrossMetricPatterns } from './cross-metric-patterns.js';
 
 // ============================================================================
 // Weights & Thresholds
@@ -152,6 +153,9 @@ export function buildStructuralHealthReport(
   const overallScore = computeOverallScore(metrics);
   const trend = computeOverallTrend(previousSnapshots);
 
+  // Detect cross-metric interaction patterns (I-2 improvement)
+  const crossPatterns = detectCrossMetricPatterns(metrics);
+
   return {
     overallScore,
     metricBreakdown: breakdown,
@@ -160,6 +164,7 @@ export function buildStructuralHealthReport(
     metacognitiveStage,
     domain,
     generatedAt: new Date().toISOString(),
+    crossMetricPatterns: crossPatterns,
   };
 }
 
@@ -201,13 +206,37 @@ function classifyHealth(
   }
 }
 
+/**
+ * Normalise a raw metric value to a [0,1] "goodness" score.
+ *
+ * Most metrics use simple inversion (badness) or direct pass-through (goodness).
+ * Three special cases from STRUCTURAL-METRICS-SPECIFICATION.md:
+ *
+ *  - SSE → s = 1 - |SSE - 0.5| × 2   (best at 0.5, worst at extremes)
+ *  - SSG → s = (SSG + 1) / 2          (maps [-1,1] → [0,1])
+ *  - BSI → s = (BSI + 1) / 2          (maps [-1,1] → [0,1])
+ */
+function normaliseToGoodness(field: string, raw: number, config: IMetricConfig): number {
+  // Special: SSE — best at 0.5, worst at 0 or 1
+  if (field === 'structuralStrategyEntropy') {
+    return 1 - Math.abs(raw - 0.5) * 2;
+  }
+
+  // Special: SSG / BSI — range [-1,1] mapped to [0,1]
+  if (field === 'structuralStabilityGain' || field === 'boundarySensitivityImprovement') {
+    return (raw + 1) / 2;
+  }
+
+  // Default: badness metrics inverted, goodness metrics pass-through
+  return config.isBadness ? 1 - raw : raw;
+}
+
 function computeOverallScore(metrics: IStructuralMetrics): number {
   let score = 0;
 
   for (const [field, config] of Object.entries(METRIC_CONFIGS)) {
     const raw = metrics[field as keyof IStructuralMetrics];
-    // Normalise to goodness: if badness metric, invert
-    const goodness = config.isBadness ? 1 - raw : raw;
+    const goodness = normaliseToGoodness(field, raw, config);
     score += config.weight * Math.max(0, Math.min(1, goodness));
   }
 

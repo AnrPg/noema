@@ -251,6 +251,38 @@ export interface IStructuralHealthReport {
 
   /** When this report was generated (ISO 8601) */
   readonly generatedAt: string;
+
+  /**
+   * Detected cross-metric interaction patterns (optional).
+   *
+   * Populated when the health report builder detects compound patterns
+   * formed by combinations of metric values (e.g., "Double Misframing"
+   * when both AD and DCG are high).
+   */
+  readonly crossMetricPatterns?: readonly ICrossMetricPatternEntry[];
+}
+
+/**
+ * A cross-metric interaction pattern detected in the health report.
+ */
+export interface ICrossMetricPatternEntry {
+  /** Pattern identifier (e.g., "double_misframing") */
+  readonly id: string;
+
+  /** Human-readable pattern name */
+  readonly name: string;
+
+  /** Severity level */
+  readonly severity: 'info' | 'warning' | 'critical';
+
+  /** Description of what the pattern means */
+  readonly description: string;
+
+  /** Abbreviated metric names that participate */
+  readonly participatingMetrics: readonly string[];
+
+  /** Recommended remediation action */
+  readonly suggestedAction: string;
 }
 
 // ============================================================================
