@@ -3,13 +3,15 @@ import pino from 'pino';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
-  ISchedulerEventReliabilityRepository,
-  ISchedulerCardRepository,
-  IReviewRepository,
   ICalibrationDataRepository,
+  IReviewRepository,
+  ISchedulerCardRepository,
+  ISchedulerEventReliabilityRepository,
 } from '../../../src/domain/scheduler-service/scheduler.repository.js';
 import type { IEventPublisher } from '../../../src/domain/shared/event-publisher.js';
-import { SchedulerEventConsumer } from '../../../src/infrastructure/events/scheduler-event-consumer.js';
+import type { BaseEventConsumer } from '../../../src/infrastructure/events/consumers/base-consumer.js';
+import { ReviewRecordedConsumer } from '../../../src/infrastructure/events/consumers/review-recorded.consumer.js';
+import { SessionCohortConsumer } from '../../../src/infrastructure/events/consumers/session-cohort.consumer.js';
 
 function createRedisStub() {
   return {
@@ -21,10 +23,13 @@ function createRedisStub() {
   };
 }
 
-function createConsumerDeps(overrides?: {
-  reliability?: Partial<ISchedulerEventReliabilityRepository>;
-  redis?: ReturnType<typeof createRedisStub>;
-}) {
+function createConsumerDeps<T extends BaseEventConsumer>(
+  ConsumerClass: new (...args: ConstructorParameters<typeof ReviewRecordedConsumer>) => T,
+  overrides?: {
+    reliability?: Partial<ISchedulerEventReliabilityRepository>;
+    redis?: ReturnType<typeof createRedisStub>;
+  },
+) {
   const redisStub = overrides?.redis ?? createRedisStub();
 
   const schedulerCardRepository = {
@@ -56,7 +61,7 @@ function createConsumerDeps(overrides?: {
     publishBatch: vi.fn().mockResolvedValue(undefined),
   };
 
-  const consumer = new SchedulerEventConsumer(
+  const consumer = new ConsumerClass(
     redisStub as unknown as Redis,
     {
       sourceStreamKey: 'noema:events:session-service',
@@ -78,7 +83,7 @@ function createConsumerDeps(overrides?: {
       reliabilityRepository,
       eventPublisher,
     },
-    pino({ enabled: false })
+    pino({ enabled: false }),
   );
 
   return {
@@ -94,11 +99,14 @@ function createConsumerDeps(overrides?: {
 
 describe('scheduler event consumer phase 5 reliability', () => {
   it('acks duplicate deliveries without reprocessing', async () => {
-    const { consumer, redisStub, reliabilityRepository } = createConsumerDeps({
-      reliability: {
-        claimInbox: vi.fn().mockResolvedValue({ status: 'duplicate_processed' }),
+    const { consumer, redisStub, reliabilityRepository } = createConsumerDeps(
+      ReviewRecordedConsumer,
+      {
+        reliability: {
+          claimInbox: vi.fn().mockResolvedValue({ status: 'duplicate_processed' }),
+        },
       },
-    });
+    );
 
     const envelope = {
       eventType: 'attempt.recorded',
@@ -121,14 +129,17 @@ describe('scheduler event consumer phase 5 reliability', () => {
     const applyHandshakeTransition = vi.fn().mockResolvedValue(undefined);
     const markInboxProcessed = vi.fn().mockResolvedValue(undefined);
 
-    const { consumer, redisStub, reliabilityRepository } = createConsumerDeps({
-      reliability: {
-        claimInbox: vi.fn().mockResolvedValue({ status: 'claimed' }),
-        readLatestSessionRevision: vi.fn().mockResolvedValue(4),
-        applyHandshakeTransition,
-        markInboxProcessed,
+    const { consumer, redisStub, reliabilityRepository } = createConsumerDeps(
+      SessionCohortConsumer,
+      {
+        reliability: {
+          claimInbox: vi.fn().mockResolvedValue({ status: 'claimed' }),
+          readLatestSessionRevision: vi.fn().mockResolvedValue(4),
+          applyHandshakeTransition,
+          markInboxProcessed,
+        },
       },
-    });
+    );
 
     const envelope = {
       eventType: 'session.cohort.accepted',
@@ -193,7 +204,7 @@ describe('scheduler event consumer phase 5 reliability', () => {
       ])
       .mockResolvedValueOnce(['1-1', []]);
 
-    const { consumer } = createConsumerDeps({ redis: redisStub });
+    const { consumer } = createConsumerDeps(SessionCohortConsumer, { redis: redisStub });
 
     await (
       consumer as unknown as {
