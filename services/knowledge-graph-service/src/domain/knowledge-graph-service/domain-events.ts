@@ -23,56 +23,31 @@ export { KnowledgeGraphEventType } from '@noema/events';
 
 // PKG event payloads
 export type {
-  IPkgNodeCreatedPayload,
-  IPkgNodeUpdatedPayload,
-  IPkgNodeRemovedPayload,
-  IPkgEdgeCreatedPayload,
-  IPkgEdgeUpdatedPayload,
-  IPkgEdgeRemovedPayload,
-  IPkgStructuralMetricsUpdatedPayload,
+  IPkgEdgeCreatedPayload, IPkgEdgeRemovedPayload, IPkgEdgeUpdatedPayload, IPkgNodeCreatedPayload, IPkgNodeRemovedPayload, IPkgNodeUpdatedPayload, IPkgStructuralMetricsUpdatedPayload
 } from '@noema/events';
 
 // CKG event payloads
 export type {
-  ICkgMutationProposedPayload,
-  ICkgMutationValidatedPayload,
-  ICkgMutationCommittedPayload,
-  ICkgMutationRejectedPayload,
-  ICkgNodePromotedPayload,
+  ICkgMutationCommittedPayload, ICkgMutationProposedPayload, ICkgMutationRejectedPayload, ICkgMutationValidatedPayload, ICkgNodePromotedPayload
 } from '@noema/events';
 
 // Metacognitive event payloads
 export type {
-  IMisconceptionDetectedPayload,
   IInterventionTriggeredPayload,
-  IMetacognitiveStageTransitionedPayload,
+  IMetacognitiveStageTransitionedPayload, IMisconceptionDetectedPayload
 } from '@noema/events';
 
 // Typed event aliases
 export type {
-  // PKG
-  PkgNodeCreatedEvent,
-  PkgNodeUpdatedEvent,
-  PkgNodeRemovedEvent,
-  PkgEdgeCreatedEvent,
-  PkgEdgeUpdatedEvent,
-  PkgEdgeRemovedEvent,
-  PkgStructuralMetricsUpdatedEvent,
+  CkgDomainEvent, CkgMutationCommittedEvent,
   // CKG
-  CkgMutationProposedEvent,
-  CkgMutationValidatedEvent,
-  CkgMutationCommittedEvent,
-  CkgMutationRejectedEvent,
-  CkgNodePromotedEvent,
+  CkgMutationProposedEvent, CkgMutationRejectedEvent, CkgMutationValidatedEvent, CkgNodePromotedEvent, InterventionTriggeredEvent, KnowledgeGraphDomainEvent, MetacognitiveDomainEvent, MetacognitiveStageTransitionedEvent,
   // Metacognitive
   MisconceptionDetectedEvent,
-  InterventionTriggeredEvent,
-  MetacognitiveStageTransitionedEvent,
   // Union types
-  PkgDomainEvent,
-  CkgDomainEvent,
-  MetacognitiveDomainEvent,
-  KnowledgeGraphDomainEvent,
+  PkgDomainEvent, PkgEdgeCreatedEvent, PkgEdgeRemovedEvent, PkgEdgeUpdatedEvent,
+  // PKG
+  PkgNodeCreatedEvent, PkgNodeRemovedEvent, PkgNodeUpdatedEvent, PkgStructuralMetricsUpdatedEvent
 } from '@noema/events';
 
 // ============================================================================

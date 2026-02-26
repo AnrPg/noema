@@ -18,10 +18,12 @@ import type {
   IPaginatedResponse,
   IStructuralMetrics,
   ISubgraph,
+  MutationId,
   NodeId,
-  UserId,
+  UserId
 } from '@noema/types';
 
+import type { IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -30,6 +32,7 @@ import type {
   IUpdateNodeInput,
 } from './graph.repository.js';
 import type { IMetricsHistoryOptions } from './metrics.repository.js';
+import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
   INodeFilter,
@@ -305,4 +308,62 @@ export interface IKnowledgeGraphService {
     domain: string,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphComparison>>;
+
+  // ========================================================================
+  // CKG Mutation Pipeline (Phase 6)
+  // ========================================================================
+
+  /**
+   * Propose a new CKG mutation.
+   *
+   * Creates a mutation in PROPOSED state and fires off async validation.
+   * Returns immediately — the mutation progresses through the typestate
+   * pipeline (validate → prove → commit) asynchronously.
+   */
+  proposeMutation(
+    proposal: IMutationProposal,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Get a CKG mutation by ID.
+   */
+  getMutation(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * List CKG mutations with optional filters (state, proposedBy).
+   */
+  listMutations(
+    filters: IMutationFilter,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation[]>>;
+
+  /**
+   * Cancel a CKG mutation. Only allowed for PROPOSED or VALIDATING state.
+   * Transitions to REJECTED with "cancelled by proposer" reason.
+   */
+  cancelMutation(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Retry a rejected CKG mutation. Creates a NEW mutation with the same
+   * operations — the original stays REJECTED for audit.
+   */
+  retryMutation(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Get the full audit log for a CKG mutation.
+   */
+  getMutationAuditLog(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMutationAuditEntry[]>>;
 }

@@ -20,46 +20,46 @@ import neo4j from 'neo4j-driver';
 import type pino from 'pino';
 
 import type {
-  EdgeId,
-  GraphEdgeType,
-  IGraphEdge,
-  IGraphNode,
-  ISubgraph,
-  NodeId,
+    EdgeId,
+    GraphEdgeType,
+    IGraphEdge,
+    IGraphNode,
+    ISubgraph,
+    NodeId,
 } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 
 import {
-  DuplicateNodeError,
-  EdgeNotFoundError,
-  GraphConsistencyError,
-  NodeNotFoundError,
+    DuplicateNodeError,
+    EdgeNotFoundError,
+    GraphConsistencyError,
+    NodeNotFoundError,
 } from '../../domain/knowledge-graph-service/errors/index.js';
 import type {
-  EdgeDirection,
-  ICreateEdgeInput,
-  ICreateNodeInput,
-  IEdgeFilter,
-  IGraphRepository,
-  IUpdateEdgeInput,
-  IUpdateNodeInput,
+    EdgeDirection,
+    ICreateEdgeInput,
+    ICreateNodeInput,
+    IEdgeFilter,
+    IGraphRepository,
+    IUpdateEdgeInput,
+    IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
-  INodeFilter,
-  ITraversalOptions,
+    INodeFilter,
+    ITraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { Neo4jClient } from './neo4j-client.js';
 import {
-  buildEdgeProperties,
-  buildNodeProperties,
-  buildNodeUpdateProperties,
-  buildSubgraph,
-  edgeTypeToRelType,
-  graphTypeToLabel,
-  inferGraphType,
-  mapNodeToGraphNode,
-  mapRelationshipToGraphEdge,
-  nodeTypeToLabel,
+    buildEdgeProperties,
+    buildNodeProperties,
+    buildNodeUpdateProperties,
+    buildSubgraph,
+    edgeTypeToRelType,
+    graphTypeToLabel,
+    inferGraphType,
+    mapNodeToGraphNode,
+    mapRelationshipToGraphEdge,
+    nodeTypeToLabel,
 } from './neo4j-mapper.js';
 
 // ============================================================================

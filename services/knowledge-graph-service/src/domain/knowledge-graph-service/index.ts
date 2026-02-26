@@ -2,8 +2,8 @@
  * @noema/knowledge-graph-service - Domain Layer Barrel Export
  *
  * Re-exports the complete domain layer: errors, value objects, policies,
- * repository interfaces, service interface, validation pipeline, and
- * domain events.
+ * repository interfaces, service interface, validation pipeline,
+ * domain events, and CKG mutation pipeline.
  *
  * Zero infrastructure imports — this layer defines contracts only.
  */
@@ -25,8 +25,16 @@ export {
   InvalidEdgeTypeError,
   InvalidMisconceptionStateTransitionError,
   // Mutation errors
-  InvalidStateTransitionError,
-  MaxDepthExceededError,
+  InvalidStateTransitionError, isDomainError,
+  isInterventionTemplateNotFoundError,
+  isInvalidMisconceptionStateTransitionError,
+  isInvalidStateTransitionError,
+  isMisconceptionPatternNotFoundError,
+  isMutationAlreadyCommittedError,
+  isMutationConflictError,
+  isMutationNotFoundError,
+  isValidationError,
+  isValidationFailedError, MaxDepthExceededError,
   MisconceptionPatternNotFoundError,
   MutationAlreadyCommittedError,
   MutationConflictError,
@@ -36,17 +44,7 @@ export {
   RateLimitExceededError,
   UnauthorizedError,
   ValidationError,
-  ValidationFailedError,
-  isDomainError,
-  isInterventionTemplateNotFoundError,
-  isInvalidMisconceptionStateTransitionError,
-  isInvalidStateTransitionError,
-  isMisconceptionPatternNotFoundError,
-  isMutationAlreadyCommittedError,
-  isMutationConflictError,
-  isMutationNotFoundError,
-  isValidationError,
-  isValidationFailedError,
+  ValidationFailedError
 } from './errors/index.js';
 
 // ============================================================================
@@ -67,7 +65,7 @@ export {
   // Promotion band
   PromotionBandUtil,
   TraversalOptions,
-  ValidationOptions,
+  ValidationOptions
 } from './value-objects/index.js';
 
 export type {
@@ -92,7 +90,7 @@ export type {
   PkgOperation,
   PkgOperationTypeUnion,
   PositiveDepthType,
-  TraversalDirection,
+  TraversalDirection
 } from './value-objects/index.js';
 
 // ============================================================================
@@ -117,7 +115,7 @@ export type {
   INodeRepository,
   ITraversalRepository,
   IUpdateEdgeInput,
-  IUpdateNodeInput,
+  IUpdateNodeInput
 } from './graph.repository.js';
 
 export type {
@@ -125,14 +123,13 @@ export type {
   ICkgMutation,
   ICreateMutationInput,
   IMutationAuditEntry,
-  IMutationRepository,
+  IMutationRepository
 } from './mutation.repository.js';
 
 export type {
-  // Metrics repository
-  IMetricSnapshot,
   IMetricsHistoryOptions,
-  IMetricsRepository,
+  // Metrics repository
+  IMetricSnapshot, IMetricsRepository
 } from './metrics.repository.js';
 
 export type {
@@ -143,26 +140,26 @@ export type {
   IMisconceptionRepository,
   IRecordDetectionInput,
   IUpsertInterventionTemplateInput,
-  IUpsertPatternInput,
+  IUpsertPatternInput
 } from './misconception.repository.js';
 
 export type {
   // PKG operation log repository
   IPkgOperationLogEntry,
-  IPkgOperationLogRepository,
+  IPkgOperationLogRepository
 } from './pkg-operation-log.repository.js';
 
 export type {
   // Metrics staleness repository
   IMetricsStalenessRecord,
-  IMetricsStalenessRepository,
+  IMetricsStalenessRepository
 } from './metrics-staleness.repository.js';
 
 export type {
   // Aggregation evidence repository
   IAggregationEvidence,
   IAggregationEvidenceRepository,
-  IEvidenceSummary,
+  IEvidenceSummary
 } from './aggregation-evidence.repository.js';
 
 // ============================================================================
@@ -172,7 +169,7 @@ export type {
 export type {
   IExecutionContext,
   IKnowledgeGraphService,
-  IServiceResult,
+  IServiceResult
 } from './knowledge-graph.service.js';
 
 // ============================================================================
@@ -191,7 +188,7 @@ export {
   EdgeFilterSchema,
   PaginationSchema,
   UpdateEdgeInputSchema,
-  UpdateNodeInputSchema,
+  UpdateNodeInputSchema
 } from './knowledge-graph.schemas.js';
 
 // ============================================================================
@@ -204,14 +201,66 @@ export type {
   IValidationResult,
   IValidationStage,
   IValidationStageResult,
-  IValidationViolation,
+  IValidationViolation
 } from './validation.js';
+
+// ============================================================================
+// CKG Mutation Pipeline (Phase 6)
+// ============================================================================
+
+// DSL: operation types, Zod schemas, utility functions
+export {
+  CkgMutationOperationSchema,
+  CkgOperationType, extractAffectedEdgeIds,
+  extractAffectedNodeIds, MutationFilterSchema,
+  MutationProposalSchema
+} from './ckg-mutation-dsl.js';
+
+export type {
+  CkgMutationOperation,
+  IAddEdgeOperation,
+  IAddNodeOperation,
+  IEdgeReassignmentRule,
+  IMergeNodesOperation,
+  IMutationFilter,
+  IMutationProposal,
+  IRemoveEdgeOperation,
+  IRemoveNodeOperation,
+  ISplitNodeOperation,
+  IUpdateNodeOperation
+} from './ckg-mutation-dsl.js';
+
+// Typestate machine: transition rules, guards, branded state types
+export {
+  CANCELLABLE_STATES, getAllowedTransitions,
+  getNextHappyPathState,
+  isCancellableState,
+  isTerminalState,
+  isValidTransition, STATE_TRANSITIONS,
+  TERMINAL_STATES, validateTransition
+} from './ckg-typestate.js';
+
+export type { IMutationInState, IStateTransition } from './ckg-typestate.js';
+
+// Validation stages: schema, structural, conflict, evidence
+export {
+  ConflictDetectionStage,
+  EvidenceSufficiencyStage,
+  SchemaValidationStage,
+  StructuralIntegrityStage
+} from './ckg-validation-stages.js';
+
+// Validation pipeline: IValidationPipeline implementation
+export { CkgValidationPipeline } from './ckg-validation-pipeline.js';
+
+// Mutation pipeline: orchestrator class
+export { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 
 // ============================================================================
 // Domain Events
 // ============================================================================
 
-export { KnowledgeGraphEventType } from './domain-events.js';
+export type { KnowledgeGraphEventType } from './domain-events.js';
 
 export type {
   CkgDomainEvent,
@@ -230,17 +279,14 @@ export type {
   IInterventionTriggeredPayload,
   IMetacognitiveStageTransitionedPayload,
   // Metacognitive events
-  IMisconceptionDetectedPayload,
-  IPkgEdgeCreatedPayload,
+  IMisconceptionDetectedPayload, InterventionTriggeredEvent, IPkgEdgeCreatedPayload,
   IPkgEdgeRemovedPayload,
   IPkgEdgeUpdatedPayload,
   // PKG events
   IPkgNodeCreatedPayload,
   IPkgNodeRemovedPayload,
   IPkgNodeUpdatedPayload,
-  IPkgStructuralMetricsUpdatedPayload,
-  InterventionTriggeredEvent,
-  KnowledgeGraphDomainEvent,
+  IPkgStructuralMetricsUpdatedPayload, KnowledgeGraphDomainEvent,
   MetacognitiveDomainEvent,
   MetacognitiveStageTransitionedEvent,
   MisconceptionDetectedEvent,
@@ -252,5 +298,6 @@ export type {
   PkgNodeCreatedEvent,
   PkgNodeRemovedEvent,
   PkgNodeUpdatedEvent,
-  PkgStructuralMetricsUpdatedEvent,
+  PkgStructuralMetricsUpdatedEvent
 } from './domain-events.js';
+

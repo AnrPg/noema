@@ -29,11 +29,11 @@ Four design decisions were evaluated and approved before implementation began.
 
 **Options evaluated:**
 
-| Option | Description | Trade-off |
-|--------|-------------|-----------|
-| A: Exception-only | Throw `DomainError` subclasses, no result wrapper | Simple but loses agent hints |
-| B: Result-everywhere | `Result<T, E>` monad on every function | Rigorous but heavy for TypeScript |
-| **C: Hybrid** | `IServiceResult<T>` at service boundary, exceptions internally | Matches content-service, pragmatic |
+| Option               | Description                                                    | Trade-off                          |
+| -------------------- | -------------------------------------------------------------- | ---------------------------------- |
+| A: Exception-only    | Throw `DomainError` subclasses, no result wrapper              | Simple but loses agent hints       |
+| B: Result-everywhere | `Result<T, E>` monad on every function                         | Rigorous but heavy for TypeScript  |
+| **C: Hybrid**        | `IServiceResult<T>` at service boundary, exceptions internally | Matches content-service, pragmatic |
 
 **Decision:** Option C — `IServiceResult<T>` (with `IAgentHints`) at the
 `IKnowledgeGraphService` boundary. Internal domain logic (validation pipeline,
@@ -48,14 +48,15 @@ flow where validation failures should short-circuit immediately.
 
 **Options evaluated:**
 
-| Option | Description |
-|--------|-------------|
+| Option                | Description                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------- |
 | **A: Function-first** | One file per concern (`graph.repository.ts`, `mutation.repository.ts`, `knowledge-graph.service.ts`) |
-| B: Layer-first | Nested directories (`repositories/`, `services/`, `errors/`) |
+| B: Layer-first        | Nested directories (`repositories/`, `services/`, `errors/`)                                         |
 
-**Decision:** Option A — flat, function-first layout matching the content-service
-convention. Errors and value objects get their own subdirectories because they
-have many files; repositories and the service interface live at the domain root.
+**Decision:** Option A — flat, function-first layout matching the
+content-service convention. Errors and value objects get their own
+subdirectories because they have many files; repositories and the service
+interface live at the domain root.
 
 **Structure:**
 
@@ -93,10 +94,10 @@ src/domain/knowledge-graph-service/
 
 **Options evaluated:**
 
-| Option | Description |
-|--------|-------------|
+| Option                           | Description                                                               |
+| -------------------------------- | ------------------------------------------------------------------------- |
 | **A: Typed discriminated union** | `PkgOperationType` enum → `IPkgNodeCreatedOp \| IPkgEdgeDeletedOp \| ...` |
-| B: Generic op envelope | `{ type: string; payload: unknown }` |
+| B: Generic op envelope           | `{ type: string; payload: unknown }`                                      |
 
 **Decision:** Option A — each operation type has its own interface with a `type`
 discriminator field. The `PkgOperation` union type enables exhaustive `switch`
@@ -109,11 +110,11 @@ statements and type-narrowing without casts.
 
 **Options evaluated:**
 
-| Option | Description |
-|--------|-------------|
-| A: All in the service | Define EdgeWeight, MasteryLevel, etc. locally |
-| B: All in @noema/types | Every branded numeric is cross-service |
-| **C: Split** | Cross-service numerics in @noema/types, KG-only numerics local |
+| Option                 | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| A: All in the service  | Define EdgeWeight, MasteryLevel, etc. locally                  |
+| B: All in @noema/types | Every branded numeric is cross-service                         |
+| **C: Split**           | Cross-service numerics in @noema/types, KG-only numerics local |
 
 **Decision:** Option C.
 
@@ -172,6 +173,7 @@ subset (e.g., traversal-only) depend on the narrower interface.
 
 Data-driven configuration for all 8 `GraphEdgeType` values. Each policy
 specifies:
+
 - `requiresAcyclicity` — whether edges of this type must form a DAG
 - `allowedSourceTypes` / `allowedTargetTypes` — structural constraints
 - `maxWeight` / `defaultWeight` — weight bounds
@@ -231,36 +233,36 @@ events (eventId, correlationId, causationId, service name, version).
 
 ### New files (knowledge-graph-service domain layer)
 
-| File | Purpose |
-|------|---------|
-| `errors/base.errors.ts` | `DomainError` abstract class, `ValidationError`, `UnauthorizedError`, `RateLimitExceededError`, type guards |
-| `errors/graph.errors.ts` | Graph-specific errors (8 classes) |
-| `errors/mutation.errors.ts` | CKG mutation errors (5 classes) |
-| `errors/misconception.errors.ts` | Misconception-specific errors (3 classes) |
-| `errors/index.ts` | Barrel export |
-| `value-objects/graph.value-objects.ts` | `IEdgePolicy`, `IValidationOptions`, `ITraversalOptions`, `INodeFilter` + factories |
-| `value-objects/branded-numerics.ts` | `PositiveDepth` branded numeric (KG-local) |
-| `value-objects/comparison.ts` | `IGraphComparison`, `IStructuralDivergence`, divergence enums |
-| `value-objects/operation-log.ts` | `PkgOperation` discriminated union (6 operation types) |
-| `value-objects/promotion-band.ts` | `PromotionBandUtil` (evidence thresholds) |
-| `value-objects/index.ts` | Barrel export |
-| `policies/edge-type-policies.ts` | `EDGE_TYPE_POLICIES` frozen config (8 edge types) |
-| `policies/index.ts` | Barrel export |
-| `graph.repository.ts` | `INodeRepository`, `IEdgeRepository`, `ITraversalRepository`, `IBatchGraphRepository`, composite `IGraphRepository` |
-| `mutation.repository.ts` | `ICkgMutation`, `IMutationRepository` |
-| `metrics.repository.ts` | `IMetricsRepository` |
-| `misconception.repository.ts` | `IMisconceptionRepository` |
-| `pkg-operation-log.repository.ts` | `IPkgOperationLogRepository` |
-| `aggregation-evidence.repository.ts` | `IAggregationEvidenceRepository` |
-| `knowledge-graph.service.ts` | `IKnowledgeGraphService` (full service contract) |
-| `validation.ts` | `IValidationPipeline`, `IValidationStage`, violation types |
-| `domain-events.ts` | Re-exports from `@noema/events` + `IEventMetadata` |
-| `index.ts` | Domain barrel export |
+| File                                   | Purpose                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `errors/base.errors.ts`                | `DomainError` abstract class, `ValidationError`, `UnauthorizedError`, `RateLimitExceededError`, type guards         |
+| `errors/graph.errors.ts`               | Graph-specific errors (8 classes)                                                                                   |
+| `errors/mutation.errors.ts`            | CKG mutation errors (5 classes)                                                                                     |
+| `errors/misconception.errors.ts`       | Misconception-specific errors (3 classes)                                                                           |
+| `errors/index.ts`                      | Barrel export                                                                                                       |
+| `value-objects/graph.value-objects.ts` | `IEdgePolicy`, `IValidationOptions`, `ITraversalOptions`, `INodeFilter` + factories                                 |
+| `value-objects/branded-numerics.ts`    | `PositiveDepth` branded numeric (KG-local)                                                                          |
+| `value-objects/comparison.ts`          | `IGraphComparison`, `IStructuralDivergence`, divergence enums                                                       |
+| `value-objects/operation-log.ts`       | `PkgOperation` discriminated union (6 operation types)                                                              |
+| `value-objects/promotion-band.ts`      | `PromotionBandUtil` (evidence thresholds)                                                                           |
+| `value-objects/index.ts`               | Barrel export                                                                                                       |
+| `policies/edge-type-policies.ts`       | `EDGE_TYPE_POLICIES` frozen config (8 edge types)                                                                   |
+| `policies/index.ts`                    | Barrel export                                                                                                       |
+| `graph.repository.ts`                  | `INodeRepository`, `IEdgeRepository`, `ITraversalRepository`, `IBatchGraphRepository`, composite `IGraphRepository` |
+| `mutation.repository.ts`               | `ICkgMutation`, `IMutationRepository`                                                                               |
+| `metrics.repository.ts`                | `IMetricsRepository`                                                                                                |
+| `misconception.repository.ts`          | `IMisconceptionRepository`                                                                                          |
+| `pkg-operation-log.repository.ts`      | `IPkgOperationLogRepository`                                                                                        |
+| `aggregation-evidence.repository.ts`   | `IAggregationEvidenceRepository`                                                                                    |
+| `knowledge-graph.service.ts`           | `IKnowledgeGraphService` (full service contract)                                                                    |
+| `validation.ts`                        | `IValidationPipeline`, `IValidationStage`, violation types                                                          |
+| `domain-events.ts`                     | Re-exports from `@noema/events` + `IEventMetadata`                                                                  |
+| `index.ts`                             | Domain barrel export                                                                                                |
 
 ### Modified files (shared packages)
 
-| File | Change |
-|------|--------|
+| File                                           | Change                                               |
+| ---------------------------------------------- | ---------------------------------------------------- |
 | `packages/types/src/branded-numerics/index.ts` | New: `EdgeWeight`, `MasteryLevel`, `ConfidenceScore` |
-| `packages/types/src/base/index.ts` | Added `DeepReadonly<T>` utility type |
-| `packages/types/src/index.ts` | Barrel export for branded-numerics |
+| `packages/types/src/base/index.ts`             | Added `DeepReadonly<T>` utility type                 |
+| `packages/types/src/index.ts`                  | Barrel export for branded-numerics                   |

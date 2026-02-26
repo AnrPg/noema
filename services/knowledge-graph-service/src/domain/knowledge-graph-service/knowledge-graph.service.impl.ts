@@ -2,6 +2,7 @@
  * @noema/knowledge-graph-service - KnowledgeGraphService Implementation
  *
  * Phase 5: PKG Operations & Service Layer Foundation.
+ * Phase 6: CKG Mutation Pipeline (typestate-governed, async validation).
  *
  * Concrete implementation of IKnowledgeGraphService. Orchestrates graph
  * repository calls, edge policy enforcement, event publishing, operation
@@ -13,15 +14,19 @@
  * - Full before/after tracking in operation log (D3a)
  * - Zod validation at service boundary (D2a)
  * - Metrics staleness via Prisma model (D4a)
+ * - CKG mutations delegate to CkgMutationPipeline (Phase 6 D2a)
  * - Phase 7 methods (metrics, misconception, comparison) throw NotImplementedError
  *
  * @see ADR-0010 for edge policy architecture
+ * @see ADR-005 for CKG mutation pipeline design
  * @see PHASE-5-PKG-OPERATIONS.md for requirements
+ * @see PHASE-6-CKG-MUTATION-PIPELINE.md for CKG mutation requirements
  */
 
 import type { IAgentHints } from '@noema/contracts';
 import { KnowledgeGraphEventType } from '@noema/events';
 import type {
+  AgentId,
   EdgeId,
   IGraphEdge,
   IGraphNode,
@@ -29,6 +34,8 @@ import type {
   IPaginatedResponse,
   IStructuralMetrics,
   ISubgraph,
+  MutationId,
+  MutationState,
   NodeId,
   UserId,
 } from '@noema/types';
@@ -36,7 +43,9 @@ import { EdgeWeight, GraphType } from '@noema/types';
 import type { Logger } from 'pino';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
-import type { IExecutionContext, IServiceResult } from './execution-context.js';
+import type { CkgMutationOperation, IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
+import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
+import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import { ValidationError } from './errors/base.errors.js';
 import {
   CyclicEdgeError,
@@ -45,6 +54,7 @@ import {
   NodeNotFoundError,
   OrphanEdgeError,
 } from './errors/graph.errors.js';
+import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -53,15 +63,16 @@ import type {
   IUpdateEdgeInput,
   IUpdateNodeInput,
 } from './graph.repository.js';
-import type { IKnowledgeGraphService } from './knowledge-graph.service.js';
 import {
   CreateEdgeInputSchema,
   CreateNodeInputSchema,
   UpdateEdgeInputSchema,
   UpdateNodeInputSchema,
 } from './knowledge-graph.schemas.js';
+import type { IKnowledgeGraphService } from './knowledge-graph.service.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
 import type { IMetricsHistoryOptions } from './metrics.repository.js';
+import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
@@ -70,7 +81,6 @@ import type {
   ITraversalOptions,
   IValidationOptions,
 } from './value-objects/graph.value-objects.js';
-import { PkgOperationType } from './value-objects/operation-log.js';
 import type {
   IPkgEdgeCreatedOp,
   IPkgEdgeDeletedOp,
@@ -78,6 +88,7 @@ import type {
   IPkgNodeDeletedOp,
   IPkgNodeUpdatedOp,
 } from './value-objects/operation-log.js';
+import { PkgOperationType } from './value-objects/operation-log.js';
 
 // ============================================================================
 // Constants
@@ -113,6 +124,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     private readonly operationLogRepository: IPkgOperationLogRepository,
     private readonly metricsStalenessRepository: IMetricsStalenessRepository,
     private readonly eventPublisher: IEventPublisher,
+    private readonly mutationPipeline: CkgMutationPipeline,
     logger: Logger
   ) {
     this.logger = logger.child({ service: 'KnowledgeGraphService' });
@@ -969,6 +981,161 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   }
 
   // ========================================================================
+  // CKG Mutation Pipeline (Phase 6)
+  // ========================================================================
+
+  async proposeMutation(
+    proposal: IMutationProposal,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    this.requireAuth(context);
+
+    // Validate proposal at service boundary
+    const validated = this.validateInput(
+      MutationProposalSchema,
+      proposal,
+      'MutationProposal'
+    );
+
+    // Infer agentId from context (userId acts as proposer at the service level)
+    const agentId = (context.userId ?? 'agent_unknown') as AgentId;
+
+    const mutation = await this.mutationPipeline.proposeMutation(
+      agentId,
+      validated.operations as unknown as CkgMutationOperation[],
+      validated.rationale,
+      validated.evidenceCount,
+      validated.priority,
+      context
+    );
+
+    this.logger.info(
+      { mutationId: mutation.mutationId, state: mutation.state },
+      'CKG mutation proposed'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.createMutationHints('proposed', mutation),
+    };
+  }
+
+  async getMutation(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    this.requireAuth(context);
+
+    const mutation = await this.mutationPipeline.getMutation(mutationId);
+
+    return {
+      data: mutation,
+      agentHints: this.createMutationHints('retrieved', mutation),
+    };
+  }
+
+  async listMutations(
+    filters: IMutationFilter,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation[]>> {
+    this.requireAuth(context);
+
+    // Validate filters at service boundary
+    const validated = this.validateInput(
+      MutationFilterSchema,
+      filters,
+      'MutationFilter'
+    );
+
+    const listFilters: { state?: MutationState; proposedBy?: AgentId } = {};
+    if (validated.state !== undefined) listFilters.state = validated.state as MutationState;
+    if (validated.proposedBy !== undefined) listFilters.proposedBy = validated.proposedBy as AgentId;
+
+    const mutations = await this.mutationPipeline.listMutations(listFilters);
+
+    return {
+      data: mutations,
+      agentHints: this.createMutationListHints(mutations, validated),
+    };
+  }
+
+  async cancelMutation(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    this.requireAuth(context);
+
+    const mutation = await this.mutationPipeline.cancelMutation(mutationId, context);
+
+    this.logger.info({ mutationId, state: mutation.state }, 'CKG mutation cancelled');
+
+    return {
+      data: mutation,
+      agentHints: this.createMutationHints('cancelled', mutation),
+    };
+  }
+
+  async retryMutation(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    this.requireAuth(context);
+
+    const mutation = await this.mutationPipeline.retryMutation(mutationId, context);
+
+    this.logger.info(
+      { originalMutationId: mutationId, newMutationId: mutation.mutationId },
+      'CKG mutation retried'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.createMutationHints('retried', mutation),
+    };
+  }
+
+  async getMutationAuditLog(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMutationAuditEntry[]>> {
+    this.requireAuth(context);
+
+    const auditLog = await this.mutationPipeline.getAuditLog(mutationId);
+
+    return {
+      data: auditLog,
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'get_mutation',
+            description: 'View the current mutation state',
+            priority: 'low',
+            category: 'exploration',
+          },
+        ],
+        relatedResources: [
+          {
+            type: 'CKGMutation',
+            id: mutationId as string,
+            label: `Mutation ${mutationId}`,
+            relevance: 1.0,
+          },
+        ],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+        preferenceAlignment: [],
+        reasoning: `Audit log contains ${String(auditLog.length)} entries for mutation ${mutationId}`,
+      },
+    };
+  }
+
+  // ========================================================================
   // Private — Authorization
   // ========================================================================
 
@@ -1526,6 +1693,120 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
       preferenceAlignment: [],
       reasoning: `CKG node "${node.label}" (${node.nodeType}) in domain "${node.domain}"`,
+    };
+  }
+
+  // ========================================================================
+  // Private — CKG Mutation Agent Hints
+  // ========================================================================
+
+  /**
+   * Create agent hints for a CKG mutation operation.
+   */
+  private createMutationHints(action: string, mutation: ICkgMutation): IAgentHints {
+    const isTerminal = mutation.state === 'committed' || mutation.state === 'rejected';
+
+    const nextActions: IAgentHints['suggestedNextActions'] = [];
+
+    if (action === 'proposed') {
+      nextActions.push({
+        action: 'get_mutation',
+        description: 'Check the mutation status — it is processing asynchronously',
+        priority: 'medium',
+        category: 'exploration',
+      });
+    }
+
+    if (mutation.state === 'rejected') {
+      nextActions.push({
+        action: 'retry_mutation',
+        description: 'Retry this mutation if the rejection reason is resolvable',
+        priority: 'medium',
+        category: 'exploration',
+      });
+      nextActions.push({
+        action: 'get_mutation_audit_log',
+        description: 'Review the audit trail to understand why it was rejected',
+        priority: 'high',
+        category: 'exploration',
+      });
+    }
+
+    if (!isTerminal && mutation.state !== 'proposed') {
+      nextActions.push({
+        action: 'cancel_mutation',
+        description: 'Cancel this mutation if it should not proceed',
+        priority: 'low',
+        category: 'exploration',
+      });
+    }
+
+    return {
+      suggestedNextActions: nextActions,
+      relatedResources: [
+        {
+          type: 'CKGMutation',
+          id: mutation.mutationId as string,
+          label: `Mutation ${mutation.mutationId} (${mutation.state})`,
+          relevance: 1.0,
+        },
+      ],
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: isTerminal
+        ? []
+        : ['Mutation is processing asynchronously — state may change'],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3.0 },
+      preferenceAlignment: [],
+      reasoning: `CKG mutation ${action}: ${mutation.mutationId} is in state "${mutation.state}"`,
+    };
+  }
+
+  /**
+   * Create agent hints for a list of CKG mutations.
+   */
+  private createMutationListHints(
+    mutations: ICkgMutation[],
+    _filters: IMutationFilter
+  ): IAgentHints {
+    const stateCounts = new Map<string, number>();
+    for (const m of mutations) {
+      stateCounts.set(m.state, (stateCounts.get(m.state) ?? 0) + 1);
+    }
+
+    const stateBreakdown = [...stateCounts.entries()]
+      .map(([state, count]) => `${state}: ${String(count)}`)
+      .join(', ');
+
+    return {
+      suggestedNextActions: [
+        {
+          action: 'propose_mutation',
+          description: 'Create a new CKG mutation proposal',
+          priority: 'low',
+          category: 'exploration',
+        },
+      ],
+      relatedResources: mutations.slice(0, 5).map((m) => ({
+        type: 'CKGMutation' as const,
+        id: m.mutationId as string,
+        label: `Mutation ${m.mutationId} (${m.state})`,
+        relevance: 0.8,
+      })),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+      preferenceAlignment: [],
+      reasoning: `Found ${String(mutations.length)} mutation(s): ${stateBreakdown}`,
     };
   }
 }

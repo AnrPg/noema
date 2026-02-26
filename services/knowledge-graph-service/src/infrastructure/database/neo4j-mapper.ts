@@ -13,8 +13,6 @@
  * - Label-based graphType inference (PkgNode → 'pkg', CkgNode → 'ckg')
  */
 
-import type { Node, Relationship } from 'neo4j-driver';
-import neo4j from 'neo4j-driver';
 import type {
   EdgeId,
   EdgeWeight,
@@ -28,6 +26,8 @@ import type {
   Metadata,
   NodeId,
 } from '@noema/types';
+import type { Node, Relationship } from 'neo4j-driver';
+import neo4j from 'neo4j-driver';
 
 // ============================================================================
 // Neo4j Primitive Conversions
