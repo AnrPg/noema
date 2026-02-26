@@ -7,7 +7,7 @@
  * classically relational data with strict ACID requirements.
  */
 
-import type { AgentId, Metadata, MutationId, MutationState } from '@noema/types';
+import type { Metadata, MutationId, MutationState, ProposerId } from '@noema/types';
 
 // ============================================================================
 // Mutation Data Types
@@ -23,8 +23,8 @@ export interface ICkgMutation {
   /** Current typestate */
   state: MutationState;
 
-  /** Agent that proposed the mutation */
-  readonly proposedBy: AgentId;
+  /** Agent or admin user that proposed the mutation */
+  readonly proposedBy: ProposerId;
 
   /** Optimistic locking version (incremented on each state transition) */
   version: number;
@@ -72,7 +72,7 @@ export interface IMutationAuditEntry {
  * Input for creating a new CKG mutation.
  */
 export interface ICreateMutationInput {
-  readonly proposedBy: AgentId;
+  readonly proposedBy: ProposerId;
   readonly operations: Metadata[];
   readonly rationale: string;
   readonly evidenceCount: number;
@@ -131,9 +131,9 @@ export interface IMutationRepository {
   findMutationsByState(state: MutationState): Promise<ICkgMutation[]>;
 
   /**
-   * Find mutations by proposer agent.
+   * Find mutations by proposer (agent or admin user).
    */
-  findMutationsByProposer(agentId: AgentId): Promise<ICkgMutation[]>;
+  findMutationsByProposer(proposerId: ProposerId): Promise<ICkgMutation[]>;
 
   /**
    * Count mutations by state (for monitoring dashboards).
@@ -146,7 +146,7 @@ export interface IMutationRepository {
    */
   findMutations(filters: {
     state?: MutationState;
-    proposedBy?: AgentId;
+    proposedBy?: ProposerId;
     createdAfter?: string;
     createdBefore?: string;
   }): Promise<ICkgMutation[]>;

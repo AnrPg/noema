@@ -10,24 +10,24 @@
  * - Centralized P2025 error handling
  */
 
-import type { AgentId, Metadata, MutationId, MutationState } from '@noema/types';
+import type { Metadata, MutationId, MutationState, ProposerId } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type {
-    Prisma,
-    CkgMutationState as PrismaCkgMutationState,
-    PrismaClient,
+  Prisma,
+  CkgMutationState as PrismaCkgMutationState,
+  PrismaClient,
 } from '../../../../generated/prisma/index.js';
 
 import {
-    MutationConflictError,
-    MutationNotFoundError,
+  MutationConflictError,
+  MutationNotFoundError,
 } from '../../../domain/knowledge-graph-service/errors/index.js';
 import type {
-    ICkgMutation,
-    ICreateMutationInput,
-    IMutationAuditEntry,
-    IMutationRepository,
+  ICkgMutation,
+  ICreateMutationInput,
+  IMutationAuditEntry,
+  IMutationRepository,
 } from '../../../domain/knowledge-graph-service/mutation.repository.js';
 
 // ============================================================================
@@ -166,9 +166,9 @@ export class PrismaMutationRepository implements IMutationRepository {
     return records.map((r) => this.toDomain(r));
   }
 
-  async findMutationsByProposer(agentId: AgentId): Promise<ICkgMutation[]> {
+  async findMutationsByProposer(proposerId: ProposerId): Promise<ICkgMutation[]> {
     const records = await this.prisma.ckgMutation.findMany({
-      where: { createdBy: agentId as string },
+      where: { createdBy: proposerId as string },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -183,7 +183,7 @@ export class PrismaMutationRepository implements IMutationRepository {
 
   async findMutations(filters: {
     state?: MutationState;
-    proposedBy?: AgentId;
+    proposedBy?: ProposerId;
     createdAfter?: string;
     createdBefore?: string;
   }): Promise<ICkgMutation[]> {
@@ -276,7 +276,7 @@ export class PrismaMutationRepository implements IMutationRepository {
     return {
       mutationId: record.id as MutationId,
       state: fromDbState(record.state),
-      proposedBy: (record.createdBy ?? '') as AgentId,
+      proposedBy: (record.createdBy ?? '') as ProposerId,
       version: record.version,
       operations: record.operation as unknown as Metadata[],
       rationale: record.rationale ?? '',

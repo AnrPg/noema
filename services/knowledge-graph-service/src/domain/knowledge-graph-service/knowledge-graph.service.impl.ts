@@ -30,7 +30,6 @@
 import type { IAgentHints } from '@noema/contracts';
 import { KnowledgeGraphEventType } from '@noema/events';
 import type {
-  AgentId,
   EdgeId,
   IGraphEdge,
   IGraphNode,
@@ -45,6 +44,7 @@ import type {
   MutationId,
   MutationState,
   NodeId,
+  ProposerId,
   UserId,
 } from '@noema/types';
 import { ConfidenceScore as ConfidenceScoreFactory, EdgeWeight, GraphType } from '@noema/types';
@@ -1410,11 +1410,13 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     // Validate proposal at service boundary
     const validated = this.validateInput(MutationProposalSchema, proposal, 'MutationProposal');
 
-    // Infer agentId from context (userId acts as proposer at the service level)
-    const agentId = (context.userId ?? 'agent_unknown') as AgentId;
+    // Derive proposerId from context: userId for admin users, agentId for agents.
+    // The userId in the context represents whoever is authenticated — an agent
+    // identity (agent_xxx) or a human admin (user_xxx). Both are valid proposers.
+    const proposerId = (context.userId ?? 'agent_unknown') as ProposerId;
 
     const mutation = await this.mutationPipeline.proposeMutation(
-      agentId,
+      proposerId,
       validated.operations as unknown as CkgMutationOperation[],
       validated.rationale,
       validated.evidenceCount,
@@ -1458,13 +1460,13 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     const listFilters: {
       state?: MutationState;
-      proposedBy?: AgentId;
+      proposedBy?: ProposerId;
       createdAfter?: string;
       createdBefore?: string;
     } = {};
     if (validated.state !== undefined) listFilters.state = validated.state as MutationState;
     if (validated.proposedBy !== undefined)
-      listFilters.proposedBy = validated.proposedBy as AgentId;
+      listFilters.proposedBy = validated.proposedBy as ProposerId;
     if (validated.createdAfter !== undefined) listFilters.createdAfter = validated.createdAfter;
     if (validated.createdBefore !== undefined) listFilters.createdBefore = validated.createdBefore;
 

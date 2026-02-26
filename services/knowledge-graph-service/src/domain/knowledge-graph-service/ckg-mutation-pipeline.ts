@@ -27,7 +27,8 @@ import type {
   Metadata,
   MutationId,
   MutationState,
-  NodeId
+  NodeId,
+  ProposerId,
 } from '@noema/types';
 
 import type { IEventPublisher, IEventToPublish } from '../shared/event-publisher.js';
@@ -51,7 +52,7 @@ import {
   CANCELLABLE_STATES,
   isTerminalState,
   isValidTransition,
-  STATE_TRANSITIONS
+  STATE_TRANSITIONS,
 } from './ckg-typestate.js';
 import { KnowledgeGraphEventType } from './domain-events.js';
 import {
@@ -90,7 +91,7 @@ export class CkgMutationPipeline {
    * Creates the mutation in PROPOSED state, publishes CkgMutationProposed
    * event, and fires off async validation (D3: hybrid approach).
    *
-   * @param agentId The agent proposing the mutation.
+   * @param proposerId The agent or admin user proposing the mutation.
    * @param operations The mutation DSL operations.
    * @param rationale Human-readable justification.
    * @param evidenceCount Number of supporting evidence items (0 = agent-initiated).
@@ -99,7 +100,7 @@ export class CkgMutationPipeline {
    * @returns The created mutation.
    */
   async proposeMutation(
-    agentId: AgentId,
+    proposerId: ProposerId,
     operations: CkgMutationOperation[],
     rationale: string,
     evidenceCount: number,
@@ -107,13 +108,13 @@ export class CkgMutationPipeline {
     context: IExecutionContext
   ): Promise<ICkgMutation> {
     this.logger.info(
-      { agentId, operationCount: operations.length, evidenceCount },
+      { proposerId, operationCount: operations.length, evidenceCount },
       'Proposing CKG mutation'
     );
 
     // Create mutation in PROPOSED state
     const input: ICreateMutationInput = {
-      proposedBy: agentId,
+      proposedBy: proposerId,
       operations: operations as unknown as Metadata[],
       rationale,
       evidenceCount,
@@ -126,7 +127,7 @@ export class CkgMutationPipeline {
       mutationId: mutation.mutationId,
       fromState: 'proposed' as MutationState,
       toState: 'proposed' as MutationState,
-      performedBy: agentId as string,
+      performedBy: proposerId as string,
       context: {
         action: 'created',
         operationCount: operations.length,
@@ -142,7 +143,7 @@ export class CkgMutationPipeline {
       mutation.mutationId,
       {
         mutationId: mutation.mutationId,
-        proposedBy: agentId,
+        proposedBy: proposerId,
         operations: operations as unknown as Metadata[],
         rationale,
         evidenceCount,
@@ -172,12 +173,13 @@ export class CkgMutationPipeline {
    */
   async listMutations(filters: {
     state?: MutationState;
-    proposedBy?: AgentId;
+    proposedBy?: ProposerId;
     createdAfter?: string;
     createdBefore?: string;
   }): Promise<ICkgMutation[]> {
     // Use the composite findMutations method when any filter is present
-    const hasFilters = filters.state !== undefined ||
+    const hasFilters =
+      filters.state !== undefined ||
       filters.proposedBy !== undefined ||
       filters.createdAfter !== undefined ||
       filters.createdBefore !== undefined;
@@ -209,10 +211,7 @@ export class CkgMutationPipeline {
    * Cancel a mutation (only allowed for PROPOSED or VALIDATING).
    * Transitions to REJECTED with reason "cancelled by proposer."
    */
-  async cancelMutation(
-    mutationId: MutationId,
-    context: IExecutionContext
-  ): Promise<ICkgMutation> {
+  async cancelMutation(mutationId: MutationId, context: IExecutionContext): Promise<ICkgMutation> {
     const mutation = await this.getMutation(mutationId);
 
     if (isTerminalState(mutation.state)) {
@@ -220,17 +219,15 @@ export class CkgMutationPipeline {
     }
 
     if (!CANCELLABLE_STATES.has(mutation.state)) {
-      throw new InvalidStateTransitionError(
-        mutation.state,
-        'rejected',
-        [...STATE_TRANSITIONS[mutation.state]]
-      );
+      throw new InvalidStateTransitionError(mutation.state, 'rejected', [
+        ...STATE_TRANSITIONS[mutation.state],
+      ]);
     }
 
     return this.transitionState(
       mutation,
       'rejected',
-      context.userId as string | undefined ?? 'system',
+      (context.userId as string | undefined) ?? 'system',
       'Cancelled by proposer',
       context
     );
@@ -240,24 +237,16 @@ export class CkgMutationPipeline {
    * Retry a rejected mutation — creates a NEW mutation with the same
    * operations. The original stays REJECTED for audit.
    */
-  async retryMutation(
-    mutationId: MutationId,
-    context: IExecutionContext
-  ): Promise<ICkgMutation> {
+  async retryMutation(mutationId: MutationId, context: IExecutionContext): Promise<ICkgMutation> {
     const original = await this.getMutation(mutationId);
 
     if (original.state !== 'rejected') {
-      throw new InvalidStateTransitionError(
-        original.state,
-        'proposed',
-        ['Only REJECTED mutations can be retried']
-      );
+      throw new InvalidStateTransitionError(original.state, 'proposed', [
+        'Only REJECTED mutations can be retried',
+      ]);
     }
 
-    this.logger.info(
-      { originalMutationId: mutationId },
-      'Retrying rejected mutation with new ID'
-    );
+    this.logger.info({ originalMutationId: mutationId }, 'Retrying rejected mutation with new ID');
 
     // Create new mutation with same operations
     return this.proposeMutation(
@@ -352,18 +341,12 @@ export class CkgMutationPipeline {
    * This method is called fire-and-forget from proposeMutation.
    * It can also be called directly in tests for synchronous execution.
    */
-  async runPipelineAsync(
-    mutationId: MutationId,
-    context: IExecutionContext
-  ): Promise<void> {
+  async runPipelineAsync(mutationId: MutationId, context: IExecutionContext): Promise<void> {
     try {
       await this.runPipeline(mutationId, context);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        { mutationId, error: message },
-        'Pipeline processing failed'
-      );
+      this.logger.error({ mutationId, error: message }, 'Pipeline processing failed');
       // Pipeline errors should not propagate — they're recorded as REJECTED state
     }
   }
@@ -374,10 +357,7 @@ export class CkgMutationPipeline {
    * Each stage transitions the mutation state with audit logging.
    * If any stage fails, the mutation transitions to REJECTED.
    */
-  private async runPipeline(
-    mutationId: MutationId,
-    context: IExecutionContext
-  ): Promise<void> {
+  private async runPipeline(mutationId: MutationId, context: IExecutionContext): Promise<void> {
     // Stage 1: PROPOSED → VALIDATING → run validation → VALIDATED/REJECTED
     let mutation = await this.getMutation(mutationId);
     mutation = await this.runValidationStage(mutation, context);
@@ -557,8 +537,8 @@ export class CkgMutationPipeline {
             reconciliationNeeded: true,
           },
           'CROSS-DB INCONSISTENCY: Neo4j commit succeeded but Postgres state update ' +
-          'failed. Mutation data is in Neo4j but state is still COMMITTING. ' +
-          'Manual reconciliation required.'
+            'failed. Mutation data is in Neo4j but state is still COMMITTING. ' +
+            'Manual reconciliation required.'
         );
         throw pgError;
       }
@@ -647,16 +627,13 @@ export class CkgMutationPipeline {
       for (const op of operations) {
         switch (op.type) {
           case CkgOperationType.ADD_NODE: {
-            const node: IGraphNode = await txRepo.createNode(
-              graphType,
-              {
-                label: op.label,
-                nodeType: op.nodeType,
-                domain: op.domain,
-                description: op.description,
-                properties: op.properties,
-              }
-            );
+            const node: IGraphNode = await txRepo.createNode(graphType, {
+              label: op.label,
+              nodeType: op.nodeType,
+              domain: op.domain,
+              description: op.description,
+              properties: op.properties,
+            });
             createdNodeIds.push(node.nodeId as string);
             break;
           }
@@ -670,26 +647,22 @@ export class CkgMutationPipeline {
           case CkgOperationType.UPDATE_NODE: {
             const updateInput: Record<string, unknown> = {};
             if (op.updates.label !== undefined) updateInput['label'] = op.updates.label;
-            if (op.updates.description !== undefined) updateInput['description'] = op.updates.description;
+            if (op.updates.description !== undefined)
+              updateInput['description'] = op.updates.description;
             if (op.updates.domain !== undefined) updateInput['domain'] = op.updates.domain;
-            if (op.updates.properties !== undefined) updateInput['properties'] = op.updates.properties;
-            await txRepo.updateNode(
-              op.nodeId as NodeId,
-              updateInput as IUpdateNodeInput
-            );
+            if (op.updates.properties !== undefined)
+              updateInput['properties'] = op.updates.properties;
+            await txRepo.updateNode(op.nodeId as NodeId, updateInput as IUpdateNodeInput);
             break;
           }
 
           case CkgOperationType.ADD_EDGE: {
-            const edge: IGraphEdge = await txRepo.createEdge(
-              graphType,
-              {
-                sourceNodeId: op.sourceNodeId as NodeId,
-                targetNodeId: op.targetNodeId as NodeId,
-                edgeType: op.edgeType,
-                weight: op.weight as unknown as EdgeWeight,
-              }
-            );
+            const edge: IGraphEdge = await txRepo.createEdge(graphType, {
+              sourceNodeId: op.sourceNodeId as NodeId,
+              targetNodeId: op.targetNodeId as NodeId,
+              edgeType: op.edgeType,
+              weight: op.weight as unknown as EdgeWeight,
+            });
             createdEdgeIds.push(edge.edgeId as string);
             break;
           }
@@ -734,10 +707,7 @@ export class CkgMutationPipeline {
     repo: IGraphRepository = this.graphRepository
   ): Promise<void> {
     // Get all edges connected to the source node
-    const sourceEdges = await repo.getEdgesForNode(
-      op.sourceNodeId as NodeId,
-      'both'
-    );
+    const sourceEdges = await repo.getEdgesForNode(op.sourceNodeId as NodeId, 'both');
 
     // Redirect each edge to the target node
     for (const edge of sourceEdges) {
@@ -809,9 +779,7 @@ export class CkgMutationPipeline {
     }
 
     // Reassign edges per rules
-    const reassignmentMap = new Map(
-      op.edgeReassignmentRules.map((r) => [r.edgeId, r.assignTo])
-    );
+    const reassignmentMap = new Map(op.edgeReassignmentRules.map((r) => [r.edgeId, r.assignTo]));
 
     const allEdges = await repo.getEdgesForNode(op.nodeId as NodeId, 'both');
 
@@ -870,11 +838,9 @@ export class CkgMutationPipeline {
   ): Promise<ICkgMutation> {
     // Validate transition
     if (!isValidTransition(mutation.state, targetState)) {
-      throw new InvalidStateTransitionError(
-        mutation.state,
-        targetState,
-        [...STATE_TRANSITIONS[mutation.state]]
-      );
+      throw new InvalidStateTransitionError(mutation.state, targetState, [
+        ...STATE_TRANSITIONS[mutation.state],
+      ]);
     }
 
     // Atomically update state + append audit in a single DB transaction

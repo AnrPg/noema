@@ -121,6 +121,40 @@ export type MisconceptionPatternId = Brand<string, 'MisconceptionPatternId'>;
 /** Remediation intervention identifier - prefix: intv_ */
 export type InterventionId = Brand<string, 'InterventionId'>;
 
+/**
+ * Identity of whoever proposes a CKG mutation.
+ *
+ * CKG mutations can be proposed by either an AI agent (AgentId) or a
+ * platform administrator (UserId with admin role). This union type is
+ * used in `ICkgMutation.proposedBy`, `ICreateMutationInput.proposedBy`,
+ * and pipeline/repository filter parameters.
+ *
+ * At runtime the value is a plain string with either the `agent_` or
+ * `user_` prefix — consumers can inspect the prefix to determine the
+ * proposer kind.
+ */
+export type ProposerId = AgentId | UserId;
+
+/**
+ * Utilities for the `ProposerId` union type.
+ */
+export const ProposerId = {
+  /** Check whether a ProposerId represents an agent. */
+  isAgent(id: ProposerId): id is AgentId {
+    return typeof id === 'string' && id.startsWith(ID_PREFIXES.AgentId);
+  },
+
+  /** Check whether a ProposerId represents an admin user. */
+  isUser(id: ProposerId): id is UserId {
+    return typeof id === 'string' && id.startsWith(ID_PREFIXES.UserId);
+  },
+
+  /** Validate that a string is a valid ProposerId (agent_ or user_ prefix). */
+  isValid(value: unknown): value is ProposerId {
+    return AgentId.isValid(value) || UserId.isValid(value);
+  },
+} as const;
+
 // ============================================================================
 // ID Prefix Registry
 // ============================================================================

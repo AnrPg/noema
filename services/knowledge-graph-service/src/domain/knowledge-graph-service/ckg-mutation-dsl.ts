@@ -300,7 +300,7 @@ export const CkgMutationOperationSchema = z.discriminatedUnion('type', [
 // ── Mutation proposal schema ─────────────────────────────────────────────
 
 /**
- * Schema for the full mutation proposal submitted by an agent.
+ * Schema for the full mutation proposal submitted by an agent or admin user.
  */
 export const MutationProposalSchema = z.object({
   /** The operations comprising this mutation (at least one required) */
@@ -343,7 +343,7 @@ export const MutationFilterSchema = z.object({
     ])
     .optional(),
 
-  /** Filter by proposing agent */
+  /** Filter by proposer (agent or admin user) */
   proposedBy: z.string().optional(),
 
   /** Filter mutations created after this date (ISO 8601) */
