@@ -593,8 +593,8 @@ Defining them in the domain layer:
 
 **CKG mutation events:**
 
-- `CkgMutationProposed` — payload: mutationId, proposedBy (agentId),
-  operationCount, operationTypes
+- `CkgMutationProposed` — payload: mutationId, proposedBy (agentId or
+  adminUserId), operationCount, operationTypes
 - `CkgMutationValidated` — payload: mutationId, validationDuration, stageResults
   summary
 - `CkgMutationCommitted` — payload: mutationId, affectedNodeIds,

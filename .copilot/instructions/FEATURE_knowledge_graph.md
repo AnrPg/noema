@@ -3248,7 +3248,7 @@ DSL proposal details (for CKG)
 
 8️⃣ Explainability for CKG Mutation Proposals (Special Requirement)
 
-When an agent proposes a CKG DSL mutation, the trace must include:
+When an agent or admin user proposes a CKG DSL mutation, the trace must include:
 
 Evidence provenance:
 

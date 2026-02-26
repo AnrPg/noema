@@ -12,40 +12,38 @@ for longevity.
 
 ## Boilerplate Instructions
 
-Read PROJECT_CONTEXT.md, then,
-based on the files with respective specifications, help me with the
-implementation. The design process should follow the principles in
-PROJECT_CONTEXT.md (APIs and schema first, follow the microservices pattern,
-expose agent tools and interfaces for agents etc). If there is any design
-decision you must take, first show me options with pros and cons and ask me to
-choose.
+Read PROJECT_CONTEXT.md, then, based on the files with respective
+specifications, help me with the implementation. The design process should
+follow the principles in PROJECT_CONTEXT.md (APIs and schema first, follow the
+microservices pattern, expose agent tools and interfaces for agents etc). If
+there is any design decision you must take, first show me options with pros and
+cons and ask me to choose.
 
-Generate new code strictly in the existing project style and architecture,
-fully conforming to current schemas, APIs, types, models, and patterns;
-maximize reuse of existing implementations, favor additive and minimally
-invasive changes over redesign or refactoring, and if you detect that
-modifying or breaking existing behavior is unavoidable, trigger the harness to
-stop and explicitly ask for my approval before proceeding; after
-implementation, resolve all errors, warnings, and inconsistencies (including
-pre-existing ones), request clarification for any architectural decisions,
-produce an ADR documenting the changes, and commit with clear, structured
-messages.
+Generate new code strictly in the existing project style and architecture, fully
+conforming to current schemas, APIs, types, models, and patterns; maximize reuse
+of existing implementations, favor additive and minimally invasive changes over
+redesign or refactoring, and if you detect that modifying or breaking existing
+behavior is unavoidable, trigger the harness to stop and explicitly ask for my
+approval before proceeding; after implementation, resolve all errors, warnings,
+and inconsistencies (including pre-existing ones), request clarification for any
+architectural decisions, produce an ADR documenting the changes, and commit with
+clear, structured messages.
 
-I want you to make sure that no errors, or warnings or uncommited changes
-remain in the codebase after your implementation. If you detect any, please
-ask me to approve fixing them before proceeding with new implementations.
+I want you to make sure that no errors, or warnings or uncommited changes remain
+in the codebase after your implementation. If you detect any, please ask me to
+approve fixing them before proceeding with new implementations.
 
-Also, before you begin implementing and writing code, tell me with details
-about the design decisions you have taken, and ask for my approval before
-proceeding. If there are any design decisions that you are not sure about,
-please present me with options and their pros and cons, and ask me to choose
-before proceeding. let's make sure we are on the same page about the design
-before you start implementing. we can do some banter about the design to make
-sure we are aligned. be analytical, detailed, and thorough in your design
-explanations and discussions.
+Also, before you begin implementing and writing code, tell me with details about
+the design decisions you have taken, and ask for my approval before proceeding.
+If there are any design decisions that you are not sure about, please present me
+with options and their pros and cons, and ask me to choose before proceeding.
+let's make sure we are on the same page about the design before you start
+implementing. we can do some banter about the design to make sure we are
+aligned. be analytical, detailed, and thorough in your design explanations and
+discussions.
 
-I generally prefer more complex solutions than simpler ones, given that they
-are more powerful and flexible, and I trust your judgment in finding the right
+I generally prefer more complex solutions than simpler ones, given that they are
+more powerful and flexible, and I trust your judgment in finding the right
 balance. I also prefer solutions that are more aligned with the existing
 architecture and patterns of the codebase, even if they require more effort to
 implement, as long as they don't introduce significant technical debt or
@@ -56,13 +54,13 @@ design choices, especially in terms of scalability, maintainability, and
 extensibility.
 
 Do not optimize for short-term speed of implementation at the cost of code
-quality, architectural integrity, or alignment with project conventions. I
-value well-designed, robust solutions that fit seamlessly into the existing
-codebase, even if they take more time to implement.
+quality, architectural integrity, or alignment with project conventions. I value
+well-designed, robust solutions that fit seamlessly into the existing codebase,
+even if they take more time to implement.
 
-Always reason about the full system architecture before implementing
-anything. Every feature touches multiple services, agents, and graph layers.
-Design decisions must account for agent orchestration, event propagation, graph
+Always reason about the full system architecture before implementing anything.
+Every feature touches multiple services, agents, and graph layers. Design
+decisions must account for agent orchestration, event propagation, graph
 consistency, and offline sync simultaneously.
 
 ---
@@ -81,8 +79,8 @@ branded ID types (including `NodeId` and `EdgeId`), and
 Because Phase 3 (domain layer) and Phase 4 (repositories) both import from
 `@noema/types` and `@noema/events`. If the types don't exist in the shared
 packages first, the domain layer can't compile. Shared types also serve as the
-API contract — they define what knowledge-graph concepts look like to every other
-service in the system.
+API contract — they define what knowledge-graph concepts look like to every
+other service in the system.
 
 ---
 
@@ -96,10 +94,10 @@ Each needs a branded type, a prefix constant, factory `create()` method, and
 ### New IDs
 
 - **MutationId** — prefix `mut_` — identifies a CKG mutation lifecycle instance.
-  Mutations are the core unit of work in the CKG pipeline: an agent proposes a
-  structural change, it passes through validation stages, and eventually gets
-  committed or rejected. Each mutation needs a stable ID for tracking, auditing
-  and idempotency.
+  Mutations are the core unit of work in the CKG pipeline: an agent or an admin
+  user proposes a structural change, it passes through validation stages, and
+  eventually gets committed or rejected. Each mutation needs a stable ID for
+  tracking, auditing and idempotency.
 
 - **MisconceptionPatternId** — prefix `mpat_` — identifies a misconception
   detection pattern definition. The misconception ontology (ADR-004) defines 27
@@ -128,8 +126,8 @@ existing enum-as-const-object pattern used throughout the file (e.g.,
 
 ### New enums
 
-- **GraphType** — `pkg` | `ckg` — distinguishes which graph a node or edge
-  lives in. The PKG (Personal Knowledge Graph) is per-user; the CKG (Canonical
+- **GraphType** — `pkg` | `ckg` — distinguishes which graph a node or edge lives
+  in. The PKG (Personal Knowledge Graph) is per-user; the CKG (Canonical
   Knowledge Graph) is the shared "ground truth." Many queries need to specify
   which graph they're targeting.
 
@@ -138,9 +136,9 @@ existing enum-as-const-object pattern used throughout the file (e.g.,
   - **Structural**: `circular_dependency`, `orphan_concept`,
     `over_generalization`, `under_specification`, `false_hierarchy`,
     `missing_prerequisite`, `phantom_link`
-  - **Relational**: `false_equivalence`, `inverted_dependency`,
-    `conflation`, `missing_distinction`, `spurious_analogy`,
-    `scope_confusion`, `boundary_error`
+  - **Relational**: `false_equivalence`, `inverted_dependency`, `conflation`,
+    `missing_distinction`, `spurious_analogy`, `scope_confusion`,
+    `boundary_error`
   - **Temporal**: `anachronistic_ordering`, `premature_abstraction`,
     `delayed_integration`, `revision_resistance`
   - **Semantic**: `label_fixation`, `surface_similarity_bias`,
@@ -149,26 +147,26 @@ existing enum-as-const-object pattern used throughout the file (e.g.,
     `strategy_mismatch`, `transfer_blindness`
 
   This taxonomy matters because different misconception families are detected by
-  different mechanisms (structural patterns analyze the graph topology,
-  semantic patterns analyze node content, temporal patterns analyze learning
-  sequence). The classification drives which detection engine runs.
+  different mechanisms (structural patterns analyze the graph topology, semantic
+  patterns analyze node content, temporal patterns analyze learning sequence).
+  The classification drives which detection engine runs.
 
 - **MisconceptionPatternKind** — `structural` | `statistical` | `semantic` |
-  `hybrid` — categories of detection patterns. Structural patterns look at
-  graph shape (cycles, orphans). Statistical patterns look at learning metrics
-  across a population. Semantic patterns use vector similarity. Hybrid combines
+  `hybrid` — categories of detection patterns. Structural patterns look at graph
+  shape (cycles, orphans). Statistical patterns look at learning metrics across
+  a population. Semantic patterns use vector similarity. Hybrid combines
   multiple signals.
 
 - **InterventionType** — `counterexample_card` | `disambiguation_exercise` |
   `prerequisite_review` | `structural_visualization` | `guided_comparison` |
-  `corrective_feedback` | `reorganization_prompt` | `metacognitive_prompt` —
-  the kinds of remediation actions the system can take. Each maps to a content
+  `corrective_feedback` | `reorganization_prompt` | `metacognitive_prompt` — the
+  kinds of remediation actions the system can take. Each maps to a content
   generation strategy.
 
-- **MisconceptionStatus** — `detected` | `confirmed` | `addressed` |
-  `resolved` | `recurring` — lifecycle of a misconception instance from first
-  detection through remediation to resolution. The `recurring` state handles the
-  common case where a misconception was resolved but re-emerges.
+- **MisconceptionStatus** — `detected` | `confirmed` | `addressed` | `resolved`
+  | `recurring` — lifecycle of a misconception instance from first detection
+  through remediation to resolution. The `recurring` state handles the common
+  case where a misconception was resolved but re-emerges.
 
 - **PromotionBand** — `none` | `weak` | `moderate` | `strong` | `definitive` —
   the confidence levels used in the PKG→CKG aggregation pipeline (ADR-005). When
@@ -189,8 +187,8 @@ existing enum-as-const-object pattern used throughout the file (e.g.,
   pipeline. These track where in the pipeline an aggregation run currently is.
 
 - **StructuralMetricType** — `abstraction_drift` | `depth_calibration_gradient`
-  | `scope_leakage_index` | `sibling_confusion_entropy` |
-  `upward_link_strength` | `traversal_breadth_score` | `strategy_depth_fit` |
+  | `scope_leakage_index` | `sibling_confusion_entropy` | `upward_link_strength`
+  | `traversal_breadth_score` | `strategy_depth_fit` |
   `structural_strategy_entropy` | `structural_attribution_accuracy` |
   `structural_stability_gain` | `boundary_sensitivity_improvement` — the 11
   structural metrics that measure different facets of a user's knowledge graph
@@ -208,9 +206,9 @@ Register it in the barrel export.
 
 The knowledge-graph-service is event-driven. When a node is created, edges are
 added, or a mutation commits, other services need to react. The session-service
-needs to know about graph changes to update learning paths. The analytics-service
-needs events for reporting. The agents need events to trigger downstream work.
-All of this flows through Redis Streams.
+needs to know about graph changes to update learning paths. The
+analytics-service needs events for reporting. The agents need events to trigger
+downstream work. All of this flows through Redis Streams.
 
 ### PKG Events (Personal Knowledge Graph)
 
@@ -220,9 +218,9 @@ These fire when individual users' graphs change:
   userId, nodeType, label, domain, metadata. Downstream: analytics, agents
   tracking user progress.
 
-- **PkgNodeUpdated** — a node's attributes changed (label, properties,
-  mastery level). Payload: nodeId, userId, changedFields, previousValues,
-  newValues. Downstream: triggers structural metric recalculation.
+- **PkgNodeUpdated** — a node's attributes changed (label, properties, mastery
+  level). Payload: nodeId, userId, changedFields, previousValues, newValues.
+  Downstream: triggers structural metric recalculation.
 
 - **PkgNodeRemoved** — a node was soft-deleted from a user's PKG. Payload:
   nodeId, userId, reason. Downstream: cascade checks (orphan edges).
@@ -243,10 +241,10 @@ These fire when individual users' graphs change:
 
 These fire when the shared canonical graph changes:
 
-- **CkgMutationProposed** — an agent proposed a structural change to the CKG.
-  Payload: mutationId, proposedBy (agentId), operations (the mutation DSL
-  operations), rationale, evidenceCount. Downstream: triggers validation
-  pipeline.
+- **CkgMutationProposed** — an agent or admin user proposed a structural change
+  to the CKG. Payload: mutationId, proposedBy (agentId or adminUserId),
+  operations (the mutation DSL operations), rationale, evidenceCount.
+  Downstream: triggers validation pipeline.
 
 - **CkgMutationValidated** — a mutation passed all validation stages. Payload:
   mutationId, validationResults (per-stage pass/fail). Downstream: triggers
@@ -274,14 +272,14 @@ These fire when the system's understanding of a user's learning state changes:
   patternId, evidence. Downstream: triggers intervention selection.
 
 - **InterventionTriggered** — a remediation intervention was initiated. Payload:
-  interventionId, userId, misconceptionType, interventionType,
-  targetNodeIds, content (if applicable). Downstream: content-generation-agent,
-  session scheduling.
+  interventionId, userId, misconceptionType, interventionType, targetNodeIds,
+  content (if applicable). Downstream: content-generation-agent, session
+  scheduling.
 
 - **MetacognitiveStageTransitioned** — a user progressed (or regressed) in the
-  metacognitive stages for a graph region. Payload: userId, domain, previousStage,
-  newStage, triggeringMetrics, rationale. Downstream: UI scaffolding changes,
-  agent behavior adaptation.
+  metacognitive stages for a graph region. Payload: userId, domain,
+  previousStage, newStage, triggeringMetrics, rationale. Downstream: UI
+  scaffolding changes, agent behavior adaptation.
 
 ### Event naming and metadata
 
@@ -319,12 +317,12 @@ knowledge-graph-service and by agents/other services that consume graph data.
 ### Structural metrics interface
 
 - **IStructuralMetrics** — the complete set of structural health metrics for a
-  user in a domain. One field per metric: abstractionDrift, depthCalibrationGradient,
-  scopeLeakageIndex, siblingConfusionEntropy, upwardLinkStrength,
-  traversalBreadthScore, strategyDepthFit, structuralStrategyEntropy,
-  structuralAttributionAccuracy, structuralStabilityGain,
-  boundarySensitivityImprovement. All numbers. This is a "snapshot in time" of
-  graph health.
+  user in a domain. One field per metric: abstractionDrift,
+  depthCalibrationGradient, scopeLeakageIndex, siblingConfusionEntropy,
+  upwardLinkStrength, traversalBreadthScore, strategyDepthFit,
+  structuralStrategyEntropy, structuralAttributionAccuracy,
+  structuralStabilityGain, boundarySensitivityImprovement. All numbers. This is
+  a "snapshot in time" of graph health.
 
 ### Misconception interfaces
 
@@ -348,9 +346,9 @@ consume all the new types.
 
 - [ ] MutationId, MisconceptionPatternId, InterventionId branded IDs added
 - [ ] ID_PREFIXES registry updated with new prefixes
-- [ ] All new enums added (GraphType, MisconceptionType, MisconceptionPatternKind,
-      InterventionType, MisconceptionStatus, PromotionBand, MetacognitiveStage,
-      AggregationStage, StructuralMetricType)
+- [ ] All new enums added (GraphType, MisconceptionType,
+      MisconceptionPatternKind, InterventionType, MisconceptionStatus,
+      PromotionBand, MetacognitiveStage, AggregationStage, StructuralMetricType)
 - [ ] knowledge-graph domain events module created with PKG, CKG, and
       metacognitive events
 - [ ] Events barrel export updated

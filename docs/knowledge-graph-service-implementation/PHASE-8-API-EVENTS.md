@@ -203,7 +203,8 @@ personal graph. The userId in the URL makes the ownership explicit and enables
 authorization checks ("is the authenticated user accessing their own PKG?").
 
 **Why `/ckg/...` without userId?** The CKG is shared. All authenticated users
-can read it. Only agents can write to it (via mutations).
+can read it. Agents and users with the `admin` role can write to it (via the
+mutation pipeline).
 
 **Why separate `/traversal/` prefix?** Traversal operations return different
 data shapes (subgraphs, paths) and have different performance characteristics
@@ -216,7 +217,8 @@ than CRUD. Separating them makes rate limiting and monitoring easier.
   can only access their own PKG) — or the requester is an agent with appropriate
   permissions
 - CKG read routes: any authenticated user
-- CKG mutation routes: restricted to agent identities (not end users)
+- CKG mutation routes: restricted to agent identities or users with the `admin`
+  role (not regular end users)
 - Metrics and misconception routes: same as PKG (user's own data)
 
 ### Response format
@@ -363,7 +365,7 @@ The documentation should include:
 - [ ] Metrics routes (get, compute, history)
 - [ ] Misconception routes (get, detect, update status)
 - [ ] Authentication middleware on all routes
-- [ ] Authorization checks (user owns PKG, agent-only for CKG writes)
+- [ ] Authorization checks (user owns PKG, agent or admin for CKG writes)
 - [ ] Rate limiting configured (read/write/batch tiers)
 - [ ] Domain errors mapped to HTTP status codes
 - [ ] Response envelopes include data, metadata, agentHints

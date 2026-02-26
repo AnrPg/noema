@@ -92,8 +92,8 @@ The CKG is the shared "ground truth" graph that all users' PKGs are compared
 against. Unlike the PKG, where any authenticated user can add nodes and edges
 freely, the CKG requires a formal mutation pipeline:
 
-1. An agent (typically the knowledge-graph-agent or the aggregation pipeline)
-   **proposes** a change
+1. An agent or an admin user (typically the knowledge-graph-agent, the
+   aggregation pipeline, or a platform administrator) **proposes** a change
 2. The change passes through **validation stages** (structural integrity,
    conflict detection, evidence sufficiency)
 3. If validated, the change is **committed** to the CKG

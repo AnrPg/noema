@@ -334,7 +334,7 @@ Knowledge Graph (formal)
 **Why for Noema:**
 
 - PKG: per-user, exploratory, agents can mutate directly
-- CKG: global, formally verified, agents propose via DSL
+- CKG: global, formally verified, agents and admins propose via DSL
 - Stratified 5-layer reasoning (Layer 0 mutable, 1-4 derived)
 - Prevents agent corruption of canonical knowledge
 
@@ -350,7 +350,7 @@ PKG (Personal Knowledge Graph):
 CKG (Canonical Knowledge Graph):
   - Global, shared knowledge
   - Formally verified (ontology + TLA+)
-  - Agents propose via DSL only
+  - Agents and admin users propose via DSL
   - Typestate pipeline validates mutations
 
 5-Layer Stratification:
