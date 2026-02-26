@@ -126,10 +126,11 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
           misconceptionType: type as string,
         },
       },
+      include: { misconceptionPattern: { select: { misconceptionType: true } } },
       orderBy: { priority: 'asc' },
     });
 
-    return records.map((r) => this.templateToDomain(r));
+    return records.map((r) => this.templateToDomainWithType(r));
   }
 
   async getInterventionTemplateById(
@@ -205,11 +206,18 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
     return this.detectionToDomain(record);
   }
 
-  async getActiveMisconceptions(userId: UserId, _domain?: string): Promise<IMisconceptionRecord[]> {
+  async getActiveMisconceptions(userId: UserId, domain?: string): Promise<IMisconceptionRecord[]> {
     const records = await this.prisma.misconceptionDetection.findMany({
       where: {
         userId: userId as string,
         status: { not: 'resolved' },
+        ...(domain !== undefined
+          ? {
+              misconceptionPattern: {
+                misconceptionType: { startsWith: domain },
+              },
+            }
+          : {}),
       },
       orderBy: { detectedAt: 'desc' },
     });
@@ -257,29 +265,6 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
       config: record.spec as unknown as Metadata,
       threshold: record.threshold,
       active: record.active,
-      createdAt: record.createdAt.toISOString(),
-      updatedAt: record.updatedAt.toISOString(),
-    };
-  }
-
-  private templateToDomain(record: {
-    id: string;
-    interventionType: string;
-    name: string;
-    description: string | null;
-    spec: Prisma.JsonValue;
-    priority: number;
-    createdAt: Date;
-    updatedAt: Date;
-  }): IInterventionTemplate {
-    return {
-      templateId: record.id as InterventionId,
-      misconceptionType: '' as MisconceptionType, // Missing without join
-      interventionType: record.interventionType as InterventionType,
-      name: record.name,
-      description: record.description ?? '',
-      config: record.spec as unknown as Metadata,
-      priority: record.priority,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

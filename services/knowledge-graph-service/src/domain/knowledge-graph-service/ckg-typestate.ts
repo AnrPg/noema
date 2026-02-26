@@ -112,6 +112,8 @@ export function isCancellableState(state: MutationState): boolean {
  *
  * Example:
  *   `startValidation(m: MutationInState<'proposed'>): MutationInState<'validating'>`
+ *
+ * @remarks Currently unused — reserved for future typestate narrowing at call sites.
  */
 export interface IMutationInState<S extends MutationState> {
   readonly mutationId: string;
@@ -121,6 +123,9 @@ export interface IMutationInState<S extends MutationState> {
 
 /**
  * A state transition record for the audit log.
+ *
+ * @remarks Currently unused — the pipeline uses IMutationAuditEntry directly.
+ * Retained for potential external consumers of the typestate API.
  */
 export interface IStateTransition {
   /** State before the transition */
@@ -140,10 +145,13 @@ export interface IStateTransition {
 // ============================================================================
 
 /**
- * Transition from PROPOSED to VALIDATING.
- * Called when the validation pipeline starts processing the mutation.
+ * Validate a state transition and throw a descriptive Error if invalid.
  *
- * @throws InvalidStateTransitionError (imported at call site)
+ * @remarks Currently unused — the pipeline calls `isValidTransition` directly
+ * and throws `InvalidStateTransitionError`. Retained for external consumers
+ * that may prefer the throwing-style API.
+ *
+ * @throws Error if the transition is not allowed.
  */
 export function validateTransition(
   from: MutationState,
@@ -161,6 +169,9 @@ export function validateTransition(
 /**
  * Compute the next "happy path" state after a given state.
  * Used by the pipeline to determine the next stage to process.
+ *
+ * @remarks Currently unused — the pipeline hard-codes its stage sequence.
+ * Useful for generic pipeline orchestrators or external callers.
  *
  * @returns The next non-REJECTED state, or null if the state is terminal.
  */

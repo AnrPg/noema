@@ -139,4 +139,27 @@ export interface IMutationRepository {
    * Count mutations by state (for monitoring dashboards).
    */
   countMutationsByState(state: MutationState): Promise<number>;
+
+  /**
+   * Find mutations matching composite filter criteria (state, proposer, date range).
+   * Supports createdAfter / createdBefore for date filtering.
+   */
+  findMutations(filters: {
+    state?: MutationState;
+    proposedBy?: AgentId;
+    createdAfter?: string;
+    createdBefore?: string;
+  }): Promise<ICkgMutation[]>;
+
+  /**
+   * Atomically update mutation state AND append the audit log entry
+   * within a single database transaction. Prevents inconsistency where
+   * the state updates but the audit entry fails (or vice versa).
+   */
+  transitionStateWithAudit(
+    mutationId: MutationId,
+    newState: MutationState,
+    expectedVersion: number,
+    auditEntry: Omit<IMutationAuditEntry, 'timestamp'>
+  ): Promise<{ mutation: ICkgMutation; audit: IMutationAuditEntry }>;
 }

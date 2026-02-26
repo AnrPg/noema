@@ -13,40 +13,38 @@ programmatically interact with the knowledge graph.
 
 ## Boilerplate Instructions
 
-Read PROJECT_CONTEXT.md, then,
-based on the files with respective specifications, help me with the
-implementation. The design process should follow the principles in
-PROJECT_CONTEXT.md (APIs and schema first, follow the microservices pattern,
-expose agent tools and interfaces for agents etc). If there is any design
-decision you must take, first show me options with pros and cons and ask me to
-choose.
+Read PROJECT_CONTEXT.md, then, based on the files with respective
+specifications, help me with the implementation. The design process should
+follow the principles in PROJECT_CONTEXT.md (APIs and schema first, follow the
+microservices pattern, expose agent tools and interfaces for agents etc). If
+there is any design decision you must take, first show me options with pros and
+cons and ask me to choose.
 
-Generate new code strictly in the existing project style and architecture,
-fully conforming to current schemas, APIs, types, models, and patterns;
-maximize reuse of existing implementations, favor additive and minimally
-invasive changes over redesign or refactoring, and if you detect that
-modifying or breaking existing behavior is unavoidable, trigger the harness to
-stop and explicitly ask for my approval before proceeding; after
-implementation, resolve all errors, warnings, and inconsistencies (including
-pre-existing ones), request clarification for any architectural decisions,
-produce an ADR documenting the changes, and commit with clear, structured
-messages.
+Generate new code strictly in the existing project style and architecture, fully
+conforming to current schemas, APIs, types, models, and patterns; maximize reuse
+of existing implementations, favor additive and minimally invasive changes over
+redesign or refactoring, and if you detect that modifying or breaking existing
+behavior is unavoidable, trigger the harness to stop and explicitly ask for my
+approval before proceeding; after implementation, resolve all errors, warnings,
+and inconsistencies (including pre-existing ones), request clarification for any
+architectural decisions, produce an ADR documenting the changes, and commit with
+clear, structured messages.
 
-I want you to make sure that no errors, or warnings or uncommited changes
-remain in the codebase after your implementation. If you detect any, please
-ask me to approve fixing them before proceeding with new implementations.
+I want you to make sure that no errors, or warnings or uncommited changes remain
+in the codebase after your implementation. If you detect any, please ask me to
+approve fixing them before proceeding with new implementations.
 
-Also, before you begin implementing and writing code, tell me with details
-about the design decisions you have taken, and ask for my approval before
-proceeding. If there are any design decisions that you are not sure about,
-please present me with options and their pros and cons, and ask me to choose
-before proceeding. let's make sure we are on the same page about the design
-before you start implementing. we can do some banter about the design to make
-sure we are aligned. be analytical, detailed, and thorough in your design
-explanations and discussions.
+Also, before you begin implementing and writing code, tell me with details about
+the design decisions you have taken, and ask for my approval before proceeding.
+If there are any design decisions that you are not sure about, please present me
+with options and their pros and cons, and ask me to choose before proceeding.
+let's make sure we are on the same page about the design before you start
+implementing. we can do some banter about the design to make sure we are
+aligned. be analytical, detailed, and thorough in your design explanations and
+discussions.
 
-I generally prefer more complex solutions than simpler ones, given that they
-are more powerful and flexible, and I trust your judgment in finding the right
+I generally prefer more complex solutions than simpler ones, given that they are
+more powerful and flexible, and I trust your judgment in finding the right
 balance. I also prefer solutions that are more aligned with the existing
 architecture and patterns of the codebase, even if they require more effort to
 implement, as long as they don't introduce significant technical debt or
@@ -57,21 +55,23 @@ design choices, especially in terms of scalability, maintainability, and
 extensibility.
 
 Do not optimize for short-term speed of implementation at the cost of code
-quality, architectural integrity, or alignment with project conventions. I
-value well-designed, robust solutions that fit seamlessly into the existing
-codebase, even if they take more time to implement.
+quality, architectural integrity, or alignment with project conventions. I value
+well-designed, robust solutions that fit seamlessly into the existing codebase,
+even if they take more time to implement.
 
-Always reason about the full system architecture before implementing
-anything. Every feature touches multiple services, agents, and graph layers.
-Design decisions must account for agent orchestration, event propagation, graph
+Always reason about the full system architecture before implementing anything.
+Every feature touches multiple services, agents, and graph layers. Design
+decisions must account for agent orchestration, event propagation, graph
 consistency, and offline sync simultaneously.
 
 ---
 
 ## Context
 
-The MCP Tool Contract Standard (`docs/architecture/MCP_TOOL_CONTRACT_STANDARD.md`)
-defines the mandatory structure for all tools in Noema:
+The MCP Tool Contract Standard
+(`docs/architecture/MCP_TOOL_CONTRACT_STANDARD.md`) defines the mandatory
+structure for all tools in Noema:
+
 - `IToolDefinition`: name, description, version, inputSchema (Zod), category,
   permissions, rateLimit, examples, deprecation info
 - `IToolResult`: success (boolean), data, error, agentHints, executionTime,
@@ -85,8 +85,9 @@ content-service's tool implementations (17 tools) for the exact patterns.
 
 ### Why MCP tools in addition to REST?
 
-REST routes serve external clients (web/mobile apps, other services calling
-via HTTP). MCP tools serve AI agents. The distinction matters because:
+REST routes serve external clients (web/mobile apps, other services calling via
+HTTP). MCP tools serve AI agents. The distinction matters because:
+
 - Agents discover tools dynamically (they query the registry)
 - Agent inputs/outputs include richer metadata (agent hints, confidence scores)
 - Tool descriptions are written for LLM consumption (natural language, examples)
@@ -141,8 +142,8 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
 ### kg_add_concept_node
 
 - **Purpose**: add a new concept node to a user's PKG
-- **Input**: userId, label, nodeType, domain, description (optional),
-  properties (optional)
+- **Input**: userId, label, nodeType, domain, description (optional), properties
+  (optional)
 - **Output**: the created node, plus hints about duplicate risk (similar labels
   in the same domain), suggested edges to existing concepts
 - **Agent use case**: the ingestion agent creating graph structure from newly
@@ -154,8 +155,8 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
   EDGE_TYPE_POLICIES validation
 - **Input**: userId, sourceNodeId, targetNodeId, edgeType, weight (optional),
   skipAcyclicityCheck (optional, defaults false)
-- **Output**: the created edge, plus hints about the structural impact (did
-  this edge change the graph's connectivity? create a new cluster? extend a
+- **Output**: the created edge, plus hints about the structural impact (did this
+  edge change the graph's connectivity? create a new cluster? extend a
   prerequisite chain?)
 - **Agent use case**: the knowledge-graph agent building structure after
   analyzing user study patterns
@@ -168,15 +169,15 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
   "calibration_update")
 - **Output**: updated node, plus hints about mastery progression trend, related
   nodes that might also need mastery updates
-- **Agent use case**: the calibration agent updating mastery levels after
-  spaced repetition review
+- **Agent use case**: the calibration agent updating mastery levels after spaced
+  repetition review
 
 ### kg_remove_node
 
 - **Purpose**: soft-delete a node from the user's PKG
 - **Input**: userId, nodeId, reason (why the node is being removed)
-- **Output**: confirmation plus hints about orphaned edges, connected nodes
-  that may now be disconnected
+- **Output**: confirmation plus hints about orphaned edges, connected nodes that
+  may now be disconnected
 - **Agent use case**: the governance agent cleaning up deprecated or merged
   concepts
 
@@ -197,8 +198,8 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
 - **Purpose**: retrieve the canonical (CKG) structure for a domain or concept
   area
 - **Input**: domain (optional), rootNodeId (optional), maxDepth (default 3)
-- **Output**: CKG subgraph plus hints about how many users' PKGs align with
-  this structure, areas of high divergence
+- **Output**: CKG subgraph plus hints about how many users' PKGs align with this
+  structure, areas of high divergence
 - **Agent use case**: agents comparing a user's PKG against the canonical
   structure
 
@@ -226,8 +227,8 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
 
 ### kg_compute_structural_metrics
 
-- **Purpose**: trigger computation of all 11 structural metrics for a user's
-  PKG in a domain
+- **Purpose**: trigger computation of all 11 structural metrics for a user's PKG
+  in a domain
 - **Input**: userId, domain
 - **Output**: full IStructuralMetrics snapshot, comparison with previous
   snapshot (delta), hints about which metrics need attention and what actions
@@ -272,8 +273,8 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
 
 ### kg_get_metacognitive_stage
 
-- **Purpose**: determine the user's current metacognitive stage for a domain
-  or specific graph region
+- **Purpose**: determine the user's current metacognitive stage for a domain or
+  specific graph region
 - **Input**: userId, domain
 - **Output**: current MetacognitiveStage, evidence supporting the assessment,
   proximity to next stage transition, hints about what the user needs to
@@ -283,9 +284,9 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
 
 ### kg_get_learning_path_context
 
-- **Purpose**: comprehensive context dump for agents planning learning activities
-  — combines structural metrics, misconceptions, metacognitive stage, and
-  graph topology into a single rich response
+- **Purpose**: comprehensive context dump for agents planning learning
+  activities — combines structural metrics, misconceptions, metacognitive stage,
+  and graph topology into a single rich response
 - **Input**: userId, domain, focusNodeId (optional — if the agent is planning
   around a specific concept)
 - **Output**: combined context including: structural metrics, active
@@ -301,19 +302,20 @@ via HTTP). MCP tools serve AI agents. The distinction matters because:
 ## Task 5: Create the tool registry
 
 Create a tool registry module that:
+
 - Registers all 19 tool definitions with their IToolDefinition metadata
 - Exposes a `GET /api/v1/tools` endpoint that returns the registry (for agent
   discovery)
-- Exposes a `POST /api/v1/tools/:toolName/execute` endpoint that dispatches
-  tool invocations to the appropriate handler
+- Exposes a `POST /api/v1/tools/:toolName/execute` endpoint that dispatches tool
+  invocations to the appropriate handler
 
-Follow the content-service tool registry pattern exactly. Each tool must
-have:
+Follow the content-service tool registry pattern exactly. Each tool must have:
+
 - A unique name (the `kg_xxx` names listed above)
 - A semver version (start at 1.0.0)
 - A category (pkg, ckg, analysis, metacognitive)
-- A description written for LLM consumption (clear, concise, explains when
-  to use the tool and what it returns)
+- A description written for LLM consumption (clear, concise, explains when to
+  use the tool and what it returns)
 - An input schema (Zod) that validates parameters
 - Permission requirements (which agent roles can call this tool)
 - Rate limit configuration
@@ -325,17 +327,19 @@ have:
 
 Create route handlers at `src/agents/tools/` that bridge between the tool
 registry and the service layer. Each handler:
+
 1. Validates the input against the tool's Zod schema
 2. Authenticates the calling agent
 3. Calls the appropriate KnowledgeGraphService method(s)
-4. Computes tool-specific agent hints (may augment the service-level hints
-   with tool-level context)
+4. Computes tool-specific agent hints (may augment the service-level hints with
+   tool-level context)
 5. Returns IToolResult with success/error, data, and hints
 
 ### Why separate tool handlers from REST route handlers?
 
 Despite calling the same service methods, tool handlers and REST handlers have
 different concerns:
+
 - Tool handlers include richer agent hints (because the consumer is an agent,
   not a UI)
 - Tool handlers may compose multiple service calls (like

@@ -12,40 +12,38 @@ documentation and a safety net for future changes.
 
 ## Boilerplate Instructions
 
-Read PROJECT_CONTEXT.md, then,
-based on the files with respective specifications, help me with the
-implementation. The design process should follow the principles in
-PROJECT_CONTEXT.md (APIs and schema first, follow the microservices pattern,
-expose agent tools and interfaces for agents etc). If there is any design
-decision you must take, first show me options with pros and cons and ask me to
-choose.
+Read PROJECT_CONTEXT.md, then, based on the files with respective
+specifications, help me with the implementation. The design process should
+follow the principles in PROJECT_CONTEXT.md (APIs and schema first, follow the
+microservices pattern, expose agent tools and interfaces for agents etc). If
+there is any design decision you must take, first show me options with pros and
+cons and ask me to choose.
 
-Generate new code strictly in the existing project style and architecture,
-fully conforming to current schemas, APIs, types, models, and patterns;
-maximize reuse of existing implementations, favor additive and minimally
-invasive changes over redesign or refactoring, and if you detect that
-modifying or breaking existing behavior is unavoidable, trigger the harness to
-stop and explicitly ask for my approval before proceeding; after
-implementation, resolve all errors, warnings, and inconsistencies (including
-pre-existing ones), request clarification for any architectural decisions,
-produce an ADR documenting the changes, and commit with clear, structured
-messages.
+Generate new code strictly in the existing project style and architecture, fully
+conforming to current schemas, APIs, types, models, and patterns; maximize reuse
+of existing implementations, favor additive and minimally invasive changes over
+redesign or refactoring, and if you detect that modifying or breaking existing
+behavior is unavoidable, trigger the harness to stop and explicitly ask for my
+approval before proceeding; after implementation, resolve all errors, warnings,
+and inconsistencies (including pre-existing ones), request clarification for any
+architectural decisions, produce an ADR documenting the changes, and commit with
+clear, structured messages.
 
-I want you to make sure that no errors, or warnings or uncommited changes
-remain in the codebase after your implementation. If you detect any, please
-ask me to approve fixing them before proceeding with new implementations.
+I want you to make sure that no errors, or warnings or uncommited changes remain
+in the codebase after your implementation. If you detect any, please ask me to
+approve fixing them before proceeding with new implementations.
 
-Also, before you begin implementing and writing code, tell me with details
-about the design decisions you have taken, and ask for my approval before
-proceeding. If there are any design decisions that you are not sure about,
-please present me with options and their pros and cons, and ask me to choose
-before proceeding. let's make sure we are on the same page about the design
-before you start implementing. we can do some banter about the design to make
-sure we are aligned. be analytical, detailed, and thorough in your design
-explanations and discussions.
+Also, before you begin implementing and writing code, tell me with details about
+the design decisions you have taken, and ask for my approval before proceeding.
+If there are any design decisions that you are not sure about, please present me
+with options and their pros and cons, and ask me to choose before proceeding.
+let's make sure we are on the same page about the design before you start
+implementing. we can do some banter about the design to make sure we are
+aligned. be analytical, detailed, and thorough in your design explanations and
+discussions.
 
-I generally prefer more complex solutions than simpler ones, given that they
-are more powerful and flexible, and I trust your judgment in finding the right
+I generally prefer more complex solutions than simpler ones, given that they are
+more powerful and flexible, and I trust your judgment in finding the right
 balance. I also prefer solutions that are more aligned with the existing
 architecture and patterns of the codebase, even if they require more effort to
 implement, as long as they don't introduce significant technical debt or
@@ -56,13 +54,13 @@ design choices, especially in terms of scalability, maintainability, and
 extensibility.
 
 Do not optimize for short-term speed of implementation at the cost of code
-quality, architectural integrity, or alignment with project conventions. I
-value well-designed, robust solutions that fit seamlessly into the existing
-codebase, even if they take more time to implement.
+quality, architectural integrity, or alignment with project conventions. I value
+well-designed, robust solutions that fit seamlessly into the existing codebase,
+even if they take more time to implement.
 
-Always reason about the full system architecture before implementing
-anything. Every feature touches multiple services, agents, and graph layers.
-Design decisions must account for agent orchestration, event propagation, graph
+Always reason about the full system architecture before implementing anything.
+Every feature touches multiple services, agents, and graph layers. Design
+decisions must account for agent orchestration, event propagation, graph
 consistency, and offline sync simultaneously.
 
 ---
@@ -73,8 +71,8 @@ The knowledge-graph-service has unique testing challenges compared to other
 services in Noema:
 
 - **Neo4j testing**: unlike PostgreSQL (where Prisma offers test containers and
-  migrations), Neo4j requires a running instance or an embedded test driver.
-  The test strategy must handle this.
+  migrations), Neo4j requires a running instance or an embedded test driver. The
+  test strategy must handle this.
 - **Dual database**: integration tests need both Neo4j and PostgreSQL.
 - **Graph invariants**: tests must verify structural properties (acyclicity,
   connectivity, traversal correctness) that are harder to assert than simple
@@ -100,12 +98,12 @@ Create fixture files that define standard graph structures for testing:
   traversal that handles shared descendants (don't double-count D).
 
 - **Cyclic graph**: A → B → C → A (intentional cycle in `related_to` edges).
-  Tests that cycle detection works and that acyclic edge types correctly
-  reject this structure.
+  Tests that cycle detection works and that acyclic edge types correctly reject
+  this structure.
 
 - **Multi-domain graph**: nodes in "mathematics", "physics", "computer_science"
-  domains with cross-domain edges. Tests domain-scoped queries and SLI
-  (Scope Leakage Index) computation.
+  domains with cross-domain edges. Tests domain-scoped queries and SLI (Scope
+  Leakage Index) computation.
 
 - **Deep hierarchy**: 10-level `part_of` hierarchy. Tests depth-limited
   traversal and performance.
@@ -113,9 +111,9 @@ Create fixture files that define standard graph structures for testing:
 - **Hub graph**: one central node connected to 20+ peripheral nodes. Tests
   high-degree node handling and hub detection hints.
 
-- **CKG reference graph**: a small canonical structure with nodes and edges
-  that user PKGs can be compared against. Tests structural metrics that
-  require CKG comparison.
+- **CKG reference graph**: a small canonical structure with nodes and edges that
+  user PKGs can be compared against. Tests structural metrics that require CKG
+  comparison.
 
 ### Factory functions
 
@@ -136,8 +134,8 @@ fields they care about, with everything else filled in with realistic defaults.
 
 Create mock implementations of all repository interfaces for unit testing:
 
-- `MockGraphRepository` — in-memory graph stored as Maps. Supports all read
-  and write operations including traversal (using BFS/DFS on the in-memory
+- `MockGraphRepository` — in-memory graph stored as Maps. Supports all read and
+  write operations including traversal (using BFS/DFS on the in-memory
   structure). This is the most complex mock — it needs to faithfully simulate
   graph traversal behavior.
 
@@ -146,16 +144,16 @@ Create mock implementations of all repository interfaces for unit testing:
 
 - `MockMetricsRepository` — in-memory store for metric snapshots.
 
-- `MockMisconceptionRepository` — in-memory store for patterns, templates,
-  and detections.
+- `MockMisconceptionRepository` — in-memory store for patterns, templates, and
+  detections.
 
 - `MockEventPublisher` — captures published events in an array for assertion.
 
 ### Why in-memory graph mocks?
 
 Testing the service layer's business logic (edge policy enforcement, acyclicity
-checks, metric computation) requires a graph that actually supports traversal.
-A simple spy/stub that returns canned responses can't test "does creating this
+checks, metric computation) requires a graph that actually supports traversal. A
+simple spy/stub that returns canned responses can't test "does creating this
 edge actually create a cycle?" — you need a working graph. The in-memory mock
 provides this without requiring a Neo4j instance.
 
@@ -295,8 +293,8 @@ PostgreSQL instances (via Docker containers or test-specific instances).
 
 ### Route tests
 
-Test each route group with a running Fastify instance (using Fastify's
-injection API — no real HTTP, just simulated requests):
+Test each route group with a running Fastify instance (using Fastify's injection
+API — no real HTTP, just simulated requests):
 
 - **Node routes**: POST creates, GET retrieves, PATCH updates, DELETE removes.
   Verify Zod validation rejects malformed inputs. Verify auth requirements.
@@ -304,8 +302,8 @@ injection API — no real HTTP, just simulated requests):
   Verify error response format.
 - **Traversal routes**: subgraph, ancestors, descendants with various
   parameters. Verify response shape includes nodes, edges, metadata.
-- **Mutation routes**: propose, get status, cancel. Verify state transitions
-  in responses.
+- **Mutation routes**: propose, get status, cancel. Verify state transitions in
+  responses.
 - **Metrics routes**: get, compute, history. Verify response includes all 11
   metrics.
 - **Tool routes**: execute each of the 19 MCP tools via the tool endpoint.
@@ -367,8 +365,8 @@ testing strategy for CI:
   Docker containers. 10-30 second execution.
 - **Tier 3: Contract tests** — run on PR, verify cross-service compatibility.
   Lightweight, no database required.
-- **Tier 4: E2E smoke tests** — run post-deploy, verify the service is alive
-  and healthy in the deployed environment.
+- **Tier 4: E2E smoke tests** — run post-deploy, verify the service is alive and
+  healthy in the deployed environment.
 
 ### Coverage thresholds
 
@@ -378,6 +376,7 @@ These thresholds match the content-service.
 ### Neo4j test container
 
 Document the recommended approach for Neo4j in CI:
+
 - Use the official `neo4j:5-community` Docker image
 - Start with `NEO4J_AUTH=none` for CI simplicity
 - Prefix test databases/nodes with test-run IDs for isolation
@@ -407,7 +406,8 @@ The absolute last step of the entire implementation:
       hub, CKG reference)
 - [ ] Factory functions for all domain types (nodes, edges, mutations, metrics,
       misconceptions, context)
-- [ ] Mock repositories (graph, mutation, metrics, misconception, event publisher)
+- [ ] Mock repositories (graph, mutation, metrics, misconception, event
+      publisher)
 - [ ] MockGraphRepository supports in-memory traversal
 - [ ] Domain layer unit tests (edge policies, typestate machine, value objects,
       branded IDs)

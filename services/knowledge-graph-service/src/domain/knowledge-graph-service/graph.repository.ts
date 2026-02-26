@@ -178,9 +178,10 @@ export interface IEdgeRepository {
   removeEdge(edgeId: EdgeId): Promise<void>;
 
   /**
-   * Find edges matching filter criteria.
+   * Find edges matching filter criteria with optional pagination.
+   * When limit/offset are provided, pagination is handled at the database level.
    */
-  findEdges(filter: IEdgeFilter): Promise<IGraphEdge[]>;
+  findEdges(filter: IEdgeFilter, limit?: number, offset?: number): Promise<IGraphEdge[]>;
 
   /**
    * Get all edges for a node in a given direction.
@@ -300,4 +301,19 @@ export interface IBatchGraphRepository {
  * - **Decorator composition**: cache INodeRepository without ITraversalRepository
  */
 export interface IGraphRepository
-  extends INodeRepository, IEdgeRepository, ITraversalRepository, IBatchGraphRepository {}
+  extends INodeRepository, IEdgeRepository, ITraversalRepository, IBatchGraphRepository {
+
+  /**
+   * Execute a callback within a single Neo4j transaction.
+   * All graph operations performed inside the callback use the same
+   * transaction and commit atomically. On failure, the entire transaction
+   * is rolled back.
+   *
+   * This is critical for the CKG mutation pipeline's commit protocol,
+   * which requires multi-operation atomicity.
+   *
+   * @param fn Callback that receives a transactional graph repository.
+   * @returns The result of the callback.
+   */
+  runInTransaction<T>(fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T>;
+}

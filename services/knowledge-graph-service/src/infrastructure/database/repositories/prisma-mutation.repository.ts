@@ -14,20 +14,20 @@ import type { AgentId, Metadata, MutationId, MutationState } from '@noema/types'
 import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type {
-  Prisma,
-  CkgMutationState as PrismaCkgMutationState,
-  PrismaClient,
+    Prisma,
+    CkgMutationState as PrismaCkgMutationState,
+    PrismaClient,
 } from '../../../../generated/prisma/index.js';
 
 import {
-  MutationConflictError,
-  MutationNotFoundError,
+    MutationConflictError,
+    MutationNotFoundError,
 } from '../../../domain/knowledge-graph-service/errors/index.js';
 import type {
-  ICkgMutation,
-  ICreateMutationInput,
-  IMutationAuditEntry,
-  IMutationRepository,
+    ICkgMutation,
+    ICreateMutationInput,
+    IMutationAuditEntry,
+    IMutationRepository,
 } from '../../../domain/knowledge-graph-service/mutation.repository.js';
 
 // ============================================================================
@@ -179,6 +179,80 @@ export class PrismaMutationRepository implements IMutationRepository {
     return this.prisma.ckgMutation.count({
       where: { state: toDbState(state) },
     });
+  }
+
+  async findMutations(filters: {
+    state?: MutationState;
+    proposedBy?: AgentId;
+    createdAfter?: string;
+    createdBefore?: string;
+  }): Promise<ICkgMutation[]> {
+    const where: Record<string, unknown> = {};
+
+    if (filters.state !== undefined) {
+      where['state'] = toDbState(filters.state);
+    }
+    if (filters.proposedBy !== undefined) {
+      where['createdBy'] = filters.proposedBy as string;
+    }
+    if (filters.createdAfter !== undefined || filters.createdBefore !== undefined) {
+      const createdAt: Record<string, Date> = {};
+      if (filters.createdAfter !== undefined) {
+        createdAt['gte'] = new Date(filters.createdAfter);
+      }
+      if (filters.createdBefore !== undefined) {
+        createdAt['lte'] = new Date(filters.createdBefore);
+      }
+      where['createdAt'] = createdAt;
+    }
+
+    const records = await this.prisma.ckgMutation.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return records.map((r) => this.toDomain(r));
+  }
+
+  async transitionStateWithAudit(
+    mutationId: MutationId,
+    newState: MutationState,
+    expectedVersion: number,
+    auditEntry: Omit<IMutationAuditEntry, 'timestamp'>
+  ): Promise<{ mutation: ICkgMutation; audit: IMutationAuditEntry }> {
+    const [updatedRecord, auditRecord] = await this.prisma.$transaction([
+      this.prisma.ckgMutation.update({
+        where: { id: mutationId, version: expectedVersion },
+        data: {
+          state: toDbState(newState),
+          version: { increment: 1 },
+        },
+      }),
+      this.prisma.ckgMutationAuditLog.create({
+        data: {
+          id: generateAuditId(),
+          mutationId: auditEntry.mutationId,
+          fromState: toDbState(auditEntry.fromState),
+          toState: toDbState(auditEntry.toState),
+          triggeredBy: auditEntry.performedBy,
+          snapshot: (auditEntry.context ?? {}) as unknown as Prisma.JsonObject,
+        },
+      }),
+    ]);
+
+    const mutation = this.toDomain(updatedRecord);
+    const audit: IMutationAuditEntry = {
+      mutationId: auditRecord.mutationId as MutationId,
+      fromState: fromDbState(auditRecord.fromState),
+      toState: fromDbState(auditRecord.toState),
+      performedBy: auditRecord.triggeredBy,
+      timestamp: auditRecord.createdAt.toISOString(),
+    };
+    if (auditRecord.snapshot !== null) {
+      (audit as { context: Metadata }).context = auditRecord.snapshot as Metadata;
+    }
+
+    return { mutation, audit };
   }
 
   // ==========================================================================

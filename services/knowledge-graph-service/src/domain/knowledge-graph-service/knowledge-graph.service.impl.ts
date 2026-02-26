@@ -84,6 +84,7 @@ import type {
 import type {
   IPkgEdgeCreatedOp,
   IPkgEdgeDeletedOp,
+  IPkgEdgeUpdatedOp,
   IPkgNodeCreatedOp,
   IPkgNodeDeletedOp,
   IPkgNodeUpdatedOp,
@@ -476,6 +477,11 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     const edge = await this.graphRepository.createEdge(GraphType.PKG, edgeInput, userId);
 
     // Log operation
+    const skippedValidations: string[] = [];
+    if (validationOptions?.validateNodeTypes === false) skippedValidations.push('nodeTypes');
+    if (validationOptions?.validateWeight === false) skippedValidations.push('weight');
+    if (validationOptions?.validateAcyclicity === false) skippedValidations.push('acyclicity');
+
     const operation: IPkgEdgeCreatedOp = {
       operationType: PkgOperationType.EDGE_CREATED,
       sequenceNumber: 0,
@@ -485,6 +491,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       sourceNodeId: edge.sourceNodeId,
       targetNodeId: edge.targetNodeId,
       weight: edge.weight,
+      ...(skippedValidations.length > 0 ? { skippedValidations } : {}),
     };
     await this.operationLogRepository.appendOperation(userId, operation);
 
@@ -578,6 +585,16 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     // Log & publish only if something actually changed
     if (changedFields.length > 0) {
+      // Log operation for audit trail (D3a)
+      const edgeUpdateOp: IPkgEdgeUpdatedOp = {
+        operationType: PkgOperationType.EDGE_UPDATED,
+        sequenceNumber: 0,
+        timestamp: new Date().toISOString(),
+        edgeId: existingEdge.edgeId,
+        changedFields,
+      };
+      await this.operationLogRepository.appendOperation(userId, edgeUpdateOp);
+
       // Publish domain event
       const fieldNames = changedFields.map((cf) => cf.field);
       const previousValues: Record<string, unknown> = {};
@@ -698,23 +715,25 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     };
 
     // Apply pagination limits
-    const _limit = Math.min(pagination.limit, MAX_PAGE_SIZE);
-
-    const edges = await this.graphRepository.findEdges(scopedFilter);
-
-    // Apply manual pagination since findEdges doesn't support it natively
+    const limit = Math.min(pagination.limit, MAX_PAGE_SIZE);
     const offset = Math.max(pagination.offset, 0);
-    const paginatedEdges = edges.slice(offset, offset + _limit);
+
+    // Push pagination to the repository (database-level SKIP/LIMIT)
+    // Fetch limit+1 to know if there are more results without a separate count query
+    const edges = await this.graphRepository.findEdges(scopedFilter, limit + 1, offset);
+
+    const hasMore = edges.length > limit;
+    const paginatedEdges = hasMore ? edges.slice(0, limit) : edges;
 
     const result: IPaginatedResponse<IGraphEdge> = {
       items: paginatedEdges,
-      total: edges.length,
-      hasMore: offset + paginatedEdges.length < edges.length,
+      total: offset + edges.length, // Approximate total (exact count requires separate query)
+      hasMore,
     };
 
     return {
       data: result,
-      agentHints: this.createListHints('edges', paginatedEdges.length, edges.length),
+      agentHints: this.createListHints('edges', paginatedEdges.length, result.total ?? 0),
     };
   }
 
@@ -861,10 +880,34 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     this.validateTraversalDepth(traversalOptions.maxDepth);
 
-    // Verify root exists in CKG
+    // Verify root exists in CKG — return empty subgraph if not found
     const rootNode = await this.graphRepository.getNode(rootNodeId);
-    if (rootNode?.graphType !== GraphType.CKG) {
-      throw new NodeNotFoundError(rootNodeId, GraphType.CKG);
+    if (!rootNode || rootNode.graphType !== GraphType.CKG) {
+      this.logger.info(
+        { rootNodeId },
+        'CKG subgraph root node not found — returning empty subgraph'
+      );
+      const emptySubgraph: ISubgraph = { nodes: [], edges: [] };
+      return {
+        data: emptySubgraph,
+        agentHints: {
+          suggestedNextActions: [
+            { action: 'verify_node_id', description: 'Verify the node ID belongs to the CKG', priority: 'high' as const, category: 'correction' },
+            { action: 'check_ingestion', description: 'Check if the domain has been ingested', priority: 'medium' as const, category: 'exploration' },
+          ],
+          relatedResources: [],
+          confidence: 0,
+          sourceQuality: 'low' as const,
+          validityPeriod: 'short' as const,
+          contextNeeded: ['Valid CKG root node ID'],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0, effort: 0.1, roi: 0 },
+          preferenceAlignment: [],
+          reasoning: 'No CKG data found for the requested root node.',
+        },
+      };
     }
 
     // CKG traversals don't pass userId
@@ -1047,9 +1090,11 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       'MutationFilter'
     );
 
-    const listFilters: { state?: MutationState; proposedBy?: AgentId } = {};
+    const listFilters: { state?: MutationState; proposedBy?: AgentId; createdAfter?: string; createdBefore?: string } = {};
     if (validated.state !== undefined) listFilters.state = validated.state as MutationState;
     if (validated.proposedBy !== undefined) listFilters.proposedBy = validated.proposedBy as AgentId;
+    if (validated.createdAfter !== undefined) listFilters.createdAfter = validated.createdAfter;
+    if (validated.createdBefore !== undefined) listFilters.createdBefore = validated.createdBefore;
 
     const mutations = await this.mutationPipeline.listMutations(listFilters);
 

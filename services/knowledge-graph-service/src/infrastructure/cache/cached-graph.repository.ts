@@ -245,4 +245,12 @@ export class CachedGraphRepository implements IGraphRepository {
       this.inner.getNodesByIds(nodeIds, userId)
     );
   }
+
+  // ==========================================================================
+  // Transaction support — delegates to inner (cache is bypassed within tx)
+  // ==========================================================================
+
+  async runInTransaction<T>(fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
+    return this.inner.runInTransaction(fn);
+  }
 }

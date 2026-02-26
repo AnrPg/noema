@@ -10,8 +10,8 @@ transform raw graph structure into metacognitive signals.
 This phase is deliberately placed **after** Phase 6 (CKG Mutation Pipeline)
 because 7 of the 11 structural metrics require CKG data for computation, and
 `compareWithCkg` and misconception detection also depend on CKG structure. By
-this point, the CKG mutation pipeline is functional and CKG data can exist,
-so all metrics compute at full accuracy from day one — no graceful degradation
+this point, the CKG mutation pipeline is functional and CKG data can exist, so
+all metrics compute at full accuracy from day one — no graceful degradation
 needed.
 
 ---
@@ -110,10 +110,10 @@ metrics. It includes:
 - Cross-metric interaction patterns and composite health score
 - Dependency matrix showing which metrics need CKG data
 
-**Use `STRUCTURAL-METRICS-SPECIFICATION.md` as the primary implementation
-guide for Task 1.** This phase file provides the software engineering context
-(service integration, events, hints, concurrency); the specification file
-provides the mathematics and algorithms.
+**Use `STRUCTURAL-METRICS-SPECIFICATION.md` as the primary implementation guide
+for Task 1.** This phase file provides the software engineering context (service
+integration, events, hints, concurrency); the specification file provides the
+mathematics and algorithms.
 
 ---
 
@@ -137,26 +137,26 @@ Compute all 11 structural metrics for a user in a domain. Add this method to the
 4. **Compute each metric** using the formulas and algorithms in
    `STRUCTURAL-METRICS-SPECIFICATION.md`:
 
-   | # | Metric | Abbr | CKG Required? |
-   |---|--------|------|---------------|
-   | 1 | Abstraction Drift | AD | Yes |
-   | 2 | Depth Calibration Gradient | DCG | Yes |
-   | 3 | Scope Leakage Index | SLI | Yes |
-   | 4 | Sibling Confusion Entropy | SCE | Yes |
-   | 5 | Upward Link Strength | ULS | Yes |
-   | 6 | Traversal Breadth Score | TBS | No (PKG-only) |
-   | 7 | Strategy-Depth Fit | SDF | No (PKG-only) |
-   | 8 | Structural Strategy Entropy | SSE | No (PKG-only) |
-   | 9 | Structural Attribution Accuracy | SAA | Partial (PKG attributions) |
-   | 10 | Structural Stability Gain | SSG | No (delta metric, PKG snapshots) |
-   | 11 | Boundary Sensitivity Improvement | BSI | No (delta metric, PKG snapshots) |
+   | #   | Metric                           | Abbr | CKG Required?                    |
+   | --- | -------------------------------- | ---- | -------------------------------- |
+   | 1   | Abstraction Drift                | AD   | Yes                              |
+   | 2   | Depth Calibration Gradient       | DCG  | Yes                              |
+   | 3   | Scope Leakage Index              | SLI  | Yes                              |
+   | 4   | Sibling Confusion Entropy        | SCE  | Yes                              |
+   | 5   | Upward Link Strength             | ULS  | Yes                              |
+   | 6   | Traversal Breadth Score          | TBS  | No (PKG-only)                    |
+   | 7   | Strategy-Depth Fit               | SDF  | No (PKG-only)                    |
+   | 8   | Structural Strategy Entropy      | SSE  | No (PKG-only)                    |
+   | 9   | Structural Attribution Accuracy  | SAA  | Partial (PKG attributions)       |
+   | 10  | Structural Stability Gain        | SSG  | No (delta metric, PKG snapshots) |
+   | 11  | Boundary Sensitivity Improvement | BSI  | No (delta metric, PKG snapshots) |
 
 5. **Save the snapshot** via `IMetricsRepository.saveSnapshot()`
-6. **Compare with previous snapshot** (from `IMetricsRepository.getLatest()`)
-   to compute deltas
+6. **Compare with previous snapshot** (from `IMetricsRepository.getLatest()`) to
+   compute deltas
 7. **Publish `PkgStructuralMetricsUpdated` event** if metrics changed
-   significantly (threshold: any metric changed by >0.05 or crossed a
-   concerning threshold boundary)
+   significantly (threshold: any metric changed by >0.05 or crossed a concerning
+   threshold boundary)
 8. **Return `IServiceResult<IStructuralMetrics>`** with agent hints
 
 ### CKG unavailability handling
@@ -165,12 +165,12 @@ Even though CKG data should be available by Phase 7, the implementation must
 still handle the case where CKG has no data for a specific domain (not all
 domains will have canonical structures). In this case:
 
-- CKG-dependent metrics (AD, DCG, SLI, SCE, ULS) → return 0.0 with a hint:
-  "CKG has no data for domain '{domain}' — these metrics are not meaningful
-  without a canonical reference"
+- CKG-dependent metrics (AD, DCG, SLI, SCE, ULS) → return 0.0 with a hint: "CKG
+  has no data for domain '{domain}' — these metrics are not meaningful without a
+  canonical reference"
 - PKG-only metrics (TBS, SDF, SSE, SAA, SSG, BSI) → compute normally
-- Agent hints should include `contextNeeded`: "CKG data for domain '{domain}'
-  is empty — 5 CKG-dependent metrics cannot be computed"
+- Agent hints should include `contextNeeded`: "CKG data for domain '{domain}' is
+  empty — 5 CKG-dependent metrics cannot be computed"
 
 ### Concurrency and locking
 
@@ -193,8 +193,8 @@ For large PKGs (500+ nodes), metric computation may be expensive. Consider:
 
 ### Agent hints for computeMetrics
 
-- Highlight the 3–4 metrics that changed most since last computation (with
-  delta values for all metrics in parentheses)
+- Highlight the 3–4 metrics that changed most since last computation (with delta
+  values for all metrics in parentheses)
 - Flag any metric in the "concerning" range (see threshold tables in
   `STRUCTURAL-METRICS-SPECIFICATION.md`)
 - Suggest specific actions for the worst-performing metric (e.g., "Your Scope
@@ -224,11 +224,11 @@ analysis.
      type. Produce matched pairs, unmatched PKG nodes (student-specific
      concepts), and unmatched CKG nodes (canonical concepts the student hasn't
      covered)
-   - **Edge alignment**: for matched node pairs, compare edges. Produce
-     matched edges, PKG-only edges (structural divergences), and CKG-only edges
-     (missing canonical relationships)
-   - **Edge alignment score**: fraction of CKG edges that have a PKG
-     counterpart (weighted by edge importance)
+   - **Edge alignment**: for matched node pairs, compare edges. Produce matched
+     edges, PKG-only edges (structural divergences), and CKG-only edges (missing
+     canonical relationships)
+   - **Edge alignment score**: fraction of CKG edges that have a PKG counterpart
+     (weighted by edge importance)
    - **Coverage metrics**: what fraction of the CKG is "covered" by the PKG
    - **Divergence details**: specific nodes/edges where PKG diverges from CKG,
      with severity classification
@@ -238,8 +238,8 @@ analysis.
 
 - Coverage summary: "You've covered 67% of the canonical concepts in
   'thermodynamics'"
-- Most significant gaps: "Missing canonical concepts: [list top 5 unmatched
-  CKG nodes]"
+- Most significant gaps: "Missing canonical concepts: [list top 5 unmatched CKG
+  nodes]"
 - Structural divergences: "Your graph has 3 edges that contradict canonical
   relationships — review these"
 - Strengths: "Your prerequisite chain for 'entropy' matches the canonical
@@ -260,7 +260,6 @@ Run all active misconception patterns against a user's PKG for a domain.
 1. **Fetch active patterns** from `IMisconceptionRepository`
 2. **For each pattern**, run the detection logic against the user's PKG subgraph
    and CKG comparison:
-
    - **Structural patterns** — analyze graph topology:
      - `circular_dependency`: detect cycles in edge types that should be acyclic
        (same cycle detection as edge creation, but scanning the entire subgraph)
@@ -271,8 +270,7 @@ Run all active misconception patterns against a user's PKG for a domain.
      - `missing_prerequisites`: concepts with high mastery but missing
        prerequisite edges to foundational concepts that exist in the CKG
      - `over_generalization`: a node with >N incoming prerequisite edges,
-       suggesting the user is funneling too many concepts through a single
-       point
+       suggesting the user is funneling too many concepts through a single point
      - `fragmented_knowledge`: disconnected subgraph components within the same
        domain (knowledge islands that should be connected)
 
@@ -313,8 +311,8 @@ periodically by the diagnostic agent or on-demand when a user requests a
 - Trend: if the same misconception was detected previously, indicate whether
   it's improving, stable, or worsening
 - Related misconceptions: flag if multiple detections suggest a common root
-  cause (e.g., "Both `circular_dependency` and `over_generalization` in the
-  same subregion suggest confusion about the hierarchy in [topic]")
+  cause (e.g., "Both `circular_dependency` and `over_generalization` in the same
+  subregion suggest confusion about the hierarchy in [topic]")
 
 ---
 
@@ -342,8 +340,8 @@ threshold tables).
 ### Agent hints for getMetacognitiveStage
 
 - Current stage with evidence (which metrics support this assessment)
-- Distance to next stage: "You need to improve SLI from 0.35 to <0.20 and
-  AD from 0.42 to <0.30 to reach Stage 3"
+- Distance to next stage: "You need to improve SLI from 0.35 to <0.20 and AD
+  from 0.42 to <0.30 to reach Stage 3"
 - Regression warning: if metrics have declined since last assessment, flag
   potential stage regression
 - Recommended focus areas: which metrics to work on for stage progression
@@ -365,8 +363,8 @@ Compute a composite health score that synthesizes all 11 metrics into a single
    with "badness" metrics inverted so higher is always better
 3. **Classify per-metric status**: healthy / warning / critical (based on
    threshold tables per metacognitive stage)
-4. **Compute trend direction**: improving / stable / declining (based on
-   last 3–5 snapshots)
+4. **Compute trend direction**: improving / stable / declining (based on last
+   3–5 snapshots)
 5. **Return `IServiceResult<IStructuralHealthReport>`** including:
    - Overall health score (0–1, higher is better)
    - Per-metric status breakdown
@@ -380,15 +378,15 @@ Compute a composite health score that synthesizes all 11 metrics into a single
   structural health (0.72/1.0), improving (+0.04 since last week)"
 - Priority actions: top 2–3 most impactful improvements the user can make
 - Celebration: if the user crossed a health milestone, acknowledge it
-- Warning: if health is declining, call it out with specific metrics causing
-  the decline
+- Warning: if health is declining, call it out with specific metrics causing the
+  decline
 
 ---
 
 ## Checklist
 
-- [ ] `computeMetrics` implemented per STRUCTURAL-METRICS-SPECIFICATION.md
-      (all 11 metrics computed with correct formulas)
+- [ ] `computeMetrics` implemented per STRUCTURAL-METRICS-SPECIFICATION.md (all
+      11 metrics computed with correct formulas)
 - [ ] IGraphComparison computed once and shared across CKG-dependent metrics
 - [ ] Metric snapshots saved via IMetricsRepository
 - [ ] Delta computation against previous snapshot

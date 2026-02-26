@@ -83,8 +83,8 @@ with method-per-feature, each returning `IServiceResult<T>` with agent hints.
 ### Why one service class?
 
 Following content-service convention. The `KnowledgeGraphService` receives all
-repository interfaces plus the event publisher via constructor injection.
-It has no direct infrastructure dependencies. This makes it testable with mock
+repository interfaces plus the event publisher via constructor injection. It has
+no direct infrastructure dependencies. This makes it testable with mock
 repositories.
 
 ### Phase dependency map
@@ -97,12 +97,11 @@ Phase 6 (CKG) ──┘
 
 - **Phase 5 (this phase)** and **Phase 6** (CKG Mutation Pipeline) are
   **independent peers** — neither depends on the other. They could be
-  implemented in either order. Phase 5 is sequenced first by convention, not
-  by necessity.
-- **Phase 7** (Structural Metrics & Misconception Detection) **depends on
-  both** Phase 5 and Phase 6: `computeMetrics` needs the user's PKG (Phase 5)
-  and the CKG reference subgraph (Phase 6) to compute all 11 metrics at full
-  accuracy.
+  implemented in either order. Phase 5 is sequenced first by convention, not by
+  necessity.
+- **Phase 7** (Structural Metrics & Misconception Detection) **depends on both**
+  Phase 5 and Phase 6: `computeMetrics` needs the user's PKG (Phase 5) and the
+  CKG reference subgraph (Phase 6) to compute all 11 metrics at full accuracy.
 
 ---
 
@@ -270,8 +269,8 @@ These are simpler than PKG operations — no userId scoping, no mutation pipelin
 - Return with agent hints that contextualize the canonical structure (e.g.,
   "this concept has 12 child concepts and is canonical across 340 user PKGs")
 - **When CKG has no data** (before Phase 6 seeds it), these methods return empty
-  results gracefully — no errors, just empty subgraphs with a hint: "CKG has
-  no data for this domain yet"
+  results gracefully — no errors, just empty subgraphs with a hint: "CKG has no
+  data for this domain yet"
 
 ---
 
@@ -279,7 +278,8 @@ These are simpler than PKG operations — no userId scoping, no mutation pipelin
 
 - [ ] KnowledgeGraphService class created with constructor DI (implements
       IKnowledgeGraphService)
-- [ ] Private helper methods for building IAgentHints (deterministic, rule-based)
+- [ ] Private helper methods for building IAgentHints (deterministic,
+      rule-based)
 - [ ] Node CRUD operations (create, get, update, delete, list) with events
 - [ ] Edge CRUD operations (create, get, update, delete, list) with full
       EDGE_TYPE_POLICIES enforcement

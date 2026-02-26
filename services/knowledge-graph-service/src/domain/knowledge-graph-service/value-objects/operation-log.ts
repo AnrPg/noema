@@ -21,6 +21,7 @@ export const PkgOperationType = {
   NODE_UPDATED: 'PkgNodeUpdated',
   NODE_DELETED: 'PkgNodeDeleted',
   EDGE_CREATED: 'PkgEdgeCreated',
+  EDGE_UPDATED: 'PkgEdgeUpdated',
   EDGE_DELETED: 'PkgEdgeDeleted',
   BATCH_IMPORT: 'PkgBatchImport',
 } as const;
@@ -91,6 +92,27 @@ export interface IPkgEdgeCreatedOp extends IPkgOperationBase {
   readonly sourceNodeId: NodeId;
   readonly targetNodeId: NodeId;
   readonly weight: EdgeWeight;
+
+  /**
+   * Records which validations were explicitly skipped via
+   * IValidationOptions. Present only when at least one check
+   * was bypassed — provides a governance audit trail.
+   */
+  readonly skippedValidations?: readonly string[];
+}
+
+/**
+ * An edge's weight or properties were updated.
+ * Tracks before/after values for undo support.
+ */
+export interface IPkgEdgeUpdatedOp extends IPkgOperationBase {
+  readonly operationType: typeof PkgOperationType.EDGE_UPDATED;
+  readonly edgeId: EdgeId;
+  readonly changedFields: readonly {
+    readonly field: string;
+    readonly before: unknown;
+    readonly after: unknown;
+  }[];
 }
 
 /**
@@ -121,6 +143,7 @@ export type PkgAtomicOperation =
   | IPkgNodeUpdatedOp
   | IPkgNodeDeletedOp
   | IPkgEdgeCreatedOp
+  | IPkgEdgeUpdatedOp
   | IPkgEdgeDeletedOp;
 
 /**

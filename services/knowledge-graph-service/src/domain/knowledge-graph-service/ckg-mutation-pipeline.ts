@@ -18,46 +18,46 @@
 import type { Logger } from 'pino';
 
 import type {
-    AgentId,
-    EdgeId,
-    EdgeWeight,
-    GraphType,
-    IGraphEdge,
-    IGraphNode,
-    Metadata,
-    MutationId,
-    MutationState,
-    NodeId
+  AgentId,
+  EdgeId,
+  EdgeWeight,
+  GraphType,
+  IGraphEdge,
+  IGraphNode,
+  Metadata,
+  MutationId,
+  MutationState,
+  NodeId
 } from '@noema/types';
 
 import type { IEventPublisher, IEventToPublish } from '../shared/event-publisher.js';
 import type { IExecutionContext } from './execution-context.js';
 import type { IGraphRepository, IUpdateNodeInput } from './graph.repository.js';
 import type {
-    ICkgMutation,
-    ICreateMutationInput,
-    IMutationAuditEntry,
-    IMutationRepository,
+  ICkgMutation,
+  ICreateMutationInput,
+  IMutationAuditEntry,
+  IMutationRepository,
 } from './mutation.repository.js';
 import type { IValidationPipeline, IValidationResult } from './validation.js';
 
 import {
-    type CkgMutationOperation,
-    CkgOperationType,
-    extractAffectedEdgeIds,
-    extractAffectedNodeIds,
+  type CkgMutationOperation,
+  CkgOperationType,
+  extractAffectedEdgeIds,
+  extractAffectedNodeIds,
 } from './ckg-mutation-dsl.js';
 import {
-    CANCELLABLE_STATES,
-    isTerminalState,
-    isValidTransition,
-    STATE_TRANSITIONS
+  CANCELLABLE_STATES,
+  isTerminalState,
+  isValidTransition,
+  STATE_TRANSITIONS
 } from './ckg-typestate.js';
 import { KnowledgeGraphEventType } from './domain-events.js';
 import {
-    InvalidStateTransitionError,
-    MutationAlreadyCommittedError,
-    MutationNotFoundError,
+  InvalidStateTransitionError,
+  MutationAlreadyCommittedError,
+  MutationNotFoundError,
 } from './errors/index.js';
 
 // ============================================================================
@@ -173,23 +173,17 @@ export class CkgMutationPipeline {
   async listMutations(filters: {
     state?: MutationState;
     proposedBy?: AgentId;
+    createdAfter?: string;
+    createdBefore?: string;
   }): Promise<ICkgMutation[]> {
-    if (filters.state !== undefined && filters.proposedBy !== undefined) {
-      // Both filters — intersect results
-      const [byState, byProposer] = await Promise.all([
-        this.mutationRepository.findMutationsByState(filters.state),
-        this.mutationRepository.findMutationsByProposer(filters.proposedBy),
-      ]);
-      const proposerIds = new Set(byProposer.map((m) => m.mutationId));
-      return byState.filter((m) => proposerIds.has(m.mutationId));
-    }
+    // Use the composite findMutations method when any filter is present
+    const hasFilters = filters.state !== undefined ||
+      filters.proposedBy !== undefined ||
+      filters.createdAfter !== undefined ||
+      filters.createdBefore !== undefined;
 
-    if (filters.state !== undefined) {
-      return this.mutationRepository.findMutationsByState(filters.state);
-    }
-
-    if (filters.proposedBy !== undefined) {
-      return this.mutationRepository.findMutationsByProposer(filters.proposedBy);
+    if (hasFilters) {
+      return this.mutationRepository.findMutations(filters);
     }
 
     // No filters — return all (via all non-terminal states)
@@ -541,15 +535,33 @@ export class CkgMutationPipeline {
       // Apply operations to Neo4j (atomically)
       const commitResult = await this.applyOperations(mutation);
 
-      // COMMITTING → COMMITTED
-      mutation = await this.transitionState(
-        mutation,
-        'committed',
-        'system',
-        `Committed ${String(commitResult.appliedCount)} operation(s) to CKG`,
-        context,
-        { commitResult }
-      );
+      // COMMITTING → COMMITTED (Postgres state update)
+      // CRITICAL: If this fails after Neo4j committed, we have a cross-DB
+      // inconsistency (Neo4j has the data, Postgres still says "committing").
+      try {
+        mutation = await this.transitionState(
+          mutation,
+          'committed',
+          'system',
+          `Committed ${String(commitResult.appliedCount)} operation(s) to CKG`,
+          context,
+          { commitResult }
+        );
+      } catch (pgError: unknown) {
+        const pgMessage = pgError instanceof Error ? pgError.message : String(pgError);
+        this.logger.error(
+          {
+            mutationId: mutation.mutationId,
+            error: pgMessage,
+            commitResult,
+            reconciliationNeeded: true,
+          },
+          'CROSS-DB INCONSISTENCY: Neo4j commit succeeded but Postgres state update ' +
+          'failed. Mutation data is in Neo4j but state is still COMMITTING. ' +
+          'Manual reconciliation required.'
+        );
+        throw pgError;
+      }
 
       // Publish CkgMutationCommitted event
       const operations = mutation.operations as unknown as CkgMutationOperation[];
@@ -624,89 +636,93 @@ export class CkgMutationPipeline {
     const operations = mutation.operations as unknown as CkgMutationOperation[];
     const graphType: GraphType = 'ckg' as GraphType;
 
-    const createdNodeIds: string[] = [];
-    const createdEdgeIds: string[] = [];
-    const deletedNodeIds: string[] = [];
-    const deletedEdgeIds: string[] = [];
+    // Wrap all operations in a single Neo4j transaction so a failure
+    // in any operation rolls back the entire batch (atomic commit).
+    return this.graphRepository.runInTransaction(async (txRepo) => {
+      const createdNodeIds: string[] = [];
+      const createdEdgeIds: string[] = [];
+      const deletedNodeIds: string[] = [];
+      const deletedEdgeIds: string[] = [];
 
-    for (const op of operations) {
-      switch (op.type) {
-        case CkgOperationType.ADD_NODE: {
-          const node: IGraphNode = await this.graphRepository.createNode(
-            graphType,
-            {
-              label: op.label,
-              nodeType: op.nodeType,
-              domain: op.domain,
-              description: op.description,
-              properties: op.properties,
-            }
-          );
-          createdNodeIds.push(node.nodeId as string);
-          break;
-        }
+      for (const op of operations) {
+        switch (op.type) {
+          case CkgOperationType.ADD_NODE: {
+            const node: IGraphNode = await txRepo.createNode(
+              graphType,
+              {
+                label: op.label,
+                nodeType: op.nodeType,
+                domain: op.domain,
+                description: op.description,
+                properties: op.properties,
+              }
+            );
+            createdNodeIds.push(node.nodeId as string);
+            break;
+          }
 
-        case CkgOperationType.REMOVE_NODE: {
-          await this.graphRepository.deleteNode(op.nodeId as NodeId);
-          deletedNodeIds.push(op.nodeId);
-          break;
-        }
+          case CkgOperationType.REMOVE_NODE: {
+            await txRepo.deleteNode(op.nodeId as NodeId);
+            deletedNodeIds.push(op.nodeId);
+            break;
+          }
 
-        case CkgOperationType.UPDATE_NODE: {
-          const updateInput: Record<string, unknown> = {};
-          if (op.updates.label !== undefined) updateInput['label'] = op.updates.label;
-          if (op.updates.description !== undefined) updateInput['description'] = op.updates.description;
-          if (op.updates.domain !== undefined) updateInput['domain'] = op.updates.domain;
-          if (op.updates.properties !== undefined) updateInput['properties'] = op.updates.properties;
-          await this.graphRepository.updateNode(
-            op.nodeId as NodeId,
-            updateInput as IUpdateNodeInput
-          );
-          break;
-        }
+          case CkgOperationType.UPDATE_NODE: {
+            const updateInput: Record<string, unknown> = {};
+            if (op.updates.label !== undefined) updateInput['label'] = op.updates.label;
+            if (op.updates.description !== undefined) updateInput['description'] = op.updates.description;
+            if (op.updates.domain !== undefined) updateInput['domain'] = op.updates.domain;
+            if (op.updates.properties !== undefined) updateInput['properties'] = op.updates.properties;
+            await txRepo.updateNode(
+              op.nodeId as NodeId,
+              updateInput as IUpdateNodeInput
+            );
+            break;
+          }
 
-        case CkgOperationType.ADD_EDGE: {
-          const edge: IGraphEdge = await this.graphRepository.createEdge(
-            graphType,
-            {
-              sourceNodeId: op.sourceNodeId as NodeId,
-              targetNodeId: op.targetNodeId as NodeId,
-              edgeType: op.edgeType,
-              weight: op.weight as unknown as EdgeWeight,
-            }
-          );
-          createdEdgeIds.push(edge.edgeId as string);
-          break;
-        }
+          case CkgOperationType.ADD_EDGE: {
+            const edge: IGraphEdge = await txRepo.createEdge(
+              graphType,
+              {
+                sourceNodeId: op.sourceNodeId as NodeId,
+                targetNodeId: op.targetNodeId as NodeId,
+                edgeType: op.edgeType,
+                weight: op.weight as unknown as EdgeWeight,
+              }
+            );
+            createdEdgeIds.push(edge.edgeId as string);
+            break;
+          }
 
-        case CkgOperationType.REMOVE_EDGE: {
-          await this.graphRepository.removeEdge(op.edgeId as unknown as EdgeId);
-          deletedEdgeIds.push(op.edgeId);
-          break;
-        }
+          case CkgOperationType.REMOVE_EDGE: {
+            await txRepo.removeEdge(op.edgeId as unknown as EdgeId);
+            deletedEdgeIds.push(op.edgeId);
+            break;
+          }
 
-        case CkgOperationType.MERGE_NODES: {
-          await this.executeMerge(op, graphType);
-          deletedNodeIds.push(op.sourceNodeId);
-          break;
-        }
+          case CkgOperationType.MERGE_NODES: {
+            await this.executeMerge(op, graphType, txRepo);
+            deletedNodeIds.push(op.sourceNodeId);
+            break;
+          }
 
-        case CkgOperationType.SPLIT_NODE: {
-          const { nodeAId, nodeBId } = await this.executeSplit(op, graphType);
-          createdNodeIds.push(nodeAId, nodeBId);
-          deletedNodeIds.push(op.nodeId);
-          break;
+          case CkgOperationType.SPLIT_NODE: {
+            const { nodeAId, nodeBId } = await this.executeSplit(op, graphType, txRepo);
+            createdNodeIds.push(nodeAId, nodeBId);
+            deletedNodeIds.push(op.nodeId);
+            break;
+          }
         }
       }
-    }
 
-    return {
-      appliedCount: operations.length,
-      createdNodeIds,
-      createdEdgeIds,
-      deletedNodeIds,
-      deletedEdgeIds,
-    };
+      return {
+        appliedCount: operations.length,
+        createdNodeIds,
+        createdEdgeIds,
+        deletedNodeIds,
+        deletedEdgeIds,
+      };
+    });
   }
 
   /**
@@ -714,10 +730,11 @@ export class CkgMutationPipeline {
    */
   private async executeMerge(
     op: Extract<CkgMutationOperation, { type: 'merge_nodes' }>,
-    graphType: GraphType
+    graphType: GraphType,
+    repo: IGraphRepository = this.graphRepository
   ): Promise<void> {
     // Get all edges connected to the source node
-    const sourceEdges = await this.graphRepository.getEdgesForNode(
+    const sourceEdges = await repo.getEdgesForNode(
       op.sourceNodeId as NodeId,
       'both'
     );
@@ -729,12 +746,12 @@ export class CkgMutationPipeline {
 
       // Skip self-loops that would result from merging
       if ((otherNodeId as string) === op.targetNodeId) {
-        await this.graphRepository.removeEdge(edge.edgeId);
+        await repo.removeEdge(edge.edgeId);
         continue;
       }
 
       // Create new edge from/to target node
-      await this.graphRepository.createEdge(graphType, {
+      await repo.createEdge(graphType, {
         sourceNodeId: isSource ? (op.targetNodeId as NodeId) : otherNodeId,
         targetNodeId: isSource ? otherNodeId : (op.targetNodeId as NodeId),
         edgeType: edge.edgeType,
@@ -743,18 +760,18 @@ export class CkgMutationPipeline {
       });
 
       // Remove the old edge
-      await this.graphRepository.removeEdge(edge.edgeId);
+      await repo.removeEdge(edge.edgeId);
     }
 
     // Update target node with merged properties
     if (Object.keys(op.mergedProperties).length > 0) {
-      await this.graphRepository.updateNode(op.targetNodeId as NodeId, {
+      await repo.updateNode(op.targetNodeId as NodeId, {
         properties: op.mergedProperties,
       });
     }
 
     // Soft-delete the source node
-    await this.graphRepository.deleteNode(op.sourceNodeId as NodeId);
+    await repo.deleteNode(op.sourceNodeId as NodeId);
   }
 
   /**
@@ -762,10 +779,11 @@ export class CkgMutationPipeline {
    */
   private async executeSplit(
     op: Extract<CkgMutationOperation, { type: 'split_node' }>,
-    graphType: GraphType
+    graphType: GraphType,
+    repo: IGraphRepository = this.graphRepository
   ): Promise<{ nodeAId: string; nodeBId: string }> {
     // Create the two new nodes
-    const nodeA = await this.graphRepository.createNode(graphType, {
+    const nodeA = await repo.createNode(graphType, {
       label: op.newNodeA.label,
       nodeType: op.newNodeA.nodeType,
       domain: '', // Domain inherited from original
@@ -773,7 +791,7 @@ export class CkgMutationPipeline {
       properties: op.newNodeA.properties,
     });
 
-    const nodeB = await this.graphRepository.createNode(graphType, {
+    const nodeB = await repo.createNode(graphType, {
       label: op.newNodeB.label,
       nodeType: op.newNodeB.nodeType,
       domain: '',
@@ -782,11 +800,11 @@ export class CkgMutationPipeline {
     });
 
     // Inherit domain from original node
-    const originalNode = await this.graphRepository.getNode(op.nodeId as NodeId);
+    const originalNode = await repo.getNode(op.nodeId as NodeId);
     if (originalNode) {
       await Promise.all([
-        this.graphRepository.updateNode(nodeA.nodeId, { domain: originalNode.domain }),
-        this.graphRepository.updateNode(nodeB.nodeId, { domain: originalNode.domain }),
+        repo.updateNode(nodeA.nodeId, { domain: originalNode.domain }),
+        repo.updateNode(nodeB.nodeId, { domain: originalNode.domain }),
       ]);
     }
 
@@ -795,7 +813,7 @@ export class CkgMutationPipeline {
       op.edgeReassignmentRules.map((r) => [r.edgeId, r.assignTo])
     );
 
-    const allEdges = await this.graphRepository.getEdgesForNode(op.nodeId as NodeId, 'both');
+    const allEdges = await repo.getEdgesForNode(op.nodeId as NodeId, 'both');
 
     for (const edge of allEdges) {
       const assignment = reassignmentMap.get(edge.edgeId as string);
@@ -804,7 +822,7 @@ export class CkgMutationPipeline {
       if (targetNewNode) {
         const isSource = (edge.sourceNodeId as string) === op.nodeId;
 
-        await this.graphRepository.createEdge(graphType, {
+        await repo.createEdge(graphType, {
           sourceNodeId: isSource ? targetNewNode.nodeId : edge.sourceNodeId,
           targetNodeId: isSource ? edge.targetNodeId : targetNewNode.nodeId,
           edgeType: edge.edgeType,
@@ -814,11 +832,11 @@ export class CkgMutationPipeline {
       }
 
       // Remove the old edge (whether reassigned or not)
-      await this.graphRepository.removeEdge(edge.edgeId);
+      await repo.removeEdge(edge.edgeId);
     }
 
     // Soft-delete the original node
-    await this.graphRepository.deleteNode(op.nodeId as NodeId);
+    await repo.deleteNode(op.nodeId as NodeId);
 
     return {
       nodeAId: nodeA.nodeId as string,
@@ -859,25 +877,23 @@ export class CkgMutationPipeline {
       );
     }
 
-    // Update state with optimistic locking
-    const updated = await this.mutationRepository.updateMutationState(
+    // Atomically update state + append audit in a single DB transaction
+    const { mutation: updated } = await this.mutationRepository.transitionStateWithAudit(
       mutation.mutationId,
       targetState,
-      mutation.version
+      mutation.version,
+      {
+        mutationId: mutation.mutationId,
+        fromState: mutation.state,
+        toState: targetState,
+        performedBy,
+        context: {
+          reason,
+          correlationId: context.correlationId,
+          ...snapshot,
+        },
+      }
     );
-
-    // Append audit log entry
-    await this.mutationRepository.appendAuditEntry({
-      mutationId: mutation.mutationId,
-      fromState: mutation.state,
-      toState: targetState,
-      performedBy,
-      context: {
-        reason,
-        correlationId: context.correlationId,
-        ...snapshot,
-      },
-    });
 
     this.logger.debug(
       {
