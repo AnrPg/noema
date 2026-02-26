@@ -22,7 +22,7 @@ import type {
   ISubgraph,
   MutationId,
   NodeId,
-  UserId,
+  UserId
 } from '@noema/types';
 
 import type { IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
@@ -37,7 +37,13 @@ import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
+  ICoParentsQuery,
+  ICoParentsResult,
+  INeighborhoodQuery,
+  INeighborhoodResult,
   INodeFilter,
+  ISiblingsQuery,
+  ISiblingsResult,
   ITraversalOptions,
   IValidationOptions,
 } from './value-objects/graph.value-objects.js';
@@ -200,6 +206,39 @@ export interface IKnowledgeGraphService {
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphNode[]>>;
 
+  /**
+   * Get siblings (co-children) of a node in the user's PKG.
+   * Returns nodes sharing a common parent via the same edge type.
+   */
+  getSiblings(
+    userId: UserId,
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ISiblingsResult>>;
+
+  /**
+   * Get co-parents (co-ancestors) of a node in the user's PKG.
+   * Returns nodes sharing a common child via the same edge type.
+   */
+  getCoParents(
+    userId: UserId,
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICoParentsResult>>;
+
+  /**
+   * Get the N-hop neighborhood of a node in the user's PKG.
+   * Returns nodes grouped by connecting edge type.
+   */
+  getNeighborhood(
+    userId: UserId,
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INeighborhoodResult>>;
+
   // ========================================================================
   // CKG Operations (read-only)
   // ========================================================================
@@ -226,6 +265,83 @@ export interface IKnowledgeGraphService {
     pagination: { limit: number; offset: number },
     context: IExecutionContext
   ): Promise<IServiceResult<IPaginatedResponse<IGraphNode>>>;
+
+  /**
+   * Get an edge from the CKG by ID.
+   */
+  getCkgEdge(
+    edgeId: EdgeId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphEdge>>;
+
+  /**
+   * List edges in the CKG with filters and pagination.
+   */
+  listCkgEdges(
+    filters: IEdgeFilter,
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphEdge>>>;
+
+  /**
+   * Get ancestors of a node in the CKG.
+   * Same semantics as PKG getAncestors, but without userId scoping.
+   */
+  getCkgAncestors(
+    nodeId: NodeId,
+    options: ITraversalOptions,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphNode[]>>;
+
+  /**
+   * Get descendants of a node in the CKG.
+   * Same semantics as PKG getDescendants, but without userId scoping.
+   */
+  getCkgDescendants(
+    nodeId: NodeId,
+    options: ITraversalOptions,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphNode[]>>;
+
+  /**
+   * Find the shortest path between two nodes in the CKG.
+   * Same semantics as PKG findPath, but without userId scoping.
+   */
+  findCkgPath(
+    fromNodeId: NodeId,
+    toNodeId: NodeId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphNode[]>>;
+
+  /**
+   * Get siblings (co-children) of a node in the CKG.
+   * Same semantics as PKG getSiblings, but without userId scoping.
+   */
+  getCkgSiblings(
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ISiblingsResult>>;
+
+  /**
+   * Get co-parents (co-ancestors) of a node in the CKG.
+   * Same semantics as PKG getCoParents, but without userId scoping.
+   */
+  getCkgCoParents(
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICoParentsResult>>;
+
+  /**
+   * Get the N-hop neighborhood of a node in the CKG.
+   * Same semantics as PKG getNeighborhood, but without userId scoping.
+   */
+  getCkgNeighborhood(
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INeighborhoodResult>>;
 
   // ========================================================================
   // Structural Metrics
@@ -397,4 +513,59 @@ export interface IKnowledgeGraphService {
     mutationId: MutationId,
     context: IExecutionContext
   ): Promise<IServiceResult<IMutationAuditEntry[]>>;
+
+  /**
+   * Get the CKG mutation pipeline health metrics.
+   *
+   * Returns per-state counts and stuck mutation count.
+   * Restricted to admin/agent roles at the API layer.
+   */
+  getMutationPipelineHealth(
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPipelineHealthResult>>;
+
+  // ========================================================================
+  // PKG Operation Log
+  // ========================================================================
+
+  /**
+   * Get the operation log for a user's PKG with filtering and pagination.
+   *
+   * Dispatches to the appropriate IPkgOperationLogRepository query method
+   * based on which filters are present (nodeId, edgeId, operationType, since).
+   */
+  getOperationLog(
+    userId: UserId,
+    filters: IOperationLogFilter,
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IPkgOperationLogEntry>>>;
+}
+
+// ============================================================================
+// Supporting Types
+// ============================================================================
+
+/**
+ * Filters for the PKG operation log query.
+ * The service dispatches to the most specific repository method available.
+ */
+export interface IOperationLogFilter {
+  readonly operationType?: PkgOperationType;
+  readonly nodeId?: NodeId;
+  readonly edgeId?: EdgeId;
+  readonly since?: string;
+}
+
+/**
+ * CKG mutation pipeline health result.
+ */
+export interface IPipelineHealthResult {
+  readonly proposedCount: number;
+  readonly validatingCount: number;
+  readonly validatedCount: number;
+  readonly committedCount: number;
+  readonly rejectedCount: number;
+  readonly stuckCount: number;
+  readonly totalCount: number;
 }

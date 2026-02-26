@@ -81,7 +81,7 @@ import {
   UpdateEdgeInputSchema,
   UpdateNodeInputSchema,
 } from './knowledge-graph.schemas.js';
-import type { IKnowledgeGraphService } from './knowledge-graph.service.js';
+import type { IKnowledgeGraphService, IOperationLogFilter, IPipelineHealthResult } from './knowledge-graph.service.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
 import type { IMetricsHistoryOptions, IMetricsRepository } from './metrics.repository.js';
 import {
@@ -95,11 +95,17 @@ import type { IMisconceptionRepository } from './misconception.repository.js';
 import type { IMisconceptionDetectionContext } from './misconception/index.js';
 import { MisconceptionDetectionEngine } from './misconception/index.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
-import type { IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
+import type { IPkgOperationLogEntry, IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
+  ICoParentsQuery,
+  ICoParentsResult,
+  INeighborhoodQuery,
+  INeighborhoodResult,
   INodeFilter,
+  ISiblingsQuery,
+  ISiblingsResult,
   ITraversalOptions,
   IValidationOptions,
 } from './value-objects/graph.value-objects.js';
@@ -867,6 +873,84 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     };
   }
 
+  async getSiblings(
+    userId: UserId,
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ISiblingsResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, nodeId, edgeType: query.edgeType, direction: query.direction },
+      'Getting PKG siblings'
+    );
+
+    // Verify node exists
+    const node = await this.graphRepository.getNode(nodeId, userId);
+    if (!node) {
+      throw new NodeNotFoundError(nodeId, GraphType.PKG);
+    }
+
+    const result = await this.graphRepository.getSiblings(nodeId, query, userId);
+
+    return {
+      data: result,
+      agentHints: this.createSiblingsHints(result),
+    };
+  }
+
+  async getCoParents(
+    userId: UserId,
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICoParentsResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, nodeId, edgeType: query.edgeType, direction: query.direction },
+      'Getting PKG co-parents'
+    );
+
+    // Verify node exists
+    const node = await this.graphRepository.getNode(nodeId, userId);
+    if (!node) {
+      throw new NodeNotFoundError(nodeId, GraphType.PKG);
+    }
+
+    const result = await this.graphRepository.getCoParents(nodeId, query, userId);
+
+    return {
+      data: result,
+      agentHints: this.createCoParentsHints(result),
+    };
+  }
+
+  async getNeighborhood(
+    userId: UserId,
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INeighborhoodResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, nodeId, hops: query.hops, filterMode: query.filterMode },
+      'Getting PKG neighborhood'
+    );
+
+    // Verify node exists
+    const node = await this.graphRepository.getNode(nodeId, userId);
+    if (!node) {
+      throw new NodeNotFoundError(nodeId, GraphType.PKG);
+    }
+
+    const result = await this.graphRepository.getNeighborhood(nodeId, query, userId);
+
+    return {
+      data: result,
+      agentHints: this.createNeighborhoodHints(result),
+    };
+  }
+
   // ========================================================================
   // CKG Operations (read-only)
   // ========================================================================
@@ -981,6 +1065,219 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     return {
       data: result,
       agentHints: this.createListHints('CKG nodes', items.length, total),
+    };
+  }
+
+  async getCkgEdge(
+    edgeId: EdgeId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphEdge>> {
+    this.requireAuth(context);
+    this.logger.debug({ edgeId }, 'Getting CKG edge');
+
+    const edge = await this.graphRepository.getEdge(edgeId);
+    if (edge?.graphType !== GraphType.CKG) {
+      throw new EdgeNotFoundError(edgeId as string);
+    }
+
+    return {
+      data: edge,
+      agentHints: this.createEdgeRetrievalHints(edge),
+    };
+  }
+
+  async listCkgEdges(
+    filters: IEdgeFilter,
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphEdge>>> {
+    this.requireAuth(context);
+    this.logger.debug({ filters, pagination }, 'Listing CKG edges');
+
+    // Apply pagination limits
+    const limit = Math.min(pagination.limit, MAX_PAGE_SIZE);
+    const offset = Math.max(pagination.offset, 0);
+
+    // CKG edges have no userId — omit it from the filter
+    const ckgFilter: IEdgeFilter = {
+      ...(filters.edgeType != null ? { edgeType: filters.edgeType } : {}),
+      ...(filters.sourceNodeId != null ? { sourceNodeId: filters.sourceNodeId } : {}),
+      ...(filters.targetNodeId != null ? { targetNodeId: filters.targetNodeId } : {}),
+    };
+
+    // Fetch limit+1 to know if there are more results without a separate count query
+    const edges = await this.graphRepository.findEdges(ckgFilter, limit + 1, offset);
+
+    const hasMore = edges.length > limit;
+    const paginatedEdges = hasMore ? edges.slice(0, limit) : edges;
+
+    const result: IPaginatedResponse<IGraphEdge> = {
+      items: paginatedEdges,
+      total: offset + edges.length,
+      hasMore,
+    };
+
+    return {
+      data: result,
+      agentHints: this.createListHints('CKG edges', paginatedEdges.length, result.total ?? 0),
+    };
+  }
+
+  async getCkgAncestors(
+    nodeId: NodeId,
+    options: ITraversalOptions,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphNode[]>> {
+    this.requireAuth(context);
+    this.logger.debug({ nodeId, maxDepth: options.maxDepth }, 'Getting CKG ancestors');
+
+    this.validateTraversalDepth(options.maxDepth);
+
+    // Verify node exists in CKG
+    const node = await this.graphRepository.getNode(nodeId);
+    if (node?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeId, GraphType.CKG);
+    }
+
+    // CKG traversals don't pass userId
+    const ancestors = await this.graphRepository.getAncestors(nodeId, options);
+
+    return {
+      data: ancestors,
+      agentHints: this.createTraversalHints('CKG ancestors', ancestors, node),
+    };
+  }
+
+  async getCkgDescendants(
+    nodeId: NodeId,
+    options: ITraversalOptions,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphNode[]>> {
+    this.requireAuth(context);
+    this.logger.debug({ nodeId, maxDepth: options.maxDepth }, 'Getting CKG descendants');
+
+    this.validateTraversalDepth(options.maxDepth);
+
+    // Verify node exists in CKG
+    const node = await this.graphRepository.getNode(nodeId);
+    if (node?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeId, GraphType.CKG);
+    }
+
+    // CKG traversals don't pass userId
+    const descendants = await this.graphRepository.getDescendants(nodeId, options);
+
+    return {
+      data: descendants,
+      agentHints: this.createTraversalHints('CKG descendants', descendants, node),
+    };
+  }
+
+  async findCkgPath(
+    fromNodeId: NodeId,
+    toNodeId: NodeId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphNode[]>> {
+    this.requireAuth(context);
+    this.logger.debug({ fromNodeId, toNodeId }, 'Finding path in CKG');
+
+    // Verify both nodes exist in CKG
+    const [fromNode, toNode] = await Promise.all([
+      this.graphRepository.getNode(fromNodeId),
+      this.graphRepository.getNode(toNodeId),
+    ]);
+
+    if (fromNode?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(fromNodeId, GraphType.CKG);
+    }
+    if (toNode?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(toNodeId, GraphType.CKG);
+    }
+
+    // CKG path finding — no userId scoping
+    const path = await this.graphRepository.findShortestPath(fromNodeId, toNodeId);
+
+    return {
+      data: path,
+      agentHints: this.createPathHints(path, fromNode, toNode),
+    };
+  }
+
+  async getCkgSiblings(
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ISiblingsResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { nodeId, edgeType: query.edgeType, direction: query.direction },
+      'Getting CKG siblings'
+    );
+
+    // Verify node exists in CKG
+    const node = await this.graphRepository.getNode(nodeId);
+    if (node?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeId, GraphType.CKG);
+    }
+
+    // CKG traversals don't pass userId
+    const result = await this.graphRepository.getSiblings(nodeId, query);
+
+    return {
+      data: result,
+      agentHints: this.createSiblingsHints(result),
+    };
+  }
+
+  async getCkgCoParents(
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICoParentsResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { nodeId, edgeType: query.edgeType, direction: query.direction },
+      'Getting CKG co-parents'
+    );
+
+    // Verify node exists in CKG
+    const node = await this.graphRepository.getNode(nodeId);
+    if (node?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeId, GraphType.CKG);
+    }
+
+    // CKG traversals don't pass userId
+    const result = await this.graphRepository.getCoParents(nodeId, query);
+
+    return {
+      data: result,
+      agentHints: this.createCoParentsHints(result),
+    };
+  }
+
+  async getCkgNeighborhood(
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INeighborhoodResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { nodeId, hops: query.hops, filterMode: query.filterMode },
+      'Getting CKG neighborhood'
+    );
+
+    // Verify node exists in CKG
+    const node = await this.graphRepository.getNode(nodeId);
+    if (node?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeId, GraphType.CKG);
+    }
+
+    // CKG traversals don't pass userId
+    const result = await this.graphRepository.getNeighborhood(nodeId, query);
+
+    return {
+      data: result,
+      agentHints: this.createNeighborhoodHints(result),
     };
   }
 
@@ -1551,6 +1848,150 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         preferenceAlignment: [],
         reasoning: `Audit log contains ${String(auditLog.length)} entries for mutation ${mutationId}`,
       },
+    };
+  }
+
+  async getMutationPipelineHealth(
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPipelineHealthResult>> {
+    this.requireAuth(context);
+    this.logger.debug('Getting mutation pipeline health');
+
+    const health = await this.mutationPipeline.getPipelineHealth();
+
+    const totalCount =
+      health.proposedCount +
+      health.validatingCount +
+      health.validatedCount +
+      health.committedCount +
+      health.rejectedCount;
+
+    const result: IPipelineHealthResult = {
+      proposedCount: health.proposedCount,
+      validatingCount: health.validatingCount,
+      validatedCount: health.validatedCount,
+      committedCount: health.committedCount,
+      rejectedCount: health.rejectedCount,
+      stuckCount: health.stuckCount,
+      totalCount,
+    };
+
+    const stuckWarning =
+      health.stuckCount > 0
+        ? [
+            {
+              factor: `${String(health.stuckCount)} mutations stuck in processing states`,
+              severity: 'medium' as const,
+              mitigation: 'Check pipeline logs — stuck mutations may need manual retry or cancellation',
+            },
+          ]
+        : [];
+
+    return {
+      data: result,
+      agentHints: {
+        suggestedNextActions: [
+          ...(health.stuckCount > 0
+            ? [
+                {
+                  action: 'list_stuck_mutations',
+                  description: 'List mutations in non-terminal processing states',
+                  priority: 'high' as const,
+                  category: 'investigation' as const,
+                },
+              ]
+            : []),
+          {
+            action: 'list_mutations',
+            description: 'List all mutations with state filter',
+            priority: 'low' as const,
+            category: 'exploration' as const,
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high' as const,
+        validityPeriod: 'short' as const,
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: stuckWarning,
+        dependencies: [],
+        estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+        preferenceAlignment: [],
+        reasoning: `Pipeline has ${String(totalCount)} total mutations: ${String(health.proposedCount)} proposed, ${String(health.committedCount)} committed, ${String(health.rejectedCount)} rejected, ${String(health.stuckCount)} stuck.`,
+      },
+    };
+  }
+
+  // ========================================================================
+  // PKG Operation Log
+  // ========================================================================
+
+  async getOperationLog(
+    userId: UserId,
+    filters: IOperationLogFilter,
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IPkgOperationLogEntry>>> {
+    this.requireAuth(context);
+    this.logger.debug({ userId, filters, pagination }, 'Getting PKG operation log');
+
+    const limit = Math.min(pagination.limit, MAX_PAGE_SIZE);
+    const offset = Math.max(pagination.offset, 0);
+
+    // Dispatch to the most specific repository method based on filter type.
+    // Precedence: nodeId → edgeId → operationType → since → default.
+    let entries: IPkgOperationLogEntry[];
+    let usedPagination = false;
+
+    if (filters.nodeId != null) {
+      entries = await this.operationLogRepository.getOperationsForNode(userId, filters.nodeId);
+    } else if (filters.edgeId != null) {
+      entries = await this.operationLogRepository.getOperationsForEdge(userId, filters.edgeId);
+    } else if (filters.operationType != null) {
+      const result = await this.operationLogRepository.getOperationsByType(
+        userId,
+        filters.operationType,
+        limit,
+        offset
+      );
+      entries = result.items;
+      usedPagination = true;
+    } else if (filters.since != null) {
+      entries = await this.operationLogRepository.getOperationsSince(userId, filters.since);
+    } else {
+      const result = await this.operationLogRepository.getOperationHistory(userId, limit, offset);
+      entries = result.items;
+      usedPagination = true;
+    }
+
+    // For non-paginated repo methods, apply manual pagination
+    let paginatedEntries: IPkgOperationLogEntry[];
+    let total: number;
+    let hasMore: boolean;
+
+    if (usedPagination) {
+      // The repository already paginated — use its results directly
+      paginatedEntries = entries;
+      // Approximate total (repo doesn't give us exact total for some queries)
+      total = offset + entries.length + (entries.length === limit ? 1 : 0);
+      hasMore = entries.length === limit;
+    } else {
+      // Manual pagination over the full list
+      total = entries.length;
+      paginatedEntries = entries.slice(offset, offset + limit);
+      hasMore = offset + limit < total;
+    }
+
+    const paginatedResponse: IPaginatedResponse<IPkgOperationLogEntry> = {
+      items: paginatedEntries,
+      total,
+      hasMore,
+    };
+
+    return {
+      data: paginatedResponse,
+      agentHints: this.createListHints('PKG operations', paginatedEntries.length, total),
     };
   }
 
@@ -2134,6 +2575,194 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       reasoning: pathExists
         ? `Shortest path: "${fromNode.label}" → ${String(path.length - 2)} intermediates → "${toNode.label}"`
         : `No path exists between "${fromNode.label}" and "${toNode.label}"`,
+    };
+  }
+
+  /**
+   * Create agent hints for siblings query results.
+   */
+  private createSiblingsHints(result: ISiblingsResult): IAgentHints {
+    const groupCount = result.groups.length;
+    const largestGroup = result.groups.reduce(
+      (max, g) => Math.max(max, g.totalInGroup),
+      0
+    );
+
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (result.totalSiblingCount === 0) {
+      actions.push({
+        action: 'create_edges',
+        description: `No siblings found for "${result.originNode.label}" via ${result.edgeType} — consider adding structural edges`,
+        priority: 'high',
+        category: 'exploration',
+      });
+    } else {
+      actions.push({
+        action: 'get_neighborhood',
+        description: `Explore the full neighborhood around "${result.originNode.label}"`,
+        priority: 'medium',
+        category: 'exploration',
+      });
+
+      if (largestGroup > 10 && (result.edgeType === 'is_a' || result.edgeType === 'part_of')) {
+        actions.push({
+          action: 'review_sce',
+          description: `Large sibling group (${String(largestGroup)} nodes) may indicate high sibling confusion entropy — review discrimination`,
+          priority: 'medium',
+          category: 'optimization',
+        });
+      }
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.groups.flatMap((g) =>
+        g.siblings.slice(0, 3).map((node) => ({
+          type: 'KGNode' as const,
+          id: node.nodeId as string,
+          label: node.label,
+          relevance: 0.7,
+        }))
+      ),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+      preferenceAlignment: [],
+      reasoning: `Found ${String(result.totalSiblingCount)} sibling(s) across ${String(groupCount)} parent group(s) for "${result.originNode.label}" via ${result.edgeType}. Largest group: ${String(largestGroup)}.`,
+    };
+  }
+
+  /**
+   * Create agent hints for co-parents query results.
+   */
+  private createCoParentsHints(result: ICoParentsResult): IAgentHints {
+    const groupCount = result.groups.length;
+    const largestGroup = result.groups.reduce(
+      (max, g) => Math.max(max, g.totalInGroup),
+      0
+    );
+
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (result.totalCoParentCount === 0) {
+      actions.push({
+        action: 'create_edges',
+        description: `No co-parents found for "${result.originNode.label}" via ${result.edgeType} — consider adding structural edges`,
+        priority: 'high',
+        category: 'exploration',
+      });
+    } else {
+      actions.push({
+        action: 'get_siblings',
+        description: `Complement with a siblings query to see the full structural picture`,
+        priority: 'medium',
+        category: 'exploration',
+      });
+
+      if (largestGroup > 5) {
+        actions.push({
+          action: 'review_scope_overlap',
+          description: `High co-parenting (${String(largestGroup)} co-parents for a single child) — potential scope overlap or redundancy`,
+          priority: 'medium',
+          category: 'optimization',
+        });
+      }
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.groups.flatMap((g) =>
+        g.coParents.slice(0, 3).map((node) => ({
+          type: 'KGNode' as const,
+          id: node.nodeId as string,
+          label: node.label,
+          relevance: 0.7,
+        }))
+      ),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+      preferenceAlignment: [],
+      reasoning: `Found ${String(result.totalCoParentCount)} co-parent(s) across ${String(groupCount)} shared child group(s) for "${result.originNode.label}" via ${result.edgeType}. Largest group: ${String(largestGroup)}.`,
+    };
+  }
+
+  /**
+   * Create agent hints for neighborhood query results.
+   */
+  private createNeighborhoodHints(result: INeighborhoodResult): IAgentHints {
+    const groupCount = result.groups.length;
+    const edgeTypeDiversity = groupCount;
+
+    // Find dominant edge type (most neighbors)
+    const dominantGroup = result.groups.reduce<{ edgeType: string; total: number } | undefined>(
+      (best, g) => {
+        if (best === undefined || g.totalInGroup > best.total) {
+          return { edgeType: g.edgeType, total: g.totalInGroup };
+        }
+        return best;
+      },
+      undefined
+    );
+
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (result.totalNeighborCount === 0) {
+      actions.push({
+        action: 'create_edges',
+        description: `"${result.originNode.label}" is isolated — add relationships to build its neighborhood`,
+        priority: 'high',
+        category: 'exploration',
+      });
+    } else {
+      if (edgeTypeDiversity >= 3) {
+        actions.push({
+          action: 'analyze_edge_distribution',
+          description: `High edge-type diversity (${String(edgeTypeDiversity)} types) — node is a structural hub`,
+          priority: 'medium',
+          category: 'exploration',
+        });
+      }
+
+      actions.push({
+        action: 'get_subgraph',
+        description: `Get the full subgraph for visualization around "${result.originNode.label}"`,
+        priority: 'medium',
+        category: 'exploration',
+      });
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.groups.flatMap((g) =>
+        g.neighbors.slice(0, 3).map((node) => ({
+          type: 'KGNode' as const,
+          id: node.nodeId as string,
+          label: node.label,
+          relevance: 0.7,
+        }))
+      ),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.6, effort: 0.1, roi: 6.0 },
+      preferenceAlignment: [],
+      reasoning: `Neighborhood of "${result.originNode.label}": ${String(result.totalNeighborCount)} neighbor(s) across ${String(groupCount)} edge-type group(s).${dominantGroup !== undefined ? ` Dominant: ${dominantGroup.edgeType} (${String(dominantGroup.total)}).` : ''}`,
     };
   }
 

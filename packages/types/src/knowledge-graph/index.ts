@@ -354,3 +354,101 @@ export interface IMetacognitiveStageAssessment {
   /** When the assessment was performed (ISO 8601) */
   readonly assessedAt: string;
 }
+
+// ============================================================================
+// Relational Traversal Results (Phase 8b)
+// ============================================================================
+
+/**
+ * A single group of siblings sharing a common parent.
+ */
+export interface ISiblingGroupResult {
+  /** The common parent node */
+  readonly parent: IGraphNode;
+  /** The edge type connecting origin to parent */
+  readonly edgeType: GraphEdgeType;
+  /** The sibling nodes under this parent (excluding the origin) */
+  readonly siblings: readonly IGraphNode[];
+  /** Total sibling count under this parent (may exceed returned if capped) */
+  readonly totalInGroup: number;
+}
+
+/**
+ * Complete result of a siblings query.
+ */
+export interface ISiblingsResult {
+  /** The node whose siblings were queried */
+  readonly originNodeId: NodeId;
+  /** The origin node (full data) */
+  readonly originNode: IGraphNode;
+  /** The edge type used for the sibling query */
+  readonly edgeType: GraphEdgeType;
+  /** The direction used (outbound or inbound) */
+  readonly direction: 'outbound' | 'inbound';
+  /** Sibling groups, one per shared parent */
+  readonly groups: readonly ISiblingGroupResult[];
+  /** Total number of unique sibling nodes across all groups */
+  readonly totalSiblingCount: number;
+}
+
+/**
+ * A single group of co-parents sharing a common child.
+ */
+export interface ICoParentGroupResult {
+  /** The shared child node */
+  readonly child: IGraphNode;
+  /** The edge type connecting origin to child */
+  readonly edgeType: GraphEdgeType;
+  /** The co-parent nodes for this child (excluding the origin) */
+  readonly coParents: readonly IGraphNode[];
+  /** Total co-parent count for this child (may exceed returned if capped) */
+  readonly totalInGroup: number;
+}
+
+/**
+ * Complete result of a co-parents query.
+ */
+export interface ICoParentsResult {
+  /** The node whose co-parents were queried */
+  readonly originNodeId: NodeId;
+  /** The origin node (full data) */
+  readonly originNode: IGraphNode;
+  /** The edge type used for the co-parent query */
+  readonly edgeType: GraphEdgeType;
+  /** The direction used (outbound or inbound) */
+  readonly direction: 'outbound' | 'inbound';
+  /** Co-parent groups, one per shared child */
+  readonly groups: readonly ICoParentGroupResult[];
+  /** Total number of unique co-parent nodes across all groups */
+  readonly totalCoParentCount: number;
+}
+
+/**
+ * A group of neighbors reachable via a specific edge type from the origin.
+ */
+export interface IEdgeTypeNeighborGroup {
+  /** The edge type from origin (for hops=1) or the first-hop edge type */
+  readonly edgeType: GraphEdgeType;
+  /** Direction of this edge type relative to origin */
+  readonly direction: 'inbound' | 'outbound';
+  /** Neighbor nodes reachable via this edge type */
+  readonly neighbors: readonly IGraphNode[];
+  /** Total count (may exceed returned if capped by maxPerGroup) */
+  readonly totalInGroup: number;
+}
+
+/**
+ * Complete result of a neighborhood query.
+ */
+export interface INeighborhoodResult {
+  /** The origin node ID */
+  readonly originNodeId: NodeId;
+  /** The origin node (full data) */
+  readonly originNode: IGraphNode;
+  /** Results grouped by the connecting edge type */
+  readonly groups: readonly IEdgeTypeNeighborGroup[];
+  /** All edges in the neighborhood (for visualization), if includeEdges=true */
+  readonly edges: readonly IGraphEdge[];
+  /** Total unique neighbor count across all groups */
+  readonly totalNeighborCount: number;
+}

@@ -24,7 +24,16 @@ import type {
   NodeId,
 } from '@noema/types';
 
-import type { INodeFilter, ITraversalOptions } from './value-objects/graph.value-objects.js';
+import type {
+  ICoParentsQuery,
+  ICoParentsResult,
+  INeighborhoodQuery,
+  INeighborhoodResult,
+  INodeFilter,
+  ISiblingsQuery,
+  ISiblingsResult,
+  ITraversalOptions,
+} from './value-objects/graph.value-objects.js';
 
 // ============================================================================
 // Input Types
@@ -239,6 +248,36 @@ export interface ITraversalRepository {
    * Returns both the nodes and the edges connecting them.
    */
   getSubgraph(rootNodeId: NodeId, options: ITraversalOptions, userId?: string): Promise<ISubgraph>;
+
+  /**
+   * Get siblings (co-children) of a node — nodes sharing a common parent
+   * via the same edge type and direction. Results grouped by parent.
+   */
+  getSiblings(
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    userId?: string
+  ): Promise<ISiblingsResult>;
+
+  /**
+   * Get co-parents (co-ancestors) of a node — nodes sharing a common child
+   * via the same edge type and direction. Results grouped by shared child.
+   */
+  getCoParents(
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    userId?: string
+  ): Promise<ICoParentsResult>;
+
+  /**
+   * Get the N-hop neighborhood of a node, grouped by connecting edge type.
+   * Supports dual filter modes: full_path and immediate.
+   */
+  getNeighborhood(
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    userId?: string
+  ): Promise<INeighborhoodResult>;
 
   /**
    * Detect cycles involving a given node or edge.

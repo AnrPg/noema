@@ -33,7 +33,13 @@ import type {
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
+  ICoParentsQuery,
+  ICoParentsResult,
+  INeighborhoodQuery,
+  INeighborhoodResult,
   INodeFilter,
+  ISiblingsQuery,
+  ISiblingsResult,
   ITraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { KgRedisCacheProvider } from './kg-redis-cache.provider.js';
@@ -203,6 +209,35 @@ export class CachedGraphRepository implements IGraphRepository {
 
   async detectCycles(nodeId: NodeId, edgeType?: GraphEdgeType, userId?: string): Promise<NodeId[]> {
     return this.inner.detectCycles(nodeId, edgeType, userId);
+  }
+
+  // Phase 8b: Relational traversal — pass-through (D4)
+
+  async getSiblings(
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    userId?: string
+  ): Promise<ISiblingsResult> {
+    // TODO: cache key → siblings:{graphType}:{nodeId}:{edgeType}:{direction}
+    return this.inner.getSiblings(nodeId, query, userId);
+  }
+
+  async getCoParents(
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    userId?: string
+  ): Promise<ICoParentsResult> {
+    // TODO: cache key → co-parents:{graphType}:{nodeId}:{edgeType}:{direction}
+    return this.inner.getCoParents(nodeId, query, userId);
+  }
+
+  async getNeighborhood(
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    userId?: string
+  ): Promise<INeighborhoodResult> {
+    // TODO: cache key → neighborhood:{graphType}:{nodeId}:{hops}:{edgeTypes}:{nodeTypes}:{filterMode}:{direction}
+    return this.inner.getNeighborhood(nodeId, query, userId);
   }
 
   // ==========================================================================

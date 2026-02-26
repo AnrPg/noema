@@ -45,7 +45,13 @@ import type {
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
+  ICoParentsQuery,
+  ICoParentsResult,
+  INeighborhoodQuery,
+  INeighborhoodResult,
   INodeFilter,
+  ISiblingsQuery,
+  ISiblingsResult,
   ITraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { Neo4jClient } from './neo4j-client.js';
@@ -744,6 +750,323 @@ export class Neo4jGraphRepository implements IGraphRepository {
     }
   }
 
+  async getSiblings(
+    nodeId: NodeId,
+    query: ISiblingsQuery,
+    userId?: string
+  ): Promise<ISiblingsResult> {
+    const relType = edgeTypeToRelType(query.edgeType);
+    const userFilter =
+      userId !== undefined ? 'AND me.userId = $userId AND parent.userId = $userId AND sibling.userId = $userId' : '';
+
+    // Direction-dispatched: outbound = me→parent, inbound = parent→me
+    const matchClause =
+      query.direction === 'outbound'
+        ? `MATCH (me {nodeId: $nodeId})-[e1:${relType}]->(parent)<-[e2:${relType}]-(sibling)`
+        : `MATCH (me {nodeId: $nodeId})<-[e1:${relType}]-(parent)-[e2:${relType}]->(sibling)`;
+
+    const session = this.neo4j.getSession();
+    try {
+      // First, fetch the origin node
+      const originResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`,
+          { nodeId, ...(userId !== undefined ? { userId } : {}) }
+        );
+      });
+      const originRecord = originResult.records[0];
+      if (!originRecord) {
+        return {
+          originNodeId: nodeId,
+          originNode: { nodeId } as IGraphNode,
+          edgeType: query.edgeType,
+          direction: query.direction,
+          groups: [],
+          totalSiblingCount: 0,
+        };
+      }
+      const originNode = mapNodeToGraphNode(originRecord.get('n') as neo4j.Node);
+
+      // Execute the sibling query
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `${matchClause}
+           WHERE me.isDeleted = false
+             AND parent.isDeleted = false
+             AND sibling.isDeleted = false
+             AND sibling.nodeId <> $nodeId
+             ${userFilter}
+           WITH parent, collect(DISTINCT sibling) AS allSiblings, count(DISTINCT sibling) AS totalInGroup
+           RETURN parent, allSiblings[0..${String(query.maxSiblingsPerGroup)}] AS siblings, totalInGroup
+           ORDER BY totalInGroup DESC`,
+          { nodeId, ...(userId !== undefined ? { userId } : {}) }
+        );
+      });
+
+      let totalSiblingCount = 0;
+      const groups = result.records.map((rec) => {
+        const parentNode = mapNodeToGraphNode(rec.get('parent') as neo4j.Node);
+        const siblingNodes = (rec.get('siblings') as neo4j.Node[]).map(mapNodeToGraphNode);
+        const total = (rec.get('totalInGroup') as Integer).toNumber();
+        totalSiblingCount += total;
+        return {
+          parent: parentNode,
+          edgeType: query.edgeType,
+          siblings: siblingNodes,
+          totalInGroup: total,
+        };
+      });
+
+      return {
+        originNodeId: nodeId,
+        originNode: originNode,
+        edgeType: query.edgeType,
+        direction: query.direction,
+        groups,
+        totalSiblingCount,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getCoParents(
+    nodeId: NodeId,
+    query: ICoParentsQuery,
+    userId?: string
+  ): Promise<ICoParentsResult> {
+    const relType = edgeTypeToRelType(query.edgeType);
+    const userFilter =
+      userId !== undefined ? 'AND me.userId = $userId AND child.userId = $userId AND coParent.userId = $userId' : '';
+
+    // Direction-dispatched: outbound = me→child, inbound = child→me
+    const matchClause =
+      query.direction === 'outbound'
+        ? `MATCH (me {nodeId: $nodeId})-[e1:${relType}]->(child)<-[e2:${relType}]-(coParent)`
+        : `MATCH (me {nodeId: $nodeId})<-[e1:${relType}]-(child)-[e2:${relType}]->(coParent)`;
+
+    const session = this.neo4j.getSession();
+    try {
+      // First, fetch the origin node
+      const originResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`,
+          { nodeId, ...(userId !== undefined ? { userId } : {}) }
+        );
+      });
+      const originRecord = originResult.records[0];
+      if (!originRecord) {
+        return {
+          originNodeId: nodeId,
+          originNode: { nodeId } as IGraphNode,
+          edgeType: query.edgeType,
+          direction: query.direction,
+          groups: [],
+          totalCoParentCount: 0,
+        };
+      }
+      const originNode = mapNodeToGraphNode(originRecord.get('n') as neo4j.Node);
+
+      // Execute the co-parents query
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `${matchClause}
+           WHERE me.isDeleted = false
+             AND child.isDeleted = false
+             AND coParent.isDeleted = false
+             AND coParent.nodeId <> $nodeId
+             ${userFilter}
+           WITH child, collect(DISTINCT coParent) AS allCoParents, count(DISTINCT coParent) AS totalInGroup
+           RETURN child, allCoParents[0..${String(query.maxCoParentsPerGroup)}] AS coParents, totalInGroup
+           ORDER BY totalInGroup DESC`,
+          { nodeId, ...(userId !== undefined ? { userId } : {}) }
+        );
+      });
+
+      let totalCoParentCount = 0;
+      const groups = result.records.map((rec) => {
+        const childNode = mapNodeToGraphNode(rec.get('child') as neo4j.Node);
+        const coParentNodes = (rec.get('coParents') as neo4j.Node[]).map(mapNodeToGraphNode);
+        const total = (rec.get('totalInGroup') as Integer).toNumber();
+        totalCoParentCount += total;
+        return {
+          child: childNode,
+          edgeType: query.edgeType,
+          coParents: coParentNodes,
+          totalInGroup: total,
+        };
+      });
+
+      return {
+        originNodeId: nodeId,
+        originNode: originNode,
+        edgeType: query.edgeType,
+        direction: query.direction,
+        groups,
+        totalCoParentCount,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getNeighborhood(
+    nodeId: NodeId,
+    query: INeighborhoodQuery,
+    userId?: string
+  ): Promise<INeighborhoodResult> {
+    const relPattern = buildRelTypePattern(query.edgeTypes);
+    const userFilter =
+      userId !== undefined ? 'AND all(x IN nodes(path) WHERE x.userId = $userId)' : '';
+    const nodeTypeFilter =
+      query.nodeTypes !== undefined && query.nodeTypes.length > 0
+        ? 'AND all(x IN nodes(path)[1..] WHERE x.nodeType IN $nodeTypes)'
+        : '';
+
+    // Build direction pattern
+    const dirArrowLeft = query.direction === 'inbound' ? '<' : '';
+    const dirArrowRight = query.direction === 'outbound' ? '>' : '';
+
+    const session = this.neo4j.getSession();
+    try {
+      // First, fetch the origin node
+      const originResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`,
+          { nodeId }
+        );
+      });
+      const originRecord = originResult.records[0];
+      if (!originRecord) {
+        return {
+          originNodeId: nodeId,
+          originNode: { nodeId } as IGraphNode,
+          groups: [],
+          edges: [],
+          totalNeighborCount: 0,
+        };
+      }
+      const originNode = mapNodeToGraphNode(originRecord.get('n') as neo4j.Node);
+
+      const params: Record<string, unknown> = {
+        nodeId,
+        ...(userId !== undefined ? { userId } : {}),
+        ...(query.nodeTypes !== undefined && query.nodeTypes.length > 0 ? { nodeTypes: query.nodeTypes } : {}),
+      };
+
+      let groupsResult: { edgeType: string; direction: string; neighbors: neo4j.Node[]; totalInGroup: number }[];
+      let edgeRecords: IGraphEdge[] = [];
+
+      if (query.filterMode === 'immediate' && query.hops > 1) {
+        // Immediate mode: first hop filtered, remaining hops untyped
+        const remainingHops = query.hops - 1;
+
+        const result = await session.executeRead(async (tx: ManagedTransaction) => {
+          return tx.run(
+            `MATCH (origin {nodeId: $nodeId})${dirArrowLeft}-[r1:${relPattern}]-${dirArrowRight}(hop1)
+             WHERE hop1.isDeleted = false AND origin.isDeleted = false
+               ${userId !== undefined ? 'AND origin.userId = $userId AND hop1.userId = $userId' : ''}
+             WITH origin, hop1, r1, type(r1) AS firstEdgeType,
+                  CASE WHEN startNode(r1) = origin THEN 'outbound' ELSE 'inbound' END AS dir
+             OPTIONAL MATCH path = (hop1)-[*1..${String(remainingHops)}]-(further)
+             WHERE all(n IN nodes(path) WHERE n.isDeleted = false)
+               ${query.nodeTypes !== undefined && query.nodeTypes.length > 0 ? 'AND all(n IN nodes(path) WHERE n.nodeType IN $nodeTypes)' : ''}
+               ${userId !== undefined ? 'AND all(n IN nodes(path) WHERE n.userId = $userId)' : ''}
+             WITH firstEdgeType, dir,
+                  collect(DISTINCT hop1) + collect(DISTINCT further) AS allNeighbors
+             UNWIND allNeighbors AS neighbor
+             WITH firstEdgeType, dir, neighbor
+             WHERE neighbor.nodeId <> $nodeId
+             WITH firstEdgeType AS edgeType, dir,
+                  collect(DISTINCT neighbor)[0..${String(query.maxPerGroup)}] AS neighbors,
+                  count(DISTINCT neighbor) AS totalInGroup
+             RETURN edgeType, dir, neighbors, totalInGroup`,
+            params
+          );
+        });
+
+        groupsResult = result.records.map((rec) => ({
+          edgeType: rec.get('edgeType') as string,
+          direction: rec.get('dir') as string,
+          neighbors: rec.get('neighbors') as neo4j.Node[],
+          totalInGroup: (rec.get('totalInGroup') as Integer).toNumber(),
+        }));
+      } else {
+        // Full-path mode (or hops=1 where both modes are equivalent)
+        const result = await session.executeRead(async (tx: ManagedTransaction) => {
+          return tx.run(
+            `MATCH path = (origin {nodeId: $nodeId})${dirArrowLeft}-[rels:${relPattern}*1..${String(query.hops)}]-${dirArrowRight}(neighbor)
+             WHERE all(n IN nodes(path) WHERE n.isDeleted = false)
+               ${nodeTypeFilter}
+               ${userFilter}
+             WITH origin, neighbor, relationships(path) AS pathRels, length(path) AS dist
+             WITH origin, neighbor, head(pathRels) AS firstRel, dist
+             ORDER BY dist ASC
+             WITH origin, type(firstRel) AS edgeType,
+                  CASE WHEN startNode(firstRel) = origin THEN 'outbound' ELSE 'inbound' END AS dir,
+                  collect(DISTINCT neighbor)[0..${String(query.maxPerGroup)}] AS neighbors,
+                  count(DISTINCT neighbor) AS totalInGroup
+             RETURN edgeType, dir, neighbors, totalInGroup`,
+            params
+          );
+        });
+
+        groupsResult = result.records.map((rec) => ({
+          edgeType: rec.get('edgeType') as string,
+          direction: rec.get('dir') as string,
+          neighbors: rec.get('neighbors') as neo4j.Node[],
+          totalInGroup: (rec.get('totalInGroup') as Integer).toNumber(),
+        }));
+      }
+
+      // Optionally fetch edges
+      if (query.includeEdges) {
+        const allNeighborNodeIds = groupsResult.flatMap((g) =>
+          g.neighbors.map((n) => (mapNodeToGraphNode(n)).nodeId)
+        );
+        if (allNeighborNodeIds.length > 0) {
+          const edgesResult = await session.executeRead(async (tx: ManagedTransaction) => {
+            return tx.run(
+              `MATCH (a)-[r]->(b)
+               WHERE (a.nodeId = $nodeId OR a.nodeId IN $neighborNodeIds)
+                 AND (b.nodeId = $nodeId OR b.nodeId IN $neighborNodeIds)
+                 AND a.isDeleted = false AND b.isDeleted = false
+               RETURN r, a.nodeId AS sourceId, b.nodeId AS targetId, a.graphType AS graphType`,
+              { nodeId, neighborNodeIds: allNeighborNodeIds }
+            );
+          });
+          edgeRecords = edgesResult.records.map((rec) =>
+            mapRelationshipToGraphEdge(
+              rec.get('r') as neo4j.Relationship,
+              rec.get('sourceId') as NodeId,
+              rec.get('targetId') as NodeId,
+              rec.get('graphType') as IGraphEdge['graphType']
+            )
+          );
+        }
+      }
+
+      const groups = groupsResult.map((g) => ({
+        edgeType: g.edgeType.toLowerCase() as IGraphEdge['edgeType'],
+        direction: g.direction as 'inbound' | 'outbound',
+        neighbors: g.neighbors.map(mapNodeToGraphNode),
+        totalInGroup: g.totalInGroup,
+      }));
+
+      const totalNeighborCount = groups.reduce((sum, g) => sum + g.totalInGroup, 0);
+
+      return {
+        originNodeId: nodeId,
+        originNode: originNode,
+        groups,
+        edges: query.includeEdges ? edgeRecords : [],
+        totalNeighborCount,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
   // ==========================================================================
   // IBatchGraphRepository
   // ==========================================================================
@@ -1362,5 +1685,19 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
   async runInTransaction<T>(_fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
     throw new Error('Nested transactions are not supported');
+  }
+
+  // ── Traversal stubs (not needed inside commit protocol) ───────────────
+
+  async getSiblings(_nodeId: NodeId, _query: ISiblingsQuery, _userId?: string): Promise<ISiblingsResult> {
+    throw new Error('getSiblings is not supported inside transactions');
+  }
+
+  async getCoParents(_nodeId: NodeId, _query: ICoParentsQuery, _userId?: string): Promise<ICoParentsResult> {
+    throw new Error('getCoParents is not supported inside transactions');
+  }
+
+  async getNeighborhood(_nodeId: NodeId, _query: INeighborhoodQuery, _userId?: string): Promise<INeighborhoodResult> {
+    throw new Error('getNeighborhood is not supported inside transactions');
   }
 }
