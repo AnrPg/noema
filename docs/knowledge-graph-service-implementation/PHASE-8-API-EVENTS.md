@@ -106,6 +106,8 @@ Fastify's Swagger integration).
 - **CreateEdgeRequest**: edgeType (GraphEdgeType enum), sourceNodeId (NodeId),
   targetNodeId (NodeId), weight (optional number 0-1, defaults per policy),
   skipAcyclicityCheck (optional boolean, defaults to false)
+- **UpdateEdgeRequest**: weight (optional number 0-1), properties (optional
+  partial update). Validates weight against EDGE_TYPE_POLICIES max weight.
 - **EdgeResponse**: the full IGraphEdge
 - **EdgeQueryParams**: edgeType (optional), nodeId (optional, for "edges
   connected to this node"), direction (optional)
@@ -140,6 +142,56 @@ Fastify's Swagger integration).
 - **MisconceptionQueryParams**: domain (optional), status (optional filter)
 - **UpdateMisconceptionStatusRequest**: status (MisconceptionStatus enum)
 
+### Structural health schemas
+
+- **HealthQueryParams**: domain (required)
+- **HealthResponse**: the full IStructuralHealthReport — per-metric status
+  entries, weighted overall score, health classification (healthy / concerning /
+  critical), cross-metric patterns, and trend indicators
+
+### Metacognitive stage schemas
+
+- **StageQueryParams**: domain (required)
+- **StageResponse**: the full IMetacognitiveStageAssessment — current stage,
+  evidence for the stage, gate criteria and readiness for the next stage,
+  regression detection, and recommended actions
+
+### PKG↔CKG comparison schemas
+
+- **ComparisonQueryParams**: domain (required)
+- **ComparisonResponse**: the full IGraphComparison — divergences (missing
+  nodes, extra nodes, wrong edge type, missing edges, extra edges, wrong
+  hierarchy, wrong classification), divergence severities, summary statistics,
+  alignment score, and remediation suggestions
+
+### Batch operation schemas
+
+- **BatchCreateNodesRequest**: nodes (array of CreateNodeRequest, max 100)
+- **BatchCreateNodesResponse**: created (IGraphNode[]), failed ({index,
+  error}[])
+- **BatchCreateEdgesRequest**: edges (array of CreateEdgeInput, max 200),
+  skipAcyclicityCheck (optional boolean, defaults to false)
+- **BatchCreateEdgesResponse**: created (IGraphEdge[]), failed ({index,
+  error}[])
+
+### Operation log schemas
+
+- **OperationLogQueryParams**: operationType (optional filter from
+  PkgOperationType enum), nodeId (optional), edgeId (optional), since (optional
+  ISO datetime), page, pageSize
+- **OperationLogResponse**: the IPkgOperation entries with pagination metadata
+
+### Pipeline health schemas
+
+- **PipelineHealthResponse**: count of mutations per state (proposed,
+  validating, validated, proving, proven, committing, committed, rejected),
+  total count, oldest stuck mutation timestamp (if any)
+
+### Mutation audit log schemas
+
+- **AuditLogResponse**: array of IMutationAuditEntry — state transition,
+  timestamp, actor, detail message, and optional validation/proof results
+
 ---
 
 ## Task 2: Implement REST routes
@@ -161,7 +213,16 @@ Create route modules following the content-service pattern:
 
 - `POST /` — create an edge (triggers EDGE_TYPE_POLICIES validation)
 - `GET /` — list edges with filtering
+- `GET /:edgeId` — get a single edge
+- `PATCH /:edgeId` — update an edge (weight and/or properties; re-validates
+  against EDGE_TYPE_POLICIES for weight bounds)
 - `DELETE /:edgeId` — remove an edge
+
+**PKG Batch routes** — prefix `/api/v1/users/:userId/pkg/batch`
+
+- `POST /nodes` — batch-create up to 100 nodes in a single transaction
+- `POST /edges` — batch-create up to 200 edges in a single transaction
+  (validates each against EDGE_TYPE_POLICIES; reports per-item failures)
 
 **PKG Traversal routes** — prefix `/api/v1/users/:userId/pkg/traversal`
 
@@ -174,13 +235,35 @@ Create route modules following the content-service pattern:
 
 - `GET /` — list CKG nodes with filtering
 - `GET /:nodeId` — get a single CKG node
-- `GET /:nodeId/subgraph` — get subgraph from CKG node
+
+**CKG Edge routes** — prefix `/api/v1/ckg/edges`
+
+- `GET /` — list CKG edges with filtering (by edgeType, nodeId, direction)
+- `GET /:edgeId` — get a single CKG edge
+
+**CKG Traversal routes** — prefix `/api/v1/ckg/traversal`
+
+- `GET /subgraph` — get a subgraph from a root CKG node (same semantics as PKG
+  subgraph, but scoped to the canonical graph)
+- `GET /ancestors/:nodeId` — get ancestors in CKG
+- `GET /descendants/:nodeId` — get descendants in CKG
+- `GET /path` — find shortest path between two CKG nodes
+
+> **Note**: Phase 8b adds 6 advanced CKG traversal endpoints (siblings,
+> neighborhood, bridges, common-ancestors, prerequisite-chain, centrality) under
+> the same `/api/v1/ckg/traversal/` prefix. Knowledge Frontier is PKG-only.
 
 **CKG Mutation routes** — prefix `/api/v1/ckg/mutations`
 
-- `POST /` — propose a new mutation
+- `POST /` — propose a new mutation (operations use the CKG mutation DSL:
+  ADD_NODE, REMOVE_NODE, UPDATE_NODE, ADD_EDGE, REMOVE_EDGE, UPDATE_EDGE,
+  MERGE_NODES, SPLIT_NODE)
 - `GET /` — list mutations with filtering
+- `GET /health` — pipeline health summary (mutations count per state, stuck
+  mutation detection)
 - `GET /:mutationId` — get mutation status and details
+- `GET /:mutationId/audit-log` — get the full audit trail for a mutation (state
+  transitions, validation results, proof outcomes)
 - `POST /:mutationId/cancel` — cancel a pending mutation
 - `POST /:mutationId/retry` — retry a rejected mutation
 
@@ -196,6 +279,30 @@ Create route modules following the content-service pattern:
 - `POST /detect` — trigger misconception detection
 - `PATCH /:detectionId/status` — update misconception status
 
+**Structural Health routes** — prefix `/api/v1/users/:userId/health`
+
+- `GET /` — get a comprehensive structural health report for a domain.
+  Synthesizes the latest structural metrics, per-metric status classifications
+  (healthy / concerning / critical), cross-metric pattern analysis, and trend
+  indicators into a single assessment.
+- `GET /stage` — assess the user's metacognitive stage for a domain. Returns the
+  current stage, evidence, gate criteria for the next stage, gaps to close, and
+  regression detection.
+
+**PKG↔CKG Comparison routes** — prefix `/api/v1/users/:userId/comparison`
+
+- `GET /` — compare the user's PKG structure against the CKG for a domain.
+  Returns structural divergences (missing nodes, extra nodes, wrong edge types,
+  missing edges, hierarchy mismatches, classification errors), divergence
+  severities, an alignment score, and remediation suggestions.
+
+**PKG Operation Log routes** — prefix `/api/v1/users/:userId/pkg/operations`
+
+- `GET /` — get the operation history for the user's PKG with filtering (by
+  operation type, node ID, edge ID, time range) and pagination. Returns the
+  ordered list of atomic PKG operations (node created, node updated, node
+  removed, edge created, edge updated, edge removed, mastery updated).
+
 ### URL design rationale
 
 **Why `/users/:userId/pkg/...`?** PKG operations are scoped to a specific user's
@@ -205,6 +312,29 @@ authorization checks ("is the authenticated user accessing their own PKG?").
 **Why `/ckg/...` without userId?** The CKG is shared. All authenticated users
 can read it. Agents and users with the `admin` role can write to it (via the
 mutation pipeline).
+
+**Why CKG edge routes separate from CKG node routes?** Edges are first-class
+entities in a graph database. Consumers frequently need to query edges
+independently — e.g., "find all prerequisite relationships in the graph" or "get
+the edge connecting two specific nodes." Separating edge routes mirrors the PKG
+pattern and makes the API symmetrical.
+
+**Why CKG traversal routes?** Even though the CKG is read-only for most users,
+traversal queries are essential for agents comparing a user's PKG against the
+CKG, for content-service resolving knowledge node references, and for the
+strategy agent analyzing prerequisite structures. The CKG traversal prefix
+mirrors the PKG traversal prefix for API symmetry.
+
+**Why batch routes?** Import pipelines, agent-driven graph construction, and
+initial PKG scaffolding require creating many nodes and edges atomically.
+Without batch endpoints, clients must make N sequential HTTP requests, which is
+slow and lacks transactional guarantees. Batch routes wrap
+`IBatchGraphRepository` operations in a single Neo4j transaction.
+
+**Why operation log routes?** The PKG operation log captures every atomic
+mutation to a user's graph, enabling audit trails, undo functionality, and
+offline sync conflict resolution. Exposing it lets agents and the front-end show
+change history and replay operations.
 
 **Why separate `/traversal/` prefix?** Traversal operations return different
 data shapes (subgraphs, paths) and have different performance characteristics
@@ -217,9 +347,13 @@ than CRUD. Separating them makes rate limiting and monitoring easier.
   can only access their own PKG) — or the requester is an agent with appropriate
   permissions
 - CKG read routes: any authenticated user
+- CKG read routes (nodes, edges, traversal): any authenticated user
 - CKG mutation routes: restricted to agent identities or users with the `admin`
   role (not regular end users)
-- Metrics and misconception routes: same as PKG (user's own data)
+- CKG mutation pipeline health: restricted to agents and admin users
+- Metrics, misconception, health, stage, comparison, and operation log routes:
+  same as PKG (user's own data)
+- Batch routes: same as PKG (user's own data)
 
 ### Response format
 
@@ -264,7 +398,7 @@ stream (e.g., `knowledge-graph-service:events`). Each event includes:
 Wire the publisher into all the service methods that produce events:
 
 - PKG operations → PkgNodeCreated, PkgNodeUpdated, PkgNodeRemoved,
-  PkgEdgeCreated, PkgEdgeRemoved
+  PkgEdgeCreated, PkgEdgeUpdated, PkgEdgeRemoved
 - Structural metrics → PkgStructuralMetricsUpdated
 - CKG mutations → CkgMutationProposed, CkgMutationValidated,
   CkgMutationCommitted, CkgMutationRejected
@@ -356,22 +490,57 @@ The documentation should include:
 
 ## Checklist
 
+### Schemas
+
 - [ ] Zod request/response schemas for all endpoints
+- [ ] UpdateEdgeRequest schema (weight, properties)
+- [ ] Health, Stage, Comparison response schemas
+- [ ] Batch create nodes/edges request and response schemas
+- [ ] Operation log query/response schemas
+- [ ] Pipeline health response schema
+- [ ] Mutation audit log response schema
+
+### PKG routes
+
 - [ ] PKG node routes (CRUD + list with filtering)
-- [ ] PKG edge routes (create with policy validation, list, delete)
+- [ ] PKG edge routes (create, list, **get**, **update**, delete)
 - [ ] PKG traversal routes (subgraph, ancestors, descendants, path)
-- [ ] CKG node routes (read-only: list, get, subgraph)
-- [ ] CKG mutation routes (propose, get, list, cancel, retry)
+- [ ] PKG batch routes (batch create nodes, batch create edges)
+- [ ] PKG operation log routes (list with filtering)
+
+### CKG routes
+
+- [ ] CKG node routes (read-only: list, get)
+- [ ] CKG edge routes (read-only: list, get)
+- [ ] CKG traversal routes (subgraph, ancestors, descendants, path)
+- [ ] CKG mutation routes (propose, get, list, cancel, retry, **audit-log**,
+      **pipeline health**)
+
+### Analysis routes
+
 - [ ] Metrics routes (get, compute, history)
 - [ ] Misconception routes (get, detect, update status)
+- [ ] Structural health routes (health report, metacognitive stage)
+- [ ] PKG↔CKG comparison route
+
+### Cross-cutting
+
 - [ ] Authentication middleware on all routes
-- [ ] Authorization checks (user owns PKG, agent or admin for CKG writes)
+- [ ] Authorization checks (user owns PKG, agent or admin for CKG writes, admin
+      or agent for pipeline health)
 - [ ] Rate limiting configured (read/write/batch tiers)
 - [ ] Domain errors mapped to HTTP status codes
 - [ ] Response envelopes include data, metadata, agentHints
+
+### Events
+
 - [ ] RedisEventPublisher wired to all state-changing service operations
+      (including PkgEdgeUpdated)
 - [ ] Event consumers for content, session, user service events
 - [ ] Consumers are idempotent with dead-letter handling
+
+### Infrastructure
+
 - [ ] Bootstrap updated to register routes and start consumers
 - [ ] Swagger/OpenAPI documentation configured
 - [ ] `pnpm typecheck` passes
