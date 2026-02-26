@@ -55,6 +55,7 @@ export const KnowledgeGraphEventType = {
   PKG_NODE_UPDATED: 'pkg.node.updated',
   PKG_NODE_REMOVED: 'pkg.node.removed',
   PKG_EDGE_CREATED: 'pkg.edge.created',
+  PKG_EDGE_UPDATED: 'pkg.edge.updated',
   PKG_EDGE_REMOVED: 'pkg.edge.removed',
   PKG_STRUCTURAL_METRICS_UPDATED: 'pkg.metrics.updated',
 
@@ -154,6 +155,22 @@ export interface IPkgEdgeRemovedPayload {
   userId: UserId;
   /** Reason for removal */
   reason: string;
+}
+
+/**
+ * Payload for pkg.edge.updated — an edge's weight or properties changed.
+ */
+export interface IPkgEdgeUpdatedPayload {
+  /** The updated edge's ID */
+  edgeId: EdgeId;
+  /** Owner of the PKG */
+  userId: UserId;
+  /** List of field names that changed */
+  changedFields: string[];
+  /** Previous values of changed fields */
+  previousValues: Metadata;
+  /** New values of changed fields */
+  newValues: Metadata;
 }
 
 /**
@@ -329,6 +346,11 @@ export type PkgEdgeCreatedEvent = ITypedEvent<
   'PersonalKnowledgeGraph',
   IPkgEdgeCreatedPayload
 >;
+export type PkgEdgeUpdatedEvent = ITypedEvent<
+  'pkg.edge.updated',
+  'PersonalKnowledgeGraph',
+  IPkgEdgeUpdatedPayload
+>;
 export type PkgEdgeRemovedEvent = ITypedEvent<
   'pkg.edge.removed',
   'PersonalKnowledgeGraph',
@@ -396,6 +418,7 @@ export type PkgDomainEvent =
   | PkgNodeUpdatedEvent
   | PkgNodeRemovedEvent
   | PkgEdgeCreatedEvent
+  | PkgEdgeUpdatedEvent
   | PkgEdgeRemovedEvent
   | PkgStructuralMetricsUpdatedEvent;
 

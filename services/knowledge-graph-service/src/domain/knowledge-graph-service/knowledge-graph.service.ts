@@ -22,7 +22,13 @@ import type {
   UserId,
 } from '@noema/types';
 
-import type { ICreateEdgeInput, ICreateNodeInput, IUpdateNodeInput } from './graph.repository.js';
+import type {
+  ICreateEdgeInput,
+  ICreateNodeInput,
+  IEdgeFilter,
+  IUpdateEdgeInput,
+  IUpdateNodeInput,
+} from './graph.repository.js';
 import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
@@ -112,6 +118,25 @@ export interface IKnowledgeGraphService {
   ): Promise<IServiceResult<IGraphEdge>>;
 
   /**
+   * Get an edge from the user's PKG by ID.
+   */
+  getEdge(
+    userId: UserId,
+    edgeId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphEdge>>;
+
+  /**
+   * Update an edge in the user's PKG (weight and/or properties).
+   */
+  updateEdge(
+    userId: UserId,
+    edgeId: string,
+    updates: IUpdateEdgeInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphEdge>>;
+
+  /**
    * Delete an edge from the user's PKG.
    */
   deleteEdge(
@@ -119,6 +144,16 @@ export interface IKnowledgeGraphService {
     edgeId: string,
     context: IExecutionContext
   ): Promise<IServiceResult<void>>;
+
+  /**
+   * List edges in the user's PKG with filters and pagination.
+   */
+  listEdges(
+    userId: UserId,
+    filters: IEdgeFilter,
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphEdge>>>;
 
   /**
    * Get the subgraph reachable from a root node in the user's PKG.

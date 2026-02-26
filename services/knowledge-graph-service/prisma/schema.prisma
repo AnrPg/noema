@@ -428,6 +428,38 @@ model PkgOperationLog {
 }
 
 // ============================================================================
+// Metrics Staleness — Tracks when user+domain metrics need recomputation
+// ============================================================================
+// Upserted on every PKG mutation (node/edge CRUD). Phase 7's computeMetrics
+// checks lastStructuralChangeAt against the latest StructuralMetricSnapshot
+// to determine if recomputation is needed.
+
+model MetricsStaleness {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    // Knowledge domain the staleness applies to
+    domain String @db.VarChar(200)
+
+    // When the last structural change occurred (PKG node/edge mutation)
+    lastStructuralChangeAt DateTime @map("last_structural_change_at")
+
+    // What type of mutation triggered staleness (for diagnostics)
+    lastMutationType String @map("last_mutation_type") @db.VarChar(50)
+
+    // Audit fields
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    // Constraints — one staleness record per user+domain
+    @@unique([userId, domain])
+    @@index([userId])
+    @@index([userId, domain])
+    @@index([lastStructuralChangeAt])
+    @@map("metrics_staleness")
+}
+
+// ============================================================================
 // Enums
 // ============================================================================
 

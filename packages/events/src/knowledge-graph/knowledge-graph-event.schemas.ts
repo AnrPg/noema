@@ -112,6 +112,17 @@ export const PkgEdgeRemovedPayloadSchema = z.object({
 });
 
 /**
+ * Payload schema for `pkg.edge.updated` event.
+ */
+export const PkgEdgeUpdatedPayloadSchema = z.object({
+  edgeId: EdgeIdSchema,
+  userId: UserIdSchema,
+  changedFields: z.array(z.string().min(1)).min(1),
+  previousValues: MetadataSchema,
+  newValues: MetadataSchema,
+});
+
+/**
  * Payload schema for `pkg.metrics.updated` event.
  */
 export const PkgStructuralMetricsUpdatedPayloadSchema = z.object({
@@ -249,6 +260,12 @@ export const PkgEdgeRemovedEventSchema = createEventSchema(
   'pkg.edge.removed',
   'PersonalKnowledgeGraph',
   PkgEdgeRemovedPayloadSchema
+);
+
+export const PkgEdgeUpdatedEventSchema = createEventSchema(
+  'pkg.edge.updated',
+  'PersonalKnowledgeGraph',
+  PkgEdgeUpdatedPayloadSchema
 );
 
 export const PkgStructuralMetricsUpdatedEventSchema = createEventSchema(

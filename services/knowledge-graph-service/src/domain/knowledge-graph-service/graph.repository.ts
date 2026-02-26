@@ -65,6 +65,14 @@ export interface ICreateEdgeInput {
 }
 
 /**
+ * Input for updating a graph edge (partial update — weight and/or properties).
+ */
+export interface IUpdateEdgeInput {
+  readonly weight?: EdgeWeight;
+  readonly properties?: Record<string, unknown>;
+}
+
+/**
  * Criteria for filtering edges.
  */
 export interface IEdgeFilter {
@@ -150,17 +158,19 @@ export interface IEdgeRepository {
    * @param userId Owner user ID (required for PKG).
    * @returns The created edge.
    */
-  createEdge(
-    graphType: string,
-    input: ICreateEdgeInput,
-    userId?: string
-  ): Promise<IGraphEdge>;
+  createEdge(graphType: string, input: ICreateEdgeInput, userId?: string): Promise<IGraphEdge>;
 
   /**
    * Get an edge by ID.
    * @returns The edge, or null if not found.
    */
   getEdge(edgeId: EdgeId): Promise<IGraphEdge | null>;
+
+  /**
+   * Update an edge's weight and/or properties (partial update).
+   * @returns The updated edge.
+   */
+  updateEdge(edgeId: EdgeId, updates: IUpdateEdgeInput): Promise<IGraphEdge>;
 
   /**
    * Remove an edge (hard delete — edges have no soft-delete semantics).

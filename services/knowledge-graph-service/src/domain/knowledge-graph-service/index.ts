@@ -13,40 +13,40 @@
 // ============================================================================
 
 export {
-  // Base errors
-  DomainError,
-  isDomainError,
-  isValidationError,
-  RateLimitExceededError,
-  UnauthorizedError,
-  ValidationError,
   // Graph errors
   CyclicEdgeError,
+  // Base errors
+  DomainError,
   DuplicateNodeError,
   EdgeNotFoundError,
   GraphConsistencyError,
+  // Misconception errors
+  InterventionTemplateNotFoundError,
   InvalidEdgeTypeError,
-  MaxDepthExceededError,
-  NodeNotFoundError,
-  OrphanEdgeError,
+  InvalidMisconceptionStateTransitionError,
   // Mutation errors
   InvalidStateTransitionError,
-  isInvalidStateTransitionError,
-  isMutationAlreadyCommittedError,
-  isMutationConflictError,
-  isMutationNotFoundError,
-  isValidationFailedError,
+  MaxDepthExceededError,
+  MisconceptionPatternNotFoundError,
   MutationAlreadyCommittedError,
   MutationConflictError,
   MutationNotFoundError,
+  NodeNotFoundError,
+  OrphanEdgeError,
+  RateLimitExceededError,
+  UnauthorizedError,
+  ValidationError,
   ValidationFailedError,
-  // Misconception errors
-  InterventionTemplateNotFoundError,
-  InvalidMisconceptionStateTransitionError,
+  isDomainError,
   isInterventionTemplateNotFoundError,
   isInvalidMisconceptionStateTransitionError,
+  isInvalidStateTransitionError,
   isMisconceptionPatternNotFoundError,
-  MisconceptionPatternNotFoundError,
+  isMutationAlreadyCommittedError,
+  isMutationConflictError,
+  isMutationNotFoundError,
+  isValidationError,
+  isValidationFailedError,
 } from './errors/index.js';
 
 // ============================================================================
@@ -54,35 +54,30 @@ export {
 // ============================================================================
 
 export {
-  // Graph value objects
-  EdgePolicy,
-  NodeFilter,
-  TraversalOptions,
-  ValidationOptions,
-  // Branded numerics
-  PositiveDepth,
   // Comparison
   DivergenceSeverity,
   DivergenceType,
+  // Graph value objects
+  EdgePolicy,
+  NodeFilter,
   // Operation log
   PkgOperationType,
+  // Branded numerics
+  PositiveDepth,
   // Promotion band
   PromotionBandUtil,
+  TraversalOptions,
+  ValidationOptions,
 } from './value-objects/index.js';
 
 export type {
-  // Graph value objects
-  IEdgePolicy,
-  INodeFilter,
-  ITraversalOptions,
-  IValidationOptions,
-  TraversalDirection,
-  PositiveDepthType,
   // Comparison
   DivergenceSeverityType,
   DivergenceTypeType,
+  // Graph value objects
+  IEdgePolicy,
   IGraphComparison,
-  IStructuralDivergence,
+  INodeFilter,
   // Operation log
   IPkgBatchImportOp,
   IPkgEdgeCreatedOp,
@@ -90,9 +85,14 @@ export type {
   IPkgNodeCreatedOp,
   IPkgNodeDeletedOp,
   IPkgNodeUpdatedOp,
+  IStructuralDivergence,
+  ITraversalOptions,
+  IValidationOptions,
   PkgAtomicOperation,
   PkgOperation,
   PkgOperationTypeUnion,
+  PositiveDepthType,
+  TraversalDirection,
 } from './value-objects/index.js';
 
 // ============================================================================
@@ -116,6 +116,7 @@ export type {
   IGraphRepository,
   INodeRepository,
   ITraversalRepository,
+  IUpdateEdgeInput,
   IUpdateNodeInput,
 } from './graph.repository.js';
 
@@ -135,11 +136,11 @@ export type {
 } from './metrics.repository.js';
 
 export type {
+  IInterventionTemplate,
   // Misconception repository
   IMisconceptionPattern,
   IMisconceptionRecord,
   IMisconceptionRepository,
-  IInterventionTemplate,
   IRecordDetectionInput,
   IUpsertInterventionTemplateInput,
   IUpsertPatternInput,
@@ -150,6 +151,12 @@ export type {
   IPkgOperationLogEntry,
   IPkgOperationLogRepository,
 } from './pkg-operation-log.repository.js';
+
+export type {
+  // Metrics staleness repository
+  IMetricsStalenessRecord,
+  IMetricsStalenessRepository,
+} from './metrics-staleness.repository.js';
 
 export type {
   // Aggregation evidence repository
@@ -169,6 +176,25 @@ export type {
 } from './knowledge-graph.service.js';
 
 // ============================================================================
+// Service Implementation
+// ============================================================================
+
+export { KnowledgeGraphService } from './knowledge-graph.service.impl.js';
+
+// ============================================================================
+// Validation Schemas (Zod)
+// ============================================================================
+
+export {
+  CreateEdgeInputSchema,
+  CreateNodeInputSchema,
+  EdgeFilterSchema,
+  PaginationSchema,
+  UpdateEdgeInputSchema,
+  UpdateNodeInputSchema,
+} from './knowledge-graph.schemas.js';
+
+// ============================================================================
 // Validation Pipeline
 // ============================================================================
 
@@ -185,44 +211,46 @@ export type {
 // Domain Events
 // ============================================================================
 
-export type { KnowledgeGraphEventType } from './domain-events.js';
+export { KnowledgeGraphEventType } from './domain-events.js';
 
 export type {
-  IEventMetadata,
-  // PKG events
-  IPkgNodeCreatedPayload,
-  IPkgNodeUpdatedPayload,
-  IPkgNodeRemovedPayload,
-  IPkgEdgeCreatedPayload,
-  IPkgEdgeRemovedPayload,
-  IPkgStructuralMetricsUpdatedPayload,
+  CkgDomainEvent,
+  CkgMutationCommittedEvent,
+  CkgMutationProposedEvent,
+  CkgMutationRejectedEvent,
+  CkgMutationValidatedEvent,
+  CkgNodePromotedEvent,
+  ICkgMutationCommittedPayload,
   // CKG events
   ICkgMutationProposedPayload,
-  ICkgMutationValidatedPayload,
-  ICkgMutationCommittedPayload,
   ICkgMutationRejectedPayload,
+  ICkgMutationValidatedPayload,
   ICkgNodePromotedPayload,
-  // Metacognitive events
-  IMisconceptionDetectedPayload,
+  IEventMetadata,
   IInterventionTriggeredPayload,
   IMetacognitiveStageTransitionedPayload,
-  // Typed events
-  PkgNodeCreatedEvent,
-  PkgNodeUpdatedEvent,
-  PkgNodeRemovedEvent,
+  // Metacognitive events
+  IMisconceptionDetectedPayload,
+  IPkgEdgeCreatedPayload,
+  IPkgEdgeRemovedPayload,
+  IPkgEdgeUpdatedPayload,
+  // PKG events
+  IPkgNodeCreatedPayload,
+  IPkgNodeRemovedPayload,
+  IPkgNodeUpdatedPayload,
+  IPkgStructuralMetricsUpdatedPayload,
+  InterventionTriggeredEvent,
+  KnowledgeGraphDomainEvent,
+  MetacognitiveDomainEvent,
+  MetacognitiveStageTransitionedEvent,
+  MisconceptionDetectedEvent,
+  PkgDomainEvent,
   PkgEdgeCreatedEvent,
   PkgEdgeRemovedEvent,
+  PkgEdgeUpdatedEvent,
+  // Typed events
+  PkgNodeCreatedEvent,
+  PkgNodeRemovedEvent,
+  PkgNodeUpdatedEvent,
   PkgStructuralMetricsUpdatedEvent,
-  CkgMutationProposedEvent,
-  CkgMutationValidatedEvent,
-  CkgMutationCommittedEvent,
-  CkgMutationRejectedEvent,
-  CkgNodePromotedEvent,
-  MisconceptionDetectedEvent,
-  InterventionTriggeredEvent,
-  MetacognitiveStageTransitionedEvent,
-  PkgDomainEvent,
-  CkgDomainEvent,
-  MetacognitiveDomainEvent,
-  KnowledgeGraphDomainEvent,
 } from './domain-events.js';

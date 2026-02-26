@@ -29,6 +29,7 @@ import type {
   ICreateNodeInput,
   IEdgeFilter,
   IGraphRepository,
+  IUpdateEdgeInput,
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
@@ -125,6 +126,17 @@ export class CachedGraphRepository implements IGraphRepository {
       await this.cache.delPattern(this.cache.edgesForNodePattern(edge.sourceNodeId));
       await this.cache.delPattern(this.cache.edgesForNodePattern(edge.targetNodeId));
     }
+  }
+
+  async updateEdge(edgeId: EdgeId, updates: IUpdateEdgeInput): Promise<IGraphEdge> {
+    // Pre-fetch edge to get node IDs for invalidation
+    const existingEdge = await this.inner.getEdge(edgeId);
+    const updatedEdge = await this.inner.updateEdge(edgeId, updates);
+    if (existingEdge) {
+      await this.cache.delPattern(this.cache.edgesForNodePattern(existingEdge.sourceNodeId));
+      await this.cache.delPattern(this.cache.edgesForNodePattern(existingEdge.targetNodeId));
+    }
+    return updatedEdge;
   }
 
   async findEdges(filter: IEdgeFilter): Promise<IGraphEdge[]> {

@@ -14,10 +14,10 @@
  * - All Cypher queries use parameterized queries ($params)
  */
 
+import { nanoid } from 'nanoid';
 import type { Integer, ManagedTransaction } from 'neo4j-driver';
 import neo4j from 'neo4j-driver';
 import type pino from 'pino';
-import { nanoid } from 'nanoid';
 
 import type {
   EdgeId,
@@ -29,24 +29,25 @@ import type {
 } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 
-import type {
-  EdgeDirection,
-  ICreateEdgeInput,
-  ICreateNodeInput,
-  IEdgeFilter,
-  IGraphRepository,
-  IUpdateNodeInput,
-} from '../../domain/knowledge-graph-service/graph.repository.js';
-import type {
-  INodeFilter,
-  ITraversalOptions,
-} from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import {
   DuplicateNodeError,
   EdgeNotFoundError,
   GraphConsistencyError,
   NodeNotFoundError,
 } from '../../domain/knowledge-graph-service/errors/index.js';
+import type {
+  EdgeDirection,
+  ICreateEdgeInput,
+  ICreateNodeInput,
+  IEdgeFilter,
+  IGraphRepository,
+  IUpdateEdgeInput,
+  IUpdateNodeInput,
+} from '../../domain/knowledge-graph-service/graph.repository.js';
+import type {
+  INodeFilter,
+  ITraversalOptions,
+} from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { Neo4jClient } from './neo4j-client.js';
 import {
   buildEdgeProperties,
@@ -360,6 +361,51 @@ export class Neo4jGraphRepository implements IGraphRepository {
         record.get('sourceId') as NodeId,
         record.get('targetId') as NodeId,
         record.get('graphType') as IGraphEdge['graphType']
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  async updateEdge(edgeId: EdgeId, updates: IUpdateEdgeInput): Promise<IGraphEdge> {
+    const relTypePattern = ALL_REL_TYPES.join('|');
+    const updateProps: Record<string, unknown> = {
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (updates.weight !== undefined) {
+      updateProps['weight'] = updates.weight;
+    }
+    if (updates.properties !== undefined) {
+      // Merge properties into edge — flatten to top-level prop keys
+      for (const [key, value] of Object.entries(updates.properties)) {
+        updateProps[`prop_${key}`] = value;
+      }
+    }
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeWrite(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (src)-[r:${relTypePattern}]->(tgt)
+           WHERE r.edgeId = $edgeId
+           SET r += $updateProps
+           RETURN r, src.nodeId AS sourceNodeId, tgt.nodeId AS targetNodeId, labels(src) AS srcLabels`,
+          { edgeId, updateProps }
+        );
+      });
+
+      const record = result.records[0];
+      if (record === undefined) {
+        throw new EdgeNotFoundError(edgeId);
+      }
+
+      this.logger.debug({ edgeId }, 'Edge updated');
+      return mapRelationshipToGraphEdge(
+        record.get('r') as neo4j.Relationship,
+        record.get('sourceNodeId') as NodeId,
+        record.get('targetNodeId') as NodeId,
+        inferGraphType(record.get('srcLabels') as string[])
       );
     } finally {
       await session.close();

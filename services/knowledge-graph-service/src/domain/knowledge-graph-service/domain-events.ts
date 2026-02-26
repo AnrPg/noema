@@ -19,7 +19,7 @@
 // ============================================================================
 
 // Event type registry
-export type { KnowledgeGraphEventType } from '@noema/events';
+export { KnowledgeGraphEventType } from '@noema/events';
 
 // PKG event payloads
 export type {
@@ -27,6 +27,7 @@ export type {
   IPkgNodeUpdatedPayload,
   IPkgNodeRemovedPayload,
   IPkgEdgeCreatedPayload,
+  IPkgEdgeUpdatedPayload,
   IPkgEdgeRemovedPayload,
   IPkgStructuralMetricsUpdatedPayload,
 } from '@noema/events';
@@ -54,6 +55,7 @@ export type {
   PkgNodeUpdatedEvent,
   PkgNodeRemovedEvent,
   PkgEdgeCreatedEvent,
+  PkgEdgeUpdatedEvent,
   PkgEdgeRemovedEvent,
   PkgStructuralMetricsUpdatedEvent,
   // CKG
