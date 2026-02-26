@@ -25,7 +25,8 @@ export {
   InvalidEdgeTypeError,
   InvalidMisconceptionStateTransitionError,
   // Mutation errors
-  InvalidStateTransitionError, isDomainError,
+  InvalidStateTransitionError,
+  isDomainError,
   isInterventionTemplateNotFoundError,
   isInvalidMisconceptionStateTransitionError,
   isInvalidStateTransitionError,
@@ -34,7 +35,8 @@ export {
   isMutationConflictError,
   isMutationNotFoundError,
   isValidationError,
-  isValidationFailedError, MaxDepthExceededError,
+  isValidationFailedError,
+  MaxDepthExceededError,
   MisconceptionPatternNotFoundError,
   MutationAlreadyCommittedError,
   MutationConflictError,
@@ -44,7 +46,7 @@ export {
   RateLimitExceededError,
   UnauthorizedError,
   ValidationError,
-  ValidationFailedError
+  ValidationFailedError,
 } from './errors/index.js';
 
 // ============================================================================
@@ -65,7 +67,7 @@ export {
   // Promotion band
   PromotionBandUtil,
   TraversalOptions,
-  ValidationOptions
+  ValidationOptions,
 } from './value-objects/index.js';
 
 export type {
@@ -90,7 +92,7 @@ export type {
   PkgOperation,
   PkgOperationTypeUnion,
   PositiveDepthType,
-  TraversalDirection
+  TraversalDirection,
 } from './value-objects/index.js';
 
 // ============================================================================
@@ -115,7 +117,7 @@ export type {
   INodeRepository,
   ITraversalRepository,
   IUpdateEdgeInput,
-  IUpdateNodeInput
+  IUpdateNodeInput,
 } from './graph.repository.js';
 
 export type {
@@ -123,13 +125,14 @@ export type {
   ICkgMutation,
   ICreateMutationInput,
   IMutationAuditEntry,
-  IMutationRepository
+  IMutationRepository,
 } from './mutation.repository.js';
 
 export type {
   IMetricsHistoryOptions,
   // Metrics repository
-  IMetricSnapshot, IMetricsRepository
+  IMetricSnapshot,
+  IMetricsRepository,
 } from './metrics.repository.js';
 
 export type {
@@ -140,26 +143,26 @@ export type {
   IMisconceptionRepository,
   IRecordDetectionInput,
   IUpsertInterventionTemplateInput,
-  IUpsertPatternInput
+  IUpsertPatternInput,
 } from './misconception.repository.js';
 
 export type {
   // PKG operation log repository
   IPkgOperationLogEntry,
-  IPkgOperationLogRepository
+  IPkgOperationLogRepository,
 } from './pkg-operation-log.repository.js';
 
 export type {
   // Metrics staleness repository
   IMetricsStalenessRecord,
-  IMetricsStalenessRepository
+  IMetricsStalenessRepository,
 } from './metrics-staleness.repository.js';
 
 export type {
   // Aggregation evidence repository
   IAggregationEvidence,
   IAggregationEvidenceRepository,
-  IEvidenceSummary
+  IEvidenceSummary,
 } from './aggregation-evidence.repository.js';
 
 // ============================================================================
@@ -169,7 +172,7 @@ export type {
 export type {
   IExecutionContext,
   IKnowledgeGraphService,
-  IServiceResult
+  IServiceResult,
 } from './knowledge-graph.service.js';
 
 // ============================================================================
@@ -188,7 +191,7 @@ export {
   EdgeFilterSchema,
   PaginationSchema,
   UpdateEdgeInputSchema,
-  UpdateNodeInputSchema
+  UpdateNodeInputSchema,
 } from './knowledge-graph.schemas.js';
 
 // ============================================================================
@@ -201,7 +204,7 @@ export type {
   IValidationResult,
   IValidationStage,
   IValidationStageResult,
-  IValidationViolation
+  IValidationViolation,
 } from './validation.js';
 
 // ============================================================================
@@ -211,9 +214,11 @@ export type {
 // DSL: operation types, Zod schemas, utility functions
 export {
   CkgMutationOperationSchema,
-  CkgOperationType, extractAffectedEdgeIds,
-  extractAffectedNodeIds, MutationFilterSchema,
-  MutationProposalSchema
+  CkgOperationType,
+  extractAffectedEdgeIds,
+  extractAffectedNodeIds,
+  MutationFilterSchema,
+  MutationProposalSchema,
 } from './ckg-mutation-dsl.js';
 
 export type {
@@ -227,17 +232,20 @@ export type {
   IRemoveEdgeOperation,
   IRemoveNodeOperation,
   ISplitNodeOperation,
-  IUpdateNodeOperation
+  IUpdateNodeOperation,
 } from './ckg-mutation-dsl.js';
 
 // Typestate machine: transition rules, guards, branded state types
 export {
-  CANCELLABLE_STATES, getAllowedTransitions,
+  CANCELLABLE_STATES,
+  getAllowedTransitions,
   getNextHappyPathState,
   isCancellableState,
   isTerminalState,
-  isValidTransition, STATE_TRANSITIONS,
-  TERMINAL_STATES, validateTransition
+  isValidTransition,
+  STATE_TRANSITIONS,
+  TERMINAL_STATES,
+  validateTransition,
 } from './ckg-typestate.js';
 
 export type { IMutationInState, IStateTransition } from './ckg-typestate.js';
@@ -247,7 +255,7 @@ export {
   ConflictDetectionStage,
   EvidenceSufficiencyStage,
   SchemaValidationStage,
-  StructuralIntegrityStage
+  StructuralIntegrityStage,
 } from './ckg-validation-stages.js';
 
 // Validation pipeline: IValidationPipeline implementation
@@ -279,14 +287,17 @@ export type {
   IInterventionTriggeredPayload,
   IMetacognitiveStageTransitionedPayload,
   // Metacognitive events
-  IMisconceptionDetectedPayload, InterventionTriggeredEvent, IPkgEdgeCreatedPayload,
+  IMisconceptionDetectedPayload,
+  InterventionTriggeredEvent,
+  IPkgEdgeCreatedPayload,
   IPkgEdgeRemovedPayload,
   IPkgEdgeUpdatedPayload,
   // PKG events
   IPkgNodeCreatedPayload,
   IPkgNodeRemovedPayload,
   IPkgNodeUpdatedPayload,
-  IPkgStructuralMetricsUpdatedPayload, KnowledgeGraphDomainEvent,
+  IPkgStructuralMetricsUpdatedPayload,
+  KnowledgeGraphDomainEvent,
   MetacognitiveDomainEvent,
   MetacognitiveStageTransitionedEvent,
   MisconceptionDetectedEvent,
@@ -298,6 +309,37 @@ export type {
   PkgNodeCreatedEvent,
   PkgNodeRemovedEvent,
   PkgNodeUpdatedEvent,
-  PkgStructuralMetricsUpdatedEvent
+  PkgStructuralMetricsUpdatedEvent,
 } from './domain-events.js';
 
+// ============================================================================
+// Structural Metrics Engine (Phase 7)
+// ============================================================================
+
+export {
+  assessMetacognitiveStage,
+  buildGraphComparison,
+  buildMetricComputationContext,
+  buildStructuralHealthReport,
+  detectCrossMetricPatterns,
+  StructuralMetricsEngine,
+} from './metrics/index.js';
+
+export type {
+  IMetricComputationContext,
+  IMetricComputer,
+  ISiblingGroup,
+  IStructuralRegion,
+} from './metrics/index.js';
+
+// ============================================================================
+// Misconception Detection Engine (Phase 7)
+// ============================================================================
+
+export { MisconceptionDetectionEngine } from './misconception/index.js';
+
+export type {
+  IMisconceptionDetectionContext,
+  IMisconceptionDetectionResult,
+  IMisconceptionDetector,
+} from './misconception/index.js';

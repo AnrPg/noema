@@ -5,16 +5,20 @@
  * knowledge-graph-service and by agents/services that consume graph data.
  */
 
+import type { Metadata } from '../base/index.js';
 import type { EdgeId, MisconceptionPatternId, NodeId } from '../branded-ids/index.js';
-import type { EdgeWeight, MasteryLevel, ConfidenceScore } from '../branded-numerics/index.js';
+import type { ConfidenceScore, EdgeWeight, MasteryLevel } from '../branded-numerics/index.js';
 import type {
   GraphEdgeType,
   GraphNodeType,
   GraphType,
+  MetacognitiveStage,
+  MetricHealthStatus,
   MisconceptionStatus,
   MisconceptionType,
+  StructuralMetricType,
+  TrendDirection,
 } from '../enums/index.js';
-import type { Metadata } from '../base/index.js';
 
 // ============================================================================
 // Graph Data Interfaces
@@ -193,4 +197,128 @@ export interface IMisconceptionDetection {
 
   /** When this misconception was resolved (ISO 8601), null if unresolved */
   resolvedAt: string | null;
+}
+
+// ============================================================================
+// Structural Health Report
+// ============================================================================
+
+/**
+ * Per-metric health status entry in the structural health report.
+ * Captures the metric's current value, classification, and trend.
+ */
+export interface IMetricStatusEntry {
+  /** Which structural metric this entry describes */
+  readonly metricType: StructuralMetricType;
+
+  /** Current metric value */
+  readonly value: number;
+
+  /** Health classification based on threshold tables */
+  readonly status: MetricHealthStatus;
+
+  /** Trend direction computed from recent snapshots */
+  readonly trend: TrendDirection;
+
+  /** Human-readable hint for this metric's current state */
+  readonly hint: string;
+}
+
+/**
+ * Composite structural health report for a user in a domain.
+ *
+ * Synthesizes all 11 structural metrics into a single health assessment
+ * with per-metric breakdowns, metacognitive stage, and actionable insights.
+ */
+export interface IStructuralHealthReport {
+  /** Overall health score (0–1, higher is better) */
+  readonly overallScore: number;
+
+  /** Per-metric status breakdown */
+  readonly metricBreakdown: readonly IMetricStatusEntry[];
+
+  /** Overall trend direction */
+  readonly trend: TrendDirection;
+
+  /** Number of currently active misconceptions */
+  readonly activeMisconceptionCount: number;
+
+  /** Current metacognitive stage assessment */
+  readonly metacognitiveStage: MetacognitiveStage;
+
+  /** Knowledge domain this report covers */
+  readonly domain: string;
+
+  /** When this report was generated (ISO 8601) */
+  readonly generatedAt: string;
+}
+
+// ============================================================================
+// Metacognitive Stage Assessment
+// ============================================================================
+
+/**
+ * A single stage gate criterion and whether it's met.
+ */
+export interface IStageGateCriterion {
+  /** Which metric this criterion evaluates */
+  readonly metricType: StructuralMetricType;
+
+  /** The threshold the metric must meet */
+  readonly threshold: number;
+
+  /** Comparison operator (e.g., 'below', 'above', 'stable') */
+  readonly operator: 'below' | 'above' | 'stable' | 'improving';
+
+  /** Current metric value */
+  readonly currentValue: number;
+
+  /** Whether this criterion is currently met */
+  readonly met: boolean;
+}
+
+/**
+ * Gap analysis for a single unmet stage gate criterion.
+ */
+export interface IStageGateGap {
+  /** Which metric needs improvement */
+  readonly metricType: StructuralMetricType;
+
+  /** Current value */
+  readonly currentValue: number;
+
+  /** Required threshold value */
+  readonly requiredValue: number;
+
+  /** Numeric gap (absolute distance to threshold) */
+  readonly gap: number;
+
+  /** Human-readable description of what needs to change */
+  readonly description: string;
+}
+
+/**
+ * Full metacognitive stage assessment for a user in a domain.
+ *
+ * Includes the current stage, evidence supporting the assessment,
+ * gaps to the next stage, and regression detection.
+ */
+export interface IMetacognitiveStageAssessment {
+  /** Current metacognitive stage */
+  readonly currentStage: MetacognitiveStage;
+
+  /** Knowledge domain assessed */
+  readonly domain: string;
+
+  /** Stage gate criteria that support the current stage */
+  readonly stageEvidence: readonly IStageGateCriterion[];
+
+  /** Gaps preventing advancement to the next stage */
+  readonly nextStageGaps: readonly IStageGateGap[];
+
+  /** Whether metrics indicate a potential stage regression */
+  readonly regressionDetected: boolean;
+
+  /** When the assessment was performed (ISO 8601) */
+  readonly assessedAt: string;
 }

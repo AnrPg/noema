@@ -1081,5 +1081,42 @@ export const StructuralMetricType = {
   BOUNDARY_SENSITIVITY_IMPROVEMENT: 'boundary_sensitivity_improvement',
 } as const;
 
-export type StructuralMetricType =
-  (typeof StructuralMetricType)[keyof typeof StructuralMetricType];
+export type StructuralMetricType = (typeof StructuralMetricType)[keyof typeof StructuralMetricType];
+
+// ============================================================================
+// Knowledge Graph — Metric Health Status
+// ============================================================================
+
+/**
+ * Per-metric health classification based on threshold tables.
+ * Used in structural health reports to communicate metric state.
+ */
+export const MetricHealthStatus = {
+  /** Metric is within healthy range */
+  HEALTHY: 'healthy',
+  /** Metric is in moderate/warning range */
+  WARNING: 'warning',
+  /** Metric is in concerning/critical range */
+  CRITICAL: 'critical',
+} as const;
+
+export type MetricHealthStatus = (typeof MetricHealthStatus)[keyof typeof MetricHealthStatus];
+
+// ============================================================================
+// Knowledge Graph — Trend Direction
+// ============================================================================
+
+/**
+ * Direction of change for a metric or aggregate score over time.
+ * Computed from the last 3–5 metric snapshots.
+ */
+export const TrendDirection = {
+  /** Metric is improving over recent snapshots */
+  IMPROVING: 'improving',
+  /** Metric is stable (no significant change) */
+  STABLE: 'stable',
+  /** Metric is declining over recent snapshots */
+  DECLINING: 'declining',
+} as const;
+
+export type TrendDirection = (typeof TrendDirection)[keyof typeof TrendDirection];

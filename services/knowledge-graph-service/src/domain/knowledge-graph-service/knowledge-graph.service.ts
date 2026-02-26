@@ -14,13 +14,15 @@
 import type {
   IGraphEdge,
   IGraphNode,
+  IMetacognitiveStageAssessment,
   IMisconceptionDetection,
   IPaginatedResponse,
+  IStructuralHealthReport,
   IStructuralMetrics,
   ISubgraph,
   MutationId,
   NodeId,
-  UserId
+  UserId,
 } from '@noema/types';
 
 import type { IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
@@ -291,6 +293,35 @@ export interface IKnowledgeGraphService {
     status: string,
     context: IExecutionContext
   ): Promise<IServiceResult<void>>;
+
+  // ========================================================================
+  // Structural Health & Metacognitive Stage (Phase 7)
+  // ========================================================================
+
+  /**
+   * Get a comprehensive structural health report for a user in a domain.
+   *
+   * Synthesizes metrics, misconceptions, and metacognitive stage into
+   * a single health assessment with per-metric breakdowns and trends.
+   */
+  getStructuralHealth(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IStructuralHealthReport>>;
+
+  /**
+   * Assess the user's metacognitive stage for a domain.
+   *
+   * Evaluates stage gate criteria based on structural metrics and
+   * returns the current stage, evidence, gaps to the next stage,
+   * and regression detection.
+   */
+  getMetacognitiveStage(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMetacognitiveStageAssessment>>;
 
   // ========================================================================
   // PKG↔CKG Comparison

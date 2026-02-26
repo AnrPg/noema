@@ -3,6 +3,7 @@
  *
  * Phase 5: PKG Operations & Service Layer Foundation.
  * Phase 6: CKG Mutation Pipeline (typestate-governed, async validation).
+ * Phase 7: Structural Metrics & Misconception Detection.
  *
  * Concrete implementation of IKnowledgeGraphService. Orchestrates graph
  * repository calls, edge policy enforcement, event publishing, operation
@@ -15,12 +16,15 @@
  * - Zod validation at service boundary (D2a)
  * - Metrics staleness via Prisma model (D4a)
  * - CKG mutations delegate to CkgMutationPipeline (Phase 6 D2a)
- * - Phase 7 methods (metrics, misconception, comparison) throw NotImplementedError
+ * - Structural metrics via StructuralMetricsEngine (Phase 7 ADR-006 D1-B)
+ * - Misconception detection via MisconceptionDetectionEngine (Phase 7 ADR-006 D3-C)
  *
  * @see ADR-0010 for edge policy architecture
  * @see ADR-005 for CKG mutation pipeline design
+ * @see ADR-006 for structural metrics & misconception detection design
  * @see PHASE-5-PKG-OPERATIONS.md for requirements
  * @see PHASE-6-CKG-MUTATION-PIPELINE.md for CKG mutation requirements
+ * @see PHASE-7-STRUCTURAL-METRICS.md for metrics & misconception requirements
  */
 
 import type { IAgentHints } from '@noema/contracts';
@@ -30,20 +34,28 @@ import type {
   EdgeId,
   IGraphEdge,
   IGraphNode,
+  IMetacognitiveStageAssessment,
   IMisconceptionDetection,
   IPaginatedResponse,
+  IStructuralHealthReport,
   IStructuralMetrics,
   ISubgraph,
+  MisconceptionPatternId,
+  MisconceptionStatus,
   MutationId,
   MutationState,
   NodeId,
   UserId,
 } from '@noema/types';
-import { EdgeWeight, GraphType } from '@noema/types';
+import { ConfidenceScore as ConfidenceScoreFactory, EdgeWeight, GraphType } from '@noema/types';
 import type { Logger } from 'pino';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
-import type { CkgMutationOperation, IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
+import type {
+  CkgMutationOperation,
+  IMutationFilter,
+  IMutationProposal,
+} from './ckg-mutation-dsl.js';
 import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import { ValidationError } from './errors/base.errors.js';
@@ -71,7 +83,17 @@ import {
 } from './knowledge-graph.schemas.js';
 import type { IKnowledgeGraphService } from './knowledge-graph.service.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
-import type { IMetricsHistoryOptions } from './metrics.repository.js';
+import type { IMetricsHistoryOptions, IMetricsRepository } from './metrics.repository.js';
+import {
+  assessMetacognitiveStage,
+  buildGraphComparison,
+  buildMetricComputationContext,
+  buildStructuralHealthReport,
+  StructuralMetricsEngine,
+} from './metrics/index.js';
+import type { IMisconceptionRepository } from './misconception.repository.js';
+import type { IMisconceptionDetectionContext } from './misconception/index.js';
+import { MisconceptionDetectionEngine } from './misconception/index.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
@@ -119,11 +141,15 @@ const MAX_PAGE_SIZE = 200;
  */
 export class KnowledgeGraphService implements IKnowledgeGraphService {
   private readonly logger: Logger;
+  private readonly metricsEngine = new StructuralMetricsEngine();
+  private readonly misconceptionEngine = new MisconceptionDetectionEngine();
 
   constructor(
     private readonly graphRepository: IGraphRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
     private readonly metricsStalenessRepository: IMetricsStalenessRepository,
+    private readonly metricsRepository: IMetricsRepository,
+    private readonly misconceptionRepository: IMisconceptionRepository,
     private readonly eventPublisher: IEventPublisher,
     private readonly mutationPipeline: CkgMutationPipeline,
     logger: Logger
@@ -141,7 +167,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphNode>> {
     this.requireAuth(context);
-    this.logger.info({ userId, nodeType: input.nodeType, domain: input.domain }, 'Creating PKG node');
+    this.logger.info(
+      { userId, nodeType: input.nodeType, domain: input.domain },
+      'Creating PKG node'
+    );
 
     // Validate input
     const validated = this.validateInput(CreateNodeInputSchema, input, 'CreateNodeInput');
@@ -285,10 +314,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       }
     }
 
-    this.logger.info(
-      { nodeId, changedFieldCount: changedFields.length },
-      'PKG node updated'
-    );
+    this.logger.info({ nodeId, changedFieldCount: changedFields.length }, 'PKG node updated');
 
     return {
       data: updatedNode,
@@ -469,7 +495,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     // Apply default weight from policy if not specified
     const edgeInput: ICreateEdgeInput = {
-      ...validated as ICreateEdgeInput,
+      ...(validated as ICreateEdgeInput),
       weight: input.weight ?? EdgeWeight.create(policy.defaultWeight),
     };
 
@@ -518,10 +544,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     // Mark metrics as stale (use source node's domain as representative)
     await this.markMetricsStale(userId, sourceNode.domain, 'edge_created');
 
-    this.logger.info(
-      { edgeId: edge.edgeId, edgeType: edge.edgeType },
-      'PKG edge created'
-    );
+    this.logger.info({ edgeId: edge.edgeId, edgeType: edge.edgeType }, 'PKG edge created');
 
     return {
       data: edge,
@@ -628,10 +651,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       }
     }
 
-    this.logger.info(
-      { edgeId, changedFieldCount: changedFields.length },
-      'PKG edge updated'
-    );
+    this.logger.info({ edgeId, changedFieldCount: changedFields.length }, 'PKG edge updated');
 
     return {
       data: updatedEdge,
@@ -688,10 +708,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       await this.markMetricsStale(userId, sourceNode.domain, 'edge_deleted');
     }
 
-    this.logger.info(
-      { edgeId, edgeType: existingEdge.edgeType },
-      'PKG edge deleted'
-    );
+    this.logger.info({ edgeId, edgeType: existingEdge.edgeType }, 'PKG edge deleted');
 
     return {
       data: undefined,
@@ -748,7 +765,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     context: IExecutionContext
   ): Promise<IServiceResult<ISubgraph>> {
     this.requireAuth(context);
-    this.logger.debug({ userId, rootNodeId, maxDepth: traversalOptions.maxDepth }, 'Getting PKG subgraph');
+    this.logger.debug(
+      { userId, rootNodeId, maxDepth: traversalOptions.maxDepth },
+      'Getting PKG subgraph'
+    );
 
     // Validate depth
     this.validateTraversalDepth(traversalOptions.maxDepth);
@@ -882,7 +902,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     // Verify root exists in CKG — return empty subgraph if not found
     const rootNode = await this.graphRepository.getNode(rootNodeId);
-    if (!rootNode || rootNode.graphType !== GraphType.CKG) {
+    if (rootNode?.graphType !== GraphType.CKG) {
       this.logger.info(
         { rootNodeId },
         'CKG subgraph root node not found — returning empty subgraph'
@@ -892,8 +912,18 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         data: emptySubgraph,
         agentHints: {
           suggestedNextActions: [
-            { action: 'verify_node_id', description: 'Verify the node ID belongs to the CKG', priority: 'high' as const, category: 'correction' },
-            { action: 'check_ingestion', description: 'Check if the domain has been ingested', priority: 'medium' as const, category: 'exploration' },
+            {
+              action: 'verify_node_id',
+              description: 'Verify the node ID belongs to the CKG',
+              priority: 'high' as const,
+              category: 'correction',
+            },
+            {
+              action: 'check_ingestion',
+              description: 'Check if the domain has been ingested',
+              priority: 'medium' as const,
+              category: 'exploration',
+            },
           ],
           relatedResources: [],
           confidence: 0,
@@ -955,72 +985,326 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   }
 
   // ========================================================================
-  // Phase 7 Stubs — Structural Metrics
+  // Phase 7 — Structural Metrics
   // ========================================================================
 
-  computeMetrics(
-    _userId: UserId,
-    _domain: string,
-    _context: IExecutionContext
+  async computeMetrics(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
-    throw new Error('Not implemented: computeMetrics is Phase 7');
+    this.requireAuth(context);
+    this.logger.info({ userId, domain }, 'Computing structural metrics');
+
+    // Fetch subgraphs in parallel
+    const [pkgSubgraph, ckgSubgraph] = await Promise.all([
+      this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
+      this.fetchDomainSubgraph(GraphType.CKG, domain),
+    ]);
+
+    // Build comparison
+    const comparison = buildGraphComparison(pkgSubgraph, ckgSubgraph);
+
+    // Get previous snapshot for delta metrics
+    const previousSnapshot = await this.metricsRepository.getLatestSnapshot(userId, domain);
+
+    // Build computation context
+    const ctx = buildMetricComputationContext(
+      pkgSubgraph,
+      ckgSubgraph,
+      comparison,
+      previousSnapshot,
+      domain,
+      userId
+    );
+
+    // Compute all 11 metrics
+    const metrics = this.metricsEngine.computeAll(ctx);
+
+    // Save snapshot
+    await this.metricsRepository.saveSnapshot(userId, domain, metrics);
+
+    // Publish event
+    await this.eventPublisher.publish({
+      eventType: KnowledgeGraphEventType.PKG_STRUCTURAL_METRICS_UPDATED,
+      aggregateType: 'PersonalKnowledgeGraph',
+      aggregateId: userId,
+      payload: { userId, domain, metrics },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    return {
+      data: metrics,
+      agentHints: this.createMetricsHints(metrics, domain),
+    };
   }
 
-  getMetrics(
-    _userId: UserId,
-    _domain: string,
-    _context: IExecutionContext
+  async getMetrics(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
-    throw new Error('Not implemented: getMetrics is Phase 7');
+    this.requireAuth(context);
+
+    const snapshot = await this.metricsRepository.getLatestSnapshot(userId, domain);
+    if (!snapshot) {
+      // No cached snapshot — compute fresh
+      return this.computeMetrics(userId, domain, context);
+    }
+
+    // Check staleness — compare snapshot.computedAt against last structural change
+    const isStale = await this.metricsStalenessRepository.isStale(
+      userId,
+      domain,
+      snapshot.computedAt
+    );
+    if (isStale) {
+      return this.computeMetrics(userId, domain, context);
+    }
+
+    return {
+      data: snapshot.metrics,
+      agentHints: this.createMetricsHints(snapshot.metrics, domain),
+    };
   }
 
-  getMetricsHistory(
-    _userId: UserId,
-    _domain: string,
-    _options: IMetricsHistoryOptions,
-    _context: IExecutionContext
+  async getMetricsHistory(
+    userId: UserId,
+    domain: string,
+    options: IMetricsHistoryOptions,
+    context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics[]>> {
-    throw new Error('Not implemented: getMetricsHistory is Phase 7');
+    this.requireAuth(context);
+
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, options);
+    const metricsList = snapshots.map((s) => s.metrics);
+
+    return {
+      data: metricsList,
+      agentHints: this.createListHints('metric snapshots', metricsList.length, metricsList.length),
+    };
   }
 
   // ========================================================================
-  // Phase 7 Stubs — Misconception Detection
+  // Phase 7 — Misconception Detection
   // ========================================================================
 
-  detectMisconceptions(
-    _userId: UserId,
-    _domain: string,
-    _context: IExecutionContext
+  async detectMisconceptions(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>> {
-    throw new Error('Not implemented: detectMisconceptions is Phase 7');
+    this.requireAuth(context);
+    this.logger.info({ userId, domain }, 'Running misconception detection');
+
+    // Fetch subgraphs
+    const [pkgSubgraph, ckgSubgraph] = await Promise.all([
+      this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
+      this.fetchDomainSubgraph(GraphType.CKG, domain),
+    ]);
+
+    const comparison = buildGraphComparison(pkgSubgraph, ckgSubgraph);
+
+    // Get active patterns
+    const patterns = await this.misconceptionRepository.getActivePatterns();
+
+    // Build detection context
+    const detectionCtx: IMisconceptionDetectionContext = {
+      pkgSubgraph,
+      ckgSubgraph,
+      comparison,
+      patterns,
+      domain,
+      userId: userId as string,
+    };
+
+    // Run detection engine
+    const rawResults = this.misconceptionEngine.detectAll(detectionCtx);
+
+    // Persist detections
+    const detections: IMisconceptionDetection[] = [];
+    for (const result of rawResults) {
+      if (result.confidence < 0.3) continue; // Filter very low confidence
+
+      // Find the pattern to get the misconception type
+      const pattern = patterns.find((p) => p.patternId === result.patternId);
+      if (!pattern) continue;
+
+      const record = await this.misconceptionRepository.recordDetection({
+        userId,
+        patternId: result.patternId as MisconceptionPatternId,
+        misconceptionType: pattern.misconceptionType,
+        affectedNodeIds: result.affectedNodeIds,
+        confidence: ConfidenceScoreFactory.clamp(result.confidence),
+      });
+
+      detections.push({
+        userId: record.userId as string,
+        misconceptionType: record.misconceptionType,
+        status: record.status,
+        affectedNodeIds: record.affectedNodeIds,
+        confidence: record.confidence,
+        patternId: record.patternId,
+        detectedAt: record.detectedAt,
+        resolvedAt: record.resolvedAt,
+      });
+    }
+
+    return {
+      data: detections,
+      agentHints: this.createMisconceptionHints(detections),
+    };
   }
 
-  getMisconceptions(
-    _userId: UserId,
-    _domain: string | undefined,
-    _context: IExecutionContext
+  async getMisconceptions(
+    userId: UserId,
+    domain: string | undefined,
+    context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>> {
-    throw new Error('Not implemented: getMisconceptions is Phase 7');
+    this.requireAuth(context);
+
+    const records = await this.misconceptionRepository.getActiveMisconceptions(userId, domain);
+
+    const detections: IMisconceptionDetection[] = records.map((r) => ({
+      userId: r.userId as string,
+      misconceptionType: r.misconceptionType,
+      status: r.status,
+      affectedNodeIds: r.affectedNodeIds,
+      confidence: r.confidence,
+      patternId: r.patternId,
+      detectedAt: r.detectedAt,
+      resolvedAt: r.resolvedAt,
+    }));
+
+    return {
+      data: detections,
+      agentHints: this.createMisconceptionHints(detections),
+    };
   }
 
-  updateMisconceptionStatus(
-    _detectionId: string,
-    _status: string,
-    _context: IExecutionContext
+  async updateMisconceptionStatus(
+    detectionId: string,
+    status: string,
+    context: IExecutionContext
   ): Promise<IServiceResult<void>> {
-    throw new Error('Not implemented: updateMisconceptionStatus is Phase 7');
+    this.requireAuth(context);
+
+    await this.misconceptionRepository.updateMisconceptionStatus(
+      detectionId,
+      status as MisconceptionStatus
+    );
+
+    return {
+      data: undefined,
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+        preferenceAlignment: [],
+        reasoning: `Misconception ${detectionId} status updated to "${status}"`,
+      },
+    };
   }
 
   // ========================================================================
-  // Phase 7 Stub — PKG↔CKG Comparison
+  // Phase 7 — Structural Health & Metacognitive Stage
   // ========================================================================
 
-  compareWithCkg(
-    _userId: UserId,
-    _domain: string,
-    _context: IExecutionContext
+  async getStructuralHealth(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IStructuralHealthReport>> {
+    this.requireAuth(context);
+
+    // Get or compute metrics
+    const { data: metrics } = await this.getMetrics(userId, domain, context);
+
+    // Get recent snapshots for trend
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: 5 });
+
+    // Get misconception count
+    const misconceptions = await this.misconceptionRepository.getActiveMisconceptions(
+      userId,
+      domain
+    );
+
+    // Get metacognitive stage
+    const previousSnapshot = snapshots.length > 1 ? snapshots[1] : undefined;
+    const previousMetrics = previousSnapshot?.metrics ?? null;
+    const stageAssessment = assessMetacognitiveStage(metrics, previousMetrics, domain);
+
+    // Build health report
+    const report = buildStructuralHealthReport(
+      metrics,
+      snapshots,
+      misconceptions.length,
+      stageAssessment.currentStage,
+      domain
+    );
+
+    return {
+      data: report,
+      agentHints: this.createHealthHints(report),
+    };
+  }
+
+  async getMetacognitiveStage(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMetacognitiveStageAssessment>> {
+    this.requireAuth(context);
+
+    // Get or compute metrics
+    const { data: metrics } = await this.getMetrics(userId, domain, context);
+
+    // Get previous metrics for regression detection
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: 2 });
+    const prevSnapshot = snapshots.length > 1 ? snapshots[1] : undefined;
+    const previousMetrics = prevSnapshot?.metrics ?? null;
+
+    const assessment = assessMetacognitiveStage(metrics, previousMetrics, domain);
+
+    return {
+      data: assessment,
+      agentHints: this.createStageHints(assessment),
+    };
+  }
+
+  // ========================================================================
+  // Phase 7 — PKG↔CKG Comparison
+  // ========================================================================
+
+  async compareWithCkg(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
   ): Promise<IServiceResult<IGraphComparison>> {
-    throw new Error('Not implemented: compareWithCkg is Phase 7');
+    this.requireAuth(context);
+    this.logger.info({ userId, domain }, 'Comparing PKG with CKG');
+
+    const [pkgSubgraph, ckgSubgraph] = await Promise.all([
+      this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
+      this.fetchDomainSubgraph(GraphType.CKG, domain),
+    ]);
+
+    const comparison = buildGraphComparison(pkgSubgraph, ckgSubgraph);
+
+    return {
+      data: comparison,
+      agentHints: this.createComparisonHints(comparison),
+    };
   }
 
   // ========================================================================
@@ -1034,11 +1318,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     this.requireAuth(context);
 
     // Validate proposal at service boundary
-    const validated = this.validateInput(
-      MutationProposalSchema,
-      proposal,
-      'MutationProposal'
-    );
+    const validated = this.validateInput(MutationProposalSchema, proposal, 'MutationProposal');
 
     // Infer agentId from context (userId acts as proposer at the service level)
     const agentId = (context.userId ?? 'agent_unknown') as AgentId;
@@ -1084,15 +1364,17 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     this.requireAuth(context);
 
     // Validate filters at service boundary
-    const validated = this.validateInput(
-      MutationFilterSchema,
-      filters,
-      'MutationFilter'
-    );
+    const validated = this.validateInput(MutationFilterSchema, filters, 'MutationFilter');
 
-    const listFilters: { state?: MutationState; proposedBy?: AgentId; createdAfter?: string; createdBefore?: string } = {};
+    const listFilters: {
+      state?: MutationState;
+      proposedBy?: AgentId;
+      createdAfter?: string;
+      createdBefore?: string;
+    } = {};
     if (validated.state !== undefined) listFilters.state = validated.state as MutationState;
-    if (validated.proposedBy !== undefined) listFilters.proposedBy = validated.proposedBy as AgentId;
+    if (validated.proposedBy !== undefined)
+      listFilters.proposedBy = validated.proposedBy as AgentId;
     if (validated.createdAfter !== undefined) listFilters.createdAfter = validated.createdAfter;
     if (validated.createdBefore !== undefined) listFilters.createdBefore = validated.createdBefore;
 
@@ -1201,7 +1483,13 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
    * Follows the content-service safeParse + throw pattern.
    */
   private validateInput<T>(
-    schema: { safeParse: (data: unknown) => { success: boolean; data?: T; error?: { flatten: () => { fieldErrors: Record<string, string[]> } } } },
+    schema: {
+      safeParse: (data: unknown) => {
+        success: boolean;
+        data?: T;
+        error?: { flatten: () => { fieldErrors: Record<string, string[]> } };
+      };
+    },
     input: unknown,
     schemaName: string
   ): T {
@@ -1211,10 +1499,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         throw new ValidationError(`${schemaName} validation failed`, {});
       }
       const errors = result.error.flatten();
-      throw new ValidationError(
-        `${schemaName} validation failed`,
-        errors.fieldErrors
-      );
+      throw new ValidationError(`${schemaName} validation failed`, errors.fieldErrors);
     }
     if (result.data === undefined) {
       throw new ValidationError(`${schemaName} validation returned no data`, {});
@@ -1251,13 +1536,21 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       changes.push({ field: 'label', before: existing.label, after: updates.label });
     }
     if (updates.description !== undefined && updates.description !== existing.description) {
-      changes.push({ field: 'description', before: existing.description, after: updates.description });
+      changes.push({
+        field: 'description',
+        before: existing.description,
+        after: updates.description,
+      });
     }
     if (updates.domain !== undefined && updates.domain !== existing.domain) {
       changes.push({ field: 'domain', before: existing.domain, after: updates.domain });
     }
     if (updates.masteryLevel !== undefined && updates.masteryLevel !== existing.masteryLevel) {
-      changes.push({ field: 'masteryLevel', before: existing.masteryLevel, after: updates.masteryLevel });
+      changes.push({
+        field: 'masteryLevel',
+        before: existing.masteryLevel,
+        after: updates.masteryLevel,
+      });
     }
     if (updates.properties !== undefined) {
       changes.push({ field: 'properties', before: existing.properties, after: updates.properties });
@@ -1275,7 +1568,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   ): readonly { readonly field: string; readonly before: unknown; readonly after: unknown }[] {
     const changes: { field: string; before: unknown; after: unknown }[] = [];
 
-    if (updates.weight !== undefined && (updates.weight as number) !== (existing.weight as number)) {
+    if (
+      updates.weight !== undefined &&
+      (updates.weight as number) !== (existing.weight as number)
+    ) {
       changes.push({ field: 'weight', before: existing.weight, after: updates.weight });
     }
     if (updates.properties !== undefined) {
@@ -1283,6 +1579,54 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     }
 
     return changes;
+  }
+
+  // ========================================================================
+  // Private — Domain Subgraph Fetching (Phase 7)
+  // ========================================================================
+
+  /**
+   * Fetch all nodes and intra-domain edges for a given graph type and domain.
+   * Used by Phase 7 metrics and comparison operations.
+   */
+  private async fetchDomainSubgraph(
+    graphType: GraphType,
+    domain: string,
+    userId?: UserId
+  ): Promise<ISubgraph> {
+    const filter: INodeFilter = {
+      graphType,
+      domain,
+      ...(userId !== undefined && { userId: userId as string }),
+      includeDeleted: false,
+    };
+
+    // Fetch all nodes in this domain — use a generous limit
+    const nodes = await this.graphRepository.findNodes(filter, 10_000, 0);
+
+    if (nodes.length === 0) {
+      return { nodes: [], edges: [] };
+    }
+
+    // Collect all node IDs for filtering edges
+    const nodeIdSet = new Set<string>(nodes.map((n) => n.nodeId as string));
+
+    // Get outbound edges for each node, filter to intra-domain
+    const edgeArrays = await Promise.all(
+      nodes.map((n) => this.graphRepository.getEdgesForNode(n.nodeId, 'outbound'))
+    );
+
+    const edges: IGraphEdge[] = [];
+    for (const arr of edgeArrays) {
+      for (const edge of arr) {
+        // Only include edges where both endpoints are in our domain set
+        if (nodeIdSet.has(edge.targetNodeId as string)) {
+          edges.push(edge);
+        }
+      }
+    }
+
+    return { nodes, edges };
   }
 
   // ========================================================================
@@ -1800,9 +2144,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       sourceQuality: 'high',
       validityPeriod: 'short',
       contextNeeded: [],
-      assumptions: isTerminal
-        ? []
-        : ['Mutation is processing asynchronously — state may change'],
+      assumptions: isTerminal ? [] : ['Mutation is processing asynchronously — state may change'],
       riskFactors: [],
       dependencies: [],
       estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3.0 },
@@ -1852,6 +2194,271 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
       preferenceAlignment: [],
       reasoning: `Found ${String(mutations.length)} mutation(s): ${stateBreakdown}`,
+    };
+  }
+
+  // ========================================================================
+  // Private — Phase 7 Agent Hints
+  // ========================================================================
+
+  /**
+   * Create agent hints for structural metrics results.
+   */
+  private createMetricsHints(metrics: IStructuralMetrics, domain: string): IAgentHints {
+    const warningMetrics: string[] = [];
+    if (metrics.abstractionDrift > 0.6) warningMetrics.push('abstractionDrift');
+    if (metrics.scopeLeakageIndex > 0.5) warningMetrics.push('scopeLeakageIndex');
+    if (metrics.siblingConfusionEntropy > 0.6) warningMetrics.push('siblingConfusionEntropy');
+    if (metrics.structuralAttributionAccuracy < 0.4)
+      warningMetrics.push('structuralAttributionAccuracy');
+
+    const actions: IAgentHints['suggestedNextActions'] = [
+      {
+        action: 'get_structural_health',
+        description: 'Get full health report with trends',
+        priority: 'medium',
+        category: 'exploration',
+      },
+      {
+        action: 'get_metacognitive_stage',
+        description: 'Assess metacognitive development stage',
+        priority: 'medium',
+        category: 'exploration',
+      },
+    ];
+    if (warningMetrics.length > 0) {
+      actions.push({
+        action: 'detect_misconceptions',
+        description: `Run misconception detection — warning metrics: ${warningMetrics.join(', ')}`,
+        priority: 'high',
+        category: 'correction',
+      });
+    }
+
+    const risks: IAgentHints['riskFactors'] =
+      warningMetrics.length > 0
+        ? [
+            {
+              type: 'accuracy',
+              severity: 'medium',
+              description: `${String(warningMetrics.length)} metric(s) in warning range`,
+              probability: 0.7,
+              impact: 0.5,
+            },
+          ]
+        : [];
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: [],
+      confidence: 0.95,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: ['Metrics computed from current graph state'],
+      riskFactors: risks,
+      dependencies: [],
+      estimatedImpact: { benefit: 0.6, effort: 0.1, roi: 6.0 },
+      preferenceAlignment: [],
+      reasoning: `Computed 11 structural metrics for domain "${domain}". ${warningMetrics.length > 0 ? `Warning metrics: ${warningMetrics.join(', ')}` : 'All metrics within healthy range.'}`,
+    };
+  }
+
+  /**
+   * Create agent hints for graph comparison results.
+   */
+  private createComparisonHints(comparison: IGraphComparison): IAgentHints {
+    const risks: IAgentHints['riskFactors'] =
+      comparison.structuralDivergences.length > 0
+        ? [
+            {
+              type: 'accuracy',
+              severity: 'medium',
+              description: `${String(comparison.structuralDivergences.length)} divergence(s) found between PKG and CKG`,
+              probability: 0.8,
+              impact: 0.4,
+            },
+          ]
+        : [];
+
+    return {
+      suggestedNextActions: [
+        {
+          action: 'compute_metrics',
+          description: 'Compute structural metrics from this comparison',
+          priority: 'medium',
+          category: 'exploration',
+        },
+      ],
+      relatedResources: [],
+      confidence: 0.9,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: ['Comparison computed from current graph state'],
+      riskFactors: risks,
+      dependencies: [],
+      estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+      preferenceAlignment: [],
+      reasoning: `Comparison: ${String(comparison.nodeAlignment.size)} aligned nodes, ${String(comparison.unmatchedPkgNodes.length)} PKG-only, ${String(comparison.unmatchedCkgNodes.length)} CKG-only, ${String(comparison.structuralDivergences.length)} divergences.`,
+    };
+  }
+
+  /**
+   * Create agent hints for misconception detection results.
+   */
+  private createMisconceptionHints(detections: IMisconceptionDetection[]): IAgentHints {
+    const highConfidence = detections.filter((d) => (d.confidence as number) >= 0.7);
+
+    const actions: IAgentHints['suggestedNextActions'] = [];
+    if (highConfidence.length > 0) {
+      actions.push({
+        action: 'review_misconceptions',
+        description: `Review ${String(highConfidence.length)} high-confidence misconception(s)`,
+        priority: 'high',
+        category: 'correction',
+      });
+    }
+    actions.push({
+      action: 'get_structural_health',
+      description: 'Check overall structural health',
+      priority: 'medium',
+      category: 'exploration',
+    });
+
+    const risks: IAgentHints['riskFactors'] =
+      highConfidence.length > 0
+        ? [
+            {
+              type: 'accuracy',
+              severity: 'high',
+              description: `${String(highConfidence.length)} high-confidence misconception(s) requiring attention`,
+              probability: 0.9,
+              impact: 0.7,
+            },
+          ]
+        : [];
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: detections.slice(0, 5).map((d) => ({
+        type: 'Misconception' as const,
+        id: d.patternId as string,
+        label: `${d.misconceptionType} (confidence: ${(d.confidence as number).toFixed(2)})`,
+        relevance: d.confidence as number,
+      })),
+      confidence: 0.85,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: ['Detection run against current graph state'],
+      riskFactors: risks,
+      dependencies: [],
+      estimatedImpact: { benefit: 0.7, effort: 0.3, roi: 2.3 },
+      preferenceAlignment: [],
+      reasoning: `Detected ${String(detections.length)} misconception(s): ${String(highConfidence.length)} high-confidence, ${String(detections.length - highConfidence.length)} low-confidence.`,
+    };
+  }
+
+  /**
+   * Create agent hints for structural health report.
+   */
+  private createHealthHints(report: IStructuralHealthReport): IAgentHints {
+    const status =
+      report.overallScore >= 0.7 ? 'healthy' : report.overallScore >= 0.4 ? 'warning' : 'critical';
+
+    const actions: IAgentHints['suggestedNextActions'] = [
+      {
+        action: 'get_metacognitive_stage',
+        description: 'Check metacognitive development stage',
+        priority: 'medium',
+        category: 'exploration',
+      },
+    ];
+    if (status !== 'healthy') {
+      actions.push({
+        action: 'detect_misconceptions',
+        description: 'Run misconception detection for unhealthy graph',
+        priority: 'high',
+        category: 'correction',
+      });
+    }
+
+    const risks: IAgentHints['riskFactors'] =
+      status === 'critical'
+        ? [
+            {
+              type: 'accuracy',
+              severity: 'critical',
+              description: 'Graph health is critical — intervention recommended',
+              probability: 0.9,
+              impact: 0.9,
+            },
+          ]
+        : [];
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: [],
+      confidence: 0.9,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: ['Health report computed from latest metrics'],
+      riskFactors: risks,
+      dependencies: [],
+      estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+      preferenceAlignment: [],
+      reasoning: `Structural health: ${status} (score: ${report.overallScore.toFixed(2)}). Domain: ${report.domain}.`,
+    };
+  }
+
+  /**
+   * Create agent hints for metacognitive stage assessment.
+   */
+  private createStageHints(assessment: IMetacognitiveStageAssessment): IAgentHints {
+    const actions: IAgentHints['suggestedNextActions'] = [
+      {
+        action: 'get_structural_health',
+        description: 'Get full structural health report',
+        priority: 'medium',
+        category: 'exploration',
+      },
+    ];
+    if (assessment.nextStageGaps.length > 0) {
+      actions.push({
+        action: 'address_stage_gaps',
+        description: `Address ${String(assessment.nextStageGaps.length)} gap(s) to reach next stage`,
+        priority: 'medium',
+        category: 'optimization',
+      });
+    }
+
+    const risks: IAgentHints['riskFactors'] = assessment.regressionDetected
+      ? [
+          {
+            type: 'accuracy',
+            severity: 'high',
+            description: 'Stage regression detected — review recent changes',
+            probability: 0.8,
+            impact: 0.6,
+          },
+        ]
+      : [];
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: [],
+      confidence: 0.85,
+      sourceQuality: 'high',
+      validityPeriod: 'medium',
+      contextNeeded: [],
+      assumptions: ['Stage assessment from latest metrics'],
+      riskFactors: risks,
+      dependencies: [],
+      estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+      preferenceAlignment: [],
+      reasoning: `Metacognitive stage: ${assessment.currentStage}. ${assessment.regressionDetected ? 'Regression detected. ' : ''}${String(assessment.nextStageGaps.length)} gap(s) to next stage.`,
     };
   }
 }
