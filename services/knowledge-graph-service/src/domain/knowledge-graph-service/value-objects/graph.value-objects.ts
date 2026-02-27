@@ -15,6 +15,7 @@ import type {
   GraphType,
   IGraphEdge,
   IGraphNode,
+  MasteryLevel,
   NodeId,
 } from '@noema/types';
 
@@ -514,18 +515,16 @@ export const NeighborhoodQuery = {
   }): DeepReadonly<INeighborhoodQuery> {
     const hops = input.hops ?? 1;
     if (!Number.isInteger(hops) || hops < 1 || hops > 10) {
-      throw new ValidationError(
-        'NeighborhoodQuery.hops must be an integer in [1, 10]',
-        { hops: [`Received ${String(hops)}`] }
-      );
+      throw new ValidationError('NeighborhoodQuery.hops must be an integer in [1, 10]', {
+        hops: [`Received ${String(hops)}`],
+      });
     }
 
     const maxPerGroup = input.maxPerGroup ?? 25;
     if (!Number.isInteger(maxPerGroup) || maxPerGroup < 1 || maxPerGroup > 100) {
-      throw new ValidationError(
-        'NeighborhoodQuery.maxPerGroup must be an integer in [1, 100]',
-        { maxPerGroup: [`Received ${String(maxPerGroup)}`] }
-      );
+      throw new ValidationError('NeighborhoodQuery.maxPerGroup must be an integer in [1, 100]', {
+        maxPerGroup: [`Received ${String(maxPerGroup)}`],
+      });
     }
 
     const query: INeighborhoodQuery = {
@@ -574,4 +573,291 @@ export interface INeighborhoodResult {
   readonly edges: readonly IGraphEdge[];
   /** Total unique neighbor count across all groups */
   readonly totalNeighborCount: number;
+}
+
+// ============================================================================
+// BridgeQuery (Phase 8c)
+// ============================================================================
+
+/**
+ * Query parameters for bridge node (articulation point) detection.
+ *
+ * Bridge nodes are concepts whose removal would disconnect part of the
+ * knowledge graph — structurally critical threshold concepts.
+ */
+export interface IBridgeQuery {
+  /** Knowledge domain to analyze */
+  readonly domain: string;
+
+  /** Only consider these edge types for connectivity (undefined = all) */
+  readonly edgeTypes?: readonly GraphEdgeType[];
+
+  /** Minimum downstream component size for a node to qualify as a bridge */
+  readonly minComponentSize: number;
+}
+
+/**
+ * Factory for creating validated, frozen `IBridgeQuery` instances.
+ */
+export const BridgeQuery = {
+  create(input: {
+    domain: string;
+    edgeTypes?: readonly GraphEdgeType[];
+    minComponentSize?: number;
+  }): DeepReadonly<IBridgeQuery> {
+    if (!input.domain || input.domain.trim().length === 0) {
+      throw new ValidationError('BridgeQuery.domain must be a non-empty string', {
+        domain: ['Received empty string'],
+      });
+    }
+
+    const minComponentSize = input.minComponentSize ?? 2;
+    if (!Number.isInteger(minComponentSize) || minComponentSize < 1 || minComponentSize > 1000) {
+      throw new ValidationError('BridgeQuery.minComponentSize must be an integer in [1, 1000]', {
+        minComponentSize: [`Received ${String(minComponentSize)}`],
+      });
+    }
+
+    const query: IBridgeQuery = {
+      domain: input.domain.trim(),
+      ...(input.edgeTypes !== undefined ? { edgeTypes: [...input.edgeTypes] } : {}),
+      minComponentSize,
+    };
+
+    return Object.freeze(query) as DeepReadonly<IBridgeQuery>;
+  },
+};
+
+// ============================================================================
+// BridgeNode & BridgeNodesResult (Phase 8c)
+// ============================================================================
+
+/**
+ * A single bridge node (articulation point) with impact metrics.
+ */
+export interface IBridgeNode {
+  /** The bridge node */
+  readonly node: IGraphNode;
+  /** Number of connected components created if this node were removed */
+  readonly componentsCreated: number;
+  /** Sizes of the downstream components that would be disconnected */
+  readonly downstreamComponentSizes: readonly number[];
+  /** Total nodes that would become unreachable */
+  readonly totalAffectedNodes: number;
+  /** The edge types through which this node is a bridge */
+  readonly bridgeEdgeTypes: readonly GraphEdgeType[];
+}
+
+/**
+ * Complete result of a bridge nodes (articulation points) query.
+ */
+export interface IBridgeNodesResult {
+  /** Total nodes analyzed in the domain subgraph */
+  readonly totalNodesAnalyzed: number;
+  /** Identified bridge nodes, ordered by impact (largest downstream first) */
+  readonly bridges: readonly IBridgeNode[];
+}
+
+// ============================================================================
+// FrontierQuery (Phase 8c)
+// ============================================================================
+
+/** Sorting strategy for frontier nodes. */
+export type FrontierSortBy = 'readiness' | 'centrality' | 'depth';
+
+/**
+ * Query parameters for knowledge frontier detection.
+ *
+ * The knowledge frontier is the set of unmastered nodes whose prerequisites
+ * are mastered — the optimal next-study candidates.
+ */
+export interface IFrontierQuery {
+  /** Knowledge domain */
+  readonly domain: string;
+
+  /** Mastery level above which a node is considered "mastered" */
+  readonly masteryThreshold: MasteryLevel;
+
+  /** Maximum frontier nodes to return */
+  readonly maxResults: number;
+
+  /** Sort strategy */
+  readonly sortBy: FrontierSortBy;
+
+  /** Whether to include each frontier node's mastered prerequisites */
+  readonly includePrerequisites: boolean;
+}
+
+/**
+ * Factory for creating validated, frozen `IFrontierQuery` instances.
+ */
+export const FrontierQuery = {
+  create(input: {
+    domain: string;
+    masteryThreshold?: number;
+    maxResults?: number;
+    sortBy?: FrontierSortBy;
+    includePrerequisites?: boolean;
+  }): DeepReadonly<IFrontierQuery> {
+    if (!input.domain || input.domain.trim().length === 0) {
+      throw new ValidationError('FrontierQuery.domain must be a non-empty string', {
+        domain: ['Received empty string'],
+      });
+    }
+
+    const masteryThreshold = input.masteryThreshold ?? 0.7;
+    if (masteryThreshold < 0 || masteryThreshold > 1) {
+      throw new ValidationError('FrontierQuery.masteryThreshold must be in [0, 1]', {
+        masteryThreshold: [`Received ${String(masteryThreshold)}`],
+      });
+    }
+
+    const maxResults = input.maxResults ?? 20;
+    if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 100) {
+      throw new ValidationError('FrontierQuery.maxResults must be an integer in [1, 100]', {
+        maxResults: [`Received ${String(maxResults)}`],
+      });
+    }
+
+    const query: IFrontierQuery = {
+      domain: input.domain.trim(),
+      masteryThreshold: masteryThreshold as MasteryLevel,
+      maxResults,
+      sortBy: input.sortBy ?? 'readiness',
+      includePrerequisites: input.includePrerequisites ?? false,
+    };
+
+    return Object.freeze(query) as DeepReadonly<IFrontierQuery>;
+  },
+};
+
+// ============================================================================
+// FrontierNode & KnowledgeFrontierResult (Phase 8c)
+// ============================================================================
+
+/**
+ * A single frontier node — a concept the learner is ready to study next.
+ */
+export interface IFrontierNode {
+  /** The frontier node */
+  readonly node: IGraphNode;
+  /** Average mastery of its prerequisite parents */
+  readonly prerequisiteMasteryAvg: number;
+  /** Number of mastered prerequisites / total prerequisites */
+  readonly prerequisiteReadiness: string;
+  /** Readiness score (0–1): how prepared the learner is for this concept */
+  readonly readinessScore: number;
+  /** Mastered prerequisites (if includePrerequisites=true) */
+  readonly masteredPrerequisites?: readonly IGraphNode[];
+}
+
+/**
+ * Summary statistics for the knowledge frontier analysis.
+ */
+export interface IFrontierSummary {
+  /** Number of nodes with mastery ≥ threshold */
+  readonly totalMastered: number;
+  /** Number of nodes with mastery < threshold */
+  readonly totalUnmastered: number;
+  /** Number of frontier nodes (unmastered with mastered prereqs) */
+  readonly totalFrontier: number;
+  /** Number of deep-unmastered nodes (unmastered with unmastered prereqs) */
+  readonly totalDeepUnmastered: number;
+  /** mastered / total */
+  readonly masteryPercentage: number;
+}
+
+/**
+ * Complete result of a knowledge frontier query.
+ */
+export interface IKnowledgeFrontierResult {
+  /** Knowledge domain analyzed */
+  readonly domain: string;
+  /** Mastery threshold used */
+  readonly masteryThreshold: number;
+  /** Frontier nodes — ready to learn next */
+  readonly frontier: readonly IFrontierNode[];
+  /** Summary statistics */
+  readonly summary: IFrontierSummary;
+}
+
+// ============================================================================
+// CommonAncestorsQuery (Phase 8c)
+// ============================================================================
+
+/**
+ * Query parameters for common ancestor detection between two nodes.
+ */
+export interface ICommonAncestorsQuery {
+  /** Edge types to traverse for ancestry */
+  readonly edgeTypes: readonly GraphEdgeType[];
+
+  /** Maximum depth for ancestor search */
+  readonly maxDepth: number;
+}
+
+/**
+ * Factory for creating validated, frozen `ICommonAncestorsQuery` instances.
+ */
+export const CommonAncestorsQuery = {
+  create(input: {
+    edgeTypes?: readonly GraphEdgeType[];
+    maxDepth?: number;
+  }): DeepReadonly<ICommonAncestorsQuery> {
+    const edgeTypes: readonly GraphEdgeType[] =
+      input.edgeTypes !== undefined && input.edgeTypes.length > 0
+        ? [...input.edgeTypes]
+        : (['prerequisite', 'is_a', 'part_of'] as GraphEdgeType[]);
+
+    const maxDepth = input.maxDepth ?? 10;
+    if (!Number.isInteger(maxDepth) || maxDepth < 1 || maxDepth > 20) {
+      throw new ValidationError('CommonAncestorsQuery.maxDepth must be an integer in [1, 20]', {
+        maxDepth: [`Received ${String(maxDepth)}`],
+      });
+    }
+
+    const query: ICommonAncestorsQuery = {
+      edgeTypes,
+      maxDepth,
+    };
+
+    return Object.freeze(query) as DeepReadonly<ICommonAncestorsQuery>;
+  },
+};
+
+// ============================================================================
+// CommonAncestorEntry & CommonAncestorsResult (Phase 8c)
+// ============================================================================
+
+/**
+ * A single common ancestor entry with depth information.
+ */
+export interface ICommonAncestorEntry {
+  /** The ancestor node */
+  readonly node: IGraphNode;
+  /** Depth from nodeA to this ancestor */
+  readonly depthFromA: number;
+  /** Depth from nodeB to this ancestor */
+  readonly depthFromB: number;
+  /** Sum of depths (lower = closer = more relevant as LCA) */
+  readonly combinedDepth: number;
+}
+
+/**
+ * Complete result of a common ancestors query.
+ */
+export interface ICommonAncestorsResult {
+  /** The two query nodes */
+  readonly nodeA: IGraphNode;
+  readonly nodeB: IGraphNode;
+  /** The Lowest Common Ancestor(s) — closest shared ancestor(s) */
+  readonly lowestCommonAncestors: readonly IGraphNode[];
+  /** All common ancestors, ordered by depth from nodes (shallowest first) */
+  readonly allCommonAncestors: readonly ICommonAncestorEntry[];
+  /** Whether the two nodes are directly connected */
+  readonly directlyConnected: boolean;
+  /** Path from nodeA to LCA (if exists) */
+  readonly pathFromA: readonly IGraphNode[];
+  /** Path from nodeB to LCA (if exists) */
+  readonly pathFromB: readonly IGraphNode[];
 }

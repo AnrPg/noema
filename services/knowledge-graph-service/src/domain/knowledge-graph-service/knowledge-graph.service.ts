@@ -22,7 +22,7 @@ import type {
   ISubgraph,
   MutationId,
   NodeId,
-  UserId
+  UserId,
 } from '@noema/types';
 
 import type { IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
@@ -37,8 +37,14 @@ import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
+  IBridgeNodesResult,
+  IBridgeQuery,
+  ICommonAncestorsQuery,
+  ICommonAncestorsResult,
   ICoParentsQuery,
   ICoParentsResult,
+  IFrontierQuery,
+  IKnowledgeFrontierResult,
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
@@ -240,6 +246,49 @@ export interface IKnowledgeGraphService {
   ): Promise<IServiceResult<INeighborhoodResult>>;
 
   // ========================================================================
+  // PKG Structural Analysis (Phase 8c)
+  // ========================================================================
+
+  /**
+   * Detect bridge nodes (articulation points) in the user's PKG for a domain.
+   *
+   * Bridge nodes are concepts whose removal would disconnect part of the
+   * knowledge graph. Tries GDS native detection first, falls back to
+   * application-code Tarjan's algorithm.
+   */
+  getBridgeNodes(
+    userId: UserId,
+    query: IBridgeQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IBridgeNodesResult>>;
+
+  /**
+   * Get the knowledge frontier for a user in a domain.
+   *
+   * Returns unmastered nodes whose prerequisites are mastered — the
+   * optimal set for scheduling new study material. PKG-only.
+   */
+  getKnowledgeFrontier(
+    userId: UserId,
+    query: IFrontierQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IKnowledgeFrontierResult>>;
+
+  /**
+   * Find common ancestors of two nodes in the user's PKG.
+   *
+   * Computes the intersection of ancestor sets and extracts the Lowest
+   * Common Ancestor(s).
+   */
+  getCommonAncestors(
+    userId: UserId,
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICommonAncestorsResult>>;
+
+  // ========================================================================
   // CKG Operations (read-only)
   // ========================================================================
 
@@ -269,10 +318,7 @@ export interface IKnowledgeGraphService {
   /**
    * Get an edge from the CKG by ID.
    */
-  getCkgEdge(
-    edgeId: EdgeId,
-    context: IExecutionContext
-  ): Promise<IServiceResult<IGraphEdge>>;
+  getCkgEdge(edgeId: EdgeId, context: IExecutionContext): Promise<IServiceResult<IGraphEdge>>;
 
   /**
    * List edges in the CKG with filters and pagination.
@@ -342,6 +388,31 @@ export interface IKnowledgeGraphService {
     query: INeighborhoodQuery,
     context: IExecutionContext
   ): Promise<IServiceResult<INeighborhoodResult>>;
+
+  // ========================================================================
+  // CKG Structural Analysis (Phase 8c)
+  // ========================================================================
+
+  /**
+   * Detect bridge nodes (articulation points) in the CKG for a domain.
+   * Same semantics as PKG getBridgeNodes, but without userId scoping.
+   */
+  getCkgBridgeNodes(
+    query: IBridgeQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IBridgeNodesResult>>;
+
+  /**
+   * Find common ancestors of two nodes in the CKG.
+   * Same semantics as PKG getCommonAncestors, but without userId scoping.
+   * (No CKG frontier — CKG has no mastery levels.)
+   */
+  getCkgCommonAncestors(
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICommonAncestorsResult>>;
 
   // ========================================================================
   // Structural Metrics

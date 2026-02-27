@@ -47,6 +47,10 @@ import type {
 import type {
   ICoParentsQuery,
   ICoParentsResult,
+  ICommonAncestorsQuery,
+  ICommonAncestorsResult,
+  IFrontierQuery,
+  IKnowledgeFrontierResult,
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
@@ -757,7 +761,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
   ): Promise<ISiblingsResult> {
     const relType = edgeTypeToRelType(query.edgeType);
     const userFilter =
-      userId !== undefined ? 'AND me.userId = $userId AND parent.userId = $userId AND sibling.userId = $userId' : '';
+      userId !== undefined
+        ? 'AND me.userId = $userId AND parent.userId = $userId AND sibling.userId = $userId'
+        : '';
 
     // Direction-dispatched: outbound = me→parent, inbound = parent→me
     const matchClause =
@@ -769,10 +775,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
     try {
       // First, fetch the origin node
       const originResult = await session.executeRead(async (tx: ManagedTransaction) => {
-        return tx.run(
-          `MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`,
-          { nodeId, ...(userId !== undefined ? { userId } : {}) }
-        );
+        return tx.run(`MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`, {
+          nodeId,
+          ...(userId !== undefined ? { userId } : {}),
+        });
       });
       const originRecord = originResult.records[0];
       if (!originRecord) {
@@ -837,7 +843,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
   ): Promise<ICoParentsResult> {
     const relType = edgeTypeToRelType(query.edgeType);
     const userFilter =
-      userId !== undefined ? 'AND me.userId = $userId AND child.userId = $userId AND coParent.userId = $userId' : '';
+      userId !== undefined
+        ? 'AND me.userId = $userId AND child.userId = $userId AND coParent.userId = $userId'
+        : '';
 
     // Direction-dispatched: outbound = me→child, inbound = child→me
     const matchClause =
@@ -849,10 +857,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
     try {
       // First, fetch the origin node
       const originResult = await session.executeRead(async (tx: ManagedTransaction) => {
-        return tx.run(
-          `MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`,
-          { nodeId, ...(userId !== undefined ? { userId } : {}) }
-        );
+        return tx.run(`MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`, {
+          nodeId,
+          ...(userId !== undefined ? { userId } : {}),
+        });
       });
       const originRecord = originResult.records[0];
       if (!originRecord) {
@@ -931,10 +939,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
     try {
       // First, fetch the origin node
       const originResult = await session.executeRead(async (tx: ManagedTransaction) => {
-        return tx.run(
-          `MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`,
-          { nodeId }
-        );
+        return tx.run(`MATCH (n {nodeId: $nodeId}) WHERE n.isDeleted = false RETURN n`, { nodeId });
       });
       const originRecord = originResult.records[0];
       if (!originRecord) {
@@ -951,10 +956,17 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const params: Record<string, unknown> = {
         nodeId,
         ...(userId !== undefined ? { userId } : {}),
-        ...(query.nodeTypes !== undefined && query.nodeTypes.length > 0 ? { nodeTypes: query.nodeTypes } : {}),
+        ...(query.nodeTypes !== undefined && query.nodeTypes.length > 0
+          ? { nodeTypes: query.nodeTypes }
+          : {}),
       };
 
-      let groupsResult: { edgeType: string; direction: string; neighbors: neo4j.Node[]; totalInGroup: number }[];
+      let groupsResult: {
+        edgeType: string;
+        direction: string;
+        neighbors: neo4j.Node[];
+        totalInGroup: number;
+      }[];
       let edgeRecords: IGraphEdge[] = [];
 
       if (query.filterMode === 'immediate' && query.hops > 1) {
@@ -1022,7 +1034,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       // Optionally fetch edges
       if (query.includeEdges) {
         const allNeighborNodeIds = groupsResult.flatMap((g) =>
-          g.neighbors.map((n) => (mapNodeToGraphNode(n)).nodeId)
+          g.neighbors.map((n) => mapNodeToGraphNode(n).nodeId)
         );
         if (allNeighborNodeIds.length > 0) {
           const edgesResult = await session.executeRead(async (tx: ManagedTransaction) => {
@@ -1061,6 +1073,431 @@ export class Neo4jGraphRepository implements IGraphRepository {
         groups,
         edges: query.includeEdges ? edgeRecords : [],
         totalNeighborCount,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  // ==========================================================================
+  // Phase 8c: Structural Analysis Operations
+  // ==========================================================================
+
+  /**
+   * GDS availability detection. Cached after first check.
+   */
+  private gdsAvailable: boolean | undefined;
+
+  private async checkGdsAvailability(): Promise<boolean> {
+    if (this.gdsAvailable !== undefined) return this.gdsAvailable;
+
+    const session = this.neo4j.getSession();
+    try {
+      await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run('RETURN gds.version() AS version');
+      });
+      this.gdsAvailable = true;
+      this.logger.info('Neo4j GDS detected — native graph algorithms available');
+    } catch {
+      this.gdsAvailable = false;
+      this.logger.info('Neo4j GDS not available — using application-code algorithms');
+    } finally {
+      await session.close();
+    }
+
+    return this.gdsAvailable;
+  }
+
+  async getDomainSubgraph(
+    domain: string,
+    edgeTypes?: readonly GraphEdgeType[],
+    userId?: string
+  ): Promise<ISubgraph> {
+    const relPattern = buildRelTypePattern(edgeTypes);
+    const userFilter = userId !== undefined ? 'AND n.userId = $userId' : '';
+    const edgeUserFilter =
+      userId !== undefined ? 'AND a.userId = $userId AND b.userId = $userId' : '';
+
+    const session = this.neo4j.getSession();
+    try {
+      // Fetch all nodes in the domain
+      const nodesResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (n {domain: $domain})
+           WHERE n.isDeleted = false ${userFilter}
+           RETURN n`,
+          { domain, ...(userId !== undefined ? { userId } : {}) }
+        );
+      });
+
+      const nodes = nodesResult.records.map((r) => mapNodeToGraphNode(r.get('n') as neo4j.Node));
+
+      if (nodes.length === 0) {
+        return { nodes: [], edges: [] };
+      }
+
+      const nodeIds = nodes.map((n) => n.nodeId);
+
+      // Fetch all edges between domain nodes of the specified types
+      const edgesResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (a)-[r:${relPattern}]->(b)
+           WHERE a.domain = $domain AND b.domain = $domain
+             AND a.isDeleted = false AND b.isDeleted = false
+             AND a.nodeId IN $nodeIds AND b.nodeId IN $nodeIds
+             ${edgeUserFilter}
+           RETURN r, a.nodeId AS sourceId, b.nodeId AS targetId,
+                  CASE WHEN any(l IN labels(a) WHERE l STARTS WITH 'Pkg') THEN 'pkg' ELSE 'ckg' END AS graphType`,
+          {
+            domain,
+            nodeIds,
+            ...(userId !== undefined ? { userId } : {}),
+          }
+        );
+      });
+
+      const edges = edgesResult.records.map((r) =>
+        mapRelationshipToGraphEdge(
+          r.get('r') as neo4j.Relationship,
+          r.get('sourceId') as NodeId,
+          r.get('targetId') as NodeId,
+          r.get('graphType') as IGraphEdge['graphType']
+        )
+      );
+
+      return { nodes, edges };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async findArticulationPointsNative(
+    domain: string,
+    edgeTypes?: readonly GraphEdgeType[],
+    userId?: string
+  ): Promise<NodeId[] | null> {
+    const gdsAvailable = await this.checkGdsAvailability();
+    if (!gdsAvailable) return null;
+
+    const relPattern = buildRelTypePattern(edgeTypes);
+    const userFilter = userId !== undefined ? 'AND n.userId = $userId' : '';
+
+    const session = this.neo4j.getSession();
+    const graphName = `bridge_analysis_${domain}_${Date.now()}`;
+
+    try {
+      // Project the domain subgraph into GDS
+      const nodeQuery = `MATCH (n {domain: $domain}) WHERE n.isDeleted = false ${userFilter} RETURN id(n) AS id`;
+      const relQuery = `MATCH (a {domain: $domain})-[r:${relPattern}]->(b {domain: $domain})
+                        WHERE a.isDeleted = false AND b.isDeleted = false
+                          ${userId !== undefined ? 'AND a.userId = $userId AND b.userId = $userId' : ''}
+                        RETURN id(a) AS source, id(b) AS target`;
+
+      await session.executeWrite(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `CALL gds.graph.project.cypher($graphName, $nodeQuery, $relQuery, {
+             parameters: { domain: $domain ${userId !== undefined ? ', userId: $userId' : ''} }
+           })`,
+          {
+            graphName,
+            nodeQuery,
+            relQuery,
+            domain,
+            ...(userId !== undefined ? { userId } : {}),
+          }
+        );
+      });
+
+      // Run articulation point detection
+      const apResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `CALL gds.articulationPoints.stream($graphName)
+           YIELD nodeId
+           WITH gds.util.asNode(nodeId) AS node
+           RETURN node.nodeId AS nodeId`,
+          { graphName }
+        );
+      });
+
+      const articulationPointIds = apResult.records.map((r) => r.get('nodeId') as NodeId);
+
+      return articulationPointIds;
+    } catch (error) {
+      this.logger.warn(
+        { error, domain },
+        "GDS articulation point detection failed — caller should fall back to Tarjan's"
+      );
+      return null;
+    } finally {
+      // Clean up the projected graph
+      try {
+        await session.executeWrite(async (tx: ManagedTransaction) => {
+          return tx.run('CALL gds.graph.drop($graphName, false)', { graphName });
+        });
+      } catch {
+        // Ignore cleanup errors
+      }
+      await session.close();
+    }
+  }
+
+  async getKnowledgeFrontier(
+    query: IFrontierQuery,
+    userId: string
+  ): Promise<IKnowledgeFrontierResult> {
+    const session = this.neo4j.getSession();
+    try {
+      // Main frontier query: find unmastered nodes with at least one mastered prerequisite
+      const frontierResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (node:PkgNode {userId: $userId, domain: $domain})
+           WHERE node.isDeleted = false
+             AND (node.masteryLevel IS NULL OR node.masteryLevel < $threshold)
+           OPTIONAL MATCH (node)-[:PREREQUISITE]->(prereq:PkgNode {userId: $userId})
+           WHERE prereq.isDeleted = false
+           WITH node,
+                collect(prereq) AS prereqs,
+                [p IN collect(prereq) WHERE p.masteryLevel >= $threshold] AS masteredPrereqs
+           WHERE size(masteredPrereqs) > 0 OR size(prereqs) = 0
+           RETURN node,
+                  masteredPrereqs,
+                  size(masteredPrereqs) AS masteredCount,
+                  size(prereqs) AS totalPrereqs,
+                  CASE WHEN size(prereqs) = 0 THEN 1.0
+                       ELSE toFloat(size(masteredPrereqs)) / size(prereqs)
+                  END AS readinessScore
+           ORDER BY readinessScore DESC
+           LIMIT $maxResults`,
+          {
+            userId,
+            domain: query.domain,
+            threshold: query.masteryThreshold,
+            maxResults: neo4j.int(query.maxResults),
+          }
+        );
+      });
+
+      // Build frontier nodes
+      const frontier = frontierResult.records.map((rec) => {
+        const node = mapNodeToGraphNode(rec.get('node') as neo4j.Node);
+        const masteredCount = (rec.get('masteredCount') as Integer).toNumber();
+        const totalPrereqs = (rec.get('totalPrereqs') as Integer).toNumber();
+        const readinessScore = rec.get('readinessScore') as number;
+
+        const masteredPrereqNodes = query.includePrerequisites
+          ? (rec.get('masteredPrereqs') as neo4j.Node[]).map(mapNodeToGraphNode)
+          : undefined;
+
+        // Compute average mastery of prerequisites
+        const masteredPrereqs = rec.get('masteredPrereqs') as neo4j.Node[];
+        const avgMastery =
+          masteredPrereqs.length > 0
+            ? masteredPrereqs.reduce((sum, p) => {
+                const ml = p.properties['masteryLevel'];
+                return sum + (typeof ml === 'number' ? ml : 0);
+              }, 0) / masteredPrereqs.length
+            : 0;
+
+        return {
+          node,
+          prerequisiteMasteryAvg: avgMastery,
+          prerequisiteReadiness: `${String(masteredCount)}/${String(totalPrereqs)}`,
+          readinessScore,
+          ...(masteredPrereqNodes !== undefined
+            ? { masteredPrerequisites: masteredPrereqNodes }
+            : {}),
+        };
+      });
+
+      // Summary statistics
+      const summaryResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (n:PkgNode {userId: $userId, domain: $domain})
+           WHERE n.isDeleted = false
+           WITH count(n) AS total,
+                sum(CASE WHEN n.masteryLevel >= $threshold THEN 1 ELSE 0 END) AS mastered,
+                sum(CASE WHEN n.masteryLevel IS NULL OR n.masteryLevel < $threshold THEN 1 ELSE 0 END) AS unmastered
+           RETURN total, mastered, unmastered`,
+          {
+            userId,
+            domain: query.domain,
+            threshold: query.masteryThreshold,
+          }
+        );
+      });
+
+      const summaryRec = summaryResult.records[0];
+      const totalNodes =
+        summaryRec !== undefined ? (summaryRec.get('total') as Integer).toNumber() : 0;
+      const totalMastered =
+        summaryRec !== undefined ? (summaryRec.get('mastered') as Integer).toNumber() : 0;
+      const totalUnmastered =
+        summaryRec !== undefined ? (summaryRec.get('unmastered') as Integer).toNumber() : 0;
+
+      return {
+        domain: query.domain,
+        masteryThreshold: query.masteryThreshold,
+        frontier,
+        summary: {
+          totalMastered,
+          totalUnmastered,
+          totalFrontier: frontier.length,
+          totalDeepUnmastered: totalUnmastered - frontier.length,
+          masteryPercentage: totalNodes > 0 ? totalMastered / totalNodes : 0,
+        },
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getCommonAncestors(
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    userId?: string
+  ): Promise<ICommonAncestorsResult> {
+    const relPattern = buildRelTypePattern(query.edgeTypes);
+    const userFilter = userId !== undefined ? 'AND a.userId = $userId' : '';
+    const ancestorUserFilter =
+      userId !== undefined
+        ? 'WHERE ancestor.userId = $userId AND ancestor.isDeleted = false'
+        : 'WHERE ancestor.isDeleted = false';
+
+    const session = this.neo4j.getSession();
+    try {
+      // Fetch both query nodes
+      const nodesResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (a) WHERE a.nodeId IN [$nodeIdA, $nodeIdB] AND a.isDeleted = false ${userFilter}
+           RETURN a`,
+          {
+            nodeIdA,
+            nodeIdB,
+            ...(userId !== undefined ? { userId } : {}),
+          }
+        );
+      });
+
+      const fetchedNodes = nodesResult.records.map((r) =>
+        mapNodeToGraphNode(r.get('a') as neo4j.Node)
+      );
+      const nodeA = fetchedNodes.find((n) => n.nodeId === nodeIdA);
+      const nodeB = fetchedNodes.find((n) => n.nodeId === nodeIdB);
+
+      if (nodeA === undefined || nodeB === undefined) {
+        // Return empty result if either node not found
+        const emptyNode = (id: NodeId) =>
+          ({
+            nodeId: id,
+            graphType: 'pkg',
+            nodeType: 'concept',
+            label: '',
+            domain: '',
+            properties: {},
+            createdAt: '',
+            updatedAt: '',
+          }) as unknown as IGraphNode;
+
+        return {
+          nodeA: nodeA ?? emptyNode(nodeIdA),
+          nodeB: nodeB ?? emptyNode(nodeIdB),
+          lowestCommonAncestors: [],
+          allCommonAncestors: [],
+          directlyConnected: false,
+          pathFromA: [],
+          pathFromB: [],
+        };
+      }
+
+      // Check direct connection
+      const directResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (a {nodeId: $nodeIdA})-[r:${relPattern}]-(b {nodeId: $nodeIdB})
+           RETURN count(r) > 0 AS connected`,
+          { nodeIdA, nodeIdB }
+        );
+      });
+      const directlyConnected = directResult.records[0]?.get('connected') === true;
+
+      // Find ancestors of both nodes and compute intersection
+      const ancestorsResult = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH pathA = (a {nodeId: $nodeIdA})-[:${relPattern}*1..${String(query.maxDepth)}]->(ancestorA)
+           ${ancestorUserFilter.replace('ancestor', 'ancestorA')}
+           WITH collect(DISTINCT {nodeId: ancestorA.nodeId, node: ancestorA, depth: length(pathA)}) AS ancestorsA
+
+           MATCH pathB = (b {nodeId: $nodeIdB})-[:${relPattern}*1..${String(query.maxDepth)}]->(ancestorB)
+           ${ancestorUserFilter.replace('ancestor', 'ancestorB')}
+           WITH ancestorsA, collect(DISTINCT {nodeId: ancestorB.nodeId, node: ancestorB, depth: length(pathB)}) AS ancestorsB
+
+           UNWIND ancestorsA AS entryA
+           UNWIND ancestorsB AS entryB
+           WHERE entryA.nodeId = entryB.nodeId
+           WITH entryA.node AS ancestor,
+                min(entryA.depth) AS depthFromA,
+                min(entryB.depth) AS depthFromB
+           RETURN ancestor,
+                  depthFromA,
+                  depthFromB,
+                  depthFromA + depthFromB AS combinedDepth
+           ORDER BY combinedDepth ASC`,
+          {
+            nodeIdA,
+            nodeIdB,
+            ...(userId !== undefined ? { userId } : {}),
+          }
+        );
+      });
+
+      const allCommonAncestors = ancestorsResult.records.map((rec) => ({
+        node: mapNodeToGraphNode(rec.get('ancestor') as neo4j.Node),
+        depthFromA: (rec.get('depthFromA') as Integer).toNumber(),
+        depthFromB: (rec.get('depthFromB') as Integer).toNumber(),
+        combinedDepth: (rec.get('combinedDepth') as Integer).toNumber(),
+      }));
+
+      // LCA = ancestors with the minimum combinedDepth
+      const minCombinedDepth =
+        allCommonAncestors.length > 0 ? allCommonAncestors[0]!.combinedDepth : Infinity;
+      const lowestCommonAncestors = allCommonAncestors
+        .filter((a) => a.combinedDepth === minCombinedDepth)
+        .map((a) => a.node);
+
+      // Compute paths from A and B to the first LCA
+      let pathFromA: IGraphNode[] = [];
+      let pathFromB: IGraphNode[] = [];
+
+      if (lowestCommonAncestors.length > 0) {
+        const lcaNodeId = lowestCommonAncestors[0]!.nodeId;
+
+        const pathsResult = await session.executeRead(async (tx: ManagedTransaction) => {
+          return tx.run(
+            `OPTIONAL MATCH pathA = shortestPath((a {nodeId: $nodeIdA})-[:${relPattern}*1..${String(query.maxDepth)}]->(lca {nodeId: $lcaNodeId}))
+             WITH [n IN nodes(pathA) | n] AS nodesA
+             OPTIONAL MATCH pathB = shortestPath((b {nodeId: $nodeIdB})-[:${relPattern}*1..${String(query.maxDepth)}]->(lca2 {nodeId: $lcaNodeId}))
+             RETURN nodesA, [n IN nodes(pathB) | n] AS nodesB`,
+            { nodeIdA, nodeIdB, lcaNodeId }
+          );
+        });
+
+        const pathRec = pathsResult.records[0];
+        if (pathRec !== undefined) {
+          const nodesA = pathRec.get('nodesA') as neo4j.Node[] | null;
+          const nodesB = pathRec.get('nodesB') as neo4j.Node[] | null;
+          if (nodesA !== null) pathFromA = nodesA.map(mapNodeToGraphNode);
+          if (nodesB !== null) pathFromB = nodesB.map(mapNodeToGraphNode);
+        }
+      }
+
+      return {
+        nodeA,
+        nodeB,
+        lowestCommonAncestors,
+        allCommonAncestors,
+        directlyConnected,
+        pathFromA,
+        pathFromB,
       };
     } finally {
       await session.close();
@@ -1290,7 +1727,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
       try {
         await tx.rollback();
       } catch (rbError) {
-        this.logger.warn({ error: rbError }, 'Transaction rollback failed (original error will be thrown)');
+        this.logger.warn(
+          { error: rbError },
+          'Transaction rollback failed (original error will be thrown)'
+        );
       }
       throw error;
     } finally {
@@ -1411,9 +1851,7 @@ function toJsNumber(value: unknown): number {
  * since the commit protocol only needs write operations + getNode/getEdge.
  */
 class Neo4jTransactionalGraphRepository implements IGraphRepository {
-  constructor(
-    private readonly tx: neo4j.Transaction
-  ) {}
+  constructor(private readonly tx: neo4j.Transaction) {}
 
   // ── Node CRUD ─────────────────────────────────────────────────────────
 
@@ -1452,7 +1890,11 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     return record ? mapNodeToGraphNode(record.get('n') as neo4j.Node) : null;
   }
 
-  async updateNode(nodeId: NodeId, updates: IUpdateNodeInput, userId?: string): Promise<IGraphNode> {
+  async updateNode(
+    nodeId: NodeId,
+    updates: IUpdateNodeInput,
+    userId?: string
+  ): Promise<IGraphNode> {
     const updateProps = buildNodeUpdateProperties(updates);
     const result = await this.tx.run(
       `MATCH (n {nodeId: $nodeId, isDeleted: false})
@@ -1689,15 +2131,61 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
   // ── Traversal stubs (not needed inside commit protocol) ───────────────
 
-  async getSiblings(_nodeId: NodeId, _query: ISiblingsQuery, _userId?: string): Promise<ISiblingsResult> {
+  async getSiblings(
+    _nodeId: NodeId,
+    _query: ISiblingsQuery,
+    _userId?: string
+  ): Promise<ISiblingsResult> {
     throw new Error('getSiblings is not supported inside transactions');
   }
 
-  async getCoParents(_nodeId: NodeId, _query: ICoParentsQuery, _userId?: string): Promise<ICoParentsResult> {
+  async getCoParents(
+    _nodeId: NodeId,
+    _query: ICoParentsQuery,
+    _userId?: string
+  ): Promise<ICoParentsResult> {
     throw new Error('getCoParents is not supported inside transactions');
   }
 
-  async getNeighborhood(_nodeId: NodeId, _query: INeighborhoodQuery, _userId?: string): Promise<INeighborhoodResult> {
+  async getNeighborhood(
+    _nodeId: NodeId,
+    _query: INeighborhoodQuery,
+    _userId?: string
+  ): Promise<INeighborhoodResult> {
     throw new Error('getNeighborhood is not supported inside transactions');
+  }
+
+  // ── Phase 8c traversal stubs ──────────────────────────────────────────
+
+  async getDomainSubgraph(
+    _domain: string,
+    _edgeTypes?: readonly GraphEdgeType[],
+    _userId?: string
+  ): Promise<ISubgraph> {
+    throw new Error('getDomainSubgraph is not supported inside transactions');
+  }
+
+  async findArticulationPointsNative(
+    _domain: string,
+    _edgeTypes?: readonly GraphEdgeType[],
+    _userId?: string
+  ): Promise<NodeId[] | null> {
+    throw new Error('findArticulationPointsNative is not supported inside transactions');
+  }
+
+  async getKnowledgeFrontier(
+    _query: IFrontierQuery,
+    _userId: string
+  ): Promise<IKnowledgeFrontierResult> {
+    throw new Error('getKnowledgeFrontier is not supported inside transactions');
+  }
+
+  async getCommonAncestors(
+    _nodeIdA: NodeId,
+    _nodeIdB: NodeId,
+    _query: ICommonAncestorsQuery,
+    _userId?: string
+  ): Promise<ICommonAncestorsResult> {
+    throw new Error('getCommonAncestors is not supported inside transactions');
   }
 }

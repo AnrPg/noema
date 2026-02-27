@@ -27,6 +27,10 @@ import type {
 import type {
   ICoParentsQuery,
   ICoParentsResult,
+  ICommonAncestorsQuery,
+  ICommonAncestorsResult,
+  IFrontierQuery,
+  IKnowledgeFrontierResult,
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
@@ -253,21 +257,13 @@ export interface ITraversalRepository {
    * Get siblings (co-children) of a node — nodes sharing a common parent
    * via the same edge type and direction. Results grouped by parent.
    */
-  getSiblings(
-    nodeId: NodeId,
-    query: ISiblingsQuery,
-    userId?: string
-  ): Promise<ISiblingsResult>;
+  getSiblings(nodeId: NodeId, query: ISiblingsQuery, userId?: string): Promise<ISiblingsResult>;
 
   /**
    * Get co-parents (co-ancestors) of a node — nodes sharing a common child
    * via the same edge type and direction. Results grouped by shared child.
    */
-  getCoParents(
-    nodeId: NodeId,
-    query: ICoParentsQuery,
-    userId?: string
-  ): Promise<ICoParentsResult>;
+  getCoParents(nodeId: NodeId, query: ICoParentsQuery, userId?: string): Promise<ICoParentsResult>;
 
   /**
    * Get the N-hop neighborhood of a node, grouped by connecting edge type.
@@ -285,6 +281,61 @@ export interface ITraversalRepository {
    * @returns Array of node IDs forming the cycle, or empty if no cycle is found.
    */
   detectCycles(nodeId: NodeId, edgeType?: GraphEdgeType, userId?: string): Promise<NodeId[]>;
+
+  // Phase 8c: Structural analysis operations
+
+  /**
+   * Get the full subgraph for all nodes in a domain.
+   *
+   * Unlike `getSubgraph()` which traverses from a single root, this returns
+   * ALL nodes and edges within the specified domain — including disconnected
+   * components. Used by bridge node detection.
+   *
+   * @param domain - Knowledge domain to fetch.
+   * @param edgeTypes - Optional edge type filter.
+   * @param userId - User scope (PKG) or undefined (CKG).
+   */
+  getDomainSubgraph(
+    domain: string,
+    edgeTypes?: readonly GraphEdgeType[],
+    userId?: string
+  ): Promise<ISubgraph>;
+
+  /**
+   * Detect articulation points using native graph algorithms (GDS/APOC)
+   * if the database supports them.
+   *
+   * @returns Array of node IDs that are articulation points, or `null` if
+   *   native graph algorithms are not available (caller should fall back
+   *   to application-code Tarjan's algorithm).
+   */
+  findArticulationPointsNative(
+    domain: string,
+    edgeTypes?: readonly GraphEdgeType[],
+    userId?: string
+  ): Promise<NodeId[] | null>;
+
+  /**
+   * Get the knowledge frontier for a user in a domain.
+   *
+   * The frontier is the set of unmastered nodes whose prerequisites are
+   * mastered — the optimal set for scheduling new study material.
+   * PKG-only (CKG has no mastery levels).
+   */
+  getKnowledgeFrontier(query: IFrontierQuery, userId: string): Promise<IKnowledgeFrontierResult>;
+
+  /**
+   * Find common ancestors of two nodes by traversing specified edge types.
+   *
+   * Computes the intersection of ancestor sets and extracts the Lowest
+   * Common Ancestor(s) — the shared ancestors closest to both nodes.
+   */
+  getCommonAncestors(
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    userId?: string
+  ): Promise<ICommonAncestorsResult>;
 }
 
 // ============================================================================
@@ -341,7 +392,6 @@ export interface IBatchGraphRepository {
  */
 export interface IGraphRepository
   extends INodeRepository, IEdgeRepository, ITraversalRepository, IBatchGraphRepository {
-
   /**
    * Execute a callback within a single Neo4j transaction.
    * All graph operations performed inside the callback use the same

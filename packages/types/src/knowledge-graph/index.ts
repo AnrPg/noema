@@ -452,3 +452,120 @@ export interface INeighborhoodResult {
   /** Total unique neighbor count across all groups */
   readonly totalNeighborCount: number;
 }
+
+// ============================================================================
+// Phase 8c: Bridge Nodes (Articulation Points)
+// ============================================================================
+
+/**
+ * A single bridge node (articulation point) with impact metrics.
+ */
+export interface IBridgeNode {
+  /** The bridge node */
+  readonly node: IGraphNode;
+  /** Number of connected components created if this node were removed */
+  readonly componentsCreated: number;
+  /** Sizes of the downstream components that would be disconnected */
+  readonly downstreamComponentSizes: readonly number[];
+  /** Total nodes that would become unreachable */
+  readonly totalAffectedNodes: number;
+  /** The edge types through which this node is a bridge */
+  readonly bridgeEdgeTypes: readonly GraphEdgeType[];
+}
+
+/**
+ * Complete result of a bridge nodes (articulation points) query.
+ */
+export interface IBridgeNodesResult {
+  /** Total nodes analyzed in the domain subgraph */
+  readonly totalNodesAnalyzed: number;
+  /** Identified bridge nodes, ordered by impact (largest downstream first) */
+  readonly bridges: readonly IBridgeNode[];
+}
+
+// ============================================================================
+// Phase 8c: Knowledge Frontier
+// ============================================================================
+
+/**
+ * A single frontier node — a concept the learner is ready to study next.
+ */
+export interface IFrontierNode {
+  /** The frontier node */
+  readonly node: IGraphNode;
+  /** Average mastery of its prerequisite parents */
+  readonly prerequisiteMasteryAvg: number;
+  /** Number of mastered prerequisites / total prerequisites */
+  readonly prerequisiteReadiness: string;
+  /** Readiness score (0–1): how prepared the learner is for this concept */
+  readonly readinessScore: number;
+  /** Mastered prerequisites (if includePrerequisites=true) */
+  readonly masteredPrerequisites?: readonly IGraphNode[];
+}
+
+/**
+ * Summary statistics for the knowledge frontier analysis.
+ */
+export interface IFrontierSummary {
+  /** Number of nodes with mastery ≥ threshold */
+  readonly totalMastered: number;
+  /** Number of nodes with mastery < threshold */
+  readonly totalUnmastered: number;
+  /** Number of frontier nodes (unmastered with mastered prereqs) */
+  readonly totalFrontier: number;
+  /** Number of deep-unmastered nodes (unmastered with unmastered prereqs) */
+  readonly totalDeepUnmastered: number;
+  /** mastered / total */
+  readonly masteryPercentage: number;
+}
+
+/**
+ * Complete result of a knowledge frontier query.
+ */
+export interface IKnowledgeFrontierResult {
+  /** Knowledge domain analyzed */
+  readonly domain: string;
+  /** Mastery threshold used */
+  readonly masteryThreshold: number;
+  /** Frontier nodes — ready to learn next */
+  readonly frontier: readonly IFrontierNode[];
+  /** Summary statistics */
+  readonly summary: IFrontierSummary;
+}
+
+// ============================================================================
+// Phase 8c: Common Ancestors
+// ============================================================================
+
+/**
+ * A single common ancestor entry with depth information.
+ */
+export interface ICommonAncestorEntry {
+  /** The ancestor node */
+  readonly node: IGraphNode;
+  /** Depth from nodeA to this ancestor */
+  readonly depthFromA: number;
+  /** Depth from nodeB to this ancestor */
+  readonly depthFromB: number;
+  /** Sum of depths (lower = closer = more relevant as LCA) */
+  readonly combinedDepth: number;
+}
+
+/**
+ * Complete result of a common ancestors query.
+ */
+export interface ICommonAncestorsResult {
+  /** The two query nodes */
+  readonly nodeA: IGraphNode;
+  readonly nodeB: IGraphNode;
+  /** The Lowest Common Ancestor(s) — closest shared ancestor(s) */
+  readonly lowestCommonAncestors: readonly IGraphNode[];
+  /** All common ancestors, ordered by depth from nodes (shallowest first) */
+  readonly allCommonAncestors: readonly ICommonAncestorEntry[];
+  /** Whether the two nodes are directly connected */
+  readonly directlyConnected: boolean;
+  /** Path from nodeA to LCA (if exists) */
+  readonly pathFromA: readonly IGraphNode[];
+  /** Path from nodeB to LCA (if exists) */
+  readonly pathFromB: readonly IGraphNode[];
+}

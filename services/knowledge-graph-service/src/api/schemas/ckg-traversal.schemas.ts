@@ -95,6 +95,33 @@ export const CkgNeighborhoodQueryParamsSchema = z.object({
 });
 
 // ============================================================================
+// Bridge Query Parameters — CKG (Phase 8c)
+// ============================================================================
+
+/**
+ * CKG bridge nodes query parameters (same structure as PKG but no userId).
+ */
+export const CkgBridgeQueryParamsSchema = z.object({
+  domain: z.string().min(1),
+  edgeTypes: z.string().optional(),
+  minComponentSize: z.coerce.number().int().min(1).max(1000).default(2),
+});
+
+// ============================================================================
+// Common Ancestors Query Parameters — CKG (Phase 8c)
+// ============================================================================
+
+/**
+ * CKG common ancestors query parameters (same structure as PKG but no userId).
+ */
+export const CkgCommonAncestorsQueryParamsSchema = z.object({
+  nodeIdA: NodeIdSchema,
+  nodeIdB: NodeIdSchema,
+  edgeTypes: z.string().optional(),
+  maxDepth: z.coerce.number().int().min(1).max(20).default(10),
+});
+
+// ============================================================================
 // Type Inference
 // ============================================================================
 
@@ -104,3 +131,5 @@ export type CkgPathQueryParams = z.infer<typeof CkgPathQueryParamsSchema>;
 export type CkgSiblingsQueryParams = z.infer<typeof CkgSiblingsQueryParamsSchema>;
 export type CkgCoParentsQueryParams = z.infer<typeof CkgCoParentsQueryParamsSchema>;
 export type CkgNeighborhoodQueryParams = z.infer<typeof CkgNeighborhoodQueryParamsSchema>;
+export type CkgBridgeQueryParams = z.infer<typeof CkgBridgeQueryParamsSchema>;
+export type CkgCommonAncestorsQueryParams = z.infer<typeof CkgCommonAncestorsQueryParamsSchema>;

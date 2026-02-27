@@ -67,6 +67,7 @@ import {
   OrphanEdgeError,
 } from './errors/graph.errors.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
+import { buildBridgeNodesFromIds, findArticulationPoints } from './graph-analysis.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -81,7 +82,11 @@ import {
   UpdateEdgeInputSchema,
   UpdateNodeInputSchema,
 } from './knowledge-graph.schemas.js';
-import type { IKnowledgeGraphService, IOperationLogFilter, IPipelineHealthResult } from './knowledge-graph.service.js';
+import type {
+  IKnowledgeGraphService,
+  IOperationLogFilter,
+  IPipelineHealthResult,
+} from './knowledge-graph.service.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
 import type { IMetricsHistoryOptions, IMetricsRepository } from './metrics.repository.js';
 import {
@@ -95,12 +100,22 @@ import type { IMisconceptionRepository } from './misconception.repository.js';
 import type { IMisconceptionDetectionContext } from './misconception/index.js';
 import { MisconceptionDetectionEngine } from './misconception/index.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
-import type { IPkgOperationLogEntry, IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
+import type {
+  IPkgOperationLogEntry,
+  IPkgOperationLogRepository,
+} from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
+  IBridgeNode,
+  IBridgeNodesResult,
+  IBridgeQuery,
+  ICommonAncestorsQuery,
+  ICommonAncestorsResult,
   ICoParentsQuery,
   ICoParentsResult,
+  IFrontierQuery,
+  IKnowledgeFrontierResult,
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
@@ -952,6 +967,160 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   }
 
   // ========================================================================
+  // Phase 8c — PKG Structural Analysis
+  // ========================================================================
+
+  async getBridgeNodes(
+    userId: UserId,
+    query: IBridgeQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IBridgeNodesResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, domain: query.domain, minComponentSize: query.minComponentSize },
+      'Getting PKG bridge nodes'
+    );
+
+    // 1. Fetch the full domain subgraph (needed for component metrics
+    //    regardless of whether GDS provides AP IDs or Tarjan's runs in-app)
+    const subgraph = await this.graphRepository.getDomainSubgraph(
+      query.domain,
+      query.edgeTypes,
+      userId
+    );
+
+    // 2. Try GDS-accelerated articulation-point detection first
+    const nativeApIds = await this.graphRepository.findArticulationPointsNative(
+      query.domain,
+      query.edgeTypes,
+      userId
+    );
+
+    let bridges: IBridgeNode[];
+
+    if (nativeApIds !== null) {
+      // GDS returned AP IDs — compute component metrics from the subgraph
+      bridges = buildBridgeNodesFromIds(
+        subgraph,
+        nativeApIds,
+        query.edgeTypes,
+        query.minComponentSize
+      );
+    } else {
+      // Fall back to in-app Tarjan's algorithm
+      bridges = findArticulationPoints(subgraph, query.edgeTypes, query.minComponentSize);
+    }
+
+    const result: IBridgeNodesResult = {
+      totalNodesAnalyzed: subgraph.nodes.length,
+      bridges,
+    };
+
+    return {
+      data: result,
+      agentHints: this.createBridgeNodesHints(result),
+    };
+  }
+
+  async getKnowledgeFrontier(
+    userId: UserId,
+    query: IFrontierQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IKnowledgeFrontierResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      {
+        userId,
+        domain: query.domain,
+        masteryThreshold: query.masteryThreshold,
+        sortBy: query.sortBy,
+        maxResults: query.maxResults,
+      },
+      'Getting PKG knowledge frontier'
+    );
+
+    // Repository returns frontier sorted by readiness; re-sort if needed
+    const result = await this.graphRepository.getKnowledgeFrontier(query, userId);
+
+    // The Cypher query always sorts by readiness. For alternative sort modes
+    // we re-sort the result in application code.
+    if (query.sortBy === 'centrality') {
+      // Sort by prerequisite count descending (proxy for centrality)
+      const sorted = [...result.frontier].sort((a, b) => {
+        const [aTotal] = a.prerequisiteReadiness.split('/').map(Number);
+        const [bTotal] = b.prerequisiteReadiness.split('/').map(Number);
+        return (bTotal ?? 0) - (aTotal ?? 0);
+      });
+      const resorted: IKnowledgeFrontierResult = {
+        ...result,
+        frontier: sorted,
+      };
+      return {
+        data: resorted,
+        agentHints: this.createFrontierHints(resorted),
+      };
+    }
+
+    if (query.sortBy === 'depth') {
+      // Sort by number of prerequisites ascending (shallower concepts first)
+      const sorted = [...result.frontier].sort((a, b) => {
+        const aParts = a.prerequisiteReadiness.split('/');
+        const bParts = b.prerequisiteReadiness.split('/');
+        const aTotal = Number(aParts[1] ?? 0);
+        const bTotal = Number(bParts[1] ?? 0);
+        return aTotal - bTotal;
+      });
+      const resorted: IKnowledgeFrontierResult = {
+        ...result,
+        frontier: sorted,
+      };
+      return {
+        data: resorted,
+        agentHints: this.createFrontierHints(resorted),
+      };
+    }
+
+    return {
+      data: result,
+      agentHints: this.createFrontierHints(result),
+    };
+  }
+
+  async getCommonAncestors(
+    userId: UserId,
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICommonAncestorsResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, nodeIdA, nodeIdB, maxDepth: query.maxDepth },
+      'Getting PKG common ancestors'
+    );
+
+    // Verify both nodes exist in the user's PKG
+    const [nodeA, nodeB] = await Promise.all([
+      this.graphRepository.getNode(nodeIdA, userId),
+      this.graphRepository.getNode(nodeIdB, userId),
+    ]);
+
+    if (!nodeA) {
+      throw new NodeNotFoundError(nodeIdA, GraphType.PKG);
+    }
+    if (!nodeB) {
+      throw new NodeNotFoundError(nodeIdB, GraphType.PKG);
+    }
+
+    const result = await this.graphRepository.getCommonAncestors(nodeIdA, nodeIdB, query, userId);
+
+    return {
+      data: result,
+      agentHints: this.createCommonAncestorsHints(result),
+    };
+  }
+
+  // ========================================================================
   // CKG Operations (read-only)
   // ========================================================================
 
@@ -1278,6 +1447,86 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     return {
       data: result,
       agentHints: this.createNeighborhoodHints(result),
+    };
+  }
+
+  // ========================================================================
+  // Phase 8c — CKG Structural Analysis
+  // ========================================================================
+
+  async getCkgBridgeNodes(
+    query: IBridgeQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IBridgeNodesResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { domain: query.domain, minComponentSize: query.minComponentSize },
+      'Getting CKG bridge nodes'
+    );
+
+    // CKG: no userId — shared canonical graph
+    const subgraph = await this.graphRepository.getDomainSubgraph(query.domain, query.edgeTypes);
+
+    const nativeApIds = await this.graphRepository.findArticulationPointsNative(
+      query.domain,
+      query.edgeTypes
+    );
+
+    let bridges: IBridgeNode[];
+
+    if (nativeApIds !== null) {
+      bridges = buildBridgeNodesFromIds(
+        subgraph,
+        nativeApIds,
+        query.edgeTypes,
+        query.minComponentSize
+      );
+    } else {
+      bridges = findArticulationPoints(subgraph, query.edgeTypes, query.minComponentSize);
+    }
+
+    const result: IBridgeNodesResult = {
+      totalNodesAnalyzed: subgraph.nodes.length,
+      bridges,
+    };
+
+    return {
+      data: result,
+      agentHints: this.createBridgeNodesHints(result),
+    };
+  }
+
+  async getCkgCommonAncestors(
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICommonAncestorsResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { nodeIdA, nodeIdB, maxDepth: query.maxDepth },
+      'Getting CKG common ancestors'
+    );
+
+    // Verify both nodes exist in CKG
+    const [nodeA, nodeB] = await Promise.all([
+      this.graphRepository.getNode(nodeIdA),
+      this.graphRepository.getNode(nodeIdB),
+    ]);
+
+    if (nodeA?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeIdA, GraphType.CKG);
+    }
+    if (nodeB?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeIdB, GraphType.CKG);
+    }
+
+    // CKG: no userId
+    const result = await this.graphRepository.getCommonAncestors(nodeIdA, nodeIdB, query);
+
+    return {
+      data: result,
+      agentHints: this.createCommonAncestorsHints(result),
     };
   }
 
@@ -1882,7 +2131,8 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
             {
               factor: `${String(health.stuckCount)} mutations stuck in processing states`,
               severity: 'medium' as const,
-              mitigation: 'Check pipeline logs — stuck mutations may need manual retry or cancellation',
+              mitigation:
+                'Check pipeline logs — stuck mutations may need manual retry or cancellation',
             },
           ]
         : [];
@@ -2583,10 +2833,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
    */
   private createSiblingsHints(result: ISiblingsResult): IAgentHints {
     const groupCount = result.groups.length;
-    const largestGroup = result.groups.reduce(
-      (max, g) => Math.max(max, g.totalInGroup),
-      0
-    );
+    const largestGroup = result.groups.reduce((max, g) => Math.max(max, g.totalInGroup), 0);
 
     const actions: IAgentHints['suggestedNextActions'] = [];
 
@@ -2643,10 +2890,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
    */
   private createCoParentsHints(result: ICoParentsResult): IAgentHints {
     const groupCount = result.groups.length;
-    const largestGroup = result.groups.reduce(
-      (max, g) => Math.max(max, g.totalInGroup),
-      0
-    );
+    const largestGroup = result.groups.reduce((max, g) => Math.max(max, g.totalInGroup), 0);
 
     const actions: IAgentHints['suggestedNextActions'] = [];
 
@@ -2763,6 +3007,183 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       estimatedImpact: { benefit: 0.6, effort: 0.1, roi: 6.0 },
       preferenceAlignment: [],
       reasoning: `Neighborhood of "${result.originNode.label}": ${String(result.totalNeighborCount)} neighbor(s) across ${String(groupCount)} edge-type group(s).${dominantGroup !== undefined ? ` Dominant: ${dominantGroup.edgeType} (${String(dominantGroup.total)}).` : ''}`,
+    };
+  }
+
+  /**
+   * Create agent hints for bridge nodes (articulation points) analysis.
+   */
+  private createBridgeNodesHints(result: IBridgeNodesResult): IAgentHints {
+    const bridgeCount = result.bridges.length;
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (bridgeCount === 0) {
+      actions.push({
+        action: 'analyze_robustness',
+        description: 'No bridge nodes found — the graph is well-connected with redundant paths',
+        priority: 'low',
+        category: 'exploration',
+      });
+    } else {
+      const topBridge = result.bridges[0];
+      if (topBridge !== undefined) {
+        actions.push({
+          action: 'reinforce_bridge',
+          description: `"${topBridge.node.label}" is the most critical bridge — add redundant edges to reduce fragility`,
+          priority: 'high',
+          category: 'optimization',
+        });
+      }
+
+      if (bridgeCount >= 3) {
+        actions.push({
+          action: 'review_graph_structure',
+          description: `${String(bridgeCount)} bridge nodes detected — the graph has structural bottlenecks`,
+          priority: 'medium',
+          category: 'exploration',
+        });
+      }
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.bridges.slice(0, 5).map((b) => ({
+        type: 'KGNode' as const,
+        id: b.node.nodeId as string,
+        label: b.node.label,
+        relevance: 0.9,
+      })),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'medium',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.7, effort: 0.3, roi: 2.3 },
+      preferenceAlignment: [],
+      reasoning: `Bridge analysis: ${String(bridgeCount)} articulation point(s) found in ${String(result.totalNodesAnalyzed)} nodes.`,
+    };
+  }
+
+  /**
+   * Create agent hints for knowledge frontier analysis.
+   */
+  private createFrontierHints(result: IKnowledgeFrontierResult): IAgentHints {
+    const frontierCount = result.frontier.length;
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (frontierCount === 0) {
+      if (result.summary.totalMastered === 0) {
+        actions.push({
+          action: 'start_learning',
+          description: 'No mastered concepts yet — begin with foundational topics',
+          priority: 'high',
+          category: 'exploration',
+        });
+      } else {
+        actions.push({
+          action: 'deepen_mastery',
+          description:
+            'All frontier concepts already explored — deepen existing knowledge or branch to new domains',
+          priority: 'medium',
+          category: 'optimization',
+        });
+      }
+    } else {
+      const topNode = result.frontier[0];
+      if (topNode !== undefined) {
+        actions.push({
+          action: 'study_next',
+          description: `"${topNode.node.label}" has readiness ${String(topNode.readinessScore.toFixed(2))} — the best next study candidate`,
+          priority: 'high',
+          category: 'exploration',
+        });
+      }
+
+      actions.push({
+        action: 'schedule_study_session',
+        description: `${String(frontierCount)} frontier concept(s) available — schedule a study session`,
+        priority: 'medium',
+        category: 'optimization',
+      });
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.frontier.slice(0, 5).map((f) => ({
+        type: 'KGNode' as const,
+        id: f.node.nodeId as string,
+        label: f.node.label,
+        relevance: f.readinessScore,
+      })),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'short',
+      contextNeeded: [],
+      assumptions: [`Mastery threshold set to ${String(result.masteryThreshold)}`],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.8, effort: 0.2, roi: 4.0 },
+      preferenceAlignment: [],
+      reasoning: `Knowledge frontier for "${result.domain}": ${String(frontierCount)} concept(s) ready to learn. Mastery: ${String(result.summary.masteryPercentage.toFixed(1))}% (${String(result.summary.totalMastered)}/${String(result.summary.totalMastered + result.summary.totalUnmastered)}).`,
+    };
+  }
+
+  /**
+   * Create agent hints for common ancestors analysis.
+   */
+  private createCommonAncestorsHints(result: ICommonAncestorsResult): IAgentHints {
+    const ancestorCount = result.allCommonAncestors.length;
+    const lcaCount = result.lowestCommonAncestors.length;
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (ancestorCount === 0) {
+      actions.push({
+        action: 'explore_connections',
+        description: `"${result.nodeA.label}" and "${result.nodeB.label}" share no common ancestors — they may belong to separate taxonomic branches`,
+        priority: 'medium',
+        category: 'exploration',
+      });
+    } else {
+      const topLca = result.lowestCommonAncestors[0];
+      if (topLca !== undefined) {
+        actions.push({
+          action: 'explore_ancestor',
+          description: `Lowest common ancestor: "${topLca.label}" — explore its neighborhood for shared context`,
+          priority: 'medium',
+          category: 'exploration',
+        });
+      }
+
+      if (result.directlyConnected) {
+        actions.push({
+          action: 'analyze_direct_link',
+          description: `The two nodes are directly connected — their relationship may be more specific than the shared ancestry`,
+          priority: 'low',
+          category: 'exploration',
+        });
+      }
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.allCommonAncestors.slice(0, 5).map((a) => ({
+        type: 'KGNode' as const,
+        id: a.node.nodeId as string,
+        label: a.node.label,
+        relevance: 1.0 / (1.0 + a.combinedDepth),
+      })),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'long',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
+      preferenceAlignment: [],
+      reasoning: `Common ancestors of "${result.nodeA.label}" and "${result.nodeB.label}": ${String(ancestorCount)} shared ancestor(s), ${String(lcaCount)} LCA(s).${result.directlyConnected ? ' Nodes are directly connected.' : ''}`,
     };
   }
 

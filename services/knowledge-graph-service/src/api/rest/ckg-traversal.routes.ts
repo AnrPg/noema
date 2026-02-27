@@ -14,26 +14,30 @@ import type { GraphEdgeType, GraphNodeType, NodeId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import {
-    CoParentsQuery,
-    NeighborhoodQuery,
-    SiblingsQuery,
-    TraversalOptions,
+  BridgeQuery,
+  CoParentsQuery,
+  CommonAncestorsQuery,
+  NeighborhoodQuery,
+  SiblingsQuery,
+  TraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
-    CkgCoParentsQueryParamsSchema,
-    CkgNeighborhoodQueryParamsSchema,
-    CkgPathQueryParamsSchema,
-    CkgSiblingsQueryParamsSchema,
-    CkgSubgraphQueryParamsSchema,
+  CkgBridgeQueryParamsSchema,
+  CkgCoParentsQueryParamsSchema,
+  CkgCommonAncestorsQueryParamsSchema,
+  CkgNeighborhoodQueryParamsSchema,
+  CkgPathQueryParamsSchema,
+  CkgSiblingsQueryParamsSchema,
+  CkgSubgraphQueryParamsSchema,
 } from '../schemas/ckg-traversal.schemas.js';
 import { parseEdgeTypesFilter, parseNodeTypesFilter } from '../schemas/pkg-traversal.schemas.js';
 import {
-    type IRouteOptions,
-    attachStartTimeHook,
-    buildContext,
-    handleError,
-    wrapResponse,
+  type IRouteOptions,
+  attachStartTimeHook,
+  buildContext,
+  handleError,
+  wrapResponse,
 } from '../shared/route-helpers.js';
 
 // ============================================================================
@@ -149,11 +153,7 @@ export function registerCkgTraversalRoutes(
           includeProperties: true,
         });
 
-        const result = await service.getCkgAncestors(
-          nodeId as NodeId,
-          traversalOptions,
-          context
-        );
+        const result = await service.getCkgAncestors(nodeId as NodeId, traversalOptions, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
@@ -172,7 +172,8 @@ export function registerCkgTraversalRoutes(
       schema: {
         tags: ['CKG Traversal'],
         summary: 'Get descendants of a CKG node',
-        description: 'Traverse outbound edges to find all descendant nodes in the CKG up to maxDepth.',
+        description:
+          'Traverse outbound edges to find all descendant nodes in the CKG up to maxDepth.',
         params: {
           type: 'object',
           required: ['nodeId'],
@@ -207,11 +208,7 @@ export function registerCkgTraversalRoutes(
           includeProperties: true,
         });
 
-        const result = await service.getCkgDescendants(
-          nodeId as NodeId,
-          traversalOptions,
-          context
-        );
+        const result = await service.getCkgDescendants(nodeId as NodeId, traversalOptions, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
@@ -230,7 +227,8 @@ export function registerCkgTraversalRoutes(
       schema: {
         tags: ['CKG Traversal'],
         summary: 'Find shortest path between two CKG nodes',
-        description: 'Compute the shortest path between two nodes in the Canonical Knowledge Graph.',
+        description:
+          'Compute the shortest path between two nodes in the Canonical Knowledge Graph.',
         querystring: {
           type: 'object',
           required: ['fromNodeId', 'toNodeId'],
@@ -283,7 +281,10 @@ export function registerCkgTraversalRoutes(
           type: 'object',
           required: ['edgeType'],
           properties: {
-            edgeType: { type: 'string', description: 'Edge type defining parent-child relationship' },
+            edgeType: {
+              type: 'string',
+              description: 'Edge type defining parent-child relationship',
+            },
             direction: { type: 'string', enum: ['outbound', 'inbound'], default: 'outbound' },
             includeParentDetails: { type: 'string', enum: ['true', 'false'], default: 'true' },
             maxSiblingsPerGroup: { type: 'number', minimum: 1, maximum: 200, default: 50 },
@@ -304,11 +305,7 @@ export function registerCkgTraversalRoutes(
           maxSiblingsPerGroup: parsed.maxSiblingsPerGroup,
         });
 
-        const result = await service.getCkgSiblings(
-          nodeId as NodeId,
-          query,
-          context
-        );
+        const result = await service.getCkgSiblings(nodeId as NodeId, query, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
@@ -340,7 +337,10 @@ export function registerCkgTraversalRoutes(
           type: 'object',
           required: ['edgeType'],
           properties: {
-            edgeType: { type: 'string', description: 'Edge type defining parent-child relationship' },
+            edgeType: {
+              type: 'string',
+              description: 'Edge type defining parent-child relationship',
+            },
             direction: { type: 'string', enum: ['outbound', 'inbound'], default: 'inbound' },
             includeChildDetails: { type: 'string', enum: ['true', 'false'], default: 'true' },
             maxCoParentsPerGroup: { type: 'number', minimum: 1, maximum: 200, default: 50 },
@@ -361,11 +361,7 @@ export function registerCkgTraversalRoutes(
           maxCoParentsPerGroup: parsed.maxCoParentsPerGroup,
         });
 
-        const result = await service.getCkgCoParents(
-          nodeId as NodeId,
-          query,
-          context
-        );
+        const result = await service.getCkgCoParents(nodeId as NodeId, query, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
@@ -426,8 +422,99 @@ export function registerCkgTraversalRoutes(
           includeEdges: parsed.includeEdges,
         });
 
-        const result = await service.getCkgNeighborhood(
-          nodeId as NodeId,
+        const result = await service.getCkgNeighborhood(nodeId as NodeId, query, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/ckg/traversal/bridges — CKG Bridge nodes (Phase 8c)
+  // ============================================================================
+
+  fastify.get<{ Querystring: Record<string, unknown> }>(
+    '/api/v1/ckg/traversal/bridges',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Traversal'],
+        summary: 'Detect bridge nodes (articulation points) in the CKG',
+        description:
+          'Identify canonical nodes whose removal would disconnect the graph within a domain.',
+        querystring: {
+          type: 'object',
+          required: ['domain'],
+          properties: {
+            domain: { type: 'string' },
+            edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
+            minComponentSize: { type: 'number', minimum: 1, maximum: 1000, default: 2 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const parsed = CkgBridgeQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const edgeTypes = parseEdgeTypesFilter(parsed.edgeTypes) as GraphEdgeType[] | undefined;
+
+        const query = BridgeQuery.create({
+          domain: parsed.domain,
+          ...(edgeTypes !== undefined ? { edgeTypes } : {}),
+          minComponentSize: parsed.minComponentSize,
+        });
+
+        const result = await service.getCkgBridgeNodes(query, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/ckg/traversal/common-ancestors — CKG Common ancestors (Phase 8c)
+  // ============================================================================
+
+  fastify.get<{ Querystring: Record<string, unknown> }>(
+    '/api/v1/ckg/traversal/common-ancestors',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Traversal'],
+        summary: 'Find common ancestors of two CKG nodes',
+        description:
+          'Compute the intersection of ancestor sets for two canonical nodes and extract the LCA(s).',
+        querystring: {
+          type: 'object',
+          required: ['nodeIdA', 'nodeIdB'],
+          properties: {
+            nodeIdA: { type: 'string' },
+            nodeIdB: { type: 'string' },
+            edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
+            maxDepth: { type: 'number', minimum: 1, maximum: 20 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const parsed = CkgCommonAncestorsQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const edgeTypes = parseEdgeTypesFilter(parsed.edgeTypes) as GraphEdgeType[] | undefined;
+
+        const query = CommonAncestorsQuery.create({
+          ...(edgeTypes !== undefined ? { edgeTypes } : {}),
+          maxDepth: parsed.maxDepth,
+        });
+
+        const result = await service.getCkgCommonAncestors(
+          parsed.nodeIdA as NodeId,
+          parsed.nodeIdB as NodeId,
           query,
           context
         );

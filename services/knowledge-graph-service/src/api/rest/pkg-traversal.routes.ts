@@ -10,29 +10,36 @@
 import type { GraphEdgeType, GraphNodeType, NodeId, UserId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
+import type { IFrontierQuery } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import {
-    CoParentsQuery,
-    NeighborhoodQuery,
-    SiblingsQuery,
-    TraversalOptions,
+  BridgeQuery,
+  CoParentsQuery,
+  CommonAncestorsQuery,
+  FrontierQuery,
+  NeighborhoodQuery,
+  SiblingsQuery,
+  TraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
-    CoParentsQueryParamsSchema,
-    NeighborhoodQueryParamsSchema,
-    PathQueryParamsSchema,
-    SiblingsQueryParamsSchema,
-    SubgraphQueryParamsSchema,
-    parseEdgeTypesFilter,
-    parseNodeTypesFilter,
+  BridgeQueryParamsSchema,
+  CoParentsQueryParamsSchema,
+  CommonAncestorsQueryParamsSchema,
+  FrontierQueryParamsSchema,
+  NeighborhoodQueryParamsSchema,
+  PathQueryParamsSchema,
+  SiblingsQueryParamsSchema,
+  SubgraphQueryParamsSchema,
+  parseEdgeTypesFilter,
+  parseNodeTypesFilter,
 } from '../schemas/pkg-traversal.schemas.js';
 import {
-    type IRouteOptions,
-    assertUserAccess,
-    attachStartTimeHook,
-    buildContext,
-    handleError,
-    wrapResponse,
+  type IRouteOptions,
+  assertUserAccess,
+  attachStartTimeHook,
+  buildContext,
+  handleError,
+  wrapResponse,
 } from '../shared/route-helpers.js';
 
 // ============================================================================
@@ -61,7 +68,7 @@ export function registerPkgTraversalRoutes(
       preHandler: authMiddleware,
       schema: {
         tags: ['PKG Traversal'],
-        summary: 'Extract a subgraph from the user\'s PKG',
+        summary: "Extract a subgraph from the user's PKG",
         description:
           'Retrieve the subgraph reachable from a root node, bounded by maxDepth and filtered by edge types.',
         params: {
@@ -244,8 +251,7 @@ export function registerPkgTraversalRoutes(
       schema: {
         tags: ['PKG Traversal'],
         summary: 'Find shortest path between two PKG nodes',
-        description:
-          'Compute the shortest path between two nodes in the user\'s PKG.',
+        description: "Compute the shortest path between two nodes in the user's PKG.",
         params: {
           type: 'object',
           required: ['userId'],
@@ -308,7 +314,10 @@ export function registerPkgTraversalRoutes(
           type: 'object',
           required: ['edgeType'],
           properties: {
-            edgeType: { type: 'string', description: 'Edge type defining parent-child relationship' },
+            edgeType: {
+              type: 'string',
+              description: 'Edge type defining parent-child relationship',
+            },
             direction: { type: 'string', enum: ['outbound', 'inbound'], default: 'outbound' },
             includeParentDetails: { type: 'string', enum: ['true', 'false'], default: 'true' },
             maxSiblingsPerGroup: { type: 'number', minimum: 1, maximum: 200, default: 50 },
@@ -355,8 +364,7 @@ export function registerPkgTraversalRoutes(
       schema: {
         tags: ['PKG Traversal'],
         summary: 'Get co-parents (co-ancestors) of a PKG node',
-        description:
-          'Find nodes sharing a common child via the specified edge type and direction.',
+        description: 'Find nodes sharing a common child via the specified edge type and direction.',
         params: {
           type: 'object',
           required: ['userId', 'nodeId'],
@@ -369,7 +377,10 @@ export function registerPkgTraversalRoutes(
           type: 'object',
           required: ['edgeType'],
           properties: {
-            edgeType: { type: 'string', description: 'Edge type defining parent-child relationship' },
+            edgeType: {
+              type: 'string',
+              description: 'Edge type defining parent-child relationship',
+            },
             direction: { type: 'string', enum: ['outbound', 'inbound'], default: 'inbound' },
             includeChildDetails: { type: 'string', enum: ['true', 'false'], default: 'true' },
             maxCoParentsPerGroup: { type: 'number', minimum: 1, maximum: 200, default: 50 },
@@ -464,6 +475,179 @@ export function registerPkgTraversalRoutes(
         const result = await service.getNeighborhood(
           userId as UserId,
           nodeId as NodeId,
+          query,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/users/:userId/pkg/traversal/bridges — Bridge nodes (Phase 8c)
+  // ============================================================================
+
+  fastify.get<{ Params: { userId: string }; Querystring: Record<string, unknown> }>(
+    '/api/v1/users/:userId/pkg/traversal/bridges',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['PKG Traversal'],
+        summary: 'Detect bridge nodes (articulation points) in the PKG',
+        description:
+          "Identify nodes whose removal would disconnect the graph within a domain. Uses GDS if available, otherwise falls back to Tarjan's algorithm.",
+        params: {
+          type: 'object',
+          required: ['userId'],
+          properties: { userId: { type: 'string' } },
+        },
+        querystring: {
+          type: 'object',
+          required: ['domain'],
+          properties: {
+            domain: { type: 'string' },
+            edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
+            minComponentSize: { type: 'number', minimum: 1, maximum: 1000, default: 2 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { userId } = request.params;
+        assertUserAccess(request, userId);
+
+        const parsed = BridgeQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const edgeTypes = parseEdgeTypesFilter(parsed.edgeTypes) as GraphEdgeType[] | undefined;
+
+        const query = BridgeQuery.create({
+          domain: parsed.domain,
+          ...(edgeTypes !== undefined ? { edgeTypes } : {}),
+          minComponentSize: parsed.minComponentSize,
+        });
+
+        const result = await service.getBridgeNodes(userId as UserId, query, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/users/:userId/pkg/traversal/frontier — Knowledge frontier (Phase 8c)
+  // ============================================================================
+
+  fastify.get<{ Params: { userId: string }; Querystring: Record<string, unknown> }>(
+    '/api/v1/users/:userId/pkg/traversal/frontier',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['PKG Traversal'],
+        summary: 'Get knowledge frontier for the user',
+        description:
+          'Identify unmastered concepts whose prerequisites are mastered — the optimal next-study candidates.',
+        params: {
+          type: 'object',
+          required: ['userId'],
+          properties: { userId: { type: 'string' } },
+        },
+        querystring: {
+          type: 'object',
+          required: ['domain'],
+          properties: {
+            domain: { type: 'string' },
+            masteryThreshold: { type: 'number', minimum: 0, maximum: 1 },
+            maxResults: { type: 'number', minimum: 1, maximum: 100 },
+            sortBy: { type: 'string', enum: ['readiness', 'centrality', 'depth'] },
+            includePrerequisites: { type: 'string', enum: ['true', 'false'] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { userId } = request.params;
+        assertUserAccess(request, userId);
+
+        const parsed = FrontierQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const query = FrontierQuery.create({
+          domain: parsed.domain,
+          masteryThreshold: parsed.masteryThreshold,
+          maxResults: parsed.maxResults,
+          sortBy: parsed.sortBy,
+          includePrerequisites: parsed.includePrerequisites,
+        });
+
+        // Cast needed: DeepReadonly<IFrontierQuery> wraps the MasteryLevel
+        // branded type in a way that's not directly assignable.
+        const result = await service.getKnowledgeFrontier(
+          userId as UserId,
+          query as IFrontierQuery,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/users/:userId/pkg/traversal/common-ancestors — Common ancestors (Phase 8c)
+  // ============================================================================
+
+  fastify.get<{ Params: { userId: string }; Querystring: Record<string, unknown> }>(
+    '/api/v1/users/:userId/pkg/traversal/common-ancestors',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['PKG Traversal'],
+        summary: 'Find common ancestors of two PKG nodes',
+        description:
+          'Compute the intersection of ancestor sets for two nodes and extract the Lowest Common Ancestor(s).',
+        params: {
+          type: 'object',
+          required: ['userId'],
+          properties: { userId: { type: 'string' } },
+        },
+        querystring: {
+          type: 'object',
+          required: ['nodeIdA', 'nodeIdB'],
+          properties: {
+            nodeIdA: { type: 'string' },
+            nodeIdB: { type: 'string' },
+            edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
+            maxDepth: { type: 'number', minimum: 1, maximum: 20 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { userId } = request.params;
+        assertUserAccess(request, userId);
+
+        const parsed = CommonAncestorsQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const edgeTypes = parseEdgeTypesFilter(parsed.edgeTypes) as GraphEdgeType[] | undefined;
+
+        const query = CommonAncestorsQuery.create({
+          ...(edgeTypes !== undefined ? { edgeTypes } : {}),
+          maxDepth: parsed.maxDepth,
+        });
+
+        const result = await service.getCommonAncestors(
+          userId as UserId,
+          parsed.nodeIdA as NodeId,
+          parsed.nodeIdB as NodeId,
           query,
           context
         );

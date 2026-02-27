@@ -35,6 +35,10 @@ import type {
 import type {
   ICoParentsQuery,
   ICoParentsResult,
+  ICommonAncestorsQuery,
+  ICommonAncestorsResult,
+  IFrontierQuery,
+  IKnowledgeFrontierResult,
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
@@ -238,6 +242,63 @@ export class CachedGraphRepository implements IGraphRepository {
   ): Promise<INeighborhoodResult> {
     // TODO: cache key → neighborhood:{graphType}:{nodeId}:{hops}:{edgeTypes}:{nodeTypes}:{filterMode}:{direction}
     return this.inner.getNeighborhood(nodeId, query, userId);
+  }
+
+  // Phase 8c: Structural analysis — cached
+
+  /** Short TTL for mastery-sensitive data (60s) */
+  private readonly shortTtl = 60;
+
+  async getDomainSubgraph(
+    domain: string,
+    edgeTypes?: readonly GraphEdgeType[],
+    userId?: string
+  ): Promise<ISubgraph> {
+    const etKey =
+      edgeTypes !== undefined && edgeTypes.length > 0 ? [...edgeTypes].sort().join(',') : 'all';
+    const userKey = userId ?? 'ckg';
+    const cacheKey = `domain-subgraph:${userKey}:${domain}:${etKey}`;
+
+    return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
+      this.inner.getDomainSubgraph(domain, edgeTypes, userId)
+    );
+  }
+
+  async findArticulationPointsNative(
+    domain: string,
+    edgeTypes?: readonly GraphEdgeType[],
+    userId?: string
+  ): Promise<NodeId[] | null> {
+    // GDS detection is already cached inside the Neo4j repo; pass through.
+    return this.inner.findArticulationPointsNative(domain, edgeTypes, userId);
+  }
+
+  async getKnowledgeFrontier(
+    query: IFrontierQuery,
+    userId: string
+  ): Promise<IKnowledgeFrontierResult> {
+    const cacheKey = `frontier:${userId}:${query.domain}:${String(query.masteryThreshold)}:${String(query.maxResults)}:${query.sortBy}`;
+
+    return this.cache.getOrLoad(cacheKey, this.shortTtl, () =>
+      this.inner.getKnowledgeFrontier(query, userId)
+    );
+  }
+
+  async getCommonAncestors(
+    nodeIdA: NodeId,
+    nodeIdB: NodeId,
+    query: ICommonAncestorsQuery,
+    userId?: string
+  ): Promise<ICommonAncestorsResult> {
+    const etKey = [...query.edgeTypes].sort().join(',');
+    const userKey = userId ?? 'ckg';
+    // Sort node IDs for cache key consistency (A,B = B,A)
+    const [sortedA, sortedB] = [nodeIdA, nodeIdB].sort();
+    const cacheKey = `common-ancestors:${userKey}:${sortedA}:${sortedB}:${etKey}:${String(query.maxDepth)}`;
+
+    return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
+      this.inner.getCommonAncestors(nodeIdA, nodeIdB, query, userId)
+    );
   }
 
   // ==========================================================================
