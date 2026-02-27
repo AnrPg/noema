@@ -67,7 +67,14 @@ import {
   OrphanEdgeError,
 } from './errors/graph.errors.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
-import { buildBridgeNodesFromIds, findArticulationPoints } from './graph-analysis.js';
+import {
+  buildBridgeNodesFromIds,
+  findArticulationPoints,
+  computeTopologicalPrerequisiteOrder,
+  computeBetweennessCentrality,
+  computePageRank,
+  normaliseCentralityResults,
+} from './graph-analysis.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -110,6 +117,8 @@ import type {
   IBridgeNode,
   IBridgeNodesResult,
   IBridgeQuery,
+  ICentralityQuery,
+  ICentralityResult,
   ICommonAncestorsQuery,
   ICommonAncestorsResult,
   ICoParentsQuery,
@@ -119,6 +128,8 @@ import type {
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
+  IPrerequisiteChainQuery,
+  IPrerequisiteChainResult,
   ISiblingsQuery,
   ISiblingsResult,
   ITraversalOptions,
@@ -1121,6 +1132,129 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   }
 
   // ========================================================================
+  // PKG Ordering & Ranking (Phase 8d)
+  // ========================================================================
+
+  async getPrerequisiteChain(
+    userId: UserId,
+    nodeId: NodeId,
+    query: IPrerequisiteChainQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPrerequisiteChainResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, nodeId, maxDepth: query.maxDepth, includeIndirect: query.includeIndirect },
+      'Getting PKG prerequisite chain'
+    );
+
+    // Verify target node exists in the user's PKG
+    const targetNode = await this.graphRepository.getNode(nodeId, userId);
+    if (!targetNode) {
+      throw new NodeNotFoundError(nodeId, GraphType.PKG);
+    }
+
+    // Fetch the prerequisite subgraph (PREREQUISITE edges only by default)
+    const subgraph = await this.graphRepository.getDomainSubgraph(
+      query.domain,
+      query.edgeTypes,
+      userId
+    );
+
+    const result = computeTopologicalPrerequisiteOrder(subgraph, nodeId);
+
+    return {
+      data: result,
+      agentHints: this.createPrerequisiteChainHints(result),
+    };
+  }
+
+  async getCentralityRanking(
+    userId: UserId,
+    query: ICentralityQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICentralityResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { userId, domain: query.domain, algorithm: query.algorithm, topK: query.topK },
+      'Getting PKG centrality ranking'
+    );
+
+    const algorithm = query.algorithm;
+    const topK = query.topK;
+    const normalise = query.normalise;
+
+    if (algorithm === 'degree') {
+      // Degree centrality via Cypher (repository)
+      const entries = await this.graphRepository.getDegreeCentrality(query, userId);
+      const { ranking, statistics } = normaliseCentralityResults(
+        entries,
+        normalise,
+        topK,
+        'degree'
+      );
+      const result: ICentralityResult = {
+        algorithm: 'degree',
+        domain: query.domain,
+        totalNodes: entries.length,
+        ranking,
+        statistics,
+      };
+      return {
+        data: result,
+        agentHints: this.createCentralityHints(result),
+      };
+    }
+
+    // Betweenness / PageRank — compute in application code on subgraph
+    const subgraph = await this.graphRepository.getDomainSubgraph(
+      query.domain,
+      query.edgeTypes,
+      userId
+    );
+
+    if (algorithm === 'betweenness') {
+      const entries = computeBetweennessCentrality(subgraph, query.edgeTypes);
+      const { ranking, statistics } = normaliseCentralityResults(
+        entries,
+        normalise,
+        topK,
+        'betweenness'
+      );
+      const result: ICentralityResult = {
+        algorithm: 'betweenness',
+        domain: query.domain,
+        totalNodes: entries.length,
+        ranking,
+        statistics,
+      };
+      return {
+        data: result,
+        agentHints: this.createCentralityHints(result),
+      };
+    }
+
+    // pagerank
+    const entries = computePageRank(subgraph, query.edgeTypes);
+    const { ranking, statistics } = normaliseCentralityResults(
+      entries,
+      normalise,
+      topK,
+      'pagerank'
+    );
+    const result: ICentralityResult = {
+      algorithm: 'pagerank',
+      domain: query.domain,
+      totalNodes: entries.length,
+      ranking,
+      statistics,
+    };
+    return {
+      data: result,
+      agentHints: this.createCentralityHints(result),
+    };
+  }
+
+  // ========================================================================
   // CKG Operations (read-only)
   // ========================================================================
 
@@ -1269,9 +1403,9 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     // CKG edges have no userId — omit it from the filter
     const ckgFilter: IEdgeFilter = {
-      ...(filters.edgeType != null ? { edgeType: filters.edgeType } : {}),
-      ...(filters.sourceNodeId != null ? { sourceNodeId: filters.sourceNodeId } : {}),
-      ...(filters.targetNodeId != null ? { targetNodeId: filters.targetNodeId } : {}),
+      ...(filters.edgeType !== undefined ? { edgeType: filters.edgeType } : {}),
+      ...(filters.sourceNodeId !== undefined ? { sourceNodeId: filters.sourceNodeId } : {}),
+      ...(filters.targetNodeId !== undefined ? { targetNodeId: filters.targetNodeId } : {}),
     };
 
     // Fetch limit+1 to know if there are more results without a separate count query
@@ -1527,6 +1661,119 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     return {
       data: result,
       agentHints: this.createCommonAncestorsHints(result),
+    };
+  }
+
+  // ========================================================================
+  // Phase 8d — CKG Ordering & Ranking
+  // ========================================================================
+
+  async getCkgPrerequisiteChain(
+    nodeId: NodeId,
+    query: IPrerequisiteChainQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPrerequisiteChainResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { nodeId, maxDepth: query.maxDepth, includeIndirect: query.includeIndirect },
+      'Getting CKG prerequisite chain'
+    );
+
+    // Verify target node exists in the CKG
+    const targetNode = await this.graphRepository.getNode(nodeId);
+    if (targetNode?.graphType !== GraphType.CKG) {
+      throw new NodeNotFoundError(nodeId, GraphType.CKG);
+    }
+
+    // CKG: no userId
+    const subgraph = await this.graphRepository.getDomainSubgraph(query.domain, query.edgeTypes);
+
+    const result = computeTopologicalPrerequisiteOrder(subgraph, nodeId);
+
+    return {
+      data: result,
+      agentHints: this.createPrerequisiteChainHints(result),
+    };
+  }
+
+  async getCkgCentralityRanking(
+    query: ICentralityQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICentralityResult>> {
+    this.requireAuth(context);
+    this.logger.debug(
+      { domain: query.domain, algorithm: query.algorithm, topK: query.topK },
+      'Getting CKG centrality ranking'
+    );
+
+    const algorithm = query.algorithm;
+    const topK = query.topK;
+    const normalise = query.normalise;
+
+    if (algorithm === 'degree') {
+      // CKG: no userId
+      const entries = await this.graphRepository.getDegreeCentrality(query);
+      const { ranking, statistics } = normaliseCentralityResults(
+        entries,
+        normalise,
+        topK,
+        'degree'
+      );
+      const result: ICentralityResult = {
+        algorithm: 'degree',
+        domain: query.domain,
+        totalNodes: entries.length,
+        ranking,
+        statistics,
+      };
+      return {
+        data: result,
+        agentHints: this.createCentralityHints(result),
+      };
+    }
+
+    // Betweenness / PageRank — compute in application code on subgraph
+    const subgraph = await this.graphRepository.getDomainSubgraph(query.domain, query.edgeTypes);
+
+    if (algorithm === 'betweenness') {
+      const entries = computeBetweennessCentrality(subgraph, query.edgeTypes);
+      const { ranking, statistics } = normaliseCentralityResults(
+        entries,
+        normalise,
+        topK,
+        'betweenness'
+      );
+      const result: ICentralityResult = {
+        algorithm: 'betweenness',
+        domain: query.domain,
+        totalNodes: entries.length,
+        ranking,
+        statistics,
+      };
+      return {
+        data: result,
+        agentHints: this.createCentralityHints(result),
+      };
+    }
+
+    // pagerank
+    const entries = computePageRank(subgraph, query.edgeTypes);
+    const { ranking, statistics } = normaliseCentralityResults(
+      entries,
+      normalise,
+      topK,
+      'pagerank'
+    );
+    const result: ICentralityResult = {
+      algorithm: 'pagerank',
+      domain: query.domain,
+      totalNodes: entries.length,
+      ranking,
+      statistics,
+    };
+    return {
+      data: result,
+      agentHints: this.createCentralityHints(result),
     };
   }
 
@@ -2194,20 +2441,22 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     let entries: IPkgOperationLogEntry[];
     let usedPagination = false;
 
-    if (filters.nodeId != null) {
+    if (filters.nodeId !== undefined) {
       entries = await this.operationLogRepository.getOperationsForNode(userId, filters.nodeId);
-    } else if (filters.edgeId != null) {
+    } else if (filters.edgeId !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- EdgeId type not yet resolved
       entries = await this.operationLogRepository.getOperationsForEdge(userId, filters.edgeId);
-    } else if (filters.operationType != null) {
+    } else if (filters.operationType !== undefined) {
       const result = await this.operationLogRepository.getOperationsByType(
         userId,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- PkgOperationType type not yet resolved
         filters.operationType,
         limit,
         offset
       );
       entries = result.items;
       usedPagination = true;
-    } else if (filters.since != null) {
+    } else if (filters.since !== undefined) {
       entries = await this.operationLogRepository.getOperationsSince(userId, filters.since);
     } else {
       const result = await this.operationLogRepository.getOperationHistory(userId, limit, offset);
@@ -3095,7 +3344,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       if (topNode !== undefined) {
         actions.push({
           action: 'study_next',
-          description: `"${topNode.node.label}" has readiness ${String(topNode.readinessScore.toFixed(2))} — the best next study candidate`,
+          description: `"${topNode.node.label}" has readiness ${topNode.readinessScore.toFixed(2)} — the best next study candidate`,
           priority: 'high',
           category: 'exploration',
         });
@@ -3126,7 +3375,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       dependencies: [],
       estimatedImpact: { benefit: 0.8, effort: 0.2, roi: 4.0 },
       preferenceAlignment: [],
-      reasoning: `Knowledge frontier for "${result.domain}": ${String(frontierCount)} concept(s) ready to learn. Mastery: ${String(result.summary.masteryPercentage.toFixed(1))}% (${String(result.summary.totalMastered)}/${String(result.summary.totalMastered + result.summary.totalUnmastered)}).`,
+      reasoning: `Knowledge frontier for "${result.domain}": ${String(frontierCount)} concept(s) ready to learn. Mastery: ${result.summary.masteryPercentage.toFixed(1)}% (${String(result.summary.totalMastered)}/${String(result.summary.totalMastered + result.summary.totalUnmastered)}).`,
     };
   }
 
@@ -3184,6 +3433,122 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
       preferenceAlignment: [],
       reasoning: `Common ancestors of "${result.nodeA.label}" and "${result.nodeB.label}": ${String(ancestorCount)} shared ancestor(s), ${String(lcaCount)} LCA(s).${result.directlyConnected ? ' Nodes are directly connected.' : ''}`,
+    };
+  }
+
+  /**
+   * Create agent hints for prerequisite chain analysis.
+   */
+  private createPrerequisiteChainHints(result: IPrerequisiteChainResult): IAgentHints {
+    const layerCount = result.layers.length;
+    const totalNodes = result.totalPrerequisites;
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (layerCount === 0) {
+      actions.push({
+        action: 'explore_prerequisites',
+        description: `"${result.targetNode.label}" has no prerequisite chain — it may be a foundational concept`,
+        priority: 'low',
+        category: 'exploration',
+      });
+    } else {
+      // Suggest studying from the foundation up
+      const firstLayer = result.layers[0];
+      const firstEntry = firstLayer?.nodes[0];
+      if (firstEntry !== undefined) {
+        actions.push({
+          action: 'start_from_foundation',
+          description: `Start with "${firstEntry.node.label}" (layer ${String(firstLayer?.depth ?? 0)}) — the deepest prerequisite`,
+          priority: 'high',
+          category: 'exploration',
+        });
+      }
+
+      if (result.gaps.length > 0) {
+        actions.push({
+          action: 'address_gaps',
+          description: `${String(result.gaps.length)} prerequisite gap(s) detected — review and reinforce weak prerequisites`,
+          priority: 'high',
+          category: 'optimization',
+        });
+      }
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.topologicalOrder.slice(0, 5).map((e) => ({
+        type: 'KGNode' as const,
+        id: e.node.nodeId as string,
+        label: e.node.label,
+        relevance: 0.8,
+      })),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'long',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.7, effort: 0.2, roi: 3.5 },
+      preferenceAlignment: [],
+      reasoning: `Prerequisite chain for "${result.targetNode.label}": ${String(layerCount)} layer(s), ${String(totalNodes)} concept(s). Max depth: ${String(result.maxChainDepth)}.`,
+    };
+  }
+
+  /**
+   * Create agent hints for centrality ranking analysis.
+   */
+  private createCentralityHints(result: ICentralityResult): IAgentHints {
+    const entryCount = result.ranking.length;
+    const actions: IAgentHints['suggestedNextActions'] = [];
+
+    if (entryCount === 0) {
+      actions.push({
+        action: 'add_concepts',
+        description: 'No nodes found for centrality analysis — add concepts to the domain',
+        priority: 'medium',
+        category: 'exploration',
+      });
+    } else {
+      const topEntry = result.ranking[0];
+      if (topEntry !== undefined) {
+        actions.push({
+          action: 'focus_on_central',
+          description: `"${topEntry.node.label}" is the most central concept (${result.algorithm}, score: ${topEntry.score.toFixed(3)}) — prioritize for study`,
+          priority: 'high',
+          category: 'optimization',
+        });
+      }
+
+      if (result.statistics.standardDeviation > result.statistics.mean * 0.5) {
+        actions.push({
+          action: 'balance_graph',
+          description:
+            'High centrality variance — some concepts dominate; consider adding connections to peripheral nodes',
+          priority: 'medium',
+          category: 'optimization',
+        });
+      }
+    }
+
+    return {
+      suggestedNextActions: actions,
+      relatedResources: result.ranking.slice(0, 5).map((e) => ({
+        type: 'KGNode' as const,
+        id: e.node.nodeId as string,
+        label: e.node.label,
+        relevance: e.score,
+      })),
+      confidence: 1.0,
+      sourceQuality: 'high',
+      validityPeriod: 'medium',
+      contextNeeded: [],
+      assumptions: [`Algorithm: ${result.algorithm}`, `Top-K: ${String(entryCount)}`],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3.0 },
+      preferenceAlignment: [],
+      reasoning: `Centrality ranking (${result.algorithm}): ${String(entryCount)} node(s). Mean: ${result.statistics.mean.toFixed(3)}, StdDev: ${result.statistics.standardDeviation.toFixed(3)}.`,
     };
   }
 

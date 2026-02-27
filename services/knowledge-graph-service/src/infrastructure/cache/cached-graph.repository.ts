@@ -33,6 +33,8 @@ import type {
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
+  ICentralityEntry,
+  ICentralityQuery,
   ICoParentsQuery,
   ICoParentsResult,
   ICommonAncestorsQuery,
@@ -294,10 +296,25 @@ export class CachedGraphRepository implements IGraphRepository {
     const userKey = userId ?? 'ckg';
     // Sort node IDs for cache key consistency (A,B = B,A)
     const [sortedA, sortedB] = [nodeIdA, nodeIdB].sort();
-    const cacheKey = `common-ancestors:${userKey}:${sortedA}:${sortedB}:${etKey}:${String(query.maxDepth)}`;
+    const cacheKey = `common-ancestors:${userKey}:${String(sortedA ?? '')}:${String(sortedB ?? '')}:${etKey}:${String(query.maxDepth)}`;
 
     return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
       this.inner.getCommonAncestors(nodeIdA, nodeIdB, query, userId)
+    );
+  }
+
+  // Phase 8d: Ordering & ranking — cached
+
+  async getDegreeCentrality(query: ICentralityQuery, userId?: string): Promise<ICentralityEntry[]> {
+    const etKey =
+      query.edgeTypes !== undefined && query.edgeTypes.length > 0
+        ? [...query.edgeTypes].sort().join(',')
+        : 'all';
+    const userKey = userId ?? 'ckg';
+    const cacheKey = `centrality-degree:${userKey}:${query.domain}:${etKey}`;
+
+    return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
+      this.inner.getDegreeCentrality(query, userId)
     );
   }
 

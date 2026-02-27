@@ -45,6 +45,8 @@ import type {
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
+  ICentralityEntry,
+  ICentralityQuery,
   ICoParentsQuery,
   ICoParentsResult,
   ICommonAncestorsQuery,
@@ -1183,7 +1185,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const userFilter = userId !== undefined ? 'AND n.userId = $userId' : '';
 
     const session = this.neo4j.getSession();
-    const graphName = `bridge_analysis_${domain}_${Date.now()}`;
+    const graphName = `bridge_analysis_${domain}_${String(Date.now())}`;
 
     try {
       // Project the domain subgraph into GDS
@@ -1293,7 +1295,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
         const avgMastery =
           masteredPrereqs.length > 0
             ? masteredPrereqs.reduce((sum, p) => {
-                const ml = p.properties['masteryLevel'];
+                const ml: unknown = p.properties['masteryLevel'];
                 return sum + (typeof ml === 'number' ? ml : 0);
               }, 0) / masteredPrereqs.length
             : 0;
@@ -1387,7 +1389,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
       if (nodeA === undefined || nodeB === undefined) {
         // Return empty result if either node not found
-        const emptyNode = (id: NodeId) =>
+        const emptyNode = (id: NodeId): IGraphNode =>
           ({
             nodeId: id,
             graphType: 'pkg',
@@ -1458,8 +1460,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       }));
 
       // LCA = ancestors with the minimum combinedDepth
-      const minCombinedDepth =
-        allCommonAncestors.length > 0 ? allCommonAncestors[0]!.combinedDepth : Infinity;
+      const minCombinedDepth = allCommonAncestors[0]?.combinedDepth ?? Infinity;
       const lowestCommonAncestors = allCommonAncestors
         .filter((a) => a.combinedDepth === minCombinedDepth)
         .map((a) => a.node);
@@ -1468,8 +1469,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
       let pathFromA: IGraphNode[] = [];
       let pathFromB: IGraphNode[] = [];
 
-      if (lowestCommonAncestors.length > 0) {
-        const lcaNodeId = lowestCommonAncestors[0]!.nodeId;
+      const lcaFirst = lowestCommonAncestors[0];
+      if (lcaFirst !== undefined) {
+        const lcaNodeId = lcaFirst.nodeId;
 
         const pathsResult = await session.executeRead(async (tx: ManagedTransaction) => {
           return tx.run(
@@ -1499,6 +1501,52 @@ export class Neo4jGraphRepository implements IGraphRepository {
         pathFromA,
         pathFromB,
       };
+    } finally {
+      await session.close();
+    }
+  }
+
+  // ==========================================================================
+  // Phase 8d – Degree Centrality
+  // ==========================================================================
+
+  async getDegreeCentrality(query: ICentralityQuery, userId?: string): Promise<ICentralityEntry[]> {
+    const primaryLabel = graphTypeToLabel(query.domain);
+    const relPattern = buildRelTypePattern(query.edgeTypes);
+
+    const cypher = `
+      MATCH (n:${primaryLabel} {domain: $domain})
+      WHERE n.isDeleted = false
+      ${userId !== undefined ? 'AND n.userId = $userId' : ''}
+      OPTIONAL MATCH (n)<-[rIn:${relPattern}]-()
+      OPTIONAL MATCH (n)-[rOut:${relPattern}]->()
+      WITH n, count(DISTINCT rIn) AS inDeg, count(DISTINCT rOut) AS outDeg
+      RETURN n, inDeg, outDeg, (inDeg + outDeg) AS totalDeg
+      ORDER BY totalDeg DESC
+    `;
+
+    const params: Record<string, unknown> = { domain: query.domain };
+    if (userId !== undefined) {
+      params['userId'] = userId;
+    }
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(cypher, params);
+      });
+
+      return result.records.map((record, index) => {
+        const node = mapNodeToGraphNode(record.get('n') as neo4j.Node);
+        const inDeg = (record.get('inDeg') as { toNumber(): number }).toNumber();
+        const outDeg = (record.get('outDeg') as { toNumber(): number }).toNumber();
+        return {
+          node,
+          score: inDeg + outDeg,
+          rank: index + 1,
+          degreeBreakdown: { inDegree: inDeg, outDegree: outDeg },
+        } satisfies ICentralityEntry;
+      });
     } finally {
       await session.close();
     }
@@ -1920,11 +1968,11 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     if (result.records.length === 0) throw new NodeNotFoundError(nodeId);
   }
 
-  async findNodes(_filter: INodeFilter, _limit: number, _offset: number): Promise<IGraphNode[]> {
+  findNodes(_filter: INodeFilter, _limit: number, _offset: number): Promise<IGraphNode[]> {
     throw new Error('findNodes is not supported within a transaction context');
   }
 
-  async countNodes(_filter: INodeFilter): Promise<number> {
+  countNodes(_filter: INodeFilter): Promise<number> {
     throw new Error('countNodes is not supported within a transaction context');
   }
 
@@ -2027,7 +2075,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     if (deleted === 0) throw new EdgeNotFoundError(edgeId);
   }
 
-  async findEdges(_filter: IEdgeFilter): Promise<IGraphEdge[]> {
+  findEdges(_filter: IEdgeFilter): Promise<IGraphEdge[]> {
     throw new Error('findEdges is not supported within a transaction context');
   }
 
@@ -2062,27 +2110,27 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
   // ── Traversal (not needed in transaction context, stubs) ──────────────
 
-  async getAncestors(): Promise<IGraphNode[]> {
+  getAncestors(): Promise<IGraphNode[]> {
     throw new Error('getAncestors is not supported within a transaction context');
   }
 
-  async getDescendants(): Promise<IGraphNode[]> {
+  getDescendants(): Promise<IGraphNode[]> {
     throw new Error('getDescendants is not supported within a transaction context');
   }
 
-  async findShortestPath(): Promise<IGraphNode[]> {
+  findShortestPath(): Promise<IGraphNode[]> {
     throw new Error('findShortestPath is not supported within a transaction context');
   }
 
-  async findFilteredShortestPath(): Promise<IGraphNode[]> {
+  findFilteredShortestPath(): Promise<IGraphNode[]> {
     throw new Error('findFilteredShortestPath is not supported within a transaction context');
   }
 
-  async getSubgraph(): Promise<ISubgraph> {
+  getSubgraph(): Promise<ISubgraph> {
     throw new Error('getSubgraph is not supported within a transaction context');
   }
 
-  async detectCycles(): Promise<NodeId[]> {
+  detectCycles(): Promise<NodeId[]> {
     throw new Error('detectCycles is not supported within a transaction context');
   }
 
@@ -2125,21 +2173,17 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
   // ── Transaction nesting (not supported) ───────────────────────────────
 
-  async runInTransaction<T>(_fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
+  runInTransaction<T>(_fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
     throw new Error('Nested transactions are not supported');
   }
 
   // ── Traversal stubs (not needed inside commit protocol) ───────────────
 
-  async getSiblings(
-    _nodeId: NodeId,
-    _query: ISiblingsQuery,
-    _userId?: string
-  ): Promise<ISiblingsResult> {
+  getSiblings(_nodeId: NodeId, _query: ISiblingsQuery, _userId?: string): Promise<ISiblingsResult> {
     throw new Error('getSiblings is not supported inside transactions');
   }
 
-  async getCoParents(
+  getCoParents(
     _nodeId: NodeId,
     _query: ICoParentsQuery,
     _userId?: string
@@ -2147,7 +2191,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('getCoParents is not supported inside transactions');
   }
 
-  async getNeighborhood(
+  getNeighborhood(
     _nodeId: NodeId,
     _query: INeighborhoodQuery,
     _userId?: string
@@ -2157,7 +2201,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
   // ── Phase 8c traversal stubs ──────────────────────────────────────────
 
-  async getDomainSubgraph(
+  getDomainSubgraph(
     _domain: string,
     _edgeTypes?: readonly GraphEdgeType[],
     _userId?: string
@@ -2165,7 +2209,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('getDomainSubgraph is not supported inside transactions');
   }
 
-  async findArticulationPointsNative(
+  findArticulationPointsNative(
     _domain: string,
     _edgeTypes?: readonly GraphEdgeType[],
     _userId?: string
@@ -2173,19 +2217,22 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('findArticulationPointsNative is not supported inside transactions');
   }
 
-  async getKnowledgeFrontier(
-    _query: IFrontierQuery,
-    _userId: string
-  ): Promise<IKnowledgeFrontierResult> {
+  getKnowledgeFrontier(_query: IFrontierQuery, _userId: string): Promise<IKnowledgeFrontierResult> {
     throw new Error('getKnowledgeFrontier is not supported inside transactions');
   }
 
-  async getCommonAncestors(
+  getCommonAncestors(
     _nodeIdA: NodeId,
     _nodeIdB: NodeId,
     _query: ICommonAncestorsQuery,
     _userId?: string
   ): Promise<ICommonAncestorsResult> {
     throw new Error('getCommonAncestors is not supported inside transactions');
+  }
+
+  // ── Phase 8d traversal stubs ──────────────────────────────────────────
+
+  getDegreeCentrality(_query: ICentralityQuery, _userId?: string): Promise<ICentralityEntry[]> {
+    throw new Error('getDegreeCentrality is not supported inside transactions');
   }
 }

@@ -569,3 +569,102 @@ export interface ICommonAncestorsResult {
   /** Path from nodeB to LCA (if exists) */
   readonly pathFromB: readonly IGraphNode[];
 }
+
+// ============================================================================
+// Prerequisite Chain (Phase 8d)
+// ============================================================================
+
+/**
+ * Centrality algorithm type.
+ */
+export type CentralityAlgorithm = 'degree' | 'betweenness' | 'pagerank';
+
+/**
+ * A single prerequisite in the topological ordering.
+ */
+export interface IPrerequisiteEntry {
+  /** Node ID of the prerequisite */
+  readonly nodeId: string;
+  /** Display label */
+  readonly label: string;
+  /** Mastery level (0–1), if available from the PKG */
+  readonly masteryLevel?: number;
+  /** Whether the prerequisite is mastered (above threshold) */
+  readonly isMastered: boolean;
+}
+
+/**
+ * A topological layer in the prerequisite chain.
+ * All entries in a layer can be studied in parallel.
+ */
+export interface IPrerequisiteLayer {
+  /** Topological depth (0 = direct prerequisite of target) */
+  readonly depth: number;
+  /** Entries at this depth */
+  readonly entries: readonly IPrerequisiteEntry[];
+}
+
+/**
+ * Complete result of a prerequisite chain query.
+ */
+export interface IPrerequisiteChainResult {
+  /** Node ID of the target concept */
+  readonly targetNodeId: string;
+  /** Topologically-ordered layers (deepest-first) */
+  readonly layers: readonly IPrerequisiteLayer[];
+  /** Length of the critical (longest) path to the target */
+  readonly criticalPathLength: number;
+  /** Whether a cycle was detected in prerequisites */
+  readonly hasCycle: boolean;
+}
+
+// ============================================================================
+// Centrality Ranking (Phase 8d)
+// ============================================================================
+
+/**
+ * Statistical summary for a set of centrality scores.
+ */
+export interface ICentralityStatistics {
+  readonly mean: number;
+  readonly median: number;
+  readonly standardDeviation: number;
+  readonly skewness: number;
+  readonly kurtosis: number;
+  readonly maxScore: number;
+  readonly minScore: number;
+}
+
+/**
+ * A single centrality ranking entry.
+ */
+export interface ICentralityEntry {
+  /** Node ID */
+  readonly nodeId: string;
+  /** Display label */
+  readonly label: string;
+  /** Raw centrality score */
+  readonly score: number;
+  /** Normalised score (0–1), or 0 if not normalised */
+  readonly normalizedScore: number;
+  /** Degree breakdown (present only for degree algorithm) */
+  readonly degreeBreakdown?: {
+    readonly inDegree: number;
+    readonly outDegree: number;
+    readonly totalDegree: number;
+  };
+}
+
+/**
+ * Complete result of a centrality ranking query.
+ */
+export interface ICentralityResult {
+  /** The algorithm used */
+  readonly algorithm: CentralityAlgorithm;
+  /** Ranked entries (highest centrality first) */
+  readonly entries: readonly ICentralityEntry[];
+  /** Descriptive statistics for the full (pre-topK) distribution */
+  readonly statistics: ICentralityStatistics;
+  /** Total number of nodes analysed (before topK) */
+  readonly totalNodesAnalyzed: number;
+}

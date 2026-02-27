@@ -56,7 +56,7 @@ export const PathQueryParamsSchema = z.object({
  * Returns undefined if the input is undefined or empty.
  */
 export function parseEdgeTypesFilter(edgeTypesParam: string | undefined): string[] | undefined {
-  if (!edgeTypesParam) return undefined;
+  if (edgeTypesParam === undefined || edgeTypesParam.length === 0) return undefined;
   const types = edgeTypesParam
     .split(',')
     .map((t) => t.trim())
@@ -73,7 +73,7 @@ export function parseEdgeTypesFilter(edgeTypesParam: string | undefined): string
  * Returns undefined if the input is undefined or empty.
  */
 export function parseNodeTypesFilter(nodeTypesParam: string | undefined): string[] | undefined {
-  if (!nodeTypesParam) return undefined;
+  if (nodeTypesParam === undefined || nodeTypesParam.length === 0) return undefined;
   const types = nodeTypesParam
     .split(',')
     .map((t) => t.trim())
@@ -189,6 +189,43 @@ export const CommonAncestorsQueryParamsSchema = z.object({
 });
 
 // ============================================================================
+// Prerequisite Chain Query Parameters (Phase 8d)
+// ============================================================================
+
+/**
+ * Prerequisite chain query parameters.
+ * `domain` is required — specifies the knowledge domain to analyze.
+ */
+export const PrerequisiteChainQueryParamsSchema = z.object({
+  domain: z.string().min(1),
+  maxDepth: z.coerce.number().int().min(1).max(50).default(10),
+  edgeTypes: z.string().optional(),
+  includeIndirect: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .default('true'),
+});
+
+// ============================================================================
+// Centrality Query Parameters (Phase 8d)
+// ============================================================================
+
+/**
+ * Centrality ranking query parameters.
+ * `domain` is required — specifies the knowledge domain to analyze.
+ */
+export const CentralityQueryParamsSchema = z.object({
+  domain: z.string().min(1),
+  algorithm: z.enum(['degree', 'betweenness', 'pagerank']).default('degree'),
+  edgeTypes: z.string().optional(),
+  topK: z.coerce.number().int().min(1).max(500).default(10),
+  normalise: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .default('true'),
+});
+
+// ============================================================================
 // Type Inference
 // ============================================================================
 
@@ -201,3 +238,5 @@ export type NeighborhoodQueryParams = z.infer<typeof NeighborhoodQueryParamsSche
 export type BridgeQueryParams = z.infer<typeof BridgeQueryParamsSchema>;
 export type FrontierQueryParams = z.infer<typeof FrontierQueryParamsSchema>;
 export type CommonAncestorsQueryParams = z.infer<typeof CommonAncestorsQueryParamsSchema>;
+export type PrerequisiteChainQueryParams = z.infer<typeof PrerequisiteChainQueryParamsSchema>;
+export type CentralityQueryParams = z.infer<typeof CentralityQueryParamsSchema>;

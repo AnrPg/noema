@@ -25,6 +25,8 @@ import type {
 } from '@noema/types';
 
 import type {
+  ICentralityEntry,
+  ICentralityQuery,
   ICoParentsQuery,
   ICoParentsResult,
   ICommonAncestorsQuery,
@@ -336,6 +338,17 @@ export interface ITraversalRepository {
     query: ICommonAncestorsQuery,
     userId?: string
   ): Promise<ICommonAncestorsResult>;
+
+  // Phase 8d: Ordering & Ranking operations
+
+  /**
+   * Get degree centrality for nodes in a domain via optimized Cypher query.
+   *
+   * Counts in-degree, out-degree, and total degree for each node,
+   * returning the top-K results sorted by total degree descending.
+   * Preferred over app-code computation for degree-only queries.
+   */
+  getDegreeCentrality(query: ICentralityQuery, userId?: string): Promise<ICentralityEntry[]>;
 }
 
 // ============================================================================

@@ -10,6 +10,7 @@
 
 import type {
   DeepReadonly,
+  EdgeOntologicalCategory,
   GraphEdgeType,
   GraphNodeType,
   GraphType,
@@ -36,8 +37,21 @@ export interface IEdgePolicy {
   /** The edge type this policy governs */
   readonly edgeType: GraphEdgeType;
 
+  /** Ontological category this edge type belongs to */
+  readonly category: EdgeOntologicalCategory;
+
   /** Whether this edge type must form a DAG (no cycles) */
   readonly requiresAcyclicity: boolean;
+
+  /**
+   * Whether this edge type is semantically symmetric.
+   *
+   * Symmetric edges (e.g., equivalent_to, related_to) mean that A→B implies
+   * B→A conceptually, even if only one direction is stored in the graph.
+   * This affects guardrail conflict detection (symmetric edges need reverse
+   * pair checks) and pedagogical guidance.
+   */
+  readonly isSymmetric: boolean;
 
   /** Node types allowed as the source of this edge */
   readonly allowedSourceTypes: readonly GraphNodeType[];
@@ -50,6 +64,15 @@ export interface IEdgePolicy {
 
   /** Default weight assigned when the caller doesn't specify one */
   readonly defaultWeight: number;
+
+  /**
+   * Human-readable description of this edge type's semantics.
+   *
+   * Used in pedagogical UI, agent hints, and edge-type picker guidance.
+   * Should be a concise sentence explaining what the relationship means
+   * and when to use it.
+   */
+  readonly description: string;
 }
 
 /**
@@ -58,11 +81,14 @@ export interface IEdgePolicy {
 export const EdgePolicy = {
   create(input: {
     edgeType: GraphEdgeType;
+    category: EdgeOntologicalCategory;
     requiresAcyclicity: boolean;
+    isSymmetric: boolean;
     allowedSourceTypes: readonly GraphNodeType[];
     allowedTargetTypes: readonly GraphNodeType[];
     maxWeight: number;
     defaultWeight: number;
+    description: string;
   }): DeepReadonly<IEdgePolicy> {
     if (input.maxWeight < 0 || input.maxWeight > 1.0) {
       throw new ValidationError('EdgePolicy maxWeight must be in [0.0, 1.0]', {
@@ -86,14 +112,22 @@ export const EdgePolicy = {
         allowedTargetTypes: ['Array is empty'],
       });
     }
+    if (input.description.trim().length === 0) {
+      throw new ValidationError('EdgePolicy description must be non-empty', {
+        description: ['Empty string provided'],
+      });
+    }
 
     const policy: IEdgePolicy = {
       edgeType: input.edgeType,
+      category: input.category,
       requiresAcyclicity: input.requiresAcyclicity,
+      isSymmetric: input.isSymmetric,
       allowedSourceTypes: [...input.allowedSourceTypes],
       allowedTargetTypes: [...input.allowedTargetTypes],
       maxWeight: input.maxWeight,
       defaultWeight: input.defaultWeight,
+      description: input.description,
     };
 
     return Object.freeze(policy) as DeepReadonly<IEdgePolicy>;
@@ -256,7 +290,7 @@ export interface INodeFilter {
 export const NodeFilter = {
   create(input: Partial<INodeFilter> = {}): DeepReadonly<INodeFilter> {
     // CKG filters must not specify userId
-    if (input.graphType === 'ckg' && input.userId != null) {
+    if (input.graphType === 'ckg' && input.userId !== undefined) {
       throw new ValidationError(
         'CKG filters must not include userId — the CKG is shared, not user-scoped.',
         { userId: ['Must be omitted for CKG graph type'] }
@@ -605,7 +639,7 @@ export const BridgeQuery = {
     edgeTypes?: readonly GraphEdgeType[];
     minComponentSize?: number;
   }): DeepReadonly<IBridgeQuery> {
-    if (!input.domain || input.domain.trim().length === 0) {
+    if (input.domain.length === 0 || input.domain.trim().length === 0) {
       throw new ValidationError('BridgeQuery.domain must be a non-empty string', {
         domain: ['Received empty string'],
       });
@@ -699,7 +733,7 @@ export const FrontierQuery = {
     sortBy?: FrontierSortBy;
     includePrerequisites?: boolean;
   }): DeepReadonly<IFrontierQuery> {
-    if (!input.domain || input.domain.trim().length === 0) {
+    if (input.domain.length === 0 || input.domain.trim().length === 0) {
       throw new ValidationError('FrontierQuery.domain must be a non-empty string', {
         domain: ['Received empty string'],
       });
@@ -860,4 +894,256 @@ export interface ICommonAncestorsResult {
   readonly pathFromA: readonly IGraphNode[];
   /** Path from nodeB to LCA (if exists) */
   readonly pathFromB: readonly IGraphNode[];
+}
+
+// ============================================================================
+// Graph Analysis Constants (Phase 8d)
+// ============================================================================
+
+/**
+ * Configurable constants for graph analysis algorithms.
+ *
+ * Extracted as named constants so they can be referenced from schemas,
+ * service logic, and graph-analysis.ts without magic numbers.
+ */
+export const GRAPH_ANALYSIS_DEFAULTS = Object.freeze({
+  /** Default mastery threshold for gap analysis (used in frontier + prerequisite chain) */
+  MASTERY_THRESHOLD: 0.7 as number,
+
+  /** Default maximum depth for prerequisite chain traversal */
+  PREREQUISITE_MAX_DEPTH: 10,
+
+  /** Default number of top-ranked nodes for centrality queries */
+  CENTRALITY_TOP_K: 10,
+
+  /** Default damping factor for PageRank power iteration */
+  PAGERANK_DAMPING_FACTOR: 0.85,
+
+  /** Default maximum iterations for PageRank convergence */
+  PAGERANK_MAX_ITERATIONS: 20,
+
+  /** Convergence threshold for PageRank (L1 norm) */
+  PAGERANK_CONVERGENCE_THRESHOLD: 1e-6,
+
+  /** Default edge weight when edge has no explicit weight */
+  DEFAULT_EDGE_WEIGHT: 1.0 as number,
+
+  /** Default minimum component size for bridge node detection */
+  MIN_COMPONENT_SIZE: 2,
+
+  /** Default centrality algorithm */
+  DEFAULT_ALGORITHM: 'degree' as const,
+});
+
+// ============================================================================
+// CentralityAlgorithm (Phase 8d)
+// ============================================================================
+
+/** Supported centrality algorithms. */
+export type CentralityAlgorithm = 'degree' | 'betweenness' | 'pagerank';
+
+// ============================================================================
+// PrerequisiteChainQuery (Phase 8d)
+// ============================================================================
+
+/**
+ * Query parameters for prerequisite chain (topological order) analysis.
+ */
+export interface IPrerequisiteChainQuery {
+  /** Knowledge domain to analyse */
+  readonly domain: string;
+  /** Maximum depth of the prerequisite DAG to traverse */
+  readonly maxDepth: number;
+  /** Whether to include transitive prerequisites */
+  readonly includeIndirect: boolean;
+  /** Edge types to traverse (defaults to all) */
+  readonly edgeTypes?: readonly GraphEdgeType[];
+}
+
+/**
+ * Factory for creating validated, frozen `IPrerequisiteChainQuery` instances.
+ */
+export const PrerequisiteChainQuery = {
+  create(input: {
+    domain: string;
+    maxDepth?: number;
+    includeIndirect?: boolean;
+    edgeTypes?: readonly GraphEdgeType[];
+  }): DeepReadonly<IPrerequisiteChainQuery> {
+    if (input.domain.length === 0 || input.domain.trim().length === 0) {
+      throw new ValidationError('domain is required and must not be empty');
+    }
+
+    const maxDepth = input.maxDepth ?? GRAPH_ANALYSIS_DEFAULTS.PREREQUISITE_MAX_DEPTH;
+
+    if (maxDepth < 1 || maxDepth > 50) {
+      throw new ValidationError('maxDepth must be between 1 and 50');
+    }
+
+    const query: IPrerequisiteChainQuery = {
+      domain: input.domain.trim(),
+      maxDepth,
+      includeIndirect: input.includeIndirect ?? true,
+      ...(input.edgeTypes !== undefined ? { edgeTypes: input.edgeTypes } : {}),
+    };
+
+    return Object.freeze(query) as DeepReadonly<IPrerequisiteChainQuery>;
+  },
+};
+
+// ============================================================================
+// PrerequisiteEntry, PrerequisiteLayer, PrerequisiteChainResult (Phase 8d)
+// ============================================================================
+
+/**
+ * A single prerequisite in the topological ordering.
+ */
+export interface IPrerequisiteEntry {
+  /** The prerequisite node */
+  readonly node: IGraphNode;
+  /** Depth from the target node */
+  readonly depth: number;
+  /** Weight of the prerequisite edge (strength of dependency) */
+  readonly weight: number;
+  /** Whether this is a critical path node (on the longest prerequisite chain) */
+  readonly isCriticalPath: boolean;
+}
+
+/**
+ * A layer of prerequisites at a specific depth level.
+ */
+export interface IPrerequisiteLayer {
+  /** Depth level (0 = direct prerequisites of target) */
+  readonly depth: number;
+  /** Nodes at this depth */
+  readonly nodes: readonly IPrerequisiteEntry[];
+}
+
+/**
+ * Complete result of a prerequisite chain (topological order) query.
+ */
+export interface IPrerequisiteChainResult {
+  /** The target node */
+  readonly targetNode: IGraphNode;
+  /** Prerequisite layers, index 0 = direct prerequisites, 1 = their prerequisites, etc. */
+  readonly layers: readonly IPrerequisiteLayer[];
+  /** Topologically sorted flat list (study this in order) */
+  readonly topologicalOrder: readonly IPrerequisiteEntry[];
+  /** Total prerequisite count */
+  readonly totalPrerequisites: number;
+  /** Maximum chain depth */
+  readonly maxChainDepth: number;
+  /** Prerequisite nodes that have low mastery (gaps) — PKG only */
+  readonly gaps: readonly IPrerequisiteEntry[];
+}
+
+// ============================================================================
+// CentralityQuery (Phase 8d)
+// ============================================================================
+
+/**
+ * Query parameters for centrality ranking analysis.
+ */
+export interface ICentralityQuery {
+  /** Knowledge domain to analyze */
+  readonly domain: string;
+  /** Centrality algorithm to use */
+  readonly algorithm: CentralityAlgorithm;
+  /** Only consider these edge types (undefined = all) */
+  readonly edgeTypes?: readonly GraphEdgeType[];
+  /** Number of top-ranked nodes to return */
+  readonly topK: number;
+  /** Whether to normalise scores to [0, 1] */
+  readonly normalise: boolean;
+}
+
+/**
+ * Factory for creating validated, frozen `ICentralityQuery` instances.
+ */
+export const CentralityQuery = {
+  create(input: {
+    domain: string;
+    algorithm?: CentralityAlgorithm;
+    edgeTypes?: readonly GraphEdgeType[];
+    topK?: number;
+    normalise?: boolean;
+  }): DeepReadonly<ICentralityQuery> {
+    if (input.domain.length === 0 || input.domain.trim().length === 0) {
+      throw new ValidationError('domain is required and must not be empty');
+    }
+
+    const topK = input.topK ?? GRAPH_ANALYSIS_DEFAULTS.CENTRALITY_TOP_K;
+    if (topK < 1 || topK > 500) {
+      throw new ValidationError('topK must be between 1 and 500');
+    }
+
+    const algorithm = input.algorithm ?? 'degree';
+    const validAlgorithms: CentralityAlgorithm[] = ['degree', 'betweenness', 'pagerank'];
+    if (!validAlgorithms.includes(algorithm)) {
+      throw new ValidationError(`algorithm must be one of: ${validAlgorithms.join(', ')}`);
+    }
+
+    const query: ICentralityQuery = {
+      domain: input.domain.trim(),
+      algorithm,
+      ...(input.edgeTypes !== undefined ? { edgeTypes: input.edgeTypes } : {}),
+      topK,
+      normalise: input.normalise ?? true,
+    };
+
+    return Object.freeze(query) as DeepReadonly<ICentralityQuery>;
+  },
+};
+
+// ============================================================================
+// CentralityStatistics, CentralityEntry, CentralityResult (Phase 8d)
+// ============================================================================
+
+/**
+ * Distribution statistics for centrality scores.
+ * Computed over all nodes in the domain, not just topK.
+ */
+export interface ICentralityStatistics {
+  readonly mean: number;
+  readonly median: number;
+  readonly standardDeviation: number;
+  /** Fisher–Pearson skewness coefficient (third standardized moment) */
+  readonly skewness: number;
+  /** Excess kurtosis (fourth standardized moment minus 3) */
+  readonly kurtosis: number;
+  readonly maxScore: number;
+  readonly minScore: number;
+}
+
+/**
+ * A single node's centrality ranking entry.
+ */
+export interface ICentralityEntry {
+  /** The node */
+  readonly node: IGraphNode;
+  /** Centrality score (normalised to [0, 1] if normalise=true) */
+  readonly score: number;
+  /** Rank (1-based) */
+  readonly rank: number;
+  /** For degree: inDegree and outDegree breakdown */
+  readonly degreeBreakdown?: {
+    readonly inDegree: number;
+    readonly outDegree: number;
+  };
+}
+
+/**
+ * Complete result of a centrality ranking query.
+ */
+export interface ICentralityResult {
+  /** Algorithm used */
+  readonly algorithm: CentralityAlgorithm;
+  /** Domain analyzed */
+  readonly domain: string;
+  /** Total nodes in the graph */
+  readonly totalNodes: number;
+  /** Top-K ranked nodes */
+  readonly ranking: readonly ICentralityEntry[];
+  /** Distribution statistics */
+  readonly statistics: ICentralityStatistics;
 }

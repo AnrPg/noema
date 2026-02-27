@@ -39,6 +39,8 @@ import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
   IBridgeNodesResult,
   IBridgeQuery,
+  ICentralityQuery,
+  ICentralityResult,
   ICommonAncestorsQuery,
   ICommonAncestorsResult,
   ICoParentsQuery,
@@ -48,6 +50,8 @@ import type {
   INeighborhoodQuery,
   INeighborhoodResult,
   INodeFilter,
+  IPrerequisiteChainQuery,
+  IPrerequisiteChainResult,
   ISiblingsQuery,
   ISiblingsResult,
   ITraversalOptions,
@@ -289,6 +293,36 @@ export interface IKnowledgeGraphService {
   ): Promise<IServiceResult<ICommonAncestorsResult>>;
 
   // ========================================================================
+  // PKG Ordering & Ranking (Phase 8d)
+  // ========================================================================
+
+  /**
+   * Compute the prerequisite chain for a target node in the user's PKG.
+   *
+   * Returns a topologically-sorted layered structure of prerequisite concepts
+   * leading to the target node (Kahn's algorithm), annotated with mastery.
+   */
+  getPrerequisiteChain(
+    userId: UserId,
+    nodeId: NodeId,
+    query: IPrerequisiteChainQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPrerequisiteChainResult>>;
+
+  /**
+   * Rank nodes by centrality in the user's PKG for a domain.
+   *
+   * Supports degree (Cypher), betweenness (Brandes'), and PageRank
+   * (power iteration) algorithms. Degree uses the repository; betweenness
+   * and PageRank run in application code on the domain subgraph.
+   */
+  getCentralityRanking(
+    userId: UserId,
+    query: ICentralityQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICentralityResult>>;
+
+  // ========================================================================
   // CKG Operations (read-only)
   // ========================================================================
 
@@ -413,6 +447,29 @@ export interface IKnowledgeGraphService {
     query: ICommonAncestorsQuery,
     context: IExecutionContext
   ): Promise<IServiceResult<ICommonAncestorsResult>>;
+
+  // ========================================================================
+  // CKG Ordering & Ranking (Phase 8d)
+  // ========================================================================
+
+  /**
+   * Compute the prerequisite chain for a target node in the CKG.
+   * Same semantics as PKG getPrerequisiteChain, but without userId scoping.
+   */
+  getCkgPrerequisiteChain(
+    nodeId: NodeId,
+    query: IPrerequisiteChainQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPrerequisiteChainResult>>;
+
+  /**
+   * Rank nodes by centrality in the CKG for a domain.
+   * Same semantics as PKG getCentralityRanking, but without userId scoping.
+   */
+  getCkgCentralityRanking(
+    query: ICentralityQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICentralityResult>>;
 
   // ========================================================================
   // Structural Metrics

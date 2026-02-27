@@ -122,6 +122,41 @@ export const CkgCommonAncestorsQueryParamsSchema = z.object({
 });
 
 // ============================================================================
+// Prerequisite Chain Query Parameters — CKG (Phase 8d)
+// ============================================================================
+
+/**
+ * CKG prerequisite chain query parameters (same structure as PKG but no userId).
+ */
+export const CkgPrerequisiteChainQueryParamsSchema = z.object({
+  domain: z.string().min(1),
+  maxDepth: z.coerce.number().int().min(1).max(50).default(10),
+  edgeTypes: z.string().optional(),
+  includeIndirect: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .default('true'),
+});
+
+// ============================================================================
+// Centrality Query Parameters — CKG (Phase 8d)
+// ============================================================================
+
+/**
+ * CKG centrality ranking query parameters (same structure as PKG but no userId).
+ */
+export const CkgCentralityQueryParamsSchema = z.object({
+  domain: z.string().min(1),
+  algorithm: z.enum(['degree', 'betweenness', 'pagerank']).default('degree'),
+  edgeTypes: z.string().optional(),
+  topK: z.coerce.number().int().min(1).max(500).default(10),
+  normalise: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .default('true'),
+});
+
+// ============================================================================
 // Type Inference
 // ============================================================================
 
@@ -133,3 +168,5 @@ export type CkgCoParentsQueryParams = z.infer<typeof CkgCoParentsQueryParamsSche
 export type CkgNeighborhoodQueryParams = z.infer<typeof CkgNeighborhoodQueryParamsSchema>;
 export type CkgBridgeQueryParams = z.infer<typeof CkgBridgeQueryParamsSchema>;
 export type CkgCommonAncestorsQueryParams = z.infer<typeof CkgCommonAncestorsQueryParamsSchema>;
+export type CkgPrerequisiteChainQueryParams = z.infer<typeof CkgPrerequisiteChainQueryParamsSchema>;
+export type CkgCentralityQueryParams = z.infer<typeof CkgCentralityQueryParamsSchema>;

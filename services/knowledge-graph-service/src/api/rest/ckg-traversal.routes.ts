@@ -15,19 +15,23 @@ import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import {
   BridgeQuery,
+  CentralityQuery,
   CoParentsQuery,
   CommonAncestorsQuery,
   NeighborhoodQuery,
+  PrerequisiteChainQuery,
   SiblingsQuery,
   TraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
   CkgBridgeQueryParamsSchema,
+  CkgCentralityQueryParamsSchema,
   CkgCoParentsQueryParamsSchema,
   CkgCommonAncestorsQueryParamsSchema,
   CkgNeighborhoodQueryParamsSchema,
   CkgPathQueryParamsSchema,
+  CkgPrerequisiteChainQueryParamsSchema,
   CkgSiblingsQueryParamsSchema,
   CkgSubgraphQueryParamsSchema,
 } from '../schemas/ckg-traversal.schemas.js';
@@ -518,6 +522,108 @@ export function registerCkgTraversalRoutes(
           query,
           context
         );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/ckg/traversal/prerequisite-chain/:nodeId — CKG Prerequisite chain (Phase 8d)
+  // ============================================================================
+
+  fastify.get<{ Params: { nodeId: string }; Querystring: Record<string, unknown> }>(
+    '/api/v1/ckg/traversal/prerequisite-chain/:nodeId',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Traversal'],
+        summary: 'Get the prerequisite chain for a CKG concept',
+        description:
+          "Compute the topologically-sorted prerequisite chain leading to the target node in the canonical graph, using Kahn's algorithm.",
+        params: {
+          type: 'object',
+          required: ['nodeId'],
+          properties: { nodeId: { type: 'string' } },
+        },
+        querystring: {
+          type: 'object',
+          required: ['domain'],
+          properties: {
+            domain: { type: 'string' },
+            maxDepth: { type: 'number', minimum: 1, maximum: 50 },
+            edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
+            includeIndirect: { type: 'string', enum: ['true', 'false'] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const { nodeId } = request.params;
+        const parsed = CkgPrerequisiteChainQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const edgeTypes = parseEdgeTypesFilter(parsed.edgeTypes) as GraphEdgeType[] | undefined;
+
+        const query = PrerequisiteChainQuery.create({
+          domain: parsed.domain,
+          maxDepth: parsed.maxDepth,
+          includeIndirect: parsed.includeIndirect,
+          ...(edgeTypes !== undefined ? { edgeTypes } : {}),
+        });
+
+        const result = await service.getCkgPrerequisiteChain(nodeId as NodeId, query, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // GET /api/v1/ckg/traversal/centrality — CKG Centrality ranking (Phase 8d)
+  // ============================================================================
+
+  fastify.get<{ Querystring: Record<string, unknown> }>(
+    '/api/v1/ckg/traversal/centrality',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Traversal'],
+        summary: 'Rank CKG nodes by centrality',
+        description:
+          'Compute centrality ranking for nodes in a domain of the canonical graph. Supports degree, betweenness, and PageRank algorithms.',
+        querystring: {
+          type: 'object',
+          required: ['domain'],
+          properties: {
+            domain: { type: 'string' },
+            algorithm: { type: 'string', enum: ['degree', 'betweenness', 'pagerank'] },
+            edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
+            topK: { type: 'number', minimum: 1, maximum: 500 },
+            normalise: { type: 'string', enum: ['true', 'false'] },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const parsed = CkgCentralityQueryParamsSchema.parse(request.query);
+        const context = buildContext(request);
+
+        const edgeTypes = parseEdgeTypesFilter(parsed.edgeTypes) as GraphEdgeType[] | undefined;
+
+        const query = CentralityQuery.create({
+          domain: parsed.domain,
+          algorithm: parsed.algorithm,
+          topK: parsed.topK,
+          normalise: parsed.normalise,
+          ...(edgeTypes !== undefined ? { edgeTypes } : {}),
+        });
+
+        const result = await service.getCkgCentralityRanking(query, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
