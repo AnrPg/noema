@@ -17,6 +17,8 @@ import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
 import { RedisEventPublisher } from '@noema/events';
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import {
@@ -352,7 +354,15 @@ async function bootstrap(): Promise<void> {
   registerStructuralHealthRoutes(f, service, authMiddleware, routeOptions);
   registerComparisonRoutes(f, service, authMiddleware, routeOptions);
 
-  logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2)');
+  // MCP Tool Registry (Phase 9)
+  const toolRegistry = createToolRegistry(service);
+  registerToolRoutes(f, toolRegistry, authMiddleware);
+
+  logger.info(
+    { toolCount: toolRegistry.size },
+    'MCP tool registry initialized and tool routes registered (Phase 9)'
+  );
+  logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2 + Phase 9 MCP tools)');
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
