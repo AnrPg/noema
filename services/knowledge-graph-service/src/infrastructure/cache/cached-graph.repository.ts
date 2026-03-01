@@ -224,8 +224,12 @@ export class CachedGraphRepository implements IGraphRepository {
     query: ISiblingsQuery,
     userId?: string
   ): Promise<ISiblingsResult> {
-    // TODO: cache key → siblings:{graphType}:{nodeId}:{edgeType}:{direction}
-    return this.inner.getSiblings(nodeId, query, userId);
+    const userKey = userId ?? 'ckg';
+    const cacheKey = `siblings:${userKey}:${nodeId}:${query.edgeType}:${query.direction}`;
+
+    return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
+      this.inner.getSiblings(nodeId, query, userId)
+    );
   }
 
   async getCoParents(
@@ -233,8 +237,12 @@ export class CachedGraphRepository implements IGraphRepository {
     query: ICoParentsQuery,
     userId?: string
   ): Promise<ICoParentsResult> {
-    // TODO: cache key → co-parents:{graphType}:{nodeId}:{edgeType}:{direction}
-    return this.inner.getCoParents(nodeId, query, userId);
+    const userKey = userId ?? 'ckg';
+    const cacheKey = `co-parents:${userKey}:${nodeId}:${query.edgeType}:${query.direction}`;
+
+    return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
+      this.inner.getCoParents(nodeId, query, userId)
+    );
   }
 
   async getNeighborhood(
@@ -242,8 +250,20 @@ export class CachedGraphRepository implements IGraphRepository {
     query: INeighborhoodQuery,
     userId?: string
   ): Promise<INeighborhoodResult> {
-    // TODO: cache key → neighborhood:{graphType}:{nodeId}:{hops}:{edgeTypes}:{nodeTypes}:{filterMode}:{direction}
-    return this.inner.getNeighborhood(nodeId, query, userId);
+    const etKey =
+      query.edgeTypes !== undefined && query.edgeTypes.length > 0
+        ? [...query.edgeTypes].sort().join(',')
+        : 'all';
+    const ntKey =
+      query.nodeTypes !== undefined && query.nodeTypes.length > 0
+        ? [...query.nodeTypes].sort().join(',')
+        : 'all';
+    const userKey = userId ?? 'ckg';
+    const cacheKey = `neighborhood:${userKey}:${nodeId}:${String(query.hops)}:${etKey}:${ntKey}:${query.filterMode}:${query.direction}`;
+
+    return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
+      this.inner.getNeighborhood(nodeId, query, userId)
+    );
   }
 
   // Phase 8c: Structural analysis — cached

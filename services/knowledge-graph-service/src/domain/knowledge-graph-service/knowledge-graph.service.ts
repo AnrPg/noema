@@ -12,6 +12,7 @@
  */
 
 import type {
+  EdgeId,
   IGraphEdge,
   IGraphNode,
   IMetacognitiveStageAssessment,
@@ -35,6 +36,7 @@ import type {
 } from './graph.repository.js';
 import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
+import type { IPkgOperationLogEntry } from './pkg-operation-log.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type {
   IBridgeNodesResult,
@@ -57,6 +59,7 @@ import type {
   ITraversalOptions,
   IValidationOptions,
 } from './value-objects/graph.value-objects.js';
+import { type PkgOperationType } from './value-objects/operation-log.js';
 
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 export type { IExecutionContext, IServiceResult } from './execution-context.js';

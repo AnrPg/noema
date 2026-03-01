@@ -27,7 +27,7 @@
  * @see PHASE-7-STRUCTURAL-METRICS.md for metrics & misconception requirements
  */
 
-import type { IAgentHints } from '@noema/contracts';
+import type { IAgentHints, IRiskFactor } from '@noema/contracts';
 import { KnowledgeGraphEventType } from '@noema/events';
 import type {
   EdgeId,
@@ -592,33 +592,34 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         );
 
         if (conflicts.length > 0) {
-          // Safe: length > 0 guarantees at least one element
-          const firstConflict = conflicts[0] as IGraphEdge;
-          edgeHints.warnings = [
-            {
-              type: 'conflict' as const,
-              severity: 'medium' as const,
-              message:
-                `This ${edge.edgeType} edge conflicts with existing ` +
-                `${firstConflict.edgeType} edge. Consider whether this concept ` +
-                `'is a kind of' or 'is part of' the target — these are different ` +
-                `relationships.`,
-              relatedIds: conflicts.map((c) => c.edgeId as string),
-              suggestedFix:
-                'Distinguishing taxonomic (IS_A) from mereological ' +
-                '(PART_OF) relationships is a key skill in conceptual modelling.',
-            },
-          ];
+          const firstConflict = conflicts[0];
+          if (firstConflict !== undefined) {
+            edgeHints.warnings = [
+              {
+                type: 'conflict' as const,
+                severity: 'medium' as const,
+                message:
+                  `This ${edge.edgeType} edge conflicts with existing ` +
+                  `${firstConflict.edgeType} edge. Consider whether this concept ` +
+                  `'is a kind of' or 'is part of' the target — these are different ` +
+                  `relationships.`,
+                relatedIds: conflicts.map((c) => c.edgeId as string),
+                suggestedFix:
+                  'Distinguishing taxonomic (IS_A) from mereological ' +
+                  '(PART_OF) relationships is a key skill in conceptual modelling.',
+              },
+            ];
 
-          this.logger.info(
-            {
-              edgeId: edge.edgeId,
-              edgeType: edge.edgeType,
-              conflictingEdges: conflicts.length,
-              conflictingType: firstConflict.edgeType,
-            },
-            'PKG advisory: ontological conflict detected (non-blocking)'
-          );
+            this.logger.info(
+              {
+                edgeId: edge.edgeId,
+                edgeType: edge.edgeType,
+                conflictingEdges: conflicts.length,
+                conflictingType: firstConflict.edgeType,
+              },
+              'PKG advisory: ontological conflict detected (non-blocking)'
+            );
+          }
         }
       } catch (error) {
         // Advisory check is non-blocking — log and continue
@@ -2425,12 +2426,15 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       totalCount,
     };
 
-    const stuckWarning =
+    const stuckWarning: IRiskFactor[] =
       health.stuckCount > 0
         ? [
             {
-              factor: `${String(health.stuckCount)} mutations stuck in processing states`,
+              type: 'performance' as const,
               severity: 'medium' as const,
+              description: `${String(health.stuckCount)} mutation(s) appear stuck in non-terminal state`,
+              probability: 0.8,
+              impact: 0.6,
               mitigation:
                 'Check pipeline logs — stuck mutations may need manual retry or cancellation',
             },
@@ -2447,7 +2451,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
                   action: 'list_stuck_mutations',
                   description: 'List mutations in non-terminal processing states',
                   priority: 'high' as const,
-                  category: 'investigation' as const,
+                  category: 'correction' as const,
                 },
               ]
             : []),
@@ -2555,12 +2559,11 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     if (filters.nodeId !== undefined) {
       entries = await this.operationLogRepository.getOperationsForNode(userId, filters.nodeId);
     } else if (filters.edgeId !== undefined) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- EdgeId type not yet resolved
       entries = await this.operationLogRepository.getOperationsForEdge(userId, filters.edgeId);
     } else if (filters.operationType !== undefined) {
       const result = await this.operationLogRepository.getOperationsByType(
         userId,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- PkgOperationType type not yet resolved
+
         filters.operationType,
         limit,
         offset

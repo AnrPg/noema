@@ -20,7 +20,7 @@ export class NodeNotFoundError extends DomainError {
   public readonly graphType: string | undefined;
 
   constructor(nodeId: string, graphType?: string) {
-    const ctx = graphType ? ` in ${graphType} graph` : '';
+    const ctx = graphType !== undefined && graphType !== '' ? ` in ${graphType} graph` : '';
     super('NODE_NOT_FOUND', `Node not found: ${nodeId}${ctx}`, {
       nodeId,
       graphType,

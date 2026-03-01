@@ -1114,11 +1114,11 @@ export class CkgMutationPipeline {
     context: IExecutionContext
   ): Promise<void> {
     const conflicts = ontologicalViolations.map((v) => ({
-      proposedEdgeType: (v.metadata?.['proposedEdgeType'] ?? 'unknown') as string,
-      conflictingEdgeType: (v.metadata?.['conflictingEdgeType'] ?? 'unknown') as string,
-      sourceNodeId: (v.metadata?.['sourceNodeId'] ?? 'unknown') as string,
-      targetNodeId: (v.metadata?.['targetNodeId'] ?? 'unknown') as string,
-      reason: (v.metadata?.['reason'] ?? v.message) as string,
+      proposedEdgeType: (v.metadata['proposedEdgeType'] ?? 'unknown') as string,
+      conflictingEdgeType: (v.metadata['conflictingEdgeType'] ?? 'unknown') as string,
+      sourceNodeId: (v.metadata['sourceNodeId'] ?? 'unknown') as string,
+      targetNodeId: (v.metadata['targetNodeId'] ?? 'unknown') as string,
+      reason: (v.metadata['reason'] ?? v.message) as string,
     }));
 
     await this.publishEvent(

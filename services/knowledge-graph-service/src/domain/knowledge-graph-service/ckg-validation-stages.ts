@@ -789,16 +789,16 @@ export class OntologicalConsistencyStage implements IValidationStage {
     const operations = mutation.operations as unknown as CkgMutationOperation[];
 
     // Collect all ADD_EDGE operations with their indices
-    const addEdgeOps: Array<{
+    const addEdgeOps: {
       op: Extract<CkgMutationOperation, { type: 'add_edge' }>;
       index: number;
-    }> = [];
+    }[] = [];
 
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i];
       if (op?.type === CkgOperationType.ADD_EDGE) {
         addEdgeOps.push({
-          op: op as Extract<CkgMutationOperation, { type: 'add_edge' }>,
+          op: op,
           index: i,
         });
       }

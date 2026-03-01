@@ -18,7 +18,6 @@
 
 import { EdgeOntologicalCategory, GraphEdgeType, GraphNodeType } from '@noema/types';
 
-import { InvalidEdgeTypeError } from '../errors/graph.errors.js';
 import { EdgePolicy, type IEdgePolicy } from '../value-objects/graph.value-objects.js';
 
 // ============================================================================
@@ -417,16 +416,10 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
  *
  * @param edgeType The edge type to look up.
  * @returns The frozen `IEdgePolicy` for the edge type.
- * @throws InvalidEdgeTypeError if the edge type has no policy defined.
  */
 export function getEdgePolicy(edgeType: GraphEdgeType): IEdgePolicy {
-  const policy = EDGE_TYPE_POLICIES[edgeType];
-  if (!policy) {
-    // This is a defensive check — if all GraphEdgeType values have policies
-    // (enforced by the Record<GraphEdgeType, IEdgePolicy> type) this should
-    // never fire. It exists for forward-compatibility if someone adds a new
-    // edge type without updating policies.
-    throw new InvalidEdgeTypeError(edgeType, 'unknown', 'unknown', Object.keys(EDGE_TYPE_POLICIES));
-  }
-  return policy;
+  // Record<GraphEdgeType, IEdgePolicy> guarantees all edge types have policies.
+  // If a new type is added without updating policies, TypeScript catches it
+  // at compile time.
+  return EDGE_TYPE_POLICIES[edgeType];
 }

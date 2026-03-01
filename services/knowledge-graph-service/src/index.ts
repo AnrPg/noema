@@ -16,6 +16,7 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import { RedisEventPublisher } from '@noema/events';
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import {
@@ -34,8 +35,29 @@ import {
 } from './api/rest/index.js';
 import type { IRouteOptions } from './api/shared/route-helpers.js';
 import { getTokenVerifierConfig, loadConfig } from './config/index.js';
+import { CkgMutationPipeline } from './domain/knowledge-graph-service/ckg-mutation-pipeline.js';
+import { CkgValidationPipeline } from './domain/knowledge-graph-service/ckg-validation-pipeline.js';
+import {
+  ConflictDetectionStage,
+  EvidenceSufficiencyStage,
+  OntologicalConsistencyStage,
+  SchemaValidationStage,
+  StructuralIntegrityStage,
+} from './domain/knowledge-graph-service/ckg-validation-stages.js';
+import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
+import { CachedGraphRepository } from './infrastructure/cache/cached-graph.repository.js';
+import { KgRedisCacheProvider } from './infrastructure/cache/kg-redis-cache.provider.js';
 import { Neo4jClient } from './infrastructure/database/neo4j-client.js';
+import { Neo4jGraphRepository } from './infrastructure/database/neo4j-graph.repository.js';
 import { initializeNeo4jSchema } from './infrastructure/database/neo4j-schema.js';
+import {
+  PrismaAggregationEvidenceRepository,
+  PrismaMetricsRepository,
+  PrismaMetricsStalenessRepository,
+  PrismaMisconceptionRepository,
+  PrismaMutationRepository,
+  PrismaOperationLogRepository,
+} from './infrastructure/database/repositories/index.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
 
 // ============================================================================
@@ -215,27 +237,87 @@ async function bootstrap(): Promise<void> {
   registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, neo4jClient, redis);
 
   // --------------------------------------------------------------------------
-  // Auth middleware & route wiring (Phase 8 Wave 1)
+  // Dependency Injection — Composition Root
+  // --------------------------------------------------------------------------
+
+  // 1. Graph repository (Neo4j) with optional Redis cache decorator
+  const neo4jGraphRepository = new Neo4jGraphRepository(neo4jClient, logger);
+
+  const cacheProvider = new KgRedisCacheProvider(
+    redis,
+    {
+      entityTtl: config.cache.ttl,
+      queryTtl: config.cache.ttl,
+      prefix: config.cache.prefix,
+    },
+    logger
+  );
+
+  const graphRepository = config.cache.enabled
+    ? new CachedGraphRepository(
+        neo4jGraphRepository,
+        cacheProvider,
+        config.cache.ttl,
+        config.cache.ttl
+      )
+    : neo4jGraphRepository;
+
+  // 2. Prisma repositories (PostgreSQL)
+  const metricsRepository = new PrismaMetricsRepository(prisma);
+  const mutationRepository = new PrismaMutationRepository(prisma);
+  const misconceptionRepository = new PrismaMisconceptionRepository(prisma);
+  const operationLogRepository = new PrismaOperationLogRepository(prisma);
+  const metricsStalenessRepository = new PrismaMetricsStalenessRepository(prisma);
+  const aggregationEvidenceRepository = new PrismaAggregationEvidenceRepository(prisma);
+
+  // 3. Event publisher (Redis Streams)
+  const eventPublisher = new RedisEventPublisher(
+    redis,
+    {
+      streamKey: config.redis.eventStreamKey,
+      maxLen: config.redis.maxStreamLen,
+      serviceName: config.service.name,
+      serviceVersion: config.service.version,
+      environment: config.service.environment,
+    },
+    logger
+  );
+
+  // 4. CKG validation pipeline (5 stages, ordered)
+  const validationPipeline = new CkgValidationPipeline();
+  validationPipeline.addStage(new SchemaValidationStage()); // order 100
+  validationPipeline.addStage(new StructuralIntegrityStage(graphRepository)); // order 200
+  validationPipeline.addStage(new OntologicalConsistencyStage(graphRepository)); // order 250
+  validationPipeline.addStage(new ConflictDetectionStage(mutationRepository)); // order 300
+  validationPipeline.addStage(new EvidenceSufficiencyStage(aggregationEvidenceRepository)); // order 400
+
+  // 5. CKG mutation pipeline (orchestrates lifecycle + validation)
+  const mutationPipeline = new CkgMutationPipeline(
+    mutationRepository,
+    graphRepository,
+    validationPipeline,
+    eventPublisher,
+    logger
+  );
+
+  // 6. Knowledge Graph Service (domain service)
+  const service = new KnowledgeGraphService(
+    graphRepository,
+    operationLogRepository,
+    metricsStalenessRepository,
+    metricsRepository,
+    misconceptionRepository,
+    eventPublisher,
+    mutationPipeline,
+    logger
+  );
+
+  // --------------------------------------------------------------------------
+  // Auth middleware & route wiring
   // --------------------------------------------------------------------------
 
   const tokenVerifier = new JwtTokenVerifier(getTokenVerifierConfig(config));
   const authMiddleware = createAuthMiddleware(tokenVerifier);
-
-  // TODO [TECH-DEBT]: Replace stub service with full DI-wired KnowledgeGraphService.
-  // The service construction requires wiring together:
-  //   - Neo4jGraphRepository (neo4jClient)
-  //   - PrismaMetricsRepository (prisma)
-  //   - PrismaMutationRepository (prisma)
-  //   - PrismaMisconceptionRepository (prisma)
-  //   - RedisEventPublisher (redis, config)
-  //   - CkgMutationPipeline (with validation stages including OntologicalConsistencyStage)
-  //   - MisconceptionDetectionEngine
-  // See ADR-008-phase8-api-layer.md for full wiring plan.
-  // Phase 8e: OntologicalConsistencyStage (order 250) must be registered via
-  //   validationPipeline.addStage(new OntologicalConsistencyStage(graphRepository))
-  // For now, routes are registered but will throw at runtime until
-  // the service is properly constructed.
-  const service = null as unknown as Parameters<typeof registerPkgNodeRoutes>[1];
 
   const routeOptions: IRouteOptions = {
     rateLimit: {

@@ -182,6 +182,9 @@ function computeParentMap(subgraph: ISubgraph): Map<NodeId, Set<NodeId>> {
     parentMap.set(node.nodeId, new Set());
   }
 
+  // Track which edge type(s) connect each (source, target) pair
+  const edgePairTypes = new Map<string, Set<string>>();
+
   for (const edge of subgraph.edges) {
     if (
       HIERARCHICAL_EDGE_TYPES.has(edge.edgeType) &&
@@ -190,6 +193,27 @@ function computeParentMap(subgraph: ISubgraph): Map<NodeId, Set<NodeId>> {
     ) {
       // source (child) → target (parent) via is_a / part_of
       parentMap.get(edge.sourceNodeId)?.add(edge.targetNodeId);
+
+      // Track for dual-edge detection
+      const pairKey = `${edge.sourceNodeId}\u2192${edge.targetNodeId}`;
+      if (!edgePairTypes.has(pairKey)) {
+        edgePairTypes.set(pairKey, new Set());
+      }
+      const pairSet = edgePairTypes.get(pairKey);
+      if (pairSet !== undefined) {
+        pairSet.add(edge.edgeType);
+      }
+    }
+  }
+
+  // Diagnostic: report dual hierarchical edges (non-blocking).
+  // This is a known scenario in PKGs — the ontological advisory was shown
+  // but the learner chose to keep both edge types. Log but do not crash.
+  for (const [pairKey, types] of edgePairTypes) {
+    if (types.size > 1) {
+      console.warn(
+        `[metric-computation] Dual hierarchical edges detected: ${pairKey} has types [${[...types].join(', ')}]`
+      );
     }
   }
 
