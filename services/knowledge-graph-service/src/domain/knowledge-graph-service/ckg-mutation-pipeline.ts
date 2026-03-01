@@ -40,7 +40,7 @@ import type {
   IMutationAuditEntry,
   IMutationRepository,
 } from './mutation.repository.js';
-import type { IValidationPipeline, IValidationResult } from './validation.js';
+import type { IValidationPipeline, IValidationResult, IValidationViolation } from './validation.js';
 
 import {
   type CkgMutationOperation,
@@ -193,6 +193,7 @@ export class CkgMutationPipeline {
       'proposed',
       'validating',
       'validated',
+      'pending_review',
       'proving',
       'proven',
       'committing',
@@ -269,6 +270,124 @@ export class CkgMutationPipeline {
   }
 
   /**
+   * Approve an escalated mutation (PENDING_REVIEW → VALIDATED).
+   *
+   * When a mutation is in PENDING_REVIEW due to ontological conflicts,
+   * an admin or governance agent can approve it, overriding the conflicts.
+   * The mutation then continues through the normal pipeline (prove → commit).
+   *
+   * @param mutationId The escalated mutation to approve.
+   * @param reviewerId Who is approving (admin user or governance agent).
+   * @param reason Justification for overriding the ontological conflicts.
+   * @param context Execution context.
+   * @returns The mutation transitioned to VALIDATED state.
+   */
+  async approveMutation(
+    mutationId: MutationId,
+    reviewerId: string,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation> {
+    const mutation = await this.getMutation(mutationId);
+
+    if (mutation.state !== 'pending_review') {
+      throw new InvalidStateTransitionError(mutation.state, 'validated', [
+        'Only PENDING_REVIEW mutations can be approved',
+      ]);
+    }
+
+    this.logger.info(
+      { mutationId, reviewerId },
+      'Approving escalated mutation — overriding ontological conflicts'
+    );
+
+    // PENDING_REVIEW → VALIDATED
+    const updated = await this.transitionState(
+      mutation,
+      'validated',
+      reviewerId,
+      `Ontological conflicts overridden by reviewer: ${reason}`,
+      context,
+      { reviewAction: 'approved', reviewerId, reviewReason: reason }
+    );
+
+    // Publish CkgMutationValidated event
+    await this.publishEvent(
+      KnowledgeGraphEventType.CKG_MUTATION_VALIDATED,
+      'CanonicalKnowledgeGraph',
+      mutation.mutationId,
+      {
+        mutationId: mutation.mutationId,
+        validationResults: { overriddenByReview: true, reviewerId, reason },
+      },
+      context
+    );
+
+    // Continue the pipeline asynchronously: prove → commit
+    void this.runPostReviewPipeline(updated.mutationId, context);
+
+    return updated;
+  }
+
+  /**
+   * Reject an escalated mutation (PENDING_REVIEW → REJECTED).
+   *
+   * When a mutation is in PENDING_REVIEW, an admin or governance agent
+   * can reject it, confirming the ontological conflicts are real.
+   *
+   * @param mutationId The escalated mutation to reject.
+   * @param reviewerId Who is rejecting.
+   * @param reason Justification for the rejection.
+   * @param context Execution context.
+   * @returns The mutation transitioned to REJECTED state.
+   */
+  async rejectEscalatedMutation(
+    mutationId: MutationId,
+    reviewerId: string,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation> {
+    const mutation = await this.getMutation(mutationId);
+
+    if (mutation.state !== 'pending_review') {
+      throw new InvalidStateTransitionError(mutation.state, 'rejected', [
+        'Only PENDING_REVIEW mutations can be rejected via review',
+      ]);
+    }
+
+    this.logger.info(
+      { mutationId, reviewerId },
+      'Rejecting escalated mutation — ontological conflicts confirmed'
+    );
+
+    // PENDING_REVIEW → REJECTED
+    const updated = await this.transitionState(
+      mutation,
+      'rejected',
+      reviewerId,
+      `Ontological conflicts confirmed by reviewer: ${reason}`,
+      context,
+      { reviewAction: 'rejected', reviewerId, reviewReason: reason }
+    );
+
+    // Publish CkgMutationRejected event
+    await this.publishEvent(
+      KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
+      'CanonicalKnowledgeGraph',
+      mutation.mutationId,
+      {
+        mutationId: mutation.mutationId,
+        reason: `Ontological conflicts confirmed by reviewer: ${reason}`,
+        failedStage: 'pending_review' as MutationState,
+        rejectedBy: reviewerId,
+      },
+      context
+    );
+
+    return updated;
+  }
+
+  /**
    * Record aggregation evidence and optionally create a mutation proposal.
    * This is the "intake" of the PKG→CKG aggregation pipeline.
    */
@@ -303,17 +422,21 @@ export class CkgMutationPipeline {
     proposedCount: number;
     validatingCount: number;
     validatedCount: number;
+    pendingReviewCount: number;
     committedCount: number;
     rejectedCount: number;
     stuckCount: number;
   }> {
-    const [proposed, validating, validated, committed, rejected] = await Promise.all([
-      this.mutationRepository.countMutationsByState('proposed'),
-      this.mutationRepository.countMutationsByState('validating'),
-      this.mutationRepository.countMutationsByState('validated'),
-      this.mutationRepository.countMutationsByState('committed'),
-      this.mutationRepository.countMutationsByState('rejected'),
-    ]);
+    const [proposed, validating, validated, pendingReview, committed, rejected] = await Promise.all(
+      [
+        this.mutationRepository.countMutationsByState('proposed'),
+        this.mutationRepository.countMutationsByState('validating'),
+        this.mutationRepository.countMutationsByState('validated'),
+        this.mutationRepository.countMutationsByState('pending_review'),
+        this.mutationRepository.countMutationsByState('committed'),
+        this.mutationRepository.countMutationsByState('rejected'),
+      ]
+    );
 
     // "Stuck" = in non-terminal non-proposed state (could indicate processing failure)
     const proving = await this.mutationRepository.countMutationsByState('proving');
@@ -325,6 +448,7 @@ export class CkgMutationPipeline {
       proposedCount: proposed,
       validatingCount: validating,
       validatedCount: validated,
+      pendingReviewCount: pendingReview,
       committedCount: committed,
       rejectedCount: rejected,
       stuckCount,
@@ -356,13 +480,14 @@ export class CkgMutationPipeline {
    *
    * Each stage transitions the mutation state with audit logging.
    * If any stage fails, the mutation transitions to REJECTED.
+   * If ontological conflicts are detected, the mutation is escalated to PENDING_REVIEW.
    */
   private async runPipeline(mutationId: MutationId, context: IExecutionContext): Promise<void> {
-    // Stage 1: PROPOSED → VALIDATING → run validation → VALIDATED/REJECTED
+    // Stage 1: PROPOSED → VALIDATING → run validation → VALIDATED/PENDING_REVIEW/REJECTED
     let mutation = await this.getMutation(mutationId);
     mutation = await this.runValidationStage(mutation, context);
 
-    if (mutation.state === 'rejected') return;
+    if (mutation.state === 'rejected' || mutation.state === 'pending_review') return;
 
     // Stage 2: VALIDATED → PROVING → PROVEN (pass-through for Phase 6)
     mutation = await this.runProofStage(mutation, context);
@@ -373,12 +498,42 @@ export class CkgMutationPipeline {
     await this.runCommitStage(mutation, context);
   }
 
+  /**
+   * Resume the pipeline after a PENDING_REVIEW mutation is approved.
+   *
+   * Picks up from VALIDATED state (post-approval) and runs prove → commit.
+   * Called fire-and-forget from approveMutation().
+   */
+  private async runPostReviewPipeline(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<void> {
+    try {
+      let mutation = await this.getMutation(mutationId);
+
+      // Stage 2: VALIDATED → PROVING → PROVEN
+      mutation = await this.runProofStage(mutation, context);
+      if (mutation.state === 'rejected') return;
+
+      // Stage 3: PROVEN → COMMITTING → COMMITTED/REJECTED
+      await this.runCommitStage(mutation, context);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error({ mutationId, error: message }, 'Post-review pipeline processing failed');
+    }
+  }
+
   // ==========================================================================
   // Pipeline Stages
   // ==========================================================================
 
   /**
-   * Validation stage: PROPOSED → VALIDATING → VALIDATED or REJECTED.
+   * Validation stage: PROPOSED → VALIDATING → VALIDATED, PENDING_REVIEW, or REJECTED.
+   *
+   * Three possible outcomes:
+   * 1. Passed, no ontological conflicts → VALIDATED (continue pipeline)
+   * 2. Passed but has ontological conflicts → PENDING_REVIEW (escalate for review)
+   * 3. Failed → REJECTED
    */
   private async runValidationStage(
     mutation: ICkgMutation,
@@ -393,20 +548,37 @@ export class CkgMutationPipeline {
       context
     );
 
-    // Run the 4-stage validation pipeline
+    // Run the validation pipeline (now includes OntologicalConsistencyStage at order 250)
     const validationResult = await this.validationPipeline.validate(mutation, {
       correlationId: context.correlationId as string,
       shortCircuitOnError: true,
     });
 
     if (validationResult.passed) {
+      // Check for ontological conflict violations that require escalation.
+      // The OntologicalConsistencyStage marks violations as errors with code
+      // ONTOLOGICAL_CONFLICT. If validation "passed" but we have these violations
+      // in a stage that didn't block (because it was already collected), we escalate.
+      // However, the standard flow is: if ontological stage fails, passed=false.
+      // So we check the stageResults directly for the ontological stage.
+      const ontologicalStage = validationResult.stageResults.find(
+        (s) => s.stageName === 'ontological_consistency'
+      );
+      const hasOntologicalConflicts =
+        ontologicalStage !== undefined &&
+        !ontologicalStage.passed &&
+        ontologicalStage.violations.some((v) => v.code === 'ONTOLOGICAL_CONFLICT');
+
+      // NOTE: If shortCircuit is true and ontological stage fails, passed will be false.
+      // This branch only fires if passed=true (no ontological conflicts).
       // VALIDATING → VALIDATED
       mutation = await this.transitionState(
         mutation,
         'validated',
         'system',
         `Validation passed: ${String(validationResult.stageResults.length)} stage(s), ` +
-          `${String(validationResult.totalDuration)}ms`,
+          `${String(validationResult.totalDuration)}ms` +
+          (hasOntologicalConflicts ? ' (with advisory ontological warnings)' : ''),
         context,
         { validationResult: this.serializeValidationResult(validationResult) }
       );
@@ -423,35 +595,59 @@ export class CkgMutationPipeline {
         context
       );
     } else {
-      // VALIDATING → REJECTED
-      const failedStages = validationResult.stageResults
-        .filter((s) => !s.passed)
-        .map((s) => s.stageName);
-
-      mutation = await this.transitionState(
-        mutation,
-        'rejected',
-        'system',
-        `Validation failed at stage(s): [${failedStages.join(', ')}]. ` +
-          `${String(validationResult.violations.length)} error(s), ` +
-          `${String(validationResult.warnings.length)} warning(s)`,
-        context,
-        { validationResult: this.serializeValidationResult(validationResult) }
+      // Check if this is an ontological conflict (escalate) vs other failure (reject)
+      const ontologicalViolations = validationResult.violations.filter(
+        (v) => v.code === 'ONTOLOGICAL_CONFLICT'
+      );
+      const nonOntologicalErrors = validationResult.violations.filter(
+        (v) => v.code !== 'ONTOLOGICAL_CONFLICT'
       );
 
-      // Publish CkgMutationRejected event
-      await this.publishEvent(
-        KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
-        'CanonicalKnowledgeGraph',
-        mutation.mutationId,
-        {
-          mutationId: mutation.mutationId,
-          reason: `Validation failed at stage(s): [${failedStages.join(', ')}]`,
-          failedStage: 'validating' as MutationState,
-          rejectedBy: 'system',
-        },
-        context
-      );
+      if (ontologicalViolations.length > 0 && nonOntologicalErrors.length === 0) {
+        // ONLY ontological conflicts caused the failure → escalate to PENDING_REVIEW
+        mutation = await this.transitionState(
+          mutation,
+          'pending_review',
+          'system',
+          `Ontological conflict(s) detected: ${String(ontologicalViolations.length)} conflict(s) ` +
+            `require human review. ${String(validationResult.warnings.length)} warning(s).`,
+          context,
+          { validationResult: this.serializeValidationResult(validationResult) }
+        );
+
+        // Publish CKG_MUTATION_ESCALATED event
+        await this.publishEscalationEvent(mutation, ontologicalViolations, context);
+      } else {
+        // Non-ontological errors present → standard rejection
+        const failedStages = validationResult.stageResults
+          .filter((s) => !s.passed)
+          .map((s) => s.stageName);
+
+        mutation = await this.transitionState(
+          mutation,
+          'rejected',
+          'system',
+          `Validation failed at stage(s): [${failedStages.join(', ')}]. ` +
+            `${String(validationResult.violations.length)} error(s), ` +
+            `${String(validationResult.warnings.length)} warning(s)`,
+          context,
+          { validationResult: this.serializeValidationResult(validationResult) }
+        );
+
+        // Publish CkgMutationRejected event
+        await this.publishEvent(
+          KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
+          'CanonicalKnowledgeGraph',
+          mutation.mutationId,
+          {
+            mutationId: mutation.mutationId,
+            reason: `Validation failed at stage(s): [${failedStages.join(', ')}]`,
+            failedStage: 'validating' as MutationState,
+            rejectedBy: 'system',
+          },
+          context
+        );
+      }
     }
 
     return mutation;
@@ -906,6 +1102,38 @@ export class CkgMutationPipeline {
         'Failed to publish event (non-fatal)'
       );
     }
+  }
+
+  /**
+   * Publish a CKG_MUTATION_ESCALATED event when ontological conflicts
+   * cause a mutation to enter PENDING_REVIEW state.
+   */
+  private async publishEscalationEvent(
+    mutation: ICkgMutation,
+    ontologicalViolations: IValidationViolation[],
+    context: IExecutionContext
+  ): Promise<void> {
+    const conflicts = ontologicalViolations.map((v) => ({
+      proposedEdgeType: (v.metadata?.['proposedEdgeType'] ?? 'unknown') as string,
+      conflictingEdgeType: (v.metadata?.['conflictingEdgeType'] ?? 'unknown') as string,
+      sourceNodeId: (v.metadata?.['sourceNodeId'] ?? 'unknown') as string,
+      targetNodeId: (v.metadata?.['targetNodeId'] ?? 'unknown') as string,
+      reason: (v.metadata?.['reason'] ?? v.message) as string,
+    }));
+
+    await this.publishEvent(
+      KnowledgeGraphEventType.CKG_MUTATION_ESCALATED,
+      'CanonicalKnowledgeGraph',
+      mutation.mutationId,
+      {
+        mutationId: mutation.mutationId,
+        proposedBy: mutation.proposedBy,
+        conflicts,
+        violationCount: ontologicalViolations.length,
+        reason: `${String(ontologicalViolations.length)} ontological conflict(s) require human review`,
+      },
+      context
+    );
   }
 
   // ==========================================================================

@@ -290,27 +290,96 @@ export type GraphNodeType = (typeof GraphNodeType)[keyof typeof GraphNodeType];
 
 /**
  * Knowledge graph edge types.
+ *
+ * 17 edge types organized into 6 ontological categories covering the
+ * full spectrum of epistemological relations needed for a pedagogical
+ * knowledge graph:
+ *
+ * - **Taxonomic**: is_a, exemplifies
+ * - **Mereological**: part_of, constituted_by
+ * - **Logical**: equivalent_to, entails, disjoint_with, contradicts
+ * - **Causal/Temporal**: causes, precedes, depends_on
+ * - **Associative**: related_to, analogous_to, contrasts_with
+ * - **Structural/Pedagogical**: prerequisite, derived_from, has_property
+ *
+ * @see EdgeOntologicalCategory for the category groupings
+ * @see EDGE_TYPE_POLICIES in knowledge-graph-service for per-type validation rules
  */
 export const GraphEdgeType = {
-  /** Prerequisite relationship */
-  PREREQUISITE: 'prerequisite',
-  /** Part-of relationship */
-  PART_OF: 'part_of',
-  /** Is-a (inheritance) */
+  // ── Taxonomic ─────────────────────────────────────────────────────────
+  /** Taxonomic subsumption: "A is a kind of B" (Aristotelian genus–species) */
   IS_A: 'is_a',
-  /** Related concept */
-  RELATED_TO: 'related_to',
-  /** Contradicts */
-  CONTRADICTS: 'contradicts',
-  /** Exemplifies */
+  /** Type-instance: "A exemplifies B" (example → concept/principle) */
   EXEMPLIFIES: 'exemplifies',
-  /** Causes */
+
+  // ── Mereological ──────────────────────────────────────────────────────
+  /** Part-whole composition: "A is a component/part of B" */
+  PART_OF: 'part_of',
+  /** Material constitution without identity: "A is constituted by B" (statue/clay) */
+  CONSTITUTED_BY: 'constituted_by',
+
+  // ── Logical ───────────────────────────────────────────────────────────
+  /** Mutual entailment / co-extensionality: "A ≡ B" (symmetric) */
+  EQUIVALENT_TO: 'equivalent_to',
+  /** Asymmetric entailment: "A necessarily implies B" */
+  ENTAILS: 'entails',
+  /** Mutual exclusion: "A and B cannot both hold" (stronger than contradicts) */
+  DISJOINT_WITH: 'disjoint_with',
+  /** Contradiction or tension between concepts (may be domain-contextual) */
+  CONTRADICTS: 'contradicts',
+
+  // ── Causal / Temporal ─────────────────────────────────────────────────
+  /** Causal dependence: "A causes B" */
   CAUSES: 'causes',
-  /** Derived from */
+  /** Temporal or logical ordering: "A precedes B" (historical/conceptual) */
+  PRECEDES: 'precedes',
+  /** Existential or generic dependence: "A depends on B for its existence/definition" */
+  DEPENDS_ON: 'depends_on',
+
+  // ── Associative ───────────────────────────────────────────────────────
+  /** Generic associative link (weakest semantic commitment) */
+  RELATED_TO: 'related_to',
+  /** Structural or functional resemblance across domains (symmetric) */
+  ANALOGOUS_TO: 'analogous_to',
+  /** Opposition without contradiction: gradable antonymy (symmetric) */
+  CONTRASTS_WITH: 'contrasts_with',
+
+  // ── Structural / Pedagogical ──────────────────────────────────────────
+  /** Learning dependency: "A requires B to be learned first" */
+  PREREQUISITE: 'prerequisite',
+  /** Derivation chain: "A is logically/mathematically derived from B" */
   DERIVED_FROM: 'derived_from',
+  /** Inherence: "A has property/quality B" (attribute inheres in bearer) */
+  HAS_PROPERTY: 'has_property',
 } as const;
 
 export type GraphEdgeType = (typeof GraphEdgeType)[keyof typeof GraphEdgeType];
+
+/**
+ * Ontological category grouping for edge types.
+ *
+ * Each `GraphEdgeType` belongs to exactly one category. Categories are used
+ * for pedagogical guidance (teaching users which relation to pick), guardrail
+ * conflict detection (e.g., IS_A vs PART_OF on the same pair), and metric
+ * computation (hierarchical edge grouping).
+ */
+export const EdgeOntologicalCategory = {
+  /** Classification / inheritance: is_a, exemplifies */
+  TAXONOMIC: 'taxonomic',
+  /** Part-whole / composition / constitution: part_of, constituted_by */
+  MEREOLOGICAL: 'mereological',
+  /** Formal logical relations: equivalent_to, entails, disjoint_with, contradicts */
+  LOGICAL: 'logical',
+  /** Causation, temporal ordering, existential dependence: causes, precedes, depends_on */
+  CAUSAL_TEMPORAL: 'causal_temporal',
+  /** Similarity, analogy, opposition, generic association: related_to, analogous_to, contrasts_with */
+  ASSOCIATIVE: 'associative',
+  /** Learning-specific structural relations: prerequisite, derived_from, has_property */
+  STRUCTURAL_PEDAGOGICAL: 'structural_pedagogical',
+} as const;
+
+export type EdgeOntologicalCategory =
+  (typeof EdgeOntologicalCategory)[keyof typeof EdgeOntologicalCategory];
 
 /**
  * CKG mutation typestate (from Knowledge Graph spec).
@@ -332,6 +401,8 @@ export const MutationState = {
   COMMITTED: 'committed',
   /** Rejected with reason */
   REJECTED: 'rejected',
+  /** Escalated for human/admin review (ontological conflict) */
+  PENDING_REVIEW: 'pending_review',
 } as const;
 
 export type MutationState = (typeof MutationState)[keyof typeof MutationState];

@@ -1553,6 +1553,50 @@ export class Neo4jGraphRepository implements IGraphRepository {
   }
 
   // ==========================================================================
+  // Phase 8e – Ontological Guardrails: findConflictingEdges
+  // ==========================================================================
+
+  async findConflictingEdges(
+    sourceNodeId: NodeId,
+    targetNodeId: NodeId,
+    edgeTypes: readonly GraphEdgeType[]
+  ): Promise<IGraphEdge[]> {
+    if (edgeTypes.length === 0) return [];
+
+    // Build relationship type pattern from the requested edge types.
+    // We check both directions: (source)-[r]->(target) OR (target)-[r]->(source)
+    // because ontological conflicts are direction-agnostic.
+    const relTypePattern = edgeTypes.map((t) => edgeTypeToRelType(t)).join('|');
+
+    const cypher = `
+      MATCH (a {nodeId: $nodeA})-[r:${relTypePattern}]-(b {nodeId: $nodeB})
+      RETURN r, startNode(r).nodeId AS sourceId, endNode(r).nodeId AS targetId,
+             a.graphType AS graphType
+    `;
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(cypher, {
+          nodeA: sourceNodeId as string,
+          nodeB: targetNodeId as string,
+        });
+      });
+
+      return result.records.map((rec) =>
+        mapRelationshipToGraphEdge(
+          rec.get('r') as neo4j.Relationship,
+          rec.get('sourceId') as NodeId,
+          rec.get('targetId') as NodeId,
+          rec.get('graphType') as IGraphEdge['graphType']
+        )
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
+  // ==========================================================================
   // IBatchGraphRepository
   // ==========================================================================
 
@@ -2234,5 +2278,15 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
   getDegreeCentrality(_query: ICentralityQuery, _userId?: string): Promise<ICentralityEntry[]> {
     throw new Error('getDegreeCentrality is not supported inside transactions');
+  }
+
+  // ── Phase 8e ontological guardrails stubs ─────────────────────────────
+
+  findConflictingEdges(
+    _sourceNodeId: NodeId,
+    _targetNodeId: NodeId,
+    _edgeTypes: readonly GraphEdgeType[]
+  ): Promise<IGraphEdge[]> {
+    throw new Error('findConflictingEdges is not supported inside transactions');
   }
 }

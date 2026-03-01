@@ -14,24 +14,24 @@
  * structural integrity if schema validation fails.
  */
 
-import type { EdgeId, MutationState, NodeId } from '@noema/types';
+import type { EdgeId, GraphEdgeType, MutationState, NodeId } from '@noema/types';
 
 import type { IAggregationEvidenceRepository } from './aggregation-evidence.repository.js';
 import type { IGraphRepository } from './graph.repository.js';
 import type { ICkgMutation, IMutationRepository } from './mutation.repository.js';
 import type {
-    IValidationContext,
-    IValidationStage,
-    IValidationStageResult,
-    IValidationViolation,
+  IValidationContext,
+  IValidationStage,
+  IValidationStageResult,
+  IValidationViolation,
 } from './validation.js';
 
 import type { CkgMutationOperation } from './ckg-mutation-dsl.js';
 import {
-    CkgMutationOperationSchema,
-    CkgOperationType,
-    extractAffectedEdgeIds,
-    extractAffectedNodeIds,
+  CkgMutationOperationSchema,
+  CkgOperationType,
+  extractAffectedEdgeIds,
+  extractAffectedNodeIds,
 } from './ckg-mutation-dsl.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
 
@@ -52,10 +52,7 @@ export class SchemaValidationStage implements IValidationStage {
   readonly name = 'schema';
   readonly order = 100;
 
-  validate(
-    mutation: ICkgMutation,
-    _context: IValidationContext
-  ): Promise<IValidationStageResult> {
+  validate(mutation: ICkgMutation, _context: IValidationContext): Promise<IValidationStageResult> {
     const start = Date.now();
     const violations: IValidationViolation[] = [];
 
@@ -656,4 +653,321 @@ export class EvidenceSufficiencyStage implements IValidationStage {
       duration,
     };
   }
+}
+
+// ============================================================================
+// Stage 2.5: Ontological Consistency (Phase 8e)
+// ============================================================================
+
+/**
+ * An ontological conflict pair definition.
+ *
+ * When a mutation proposes an edge of type `edgeTypeA` between two nodes,
+ * and an edge of type `edgeTypeB` already exists between the same node pair
+ * (in either direction), this constitutes an ontological conflict.
+ */
+interface IOntologicalConflictPair {
+  /** The first edge type in the conflict */
+  readonly edgeTypeA: GraphEdgeType;
+  /** The second (conflicting) edge type */
+  readonly edgeTypeB: GraphEdgeType;
+  /** Human-readable explanation of why these conflict */
+  readonly reason: string;
+}
+
+/**
+ * Data-driven table of the 10 ontological conflict pairs.
+ *
+ * These represent fundamental ontological incompatibilities: if A IS_A B,
+ * then A cannot simultaneously be PART_OF B (you classify OR compose,
+ * not both for the same pair). The table is frozen and order-insensitive.
+ */
+const ONTOLOGICAL_CONFLICT_PAIRS: readonly IOntologicalConflictPair[] = Object.freeze([
+  // 1. Taxonomic vs Mereological
+  {
+    edgeTypeA: 'is_a' as GraphEdgeType,
+    edgeTypeB: 'part_of' as GraphEdgeType,
+    reason:
+      'Taxonomic subsumption (IS_A) and mereological composition (PART_OF) are incompatible: classify OR compose, not both',
+  },
+  // 2. Taxonomic vs Constitution
+  {
+    edgeTypeA: 'is_a' as GraphEdgeType,
+    edgeTypeB: 'constituted_by' as GraphEdgeType,
+    reason:
+      'Taxonomic subsumption (IS_A) and material constitution (CONSTITUTED_BY) are incompatible: a kind-of relation cannot also be a constitution relation',
+  },
+  // 3. Equivalence vs Taxonomy
+  {
+    edgeTypeA: 'equivalent_to' as GraphEdgeType,
+    edgeTypeB: 'is_a' as GraphEdgeType,
+    reason:
+      'Equivalence (EQUIVALENT_TO) and subsumption (IS_A) are incompatible: if A ≡ B, then A cannot also be a subtype of B',
+  },
+  // 4. Equivalence vs Disjointness
+  {
+    edgeTypeA: 'equivalent_to' as GraphEdgeType,
+    edgeTypeB: 'disjoint_with' as GraphEdgeType,
+    reason:
+      'Equivalence (EQUIVALENT_TO) and disjointness (DISJOINT_WITH) are contradictory: A cannot be both equivalent to and disjoint from B',
+  },
+  // 5. Entailment vs Contradiction
+  {
+    edgeTypeA: 'entails' as GraphEdgeType,
+    edgeTypeB: 'contradicts' as GraphEdgeType,
+    reason:
+      'Entailment (ENTAILS) and contradiction (CONTRADICTS) are incompatible: A cannot both necessarily imply and contradict B',
+  },
+  // 6. Causes vs Precedes (strict reading)
+  {
+    edgeTypeA: 'causes' as GraphEdgeType,
+    edgeTypeB: 'precedes' as GraphEdgeType,
+    reason:
+      'Causal dependence (CAUSES) subsumes temporal precedence (PRECEDES): use CAUSES when the relationship is causal, not both',
+  },
+  // 7. Prerequisite vs Derived-from
+  {
+    edgeTypeA: 'prerequisite' as GraphEdgeType,
+    edgeTypeB: 'derived_from' as GraphEdgeType,
+    reason:
+      'Learning prerequisite (PREREQUISITE) and derivation (DERIVED_FROM) conflate pedagogical and logical dependency: choose one',
+  },
+  // 8. Disjoint vs Part-of
+  {
+    edgeTypeA: 'disjoint_with' as GraphEdgeType,
+    edgeTypeB: 'part_of' as GraphEdgeType,
+    reason:
+      'Disjointness (DISJOINT_WITH) and composition (PART_OF) are incompatible: mutually exclusive concepts cannot be in a part-whole relation',
+  },
+  // 9. Contradicts vs Analogous-to
+  {
+    edgeTypeA: 'contradicts' as GraphEdgeType,
+    edgeTypeB: 'analogous_to' as GraphEdgeType,
+    reason:
+      'Contradiction (CONTRADICTS) and analogy (ANALOGOUS_TO) are incompatible: contradictory concepts cannot be analogous',
+  },
+  // 10. Equivalent-to vs Contrasts-with
+  {
+    edgeTypeA: 'equivalent_to' as GraphEdgeType,
+    edgeTypeB: 'contrasts_with' as GraphEdgeType,
+    reason:
+      'Equivalence (EQUIVALENT_TO) and contrast (CONTRASTS_WITH) are incompatible: equivalent concepts cannot be in opposition',
+  },
+]);
+
+/**
+ * Validates ontological consistency of proposed edge additions.
+ *
+ * Runs between StructuralIntegrity (200) and ConflictDetection (300).
+ * For each ADD_EDGE operation, checks:
+ *
+ * 1. **Intra-mutation conflicts**: other ADD_EDGE ops in the same batch
+ *    that would create a conflicting pair on the same node pair.
+ * 2. **Graph conflicts**: existing edges in the CKG graph that would
+ *    conflict with the proposed edge type.
+ *
+ * Violations use severity `'error'` with code `ONTOLOGICAL_CONFLICT`
+ * to trigger the escalation mechanism in the mutation pipeline
+ * (VALIDATING → PENDING_REVIEW instead of VALIDATING → REJECTED).
+ *
+ * @remarks Order 250 — runs after structural integrity confirms nodes
+ * exist and edge policies are met, but before conflict detection scans
+ * for in-flight mutation overlaps.
+ */
+export class OntologicalConsistencyStage implements IValidationStage {
+  readonly name = 'ontological_consistency';
+  readonly order = 250;
+
+  constructor(private readonly graphRepository: IGraphRepository) {}
+
+  async validate(
+    mutation: ICkgMutation,
+    context: IValidationContext
+  ): Promise<IValidationStageResult> {
+    const start = Date.now();
+    const violations: IValidationViolation[] = [];
+    const operations = mutation.operations as unknown as CkgMutationOperation[];
+
+    // Collect all ADD_EDGE operations with their indices
+    const addEdgeOps: Array<{
+      op: Extract<CkgMutationOperation, { type: 'add_edge' }>;
+      index: number;
+    }> = [];
+
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i];
+      if (op?.type === CkgOperationType.ADD_EDGE) {
+        addEdgeOps.push({
+          op: op as Extract<CkgMutationOperation, { type: 'add_edge' }>,
+          index: i,
+        });
+      }
+    }
+
+    // No add_edge operations → nothing to check
+    if (addEdgeOps.length === 0) {
+      return {
+        stageName: this.name,
+        passed: true,
+        details: 'Ontological consistency skipped: no add_edge operations',
+        violations: [],
+        duration: Date.now() - start,
+      };
+    }
+
+    // Phase 1: Intra-mutation conflict scan
+    for (let i = 0; i < addEdgeOps.length; i++) {
+      for (let j = i + 1; j < addEdgeOps.length; j++) {
+        const opA = addEdgeOps[i];
+        const opB = addEdgeOps[j];
+        if (!opA || !opB) continue;
+
+        // Check if they operate on the same node pair (direction-agnostic)
+        if (this.isSameNodePair(opA.op, opB.op)) {
+          const conflict = this.findConflict(opA.op.edgeType, opB.op.edgeType);
+          if (conflict) {
+            violations.push({
+              code: 'ONTOLOGICAL_CONFLICT',
+              message:
+                `Intra-mutation ontological conflict: operations [${String(opA.index)}] (${opA.op.edgeType}) ` +
+                `and [${String(opB.index)}] (${opB.op.edgeType}) on node pair ` +
+                `(${opA.op.sourceNodeId}, ${opA.op.targetNodeId}). ${conflict.reason}`,
+              severity: 'error',
+              affectedOperationIndex: opA.index,
+              metadata: {
+                conflictType: 'intra_mutation',
+                proposedEdgeType: opA.op.edgeType,
+                conflictingEdgeType: opB.op.edgeType,
+                sourceNodeId: opA.op.sourceNodeId,
+                targetNodeId: opA.op.targetNodeId,
+                conflictingOperationIndex: opB.index,
+                reason: conflict.reason,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    // Phase 2: Graph conflict scan (existing edges in CKG)
+    for (const { op, index } of addEdgeOps) {
+      const conflictingTypes = this.getConflictingEdgeTypes(op.edgeType);
+      if (conflictingTypes.length === 0) continue;
+
+      const existingEdges = await this.graphRepository.findConflictingEdges(
+        op.sourceNodeId as NodeId,
+        op.targetNodeId as NodeId,
+        conflictingTypes
+      );
+
+      for (const existing of existingEdges) {
+        const conflict = this.findConflict(op.edgeType, existing.edgeType);
+        if (conflict) {
+          violations.push({
+            code: 'ONTOLOGICAL_CONFLICT',
+            message:
+              `Graph ontological conflict: operation [${String(index)}] proposes ${op.edgeType} ` +
+              `but ${existing.edgeType} already exists between ` +
+              `(${op.sourceNodeId}, ${op.targetNodeId}). ${conflict.reason}`,
+            severity: 'error',
+            affectedOperationIndex: index,
+            metadata: {
+              conflictType: 'graph_existing',
+              proposedEdgeType: op.edgeType,
+              conflictingEdgeType: existing.edgeType,
+              existingEdgeId: existing.edgeId,
+              sourceNodeId: op.sourceNodeId,
+              targetNodeId: op.targetNodeId,
+              reason: conflict.reason,
+            },
+          });
+        }
+      }
+
+      if (context.shortCircuitOnError && violations.some((v) => v.severity === 'error')) {
+        break;
+      }
+    }
+
+    const duration = Date.now() - start;
+    const hasErrors = violations.some((v) => v.severity === 'error');
+
+    return {
+      stageName: this.name,
+      passed: !hasErrors,
+      details: hasErrors
+        ? `Ontological consistency failed: ${String(violations.length)} conflict(s) detected`
+        : `Ontological consistency passed for ${String(addEdgeOps.length)} add_edge operation(s)`,
+      violations,
+      duration,
+    };
+  }
+
+  /**
+   * Check if two ADD_EDGE operations target the same node pair
+   * (direction-agnostic).
+   */
+  private isSameNodePair(
+    a: Extract<CkgMutationOperation, { type: 'add_edge' }>,
+    b: Extract<CkgMutationOperation, { type: 'add_edge' }>
+  ): boolean {
+    return (
+      (a.sourceNodeId === b.sourceNodeId && a.targetNodeId === b.targetNodeId) ||
+      (a.sourceNodeId === b.targetNodeId && a.targetNodeId === b.sourceNodeId)
+    );
+  }
+
+  /**
+   * Look up conflict between two edge types in the ONTOLOGICAL_CONFLICT_PAIRS table.
+   * Order-insensitive: checks both (A,B) and (B,A).
+   */
+  private findConflict(
+    typeA: GraphEdgeType,
+    typeB: GraphEdgeType
+  ): IOntologicalConflictPair | undefined {
+    return ONTOLOGICAL_CONFLICT_PAIRS.find(
+      (pair) =>
+        (pair.edgeTypeA === typeA && pair.edgeTypeB === typeB) ||
+        (pair.edgeTypeA === typeB && pair.edgeTypeB === typeA)
+    );
+  }
+
+  /**
+   * For a given edge type, return the set of edge types that would
+   * conflict with it according to the conflict pairs table.
+   */
+  private getConflictingEdgeTypes(edgeType: GraphEdgeType): GraphEdgeType[] {
+    const conflicting: GraphEdgeType[] = [];
+    for (const pair of ONTOLOGICAL_CONFLICT_PAIRS) {
+      if (pair.edgeTypeA === edgeType) {
+        conflicting.push(pair.edgeTypeB);
+      } else if (pair.edgeTypeB === edgeType) {
+        conflicting.push(pair.edgeTypeA);
+      }
+    }
+    return conflicting;
+  }
+}
+
+// ============================================================================
+// Standalone Helpers (Phase 8e — PKG Advisory Mode)
+// ============================================================================
+
+/**
+ * For a given edge type, return the set of edge types that would conflict
+ * with it according to the ontological conflict pairs table.
+ *
+ * Used by the PKG advisory check in `KnowledgeGraphService.createEdge()` to
+ * produce non-blocking warnings without running the full CKG validation pipeline.
+ */
+export function getConflictingEdgeTypesForAdvisory(edgeType: GraphEdgeType): GraphEdgeType[] {
+  const conflicting: GraphEdgeType[] = [];
+  for (const pair of ONTOLOGICAL_CONFLICT_PAIRS) {
+    if (pair.edgeTypeA === edgeType) {
+      conflicting.push(pair.edgeTypeB);
+    } else if (pair.edgeTypeB === edgeType) {
+      conflicting.push(pair.edgeTypeA);
+    }
+  }
+  return conflicting;
 }

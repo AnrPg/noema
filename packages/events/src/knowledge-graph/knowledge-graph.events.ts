@@ -64,6 +64,7 @@ export const KnowledgeGraphEventType = {
   CKG_MUTATION_VALIDATED: 'ckg.mutation.validated',
   CKG_MUTATION_COMMITTED: 'ckg.mutation.committed',
   CKG_MUTATION_REJECTED: 'ckg.mutation.rejected',
+  CKG_MUTATION_ESCALATED: 'ckg.mutation.escalated',
   CKG_NODE_PROMOTED: 'ckg.node.promoted',
 
   // ── Metacognitive Events ───────────────────────────────────────────────
@@ -248,6 +249,34 @@ export interface ICkgMutationRejectedPayload {
 }
 
 /**
+ * Payload for ckg.mutation.escalated — a mutation was escalated for human review
+ * due to ontological conflicts detected by the OntologicalConsistencyStage.
+ */
+export interface ICkgMutationEscalatedPayload {
+  /** Mutation lifecycle ID */
+  mutationId: MutationId;
+  /** Agent that proposed the mutation */
+  proposedBy: AgentId;
+  /** Ontological conflict details */
+  conflicts: Array<{
+    /** Edge type being added */
+    proposedEdgeType: GraphEdgeType;
+    /** Conflicting edge type already present or in batch */
+    conflictingEdgeType: GraphEdgeType;
+    /** Source node of the proposed edge */
+    sourceNodeId: NodeId;
+    /** Target node of the proposed edge */
+    targetNodeId: NodeId;
+    /** Human-readable conflict explanation */
+    reason: string;
+  }>;
+  /** Total number of ontological violations */
+  violationCount: number;
+  /** Human-readable escalation reason */
+  reason: string;
+}
+
+/**
  * Payload for ckg.node.promoted — a concept was promoted from PKGs to CKG.
  */
 export interface ICkgNodePromotedPayload {
@@ -383,6 +412,11 @@ export type CkgMutationRejectedEvent = ITypedEvent<
   'CanonicalKnowledgeGraph',
   ICkgMutationRejectedPayload
 >;
+export type CkgMutationEscalatedEvent = ITypedEvent<
+  'ckg.mutation.escalated',
+  'CanonicalKnowledgeGraph',
+  ICkgMutationEscalatedPayload
+>;
 export type CkgNodePromotedEvent = ITypedEvent<
   'ckg.node.promoted',
   'CanonicalKnowledgeGraph',
@@ -430,6 +464,7 @@ export type CkgDomainEvent =
   | CkgMutationValidatedEvent
   | CkgMutationCommittedEvent
   | CkgMutationRejectedEvent
+  | CkgMutationEscalatedEvent
   | CkgNodePromotedEvent;
 
 /**

@@ -26,16 +26,6 @@ export {
   InvalidMisconceptionStateTransitionError,
   // Mutation errors
   InvalidStateTransitionError,
-  isDomainError,
-  isInterventionTemplateNotFoundError,
-  isInvalidMisconceptionStateTransitionError,
-  isInvalidStateTransitionError,
-  isMisconceptionPatternNotFoundError,
-  isMutationAlreadyCommittedError,
-  isMutationConflictError,
-  isMutationNotFoundError,
-  isValidationError,
-  isValidationFailedError,
   MaxDepthExceededError,
   MisconceptionPatternNotFoundError,
   MutationAlreadyCommittedError,
@@ -47,6 +37,16 @@ export {
   UnauthorizedError,
   ValidationError,
   ValidationFailedError,
+  isDomainError,
+  isInterventionTemplateNotFoundError,
+  isInvalidMisconceptionStateTransitionError,
+  isInvalidStateTransitionError,
+  isMisconceptionPatternNotFoundError,
+  isMutationAlreadyCommittedError,
+  isMutationConflictError,
+  isMutationNotFoundError,
+  isValidationError,
+  isValidationFailedError,
 } from './errors/index.js';
 
 // ============================================================================
@@ -129,9 +129,9 @@ export type {
 } from './mutation.repository.js';
 
 export type {
-  IMetricsHistoryOptions,
   // Metrics repository
   IMetricSnapshot,
+  IMetricsHistoryOptions,
   IMetricsRepository,
 } from './metrics.repository.js';
 
@@ -215,10 +215,10 @@ export type {
 export {
   CkgMutationOperationSchema,
   CkgOperationType,
-  extractAffectedEdgeIds,
-  extractAffectedNodeIds,
   MutationFilterSchema,
   MutationProposalSchema,
+  extractAffectedEdgeIds,
+  extractAffectedNodeIds,
 } from './ckg-mutation-dsl.js';
 
 export type {
@@ -238,24 +238,26 @@ export type {
 // Typestate machine: transition rules, guards, branded state types
 export {
   CANCELLABLE_STATES,
+  STATE_TRANSITIONS,
+  TERMINAL_STATES,
   getAllowedTransitions,
   getNextHappyPathState,
   isCancellableState,
   isTerminalState,
   isValidTransition,
-  STATE_TRANSITIONS,
-  TERMINAL_STATES,
   validateTransition,
 } from './ckg-typestate.js';
 
 export type { IMutationInState, IStateTransition } from './ckg-typestate.js';
 
-// Validation stages: schema, structural, conflict, evidence
+// Validation stages: schema, structural, conflict, evidence, ontological (Phase 8e)
 export {
   ConflictDetectionStage,
   EvidenceSufficiencyStage,
+  OntologicalConsistencyStage,
   SchemaValidationStage,
   StructuralIntegrityStage,
+  getConflictingEdgeTypesForAdvisory,
 } from './ckg-validation-stages.js';
 
 // Validation pipeline: IValidationPipeline implementation
@@ -288,7 +290,6 @@ export type {
   IMetacognitiveStageTransitionedPayload,
   // Metacognitive events
   IMisconceptionDetectedPayload,
-  InterventionTriggeredEvent,
   IPkgEdgeCreatedPayload,
   IPkgEdgeRemovedPayload,
   IPkgEdgeUpdatedPayload,
@@ -297,6 +298,7 @@ export type {
   IPkgNodeRemovedPayload,
   IPkgNodeUpdatedPayload,
   IPkgStructuralMetricsUpdatedPayload,
+  InterventionTriggeredEvent,
   KnowledgeGraphDomainEvent,
   MetacognitiveDomainEvent,
   MetacognitiveStageTransitionedEvent,
@@ -317,12 +319,12 @@ export type {
 // ============================================================================
 
 export {
+  StructuralMetricsEngine,
   assessMetacognitiveStage,
   buildGraphComparison,
   buildMetricComputationContext,
   buildStructuralHealthReport,
   detectCrossMetricPatterns,
-  StructuralMetricsEngine,
 } from './metrics/index.js';
 
 export type {

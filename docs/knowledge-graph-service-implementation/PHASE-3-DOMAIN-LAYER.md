@@ -321,38 +321,109 @@ them:
 
 ### Policy definitions
 
-- **prerequisite** — acyclic: YES, reason: prerequisite cycles mean "A requires
-  B requires A" which is a logical impossibility. Allowed source types: concept,
-  procedure, principle. Allowed target types: concept, procedure, principle,
-  fact. Default weight: 1.0.
+The 17 edge types are organized into 6 ontological categories. Each policy
+specifies: ontological category, acyclicity constraint, symmetry, allowed source
+and target node types, default weight, and a human-readable description of the
+relation's semantics.
 
-- **part_of** — acyclic: YES, reason: part-of cycles mean "A is part of B is
-  part of A" which violates the compositional hierarchy. This edge type creates
-  a strict containment structure. Allowed source types: all. Allowed target
-  types: concept, principle.
+#### Taxonomic category
 
-- **is_a** — acyclic: YES, reason: "is_a" represents taxonomic inheritance, and
-  a class can't be a subtype of itself. Allowed: concept → concept.
+- **is_a** — acyclic: YES. Taxonomic subsumption (genus–species): "A is a kind
+  of B". The source inherits the defining properties of the target. Allowed:
+  concept → concept. Default weight: 1.0.
 
-- **related_to** — acyclic: NO, reason: "related_to" is symmetric association —
-  "A is related to B" and "B is related to A" are both valid and don't imply
-  hierarchy. Cycles are natural. All node types allowed.
+- **exemplifies** — acyclic: YES. Type-instance: "A exemplifies B". An example
+  can't exemplify itself. Allowed: example/counterexample →
+  concept/principle/fact. Default weight: 1.0.
 
-- **contradicts** — acyclic: NO, reason: contradiction is symmetric. A
-  contradicts B implies B contradicts A. Cycles of contradictions can exist when
-  multiple concepts are in mutual tension.
+#### Mereological category
 
-- **exemplifies** — acyclic: YES, reason: "X exemplifies Y" establishes a
-  type-instance relationship. An example can't exemplify itself. Allowed:
-  example/counterexample → concept/principle/fact.
+- **part_of** — acyclic: YES. Part-whole composition: "A is a component of B".
+  Violating this would mean "A is part of B is part of A". Allowed source: all.
+  Allowed target: concept, principle.
 
-- **causes** — acyclic: YES, reason: causal cycles in a pedagogical graph
-  indicate a modeling error (real-world feedback loops should be modeled
-  differently). Allowed: all → all.
+- **constituted_by** — acyclic: YES. Material constitution without identity: "A
+  is constituted by B" (e.g., algorithm constituted by data structures). Not the
+  same as part-of — constitution does not imply compositional containment.
+  Allowed: concept/procedure/principle → concept/fact/principle. Default weight:
+  1.0.
 
-- **derived_from** — acyclic: YES, reason: derivation chains must have a
-  foundation. If A is derived from B which is derived from A, neither has
-  independent justification. Allowed: concept/procedure/principle → any.
+#### Logical category
+
+- **equivalent_to** — acyclic: NO (symmetric). Mutual entailment /
+  co-extensionality: "A ≡ B". Use sparingly — most seemingly equivalent concepts
+  differ in some framing. Allowed: concept-bearing types ↔ concept-bearing
+  types. Default weight: 1.0.
+
+- **entails** — acyclic: YES. Asymmetric logical entailment: "A necessarily
+  implies B". If A entails B and B entails A, use equivalent_to instead.
+  Allowed: concept-bearing types → concept-bearing types. Default weight: 0.9.
+
+- **disjoint_with** — acyclic: NO (symmetric). Mutual exclusion: "A and B cannot
+  both apply to the same entity". Stronger than contradicts. Allowed: concept ↔
+  concept. Default weight: 1.0.
+
+- **contradicts** — acyclic: NO (symmetric). Contradiction or tension between
+  concepts. Weaker than disjoint_with — contradictions may be context-dependent.
+  All node types allowed. Default weight: 1.0.
+
+#### Causal / Temporal category
+
+- **causes** — acyclic: YES. Causal dependence: "A causes B". Causal cycles in a
+  pedagogical graph indicate modelling errors. All types → all types. Default
+  weight: 0.8.
+
+- **precedes** — acyclic: YES. Temporal or logical ordering: "A precedes B".
+  Different from prerequisite — precedes captures domain chronology, not
+  learning order. Allowed: concept-bearing types → concept-bearing types.
+  Default weight: 0.8.
+
+- **depends_on** — acyclic: YES. Existential or generic dependence: "A depends
+  on B for its existence or definition". Not the same as prerequisite (learning
+  dependency) or entails (logical implication). All types → all types. Default
+  weight: 0.9.
+
+#### Associative category
+
+- **related_to** — acyclic: NO (symmetric). Generic associative link with the
+  weakest semantic commitment. Prefer a more specific edge type whenever
+  possible. All types → all types. Default weight: 0.5.
+
+- **analogous_to** — acyclic: NO (symmetric). Structural or functional analogy:
+  "A is analogous to B" across different domains (e.g., "electric current ~
+  water flow"). All types → all types. Default weight: 0.6.
+
+- **contrasts_with** — acyclic: NO (symmetric). Opposition without
+  contradiction: gradable antonymy or complementary pairs. Weaker than
+  contradicts or disjoint_with. All types → all types. Default weight: 0.7.
+
+#### Structural / Pedagogical category
+
+- **prerequisite** — acyclic: YES. Learning dependency: "A requires B to be
+  learned first". A pedagogical ordering, not a logical one. Allowed:
+  concept/procedure/principle → concept/procedure/principle/fact. Default
+  weight: 1.0.
+
+- **derived_from** — acyclic: YES. Derivation chain: "A is logically or
+  mathematically derived from B". Derivation chains must have a foundation.
+  Allowed: concept/procedure/principle → any. Default weight: 1.0.
+
+- **has_property** — acyclic: YES. Inherence: "A has property/quality B". A
+  quality or attribute inheres in its bearer (e.g., "Bubble Sort has_property
+  O(n²) Time Complexity"). Allowed: concept/procedure/principle →
+  concept/fact/principle. Default weight: 0.8.
+
+#### Enriched policy metadata
+
+Each `IEdgePolicy` carries three additional metadata fields beyond structural
+validation rules:
+
+- **category** (`EdgeOntologicalCategory`) — which of the 6 ontological families
+  this edge type belongs to.
+- **isSymmetric** (boolean) — whether the edge is semantically symmetric (A→B
+  implies B→A conceptually).
+- **description** (string) — a human-readable explanation of the relation's
+  semantics, disambiguating it from similar edge types.
 
 ### Configuration structure
 

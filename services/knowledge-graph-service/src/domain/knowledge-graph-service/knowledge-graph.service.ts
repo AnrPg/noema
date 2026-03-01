@@ -652,6 +652,29 @@ export interface IKnowledgeGraphService {
     context: IExecutionContext
   ): Promise<IServiceResult<IPipelineHealthResult>>;
 
+  /**
+   * Approve an escalated CKG mutation (PENDING_REVIEW → VALIDATED).
+   *
+   * Overrides ontological conflicts detected during validation and resumes
+   * the mutation pipeline (prove → commit).
+   */
+  approveEscalatedMutation(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Reject an escalated CKG mutation (PENDING_REVIEW → REJECTED).
+   *
+   * Confirms ontological conflicts are real and rejects the mutation.
+   */
+  rejectEscalatedMutation(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
   // ========================================================================
   // PKG Operation Log
   // ========================================================================
@@ -692,6 +715,7 @@ export interface IPipelineHealthResult {
   readonly proposedCount: number;
   readonly validatingCount: number;
   readonly validatedCount: number;
+  readonly pendingReviewCount: number;
   readonly committedCount: number;
   readonly rejectedCount: number;
   readonly stuckCount: number;

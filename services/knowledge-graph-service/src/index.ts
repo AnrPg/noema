@@ -16,10 +16,27 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
-import { loadConfig } from './config/index.js';
+import {
+  registerCkgEdgeRoutes,
+  registerCkgMutationRoutes,
+  registerCkgNodeRoutes,
+  registerCkgTraversalRoutes,
+  registerComparisonRoutes,
+  registerMetricsRoutes,
+  registerMisconceptionRoutes,
+  registerPkgEdgeRoutes,
+  registerPkgNodeRoutes,
+  registerPkgOperationLogRoutes,
+  registerPkgTraversalRoutes,
+  registerStructuralHealthRoutes,
+} from './api/rest/index.js';
+import type { IRouteOptions } from './api/shared/route-helpers.js';
+import { getTokenVerifierConfig, loadConfig } from './config/index.js';
 import { Neo4jClient } from './infrastructure/database/neo4j-client.js';
 import { initializeNeo4jSchema } from './infrastructure/database/neo4j-schema.js';
+import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
 
 // ============================================================================
 // Constants
@@ -150,11 +167,27 @@ async function bootstrap(): Promise<void> {
       },
       tags: [
         { name: 'Health', description: 'Health check endpoints' },
-        { name: 'Graph', description: 'PKG and CKG graph operations' },
-        { name: 'Mutations', description: 'CKG mutation pipeline endpoints' },
+        { name: 'PKG Nodes', description: 'Personal Knowledge Graph node operations' },
+        { name: 'PKG Edges', description: 'Personal Knowledge Graph edge operations' },
+        {
+          name: 'PKG Traversal',
+          description: 'PKG subgraph, ancestor, descendant, and path operations',
+        },
+        { name: 'CKG Nodes', description: 'Canonical Knowledge Graph node read operations' },
+        { name: 'CKG Edges', description: 'Canonical Knowledge Graph edge read operations' },
+        {
+          name: 'CKG Mutations',
+          description: 'CKG mutation pipeline (propose, cancel, retry, health)',
+        },
+        {
+          name: 'CKG Traversal',
+          description: 'CKG subgraph, ancestor, descendant, and path operations',
+        },
         { name: 'Metrics', description: 'Structural metric endpoints' },
-        { name: 'Misconceptions', description: 'Misconception pattern endpoints' },
-        { name: 'Tools', description: 'MCP tool execution endpoints' },
+        { name: 'Misconceptions', description: 'Misconception detection and lifecycle' },
+        { name: 'Structural Health', description: 'Structural health and metacognitive stage' },
+        { name: 'PKG Operations', description: 'PKG operation log (audit trail)' },
+        { name: 'Comparison', description: 'PKG↔CKG comparison endpoints' },
       ],
       components: {
         securitySchemes: {
@@ -180,6 +213,64 @@ async function bootstrap(): Promise<void> {
 
   // Register routes (Phase 1: health checks only)
   registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, neo4jClient, redis);
+
+  // --------------------------------------------------------------------------
+  // Auth middleware & route wiring (Phase 8 Wave 1)
+  // --------------------------------------------------------------------------
+
+  const tokenVerifier = new JwtTokenVerifier(getTokenVerifierConfig(config));
+  const authMiddleware = createAuthMiddleware(tokenVerifier);
+
+  // TODO [TECH-DEBT]: Replace stub service with full DI-wired KnowledgeGraphService.
+  // The service construction requires wiring together:
+  //   - Neo4jGraphRepository (neo4jClient)
+  //   - PrismaMetricsRepository (prisma)
+  //   - PrismaMutationRepository (prisma)
+  //   - PrismaMisconceptionRepository (prisma)
+  //   - RedisEventPublisher (redis, config)
+  //   - CkgMutationPipeline (with validation stages including OntologicalConsistencyStage)
+  //   - MisconceptionDetectionEngine
+  // See ADR-008-phase8-api-layer.md for full wiring plan.
+  // Phase 8e: OntologicalConsistencyStage (order 250) must be registered via
+  //   validationPipeline.addStage(new OntologicalConsistencyStage(graphRepository))
+  // For now, routes are registered but will throw at runtime until
+  // the service is properly constructed.
+  const service = null as unknown as Parameters<typeof registerPkgNodeRoutes>[1];
+
+  const routeOptions: IRouteOptions = {
+    rateLimit: {
+      writeMax: config.rateLimit.writeMax,
+      batchMax: config.rateLimit.batchMax,
+      timeWindow: config.rateLimit.timeWindow,
+    },
+    bodyLimits: {
+      defaultLimit: config.server.bodyLimit,
+      batchLimit: config.server.batchBodyLimit,
+    },
+  };
+
+  // PKG routes (user-scoped)
+  const f = fastify as unknown as FastifyInstance;
+  registerPkgNodeRoutes(f, service, authMiddleware, routeOptions);
+  registerPkgEdgeRoutes(f, service, authMiddleware, routeOptions);
+  registerPkgTraversalRoutes(f, service, authMiddleware, routeOptions);
+
+  // CKG routes (shared graph)
+  registerCkgNodeRoutes(f, service, authMiddleware, routeOptions);
+  registerCkgEdgeRoutes(f, service, authMiddleware, routeOptions);
+  registerCkgTraversalRoutes(f, service, authMiddleware, routeOptions);
+  registerCkgMutationRoutes(f, service, authMiddleware, routeOptions);
+
+  // PKG operation log (user-scoped)
+  registerPkgOperationLogRoutes(f, service, authMiddleware, routeOptions);
+
+  // User-scoped analytics routes
+  registerMetricsRoutes(f, service, authMiddleware, routeOptions);
+  registerMisconceptionRoutes(f, service, authMiddleware, routeOptions);
+  registerStructuralHealthRoutes(f, service, authMiddleware, routeOptions);
+  registerComparisonRoutes(f, service, authMiddleware, routeOptions);
+
+  logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2)');
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {

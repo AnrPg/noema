@@ -13,12 +13,12 @@ import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-servic
 import type { IFrontierQuery } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import {
   BridgeQuery,
+  CentralityQuery,
   CoParentsQuery,
   CommonAncestorsQuery,
   FrontierQuery,
   NeighborhoodQuery,
   PrerequisiteChainQuery,
-  CentralityQuery,
   SiblingsQuery,
   TraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';

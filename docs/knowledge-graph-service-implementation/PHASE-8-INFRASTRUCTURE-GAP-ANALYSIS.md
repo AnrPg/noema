@@ -317,16 +317,16 @@ Estimated: **28 route handlers**.
 9. Structural Health routes (2 handlers)
 10. Comparison route (1 handler)
 
-### Wave 2: Trivial service methods (thin wrappers)
+### Wave 2: Trivial service methods (thin wrappers) ✅ COMPLETED
 
-Add the missing service methods that are trivial delegations to existing
-repository/pipeline methods.
+Added the missing service methods that are trivial delegations to existing
+repository/pipeline methods. See ADR-0041 for design decisions.
 
-1. `listCkgEdges()` + `getCkgEdge()` → CKG Edge routes (2 handlers)
-2. `getCkgAncestors()` + `getCkgDescendants()` + `findCkgPath()` → CKG Traversal
-   routes (3 handlers)
-3. `getMutationPipelineHealth()` → Mutation health route (1 handler)
-4. `getOperationLog()` → Operation Log route (1 handler)
+1. ✅ `listCkgEdges()` + `getCkgEdge()` → CKG Edge routes (2 handlers)
+2. ✅ `getCkgAncestors()` + `getCkgDescendants()` + `findCkgPath()` → CKG Traversal
+   routes (4 handlers incl. subgraph)
+3. ✅ `getMutationPipelineHealth()` → Mutation health route (1 handler)
+4. ✅ `getOperationLog()` → Operation Log route (1 handler)
 
 ### Wave 3: Batch operations and DSL extension
 

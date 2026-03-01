@@ -58,6 +58,7 @@ import type {
 } from './ckg-mutation-dsl.js';
 import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
+import { getConflictingEdgeTypesForAdvisory } from './ckg-validation-stages.js';
 import { ValidationError } from './errors/base.errors.js';
 import {
   CyclicEdgeError,
@@ -69,10 +70,10 @@ import {
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import {
   buildBridgeNodesFromIds,
-  findArticulationPoints,
-  computeTopologicalPrerequisiteOrder,
   computeBetweennessCentrality,
   computePageRank,
+  computeTopologicalPrerequisiteOrder,
+  findArticulationPoints,
   normaliseCentralityResults,
 } from './graph-analysis.js';
 import type {
@@ -578,9 +579,59 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     this.logger.info({ edgeId: edge.edgeId, edgeType: edge.edgeType }, 'PKG edge created');
 
+    // Phase 8e — PKG advisory ontological conflict check (non-blocking)
+    const edgeHints = this.createEdgeHints('created', edge, sourceNode, targetNode);
+    const conflictingTypes = getConflictingEdgeTypesForAdvisory(edge.edgeType);
+
+    if (conflictingTypes.length > 0) {
+      try {
+        const conflicts = await this.graphRepository.findConflictingEdges(
+          edge.sourceNodeId,
+          edge.targetNodeId,
+          conflictingTypes
+        );
+
+        if (conflicts.length > 0) {
+          // Safe: length > 0 guarantees at least one element
+          const firstConflict = conflicts[0] as IGraphEdge;
+          edgeHints.warnings = [
+            {
+              type: 'conflict' as const,
+              severity: 'medium' as const,
+              message:
+                `This ${edge.edgeType} edge conflicts with existing ` +
+                `${firstConflict.edgeType} edge. Consider whether this concept ` +
+                `'is a kind of' or 'is part of' the target — these are different ` +
+                `relationships.`,
+              relatedIds: conflicts.map((c) => c.edgeId as string),
+              suggestedFix:
+                'Distinguishing taxonomic (IS_A) from mereological ' +
+                '(PART_OF) relationships is a key skill in conceptual modelling.',
+            },
+          ];
+
+          this.logger.info(
+            {
+              edgeId: edge.edgeId,
+              edgeType: edge.edgeType,
+              conflictingEdges: conflicts.length,
+              conflictingType: firstConflict.edgeType,
+            },
+            'PKG advisory: ontological conflict detected (non-blocking)'
+          );
+        }
+      } catch (error) {
+        // Advisory check is non-blocking — log and continue
+        this.logger.warn(
+          { edgeId: edge.edgeId, error },
+          'PKG advisory ontological check failed (non-blocking)'
+        );
+      }
+    }
+
     return {
       data: edge,
-      agentHints: this.createEdgeHints('created', edge, sourceNode, targetNode),
+      agentHints: edgeHints,
     };
   }
 
@@ -2359,6 +2410,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       health.proposedCount +
       health.validatingCount +
       health.validatedCount +
+      health.pendingReviewCount +
       health.committedCount +
       health.rejectedCount;
 
@@ -2366,6 +2418,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       proposedCount: health.proposedCount,
       validatingCount: health.validatingCount,
       validatedCount: health.validatedCount,
+      pendingReviewCount: health.pendingReviewCount,
       committedCount: health.committedCount,
       rejectedCount: health.rejectedCount,
       stuckCount: health.stuckCount,
@@ -2415,8 +2468,66 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         dependencies: [],
         estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
         preferenceAlignment: [],
-        reasoning: `Pipeline has ${String(totalCount)} total mutations: ${String(health.proposedCount)} proposed, ${String(health.committedCount)} committed, ${String(health.rejectedCount)} rejected, ${String(health.stuckCount)} stuck.`,
+        reasoning: `Pipeline has ${String(totalCount)} total mutations: ${String(health.proposedCount)} proposed, ${String(health.committedCount)} committed, ${String(health.rejectedCount)} rejected, ${String(health.pendingReviewCount)} pending review, ${String(health.stuckCount)} stuck.`,
       },
+    };
+  }
+
+  // ========================================================================
+  // CKG Mutation Escalation Review (Phase 8e)
+  // ========================================================================
+
+  async approveEscalatedMutation(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    this.requireAuth(context);
+
+    const reviewerId = (context.userId as string | undefined) ?? 'system';
+
+    const mutation = await this.mutationPipeline.approveMutation(
+      mutationId,
+      reviewerId,
+      reason,
+      context
+    );
+
+    this.logger.info(
+      { mutationId, reviewerId, state: mutation.state },
+      'Escalated mutation approved — pipeline resumed'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.createMutationHints('approved', mutation),
+    };
+  }
+
+  async rejectEscalatedMutation(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    this.requireAuth(context);
+
+    const reviewerId = (context.userId as string | undefined) ?? 'system';
+
+    const mutation = await this.mutationPipeline.rejectEscalatedMutation(
+      mutationId,
+      reviewerId,
+      reason,
+      context
+    );
+
+    this.logger.info(
+      { mutationId, reviewerId, state: mutation.state },
+      'Escalated mutation rejected — ontological conflicts confirmed'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.createMutationHints('rejected', mutation),
     };
   }
 
@@ -3624,6 +3735,27 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         action: 'get_mutation_audit_log',
         description: 'Review the audit trail to understand why it was rejected',
         priority: 'high',
+        category: 'exploration',
+      });
+    }
+
+    if (mutation.state === 'pending_review') {
+      nextActions.push({
+        action: 'approve_escalated_mutation',
+        description: 'Approve this mutation to override ontological conflicts',
+        priority: 'high',
+        category: 'exploration',
+      });
+      nextActions.push({
+        action: 'reject_escalated_mutation',
+        description: 'Reject this mutation to confirm ontological conflicts',
+        priority: 'high',
+        category: 'exploration',
+      });
+      nextActions.push({
+        action: 'get_mutation_audit_log',
+        description: 'Review the audit trail to understand the conflicts',
+        priority: 'medium',
         category: 'exploration',
       });
     }

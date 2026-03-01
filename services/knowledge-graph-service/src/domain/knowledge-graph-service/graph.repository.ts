@@ -349,6 +349,26 @@ export interface ITraversalRepository {
    * Preferred over app-code computation for degree-only queries.
    */
   getDegreeCentrality(query: ICentralityQuery, userId?: string): Promise<ICentralityEntry[]>;
+
+  // Phase 8e: Ontological guardrails
+
+  /**
+   * Find existing edges between two nodes that match any of the specified edge types.
+   *
+   * Used by the OntologicalConsistencyStage to detect conflicting edge types
+   * between the same node pair. Checks both directions (source→target and
+   * target→source) because ontological conflicts are direction-agnostic.
+   *
+   * @param sourceNodeId - One end of the node pair.
+   * @param targetNodeId - Other end of the node pair.
+   * @param edgeTypes - Edge types to look for.
+   * @returns Matching edges in any direction between the two nodes.
+   */
+  findConflictingEdges(
+    sourceNodeId: NodeId,
+    targetNodeId: NodeId,
+    edgeTypes: readonly GraphEdgeType[]
+  ): Promise<IGraphEdge[]>;
 }
 
 // ============================================================================

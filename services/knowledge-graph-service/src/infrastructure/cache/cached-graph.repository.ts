@@ -318,6 +318,15 @@ export class CachedGraphRepository implements IGraphRepository {
     );
   }
 
+  // Phase 8e: Ontological conflict check — pass-through (D4)
+  async findConflictingEdges(
+    sourceNodeId: NodeId,
+    targetNodeId: NodeId,
+    edgeTypes: GraphEdgeType[]
+  ): Promise<IGraphEdge[]> {
+    return this.inner.findConflictingEdges(sourceNodeId, targetNodeId, edgeTypes);
+  }
+
   // ==========================================================================
   // IBatchGraphRepository — Write-through with invalidation
   // ==========================================================================

@@ -7,6 +7,10 @@
  *   PROPOSED → VALIDATING → VALIDATED → PROVING → PROVEN → COMMITTING → COMMITTED
  *                  ↓             ↓          ↓         ↓          ↓
  *               REJECTED     REJECTED   REJECTED  REJECTED   REJECTED
+ *                  ↓
+ *            PENDING_REVIEW → VALIDATED
+ *                  ↓
+ *               REJECTED
  *
  * TypeScript enforcement:
  * - State transition rules encoded as a const transition table
@@ -33,13 +37,14 @@ import type { MutationState } from '@noema/types';
 export const STATE_TRANSITIONS: Readonly<Record<MutationState, readonly MutationState[]>> =
   Object.freeze({
     proposed: ['validating', 'rejected'] as const,
-    validating: ['validated', 'rejected'] as const,
+    validating: ['validated', 'pending_review', 'rejected'] as const,
     validated: ['proving', 'rejected'] as const,
     proving: ['proven', 'rejected'] as const,
     proven: ['committing', 'rejected'] as const,
     committing: ['committed', 'rejected'] as const,
     committed: [] as const,
     rejected: [] as const,
+    pending_review: ['validated', 'rejected'] as const,
   });
 
 /**
@@ -57,6 +62,7 @@ export const TERMINAL_STATES: ReadonlySet<MutationState> = new Set<MutationState
 export const CANCELLABLE_STATES: ReadonlySet<MutationState> = new Set<MutationState>([
   'proposed',
   'validating',
+  'pending_review',
 ]);
 
 // ============================================================================
@@ -153,10 +159,7 @@ export interface IStateTransition {
  *
  * @throws Error if the transition is not allowed.
  */
-export function validateTransition(
-  from: MutationState,
-  to: MutationState
-): void {
+export function validateTransition(from: MutationState, to: MutationState): void {
   if (!isValidTransition(from, to)) {
     const allowed = getAllowedTransitions(from);
     // Caller wraps this in InvalidStateTransitionError
