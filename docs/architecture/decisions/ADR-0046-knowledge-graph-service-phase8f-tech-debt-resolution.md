@@ -114,15 +114,50 @@ metric computation is unaffected.
 | Cache invalidation for relational queries             | TTL-based only                     | Matches existing `getDomainSubgraph` pattern                      |
 | Dual-edge detection severity                          | `console.warn` (non-blocking)      | PKGs legitimately have dual edges; crashing would break metrics   |
 | `PrismaMetricsStalenessRepository.markStale` DateTime | `new Date()`                       | Prisma convention; DateTime fields accept `Date` objects natively |
+| Test mock layer                                       | Mock at `IKnowledgeGraphService`   | Single injection point; repositories are domain-level concerns    |
+| Test auth strategy                                    | Passthrough middleware (no JWT)    | Routes test HTTP layer, not crypto; auth tested independently     |
+| Test scope per route                                  | Happy + Auth + Validation + 404    | Covers the four HTTP-layer failure modes per spec §7.3            |
+
+#### 7. Route Integration Tests (§7)
+
+Implemented 89 integration tests across 12 test files covering every route
+group. Test infrastructure:
+
+- **`tests/helpers/mocks.ts`**: `mockKnowledgeGraphService()` factory providing
+  typed `vi.fn()` stubs for all 56 interface methods.
+- **`tests/fixtures/index.ts`**: Data factories (`graphNode`, `graphEdge`,
+  `serviceResult`, `defaultAgentHints`) and pre-validated test constants
+  (`TEST_USER_ID`, `VALID_NODE_ID_A/B`, etc.).
+- **`tests/integration/test-app.ts`**: `buildTestApp()` /
+  `buildUnauthenticatedTestApp()` constructing lightweight Fastify instances
+  with test auth middleware (no JWT verification).
+- **`tests/tsconfig.json`**: Dedicated TypeScript config for test files with
+  `composite: false` overriding the parent `exclude: ["tests"]`.
+
+Coverage per route group:
+
+| Route File               | Tests | Happy | Auth | Validation | Not Found |
+| ------------------------ | ----- | ----- | ---- | ---------- | --------- |
+| pkg-node.routes          | 11    | ✓     | ✓    | ✓          | ✓         |
+| pkg-edge.routes          | 9     | ✓     | ✓    | ✓          | ✓         |
+| pkg-traversal.routes     | 14    | ✓     | ✓    | —          | —         |
+| ckg-node.routes          | 4     | ✓     | ✓    | —          | —         |
+| ckg-edge.routes          | 4     | ✓     | ✓    | —          | —         |
+| ckg-traversal.routes     | 12    | ✓     | ✓    | —          | —         |
+| ckg-mutation.routes      | 14    | ✓     | ✓    | ✓          | —         |
+| metrics.routes           | 5     | ✓     | ✓    | —          | —         |
+| misconception.routes     | 5     | ✓     | ✓    | —          | —         |
+| structural-health.routes | 4     | ✓     | ✓    | —          | —         |
+| operation-log.routes     | 4     | ✓     | ✓    | —          | —         |
+| comparison.routes        | 3     | ✓     | ✓    | —          | —         |
 
 ### Out of Scope (Deferred)
 
-| Item                            | Reason                              | Tracked in        |
-| ------------------------------- | ----------------------------------- | ----------------- |
-| Integration test suite          | Deferred to dedicated testing phase | Phase 8g          |
-| Proposer notification           | Requires notification-service       | ADR-009, Phase 9+ |
-| Semantic misconception detector | Requires vector-service             | Future phase      |
-| MCP tool surface for escalation | Phase 9 concern                     | Phase 9           |
+| Item                            | Reason                        | Tracked in        |
+| ------------------------------- | ----------------------------- | ----------------- |
+| Proposer notification           | Requires notification-service | ADR-009, Phase 9+ |
+| Semantic misconception detector | Requires vector-service       | Future phase      |
+| MCP tool surface for escalation | Phase 9 concern               | Phase 9           |
 
 ## Consequences
 
@@ -137,9 +172,10 @@ metric computation is unaffected.
 
 ### Negative
 
-- No integration tests yet (deferred to Phase 8g)
 - `console.warn` in metric computation is less structured than pino logging
   (acceptable tradeoff given pure-function context)
+- Rate-limit testing skipped (requires Redis + timing, low value for route
+  tests)
 
 ### Risks
 
