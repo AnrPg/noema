@@ -284,3 +284,25 @@ export function operationLogEntry(
     ...overrides,
   } as IPkgOperationLogEntry;
 }
+
+// ============================================================================
+// Convenience Aliases (Phase 10 spec naming)
+// ============================================================================
+
+/** Alias for `graphNode` — matches Phase 10 spec naming */
+export const createTestNode = graphNode;
+
+/** Alias for `graphEdge` — matches Phase 10 spec naming */
+export const createTestEdge = graphEdge;
+
+/** Alias for `ckgMutation` — matches Phase 10 spec naming */
+export const createTestMutation = ckgMutation;
+
+/** Alias for `structuralMetrics` — matches Phase 10 spec naming */
+export const createTestMetrics = structuralMetrics;
+
+/** Alias for `misconceptionDetection` — matches Phase 10 spec naming */
+export const createTestMisconceptionDetection = misconceptionDetection;
+
+/** Alias for `executionContext` — matches Phase 10 spec naming */
+export const createTestExecutionContext = executionContext;
