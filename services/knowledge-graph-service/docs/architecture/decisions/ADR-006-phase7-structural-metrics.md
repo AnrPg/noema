@@ -336,8 +336,29 @@ Service.getStructuralHealth(userId, domain)
 
 - ADR-005: Phase 6 — CKG Mutation Pipeline
 - ADR-004: Phase 5 — PKG Operations & Service Layer
+- ADR-010: Remediation Phase 1 (D1 metrics return type, D2 logger DI, D3
+  detection return type, D5 branded ConfidenceScore, D6 StructuralMetricType, D7
+  context-aware severity, D8 full-cycle DFS, D9 Zod validation)
 - PHASE-7-STRUCTURAL-METRICS.md specification
 - STRUCTURAL-METRICS-SPECIFICATION.md (11-metric formulas)
 - `@noema/types` MetricHealthStatus, TrendDirection, MetacognitiveStage,
   StructuralMetricType, IStructuralMetrics, IStructuralHealthReport,
   IMetacognitiveStageAssessment
+
+---
+
+## Addendum — Phase 1 Remediation (2026-03-02, ADR-010)
+
+The following changes were applied to the structural metrics subsystem during
+remediation Phase 1:
+
+| Decision                       | Change                                                                                                                              | Rationale                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| D1 — Metrics return type       | `StructuralMetricsEngine.computeAll()` returns `IMetricsComputationResult` (metrics + metadata) instead of raw `IStructuralMetrics` | Enables callers to access computation metadata (timing, context) without second call      |
+| D2 — Logger DI                 | All engines accept an optional `ILogger` parameter; default is a no-op logger                                                       | Replaces `console.error` calls; enables test-time log capture and production log routing  |
+| D3 — Detection return type     | `MisconceptionDetectionEngine.detectAll()` returns `{ results, detectorStatuses }`                                                  | Callers can inspect which detectors were skipped/errored without parsing logs             |
+| D5 — Branded ConfidenceScore   | `ConfidenceScore` is a branded numeric type with `createConfidenceScore()` factory clamping to [0,1]                                | Prevents raw `number` confusion and out-of-range confidence values                        |
+| D6 — StructuralMetricType enum | Imported from `@noema/types` as both type and value; `Record<StructuralMetricType, …>` used in metric maps                          | Single source of truth for the 11 metric keys; eliminates string-literal drift            |
+| D7 — Context-aware severity    | Graph comparison divergence severity uses metric-specific thresholds instead of a fixed 15%                                         | Reduces false-alarm noise for inherently volatile metrics (e.g., avg-path-length)         |
+| D8 — Full-cycle DFS            | Cycle detection uses iterative DFS with full-path recording                                                                         | Returns actual cycle path (`NodeId[]`) instead of boolean; enables actionable diagnostics |
+| D9 — Zod config schemas        | Detector configuration objects validated via Zod at construction time                                                               | Catches invalid thresholds/weights at startup rather than at detection time               |

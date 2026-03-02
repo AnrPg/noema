@@ -35,10 +35,18 @@ and approved individually.
 | A: Generic `:EDGE`   | All edges use a single `:EDGE` type, with `edgeType` prop | Simpler Cypher, but loses Neo4j indexing |
 | **B: Type-specific** | Each `GraphEdgeType` maps to an uppercase Neo4j rel type  | Full index leverage, idiomatic Neo4j     |
 
-**Decision:** Option B — 8 type-specific relationship types (`PREREQUISITE`,
-`PART_OF`, `IS_A`, `RELATED_TO`, `CONTRADICTS`, `EXEMPLIFIES`, `CAUSES`,
-`DERIVED_FROM`). Schema generates 16 per-type indexes (edgeId + userId per
-type). Traversal queries use `[:TYPE1|TYPE2|...]` union patterns.
+**Decision:** Option B — Type-specific relationship types. Each `GraphEdgeType`
+maps to an uppercase Neo4j relationship type. Schema generates per-type indexes
+(edgeId + userId per type). Traversal queries use `[:TYPE1|TYPE2|...]` union
+patterns.
+
+> **Addendum (2026-03-02, ADR-010 / Fix 1.1):** The original implementation
+> defined only 8 relationship types in a local `ALL_REL_TYPES` constant. The
+> canonical `RELATIONSHIP_TYPES` in `neo4j-schema.ts` defines 17 types (adding
+> `EQUIVALENT_TO`, `ENTAILS`, `DISJOINT_WITH`, `ANALOGOUS_TO`, `CONTRASTS_WITH`,
+> `DEPENDS_ON`, `CONSTITUTED_BY`, `PRECEDES`, `HAS_PROPERTY`). The local
+> constant was replaced with a direct import from `neo4j-schema.ts` as the
+> single source of truth.
 
 ### D2: Schema Evolution (4 additive changes)
 
@@ -187,3 +195,4 @@ invalidate affected cache entries; `createNode` pre-populates the cache.
 - Content-service patterns: `PrismaContentRepository`, `CachedContentRepository`
 - Phase 4 spec:
   `docs/knowledge-graph-service-implementation/PHASE-4-REPOSITORIES.md`
+- ADR-010: Remediation Phase 1 (D1 relationship type sync)

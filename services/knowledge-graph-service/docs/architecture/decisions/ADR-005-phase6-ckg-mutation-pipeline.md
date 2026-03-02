@@ -200,7 +200,21 @@ REJECTED   → [] (terminal)
 
 - ADR-004: Phase 5 — PKG Operations & Service Layer
 - ADR-003: Phase 4 — Repository Implementations
+- ADR-010: Remediation Phase 1 (D4 readonly mutation fields, D9 Zod validation)
 - PHASE-6-CKG-MUTATION-PIPELINE.md specification
 - `@noema/types` MutationState, GraphNodeType, GraphEdgeType, branded IDs
 - `@noema/events` CKG event types (CKG_MUTATION_PROPOSED, VALIDATED, COMMITTED,
   REJECTED)
+
+---
+
+## Addendum — Phase 1 Remediation (2026-03-02, ADR-010)
+
+The following changes were applied to the CKG mutation pipeline during
+remediation Phase 1:
+
+| Decision                           | Change                                                                                          | Rationale                                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| D4 — Readonly mutation fields      | `state`, `version`, `updatedAt` on `ICkgMutation` are now `readonly`                            | Prevents accidental in-place state corruption; mutations must go through pipeline methods |
+| D9 — Zod extraction validation     | `extractOperations()` and `extractEvidence()` now validate through Zod schemas before returning | Catches corrupt JSONB payloads at extraction boundaries rather than deep in the pipeline  |
+| Fix 1.10 — Serializable ops mapper | Added `toSerializableOperations()` to convert domain operation objects for JSON-safe storage    | Ensures `CkgMutationOperation[]` round-trips cleanly through Prisma JSONB columns         |

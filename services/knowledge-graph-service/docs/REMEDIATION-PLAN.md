@@ -39,7 +39,11 @@ Phase 5 (API, Config, Polish)
 
 ---
 
-## Phase 1 — Foundation: Data Bugs, Type Safety & Error Handling
+## Phase 1 — Foundation: Data Bugs, Type Safety & Error Handling ✅ COMPLETED
+
+> **Status:** All 22 fixes implemented and passing (458 tests). **Commit:**
+> `103f246` (code) · `04ee0aa` (formatter). **ADR:**
+> ADR-010-remediation-phase1-foundation.md
 
 **Goal:** Fix all silent data corruption bugs, unsafe casts, and error handling
 defects at the infrastructure and domain utility layers. These are the building
