@@ -223,7 +223,7 @@ remediation Phase 1:
 
 The following changes were applied during remediation Phase 2:
 
-| Decision                           | Change                                                                                          | Rationale                                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| D4 — ICkgMutationPipeline interface | Created `ckg-mutation-pipeline.interface.ts` with full DI interface; class now `implements ICkgMutationPipeline` | Enables mocking the pipeline in integration tests and future DI container wiring          |
-| D6 — recoveryAttempts field        | Added `recoveryAttempts: number` (readonly, default 0) to `ICkgMutation`; added `incrementRecoveryAttempts` to `IMutationRepository` | Phase 3 will use this to implement max retry guard in `recoverStuckMutations`             |
+| Decision                            | Change                                                                                                                               | Rationale                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| D4 — ICkgMutationPipeline interface | Created `ckg-mutation-pipeline.interface.ts` with full DI interface; class now `implements ICkgMutationPipeline`                     | Enables mocking the pipeline in integration tests and future DI container wiring |
+| D6 — recoveryAttempts field         | Added `recoveryAttempts: number` (readonly, default 0) to `ICkgMutation`; added `incrementRecoveryAttempts` to `IMutationRepository` | Phase 3 will use this to implement max retry guard in `recoverStuckMutations`    |

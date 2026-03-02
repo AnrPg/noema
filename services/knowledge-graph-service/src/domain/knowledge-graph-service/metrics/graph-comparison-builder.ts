@@ -284,48 +284,56 @@ function detectDivergences(
     });
   }
 
-  // Edge divergences for aligned node pairs
-  for (const [pkgSourceId, ckgSourceId] of nodeAlignment) {
-    for (const [pkgTargetId, ckgTargetId] of nodeAlignment) {
-      if (pkgSourceId === pkgTargetId) continue;
+  // Edge divergences — O(E) iteration over edges instead of O(n²) over all aligned pairs.
+  // For each CKG edge between aligned nodes, check if PKG has a matching edge type.
+  // For each PKG edge between aligned nodes, check if CKG has a matching edge type.
 
-      const pairKeyPkg = `${pkgSourceId as string}|${pkgTargetId as string}`;
-      const pairKeyCkg = `${ckgSourceId as string}|${ckgTargetId as string}`;
-      const pkgEdges = pkgEdgeMultiMap.get(pairKeyPkg) ?? [];
-      const ckgEdges = ckgEdgeMultiMap.get(pairKeyCkg) ?? [];
+  // Build sets for quick lookups: "alignedSource|alignedTarget|edgeType" → exists
+  const pkgEdgeTypeSet = new Set<string>();
+  const ckgEdgeTypeSet = new Set<string>();
 
-      const pkgEdgeTypes = new Set(pkgEdges.map((e) => e.edgeType));
-      const ckgEdgeTypes = new Set(ckgEdges.map((e) => e.edgeType));
+  for (const edge of ckgSubgraph.edges) {
+    const pkgSource = inverseAlignment.get(edge.sourceNodeId);
+    const pkgTarget = inverseAlignment.get(edge.targetNodeId);
+    if (pkgSource === undefined || pkgTarget === undefined) continue;
 
-      // Missing edges: CKG has this type, PKG doesn't
-      for (const ckgEdge of ckgEdges) {
-        if (!pkgEdgeTypes.has(ckgEdge.edgeType)) {
-          const isHierarchical =
-            ckgEdge.edgeType === EdgeType.PREREQUISITE ||
-            ckgEdge.edgeType === EdgeType.IS_A ||
-            ckgEdge.edgeType === EdgeType.PART_OF;
-          divergences.push({
-            divergenceType: DivergenceType.MISSING_EDGE,
-            affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
-            affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
-            severity: isHierarchical ? DivergenceSeverity.HIGH : DivergenceSeverity.MEDIUM,
-            description: `Missing ${ckgEdge.edgeType} edge between aligned nodes`,
-          });
-        }
-      }
+    ckgEdgeTypeSet.add(`${pkgSource as string}|${pkgTarget as string}|${edge.edgeType}`);
 
-      // Extra edges: PKG has this type, CKG doesn't
-      for (const pkgEdge of pkgEdges) {
-        if (!ckgEdgeTypes.has(pkgEdge.edgeType)) {
-          divergences.push({
-            divergenceType: DivergenceType.EXTRA_EDGE,
-            affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
-            affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
-            severity: DivergenceSeverity.LOW,
-            description: `Extra ${pkgEdge.edgeType} edge not in canonical graph`,
-          });
-        }
-      }
+    // Check if PKG has a matching edge for this CKG edge
+    const pairKeyPkg = `${pkgSource as string}|${pkgTarget as string}`;
+    const pkgEdgesForPair = pkgEdgeMultiMap.get(pairKeyPkg) ?? [];
+    const pkgHasType = pkgEdgesForPair.some((e) => e.edgeType === edge.edgeType);
+
+    if (!pkgHasType) {
+      const isHierarchical =
+        edge.edgeType === EdgeType.PREREQUISITE ||
+        edge.edgeType === EdgeType.IS_A ||
+        edge.edgeType === EdgeType.PART_OF;
+      divergences.push({
+        divergenceType: DivergenceType.MISSING_EDGE,
+        affectedPkgNodeIds: [pkgSource, pkgTarget],
+        affectedCkgNodeIds: [edge.sourceNodeId, edge.targetNodeId],
+        severity: isHierarchical ? DivergenceSeverity.HIGH : DivergenceSeverity.MEDIUM,
+        description: `Missing ${edge.edgeType} edge between aligned nodes`,
+      });
+    }
+  }
+
+  for (const edge of pkgSubgraph.edges) {
+    const ckgSource = nodeAlignment.get(edge.sourceNodeId);
+    const ckgTarget = nodeAlignment.get(edge.targetNodeId);
+    if (ckgSource === undefined || ckgTarget === undefined) continue;
+
+    // Check if CKG has a matching edge for this PKG edge (using PKG-keyed set)
+    const key = `${edge.sourceNodeId as string}|${edge.targetNodeId as string}|${edge.edgeType}`;
+    if (!ckgEdgeTypeSet.has(key)) {
+      divergences.push({
+        divergenceType: DivergenceType.EXTRA_EDGE,
+        affectedPkgNodeIds: [edge.sourceNodeId, edge.targetNodeId],
+        affectedCkgNodeIds: [ckgSource, ckgTarget],
+        severity: DivergenceSeverity.LOW,
+        description: `Extra ${edge.edgeType} edge not in canonical graph`,
+      });
     }
   }
 

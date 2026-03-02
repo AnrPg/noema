@@ -202,10 +202,10 @@ invalidate affected cache entries; `createNode` pre-populates the cache.
 
 The following repository changes were applied during remediation Phase 2:
 
-| Decision                              | Change                                                                                                      | Rationale                                                                  |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| D1 — countEdges                       | Added `countEdges(filter, userId?)` to `IEdgeRepository`; Neo4j uses `count(r)` with same filter clauses    | `listEdges` was faking totals; dedicated count enables correct pagination  |
-| D2 — getEdgesForNodes batch           | Added `getEdgesForNodes(nodeIds[], filter?, userId?)` to `IEdgeRepository`; single batched Cypher query      | Eliminates N+1 queries in `fetchDomainSubgraph`                           |
-| D5 — IReadOnlyGraphRepository         | New `IReadOnlyGraphRepository` extending `ITraversalRepository` with read-only node/edge methods             | CKG immutability enforced at type level                                   |
-| D7 — Cache key scoping                | All cache keys prefixed with `${userId ?? 'ckg'}:` via 4 private key helpers                                | Eliminates cross-user cache pollution (security fix)                      |
-| D9 — ITransactional mixin             | Extracted `ITransactional<T>` generic interface; `IGraphRepository` uses `ITransactional<IGraphRepository>`  | Enables future transactional composition on sub-interfaces                |
+| Decision                      | Change                                                                                                      | Rationale                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| D1 — countEdges               | Added `countEdges(filter, userId?)` to `IEdgeRepository`; Neo4j uses `count(r)` with same filter clauses    | `listEdges` was faking totals; dedicated count enables correct pagination |
+| D2 — getEdgesForNodes batch   | Added `getEdgesForNodes(nodeIds[], filter?, userId?)` to `IEdgeRepository`; single batched Cypher query     | Eliminates N+1 queries in `fetchDomainSubgraph`                           |
+| D5 — IReadOnlyGraphRepository | New `IReadOnlyGraphRepository` extending `ITraversalRepository` with read-only node/edge methods            | CKG immutability enforced at type level                                   |
+| D7 — Cache key scoping        | All cache keys prefixed with `${userId ?? 'ckg'}:` via 4 private key helpers                                | Eliminates cross-user cache pollution (security fix)                      |
+| D9 — ITransactional mixin     | Extracted `ITransactional<T>` generic interface; `IGraphRepository` uses `ITransactional<IGraphRepository>` | Enables future transactional composition on sub-interfaces                |

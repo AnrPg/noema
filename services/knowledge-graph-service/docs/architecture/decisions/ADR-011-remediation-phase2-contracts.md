@@ -1,8 +1,6 @@
 # ADR-011: Remediation Phase 2 — Contracts & Interfaces
 
-**Status:** Accepted
-**Date:** 2026-03-02
-**Commit:** `771b345`
+**Status:** Accepted **Date:** 2026-03-02 **Commit:** `771b345`
 
 ## Context
 
@@ -30,7 +28,8 @@ pagination.
 
 ### D2: Batch `getEdgesForNodes` on `IEdgeRepository` (Fix 2.2)
 
-Added `getEdgesForNodes(nodeIds: readonly NodeId[], filter?: IEdgeFilter, userId?: string): Promise<IGraphEdge[]>`.
+Added
+`getEdgesForNodes(nodeIds: readonly NodeId[], filter?: IEdgeFilter, userId?: string): Promise<IGraphEdge[]>`.
 The Neo4j implementation uses a single Cypher query with
 `WHERE source.nodeId IN $nodeIds OR target.nodeId IN $nodeIds`, eliminating N+1
 queries in `fetchDomainSubgraph`.
@@ -41,7 +40,8 @@ this to O(1).
 
 ### D3: `countOperations` on `IPkgOperationLogRepository` (Fix 2.3)
 
-Added `countOperations(userId: UserId, filters?: IOperationLogFilter): Promise<number>`.
+Added
+`countOperations(userId: UserId, filters?: IOperationLogFilter): Promise<number>`.
 The Prisma implementation uses `prisma.pkgOperationLog.count()` with the same
 filter translation as `getOperationLog`.
 
@@ -66,7 +66,8 @@ impossible to mock in integration tests or swap implementations.
 
 Defined `IReadOnlyGraphRepository` extending `ITraversalRepository` and adding
 read-only methods from `INodeRepository` and `IEdgeRepository` (getNode,
-findNodes, getEdge, findEdges, getEdgesForNode, getEdgesForNodes, getNodesByIds).
+findNodes, getEdge, findEdges, getEdgesForNode, getEdgesForNodes,
+getNodesByIds).
 
 **Rationale:** CKG immutability was implicit — any service receiving
 `IGraphRepository` could call write methods. `IReadOnlyGraphRepository` enforces
@@ -89,8 +90,10 @@ This will be addressed when deploying to an environment with a live database.
 
 All cache keys in `CachedGraphRepository` are now prefixed with
 `${userId ?? 'ckg'}:`. Four private helpers enforce consistent key generation:
+
 - `scopedNodeKey(nodeId, userId?)` → `${uid}:node:${nodeId}`
-- `scopedEdgesForNodeKey(nodeId, direction, userId?)` → `${uid}:edges:${nodeId}:${direction}`
+- `scopedEdgesForNodeKey(nodeId, direction, userId?)` →
+  `${uid}:edges:${nodeId}:${direction}`
 - `scopedEdgesForNodePattern(nodeId, userId?)` → `${uid}:edges:${nodeId}:*`
 - `scopedNodesByIdsKey(hash, userId?)` → `${uid}:nodes-batch:${hash}`
 
@@ -105,10 +108,12 @@ vulnerability.
 
 Verified all write operations in `CachedGraphRepository` properly invalidate
 affected cache entries using the new scoped key helpers:
+
 - `createNode` → invalidates scoped node key
 - `updateNode` → invalidates scoped node key + edge patterns
 - `deleteNode` → invalidates scoped node key + edge patterns
-- `createEdge` / `updateEdge` / `removeEdge` → invalidates source + target edge patterns
+- `createEdge` / `updateEdge` / `removeEdge` → invalidates source + target edge
+  patterns
 - Batch operations → invalidate per-node keys
 
 **Rationale:** Write-through cache was already partially implemented. The fix
@@ -117,6 +122,7 @@ ensures all paths use the new scoped keys consistently.
 ### D9: `ITransactional<T>` mixin (Fix 2.9)
 
 Extracted a generic `ITransactional<T>` interface:
+
 ```typescript
 interface ITransactional<T> {
   runInTransaction<R>(fn: (txRepo: T) => Promise<R>): Promise<R>;
@@ -127,9 +133,9 @@ interface ITransactional<T> {
 defining `runInTransaction` inline. This is backward-compatible — existing
 callers see the same method signature.
 
-**Rationale:** Transaction support was only on the composite
-`IGraphRepository`. The mixin pattern enables future composition where
-individual sub-interfaces can also be transactional.
+**Rationale:** Transaction support was only on the composite `IGraphRepository`.
+The mixin pattern enables future composition where individual sub-interfaces can
+also be transactional.
 
 ## Alternatives Considered
 
@@ -137,8 +143,8 @@ individual sub-interfaces can also be transactional.
    achieve the same isolation with minimal change.
 2. **Abstract factory for cache keys** — Rejected; the four private helpers are
    simpler and sufficient. An abstract factory adds unnecessary indirection.
-3. **`IReadOnlyGraphRepository` as a separate file** — Rejected; it's small
-   (~10 methods) and logically part of the repository interface hierarchy in
+3. **`IReadOnlyGraphRepository` as a separate file** — Rejected; it's small (~10
+   methods) and logically part of the repository interface hierarchy in
    `graph.repository.ts`.
 
 ## Consequences
@@ -147,15 +153,19 @@ individual sub-interfaces can also be transactional.
   for correct pagination and batch queries.
 - Phase 3 can use `recoveryAttempts` to implement max retry guards.
 - All cache operations are now userId-scoped — eliminates cross-user pollution.
-- `ICkgMutationPipeline` enables proper DI and testability for integration tests.
-- `IReadOnlyGraphRepository` provides type-safe read-only access for CKG consumers.
+- `ICkgMutationPipeline` enables proper DI and testability for integration
+  tests.
+- `IReadOnlyGraphRepository` provides type-safe read-only access for CKG
+  consumers.
 - Migration for `recoveryAttempts` column needs to be run before deployment.
 
 ## Follow-up Work (Deferred to Phase 3+)
 
-- **Phase 3.1:** Use `getEdgesForNodes` in `fetchDomainSubgraph` to eliminate N+1.
+- **Phase 3.1:** Use `getEdgesForNodes` in `fetchDomainSubgraph` to eliminate
+  N+1.
 - **Phase 3.2:** Use `countEdges` in pagination responses for correct `hasMore`.
 - **Phase 3.3:** Use `countOperations` in operation log pagination.
-- **Phase 3.8:** Add `recoveryAttempts >= MAX_RECOVERY` guard in `recoverStuckMutations`.
+- **Phase 3.8:** Add `recoveryAttempts >= MAX_RECOVERY` guard in
+  `recoverStuckMutations`.
 - **Phase 4:** Wire `ICkgMutationPipeline` into route handlers via DI container.
 - **Phase 4:** Use `IReadOnlyGraphRepository` for CKG read endpoints.

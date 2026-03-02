@@ -991,11 +991,15 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     graphType: GraphType,
     repo: IGraphRepository = this.graphRepository
   ): Promise<{ nodeAId: string; nodeBId: string }> {
-    // Create the two new nodes
+    // Look up original node first to get domain for atomic creation
+    const originalNode = await repo.getNode(op.nodeId as NodeId);
+    const domain = originalNode?.domain ?? '';
+
+    // Create the two new nodes with domain directly (atomic, no update needed)
     const nodeA = await repo.createNode(graphType, {
       label: op.newNodeA.label,
       nodeType: op.newNodeA.nodeType,
-      domain: '', // Domain inherited from original
+      domain,
       description: op.newNodeA.description,
       properties: op.newNodeA.properties,
     });
@@ -1003,19 +1007,10 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     const nodeB = await repo.createNode(graphType, {
       label: op.newNodeB.label,
       nodeType: op.newNodeB.nodeType,
-      domain: '',
+      domain,
       description: op.newNodeB.description,
       properties: op.newNodeB.properties,
     });
-
-    // Inherit domain from original node
-    const originalNode = await repo.getNode(op.nodeId as NodeId);
-    if (originalNode) {
-      await Promise.all([
-        repo.updateNode(nodeA.nodeId, { domain: originalNode.domain }),
-        repo.updateNode(nodeB.nodeId, { domain: originalNode.domain }),
-      ]);
-    }
 
     // Reassign edges per rules
     const reassignmentMap = new Map(op.edgeReassignmentRules.map((r) => [r.edgeId, r.assignTo]));
@@ -1211,27 +1206,57 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
    */
   async recoverStuckMutations(context: IExecutionContext): Promise<number> {
     const stuckStates: MutationState[] = ['validating', 'proving', 'committing'];
+    const MAX_RECOVERY_ATTEMPTS = 3;
     let recoveredCount = 0;
 
     for (const state of stuckStates) {
       const stuck = await this.mutationRepository.findMutationsByState(state);
 
       for (const mutation of stuck) {
-        this.logger.warn(
-          { mutationId: mutation.mutationId, state: mutation.state },
-          'Found stuck mutation — rejecting for retry'
-        );
-
         try {
-          await this.transitionState(
-            mutation,
-            'rejected',
-            'system:recovery',
-            `Stuck in ${state} state — rejected during recovery scan. ` +
-              'Original proposer can retry with retryMutation.',
-            context,
-            { recoveredFrom: state }
-          );
+          // Increment recovery counter first
+          await this.mutationRepository.incrementRecoveryAttempts(mutation.mutationId);
+
+          // If max attempts exceeded, permanently reject instead of retrying
+          if (mutation.recoveryAttempts >= MAX_RECOVERY_ATTEMPTS) {
+            this.logger.warn(
+              {
+                mutationId: mutation.mutationId,
+                state: mutation.state,
+                recoveryAttempts: mutation.recoveryAttempts + 1,
+              },
+              'Stuck mutation exceeded max recovery attempts — permanently rejecting'
+            );
+
+            await this.transitionState(
+              mutation,
+              'rejected',
+              'system:recovery',
+              `Permanently rejected after ${String(mutation.recoveryAttempts + 1)} recovery attempts. ` +
+                `Stuck in ${state} state. Manual intervention required.`,
+              context,
+              { recoveredFrom: state, permanentlyRejected: true }
+            );
+          } else {
+            this.logger.warn(
+              {
+                mutationId: mutation.mutationId,
+                state: mutation.state,
+                recoveryAttempts: mutation.recoveryAttempts + 1,
+              },
+              'Found stuck mutation — rejecting for retry'
+            );
+
+            await this.transitionState(
+              mutation,
+              'rejected',
+              'system:recovery',
+              `Stuck in ${state} state — rejected during recovery scan (attempt ${String(mutation.recoveryAttempts + 1)}/${String(MAX_RECOVERY_ATTEMPTS)}). ` +
+                'Original proposer can retry with retryMutation.',
+              context,
+              { recoveredFrom: state }
+            );
+          }
           recoveredCount++;
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);

@@ -509,21 +509,57 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       }
     }
 
+    // Run custom validators (unless skipped)
+    if (
+      validationOptions?.validateCustomRules !== false &&
+      validationOptions?.customValidators?.length
+    ) {
+      const validationContext = {
+        sourceNode,
+        targetNode,
+        edgeType: input.edgeType,
+        weight: input.weight,
+        policy,
+      };
+      for (const validator of validationOptions.customValidators) {
+        if (!validator(validationContext)) {
+          throw new ValidationError('Custom edge validation rule failed', {
+            edgeType: [input.edgeType],
+            source: [input.sourceNodeId as string],
+            target: [input.targetNodeId as string],
+          });
+        }
+      }
+    }
+
     // Acyclicity check (unless skipped)
     if (policy.requiresAcyclicity && validationOptions?.validateAcyclicity !== false) {
-      const cyclePath = await this.graphRepository.detectCycles(
-        input.targetNodeId,
-        input.edgeType,
-        userId
-      );
-
-      // If target can reach source, adding source→target creates a cycle
-      if (cyclePath.length > 0) {
+      // Self-loop guard: source === target is always a cycle
+      if (input.sourceNodeId === input.targetNodeId) {
         throw new CyclicEdgeError(
           input.edgeType,
           input.sourceNodeId as string,
           input.targetNodeId as string,
-          cyclePath as string[]
+          [input.sourceNodeId as string]
+        );
+      }
+
+      // Check reachability: if target can reach source via this edge type,
+      // adding source→target creates a cycle.
+      const pathFromTargetToSource = await this.graphRepository.findFilteredShortestPath(
+        input.targetNodeId,
+        input.sourceNodeId,
+        [input.edgeType],
+        undefined,
+        userId
+      );
+
+      if (pathFromTargetToSource.length > 0) {
+        throw new CyclicEdgeError(
+          input.edgeType,
+          input.sourceNodeId as string,
+          input.targetNodeId as string,
+          pathFromTargetToSource.map((n) => n.nodeId as string)
         );
       }
     }
@@ -798,16 +834,16 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     // Mark metrics as stale — look up source node for domain
     const sourceNode = await this.graphRepository.getNode(existingEdge.sourceNodeId, userId);
-    const sourceDomain = sourceNode?.domain ?? 'unknown';
-    if (sourceNode) {
-      await this.markMetricsStale(userId, sourceNode.domain, 'edge_deleted');
+    if (!sourceNode) {
+      throw new NodeNotFoundError(existingEdge.sourceNodeId as string);
     }
+    await this.markMetricsStale(userId, sourceNode.domain, 'edge_deleted');
 
     this.logger.info({ edgeId, edgeType: existingEdge.edgeType }, 'PKG edge deleted');
 
     return {
       data: undefined,
-      agentHints: this.createDeleteHints('edge', edgeId, sourceDomain),
+      agentHints: this.createDeleteHints('edge', edgeId, sourceNode.domain),
     };
   }
 
@@ -830,22 +866,21 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     const limit = Math.min(pagination.limit, MAX_PAGE_SIZE);
     const offset = Math.max(pagination.offset, 0);
 
-    // Push pagination to the repository (database-level SKIP/LIMIT)
-    // Fetch limit+1 to know if there are more results without a separate count query
-    const edges = await this.graphRepository.findEdges(scopedFilter, limit + 1, offset);
-
-    const hasMore = edges.length > limit;
-    const paginatedEdges = hasMore ? edges.slice(0, limit) : edges;
+    // Query edges and exact total in parallel
+    const [edges, total] = await Promise.all([
+      this.graphRepository.findEdges(scopedFilter, limit, offset),
+      this.graphRepository.countEdges(scopedFilter),
+    ]);
 
     const result: IPaginatedResponse<IGraphEdge> = {
-      items: paginatedEdges,
-      total: offset + edges.length, // Approximate total (exact count requires separate query)
-      hasMore,
+      items: edges,
+      total,
+      hasMore: offset + edges.length < total,
     };
 
     return {
       data: result,
-      agentHints: this.createListHints('edges', paginatedEdges.length, result.total ?? 0),
+      agentHints: this.createListHints('edges', edges.length, total),
     };
   }
 
@@ -2610,11 +2645,12 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     let hasMore: boolean;
 
     if (usedPagination) {
-      // The repository already paginated — use its results directly
+      // The repository already paginated — use exact count from countOperations
       paginatedEntries = entries;
-      // Approximate total (repo doesn't give us exact total for some queries)
-      total = offset + entries.length + (entries.length === limit ? 1 : 0);
-      hasMore = entries.length === limit;
+      const countFilter =
+        filters.operationType !== undefined ? { operationType: filters.operationType } : undefined;
+      total = await this.operationLogRepository.countOperations(userId, countFilter);
+      hasMore = offset + paginatedEntries.length < total;
     } else {
       // Manual pagination over the full list
       total = entries.length;
@@ -2803,18 +2839,22 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     // Collect all node IDs for filtering edges
     const nodeIdSet = new Set<string>(nodes.map((n) => n.nodeId as string));
 
-    // Get outbound edges for each node, filter to intra-domain
-    const edgeArrays = await Promise.all(
-      nodes.map((n) => this.graphRepository.getEdgesForNode(n.nodeId, 'outbound'))
+    // Batch-fetch all edges for these nodes in a single query (Fix 3.1: N+1 → O(1))
+    const allEdges = await this.graphRepository.getEdgesForNodes(
+      nodes.map((n) => n.nodeId),
+      {},
+      userId as string | undefined
     );
 
+    // Filter to intra-domain outbound edges only
     const edges: IGraphEdge[] = [];
-    for (const arr of edgeArrays) {
-      for (const edge of arr) {
-        // Only include edges where both endpoints are in our domain set
-        if (nodeIdSet.has(edge.targetNodeId as string)) {
-          edges.push(edge);
-        }
+    for (const edge of allEdges) {
+      // Only include edges where source is in our set (outbound) and target is too (intra-domain)
+      if (
+        nodeIdSet.has(edge.sourceNodeId as string) &&
+        nodeIdSet.has(edge.targetNodeId as string)
+      ) {
+        edges.push(edge);
       }
     }
 
@@ -3846,7 +3886,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
    */
   private createMutationListHints(
     mutations: ICkgMutation[],
-    _filters: IMutationFilter
+    filters: IMutationFilter
   ): IAgentHints {
     const stateCounts = new Map<string, number>();
     for (const m of mutations) {
@@ -3857,15 +3897,40 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       .map(([state, count]) => `${state}: ${String(count)}`)
       .join(', ');
 
+    // Build contextual suggestions based on active filters
+    const suggestedNextActions: IAgentHints['suggestedNextActions'] = [
+      {
+        action: 'propose_mutation',
+        description: 'Create a new CKG mutation proposal',
+        priority: 'low',
+        category: 'exploration',
+      },
+    ];
+
+    if (filters.state === 'rejected') {
+      suggestedNextActions.push({
+        action: 'retry_mutation',
+        description: 'Retry a rejected mutation after resolving issues',
+        priority: 'medium',
+        category: 'correction',
+      });
+    } else if (filters.state === 'pending_review') {
+      suggestedNextActions.push({
+        action: 'approve_mutation',
+        description: 'Review and approve a mutation pending review',
+        priority: 'high',
+        category: 'correction',
+      });
+    }
+
+    const filterDescription = filters.state
+      ? ` (filtered by state: ${filters.state})`
+      : filters.proposedBy
+        ? ` (filtered by proposer: ${filters.proposedBy})`
+        : '';
+
     return {
-      suggestedNextActions: [
-        {
-          action: 'propose_mutation',
-          description: 'Create a new CKG mutation proposal',
-          priority: 'low',
-          category: 'exploration',
-        },
-      ],
+      suggestedNextActions,
       relatedResources: mutations.slice(0, 5).map((m) => ({
         type: 'CKGMutation' as const,
         id: m.mutationId as string,
@@ -3881,7 +3946,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       dependencies: [],
       estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
       preferenceAlignment: [],
-      reasoning: `Found ${String(mutations.length)} mutation(s): ${stateBreakdown}`,
+      reasoning: `Found ${String(mutations.length)} mutation(s)${filterDescription}: ${stateBreakdown}`,
     };
   }
 

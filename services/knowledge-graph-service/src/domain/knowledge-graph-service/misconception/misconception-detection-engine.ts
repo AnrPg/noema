@@ -21,6 +21,15 @@ import {
   StatisticalMisconceptionDetector,
   StructuralMisconceptionDetector,
 } from './detectors/index.js';
+import type { ISemanticDetectorConfig } from './detectors/index.js';
+
+// ============================================================================
+// Config
+// ============================================================================
+
+export interface IMisconceptionDetectionEngineConfig {
+  readonly vectorServiceEnabled?: boolean;
+}
 
 // ============================================================================
 // Result types
@@ -45,12 +54,17 @@ export class MisconceptionDetectionEngine {
   private readonly detectors: readonly IMisconceptionDetector[];
   private readonly logger: Logger;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, config?: IMisconceptionDetectionEngineConfig) {
     this.logger = logger.child({ component: 'MisconceptionDetectionEngine' });
+
+    const semanticConfig: ISemanticDetectorConfig = {
+      vectorServiceEnabled: config?.vectorServiceEnabled ?? false,
+    };
+
     this.detectors = [
       new StructuralMisconceptionDetector(),
       new StatisticalMisconceptionDetector(),
-      new SemanticMisconceptionDetector(),
+      new SemanticMisconceptionDetector(semanticConfig),
     ];
   }
 
