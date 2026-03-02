@@ -265,7 +265,12 @@ export function registerPkgEdgeRoutes(
           ...(parsed.properties !== undefined ? { properties: parsed.properties } : {}),
         };
 
-        const result = await service.updateEdge(userId as UserId, edgeId as EdgeId, updates, context);
+        const result = await service.updateEdge(
+          userId as UserId,
+          edgeId as EdgeId,
+          updates,
+          context
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

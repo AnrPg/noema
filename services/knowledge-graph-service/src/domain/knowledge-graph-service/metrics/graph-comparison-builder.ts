@@ -255,11 +255,12 @@ function detectDivergences(
   for (const ckgNodeId of unmatchedCkgNodes) {
     const ckgNode = ckgSubgraph.nodes.find((n) => n.nodeId === ckgNodeId);
     const connectivity = countNodeEdges(ckgSubgraph.edges, ckgNodeId);
-    const severity = connectivity >= 4
-      ? DivergenceSeverity.HIGH
-      : connectivity >= 2
-        ? DivergenceSeverity.MEDIUM
-        : DivergenceSeverity.LOW;
+    const severity =
+      connectivity >= 4
+        ? DivergenceSeverity.HIGH
+        : connectivity >= 2
+          ? DivergenceSeverity.MEDIUM
+          : DivergenceSeverity.LOW;
     divergences.push({
       divergenceType: DivergenceType.MISSING_NODE,
       affectedPkgNodeIds: [],

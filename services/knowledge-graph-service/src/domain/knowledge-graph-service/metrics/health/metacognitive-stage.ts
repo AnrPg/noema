@@ -17,7 +17,7 @@ import type {
   MetacognitiveStage,
   StructuralMetricType,
 } from '@noema/types';
-import { MetacognitiveStage as Stage, StructuralMetricType as SMT } from '@noema/types';
+import { StructuralMetricType as SMT, MetacognitiveStage as Stage } from '@noema/types';
 
 // ============================================================================
 // Stage Gate Definitions
