@@ -330,13 +330,14 @@ add proper DI interfaces. Phase 3+ code will consume these new methods.
 
 ---
 
-## Phase 3 — Domain Logic: Validation, Algorithms & Semantic Correctness
+## Phase 3 — Domain Logic: Validation, Algorithms & Semantic Correctness ✅
 
+**Status:** Complete — commit `9f1ad76`, ADR-012  
 **Goal:** Fix semantic/logical errors in domain services, validation gaps,
 algorithm correctness, and business rule hardening. Uses the new interfaces from
 Phase 2.
 
-**Estimated scope:** ~15 fixes across 10 files
+**Scope:** 12 fixes across 6 files + 2 directory removals (458 tests passing)
 
 ### 3.1 — High: Fix `fetchDomainSubgraph` N+1 → batch query (H11)
 
