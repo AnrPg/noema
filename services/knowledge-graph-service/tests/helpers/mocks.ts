@@ -159,6 +159,7 @@ export function mockMutationRepository(): {
     countMutationsByState: vi.fn().mockImplementation(notConfigured),
     findMutations: vi.fn().mockImplementation(notConfigured),
     transitionStateWithAudit: vi.fn().mockImplementation(notConfigured),
+    incrementRecoveryAttempts: vi.fn().mockImplementation(notConfigured),
   };
 }
 

@@ -63,6 +63,31 @@ export class CachedGraphRepository implements IGraphRepository {
   ) {}
 
   // ==========================================================================
+  // Cache key helpers — all keys include userId scope to prevent cross-user
+  // cache pollution (Fix 2.7)
+  // ==========================================================================
+
+  private scopedNodeKey(nodeId: NodeId, userId?: string): string {
+    const scope = userId ?? 'ckg';
+    return `${scope}:${this.cache.nodeKey(nodeId)}`;
+  }
+
+  private scopedEdgesForNodeKey(nodeId: NodeId, direction: string, userId?: string): string {
+    const scope = userId ?? 'ckg';
+    return `${scope}:${this.cache.edgesForNodeKey(nodeId, direction)}`;
+  }
+
+  private scopedEdgesForNodePattern(nodeId: NodeId, userId?: string): string {
+    const scope = userId ?? 'ckg';
+    return `${scope}:${this.cache.edgesForNodePattern(nodeId)}`;
+  }
+
+  private scopedNodesByIdsKey(nodeIds: readonly NodeId[], userId?: string): string {
+    const scope = userId ?? 'ckg';
+    return `${scope}:${this.cache.nodesByIdsKey(nodeIds)}`;
+  }
+
+  // ==========================================================================
   // INodeRepository — Cached reads, write-through with invalidation
   // ==========================================================================
 
@@ -72,13 +97,13 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphNode> {
     const node = await this.inner.createNode(graphType, input, userId);
-    // Pre-populate cache with newly created node
-    await this.cache.set(this.cache.nodeKey(node.nodeId), node, this.entityTtl);
+    // Pre-populate cache with newly created node (scoped by userId)
+    await this.cache.set(this.scopedNodeKey(node.nodeId, userId), node, this.entityTtl);
     return node;
   }
 
   async getNode(nodeId: NodeId, userId?: string): Promise<IGraphNode | null> {
-    return this.cache.getOrLoad(this.cache.nodeKey(nodeId), this.entityTtl, () =>
+    return this.cache.getOrLoad(this.scopedNodeKey(nodeId, userId), this.entityTtl, () =>
       this.inner.getNode(nodeId, userId)
     );
   }
@@ -89,15 +114,15 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphNode> {
     const node = await this.inner.updateNode(nodeId, updates, userId);
-    await this.cache.del(this.cache.nodeKey(nodeId));
+    await this.cache.del(this.scopedNodeKey(nodeId, userId));
     return node;
   }
 
   async deleteNode(nodeId: NodeId, userId?: string): Promise<void> {
     await this.inner.deleteNode(nodeId, userId);
-    await this.cache.del(this.cache.nodeKey(nodeId));
+    await this.cache.del(this.scopedNodeKey(nodeId, userId));
     // Invalidate cached edges for this node (all directions)
-    await this.cache.delPattern(this.cache.edgesForNodePattern(nodeId));
+    await this.cache.delPattern(this.scopedEdgesForNodePattern(nodeId, userId));
   }
 
   async findNodes(filter: INodeFilter, limit: number, offset: number): Promise<IGraphNode[]> {
@@ -119,9 +144,9 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphEdge> {
     const edge = await this.inner.createEdge(graphType, input, userId);
-    // Invalidate cached edges for both source and target nodes
-    await this.cache.delPattern(this.cache.edgesForNodePattern(input.sourceNodeId));
-    await this.cache.delPattern(this.cache.edgesForNodePattern(input.targetNodeId));
+    // Invalidate cached edges for both source and target nodes (scoped by userId)
+    await this.cache.delPattern(this.scopedEdgesForNodePattern(input.sourceNodeId, userId));
+    await this.cache.delPattern(this.scopedEdgesForNodePattern(input.targetNodeId, userId));
     return edge;
   }
 
@@ -131,22 +156,23 @@ export class CachedGraphRepository implements IGraphRepository {
   }
 
   async removeEdge(edgeId: EdgeId): Promise<void> {
-    // Pre-fetch edge to get node IDs for invalidation
+    // Pre-fetch edge to get node IDs for cache invalidation
     const edge = await this.inner.getEdge(edgeId);
     await this.inner.removeEdge(edgeId);
     if (edge) {
-      await this.cache.delPattern(this.cache.edgesForNodePattern(edge.sourceNodeId));
-      await this.cache.delPattern(this.cache.edgesForNodePattern(edge.targetNodeId));
+      // Invalidate for both CKG and per-user scopes (we don't know the user here)
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(edge.sourceNodeId));
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(edge.targetNodeId));
     }
   }
 
   async updateEdge(edgeId: EdgeId, updates: IUpdateEdgeInput): Promise<IGraphEdge> {
-    // Pre-fetch edge to get node IDs for invalidation
+    // Pre-fetch edge to get node IDs for cache invalidation
     const existingEdge = await this.inner.getEdge(edgeId);
     const updatedEdge = await this.inner.updateEdge(edgeId, updates);
     if (existingEdge) {
-      await this.cache.delPattern(this.cache.edgesForNodePattern(existingEdge.sourceNodeId));
-      await this.cache.delPattern(this.cache.edgesForNodePattern(existingEdge.targetNodeId));
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(existingEdge.sourceNodeId));
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(existingEdge.targetNodeId));
     }
     return updatedEdge;
   }
@@ -156,10 +182,24 @@ export class CachedGraphRepository implements IGraphRepository {
     return this.inner.findEdges(filter, limit, offset);
   }
 
+  async countEdges(filter: IEdgeFilter): Promise<number> {
+    // Pass through — count queries are cheap and rarely repeated identically
+    return this.inner.countEdges(filter);
+  }
+
   async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
-    return this.cache.getOrLoad(this.cache.edgesForNodeKey(nodeId, direction), this.queryTtl, () =>
+    return this.cache.getOrLoad(this.scopedEdgesForNodeKey(nodeId, direction), this.queryTtl, () =>
       this.inner.getEdgesForNode(nodeId, direction)
     );
+  }
+
+  async getEdgesForNodes(
+    nodeIds: readonly NodeId[],
+    filter?: IEdgeFilter,
+    userId?: string
+  ): Promise<IGraphEdge[]> {
+    // Pass through — batch queries are too variable to cache effectively
+    return this.inner.getEdgesForNodes(nodeIds, filter, userId);
   }
 
   // ==========================================================================
@@ -358,9 +398,9 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphNode[]> {
     const nodes = await this.inner.createNodes(graphType, inputs, userId);
-    // Pre-populate cache for each new node
+    // Pre-populate cache for each new node (scoped by userId)
     for (const node of nodes) {
-      await this.cache.set(this.cache.nodeKey(node.nodeId), node, this.entityTtl);
+      await this.cache.set(this.scopedNodeKey(node.nodeId, userId), node, this.entityTtl);
     }
     return nodes;
   }
@@ -371,20 +411,20 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphEdge[]> {
     const edges = await this.inner.createEdges(graphType, inputs, userId);
-    // Invalidate edge caches for all affected nodes
+    // Invalidate edge caches for all affected nodes (scoped by userId)
     const nodeIds = new Set<NodeId>();
     for (const input of inputs) {
       nodeIds.add(input.sourceNodeId);
       nodeIds.add(input.targetNodeId);
     }
     for (const nodeId of nodeIds) {
-      await this.cache.delPattern(this.cache.edgesForNodePattern(nodeId));
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(nodeId, userId));
     }
     return edges;
   }
 
   async getNodesByIds(nodeIds: readonly NodeId[], userId?: string): Promise<IGraphNode[]> {
-    return this.cache.getOrLoad(this.cache.nodesByIdsKey(nodeIds), this.queryTtl, () =>
+    return this.cache.getOrLoad(this.scopedNodesByIdsKey(nodeIds, userId), this.queryTtl, () =>
       this.inner.getNodesByIds(nodeIds, userId)
     );
   }

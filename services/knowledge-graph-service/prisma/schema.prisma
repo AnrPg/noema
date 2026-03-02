@@ -59,6 +59,9 @@ model CkgMutation {
     // Denormalized evidence count for promotion band lookup
     evidenceCount Int @default(0) @map("evidence_count")
 
+    // Number of recovery attempts for stuck mutations (max retry enforcement)
+    recoveryAttempts Int @default(0) @map("recovery_attempts")
+
     // Extensible metadata
     metadata Json @default("{}")
 

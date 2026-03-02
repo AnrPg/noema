@@ -188,6 +188,21 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
     return records.map((r) => this.toDomain(r));
   }
 
+  async countOperations(
+    userId: UserId,
+    filters?: { operationType?: PkgOperationType }
+  ): Promise<number> {
+    const where: Record<string, unknown> = {
+      userId: userId as string,
+    };
+
+    if (filters?.operationType !== undefined) {
+      where['operationType'] = filters.operationType as string;
+    }
+
+    return this.prisma.pkgOperationLog.count({ where });
+  }
+
   // ==========================================================================
   // Private
   // ==========================================================================

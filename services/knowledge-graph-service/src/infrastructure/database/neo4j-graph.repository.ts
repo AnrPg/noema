@@ -561,6 +561,100 @@ export class Neo4jGraphRepository implements IGraphRepository {
     }
   }
 
+  async countEdges(filter: IEdgeFilter): Promise<number> {
+    const relTypes =
+      filter.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
+
+    const whereClauses: string[] = [];
+    const params: Record<string, unknown> = {};
+
+    if (filter.sourceNodeId !== undefined) {
+      whereClauses.push('source.nodeId = $sourceNodeId');
+      params['sourceNodeId'] = filter.sourceNodeId;
+    }
+    if (filter.targetNodeId !== undefined) {
+      whereClauses.push('target.nodeId = $targetNodeId');
+      params['targetNodeId'] = filter.targetNodeId;
+    }
+    if (filter.nodeId !== undefined) {
+      whereClauses.push('(source.nodeId = $nodeId OR target.nodeId = $nodeId)');
+      params['nodeId'] = filter.nodeId;
+    }
+    if (filter.userId !== undefined) {
+      whereClauses.push('r.userId = $userId');
+      params['userId'] = filter.userId;
+    }
+
+    const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (source)-[r:${relTypes}]->(target)
+           ${whereStr}
+           RETURN count(r) AS total`,
+          params
+        );
+      });
+
+      const record = result.records[0];
+      if (record === undefined) return 0;
+
+      const count: unknown = record.get('total');
+      return typeof count === 'object' && count !== null && 'toNumber' in count
+        ? (count as { toNumber(): number }).toNumber()
+        : Number(count);
+    } finally {
+      await session.close();
+    }
+  }
+
+  async getEdgesForNodes(
+    nodeIds: readonly NodeId[],
+    filter?: IEdgeFilter,
+    userId?: string
+  ): Promise<IGraphEdge[]> {
+    if (nodeIds.length === 0) return [];
+
+    const relTypePattern =
+      filter?.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
+
+    const whereClauses: string[] = ['(source.nodeId IN $nodeIds OR target.nodeId IN $nodeIds)'];
+    const params: Record<string, unknown> = { nodeIds: [...nodeIds] };
+
+    if (userId !== undefined) {
+      whereClauses.push('r.userId = $userId');
+      params['userId'] = userId;
+    }
+
+    const whereStr = `WHERE ${whereClauses.join(' AND ')}`;
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `MATCH (source)-[r:${relTypePattern}]->(target)
+           ${whereStr}
+           RETURN r, source.nodeId AS sourceId, target.nodeId AS targetId,
+                  source.graphType AS graphType`,
+          params
+        );
+      });
+
+      return result.records.map((rec) =>
+        mapRelationshipToGraphEdge(
+          rec.get('r') as neo4j.Relationship,
+          rec.get('sourceId') as NodeId,
+          rec.get('targetId') as NodeId,
+          rec.get('graphType') as IGraphEdge['graphType']
+        )
+      );
+    } finally {
+      await session.close();
+    }
+  }
+
   // ==========================================================================
   // ITraversalRepository
   // ==========================================================================
@@ -2122,6 +2216,10 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('findEdges is not supported within a transaction context');
   }
 
+  countEdges(_filter: IEdgeFilter): Promise<number> {
+    throw new Error('countEdges is not supported within a transaction context');
+  }
+
   async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
     const relTypePattern = ALL_REL_TYPES.join('|');
     let query: string;
@@ -2149,6 +2247,14 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
         inferGraphType(rec.get('srcLabels') as string[])
       )
     );
+  }
+
+  getEdgesForNodes(
+    _nodeIds: readonly NodeId[],
+    _filter?: IEdgeFilter,
+    _userId?: string
+  ): Promise<IGraphEdge[]> {
+    throw new Error('getEdgesForNodes is not supported within a transaction context');
   }
 
   // ── Traversal (not needed in transaction context, stubs) ──────────────

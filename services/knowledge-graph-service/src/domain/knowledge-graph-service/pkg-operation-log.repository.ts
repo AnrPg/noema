@@ -93,4 +93,10 @@ export interface IPkgOperationLogRepository {
    * Get operations affecting a specific edge (for undo context).
    */
   getOperationsForEdge(userId: UserId, edgeId: EdgeId): Promise<IPkgOperationLogEntry[]>;
+
+  /**
+   * Count operations matching optional filters (for exact pagination totals).
+   * Without filters, returns the total count for the user.
+   */
+  countOperations(userId: UserId, filters?: { operationType?: PkgOperationType }): Promise<number>;
 }

@@ -255,6 +255,28 @@ export class PrismaMutationRepository implements IMutationRepository {
     return { mutation, audit };
   }
 
+  async incrementRecoveryAttempts(mutationId: MutationId): Promise<ICkgMutation> {
+    try {
+      const record = await this.prisma.ckgMutation.update({
+        where: { id: mutationId },
+        data: {
+          recoveryAttempts: { increment: 1 },
+        },
+      });
+
+      return this.toDomain(record);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        ((error as { code?: string }).code === 'P2025' ||
+          error.message.includes('Record to update not found'))
+      ) {
+        throw new MutationNotFoundError(mutationId);
+      }
+      throw error;
+    }
+  }
+
   // ==========================================================================
   // Private
   // ==========================================================================
@@ -270,6 +292,7 @@ export class PrismaMutationRepository implements IMutationRepository {
     operation: Prisma.JsonValue;
     rationale: string | null;
     evidenceCount: number;
+    recoveryAttempts: number;
     createdAt: Date;
     updatedAt: Date;
   }): ICkgMutation {
@@ -281,6 +304,7 @@ export class PrismaMutationRepository implements IMutationRepository {
       operations: record.operation as unknown as Metadata[],
       rationale: record.rationale ?? '',
       evidenceCount: record.evidenceCount,
+      recoveryAttempts: record.recoveryAttempts,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

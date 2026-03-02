@@ -181,6 +181,7 @@ export function ckgMutation(overrides?: Partial<ICkgMutation>): ICkgMutation {
     operations: [{ type: 'add_node', nodeType: 'concept', label: 'Test', domain: TEST_DOMAIN }],
     rationale: 'Test mutation',
     evidenceCount: 0,
+    recoveryAttempts: 0,
     createdAt: '2025-01-01T00:00:00.000Z',
     updatedAt: '2025-01-01T00:00:00.000Z',
     ...overrides,

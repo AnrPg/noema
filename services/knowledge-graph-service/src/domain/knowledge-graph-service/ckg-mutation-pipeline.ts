@@ -43,6 +43,7 @@ import type {
 } from './mutation.repository.js';
 import type { IValidationPipeline, IValidationResult, IValidationViolation } from './validation.js';
 
+import type { ICkgMutationPipeline } from './ckg-mutation-pipeline.interface.js';
 import {
   type CkgMutationOperation,
   CkgMutationOperationSchema,
@@ -114,7 +115,7 @@ function toSerializableOperations(operations: CkgMutationOperation[]): Metadata[
  * All methods are stateless — they operate on mutation records from the
  * repository and use the typestate machine for transition enforcement.
  */
-export class CkgMutationPipeline {
+export class CkgMutationPipeline implements ICkgMutationPipeline {
   constructor(
     private readonly mutationRepository: IMutationRepository,
     private readonly graphRepository: IGraphRepository,

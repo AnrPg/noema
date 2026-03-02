@@ -360,10 +360,26 @@ export class MockGraphRepository implements IGraphRepository {
     if (filter.targetNodeId !== undefined) {
       results = results.filter((e) => e.targetNodeId === filter.targetNodeId);
     }
+    if (filter.nodeId !== undefined) {
+      results = results.filter(
+        (e) => e.sourceNodeId === filter.nodeId || e.targetNodeId === filter.nodeId
+      );
+    }
+    if (filter.userId !== undefined) {
+      results = results.filter((e) => {
+        const eObj = e as Record<string, unknown>;
+        return eObj['userId'] === filter.userId;
+      });
+    }
 
     const start = offset ?? 0;
     const end = limit !== undefined ? start + limit : results.length;
     return results.slice(start, end).map((e) => ({ ...e }));
+  }
+
+  async countEdges(filter: IEdgeFilter): Promise<number> {
+    const all = await this.findEdges(filter);
+    return all.length;
   }
 
   async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
@@ -383,6 +399,25 @@ export class MockGraphRepository implements IGraphRepository {
     }
 
     return results;
+  }
+
+  async getEdgesForNodes(
+    nodeIds: readonly NodeId[],
+    filter?: IEdgeFilter,
+    _userId?: string
+  ): Promise<IGraphEdge[]> {
+    if (nodeIds.length === 0) return [];
+
+    const nodeIdSet = new Set(nodeIds);
+    let results = Array.from(this.edges.values()).filter(
+      (e) => nodeIdSet.has(e.sourceNodeId) || nodeIdSet.has(e.targetNodeId)
+    );
+
+    if (filter?.edgeType !== undefined) {
+      results = results.filter((e) => e.edgeType === filter.edgeType);
+    }
+
+    return results.map((e) => ({ ...e }));
   }
 
   // ==========================================================================

@@ -43,6 +43,13 @@ export interface ICkgMutation {
 
   /** When the mutation was last updated (ISO 8601) */
   readonly updatedAt: string;
+
+  /**
+   * Number of recovery attempts for stuck mutations.
+   * Incremented each time `recoverStuckMutations()` retries this mutation.
+   * After exceeding `MAX_RECOVERY_ATTEMPTS`, the mutation is rejected.
+   */
+  readonly recoveryAttempts: number;
 }
 
 /**
@@ -162,4 +169,10 @@ export interface IMutationRepository {
     expectedVersion: number,
     auditEntry: Omit<IMutationAuditEntry, 'timestamp'>
   ): Promise<{ mutation: ICkgMutation; audit: IMutationAuditEntry }>;
+
+  /**
+   * Atomically increment the recovery attempts counter for a stuck mutation.
+   * @returns The updated mutation with the incremented counter.
+   */
+  incrementRecoveryAttempts(mutationId: MutationId): Promise<ICkgMutation>;
 }

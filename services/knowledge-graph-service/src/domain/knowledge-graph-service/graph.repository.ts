@@ -205,9 +205,30 @@ export interface IEdgeRepository {
   findEdges(filter: IEdgeFilter, limit?: number, offset?: number): Promise<IGraphEdge[]>;
 
   /**
+   * Count edges matching filter criteria (for pagination metadata).
+   * Mirrors `countNodes` — used by `listEdges` to provide exact totals.
+   */
+  countEdges(filter: IEdgeFilter): Promise<number>;
+
+  /**
    * Get all edges for a node in a given direction.
    */
   getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]>;
+
+  /**
+   * Batch-fetch edges for multiple nodes in a single query.
+   * Eliminates the N+1 problem in `fetchDomainSubgraph` and similar operations.
+   *
+   * @param nodeIds The nodes whose edges to fetch.
+   * @param filter Optional additional filter criteria.
+   * @param userId Optional user scope (for PKG).
+   * @returns All edges where at least one endpoint is in the nodeIds set.
+   */
+  getEdgesForNodes(
+    nodeIds: readonly NodeId[],
+    filter?: IEdgeFilter,
+    userId?: string
+  ): Promise<IGraphEdge[]>;
 }
 
 // ============================================================================
@@ -417,31 +438,113 @@ export interface IBatchGraphRepository {
 }
 
 // ============================================================================
+// ITransactional — Transaction support mixin
+// ============================================================================
+
+/**
+ * Mixin interface for repositories that support transactional execution.
+ *
+ * Composed into `IGraphRepository` so that any code receiving the composite
+ * interface can use transactions. Code receiving a narrower sub-interface
+ * (e.g., `INodeRepository`) does not see `runInTransaction` — which is
+ * correct because transactions span the whole graph, not a single entity.
+ *
+ * @typeParam T The repository type provided inside the transaction callback.
+ */
+export interface ITransactional<T> {
+  /**
+   * Execute a callback within a single database transaction.
+   * All operations performed inside the callback use the same
+   * transaction and commit atomically. On failure, the entire transaction
+   * is rolled back.
+   *
+   * @param fn Callback that receives a transactional repository.
+   * @returns The result of the callback.
+   */
+  runInTransaction<R>(fn: (txRepo: T) => Promise<R>): Promise<R>;
+}
+
+// ============================================================================
+// IReadOnlyGraphRepository — Read-only subset for CKG consumers
+// ============================================================================
+
+/**
+ * Read-only graph repository: traversals + node/edge reads, no mutations.
+ *
+ * CKG consumers that only need to read the canonical graph depend on this
+ * interface. This makes CKG immutability explicit at the type level —
+ * write operations are only available through the mutation pipeline.
+ */
+export interface IReadOnlyGraphRepository extends ITraversalRepository {
+  /**
+   * Get a node by ID.
+   */
+  getNode(nodeId: NodeId, userId?: string): Promise<IGraphNode | null>;
+
+  /**
+   * Find nodes matching filter criteria.
+   */
+  findNodes(filter: INodeFilter, limit: number, offset: number): Promise<IGraphNode[]>;
+
+  /**
+   * Count nodes matching filter criteria.
+   */
+  countNodes(filter: INodeFilter): Promise<number>;
+
+  /**
+   * Get an edge by ID.
+   */
+  getEdge(edgeId: EdgeId): Promise<IGraphEdge | null>;
+
+  /**
+   * Find edges matching filter criteria.
+   */
+  findEdges(filter: IEdgeFilter, limit?: number, offset?: number): Promise<IGraphEdge[]>;
+
+  /**
+   * Count edges matching filter criteria.
+   */
+  countEdges(filter: IEdgeFilter): Promise<number>;
+
+  /**
+   * Get all edges for a node in a given direction.
+   */
+  getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]>;
+
+  /**
+   * Batch-fetch edges for multiple nodes.
+   */
+  getEdgesForNodes(
+    nodeIds: readonly NodeId[],
+    filter?: IEdgeFilter,
+    userId?: string
+  ): Promise<IGraphEdge[]>;
+
+  /**
+   * Get multiple nodes by their IDs.
+   */
+  getNodesByIds(nodeIds: readonly NodeId[], userId?: string): Promise<IGraphNode[]>;
+}
+
+// ============================================================================
 // IGraphRepository — Composite Interface
 // ============================================================================
 
 /**
- * Full graph repository interface — the composition of all four sub-interfaces.
+ * Full graph repository interface — the composition of all four sub-interfaces
+ * plus transactional support.
  *
  * Services that need complete graph capability inject this composite.
  * The split sub-interfaces enable:
  * - **Testing ergonomics**: mock only the sub-interface you need
  * - **ISP compliance**: don't depend on methods you don't call
  * - **Decorator composition**: cache INodeRepository without ITraversalRepository
+ * - **CKG read-only**: use `IReadOnlyGraphRepository` for read-only CKG access
  */
 export interface IGraphRepository
-  extends INodeRepository, IEdgeRepository, ITraversalRepository, IBatchGraphRepository {
-  /**
-   * Execute a callback within a single Neo4j transaction.
-   * All graph operations performed inside the callback use the same
-   * transaction and commit atomically. On failure, the entire transaction
-   * is rolled back.
-   *
-   * This is critical for the CKG mutation pipeline's commit protocol,
-   * which requires multi-operation atomicity.
-   *
-   * @param fn Callback that receives a transactional graph repository.
-   * @returns The result of the callback.
-   */
-  runInTransaction<T>(fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T>;
-}
+  extends
+    INodeRepository,
+    IEdgeRepository,
+    ITraversalRepository,
+    IBatchGraphRepository,
+    ITransactional<IGraphRepository> {}
