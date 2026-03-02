@@ -14,7 +14,11 @@ import type {
   StructuralMetricType,
   TrendDirection,
 } from '@noema/types';
-import { MetricHealthStatus as HealthStatus, TrendDirection as Trend } from '@noema/types';
+import {
+  MetricHealthStatus as HealthStatus,
+  StructuralMetricType as SMT,
+  TrendDirection as Trend,
+} from '@noema/types';
 
 import type { IMetricSnapshot } from '../../metrics.repository.js';
 import { detectCrossMetricPatterns } from './cross-metric-patterns.js';
@@ -121,17 +125,17 @@ const METRIC_CONFIGS: Record<string, IMetricConfig> = {
 // ============================================================================
 
 const FIELD_TO_METRIC_TYPE: Record<string, StructuralMetricType> = {
-  abstractionDrift: 'abstraction_drift' as StructuralMetricType,
-  depthCalibrationGradient: 'depth_calibration_gradient' as StructuralMetricType,
-  scopeLeakageIndex: 'scope_leakage_index' as StructuralMetricType,
-  siblingConfusionEntropy: 'sibling_confusion_entropy' as StructuralMetricType,
-  upwardLinkStrength: 'upward_link_strength' as StructuralMetricType,
-  traversalBreadthScore: 'traversal_breadth_score' as StructuralMetricType,
-  strategyDepthFit: 'strategy_depth_fit' as StructuralMetricType,
-  structuralStrategyEntropy: 'structural_strategy_entropy' as StructuralMetricType,
-  structuralAttributionAccuracy: 'structural_attribution_accuracy' as StructuralMetricType,
-  structuralStabilityGain: 'structural_stability_gain' as StructuralMetricType,
-  boundarySensitivityImprovement: 'boundary_sensitivity_improvement' as StructuralMetricType,
+  abstractionDrift: SMT.ABSTRACTION_DRIFT,
+  depthCalibrationGradient: SMT.DEPTH_CALIBRATION_GRADIENT,
+  scopeLeakageIndex: SMT.SCOPE_LEAKAGE_INDEX,
+  siblingConfusionEntropy: SMT.SIBLING_CONFUSION_ENTROPY,
+  upwardLinkStrength: SMT.UPWARD_LINK_STRENGTH,
+  traversalBreadthScore: SMT.TRAVERSAL_BREADTH_SCORE,
+  strategyDepthFit: SMT.STRATEGY_DEPTH_FIT,
+  structuralStrategyEntropy: SMT.STRUCTURAL_STRATEGY_ENTROPY,
+  structuralAttributionAccuracy: SMT.STRUCTURAL_ATTRIBUTION_ACCURACY,
+  structuralStabilityGain: SMT.STRUCTURAL_STABILITY_GAIN,
+  boundarySensitivityImprovement: SMT.BOUNDARY_SENSITIVITY_IMPROVEMENT,
 };
 
 // ============================================================================
@@ -180,7 +184,7 @@ function buildMetricBreakdown(
 
   for (const [field, config] of Object.entries(METRIC_CONFIGS)) {
     const value = metrics[field as keyof IStructuralMetrics];
-    const metricType = FIELD_TO_METRIC_TYPE[field] ?? ('abstraction_drift' as StructuralMetricType);
+    const metricType = FIELD_TO_METRIC_TYPE[field] ?? SMT.ABSTRACTION_DRIFT;
     const status = classifyHealth(value, config);
     const trend = computeMetricTrend(field as keyof IStructuralMetrics, previousSnapshots);
     const hint = generateHint(config.label, value, status, config.isBadness);

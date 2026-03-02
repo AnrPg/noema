@@ -4,7 +4,7 @@
  * Internal types for the misconception detection engine.
  */
 
-import type { ISubgraph, NodeId } from '@noema/types';
+import type { ConfidenceScore, ISubgraph, NodeId } from '@noema/types';
 
 import type { IMisconceptionPattern } from '../misconception.repository.js';
 import type { IGraphComparison } from '../value-objects/comparison.js';
@@ -41,8 +41,8 @@ export interface IMisconceptionDetectionResult {
   /** Pattern that triggered this detection */
   readonly patternId: string;
 
-  /** Detection confidence (0–1) */
-  readonly confidence: number;
+  /** Detection confidence (0–1), branded for type safety */
+  readonly confidence: ConfidenceScore;
 
   /** Node IDs affected */
   readonly affectedNodeIds: readonly NodeId[];

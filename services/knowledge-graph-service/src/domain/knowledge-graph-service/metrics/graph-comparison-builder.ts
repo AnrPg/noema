@@ -247,30 +247,38 @@ function detectDivergences(
     inverseAlignment.set(ckgId, pkgId);
   }
 
-  // Build edge lookups
-  const pkgEdgeMap = buildEdgeMap(pkgSubgraph.edges);
-  const ckgEdgeMap = buildEdgeMap(ckgSubgraph.edges);
+  // Build edge lookups (multi-map: source|target → all edges between pair)
+  const pkgEdgeMultiMap = buildEdgeMultiMap(pkgSubgraph.edges);
+  const ckgEdgeMultiMap = buildEdgeMultiMap(ckgSubgraph.edges);
 
-  // Missing nodes (CKG has, PKG doesn't)
+  // Missing nodes (CKG has, PKG doesn't) — severity depends on connectivity
   for (const ckgNodeId of unmatchedCkgNodes) {
     const ckgNode = ckgSubgraph.nodes.find((n) => n.nodeId === ckgNodeId);
+    const connectivity = countNodeEdges(ckgSubgraph.edges, ckgNodeId);
+    const severity = connectivity >= 4
+      ? DivergenceSeverity.HIGH
+      : connectivity >= 2
+        ? DivergenceSeverity.MEDIUM
+        : DivergenceSeverity.LOW;
     divergences.push({
       divergenceType: DivergenceType.MISSING_NODE,
       affectedPkgNodeIds: [],
       affectedCkgNodeIds: [ckgNodeId],
-      severity: DivergenceSeverity.MEDIUM,
+      severity,
       description: `Missing canonical concept: "${ckgNode?.label ?? ckgNodeId}"`,
     });
   }
 
-  // Extra nodes (PKG has, CKG doesn't)
+  // Extra nodes (PKG has, CKG doesn't) — severity depends on connectivity
   for (const pkgNodeId of unmatchedPkgNodes) {
     const pkgNode = pkgSubgraph.nodes.find((n) => n.nodeId === pkgNodeId);
+    const connectivity = countNodeEdges(pkgSubgraph.edges, pkgNodeId);
+    const severity = connectivity >= 4 ? DivergenceSeverity.MEDIUM : DivergenceSeverity.LOW;
     divergences.push({
       divergenceType: DivergenceType.EXTRA_NODE,
       affectedPkgNodeIds: [pkgNodeId],
       affectedCkgNodeIds: [],
-      severity: DivergenceSeverity.LOW,
+      severity,
       description: `Novel concept not in canonical graph: "${pkgNode?.label ?? pkgNodeId}"`,
     });
   }
@@ -280,43 +288,42 @@ function detectDivergences(
     for (const [pkgTargetId, ckgTargetId] of nodeAlignment) {
       if (pkgSourceId === pkgTargetId) continue;
 
-      const pkgEdge = pkgEdgeMap.get(`${pkgSourceId as string}|${pkgTargetId as string}`);
-      const ckgEdge = ckgEdgeMap.get(`${ckgSourceId as string}|${ckgTargetId as string}`);
+      const pairKeyPkg = `${pkgSourceId as string}|${pkgTargetId as string}`;
+      const pairKeyCkg = `${ckgSourceId as string}|${ckgTargetId as string}`;
+      const pkgEdges = pkgEdgeMultiMap.get(pairKeyPkg) ?? [];
+      const ckgEdges = ckgEdgeMultiMap.get(pairKeyCkg) ?? [];
 
-      if (ckgEdge && !pkgEdge) {
-        // Missing edge
-        const isHierarchical =
-          ckgEdge.edgeType === EdgeType.PREREQUISITE ||
-          ckgEdge.edgeType === EdgeType.IS_A ||
-          ckgEdge.edgeType === EdgeType.PART_OF;
-        divergences.push({
-          divergenceType: DivergenceType.MISSING_EDGE,
-          affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
-          affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
-          severity: isHierarchical ? DivergenceSeverity.HIGH : DivergenceSeverity.MEDIUM,
-          description: `Missing ${ckgEdge.edgeType} edge between aligned nodes`,
-        });
-      } else if (pkgEdge && !ckgEdge) {
-        // Extra edge
-        divergences.push({
-          divergenceType: DivergenceType.EXTRA_EDGE,
-          affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
-          affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
-          severity: DivergenceSeverity.LOW,
-          description: `Extra ${pkgEdge.edgeType} edge not in canonical graph`,
-        });
-      } else if (pkgEdge && ckgEdge && pkgEdge.edgeType !== ckgEdge.edgeType) {
-        // Wrong edge type
-        const isHierarchicalMismatch =
-          (ckgEdge.edgeType === EdgeType.IS_A && pkgEdge.edgeType === EdgeType.PART_OF) ||
-          (ckgEdge.edgeType === EdgeType.PART_OF && pkgEdge.edgeType === EdgeType.IS_A);
-        divergences.push({
-          divergenceType: DivergenceType.WRONG_EDGE_TYPE,
-          affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
-          affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
-          severity: isHierarchicalMismatch ? DivergenceSeverity.HIGH : DivergenceSeverity.MEDIUM,
-          description: `Edge type mismatch: PKG has ${pkgEdge.edgeType}, CKG expects ${ckgEdge.edgeType}`,
-        });
+      const pkgEdgeTypes = new Set(pkgEdges.map((e) => e.edgeType));
+      const ckgEdgeTypes = new Set(ckgEdges.map((e) => e.edgeType));
+
+      // Missing edges: CKG has this type, PKG doesn't
+      for (const ckgEdge of ckgEdges) {
+        if (!pkgEdgeTypes.has(ckgEdge.edgeType)) {
+          const isHierarchical =
+            ckgEdge.edgeType === EdgeType.PREREQUISITE ||
+            ckgEdge.edgeType === EdgeType.IS_A ||
+            ckgEdge.edgeType === EdgeType.PART_OF;
+          divergences.push({
+            divergenceType: DivergenceType.MISSING_EDGE,
+            affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
+            affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
+            severity: isHierarchical ? DivergenceSeverity.HIGH : DivergenceSeverity.MEDIUM,
+            description: `Missing ${ckgEdge.edgeType} edge between aligned nodes`,
+          });
+        }
+      }
+
+      // Extra edges: PKG has this type, CKG doesn't
+      for (const pkgEdge of pkgEdges) {
+        if (!ckgEdgeTypes.has(pkgEdge.edgeType)) {
+          divergences.push({
+            divergenceType: DivergenceType.EXTRA_EDGE,
+            affectedPkgNodeIds: [pkgSourceId, pkgTargetId],
+            affectedCkgNodeIds: [ckgSourceId, ckgTargetId],
+            severity: DivergenceSeverity.LOW,
+            description: `Extra ${pkgEdge.edgeType} edge not in canonical graph`,
+          });
+        }
       }
     }
   }
@@ -335,16 +342,30 @@ function detectDivergences(
 }
 
 /**
- * Build edge lookup: "sourceId|targetId" → edge (first edge wins for
- * same-direction duplicates).
+ * Count the number of edges incident to a node (as source or target).
+ * Used to estimate node importance for context-aware severity.
  */
-function buildEdgeMap(edges: readonly IGraphEdge[]): Map<string, IGraphEdge> {
-  const map = new Map<string, IGraphEdge>();
+function countNodeEdges(edges: readonly IGraphEdge[], nodeId: NodeId): number {
+  let count = 0;
+  for (const edge of edges) {
+    if (edge.sourceNodeId === nodeId || edge.targetNodeId === nodeId) {
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * Build multi-edge lookup: "sourceId|targetId" → all edges between pair.
+ * Used for divergence detection where we need to compare all edge types.
+ */
+function buildEdgeMultiMap(edges: readonly IGraphEdge[]): Map<string, IGraphEdge[]> {
+  const map = new Map<string, IGraphEdge[]>();
   for (const edge of edges) {
     const key = `${edge.sourceNodeId as string}|${edge.targetNodeId as string}`;
-    if (!map.has(key)) {
-      map.set(key, edge);
-    }
+    const list = map.get(key) ?? [];
+    list.push(edge);
+    map.set(key, list);
   }
   return map;
 }

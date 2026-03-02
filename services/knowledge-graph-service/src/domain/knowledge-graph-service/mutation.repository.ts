@@ -21,13 +21,13 @@ export interface ICkgMutation {
   readonly mutationId: MutationId;
 
   /** Current typestate */
-  state: MutationState;
+  readonly state: MutationState;
 
   /** Agent or admin user that proposed the mutation */
   readonly proposedBy: ProposerId;
 
   /** Optimistic locking version (incremented on each state transition) */
-  version: number;
+  readonly version: number;
 
   /** The mutation's operations (DSL) */
   readonly operations: Metadata[];
@@ -42,7 +42,7 @@ export interface ICkgMutation {
   readonly createdAt: string;
 
   /** When the mutation was last updated (ISO 8601) */
-  updatedAt: string;
+  readonly updatedAt: string;
 }
 
 /**

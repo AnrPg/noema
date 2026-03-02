@@ -151,8 +151,9 @@ export class CachedGraphRepository implements IGraphRepository {
     return updatedEdge;
   }
 
-  async findEdges(filter: IEdgeFilter): Promise<IGraphEdge[]> {
-    return this.inner.findEdges(filter);
+  async findEdges(filter: IEdgeFilter, limit?: number, offset?: number): Promise<IGraphEdge[]> {
+    // Bypass cache for paginated queries — cache only full-filter results.
+    return this.inner.findEdges(filter, limit, offset);
   }
 
   async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {

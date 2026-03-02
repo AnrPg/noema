@@ -59,7 +59,7 @@ import type {
 import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import { getConflictingEdgeTypesForAdvisory } from './ckg-validation-stages.js';
-import { ValidationError } from './errors/base.errors.js';
+import { UnauthorizedError, ValidationError } from './errors/base.errors.js';
 import {
   CyclicEdgeError,
   EdgeNotFoundError,
@@ -174,8 +174,8 @@ const MAX_PAGE_SIZE = 200;
  */
 export class KnowledgeGraphService implements IKnowledgeGraphService {
   private readonly logger: Logger;
-  private readonly metricsEngine = new StructuralMetricsEngine();
-  private readonly misconceptionEngine = new MisconceptionDetectionEngine();
+  private readonly metricsEngine: StructuralMetricsEngine;
+  private readonly misconceptionEngine: MisconceptionDetectionEngine;
 
   constructor(
     private readonly graphRepository: IGraphRepository,
@@ -188,6 +188,8 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     logger: Logger
   ) {
     this.logger = logger.child({ service: 'KnowledgeGraphService' });
+    this.metricsEngine = new StructuralMetricsEngine(this.logger);
+    this.misconceptionEngine = new MisconceptionDetectionEngine(this.logger);
   }
 
   // ========================================================================
@@ -638,15 +640,18 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
   async getEdge(
     userId: UserId,
-    edgeId: string,
+    edgeId: EdgeId,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphEdge>> {
     this.requireAuth(context);
     this.logger.debug({ userId, edgeId }, 'Getting PKG edge');
 
-    const edge = await this.graphRepository.getEdge(edgeId as EdgeId);
-    if (edge?.userId !== userId) {
+    const edge = await this.graphRepository.getEdge(edgeId);
+    if (!edge) {
       throw new EdgeNotFoundError(edgeId);
+    }
+    if (edge.userId !== userId) {
+      throw new UnauthorizedError('Not authorized to access this edge', userId);
     }
 
     return {
@@ -657,7 +662,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
   async updateEdge(
     userId: UserId,
-    edgeId: string,
+    edgeId: EdgeId,
     updates: IUpdateEdgeInput,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphEdge>> {
@@ -667,10 +672,13 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     // Validate input
     this.validateInput(UpdateEdgeInputSchema, updates, 'UpdateEdgeInput');
 
-    // Fetch current edge for before/after tracking
-    const existingEdge = await this.graphRepository.getEdge(edgeId as EdgeId);
-    if (existingEdge?.userId !== userId) {
+    // Fetch current edge for before/after tracking (userId-scoped)
+    const existingEdge = await this.graphRepository.getEdge(edgeId);
+    if (!existingEdge) {
       throw new EdgeNotFoundError(edgeId);
+    }
+    if (existingEdge.userId !== userId) {
+      throw new UnauthorizedError('Not authorized to update this edge', userId);
     }
 
     // Validate weight against policy if weight is being updated
@@ -688,7 +696,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     const changedFields = this.computeEdgeChangedFields(existingEdge, updates);
 
     // Update edge in Neo4j
-    const updatedEdge = await this.graphRepository.updateEdge(edgeId as EdgeId, updates);
+    const updatedEdge = await this.graphRepository.updateEdge(edgeId, updates);
 
     // Log & publish only if something actually changed
     if (changedFields.length > 0) {
@@ -745,20 +753,23 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
   async deleteEdge(
     userId: UserId,
-    edgeId: string,
+    edgeId: EdgeId,
     context: IExecutionContext
   ): Promise<IServiceResult<void>> {
     this.requireAuth(context);
     this.logger.info({ userId, edgeId }, 'Deleting PKG edge');
 
-    // Verify edge exists and belongs to user
-    const existingEdge = await this.graphRepository.getEdge(edgeId as EdgeId);
-    if (existingEdge?.userId !== userId) {
+    // Verify edge exists and belongs to user (userId-scoped)
+    const existingEdge = await this.graphRepository.getEdge(edgeId);
+    if (!existingEdge) {
       throw new EdgeNotFoundError(edgeId);
+    }
+    if (existingEdge.userId !== userId) {
+      throw new UnauthorizedError('Not authorized to delete this edge', userId);
     }
 
     // Hard-delete edge (edges have no soft-delete semantics)
-    await this.graphRepository.removeEdge(edgeId as EdgeId);
+    await this.graphRepository.removeEdge(edgeId);
 
     // Log operation
     const operation: IPkgEdgeDeletedOp = {
@@ -1891,7 +1902,14 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     );
 
     // Compute all 11 metrics
-    const metrics = this.metricsEngine.computeAll(ctx);
+    const { metrics, partialFailures } = this.metricsEngine.computeAll(ctx);
+
+    if (partialFailures.length > 0) {
+      this.logger.warn(
+        { domain, partialFailures },
+        'Structural metrics computed with partial failures'
+      );
+    }
 
     // Save snapshot
     await this.metricsRepository.saveSnapshot(userId, domain, metrics);
@@ -2026,7 +2044,15 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     };
 
     // Run detection engine
-    const rawResults = this.misconceptionEngine.detectAll(detectionCtx);
+    const { results: rawResults, detectorStatuses } =
+      this.misconceptionEngine.detectAll(detectionCtx);
+
+    if (detectorStatuses.some((s) => s.status === 'error')) {
+      this.logger.warn(
+        { domain, detectorStatuses: detectorStatuses.filter((s) => s.status === 'error') },
+        'Misconception detection completed with detector failures'
+      );
+    }
 
     // Persist detections
     const detections: IMisconceptionDetection[] = [];
@@ -2657,6 +2683,12 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
    * Validate traversal depth against the maximum allowed.
    */
   private validateTraversalDepth(depth: number): void {
+    if (!Number.isInteger(depth) || depth < 1) {
+      throw new ValidationError(
+        `Traversal depth must be a positive integer, got ${String(depth)}`,
+        { maxDepth: ['Must be a positive integer ≥ 1'] }
+      );
+    }
     if (depth > MAX_TRAVERSAL_DEPTH) {
       throw new ValidationError(
         `Traversal depth ${String(depth)} exceeds maximum allowed ${String(MAX_TRAVERSAL_DEPTH)}`,
@@ -2699,7 +2731,14 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       });
     }
     if (updates.properties !== undefined) {
-      changes.push({ field: 'properties', before: existing.properties, after: updates.properties });
+      // Use deep equality to avoid recording no-op changes for object fields
+      if (JSON.stringify(existing.properties) !== JSON.stringify(updates.properties)) {
+        changes.push({
+          field: 'properties',
+          before: existing.properties,
+          after: updates.properties,
+        });
+      }
     }
 
     return changes;
@@ -2721,7 +2760,14 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       changes.push({ field: 'weight', before: existing.weight, after: updates.weight });
     }
     if (updates.properties !== undefined) {
-      changes.push({ field: 'properties', before: existing.properties, after: updates.properties });
+      // Use deep equality to avoid recording no-op changes for object fields
+      if (JSON.stringify(existing.properties) !== JSON.stringify(updates.properties)) {
+        changes.push({
+          field: 'properties',
+          before: existing.properties,
+          after: updates.properties,
+        });
+      }
     }
 
     return changes;

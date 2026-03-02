@@ -5,6 +5,10 @@
 export { buildGraphComparison } from './graph-comparison-builder.js';
 export { buildMetricComputationContext } from './metric-computation-context.js';
 export { StructuralMetricsEngine } from './structural-metrics-engine.js';
+export type {
+  IMetricPartialFailure,
+  IMetricsComputationResult,
+} from './structural-metrics-engine.js';
 
 export type {
   IMetricComputationContext,

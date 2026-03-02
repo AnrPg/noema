@@ -25,6 +25,7 @@
 
 import type {
   CorrelationId,
+  EdgeId,
   EdgeWeight,
   GraphEdgeType,
   MasteryLevel,
@@ -405,7 +406,7 @@ export function createRemoveEdgeHandler(service: IKnowledgeGraphService) {
     try {
       const context = buildContext(userId, correlationId);
       const body = input as { edgeId: string; reason: string };
-      const result = await service.deleteEdge(userId as UserId, body.edgeId, {
+      const result = await service.deleteEdge(userId as UserId, body.edgeId as EdgeId, {
         ...context,
         reason: body.reason,
       } as IExecutionContext & { reason: string });

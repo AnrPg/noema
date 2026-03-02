@@ -67,10 +67,15 @@ export const PromotionBandUtil = {
    * @returns `true` if the count meets or exceeds the band's threshold.
    */
   meetsThreshold(band: PromotionBandEnum, count: number): boolean {
-    const threshold = PROMOTION_THRESHOLDS[band];
-    if (threshold === undefined) {
+    if (band === ('none' as PromotionBandEnum)) {
       // 'none' band has no threshold — vacuously true
       return true;
+    }
+    const threshold = PROMOTION_THRESHOLDS[band];
+    if (threshold === undefined) {
+      throw new Error(
+        `Unknown promotion band: '${band}'. Expected one of: weak, moderate, strong, definitive, none.`
+      );
     }
     return count >= threshold;
   },

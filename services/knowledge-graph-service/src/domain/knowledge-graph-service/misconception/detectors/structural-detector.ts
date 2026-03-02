@@ -7,13 +7,23 @@
  */
 
 import type { NodeId } from '@noema/types';
-import { GraphEdgeType as EdgeType, MisconceptionPatternKind } from '@noema/types';
+import {
+  ConfidenceScore as ConfidenceScoreFactory,
+  GraphEdgeType as EdgeType,
+  MisconceptionPatternKind,
+} from '@noema/types';
+import { z } from 'zod';
 
 import type {
   IMisconceptionDetectionContext,
   IMisconceptionDetectionResult,
   IMisconceptionDetector,
 } from '../types.js';
+
+/** Validated config shape for structural detector patterns */
+const StructuralDetectorConfigSchema = z.object({
+  detectionType: z.string().optional(),
+});
 
 export class StructuralMisconceptionDetector implements IMisconceptionDetector {
   readonly kind = MisconceptionPatternKind.STRUCTURAL;
@@ -25,8 +35,8 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
     const results: IMisconceptionDetectionResult[] = [];
 
     for (const pattern of structuralPatterns) {
-      const config = pattern.config as Record<string, unknown>;
-      const detectionType = config['detectionType'] as string | undefined;
+      const parsed = StructuralDetectorConfigSchema.safeParse(pattern.config);
+      const detectionType = parsed.success ? parsed.data.detectionType : undefined;
 
       switch (detectionType ?? pattern.name) {
         case 'circular_dependency':
@@ -83,22 +93,36 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
     // DFS cycle detection
     const visited = new Set<NodeId>();
     const inStack = new Set<NodeId>();
+    const stackPath: NodeId[] = []; // track DFS path for full cycle extraction
     const cycleNodes = new Set<NodeId>();
 
     const dfs = (nodeId: NodeId): void => {
       visited.add(nodeId);
       inStack.add(nodeId);
+      stackPath.push(nodeId);
 
       for (const neighbour of adj.get(nodeId) ?? []) {
         if (inStack.has(neighbour)) {
-          // Cycle detected
-          cycleNodes.add(nodeId);
-          cycleNodes.add(neighbour);
+          // Cycle detected — walk the stack backwards to collect all cycle participants
+          const cycleStartIdx = stackPath.indexOf(neighbour);
+          if (cycleStartIdx !== -1) {
+            for (let i = cycleStartIdx; i < stackPath.length; i++) {
+              const cycleNodeId = stackPath[i];
+              if (cycleNodeId !== undefined) {
+                cycleNodes.add(cycleNodeId);
+              }
+            }
+          } else {
+            // Fallback: at minimum record the two endpoints
+            cycleNodes.add(nodeId);
+            cycleNodes.add(neighbour);
+          }
         } else if (!visited.has(neighbour)) {
           dfs(neighbour);
         }
       }
 
+      stackPath.pop();
       inStack.delete(nodeId);
     };
 
@@ -113,7 +137,7 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
     return [
       {
         patternId,
-        confidence: 0.9,
+        confidence: ConfidenceScoreFactory.create(0.9),
         affectedNodeIds: [...cycleNodes],
         description: `Circular prerequisite dependency detected involving ${String(cycleNodes.size)} nodes.`,
       },
@@ -181,7 +205,7 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
 
       results.push({
         patternId,
-        confidence: Math.min(0.95, 0.5 + fraction),
+        confidence: ConfidenceScoreFactory.clamp(0.5 + fraction),
         affectedNodeIds: component,
         description: `Orphaned subgraph with ${String(component.length)} disconnected node(s).`,
       });
@@ -220,7 +244,7 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
       if (ckgHasReverse) {
         results.push({
           patternId,
-          confidence: 0.85,
+          confidence: ConfidenceScoreFactory.create(0.85),
           affectedNodeIds: [edge.sourceNodeId, edge.targetNodeId],
           description: `Inverted hierarchy: student has "${edge.sourceNodeId as string}" → "${edge.targetNodeId as string}" but CKG expects the reverse.`,
         });
@@ -267,7 +291,7 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
       if (!pkgHasEdge) {
         results.push({
           patternId,
-          confidence: 0.7,
+          confidence: ConfidenceScoreFactory.create(0.7),
           affectedNodeIds: [pkgSource, pkgTarget],
           description: `Missing prerequisite edge: "${pkgSource as string}" should be prerequisite of "${pkgTarget as string}".`,
         });
@@ -300,7 +324,7 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
       if (nodeIds.length > 1) {
         results.push({
           patternId,
-          confidence: 0.8,
+          confidence: ConfidenceScoreFactory.create(0.8),
           affectedNodeIds: nodeIds,
           description: `${String(nodeIds.length)} nodes share the label "${label}" — possible duplicate concepts.`,
         });
@@ -362,7 +386,7 @@ export class StructuralMisconceptionDetector implements IMisconceptionDetector {
     return [
       {
         patternId,
-        confidence: 0.6,
+        confidence: ConfidenceScoreFactory.create(0.6),
         affectedNodeIds: suspectNodes,
         description: `${String(suspectNodes.length)} node(s) appear to be missing incoming prerequisite links (broken chain).`,
       },

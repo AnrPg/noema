@@ -146,7 +146,7 @@ export interface IKnowledgeGraphService {
    */
   getEdge(
     userId: UserId,
-    edgeId: string,
+    edgeId: EdgeId,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphEdge>>;
 
@@ -155,7 +155,7 @@ export interface IKnowledgeGraphService {
    */
   updateEdge(
     userId: UserId,
-    edgeId: string,
+    edgeId: EdgeId,
     updates: IUpdateEdgeInput,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphEdge>>;
@@ -165,7 +165,7 @@ export interface IKnowledgeGraphService {
    */
   deleteEdge(
     userId: UserId,
-    edgeId: string,
+    edgeId: EdgeId,
     context: IExecutionContext
   ): Promise<IServiceResult<void>>;
 

@@ -16,6 +16,7 @@
  */
 
 import type { Logger } from 'pino';
+import { z } from 'zod';
 
 import type {
   AgentId,
@@ -44,6 +45,7 @@ import type { IValidationPipeline, IValidationResult, IValidationViolation } fro
 
 import {
   type CkgMutationOperation,
+  CkgMutationOperationSchema,
   CkgOperationType,
   extractAffectedEdgeIds,
   extractAffectedNodeIds,
@@ -60,6 +62,46 @@ import {
   MutationAlreadyCommittedError,
   MutationNotFoundError,
 } from './errors/index.js';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+const CkgMutationOperationsSchema = z.array(CkgMutationOperationSchema);
+
+/**
+ * Safely parse mutation operations from their DB-serialized form (Metadata[])
+ * into typed CkgMutationOperation[]. Throws a ZodError if the data is
+ * malformed, which the caller should handle or let propagate.
+ */
+function parseOperations(raw: unknown): CkgMutationOperation[] {
+  return CkgMutationOperationsSchema.parse(raw) as CkgMutationOperation[];
+}
+
+/**
+ * Convert operations to a serializable form suitable for event payloads.
+ * Explicitly picks only the fields that are safe to serialize (C3/H5 fix).
+ */
+function toSerializableOperations(operations: CkgMutationOperation[]): Metadata[] {
+  return operations.map((op) => {
+    const base: Record<string, unknown> = { type: op.type };
+    if ('nodeId' in op) base['nodeId'] = op.nodeId;
+    if ('edgeId' in op) base['edgeId'] = op.edgeId;
+    if ('label' in op) base['label'] = op.label;
+    if ('nodeType' in op) base['nodeType'] = op.nodeType;
+    if ('domain' in op) base['domain'] = op.domain;
+    if ('edgeType' in op) base['edgeType'] = op.edgeType;
+    if ('sourceNodeId' in op) base['sourceNodeId'] = op.sourceNodeId;
+    if ('targetNodeId' in op) base['targetNodeId'] = op.targetNodeId;
+    if ('weight' in op) base['weight'] = op.weight;
+    if ('properties' in op) base['properties'] = op.properties;
+    if ('description' in op) base['description'] = op.description;
+    if ('mergedNodeIds' in op) base['mergedNodeIds'] = op.mergedNodeIds;
+    if ('mergedLabel' in op) base['mergedLabel'] = op.mergedLabel;
+    if ('splitLabels' in op) base['splitLabels'] = op.splitLabels;
+    return base as Metadata;
+  });
+}
 
 // ============================================================================
 // CkgMutationPipeline
@@ -115,7 +157,7 @@ export class CkgMutationPipeline {
     // Create mutation in PROPOSED state
     const input: ICreateMutationInput = {
       proposedBy: proposerId,
-      operations: operations as unknown as Metadata[],
+      operations: toSerializableOperations(operations),
       rationale,
       evidenceCount,
     };
@@ -144,7 +186,7 @@ export class CkgMutationPipeline {
       {
         mutationId: mutation.mutationId,
         proposedBy: proposerId,
-        operations: operations as unknown as Metadata[],
+        operations: toSerializableOperations(operations),
         rationale,
         evidenceCount,
       },
@@ -252,7 +294,7 @@ export class CkgMutationPipeline {
     // Create new mutation with same operations
     return this.proposeMutation(
       original.proposedBy,
-      original.operations as unknown as CkgMutationOperation[],
+      parseOperations(original.operations),
       `Retry of ${mutationId}: ${original.rationale}`,
       original.evidenceCount,
       0,
@@ -740,7 +782,7 @@ export class CkgMutationPipeline {
       }
 
       // Publish CkgMutationCommitted event
-      const operations = mutation.operations as unknown as CkgMutationOperation[];
+      const operations = parseOperations(mutation.operations);
       await this.publishEvent(
         KnowledgeGraphEventType.CKG_MUTATION_COMMITTED,
         'CanonicalKnowledgeGraph',
@@ -809,7 +851,7 @@ export class CkgMutationPipeline {
     deletedNodeIds: string[];
     deletedEdgeIds: string[];
   }> {
-    const operations = mutation.operations as unknown as CkgMutationOperation[];
+    const operations = parseOperations(mutation.operations);
     const graphType: GraphType = 'ckg' as GraphType;
 
     // Wrap all operations in a single Neo4j transaction so a failure

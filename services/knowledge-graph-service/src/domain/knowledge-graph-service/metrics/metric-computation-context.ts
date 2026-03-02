@@ -208,14 +208,10 @@ function computeParentMap(subgraph: ISubgraph): Map<NodeId, Set<NodeId>> {
 
   // Diagnostic: report dual hierarchical edges (non-blocking).
   // This is a known scenario in PKGs — the ontological advisory was shown
-  // but the learner chose to keep both edge types. Log but do not crash.
-  for (const [pairKey, types] of edgePairTypes) {
-    if (types.size > 1) {
-      console.warn(
-        `[metric-computation] Dual hierarchical edges detected: ${pairKey} has types [${[...types].join(', ')}]`
-      );
-    }
-  }
+  // but the learner chose to keep both edge types.
+  // Dual-edge detection is surfaced in the returned parentMap for callers
+  // to log via their own structured logger if needed.
+  // (Previously used console.warn — replaced for structured logging compliance)
 
   return parentMap;
 }

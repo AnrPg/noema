@@ -17,7 +17,7 @@ import type {
   MetacognitiveStage,
   StructuralMetricType,
 } from '@noema/types';
-import { MetacognitiveStage as Stage } from '@noema/types';
+import { MetacognitiveStage as Stage, StructuralMetricType as SMT } from '@noema/types';
 
 // ============================================================================
 // Stage Gate Definitions
@@ -46,19 +46,19 @@ const STAGE_GATES: ReadonlyMap<MetacognitiveStage, readonly IGateRule[]> = new M
     [
       {
         field: 'abstractionDrift',
-        metricType: 'abstraction_drift' as StructuralMetricType,
+        metricType: SMT.ABSTRACTION_DRIFT,
         operator: 'below',
         threshold: 0.5,
       },
       {
         field: 'upwardLinkStrength',
-        metricType: 'upward_link_strength' as StructuralMetricType,
+        metricType: SMT.UPWARD_LINK_STRENGTH,
         operator: 'above',
         threshold: 0.4,
       },
       {
         field: 'traversalBreadthScore',
-        metricType: 'traversal_breadth_score' as StructuralMetricType,
+        metricType: SMT.TRAVERSAL_BREADTH_SCORE,
         operator: 'above',
         threshold: 0.3,
       },
@@ -71,31 +71,31 @@ const STAGE_GATES: ReadonlyMap<MetacognitiveStage, readonly IGateRule[]> = new M
     [
       {
         field: 'abstractionDrift',
-        metricType: 'abstraction_drift' as StructuralMetricType,
+        metricType: SMT.ABSTRACTION_DRIFT,
         operator: 'below',
         threshold: 0.3,
       },
       {
         field: 'scopeLeakageIndex',
-        metricType: 'scope_leakage_index' as StructuralMetricType,
+        metricType: SMT.SCOPE_LEAKAGE_INDEX,
         operator: 'below',
         threshold: 0.2,
       },
       {
         field: 'upwardLinkStrength',
-        metricType: 'upward_link_strength' as StructuralMetricType,
+        metricType: SMT.UPWARD_LINK_STRENGTH,
         operator: 'above',
         threshold: 0.6,
       },
       {
         field: 'strategyDepthFit',
-        metricType: 'strategy_depth_fit' as StructuralMetricType,
+        metricType: SMT.STRATEGY_DEPTH_FIT,
         operator: 'above',
         threshold: 0.5,
       },
       {
         field: 'structuralAttributionAccuracy',
-        metricType: 'structural_attribution_accuracy' as StructuralMetricType,
+        metricType: SMT.STRUCTURAL_ATTRIBUTION_ACCURACY,
         operator: 'above',
         threshold: 0.6,
       },
@@ -108,43 +108,43 @@ const STAGE_GATES: ReadonlyMap<MetacognitiveStage, readonly IGateRule[]> = new M
     [
       {
         field: 'abstractionDrift',
-        metricType: 'abstraction_drift' as StructuralMetricType,
+        metricType: SMT.ABSTRACTION_DRIFT,
         operator: 'below',
         threshold: 0.15,
       },
       {
         field: 'scopeLeakageIndex',
-        metricType: 'scope_leakage_index' as StructuralMetricType,
+        metricType: SMT.SCOPE_LEAKAGE_INDEX,
         operator: 'below',
         threshold: 0.1,
       },
       {
         field: 'siblingConfusionEntropy',
-        metricType: 'sibling_confusion_entropy' as StructuralMetricType,
+        metricType: SMT.SIBLING_CONFUSION_ENTROPY,
         operator: 'below',
         threshold: 0.2,
       },
       {
         field: 'upwardLinkStrength',
-        metricType: 'upward_link_strength' as StructuralMetricType,
+        metricType: SMT.UPWARD_LINK_STRENGTH,
         operator: 'above',
         threshold: 0.8,
       },
       {
         field: 'strategyDepthFit',
-        metricType: 'strategy_depth_fit' as StructuralMetricType,
+        metricType: SMT.STRATEGY_DEPTH_FIT,
         operator: 'above',
         threshold: 0.7,
       },
       {
         field: 'structuralAttributionAccuracy',
-        metricType: 'structural_attribution_accuracy' as StructuralMetricType,
+        metricType: SMT.STRUCTURAL_ATTRIBUTION_ACCURACY,
         operator: 'above',
         threshold: 0.8,
       },
       {
         field: 'structuralStabilityGain',
-        metricType: 'structural_stability_gain' as StructuralMetricType,
+        metricType: SMT.STRUCTURAL_STABILITY_GAIN,
         operator: 'above',
         threshold: 0.5,
       },

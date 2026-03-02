@@ -8,6 +8,8 @@
  * Design: Strategy per-kind with detector registry (ADR-006, D3-C).
  */
 
+import type { Logger } from 'pino';
+
 import type {
   IMisconceptionDetectionContext,
   IMisconceptionDetectionResult,
@@ -20,10 +22,31 @@ import {
   StructuralMisconceptionDetector,
 } from './detectors/index.js';
 
+// ============================================================================
+// Result types
+// ============================================================================
+
+export interface IDetectorStatus {
+  readonly kind: string;
+  readonly status: 'success' | 'error';
+  readonly error?: string;
+}
+
+export interface IMisconceptionDetectionEngineResult {
+  readonly results: IMisconceptionDetectionResult[];
+  readonly detectorStatuses: readonly IDetectorStatus[];
+}
+
+// ============================================================================
+// Engine
+// ============================================================================
+
 export class MisconceptionDetectionEngine {
   private readonly detectors: readonly IMisconceptionDetector[];
+  private readonly logger: Logger;
 
-  constructor() {
+  constructor(logger: Logger) {
+    this.logger = logger.child({ component: 'MisconceptionDetectionEngine' });
     this.detectors = [
       new StructuralMisconceptionDetector(),
       new StatisticalMisconceptionDetector(),
@@ -33,22 +56,28 @@ export class MisconceptionDetectionEngine {
 
   /**
    * Run all detectors against the given context.
-   * Returns consolidated detection results.
+   * Returns consolidated detection results plus per-detector status.
    */
-  detectAll(ctx: IMisconceptionDetectionContext): IMisconceptionDetectionResult[] {
+  detectAll(ctx: IMisconceptionDetectionContext): IMisconceptionDetectionEngineResult {
     const allResults: IMisconceptionDetectionResult[] = [];
+    const detectorStatuses: IDetectorStatus[] = [];
 
     for (const detector of this.detectors) {
       try {
         const results = detector.detect(ctx);
         allResults.push(...results);
+        detectorStatuses.push({ kind: detector.kind, status: 'success' });
       } catch (error) {
-        // Defensive: a single detector failure shouldn't crash the pipeline
+        const message = error instanceof Error ? error.message : String(error);
+        detectorStatuses.push({ kind: detector.kind, status: 'error', error: message });
 
-        console.error(`MisconceptionDetectionEngine: ${detector.kind} detector failed:`, error);
+        this.logger.error(
+          { detectorKind: detector.kind, error: message },
+          'Misconception detector failed'
+        );
       }
     }
 
-    return allResults;
+    return { results: allResults, detectorStatuses };
   }
 }

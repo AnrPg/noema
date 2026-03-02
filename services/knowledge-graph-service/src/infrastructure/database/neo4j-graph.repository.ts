@@ -73,22 +73,17 @@ import {
   mapRelationshipToGraphEdge,
   nodeTypeToLabel,
 } from './neo4j-mapper.js';
+import { RELATIONSHIP_TYPES } from './neo4j-schema.js';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-/** All 8 relationship types for Cypher multi-type patterns */
-const ALL_REL_TYPES = [
-  'PREREQUISITE',
-  'PART_OF',
-  'IS_A',
-  'RELATED_TO',
-  'CONTRADICTS',
-  'EXEMPLIFIES',
-  'CAUSES',
-  'DERIVED_FROM',
-] as const;
+/**
+ * All relationship types for Cypher multi-type patterns.
+ * Single source of truth: imported from neo4j-schema.ts (C1 fix).
+ */
+const ALL_REL_TYPES = RELATIONSHIP_TYPES;
 
 /** Build a Cypher relationship type pattern for given edge types */
 function buildRelTypePattern(edgeTypes?: readonly GraphEdgeType[]): string {
@@ -473,6 +468,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
     if (filter.targetNodeId !== undefined) {
       whereClauses.push('target.nodeId = $targetNodeId');
       params['targetNodeId'] = filter.targetNodeId;
+    }
+    if (filter.nodeId !== undefined) {
+      whereClauses.push('(source.nodeId = $nodeId OR target.nodeId = $nodeId)');
+      params['nodeId'] = filter.nodeId;
     }
     if (filter.userId !== undefined) {
       whereClauses.push('r.userId = $userId');
@@ -2209,7 +2208,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
       `MATCH (n) WHERE n.nodeId IN $nodeIds AND n.isDeleted = false
        ${userId !== undefined ? 'AND n.userId = $userId' : ''}
        RETURN n`,
-      { nodeId: [...nodeIds], ...(userId !== undefined ? { userId } : {}) }
+      { nodeIds: [...nodeIds], ...(userId !== undefined ? { userId } : {}) }
     );
 
     return result.records.map((r) => mapNodeToGraphNode(r.get('n') as neo4j.Node));

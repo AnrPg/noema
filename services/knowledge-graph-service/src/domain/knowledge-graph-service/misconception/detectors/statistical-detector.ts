@@ -7,13 +7,19 @@
  */
 
 import type { NodeId } from '@noema/types';
-import { MisconceptionPatternKind } from '@noema/types';
+import { ConfidenceScore as ConfidenceScoreFactory, MisconceptionPatternKind } from '@noema/types';
+import { z } from 'zod';
 
 import type {
   IMisconceptionDetectionContext,
   IMisconceptionDetectionResult,
   IMisconceptionDetector,
 } from '../types.js';
+
+/** Validated config shape for statistical detector patterns */
+const StatisticalDetectorConfigSchema = z.object({
+  detectionType: z.string().optional(),
+});
 
 export class StatisticalMisconceptionDetector implements IMisconceptionDetector {
   readonly kind = MisconceptionPatternKind.STATISTICAL;
@@ -25,8 +31,8 @@ export class StatisticalMisconceptionDetector implements IMisconceptionDetector 
     const results: IMisconceptionDetectionResult[] = [];
 
     for (const pattern of statisticalPatterns) {
-      const config = pattern.config as Record<string, unknown>;
-      const detectionType = config['detectionType'] as string | undefined;
+      const parsed = StatisticalDetectorConfigSchema.safeParse(pattern.config);
+      const detectionType = parsed.success ? parsed.data.detectionType : undefined;
 
       switch (detectionType ?? pattern.name) {
         case 'weight_anomaly':
@@ -88,7 +94,7 @@ export class StatisticalMisconceptionDetector implements IMisconceptionDetector 
     return [
       {
         patternId,
-        confidence: Math.min(0.9, 0.5 + anomalousEdges.length * 0.1),
+        confidence: ConfidenceScoreFactory.clamp(0.5 + anomalousEdges.length * 0.1),
         affectedNodeIds: [...affectedNodes],
         description: `${String(anomalousEdges.length)} edge(s) have statistically anomalous weights (z-score > ${String(zThreshold)}).`,
       },
@@ -136,7 +142,7 @@ export class StatisticalMisconceptionDetector implements IMisconceptionDetector 
     return [
       {
         patternId,
-        confidence: Math.min(0.85, 0.4 + outliers.length * 0.15),
+        confidence: ConfidenceScoreFactory.clamp(0.4 + outliers.length * 0.15),
         affectedNodeIds: outliers,
         description: `${String(outliers.length)} node(s) have statistically unusual degree centrality.`,
       },
@@ -195,7 +201,7 @@ export class StatisticalMisconceptionDetector implements IMisconceptionDetector 
     return [
       {
         patternId,
-        confidence: Math.min(0.75, 0.3 + lowClusteringNodes.length * 0.05),
+        confidence: ConfidenceScoreFactory.clamp(0.3 + lowClusteringNodes.length * 0.05),
         affectedNodeIds: lowClusteringNodes,
         description: `${String(lowClusteringNodes.length)} node(s) have many connections but low clustering — possible knowledge gaps.`,
       },

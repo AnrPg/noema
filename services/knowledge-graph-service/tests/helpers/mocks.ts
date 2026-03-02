@@ -9,14 +9,14 @@
  */
 
 import { vi } from 'vitest';
-import type { IEventPublisher, IEventToPublish } from '../../src/domain/shared/event-publisher.js';
 import type { IAggregationEvidenceRepository } from '../../src/domain/knowledge-graph-service/aggregation-evidence.repository.js';
-import type { IMetricsRepository } from '../../src/domain/knowledge-graph-service/metrics.repository.js';
+import type { IKnowledgeGraphService } from '../../src/domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { IMetricsStalenessRepository } from '../../src/domain/knowledge-graph-service/metrics-staleness.repository.js';
+import type { IMetricsRepository } from '../../src/domain/knowledge-graph-service/metrics.repository.js';
 import type { IMisconceptionRepository } from '../../src/domain/knowledge-graph-service/misconception.repository.js';
 import type { IMutationRepository } from '../../src/domain/knowledge-graph-service/mutation.repository.js';
 import type { IPkgOperationLogRepository } from '../../src/domain/knowledge-graph-service/pkg-operation-log.repository.js';
-import type { IKnowledgeGraphService } from '../../src/domain/knowledge-graph-service/knowledge-graph.service.js';
+import type { IEventPublisher, IEventToPublish } from '../../src/domain/shared/event-publisher.js';
 
 // ============================================================================
 // Service Mock

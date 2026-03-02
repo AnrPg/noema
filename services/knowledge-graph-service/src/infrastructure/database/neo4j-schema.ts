@@ -106,7 +106,7 @@ const NODE_INDEXES = [
  * Indexes cover edgeId (primary lookup), userId (PKG scoping), and weight
  * (threshold-based queries) per relationship type.
  */
-const RELATIONSHIP_TYPES = [
+export const RELATIONSHIP_TYPES = [
   'PREREQUISITE',
   'PART_OF',
   'IS_A',

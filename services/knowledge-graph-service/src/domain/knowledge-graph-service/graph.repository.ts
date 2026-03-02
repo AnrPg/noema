@@ -94,6 +94,12 @@ export interface IEdgeFilter {
   readonly edgeType?: GraphEdgeType;
   readonly sourceNodeId?: NodeId;
   readonly targetNodeId?: NodeId;
+  /**
+   * Match edges where the node appears as EITHER source OR target.
+   * Mutually exclusive with sourceNodeId/targetNodeId for directional queries.
+   * Used when direction is 'both'.
+   */
+  readonly nodeId?: NodeId;
   readonly userId?: string;
 }
 

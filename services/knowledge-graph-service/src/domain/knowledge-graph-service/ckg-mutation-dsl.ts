@@ -345,7 +345,7 @@ export const MutationFilterSchema = z.object({
     .optional(),
 
   /** Filter by proposer (agent or admin user) */
-  proposedBy: z.string().optional(),
+  proposedBy: z.string().min(1, 'proposedBy must be non-empty').optional(),
 
   /** Filter mutations created after this date (ISO 8601) */
   createdAfter: z.string().datetime().optional(),
