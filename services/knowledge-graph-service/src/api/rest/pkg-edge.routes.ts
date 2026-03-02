@@ -20,6 +20,8 @@ import {
 } from '../schemas/pkg-edge.schemas.js';
 import {
   type IRouteOptions,
+  UserEdgeParamSchema,
+  UserIdParamSchema,
   assertUserAccess,
   attachStartTimeHook,
   buildContext,
@@ -83,7 +85,7 @@ export function registerPkgEdgeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = CreateEdgeRequestSchema.parse(request.body);
@@ -146,7 +148,7 @@ export function registerPkgEdgeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = EdgeQueryParamsSchema.parse(request.query);
@@ -210,7 +212,7 @@ export function registerPkgEdgeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, edgeId } = request.params;
+        const { userId, edgeId } = UserEdgeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const context = buildContext(request);
@@ -254,7 +256,7 @@ export function registerPkgEdgeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, edgeId } = request.params;
+        const { userId, edgeId } = UserEdgeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = UpdateEdgeRequestSchema.parse(request.body);
@@ -302,12 +304,12 @@ export function registerPkgEdgeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, edgeId } = request.params;
+        const { userId, edgeId } = UserEdgeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const context = buildContext(request);
-        const result = await service.deleteEdge(userId as UserId, edgeId as EdgeId, context);
-        reply.status(204).send(wrapResponse(result.data, result.agentHints, request));
+        await service.deleteEdge(userId as UserId, edgeId as EdgeId, context);
+        reply.status(204).send();
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

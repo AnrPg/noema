@@ -78,6 +78,11 @@ export interface IServiceConfig {
       userService: string;
     };
   };
+  mutation: {
+    /** Whether formal proof stage (TLA+ verification) is enabled.
+     *  When false, proof stage auto-approves (Phase 6 behavior). */
+    proofStageEnabled: boolean;
+  };
   cors: {
     origin: string[];
     credentials: boolean;
@@ -197,6 +202,9 @@ export function loadConfig(): IServiceConfig {
         sessionService: optionalEnv('EVENT_STREAM_SESSION', 'noema:events:session-service'),
         userService: optionalEnv('EVENT_STREAM_USER', 'noema:events:user-service'),
       },
+    },
+    mutation: {
+      proofStageEnabled: optionalEnvBool('MUTATION_PROOF_STAGE_ENABLED', false),
     },
     cors: {
       origin: parseCorsOrigin(

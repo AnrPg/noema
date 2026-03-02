@@ -12,19 +12,20 @@
 import type { EdgeId, NodeId, UserId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type {
-    IKnowledgeGraphService,
-    IOperationLogFilter,
+  IKnowledgeGraphService,
+  IOperationLogFilter,
 } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { PkgOperationType } from '../../domain/knowledge-graph-service/value-objects/operation-log.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import { OperationLogQueryParamsSchema } from '../schemas/pkg-operation-log.schemas.js';
 import {
-    type IRouteOptions,
-    assertUserAccess,
-    attachStartTimeHook,
-    buildContext,
-    handleError,
-    wrapResponse,
+  type IRouteOptions,
+  UserIdParamSchema,
+  assertUserAccess,
+  attachStartTimeHook,
+  buildContext,
+  handleError,
+  wrapResponse,
 } from '../shared/route-helpers.js';
 
 // ============================================================================
@@ -55,7 +56,7 @@ export function registerPkgOperationLogRoutes(
         tags: ['PKG Operations'],
         summary: 'Get the PKG operation log',
         description:
-          'Retrieve the operation history for a user\'s PKG with filtering ' +
+          "Retrieve the operation history for a user's PKG with filtering " +
           'by operation type, node ID, edge ID, and time range. Supports pagination.',
         params: {
           type: 'object',
@@ -88,7 +89,7 @@ export function registerPkgOperationLogRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = OperationLogQueryParamsSchema.parse(request.query);
@@ -108,12 +109,7 @@ export function registerPkgOperationLogRoutes(
           offset: (query.page - 1) * query.pageSize,
         };
 
-        const result = await service.getOperationLog(
-          userId as UserId,
-          filter,
-          pagination,
-          context
-        );
+        const result = await service.getOperationLog(userId as UserId, filter, pagination, context);
 
         const response = wrapResponse(result.data, result.agentHints, request);
         response.pagination = {

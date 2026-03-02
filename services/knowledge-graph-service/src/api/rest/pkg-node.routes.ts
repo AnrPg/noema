@@ -21,6 +21,8 @@ import {
 } from '../schemas/pkg-node.schemas.js';
 import {
   type IRouteOptions,
+  UserIdParamSchema,
+  UserNodeParamSchema,
   assertUserAccess,
   attachStartTimeHook,
   buildContext,
@@ -81,7 +83,7 @@ export function registerPkgNodeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = CreateNodeRequestSchema.parse(request.body);
@@ -136,7 +138,7 @@ export function registerPkgNodeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = NodeQueryParamsSchema.parse(request.query);
@@ -194,7 +196,7 @@ export function registerPkgNodeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const context = buildContext(request);
@@ -240,7 +242,7 @@ export function registerPkgNodeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = UpdateNodeRequestSchema.parse(request.body);
@@ -293,12 +295,12 @@ export function registerPkgNodeRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const context = buildContext(request);
-        const result = await service.deleteNode(userId as UserId, nodeId as NodeId, context);
-        reply.status(204).send(wrapResponse(result.data, result.agentHints, request));
+        await service.deleteNode(userId as UserId, nodeId as NodeId, context);
+        reply.status(204).send();
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

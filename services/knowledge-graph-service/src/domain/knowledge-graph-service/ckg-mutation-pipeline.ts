@@ -63,7 +63,7 @@ import {
   MutationAlreadyCommittedError,
   MutationNotFoundError,
 } from './errors/index.js';
-import { kgCounters, KG_COUNTERS, withSpan } from './observability.js';
+import { KG_COUNTERS, kgCounters, withSpan } from './observability.js';
 
 // ============================================================================
 // Helpers
@@ -146,7 +146,8 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     private readonly graphRepository: IGraphRepository,
     private readonly validationPipeline: IValidationPipeline,
     private readonly eventPublisher: IEventPublisher,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly proofStageEnabled = false
   ) {}
 
   // ==========================================================================
@@ -811,19 +812,32 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       mutation,
       'proving',
       'system',
-      'Starting proof verification (Phase 6: auto-approved)',
+      this.proofStageEnabled
+        ? 'Starting formal proof verification (TLA+)'
+        : 'Starting proof verification (auto-approved: formal verification disabled)',
       context
     );
 
-    // PROVING → PROVEN (auto-transition — no actual proof logic in Phase 6)
+    if (this.proofStageEnabled) {
+      // TODO: Run actual TLA+ invariant checking when implemented.
+      // For now, even when enabled, we auto-approve since TLA+ integration
+      // is not yet available. This flag gates future implementation.
+      this.logger.warn(
+        { mutationId: mutation.mutationId },
+        'Proof stage enabled but TLA+ integration not yet implemented — auto-approving'
+      );
+    }
+
+    // PROVING → PROVEN (auto-transition — no actual proof logic yet)
     mutation = await this.transitionState(
       mutation,
       'proven',
       'system',
-      'Proof stage auto-approved: formal verification not required for Phase 6. ' +
-        'TLA+ invariant checking will be implemented in a future phase.',
+      this.proofStageEnabled
+        ? 'Proof stage auto-approved: TLA+ integration pending implementation.'
+        : 'Proof stage auto-approved: formal verification not required (disabled by config).',
       context,
-      { proofResult: { autoApproved: true, phase: 6 } }
+      { proofResult: { autoApproved: true, proofStageEnabled: this.proofStageEnabled } }
     );
 
     return mutation;

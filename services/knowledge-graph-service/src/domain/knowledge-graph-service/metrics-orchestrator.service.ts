@@ -44,8 +44,8 @@ import {
 import type { IMisconceptionRepository } from './misconception.repository.js';
 import type { IMisconceptionDetectionContext } from './misconception/index.js';
 import { MisconceptionDetectionEngine } from './misconception/index.js';
+import { KG_COUNTERS, kgCounters, withSpan } from './observability.js';
 import { detectSignificantMetricChange, requireAuth } from './service-helpers.js';
-import { kgCounters, KG_COUNTERS, withSpan } from './observability.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type { INodeFilter } from './value-objects/graph.value-objects.js';
 

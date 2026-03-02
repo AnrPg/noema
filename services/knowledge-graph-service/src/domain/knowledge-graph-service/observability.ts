@@ -15,8 +15,8 @@
  * @see ADR-013 for observability integration rationale (Fix 4.7)
  */
 
-import { SpanStatusCode, trace } from '@opentelemetry/api';
 import type { Span, SpanOptions } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 
 // ---------------------------------------------------------------------------
 // Named Tracer

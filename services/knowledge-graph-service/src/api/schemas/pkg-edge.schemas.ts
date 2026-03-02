@@ -5,12 +5,7 @@
  * and query strings.
  */
 
-import {
-    EdgeIdSchema,
-    GraphEdgeTypeSchema,
-    NodeIdSchema,
-    UserIdSchema,
-} from '@noema/validation';
+import { EdgeIdSchema, GraphEdgeTypeSchema, NodeIdSchema, UserIdSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================

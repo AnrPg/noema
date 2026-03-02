@@ -52,6 +52,7 @@ import {
   UpdateNodeInputSchema,
 } from './knowledge-graph.schemas.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
+import { KG_COUNTERS, kgCounters } from './observability.js';
 import type { IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
 import {
@@ -61,7 +62,6 @@ import {
   requireAuth,
   validateInput,
 } from './service-helpers.js';
-import { kgCounters, KG_COUNTERS } from './observability.js';
 import type { INodeFilter, IValidationOptions } from './value-objects/graph.value-objects.js';
 import type {
   IPkgEdgeCreatedOp,

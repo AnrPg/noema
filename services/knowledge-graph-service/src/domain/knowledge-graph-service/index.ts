@@ -356,4 +356,4 @@ export type {
 // Observability (Fix 4.7)
 // ============================================================================
 
-export { kgCounters, kgTracer, KG_COUNTERS, ServiceCounters, withSpan } from './observability.js';
+export { KG_COUNTERS, ServiceCounters, kgCounters, kgTracer, withSpan } from './observability.js';

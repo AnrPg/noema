@@ -15,6 +15,7 @@ import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import { CkgEdgeQueryParamsSchema } from '../schemas/ckg-edge.schemas.js';
 import {
   type IRouteOptions,
+  EdgeIdParamSchema,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -123,7 +124,7 @@ export function registerCkgEdgeRoutes(
     },
     async (request, reply) => {
       try {
-        const { edgeId } = request.params;
+        const { edgeId } = EdgeIdParamSchema.parse(request.params);
         const context = buildContext(request);
 
         const result = await service.getCkgEdge(edgeId as EdgeId, context);

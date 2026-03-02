@@ -14,7 +14,8 @@
  * structural integrity if schema validation fails.
  */
 
-import type { EdgeId, GraphEdgeType, MutationState, NodeId } from '@noema/types';
+import type { EdgeId, GraphEdgeType, Metadata, MutationState, NodeId } from '@noema/types';
+import { z } from 'zod';
 
 import type { IAggregationEvidenceRepository } from './aggregation-evidence.repository.js';
 import type { IGraphRepository } from './graph.repository.js';
@@ -34,6 +35,16 @@ import {
   extractAffectedNodeIds,
 } from './ckg-mutation-dsl.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
+
+/**
+ * Parse raw Metadata[] operations into typed CkgMutationOperation[]
+ * using Zod schema validation. Used by stages 2-4 that operate on
+ * operations already validated by SchemaValidationStage.
+ */
+function parseOperations(raw: Metadata[]): CkgMutationOperation[] {
+  // Zod validates structure; narrow cast bridges Record<string,unknown> → JsonValue gap
+  return z.array(CkgMutationOperationSchema).parse(raw) as CkgMutationOperation[];
+}
 
 // ============================================================================
 // Stage 1: Schema Validation
@@ -129,7 +140,7 @@ export class StructuralIntegrityStage implements IValidationStage {
   ): Promise<IValidationStageResult> {
     const start = Date.now();
     const violations: IValidationViolation[] = [];
-    const operations = mutation.operations as unknown as CkgMutationOperation[];
+    const operations = parseOperations(mutation.operations);
 
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i];
@@ -482,7 +493,7 @@ export class ConflictDetectionStage implements IValidationStage {
   ): Promise<IValidationStageResult> {
     const start = Date.now();
     const violations: IValidationViolation[] = [];
-    const operations = mutation.operations as unknown as CkgMutationOperation[];
+    const operations = parseOperations(mutation.operations);
 
     // Extract node/edge IDs affected by this mutation
     const myNodeIds = new Set(extractAffectedNodeIds(operations));
@@ -497,7 +508,7 @@ export class ConflictDetectionStage implements IValidationStage {
       for (const other of competing) {
         if (other.mutationId === mutation.mutationId) continue;
 
-        const otherOps = other.operations as unknown as CkgMutationOperation[];
+        const otherOps = parseOperations(other.operations);
         const otherNodeIds = new Set(extractAffectedNodeIds(otherOps));
         const otherEdgeIds = new Set(extractAffectedEdgeIds(otherOps));
 
@@ -604,7 +615,7 @@ export class EvidenceSufficiencyStage implements IValidationStage {
     }
 
     // For mutations with CKG target nodes, verify evidence in repository
-    const operations = mutation.operations as unknown as CkgMutationOperation[];
+    const operations = parseOperations(mutation.operations);
     const nodeIds = extractAffectedNodeIds(operations);
 
     for (const nodeId of nodeIds) {
@@ -786,7 +797,7 @@ export class OntologicalConsistencyStage implements IValidationStage {
   ): Promise<IValidationStageResult> {
     const start = Date.now();
     const violations: IValidationViolation[] = [];
-    const operations = mutation.operations as unknown as CkgMutationOperation[];
+    const operations = parseOperations(mutation.operations);
 
     // Collect all ADD_EDGE operations with their indices
     const addEdgeOps: {

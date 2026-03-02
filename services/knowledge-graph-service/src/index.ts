@@ -63,11 +63,7 @@ import {
 } from './infrastructure/database/repositories/index.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const SERVICE_VERSION = '0.1.0';
+import { SERVICE_VERSION } from './api/shared/route-helpers.js';
 
 // ============================================================================
 // Bootstrap
@@ -300,7 +296,8 @@ async function bootstrap(): Promise<void> {
     graphRepository,
     validationPipeline,
     eventPublisher,
-    logger
+    logger,
+    config.mutation.proofStageEnabled
   );
 
   // 6. Knowledge Graph Service (domain service)
@@ -366,16 +363,44 @@ async function bootstrap(): Promise<void> {
   );
   logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2 + Phase 9 MCP tools)');
 
+  // TODO(event-consumers): Wire up Redis stream consumers for cross-service events.
+  // Config is ready (config.consumers.enabled, config.consumers.streams) but consumer
+  // implementations are deferred until content-service and session-service publish events.
+  // See: docs/knowledge-graph-service-implementation/ for the planned consumer architecture.
+  if (config.consumers.enabled) {
+    logger.info(
+      { streams: config.consumers.streams },
+      'Event consumers configured but not yet wired — consumer implementations pending'
+    );
+  }
+
   // Graceful shutdown
+  const SHUTDOWN_TIMEOUT_MS = 10_000;
+  let isShuttingDown = false;
+
   const shutdown = async (signal: string): Promise<void> => {
+    if (isShuttingDown) return; // Prevent double-shutdown
+    isShuttingDown = true;
+
     logger.info({ signal }, 'Received shutdown signal');
 
-    await fastify.close();
-    await redis.quit();
-    await neo4jClient.close();
-    await prisma.$disconnect();
+    // Safety net: force exit if graceful shutdown hangs
+    const forceExitTimer = setTimeout(() => {
+      logger.error('Graceful shutdown timed out — forcing exit');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExitTimer.unref(); // Don't keep event loop alive for this timer
 
-    logger.info('Service shutdown complete');
+    try {
+      await fastify.close();
+      await redis.quit();
+      await neo4jClient.close();
+      await prisma.$disconnect();
+      logger.info('Service shutdown complete');
+    } catch (shutdownError) {
+      logger.error({ error: shutdownError }, 'Error during graceful shutdown');
+    }
+
     process.exit(0);
   };
 
@@ -384,6 +409,16 @@ async function bootstrap(): Promise<void> {
   });
   process.on('SIGINT', () => {
     void shutdown('SIGINT');
+  });
+
+  // Crash handlers — log and force exit on unrecoverable errors
+  process.on('unhandledRejection', (reason) => {
+    logger.fatal({ reason }, 'Unhandled promise rejection — shutting down');
+    void shutdown('unhandledRejection');
+  });
+  process.on('uncaughtException', (error) => {
+    logger.fatal({ error }, 'Uncaught exception — shutting down');
+    void shutdown('uncaughtException');
   });
 
   // Start server

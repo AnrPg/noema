@@ -27,4 +27,3 @@ export { registerComparisonRoutes } from './comparison.routes.js';
 export { registerMetricsRoutes } from './metrics.routes.js';
 export { registerMisconceptionRoutes } from './misconception.routes.js';
 export { registerStructuralHealthRoutes } from './structural-health.routes.js';
-

@@ -35,9 +35,14 @@ import {
   CkgSiblingsQueryParamsSchema,
   CkgSubgraphQueryParamsSchema,
 } from '../schemas/ckg-traversal.schemas.js';
-import { parseEdgeTypesFilter, parseNodeTypesFilter } from '../schemas/pkg-traversal.schemas.js';
+import {
+  TraversalDirectionQueryParamsSchema,
+  parseEdgeTypesFilter,
+  parseNodeTypesFilter,
+} from '../schemas/pkg-traversal.schemas.js';
 import {
   type IRouteOptions,
+  NodeIdParamSchema,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -141,17 +146,15 @@ export function registerCkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
 
-        const queryMap = request.query as Record<string, string>;
-        const maxDepth = Number(queryMap['maxDepth'] ?? 3);
-        const edgeTypesRaw = queryMap['edgeTypes'];
-        const edgeTypes = parseEdgeTypesFilter(edgeTypesRaw) as GraphEdgeType[] | undefined;
+        const query = TraversalDirectionQueryParamsSchema.parse(request.query);
+        const edgeTypes = parseEdgeTypesFilter(query.edgeTypes) as GraphEdgeType[] | undefined;
 
         const context = buildContext(request);
 
         const traversalOptions = TraversalOptions.create({
-          maxDepth,
+          maxDepth: query.maxDepth,
           ...(edgeTypes !== undefined ? { edgeTypes } : {}),
           direction: 'inbound',
           includeProperties: true,
@@ -196,17 +199,15 @@ export function registerCkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
 
-        const queryMap = request.query as Record<string, string>;
-        const maxDepth = Number(queryMap['maxDepth'] ?? 3);
-        const edgeTypesRaw = queryMap['edgeTypes'];
-        const edgeTypes = parseEdgeTypesFilter(edgeTypesRaw) as GraphEdgeType[] | undefined;
+        const query = TraversalDirectionQueryParamsSchema.parse(request.query);
+        const edgeTypes = parseEdgeTypesFilter(query.edgeTypes) as GraphEdgeType[] | undefined;
 
         const context = buildContext(request);
 
         const traversalOptions = TraversalOptions.create({
-          maxDepth,
+          maxDepth: query.maxDepth,
           ...(edgeTypes !== undefined ? { edgeTypes } : {}),
           direction: 'outbound',
           includeProperties: true,
@@ -298,7 +299,7 @@ export function registerCkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
         const parsed = CkgSiblingsQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
@@ -354,7 +355,7 @@ export function registerCkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
         const parsed = CkgCoParentsQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
@@ -409,7 +410,7 @@ export function registerCkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
         const parsed = CkgNeighborhoodQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
@@ -561,7 +562,7 @@ export function registerCkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
         const parsed = CkgPrerequisiteChainQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 

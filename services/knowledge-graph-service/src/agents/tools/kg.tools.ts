@@ -34,7 +34,8 @@ import type {
   UserId,
 } from '@noema/types';
 
-import type { IMutationProposal } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
+import { z } from 'zod';
+import { MutationProposalSchema } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
 import { DomainError } from '../../domain/knowledge-graph-service/errors/index.js';
 import type { IExecutionContext } from '../../domain/knowledge-graph-service/execution-context.js';
 import type {
@@ -50,6 +51,85 @@ import {
   TraversalOptions,
 } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
+
+// ============================================================================
+// Tool Input Zod Schemas (Fix 5.14: replace unsafe `input as` casts)
+// ============================================================================
+
+const NodeIdInputSchema = z.object({ nodeId: z.string().min(1) });
+
+const GetSubgraphInputSchema = z.object({
+  rootNodeId: z.string().min(1),
+  maxDepth: z.number().int().min(1).max(10).optional(),
+  edgeTypeFilter: z.array(z.string()).optional(),
+  direction: z.enum(['inbound', 'outbound', 'both']).optional(),
+});
+
+const FindPrerequisitesInputSchema = z.object({
+  nodeId: z.string().min(1),
+  maxDepth: z.number().int().min(1).max(10).optional(),
+  domain: z.string().min(1),
+});
+
+const NodeIdLimitInputSchema = z.object({
+  nodeId: z.string().min(1),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+const AddConceptNodeInputSchema = z.object({
+  label: z.string().min(1),
+  nodeType: z.string().min(1),
+  domain: z.string().min(1),
+  description: z.string().optional(),
+  properties: z.record(z.unknown()).optional(),
+});
+
+const AddEdgeInputSchema = z.object({
+  sourceNodeId: z.string().min(1),
+  targetNodeId: z.string().min(1),
+  edgeType: z.string().min(1),
+  weight: z.number().optional(),
+  skipAcyclicityCheck: z.boolean().optional(),
+});
+
+const UpdateMasteryInputSchema = z.object({
+  nodeId: z.string().min(1),
+  masteryLevel: z.number().min(0).max(1),
+  source: z.string().min(1),
+});
+
+const NodeIdReasonInputSchema = z.object({
+  nodeId: z.string().min(1),
+  reason: z.string().min(1),
+});
+
+const EdgeIdReasonInputSchema = z.object({
+  edgeId: z.string().min(1),
+  reason: z.string().min(1),
+});
+
+const GetCanonicalStructureInputSchema = z.object({
+  domain: z.string().optional(),
+  rootNodeId: z.string().optional(),
+  maxDepth: z.number().int().min(1).max(10).optional(),
+});
+
+const MutationIdInputSchema = z.object({ mutationId: z.string().min(1) });
+
+const DomainInputSchema = z.object({ domain: z.string().min(1) });
+
+const OptionalDomainInputSchema = z.object({ domain: z.string().optional() });
+
+const SuggestInterventionInputSchema = z.object({
+  misconceptionType: z.string().min(1),
+  affectedNodeIds: z.array(z.string().min(1)).min(1),
+  domain: z.string().optional(),
+});
+
+const DomainFocusNodeInputSchema = z.object({
+  domain: z.string().min(1),
+  focusNodeId: z.string().optional(),
+});
 
 // ============================================================================
 // Helpers (content-service pattern)
@@ -166,7 +246,7 @@ export function createGetConceptNodeHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { nodeId: string };
+      const body = NodeIdInputSchema.parse(input);
       const result = await service.getNode(userId as UserId, body.nodeId as NodeId, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -183,12 +263,7 @@ export function createGetSubgraphHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        rootNodeId: string;
-        maxDepth?: number;
-        edgeTypeFilter?: string[];
-        direction?: 'inbound' | 'outbound' | 'both';
-      };
+      const body = GetSubgraphInputSchema.parse(input);
       const edgeTypesCast = body.edgeTypeFilter as GraphEdgeType[] | undefined;
       const traversalOpts = TraversalOptions.create({
         maxDepth: body.maxDepth ?? 3,
@@ -217,7 +292,7 @@ export function createFindPrerequisitesHandler(service: IKnowledgeGraphService) 
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { nodeId: string; maxDepth?: number; domain: string };
+      const body = FindPrerequisitesInputSchema.parse(input);
       const prereqQuery = PrerequisiteChainQuery.create({
         domain: body.domain,
         maxDepth: body.maxDepth ?? 5,
@@ -245,7 +320,7 @@ export function createFindRelatedConceptsHandler(service: IKnowledgeGraphService
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { nodeId: string; limit?: number };
+      const body = NodeIdLimitInputSchema.parse(input);
       const neighborhoodQuery = NeighborhoodQuery.create({
         hops: 2,
         direction: 'both',
@@ -273,13 +348,7 @@ export function createAddConceptNodeHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        label: string;
-        nodeType: string;
-        domain: string;
-        description?: string;
-        properties?: Record<string, unknown>;
-      };
+      const body = AddConceptNodeInputSchema.parse(input);
       const createInput: ICreateNodeInput = {
         label: body.label,
         nodeType: body.nodeType,
@@ -303,13 +372,7 @@ export function createAddEdgeHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        sourceNodeId: string;
-        targetNodeId: string;
-        edgeType: string;
-        weight?: number;
-        skipAcyclicityCheck?: boolean;
-      };
+      const body = AddEdgeInputSchema.parse(input);
       const createInput: ICreateEdgeInput = {
         sourceNodeId: body.sourceNodeId as NodeId,
         targetNodeId: body.targetNodeId as NodeId,
@@ -346,11 +409,7 @@ export function createUpdateMasteryHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        nodeId: string;
-        masteryLevel: number;
-        source: string;
-      };
+      const body = UpdateMasteryInputSchema.parse(input);
       const result = await service.updateNode(
         userId as UserId,
         body.nodeId as NodeId,
@@ -378,7 +437,7 @@ export function createRemoveNodeHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { nodeId: string; reason: string };
+      const body = NodeIdReasonInputSchema.parse(input);
       // Store the reason in context metadata (the deleteNode service method
       // handles the soft-delete; reason is captured in the operation log)
       const result = await service.deleteNode(
@@ -405,7 +464,7 @@ export function createRemoveEdgeHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { edgeId: string; reason: string };
+      const body = EdgeIdReasonInputSchema.parse(input);
       const result = await service.deleteEdge(
         userId as UserId,
         body.edgeId as EdgeId,
@@ -437,11 +496,7 @@ export function createGetCanonicalStructureHandler(service: IKnowledgeGraphServi
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        domain?: string;
-        rootNodeId?: string;
-        maxDepth?: number;
-      };
+      const body = GetCanonicalStructureInputSchema.parse(input);
 
       if (body.rootNodeId !== undefined && body.rootNodeId !== '') {
         // Subgraph from a specific CKG node
@@ -478,7 +533,7 @@ export function createProposeMutationHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as IMutationProposal;
+      const body = MutationProposalSchema.parse(input);
       const result = await service.proposeMutation(body, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -495,7 +550,7 @@ export function createGetMutationStatusHandler(service: IKnowledgeGraphService) 
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { mutationId: string };
+      const body = MutationIdInputSchema.parse(input);
       const result = await service.getMutation(body.mutationId as MutationId, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -516,7 +571,7 @@ export function createComputeStructuralMetricsHandler(service: IKnowledgeGraphSe
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { domain: string };
+      const body = DomainInputSchema.parse(input);
       const result = await service.computeMetrics(userId as UserId, body.domain, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -533,7 +588,7 @@ export function createGetStructuralHealthHandler(service: IKnowledgeGraphService
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { domain: string };
+      const body = DomainInputSchema.parse(input);
       const result = await service.getStructuralHealth(userId as UserId, body.domain, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -550,7 +605,7 @@ export function createDetectMisconceptionsHandler(service: IKnowledgeGraphServic
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { domain?: string };
+      const body = OptionalDomainInputSchema.parse(input);
       // If domain is provided, run detection for that domain; otherwise
       // getMisconceptions returns all active misconceptions across domains.
       if (body.domain !== undefined && body.domain !== '') {
@@ -575,11 +630,7 @@ export function createSuggestInterventionHandler(service: IKnowledgeGraphService
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        misconceptionType: string;
-        affectedNodeIds: string[];
-        domain?: string;
-      };
+      const body = SuggestInterventionInputSchema.parse(input);
 
       // Compose: get misconceptions + metacognitive stage in parallel
       const [misconceptionsResult, stageResult] = await Promise.all([
@@ -640,7 +691,7 @@ export function createGetMetacognitiveStageHandler(service: IKnowledgeGraphServi
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as { domain: string };
+      const body = DomainInputSchema.parse(input);
       const result = await service.getMetacognitiveStage(userId as UserId, body.domain, context);
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -659,10 +710,7 @@ export function createGetLearningPathContextHandler(service: IKnowledgeGraphServ
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     try {
       const context = buildContext(userId, correlationId);
-      const body = input as {
-        domain: string;
-        focusNodeId?: string;
-      };
+      const body = DomainFocusNodeInputSchema.parse(input);
 
       // Build traversal options for focus subgraph
       const focusTraversal = TraversalOptions.create({

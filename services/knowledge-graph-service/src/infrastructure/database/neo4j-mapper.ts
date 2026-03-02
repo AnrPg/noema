@@ -50,10 +50,15 @@ export function toNumber(value: unknown): number {
 /**
  * Convert a Neo4j DateTime to an ISO string.
  * Handles Neo4j DateTime, Date, and LocalDateTime types.
+ *
+ * Returns a fallback epoch timestamp for null/unrecognized values
+ * (indicates data inconsistency — timestamps should always be present).
  */
+const EPOCH_FALLBACK = '1970-01-01T00:00:00.000Z';
+
 export function toIsoString(value: unknown): string {
-  if (value === null) {
-    return new Date().toISOString();
+  if (value === null || value === undefined) {
+    return EPOCH_FALLBACK;
   }
   // Neo4j DateTime objects have a toString() that produces ISO format
   if (typeof value === 'object' && 'toString' in value) {
@@ -62,7 +67,7 @@ export function toIsoString(value: unknown): string {
   if (typeof value === 'string') {
     return value;
   }
-  return new Date().toISOString();
+  return EPOCH_FALLBACK;
 }
 
 /**
@@ -109,19 +114,39 @@ export function graphTypeToLabel(graphType: string): string {
 }
 
 /**
+ * Validate that a string is safe to use as a Neo4j label.
+ * Prevents Cypher injection through label names.
+ */
+const SAFE_LABEL_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
  * Convert a nodeType string to a PascalCase Neo4j label.
  * e.g., 'concept' → 'Concept', 'counterexample' → 'Counterexample'
+ *
+ * Validates the result against a safe-label pattern to prevent Cypher injection.
  */
 export function nodeTypeToLabel(nodeType: string): string {
-  return nodeType.charAt(0).toUpperCase() + nodeType.slice(1);
+  const label = nodeType.charAt(0).toUpperCase() + nodeType.slice(1);
+  if (!SAFE_LABEL_PATTERN.test(label)) {
+    throw new Error(`Unsafe Neo4j label derived from nodeType "${nodeType}": "${label}"`);
+  }
+  return label;
 }
 
 /**
  * Convert a GraphEdgeType to the uppercase Neo4j relationship type.
  * e.g., 'prerequisite' → 'PREREQUISITE', 'part_of' → 'PART_OF'
+ *
+ * Validates the result against a safe-label pattern to prevent Cypher injection.
  */
 export function edgeTypeToRelType(edgeType: GraphEdgeType): string {
-  return (edgeType as string).toUpperCase();
+  const relType = (edgeType as string).toUpperCase();
+  if (!SAFE_LABEL_PATTERN.test(relType)) {
+    throw new Error(
+      `Unsafe Neo4j relationship type derived from edgeType "${edgeType}": "${relType}"`
+    );
+  }
+  return relType;
 }
 
 /**

@@ -34,11 +34,14 @@ import {
   PrerequisiteChainQueryParamsSchema,
   SiblingsQueryParamsSchema,
   SubgraphQueryParamsSchema,
+  TraversalDirectionQueryParamsSchema,
   parseEdgeTypesFilter,
   parseNodeTypesFilter,
 } from '../schemas/pkg-traversal.schemas.js';
 import {
   type IRouteOptions,
+  UserIdParamSchema,
+  UserNodeParamSchema,
   assertUserAccess,
   attachStartTimeHook,
   buildContext,
@@ -94,7 +97,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = SubgraphQueryParamsSchema.parse(request.query);
@@ -153,18 +156,16 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
-        const queryMap = request.query as Record<string, string>;
-        const maxDepth = Number(queryMap['maxDepth'] ?? 3);
-        const edgeTypesRaw = queryMap['edgeTypes'];
-        const edgeTypes = parseEdgeTypesFilter(edgeTypesRaw) as GraphEdgeType[] | undefined;
+        const query = TraversalDirectionQueryParamsSchema.parse(request.query);
+        const edgeTypes = parseEdgeTypesFilter(query.edgeTypes) as GraphEdgeType[] | undefined;
 
         const context = buildContext(request);
 
         const traversalOptions = TraversalOptions.create({
-          maxDepth,
+          maxDepth: query.maxDepth,
           ...(edgeTypes !== undefined ? { edgeTypes } : {}),
           direction: 'inbound',
           includeProperties: true,
@@ -214,18 +215,16 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
-        const queryMap = request.query as Record<string, string>;
-        const maxDepth = Number(queryMap['maxDepth'] ?? 3);
-        const edgeTypesRaw = queryMap['edgeTypes'];
-        const edgeTypes = parseEdgeTypesFilter(edgeTypesRaw) as GraphEdgeType[] | undefined;
+        const query = TraversalDirectionQueryParamsSchema.parse(request.query);
+        const edgeTypes = parseEdgeTypesFilter(query.edgeTypes) as GraphEdgeType[] | undefined;
 
         const context = buildContext(request);
 
         const traversalOptions = TraversalOptions.create({
-          maxDepth,
+          maxDepth: query.maxDepth,
           ...(edgeTypes !== undefined ? { edgeTypes } : {}),
           direction: 'outbound',
           includeProperties: true,
@@ -274,7 +273,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = PathQueryParamsSchema.parse(request.query);
@@ -331,7 +330,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = SiblingsQueryParamsSchema.parse(request.query);
@@ -394,7 +393,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = CoParentsQueryParamsSchema.parse(request.query);
@@ -457,7 +456,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = NeighborhoodQueryParamsSchema.parse(request.query);
@@ -520,7 +519,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = BridgeQueryParamsSchema.parse(request.query);
@@ -575,7 +574,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = FrontierQueryParamsSchema.parse(request.query);
@@ -635,7 +634,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = CommonAncestorsQueryParamsSchema.parse(request.query);
@@ -694,7 +693,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, nodeId } = request.params;
+        const { userId, nodeId } = UserNodeParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = PrerequisiteChainQueryParamsSchema.parse(request.query);
@@ -755,7 +754,7 @@ export function registerPkgTraversalRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = CentralityQueryParamsSchema.parse(request.query);

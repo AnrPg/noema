@@ -13,12 +13,13 @@ import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-servic
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import { ComparisonQueryParamsSchema } from '../schemas/comparison.schemas.js';
 import {
-    type IRouteOptions,
-    assertUserAccess,
-    attachStartTimeHook,
-    buildContext,
-    handleError,
-    wrapResponse,
+  type IRouteOptions,
+  UserIdParamSchema,
+  assertUserAccess,
+  attachStartTimeHook,
+  buildContext,
+  handleError,
+  wrapResponse,
 } from '../shared/route-helpers.js';
 
 // ============================================================================
@@ -49,7 +50,7 @@ export function registerComparisonRoutes(
         tags: ['Comparison'],
         summary: 'Compare PKG with CKG',
         description:
-          'Compare the user\'s Personal Knowledge Graph structure against the Canonical ' +
+          "Compare the user's Personal Knowledge Graph structure against the Canonical " +
           'Knowledge Graph for the specified domain. Returns alignment scores, divergences, ' +
           'and remediation suggestions.',
         params: {
@@ -68,7 +69,7 @@ export function registerComparisonRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = ComparisonQueryParamsSchema.parse(request.query);

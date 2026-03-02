@@ -48,14 +48,11 @@ describe('EDGE_TYPE_POLICIES completeness', () => {
 // ============================================================================
 
 describe('getEdgePolicy()', () => {
-  it.each(ALL_EDGE_TYPES.map((t) => [t]))(
-    'returns a policy for %s',
-    (edgeType) => {
-      const policy = getEdgePolicy(edgeType);
-      expect(policy).toBeDefined();
-      expect(policy.edgeType).toBe(edgeType);
-    }
-  );
+  it.each(ALL_EDGE_TYPES.map((t) => [t]))('returns a policy for %s', (edgeType) => {
+    const policy = getEdgePolicy(edgeType);
+    expect(policy).toBeDefined();
+    expect(policy.edgeType).toBe(edgeType);
+  });
 });
 
 // ============================================================================
@@ -88,19 +85,13 @@ describe('Acyclicity rules', () => {
     GraphEdgeType.CONTRASTS_WITH,
   ];
 
-  it.each(ACYCLIC_TYPES.map((t) => [t]))(
-    '%s requires acyclicity',
-    (edgeType) => {
-      expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(true);
-    }
-  );
+  it.each(ACYCLIC_TYPES.map((t) => [t]))('%s requires acyclicity', (edgeType) => {
+    expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(true);
+  });
 
-  it.each(NON_ACYCLIC_TYPES.map((t) => [t]))(
-    '%s does NOT require acyclicity',
-    (edgeType) => {
-      expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(false);
-    }
-  );
+  it.each(NON_ACYCLIC_TYPES.map((t) => [t]))('%s does NOT require acyclicity', (edgeType) => {
+    expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(false);
+  });
 
   it('11 acyclic + 6 non-acyclic = 17 total', () => {
     expect(ACYCLIC_TYPES.length + NON_ACYCLIC_TYPES.length).toBe(17);
@@ -122,17 +113,12 @@ describe('Symmetry properties', () => {
     GraphEdgeType.CONTRASTS_WITH,
   ];
 
-  it.each(SYMMETRIC_TYPES.map((t) => [t]))(
-    '%s is symmetric',
-    (edgeType) => {
-      expect(getEdgePolicy(edgeType).isSymmetric).toBe(true);
-    }
-  );
+  it.each(SYMMETRIC_TYPES.map((t) => [t]))('%s is symmetric', (edgeType) => {
+    expect(getEdgePolicy(edgeType).isSymmetric).toBe(true);
+  });
 
   it('non-symmetric types are asymmetric', () => {
-    const asymmetric = ALL_EDGE_TYPES.filter(
-      (t) => !SYMMETRIC_TYPES.includes(t)
-    );
+    const asymmetric = ALL_EDGE_TYPES.filter((t) => !SYMMETRIC_TYPES.includes(t));
     expect(asymmetric).toHaveLength(11);
     for (const t of asymmetric) {
       expect(getEdgePolicy(t).isSymmetric).toBe(false);
@@ -146,14 +132,8 @@ describe('Symmetry properties', () => {
 
 describe('Ontological categories', () => {
   const CATEGORY_MAP: Record<string, string[]> = {
-    [EdgeOntologicalCategory.TAXONOMIC]: [
-      GraphEdgeType.IS_A,
-      GraphEdgeType.EXEMPLIFIES,
-    ],
-    [EdgeOntologicalCategory.MEREOLOGICAL]: [
-      GraphEdgeType.PART_OF,
-      GraphEdgeType.CONSTITUTED_BY,
-    ],
+    [EdgeOntologicalCategory.TAXONOMIC]: [GraphEdgeType.IS_A, GraphEdgeType.EXEMPLIFIES],
+    [EdgeOntologicalCategory.MEREOLOGICAL]: [GraphEdgeType.PART_OF, GraphEdgeType.CONSTITUTED_BY],
     [EdgeOntologicalCategory.LOGICAL]: [
       GraphEdgeType.EQUIVALENT_TO,
       GraphEdgeType.ENTAILS,
@@ -178,12 +158,9 @@ describe('Ontological categories', () => {
   };
 
   for (const [category, edgeTypes] of Object.entries(CATEGORY_MAP)) {
-    it.each(edgeTypes.map((t) => [t]))(
-      `%s belongs to ${category}`,
-      (edgeType) => {
-        expect(getEdgePolicy(edgeType as GraphEdgeType).category).toBe(category);
-      }
-    );
+    it.each(edgeTypes.map((t) => [t]))(`%s belongs to ${category}`, (edgeType) => {
+      expect(getEdgePolicy(edgeType as GraphEdgeType).category).toBe(category);
+    });
   }
 
   it('all 6 categories are covered', () => {
@@ -191,10 +168,7 @@ describe('Ontological categories', () => {
   });
 
   it('all 17 edge types are assigned to a category', () => {
-    const totalMapped = Object.values(CATEGORY_MAP).reduce(
-      (sum, arr) => sum + arr.length,
-      0
-    );
+    const totalMapped = Object.values(CATEGORY_MAP).reduce((sum, arr) => sum + arr.length, 0);
     expect(totalMapped).toBe(17);
   });
 });

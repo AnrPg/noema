@@ -15,6 +15,7 @@ import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import { CkgNodeQueryParamsSchema } from '../schemas/ckg-node.schemas.js';
 import {
   type IRouteOptions,
+  NodeIdParamSchema,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -118,7 +119,7 @@ export function registerCkgNodeRoutes(
     },
     async (request, reply) => {
       try {
-        const { nodeId } = request.params;
+        const { nodeId } = NodeIdParamSchema.parse(request.params);
         const context = buildContext(request);
 
         const result = await service.getCkgNode(nodeId as NodeId, context);

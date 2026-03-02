@@ -12,16 +12,17 @@ import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
-    HealthQueryParamsSchema,
-    StageQueryParamsSchema,
+  HealthQueryParamsSchema,
+  StageQueryParamsSchema,
 } from '../schemas/structural-health.schemas.js';
 import {
-    type IRouteOptions,
-    assertUserAccess,
-    attachStartTimeHook,
-    buildContext,
-    handleError,
-    wrapResponse,
+  type IRouteOptions,
+  UserIdParamSchema,
+  assertUserAccess,
+  attachStartTimeHook,
+  buildContext,
+  handleError,
+  wrapResponse,
 } from '../shared/route-helpers.js';
 
 // ============================================================================
@@ -70,17 +71,13 @@ export function registerStructuralHealthRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = HealthQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
-        const result = await service.getStructuralHealth(
-          userId as UserId,
-          query.domain,
-          context
-        );
+        const result = await service.getStructuralHealth(userId as UserId, query.domain, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
@@ -100,7 +97,7 @@ export function registerStructuralHealthRoutes(
         tags: ['Structural Health'],
         summary: 'Get metacognitive stage assessment',
         description:
-          'Assess the user\'s metacognitive stage for the given domain based on ' +
+          "Assess the user's metacognitive stage for the given domain based on " +
           'structural metrics, stage gate criteria, and regression detection.',
         params: {
           type: 'object',
@@ -118,17 +115,13 @@ export function registerStructuralHealthRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = StageQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
-        const result = await service.getMetacognitiveStage(
-          userId as UserId,
-          query.domain,
-          context
-        );
+        const result = await service.getMetacognitiveStage(userId as UserId, query.domain, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

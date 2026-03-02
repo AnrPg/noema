@@ -19,6 +19,7 @@ import {
 } from '../schemas/metrics.schemas.js';
 import {
   type IRouteOptions,
+  UserIdParamSchema,
   assertUserAccess,
   attachStartTimeHook,
   buildContext,
@@ -75,7 +76,7 @@ export function registerMetricsRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = MetricsQueryParamsSchema.parse(request.query);
@@ -120,7 +121,7 @@ export function registerMetricsRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = MetricsComputeRequestSchema.parse(request.body);
@@ -165,7 +166,7 @@ export function registerMetricsRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = MetricsHistoryQueryParamsSchema.parse(request.query);

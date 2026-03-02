@@ -18,6 +18,8 @@ import {
 } from '../schemas/misconception.schemas.js';
 import {
   type IRouteOptions,
+  UserDetectionParamSchema,
+  UserIdParamSchema,
   assertUserAccess,
   attachStartTimeHook,
   buildContext,
@@ -74,7 +76,7 @@ export function registerMisconceptionRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const query = MisconceptionQueryParamsSchema.parse(request.query);
@@ -126,7 +128,7 @@ export function registerMisconceptionRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId } = request.params;
+        const { userId } = UserIdParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = DetectMisconceptionsRequestSchema.parse(request.body);
@@ -177,14 +179,14 @@ export function registerMisconceptionRoutes(
     },
     async (request, reply) => {
       try {
-        const { userId, detectionId } = request.params;
+        const { userId, detectionId } = UserDetectionParamSchema.parse(request.params);
         assertUserAccess(request, userId);
 
         const parsed = UpdateMisconceptionStatusRequestSchema.parse(request.body);
         const context = buildContext(request);
 
-        const result = await service.updateMisconceptionStatus(detectionId, parsed.status, context);
-        reply.status(204).send(wrapResponse(result.data, result.agentHints, request));
+        await service.updateMisconceptionStatus(detectionId, parsed.status, context);
+        reply.status(204).send();
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

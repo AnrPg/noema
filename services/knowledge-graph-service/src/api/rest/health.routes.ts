@@ -29,8 +29,7 @@ declare module 'fastify' {
   }
 }
 
-const SERVICE_NAME = 'knowledge-graph-service';
-const SERVICE_VERSION = '0.1.0';
+import { SERVICE_NAME, SERVICE_VERSION } from '../shared/route-helpers.js';
 
 /**
  * Check a dependency and return a standardized status.

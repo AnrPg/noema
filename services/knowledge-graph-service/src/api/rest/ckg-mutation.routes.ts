@@ -23,6 +23,7 @@ import {
 } from '../schemas/ckg-mutation.schemas.js';
 import {
   type IRouteOptions,
+  MutationIdParamSchema,
   assertAdminOrAgent,
   attachStartTimeHook,
   buildContext,
@@ -145,7 +146,19 @@ export function registerCkgMutationRoutes(
         };
 
         const result = await service.listMutations(filter, context);
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+
+        // Apply pagination at the API layer
+        const { page, pageSize } = query;
+        const start = (page - 1) * pageSize;
+        const paginatedData = result.data.slice(start, start + pageSize);
+
+        reply.send(
+          wrapResponse(paginatedData, result.agentHints, request, {
+            page,
+            pageSize,
+            total: result.data.length,
+          })
+        );
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }
@@ -203,7 +216,7 @@ export function registerCkgMutationRoutes(
     },
     async (request, reply) => {
       try {
-        const { mutationId } = request.params;
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
         const context = buildContext(request);
 
         const result = await service.getMutation(mutationId as MutationId, context);
@@ -237,7 +250,7 @@ export function registerCkgMutationRoutes(
     },
     async (request, reply) => {
       try {
-        const { mutationId } = request.params;
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
         const context = buildContext(request);
 
         const result = await service.getMutationAuditLog(mutationId as MutationId, context);
@@ -275,7 +288,7 @@ export function registerCkgMutationRoutes(
     async (request, reply) => {
       try {
         assertAdminOrAgent(request);
-        const { mutationId } = request.params;
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
         const context = buildContext(request);
 
         const result = await service.cancelMutation(mutationId as MutationId, context);
@@ -313,7 +326,7 @@ export function registerCkgMutationRoutes(
     async (request, reply) => {
       try {
         assertAdminOrAgent(request);
-        const { mutationId } = request.params;
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
         const context = buildContext(request);
 
         const result = await service.retryMutation(mutationId as MutationId, context);
@@ -359,7 +372,7 @@ export function registerCkgMutationRoutes(
     async (request, reply) => {
       try {
         assertAdminOrAgent(request);
-        const { mutationId } = request.params;
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
         const parsed = ApproveMutationRequestSchema.parse(request.body);
         const context = buildContext(request);
 
@@ -409,7 +422,7 @@ export function registerCkgMutationRoutes(
     async (request, reply) => {
       try {
         assertAdminOrAgent(request);
-        const { mutationId } = request.params;
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
         const parsed = RejectMutationRequestSchema.parse(request.body);
         const context = buildContext(request);
 

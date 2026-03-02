@@ -138,13 +138,7 @@ describe('POST /ckg/mutations', () => {
 
 describe('GET /ckg/mutations', () => {
   it('returns a list of mutations', async () => {
-    service.listMutations.mockResolvedValue(
-      serviceResult({
-        items: [ckgMutation()],
-        total: 1,
-        hasMore: false,
-      })
-    );
+    service.listMutations.mockResolvedValue(serviceResult([ckgMutation()]));
 
     const res = await readApp.inject({
       method: 'GET',

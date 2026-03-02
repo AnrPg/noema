@@ -207,6 +207,19 @@ export const PrerequisiteChainQueryParamsSchema = z.object({
 });
 
 // ============================================================================
+// Ancestors / Descendants Query Parameters
+// ============================================================================
+
+/**
+ * Query parameters for ancestors and descendants traversal endpoints.
+ * Replaces raw `Number(queryMap['maxDepth'])` with proper Zod coercion.
+ */
+export const TraversalDirectionQueryParamsSchema = z.object({
+  maxDepth: z.coerce.number().int().min(1).max(10).default(3),
+  edgeTypes: z.string().optional(),
+});
+
+// ============================================================================
 // Centrality Query Parameters (Phase 8d)
 // ============================================================================
 
@@ -240,3 +253,4 @@ export type FrontierQueryParams = z.infer<typeof FrontierQueryParamsSchema>;
 export type CommonAncestorsQueryParams = z.infer<typeof CommonAncestorsQueryParamsSchema>;
 export type PrerequisiteChainQueryParams = z.infer<typeof PrerequisiteChainQueryParamsSchema>;
 export type CentralityQueryParams = z.infer<typeof CentralityQueryParamsSchema>;
+export type TraversalDirectionQueryParams = z.infer<typeof TraversalDirectionQueryParamsSchema>;

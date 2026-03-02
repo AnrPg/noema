@@ -12,6 +12,7 @@
 import type { IApiResponse } from '@noema/contracts';
 import type { CorrelationId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ZodError, z } from 'zod';
 import {
   DomainError,
   RateLimitExceededError,
@@ -42,8 +43,8 @@ import type { IExecutionContext } from '../../domain/knowledge-graph-service/exe
 // Constants
 // ============================================================================
 
-const SERVICE_NAME = 'knowledge-graph-service';
-const SERVICE_VERSION = '0.1.0';
+export const SERVICE_NAME = 'knowledge-graph-service';
+export const SERVICE_VERSION = '0.1.0';
 
 // ============================================================================
 // Route Options
@@ -64,6 +65,37 @@ export interface IRouteOptions {
     batchLimit: number;
   };
 }
+
+// ============================================================================
+// URL Parameter Schemas
+// ============================================================================
+
+/**
+ * Reusable Zod schemas for URL path parameter validation.
+ * Prevents raw `as` casts by enforcing non-empty string constraints
+ * at runtime before domain logic is invoked.
+ */
+export const UserIdParamSchema = z.object({
+  userId: z.string().min(1, 'userId is required'),
+});
+
+export const NodeIdParamSchema = z.object({
+  nodeId: z.string().min(1, 'nodeId is required'),
+});
+
+export const EdgeIdParamSchema = z.object({
+  edgeId: z.string().min(1, 'edgeId is required'),
+});
+
+export const MutationIdParamSchema = z.object({
+  mutationId: z.string().min(1, 'mutationId is required'),
+});
+
+export const UserNodeParamSchema = UserIdParamSchema.merge(NodeIdParamSchema);
+export const UserEdgeParamSchema = UserIdParamSchema.merge(EdgeIdParamSchema);
+export const UserDetectionParamSchema = UserIdParamSchema.extend({
+  detectionId: z.string().min(1, 'detectionId is required'),
+});
 
 // ============================================================================
 // Request Augmentation
@@ -117,7 +149,8 @@ export function buildContext(request: FastifyRequest): IExecutionContext {
 export function wrapResponse<T>(
   data: T,
   agentHints: unknown,
-  request: FastifyRequest
+  request: FastifyRequest,
+  pagination?: { page: number; pageSize: number; total: number }
 ): IApiResponse<T> {
   const startTime = (request as ITimedRequest).startTime ?? Date.now();
   return {
@@ -130,6 +163,14 @@ export function wrapResponse<T>(
       serviceVersion: SERVICE_VERSION,
       executionTime: Date.now() - startTime,
     },
+    ...(pagination && {
+      pagination: {
+        offset: (pagination.page - 1) * pagination.pageSize,
+        limit: pagination.pageSize,
+        total: pagination.total,
+        hasMore: pagination.page * pagination.pageSize < pagination.total,
+      },
+    }),
   };
 }
 
@@ -206,6 +247,23 @@ export function handleError(
   logger: IErrorLogger
 ): void {
   const metadata = buildErrorMetadata(request);
+
+  // 400 — Zod validation error (schema parsing failures)
+  if (error instanceof ZodError) {
+    reply.status(400).send({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'Request validation failed',
+        fieldErrors: error.errors.map((e) => ({
+          path: e.path.join('.'),
+          message: e.message,
+          code: e.code,
+        })),
+      },
+      metadata,
+    });
+    return;
+  }
 
   // 400 — Validation
   if (error instanceof ValidationError) {

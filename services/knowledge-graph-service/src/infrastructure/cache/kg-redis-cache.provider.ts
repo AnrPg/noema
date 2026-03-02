@@ -102,13 +102,21 @@ export class KgRedisCacheProvider {
    * Get a value from cache or load it via the provided function.
    * Cache misses and errors both trigger the loader.
    * Loader errors PROPAGATE (only Redis errors are swallowed).
+   * Null/undefined loader results are NOT cached to prevent negative caching.
    */
   async getOrLoad<T>(key: string, ttlSeconds: number, loader: () => Promise<T>): Promise<T> {
     const cached = await this.get(key);
     if (cached !== null) return cached as T;
 
     const value = await loader();
-    await this.set(key, value, ttlSeconds);
+
+    // Skip caching null/undefined to prevent negative caching of missing entities.
+    // The generic T may include null at runtime (e.g., T = IGraphNode | null)
+    // even if the type parameter doesn't explicitly include it.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (value !== null && value !== undefined) {
+      await this.set(key, value, ttlSeconds);
+    }
     return value;
   }
 

@@ -216,6 +216,19 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const session = this.neo4j.getSession();
     try {
       const result = await session.executeWrite(async (tx: ManagedTransaction) => {
+        // Soft-delete connected edges first to prevent orphaned references
+        await tx.run(
+          `MATCH (n {nodeId: $nodeId, isDeleted: false})-[r]-(m)
+           ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
+           SET r.isDeleted = true, r.deletedAt = $deletedAt, r.updatedAt = $deletedAt`,
+          {
+            nodeId,
+            deletedAt: new Date().toISOString(),
+            ...(userId !== undefined ? { userId } : {}),
+          }
+        );
+
+        // Then soft-delete the node itself
         return tx.run(
           `MATCH (n {nodeId: $nodeId, isDeleted: false})
            ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
@@ -233,7 +246,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
         throw new NodeNotFoundError(nodeId);
       }
 
-      this.logger.debug({ nodeId }, 'Node soft-deleted');
+      this.logger.debug({ nodeId }, 'Node and connected edges soft-deleted');
     } catch (error) {
       this.translateNeo4jError(error, 'deleteNode', { nodeId });
     } finally {
