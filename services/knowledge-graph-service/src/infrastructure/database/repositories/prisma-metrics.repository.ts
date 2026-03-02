@@ -16,6 +16,17 @@ import type {
 } from '../../../domain/knowledge-graph-service/metrics.repository.js';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Current schema version for metric snapshots. Bump this when the
+ * IStructuralMetrics shape changes (new fields added, fields renamed, etc.)
+ * so consumers can detect and handle older snapshots appropriately (L2 fix).
+ */
+const CURRENT_METRICS_SCHEMA_VERSION = 1;
+
+// ============================================================================
 // PrismaMetricsRepository
 // ============================================================================
 
@@ -35,6 +46,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
         userId: userId as string,
         domain,
         metrics: metrics as unknown as Prisma.JsonObject,
+        schemaVersion: CURRENT_METRICS_SCHEMA_VERSION,
       },
     });
 
@@ -102,6 +114,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
     userId: string;
     domain: string | null;
     metrics: Prisma.JsonValue;
+    schemaVersion: number;
     createdAt: Date;
   }): IMetricSnapshot {
     return {
@@ -110,6 +123,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
       domain: record.domain ?? '',
       metrics: record.metrics as unknown as IStructuralMetrics,
       computedAt: record.createdAt.toISOString(),
+      schemaVersion: record.schemaVersion,
     };
   }
 }

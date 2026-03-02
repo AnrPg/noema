@@ -182,6 +182,12 @@ export type {
 export { KnowledgeGraphService } from './knowledge-graph.service.impl.js';
 
 // ============================================================================
+// Agent Hints Factory (4.5)
+// ============================================================================
+
+export { AgentHintsBuilder, AgentHintsFactory } from './agent-hints.factory.js';
+
+// ============================================================================
 // Validation Schemas (Zod)
 // ============================================================================
 
@@ -345,3 +351,9 @@ export type {
   IMisconceptionDetectionResult,
   IMisconceptionDetector,
 } from './misconception/index.js';
+
+// ============================================================================
+// Observability (Fix 4.7)
+// ============================================================================
+
+export { kgCounters, kgTracer, KG_COUNTERS, ServiceCounters, withSpan } from './observability.js';

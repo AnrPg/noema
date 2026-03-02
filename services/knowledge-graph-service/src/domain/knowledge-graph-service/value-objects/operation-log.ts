@@ -10,7 +10,14 @@
  * access to operation-specific fields.
  */
 
-import type { EdgeId, EdgeWeight, GraphEdgeType, GraphNodeType, Metadata, NodeId } from '@noema/types';
+import type {
+  EdgeId,
+  EdgeWeight,
+  GraphEdgeType,
+  GraphNodeType,
+  Metadata,
+  NodeId,
+} from '@noema/types';
 
 // ============================================================================
 // Operation Type Discriminator
@@ -149,6 +156,4 @@ export type PkgAtomicOperation =
 /**
  * Any PKG operation (including batch).
  */
-export type PkgOperation =
-  | PkgAtomicOperation
-  | IPkgBatchImportOp;
+export type PkgOperation = PkgAtomicOperation | IPkgBatchImportOp;

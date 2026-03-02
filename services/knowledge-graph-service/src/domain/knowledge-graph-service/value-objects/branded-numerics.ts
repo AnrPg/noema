@@ -31,9 +31,7 @@ export const PositiveDepth = {
    */
   create(value: number): PositiveDepth {
     if (!Number.isInteger(value) || value < 1) {
-      throw new Error(
-        `PositiveDepth must be a positive integer (≥ 1), received: ${String(value)}`
-      );
+      throw new Error(`PositiveDepth must be a positive integer (≥ 1), received: ${String(value)}`);
     }
     return value as PositiveDepth;
   },

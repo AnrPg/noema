@@ -39,6 +39,7 @@
     "@noema/events": "workspace:*",
     "@noema/types": "workspace:*",
     "@noema/validation": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
     "@prisma/client": "^5.22.0",
     "fastify": "^5.2.0",
     "ioredis": "^5.4.2",

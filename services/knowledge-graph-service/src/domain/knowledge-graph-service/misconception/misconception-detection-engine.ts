@@ -16,12 +16,12 @@ import type {
   IMisconceptionDetector,
 } from './types.js';
 
+import type { ISemanticDetectorConfig } from './detectors/index.js';
 import {
   SemanticMisconceptionDetector,
   StatisticalMisconceptionDetector,
   StructuralMisconceptionDetector,
 } from './detectors/index.js';
-import type { ISemanticDetectorConfig } from './detectors/index.js';
 
 // ============================================================================
 // Config

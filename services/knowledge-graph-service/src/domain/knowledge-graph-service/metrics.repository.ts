@@ -31,6 +31,13 @@ export interface IMetricSnapshot {
 
   /** When the snapshot was computed (ISO 8601) */
   readonly computedAt: string;
+
+  /**
+   * Schema version for forward-compatible deserialization.
+   * Older snapshots missing new metric fields can be detected and
+   * handled by checking this version. Defaults to 1 for legacy snapshots.
+   */
+  readonly schemaVersion: number;
 }
 
 /**

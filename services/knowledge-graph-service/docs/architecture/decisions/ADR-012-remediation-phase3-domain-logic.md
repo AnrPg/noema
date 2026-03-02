@@ -11,8 +11,8 @@ algorithm correctness, and business rule hardening. These fixes depend on the
 repository interfaces and DI contracts added in Phase 2 (ADR-011).
 
 Phase 1 (ADR-010) fixed data bugs and type safety. Phase 2 (ADR-011) added
-repository methods and interfaces. Phase 3 consumes those new methods to fix
-the domain logic layer.
+repository methods and interfaces. Phase 3 consumes those new methods to fix the
+domain logic layer.
 
 ## Decisions
 
@@ -162,8 +162,8 @@ semantic equivalent.
 
 ### Negative
 
-- `SemanticMisconceptionDetector` will throw if enabled without implementation
-  — intentional, forces explicit attention when vector service is deployed
+- `SemanticMisconceptionDetector` will throw if enabled without implementation —
+  intentional, forces explicit attention when vector service is deployed
 - Custom validator context type is `unknown` in the interface — callers must
   cast, but this preserves the existing interface contract
 
@@ -171,8 +171,8 @@ semantic equivalent.
 
 - Phase 4 will address God object splitting, observability, and the outbox
   pattern
-- Vector service integration should implement the semantic detector body
-  before enabling `vectorServiceEnabled`
+- Vector service integration should implement the semantic detector body before
+  enabling `vectorServiceEnabled`
 
 ## Test Results
 

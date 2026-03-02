@@ -37,6 +37,7 @@ import {
 } from './api/rest/index.js';
 import type { IRouteOptions } from './api/shared/route-helpers.js';
 import { getTokenVerifierConfig, loadConfig } from './config/index.js';
+import { AgentHintsFactory } from './domain/knowledge-graph-service/agent-hints.factory.js';
 import { CkgMutationPipeline } from './domain/knowledge-graph-service/ckg-mutation-pipeline.js';
 import { CkgValidationPipeline } from './domain/knowledge-graph-service/ckg-validation-pipeline.js';
 import {
@@ -311,6 +312,7 @@ async function bootstrap(): Promise<void> {
     misconceptionRepository,
     eventPublisher,
     mutationPipeline,
+    new AgentHintsFactory(),
     logger
   );
 

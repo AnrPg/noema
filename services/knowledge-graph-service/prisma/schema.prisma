@@ -149,6 +149,10 @@ model StructuralMetricSnapshot {
     // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, SSG, BSI }
     metrics Json
 
+    // Schema version for forward-compatible deserialization of metrics.
+    // Older snapshots missing new metric fields can be detected by checking this.
+    schemaVersion Int @default(1) @map("schema_version")
+
     // Optional graph region identifier (for per-region staging)
     graphRegion String? @map("graph_region") @db.VarChar(200)
 

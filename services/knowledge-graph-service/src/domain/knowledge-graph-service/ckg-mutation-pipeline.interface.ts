@@ -107,6 +107,19 @@ export interface ICkgMutationPipeline {
   }>;
 
   /**
+   * Return in-process pipeline failure/success counters (4.8).
+   * Counters reset on service restart.
+   */
+  getPipelineErrorMetrics(): {
+    pipelineSuccessCount: number;
+    pipelineFailureCount: number;
+    postReviewSuccessCount: number;
+    postReviewFailureCount: number;
+    lastFailureTimestamp: string | null;
+    lastFailureMutationId: string | null;
+  };
+
+  /**
    * Run the full pipeline for a mutation asynchronously.
    */
   runPipelineAsync(mutationId: MutationId, context: IExecutionContext): Promise<void>;
@@ -116,4 +129,11 @@ export interface ICkgMutationPipeline {
    * state for too long.
    */
   recoverStuckMutations(context: IExecutionContext): Promise<number>;
+
+  /**
+   * Reconcile mutations stuck in COMMITTING state due to cross-DB
+   * inconsistency (Neo4j committed but Postgres state update failed).
+   * Transitions them to COMMITTED after a safety threshold.
+   */
+  reconcileStuckCommitting(context: IExecutionContext): Promise<number>;
 }

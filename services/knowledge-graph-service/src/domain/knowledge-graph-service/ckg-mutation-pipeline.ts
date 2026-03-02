@@ -43,7 +43,6 @@ import type {
 } from './mutation.repository.js';
 import type { IValidationPipeline, IValidationResult, IValidationViolation } from './validation.js';
 
-import type { ICkgMutationPipeline } from './ckg-mutation-pipeline.interface.js';
 import {
   type CkgMutationOperation,
   CkgMutationOperationSchema,
@@ -51,6 +50,7 @@ import {
   extractAffectedEdgeIds,
   extractAffectedNodeIds,
 } from './ckg-mutation-dsl.js';
+import type { ICkgMutationPipeline } from './ckg-mutation-pipeline.interface.js';
 import {
   CANCELLABLE_STATES,
   isTerminalState,
@@ -63,6 +63,7 @@ import {
   MutationAlreadyCommittedError,
   MutationNotFoundError,
 } from './errors/index.js';
+import { kgCounters, KG_COUNTERS, withSpan } from './observability.js';
 
 // ============================================================================
 // Helpers
@@ -105,6 +106,20 @@ function toSerializableOperations(operations: CkgMutationOperation[]): Metadata[
 }
 
 // ============================================================================
+// Pipeline Error Metrics (4.8)
+// ============================================================================
+
+/** In-process pipeline failure/success counters for observability (4.8). */
+export interface IPipelineErrorMetrics {
+  pipelineSuccessCount: number;
+  pipelineFailureCount: number;
+  postReviewSuccessCount: number;
+  postReviewFailureCount: number;
+  lastFailureTimestamp: string | null;
+  lastFailureMutationId: string | null;
+}
+
+// ============================================================================
 // CkgMutationPipeline
 // ============================================================================
 
@@ -116,6 +131,16 @@ function toSerializableOperations(operations: CkgMutationOperation[]): Metadata[
  * repository and use the typestate machine for transition enforcement.
  */
 export class CkgMutationPipeline implements ICkgMutationPipeline {
+  /** In-process pipeline error metrics (4.8). */
+  private readonly pipelineMetrics: IPipelineErrorMetrics = {
+    pipelineSuccessCount: 0,
+    pipelineFailureCount: 0,
+    postReviewSuccessCount: 0,
+    postReviewFailureCount: 0,
+    lastFailureTimestamp: null,
+    lastFailureMutationId: null,
+  };
+
   constructor(
     private readonly mutationRepository: IMutationRepository,
     private readonly graphRepository: IGraphRepository,
@@ -150,54 +175,63 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     priority: number,
     context: IExecutionContext
   ): Promise<ICkgMutation> {
-    this.logger.info(
-      { proposerId, operationCount: operations.length, evidenceCount },
-      'Proposing CKG mutation'
-    );
+    return withSpan('ckg.proposeMutation', async (span) => {
+      span.setAttribute('kg.proposerId', proposerId as string);
+      span.setAttribute('kg.operationCount', operations.length);
+      span.setAttribute('kg.evidenceCount', evidenceCount);
 
-    // Create mutation in PROPOSED state
-    const input: ICreateMutationInput = {
-      proposedBy: proposerId,
-      operations: toSerializableOperations(operations),
-      rationale,
-      evidenceCount,
-    };
+      this.logger.info(
+        { proposerId, operationCount: operations.length, evidenceCount },
+        'Proposing CKG mutation'
+      );
 
-    const mutation = await this.mutationRepository.createMutation(input);
-
-    // Audit log: initial creation
-    await this.mutationRepository.appendAuditEntry({
-      mutationId: mutation.mutationId,
-      fromState: 'proposed' as MutationState,
-      toState: 'proposed' as MutationState,
-      performedBy: proposerId as string,
-      context: {
-        action: 'created',
-        operationCount: operations.length,
-        evidenceCount,
-        priority,
-      },
-    });
-
-    // Publish CkgMutationProposed event (D3: event audit trail)
-    await this.publishEvent(
-      KnowledgeGraphEventType.CKG_MUTATION_PROPOSED,
-      'CanonicalKnowledgeGraph',
-      mutation.mutationId,
-      {
-        mutationId: mutation.mutationId,
+      // Create mutation in PROPOSED state
+      const input: ICreateMutationInput = {
         proposedBy: proposerId,
         operations: toSerializableOperations(operations),
         rationale,
         evidenceCount,
-      },
-      context
-    );
+      };
 
-    // Fire async validation (D3: fire-and-forget in-process)
-    void this.runPipelineAsync(mutation.mutationId, context);
+      const mutation = await this.mutationRepository.createMutation(input);
+      span.setAttribute('kg.mutationId', mutation.mutationId as string);
 
-    return mutation;
+      // Audit log: initial creation
+      await this.mutationRepository.appendAuditEntry({
+        mutationId: mutation.mutationId,
+        fromState: 'proposed' as MutationState,
+        toState: 'proposed' as MutationState,
+        performedBy: proposerId as string,
+        context: {
+          action: 'created',
+          operationCount: operations.length,
+          evidenceCount,
+          priority,
+        },
+      });
+
+      // Publish CkgMutationProposed event (D3: event audit trail)
+      await this.publishEvent(
+        KnowledgeGraphEventType.CKG_MUTATION_PROPOSED,
+        'CanonicalKnowledgeGraph',
+        mutation.mutationId,
+        {
+          mutationId: mutation.mutationId,
+          proposedBy: proposerId,
+          operations: toSerializableOperations(operations),
+          rationale,
+          evidenceCount,
+        },
+        context
+      );
+
+      kgCounters.increment(KG_COUNTERS.CKG_MUTATIONS, { stage: 'proposed' });
+
+      // Fire async validation (D3: fire-and-forget in-process)
+      void this.runPipelineAsync(mutation.mutationId, context);
+
+      return mutation;
+    });
   }
 
   /**
@@ -245,6 +279,29 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     ];
     const results: ICkgMutation[] = [];
     for (const state of states) {
+      const batch = await this.mutationRepository.findMutationsByState(state);
+      results.push(...batch);
+    }
+    return results;
+  }
+
+  /**
+   * List all non-terminal (active) mutations.
+   * Retrieves mutations in processing states (proposed through committing),
+   * excluding terminal states (committed, rejected).
+   */
+  async listActiveMutations(): Promise<ICkgMutation[]> {
+    const activeStates: MutationState[] = [
+      'proposed',
+      'validating',
+      'validated',
+      'pending_review',
+      'proving',
+      'proven',
+      'committing',
+    ];
+    const results: ICkgMutation[] = [];
+    for (const state of activeStates) {
       const batch = await this.mutationRepository.findMutationsByState(state);
       results.push(...batch);
     }
@@ -498,6 +555,17 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     };
   }
 
+  /**
+   * Return in-process pipeline failure/success counters (4.8).
+   *
+   * These counters live in memory and are reset on service restart.
+   * They complement the durable state counts from `getPipelineHealth()`
+   * with real-time failure signals useful for alerting.
+   */
+  getPipelineErrorMetrics(): IPipelineErrorMetrics {
+    return { ...this.pipelineMetrics };
+  }
+
   // ==========================================================================
   // Pipeline Processing (Async)
   // ==========================================================================
@@ -511,9 +579,23 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
   async runPipelineAsync(mutationId: MutationId, context: IExecutionContext): Promise<void> {
     try {
       await this.runPipeline(mutationId, context);
+      this.pipelineMetrics.pipelineSuccessCount++;
     } catch (error: unknown) {
+      this.pipelineMetrics.pipelineFailureCount++;
+      this.pipelineMetrics.lastFailureTimestamp = new Date().toISOString();
+      this.pipelineMetrics.lastFailureMutationId = mutationId as string;
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error({ mutationId, error: message }, 'Pipeline processing failed');
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        {
+          mutationId,
+          correlationId: context.correlationId,
+          error: message,
+          stack,
+          failureCount: this.pipelineMetrics.pipelineFailureCount,
+        },
+        'Pipeline processing failed (fire-and-forget)'
+      );
       // Pipeline errors should not propagate — they're recorded as REJECTED state
     }
   }
@@ -560,9 +642,23 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
 
       // Stage 3: PROVEN → COMMITTING → COMMITTED/REJECTED
       await this.runCommitStage(mutation, context);
+      this.pipelineMetrics.postReviewSuccessCount++;
     } catch (error: unknown) {
+      this.pipelineMetrics.postReviewFailureCount++;
+      this.pipelineMetrics.lastFailureTimestamp = new Date().toISOString();
+      this.pipelineMetrics.lastFailureMutationId = mutationId as string;
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error({ mutationId, error: message }, 'Post-review pipeline processing failed');
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        {
+          mutationId,
+          correlationId: context.correlationId,
+          error: message,
+          stack,
+          failureCount: this.pipelineMetrics.postReviewFailureCount,
+        },
+        'Post-review pipeline processing failed (fire-and-forget)'
+      );
     }
   }
 
@@ -582,118 +678,121 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     mutation: ICkgMutation,
     context: IExecutionContext
   ): Promise<ICkgMutation> {
-    // PROPOSED → VALIDATING
-    mutation = await this.transitionState(
-      mutation,
-      'validating',
-      'system',
-      'Starting validation pipeline',
-      context
-    );
+    return withSpan('ckg.validationStage', async (span) => {
+      span.setAttribute('kg.mutationId', mutation.mutationId as string);
 
-    // Run the validation pipeline (now includes OntologicalConsistencyStage at order 250)
-    const validationResult = await this.validationPipeline.validate(mutation, {
-      correlationId: context.correlationId as string,
-      shortCircuitOnError: true,
-    });
-
-    if (validationResult.passed) {
-      // Check for ontological conflict violations that require escalation.
-      // The OntologicalConsistencyStage marks violations as errors with code
-      // ONTOLOGICAL_CONFLICT. If validation "passed" but we have these violations
-      // in a stage that didn't block (because it was already collected), we escalate.
-      // However, the standard flow is: if ontological stage fails, passed=false.
-      // So we check the stageResults directly for the ontological stage.
-      const ontologicalStage = validationResult.stageResults.find(
-        (s) => s.stageName === 'ontological_consistency'
-      );
-      const hasOntologicalConflicts =
-        ontologicalStage !== undefined &&
-        !ontologicalStage.passed &&
-        ontologicalStage.violations.some((v) => v.code === 'ONTOLOGICAL_CONFLICT');
-
-      // NOTE: If shortCircuit is true and ontological stage fails, passed will be false.
-      // This branch only fires if passed=true (no ontological conflicts).
-      // VALIDATING → VALIDATED
+      // PROPOSED → VALIDATING
       mutation = await this.transitionState(
         mutation,
-        'validated',
+        'validating',
         'system',
-        `Validation passed: ${String(validationResult.stageResults.length)} stage(s), ` +
-          `${String(validationResult.totalDuration)}ms` +
-          (hasOntologicalConflicts ? ' (with advisory ontological warnings)' : ''),
-        context,
-        { validationResult: this.serializeValidationResult(validationResult) }
-      );
-
-      // Publish CkgMutationValidated event
-      await this.publishEvent(
-        KnowledgeGraphEventType.CKG_MUTATION_VALIDATED,
-        'CanonicalKnowledgeGraph',
-        mutation.mutationId,
-        {
-          mutationId: mutation.mutationId,
-          validationResults: this.serializeValidationResult(validationResult),
-        },
+        'Starting validation pipeline',
         context
       );
-    } else {
-      // Check if this is an ontological conflict (escalate) vs other failure (reject)
-      const ontologicalViolations = validationResult.violations.filter(
-        (v) => v.code === 'ONTOLOGICAL_CONFLICT'
-      );
-      const nonOntologicalErrors = validationResult.violations.filter(
-        (v) => v.code !== 'ONTOLOGICAL_CONFLICT'
-      );
 
-      if (ontologicalViolations.length > 0 && nonOntologicalErrors.length === 0) {
-        // ONLY ontological conflicts caused the failure → escalate to PENDING_REVIEW
+      kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'validating' });
+
+      // Run the validation pipeline (now includes OntologicalConsistencyStage at order 250)
+      const validationResult = await this.validationPipeline.validate(mutation, {
+        correlationId: context.correlationId as string,
+        shortCircuitOnError: true,
+      });
+
+      span.setAttribute('kg.validation.passed', validationResult.passed);
+      span.setAttribute('kg.validation.stageCount', validationResult.stageResults.length);
+      span.setAttribute('kg.validation.durationMs', validationResult.totalDuration);
+
+      if (validationResult.passed) {
+        const ontologicalStage = validationResult.stageResults.find(
+          (s) => s.stageName === 'ontological_consistency'
+        );
+        const hasOntologicalConflicts =
+          ontologicalStage !== undefined &&
+          !ontologicalStage.passed &&
+          ontologicalStage.violations.some((v) => v.code === 'ONTOLOGICAL_CONFLICT');
+
+        // VALIDATING → VALIDATED
         mutation = await this.transitionState(
           mutation,
-          'pending_review',
+          'validated',
           'system',
-          `Ontological conflict(s) detected: ${String(ontologicalViolations.length)} conflict(s) ` +
-            `require human review. ${String(validationResult.warnings.length)} warning(s).`,
+          `Validation passed: ${String(validationResult.stageResults.length)} stage(s), ` +
+            `${String(validationResult.totalDuration)}ms` +
+            (hasOntologicalConflicts ? ' (with advisory ontological warnings)' : ''),
           context,
           { validationResult: this.serializeValidationResult(validationResult) }
         );
 
-        // Publish CKG_MUTATION_ESCALATED event
-        await this.publishEscalationEvent(mutation, ontologicalViolations, context);
-      } else {
-        // Non-ontological errors present → standard rejection
-        const failedStages = validationResult.stageResults
-          .filter((s) => !s.passed)
-          .map((s) => s.stageName);
+        kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'validated' });
 
-        mutation = await this.transitionState(
-          mutation,
-          'rejected',
-          'system',
-          `Validation failed at stage(s): [${failedStages.join(', ')}]. ` +
-            `${String(validationResult.violations.length)} error(s), ` +
-            `${String(validationResult.warnings.length)} warning(s)`,
-          context,
-          { validationResult: this.serializeValidationResult(validationResult) }
-        );
-
-        // Publish CkgMutationRejected event
+        // Publish CkgMutationValidated event
         await this.publishEvent(
-          KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
+          KnowledgeGraphEventType.CKG_MUTATION_VALIDATED,
           'CanonicalKnowledgeGraph',
           mutation.mutationId,
           {
             mutationId: mutation.mutationId,
-            reason: `Validation failed at stage(s): [${failedStages.join(', ')}]`,
-            failedStage: 'validating' as MutationState,
-            rejectedBy: 'system',
+            validationResults: this.serializeValidationResult(validationResult),
           },
           context
         );
-      }
-    }
+      } else {
+        const ontologicalViolations = validationResult.violations.filter(
+          (v) => v.code === 'ONTOLOGICAL_CONFLICT'
+        );
+        const nonOntologicalErrors = validationResult.violations.filter(
+          (v) => v.code !== 'ONTOLOGICAL_CONFLICT'
+        );
 
-    return mutation;
+        if (ontologicalViolations.length > 0 && nonOntologicalErrors.length === 0) {
+          mutation = await this.transitionState(
+            mutation,
+            'pending_review',
+            'system',
+            `Ontological conflict(s) detected: ${String(ontologicalViolations.length)} conflict(s) ` +
+              `require human review. ${String(validationResult.warnings.length)} warning(s).`,
+            context,
+            { validationResult: this.serializeValidationResult(validationResult) }
+          );
+
+          kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'pending_review' });
+
+          await this.publishEscalationEvent(mutation, ontologicalViolations, context);
+        } else {
+          const failedStages = validationResult.stageResults
+            .filter((s) => !s.passed)
+            .map((s) => s.stageName);
+
+          mutation = await this.transitionState(
+            mutation,
+            'rejected',
+            'system',
+            `Validation failed at stage(s): [${failedStages.join(', ')}]. ` +
+              `${String(validationResult.violations.length)} error(s), ` +
+              `${String(validationResult.warnings.length)} warning(s)`,
+            context,
+            { validationResult: this.serializeValidationResult(validationResult) }
+          );
+
+          kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'rejected' });
+
+          await this.publishEvent(
+            KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
+            'CanonicalKnowledgeGraph',
+            mutation.mutationId,
+            {
+              mutationId: mutation.mutationId,
+              reason: `Validation failed at stage(s): [${failedStages.join(', ')}]`,
+              failedStage: 'validating' as MutationState,
+              rejectedBy: 'system',
+            },
+            context
+          );
+        }
+      }
+
+      return mutation;
+    });
   }
 
   /**
@@ -741,96 +840,91 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     mutation: ICkgMutation,
     context: IExecutionContext
   ): Promise<ICkgMutation> {
-    // PROVEN → COMMITTING
-    mutation = await this.transitionState(
-      mutation,
-      'committing',
-      'system',
-      'Starting commit to CKG graph',
-      context
-    );
+    return withSpan('ckg.commitStage', async (span) => {
+      span.setAttribute('kg.mutationId', mutation.mutationId as string);
 
-    try {
-      // Apply operations to Neo4j (atomically)
-      const commitResult = await this.applyOperations(mutation);
+      // PROVEN → COMMITTING
+      mutation = await this.transitionState(
+        mutation,
+        'committing',
+        'system',
+        'Starting commit to CKG graph',
+        context
+      );
 
-      // COMMITTING → COMMITTED (Postgres state update)
-      // CRITICAL: If this fails after Neo4j committed, we have a cross-DB
-      // inconsistency (Neo4j has the data, Postgres still says "committing").
+      kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'committing' });
+
       try {
-        mutation = await this.transitionState(
+        // Apply operations to Neo4j (atomically)
+        const commitResult = await this.applyOperations(mutation);
+        span.setAttribute('kg.commit.appliedCount', commitResult.appliedCount);
+
+        // COMMITTING → COMMITTED (Postgres state update with retry)
+        // CRITICAL: If this fails after Neo4j committed, we have a cross-DB
+        // inconsistency (Neo4j has the data, Postgres still says "committing").
+        // Retry with exponential backoff to reduce the window of inconsistency.
+        mutation = await this.retryPostgresStateUpdate(
           mutation,
           'committed',
-          'system',
           `Committed ${String(commitResult.appliedCount)} operation(s) to CKG`,
           context,
           { commitResult }
         );
-      } catch (pgError: unknown) {
-        const pgMessage = pgError instanceof Error ? pgError.message : String(pgError);
-        this.logger.error(
+
+        kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'committed' });
+
+        // Publish CkgMutationCommitted event
+        const operations = parseOperations(mutation.operations);
+        await this.publishEvent(
+          KnowledgeGraphEventType.CKG_MUTATION_COMMITTED,
+          'CanonicalKnowledgeGraph',
+          mutation.mutationId,
           {
             mutationId: mutation.mutationId,
-            error: pgMessage,
-            commitResult,
-            reconciliationNeeded: true,
+            appliedOperations: mutation.operations,
+            affectedNodeIds: extractAffectedNodeIds(operations) as NodeId[],
+            affectedEdgeIds: extractAffectedEdgeIds(operations) as unknown as NodeId[],
           },
-          'CROSS-DB INCONSISTENCY: Neo4j commit succeeded but Postgres state update ' +
-            'failed. Mutation data is in Neo4j but state is still COMMITTING. ' +
-            'Manual reconciliation required.'
+          context
         );
-        throw pgError;
+
+        return mutation;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          { mutationId: mutation.mutationId, error: message },
+          'Commit failed — transitioning to REJECTED'
+        );
+
+        kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'commit_rejected' });
+
+        // COMMITTING → REJECTED
+        mutation = await this.transitionState(
+          mutation,
+          'rejected',
+          'system',
+          `Commit failed: ${message}`,
+          context,
+          { commitError: message }
+        );
+
+        // Publish CkgMutationRejected event
+        await this.publishEvent(
+          KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
+          'CanonicalKnowledgeGraph',
+          mutation.mutationId,
+          {
+            mutationId: mutation.mutationId,
+            reason: `Commit failed: ${message}`,
+            failedStage: 'committing' as MutationState,
+            rejectedBy: 'system',
+          },
+          context
+        );
+
+        return mutation;
       }
-
-      // Publish CkgMutationCommitted event
-      const operations = parseOperations(mutation.operations);
-      await this.publishEvent(
-        KnowledgeGraphEventType.CKG_MUTATION_COMMITTED,
-        'CanonicalKnowledgeGraph',
-        mutation.mutationId,
-        {
-          mutationId: mutation.mutationId,
-          appliedOperations: mutation.operations,
-          affectedNodeIds: extractAffectedNodeIds(operations) as NodeId[],
-          affectedEdgeIds: extractAffectedEdgeIds(operations) as unknown as NodeId[],
-        },
-        context
-      );
-
-      return mutation;
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(
-        { mutationId: mutation.mutationId, error: message },
-        'Commit failed — transitioning to REJECTED'
-      );
-
-      // COMMITTING → REJECTED
-      mutation = await this.transitionState(
-        mutation,
-        'rejected',
-        'system',
-        `Commit failed: ${message}`,
-        context,
-        { commitError: message }
-      );
-
-      // Publish CkgMutationRejected event
-      await this.publishEvent(
-        KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
-        'CanonicalKnowledgeGraph',
-        mutation.mutationId,
-        {
-          mutationId: mutation.mutationId,
-          reason: `Commit failed: ${message}`,
-          failedStage: 'committing' as MutationState,
-          rejectedBy: 'system',
-        },
-        context
-      );
-
-      return mutation;
-    }
+    });
   }
 
   // ==========================================================================
@@ -1044,6 +1138,145 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       nodeAId: nodeA.nodeId as string,
       nodeBId: nodeB.nodeId as string,
     };
+  }
+
+  // ==========================================================================
+  // Cross-DB Consistency: Retry & Reconciliation (4.1)
+  // ==========================================================================
+
+  /** Maximum retry attempts for Postgres state update after Neo4j commit. */
+  private static readonly PG_RETRY_MAX = 3;
+
+  /** Base delay (ms) for exponential backoff on Postgres retry. */
+  private static readonly PG_RETRY_BASE_DELAY_MS = 200;
+
+  /** Threshold (ms) for detecting stuck committing mutations. */
+  private static readonly STUCK_COMMITTING_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+  /**
+   * Retry Postgres state update with exponential backoff.
+   *
+   * After Neo4j has committed, the Postgres state update is the most critical
+   * step — failure leaves a cross-DB inconsistency. Retrying with backoff
+   * reduces the window of inconsistency for transient failures.
+   */
+  private async retryPostgresStateUpdate(
+    mutation: ICkgMutation,
+    targetState: MutationState,
+    reason: string,
+    context: IExecutionContext,
+    snapshot?: Metadata
+  ): Promise<ICkgMutation> {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= CkgMutationPipeline.PG_RETRY_MAX; attempt++) {
+      try {
+        return await this.transitionState(
+          mutation,
+          targetState,
+          'system',
+          reason,
+          context,
+          snapshot
+        );
+      } catch (error: unknown) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+
+        if (attempt < CkgMutationPipeline.PG_RETRY_MAX) {
+          const delayMs = CkgMutationPipeline.PG_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+          this.logger.warn(
+            {
+              mutationId: mutation.mutationId,
+              attempt,
+              maxAttempts: CkgMutationPipeline.PG_RETRY_MAX,
+              delayMs,
+              error: message,
+            },
+            'Postgres state update failed — retrying with backoff'
+          );
+          await this.sleep(delayMs);
+        } else {
+          kgCounters.increment(KG_COUNTERS.CROSS_DB_INCONSISTENCIES, {
+            mutation: mutation.mutationId as string,
+          });
+          this.logger.error(
+            {
+              mutationId: mutation.mutationId,
+              attempt,
+              error: message,
+              reconciliationNeeded: true,
+            },
+            'CROSS-DB INCONSISTENCY: Neo4j commit succeeded but all Postgres retry ' +
+              'attempts failed. Mutation data is in Neo4j but state is still COMMITTING. ' +
+              'Reconciliation sweep will resolve this automatically.'
+          );
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  /**
+   * Reconcile mutations stuck in COMMITTING state.
+   *
+   * If a mutation has been in COMMITTING for longer than the threshold,
+   * it means the Postgres state update failed after Neo4j committed.
+   * Since Neo4j data is already applied, we transition to COMMITTED.
+   *
+   * Called periodically from service startup or a scheduled job.
+   */
+  async reconcileStuckCommitting(context: IExecutionContext): Promise<number> {
+    const stuck = await this.mutationRepository.findMutationsByState('committing');
+    let reconciledCount = 0;
+
+    for (const mutation of stuck) {
+      const updatedAt = new Date(mutation.updatedAt).getTime();
+      const ageMs = Date.now() - updatedAt;
+
+      if (ageMs < CkgMutationPipeline.STUCK_COMMITTING_THRESHOLD_MS) {
+        // Not stuck yet — might still be processing
+        continue;
+      }
+
+      try {
+        this.logger.warn(
+          { mutationId: mutation.mutationId, ageMs, state: mutation.state },
+          'Reconciling stuck COMMITTING mutation — Neo4j data assumed committed'
+        );
+
+        await this.transitionState(
+          mutation,
+          'committed',
+          'system:reconciliation',
+          `Reconciled from stuck COMMITTING state after ${String(Math.round(ageMs / 1000))}s. ` +
+            'Neo4j operations assumed committed. Resolved by periodic reconciliation sweep.',
+          context,
+          { reconciledFrom: 'committing', ageMs }
+        );
+        reconciledCount++;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          { mutationId: mutation.mutationId, error: message },
+          'Failed to reconcile stuck committing mutation'
+        );
+      }
+    }
+
+    if (reconciledCount > 0) {
+      this.logger.info(
+        { reconciledCount },
+        'Reconciliation sweep completed — stuck COMMITTING mutations resolved'
+      );
+    }
+
+    return reconciledCount;
+  }
+
+  /** Async sleep helper for retry backoff. */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   // ==========================================================================

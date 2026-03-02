@@ -247,18 +247,24 @@ function detectDivergences(
     inverseAlignment.set(ckgId, pkgId);
   }
 
-  // Build edge lookups (multi-map: source|target → all edges between pair)
+  // Build edge lookups (multi-map: source|target|edgeType → edges)
   const pkgEdgeMultiMap = buildEdgeMultiMap(pkgSubgraph.edges);
-  const ckgEdgeMultiMap = buildEdgeMultiMap(ckgSubgraph.edges);
 
-  // Missing nodes (CKG has, PKG doesn't) — severity depends on connectivity
+  // Compute BFS depth from root for context-aware severity (M8 fix).
+  // Shallower (root-adjacent) nodes are more structurally important.
+  const ckgDepthMap = computeBfsDepth(ckgSubgraph);
+  const pkgDepthMap = computeBfsDepth(pkgSubgraph);
+
+  // Missing nodes (CKG has, PKG doesn't) — severity depends on connectivity + depth
   for (const ckgNodeId of unmatchedCkgNodes) {
     const ckgNode = ckgSubgraph.nodes.find((n) => n.nodeId === ckgNodeId);
     const connectivity = countNodeEdges(ckgSubgraph.edges, ckgNodeId);
+    const depth = ckgDepthMap.get(ckgNodeId) ?? Infinity;
+    // Shallow (depth <= 2) or highly connected (>= 4) nodes are more critical
     const severity =
-      connectivity >= 4
+      connectivity >= 4 || depth <= 1
         ? DivergenceSeverity.HIGH
-        : connectivity >= 2
+        : connectivity >= 2 || depth <= 2
           ? DivergenceSeverity.MEDIUM
           : DivergenceSeverity.LOW;
     divergences.push({
@@ -270,11 +276,13 @@ function detectDivergences(
     });
   }
 
-  // Extra nodes (PKG has, CKG doesn't) — severity depends on connectivity
+  // Extra nodes (PKG has, CKG doesn't) — severity depends on connectivity + depth
   for (const pkgNodeId of unmatchedPkgNodes) {
     const pkgNode = pkgSubgraph.nodes.find((n) => n.nodeId === pkgNodeId);
     const connectivity = countNodeEdges(pkgSubgraph.edges, pkgNodeId);
-    const severity = connectivity >= 4 ? DivergenceSeverity.MEDIUM : DivergenceSeverity.LOW;
+    const depth = pkgDepthMap.get(pkgNodeId) ?? Infinity;
+    const severity =
+      connectivity >= 4 || depth <= 1 ? DivergenceSeverity.MEDIUM : DivergenceSeverity.LOW;
     divergences.push({
       divergenceType: DivergenceType.EXTRA_NODE,
       affectedPkgNodeIds: [pkgNodeId],
@@ -289,7 +297,6 @@ function detectDivergences(
   // For each PKG edge between aligned nodes, check if CKG has a matching edge type.
 
   // Build sets for quick lookups: "alignedSource|alignedTarget|edgeType" → exists
-  const pkgEdgeTypeSet = new Set<string>();
   const ckgEdgeTypeSet = new Set<string>();
 
   for (const edge of ckgSubgraph.edges) {
@@ -299,12 +306,12 @@ function detectDivergences(
 
     ckgEdgeTypeSet.add(`${pkgSource as string}|${pkgTarget as string}|${edge.edgeType}`);
 
-    // Check if PKG has a matching edge for this CKG edge
-    const pairKeyPkg = `${pkgSource as string}|${pkgTarget as string}`;
-    const pkgEdgesForPair = pkgEdgeMultiMap.get(pairKeyPkg) ?? [];
-    const pkgHasType = pkgEdgesForPair.some((e) => e.edgeType === edge.edgeType);
+    // Check if PKG has a matching edge for this CKG edge.
+    // Since the multi-map key now includes edgeType, a hit means exact type match.
+    const pairKeyPkg = `${pkgSource as string}|${pkgTarget as string}|${edge.edgeType}`;
+    const pkgHasEdge = pkgEdgeMultiMap.has(pairKeyPkg);
 
-    if (!pkgHasType) {
+    if (!pkgHasEdge) {
       const isHierarchical =
         edge.edgeType === EdgeType.PREREQUISITE ||
         edge.edgeType === EdgeType.IS_A ||
@@ -351,6 +358,49 @@ function detectDivergences(
 }
 
 /**
+ * Compute BFS depth from the subgraph root for each node.
+ * Returns a Map<NodeId, number> where depth 0 = root.
+ * If no rootNodeId, returns an empty map (all depths default to Infinity).
+ * Used for context-aware severity in divergence detection (M8 fix).
+ */
+function computeBfsDepth(subgraph: ISubgraph): Map<NodeId, number> {
+  const depthMap = new Map<NodeId, number>();
+  if (!subgraph.rootNodeId) return depthMap;
+
+  // Build adjacency list (undirected for depth computation)
+  const adjacency = new Map<string, Set<string>>();
+  for (const node of subgraph.nodes) {
+    adjacency.set(node.nodeId as string, new Set());
+  }
+  for (const edge of subgraph.edges) {
+    adjacency.get(edge.sourceNodeId as string)?.add(edge.targetNodeId as string);
+    adjacency.get(edge.targetNodeId as string)?.add(edge.sourceNodeId as string);
+  }
+
+  // BFS from root
+  const queue: Array<{ nodeId: string; depth: number }> = [
+    { nodeId: subgraph.rootNodeId as string, depth: 0 },
+  ];
+  const visited = new Set<string>();
+  visited.add(subgraph.rootNodeId as string);
+  depthMap.set(subgraph.rootNodeId, 0);
+
+  while (queue.length > 0) {
+    const { nodeId, depth } = queue.shift()!;
+    const neighbors = adjacency.get(nodeId);
+    if (!neighbors) continue;
+    for (const neighbor of neighbors) {
+      if (visited.has(neighbor)) continue;
+      visited.add(neighbor);
+      depthMap.set(neighbor as NodeId, depth + 1);
+      queue.push({ nodeId: neighbor, depth: depth + 1 });
+    }
+  }
+
+  return depthMap;
+}
+
+/**
  * Count the number of edges incident to a node (as source or target).
  * Used to estimate node importance for context-aware severity.
  */
@@ -365,13 +415,14 @@ function countNodeEdges(edges: readonly IGraphEdge[], nodeId: NodeId): number {
 }
 
 /**
- * Build multi-edge lookup: "sourceId|targetId" → all edges between pair.
- * Used for divergence detection where we need to compare all edge types.
+ * Build multi-edge lookup: "sourceId|targetId|edgeType" → all edges for that triple.
+ * Includes edgeType in key to avoid silently dropping duplicate edges between
+ * the same pair with different relationship types (M6 fix).
  */
 function buildEdgeMultiMap(edges: readonly IGraphEdge[]): Map<string, IGraphEdge[]> {
   const map = new Map<string, IGraphEdge[]>();
   for (const edge of edges) {
-    const key = `${edge.sourceNodeId as string}|${edge.targetNodeId as string}`;
+    const key = `${edge.sourceNodeId as string}|${edge.targetNodeId as string}|${edge.edgeType}`;
     const list = map.get(key) ?? [];
     list.push(edge);
     map.set(key, list);
