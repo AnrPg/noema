@@ -10,12 +10,12 @@
 The phases are ordered to respect the following dependency chains:
 
 ```
-Phase 1 (Foundation)
+Phase 1 (Foundation) ✅
   └─ Fix data bugs, type safety, error handling at the lowest layers
   └─ These are leaf-node fixes: no other work depends on them,
      but ALL higher-layer code benefits from correct infrastructure
 
-Phase 2 (Contracts & Interfaces)
+Phase 2 (Contracts & Interfaces) ✅
   └─ Extend/fix repository interfaces, add missing methods
   └─ DEPENDS ON Phase 1: correct types/schemas must exist first
   └─ Phase 3-5 code will call these new/fixed interfaces
@@ -246,7 +246,10 @@ blocks everything else depends on.
 
 ---
 
-## Phase 2 — Contracts & Interfaces: Repository Extensions & Port Refinement
+## Phase 2 — Contracts & Interfaces: Repository Extensions & Port Refinement ✅ COMPLETED
+
+> **Status:** All 9 fixes implemented and passing (458 tests). **Commit:**
+> `771b345`. **ADR:** ADR-011-remediation-phase2-contracts.md
 
 **Goal:** Extend repository interfaces with missing methods, fix cache contract,
 add proper DI interfaces. Phase 3+ code will consume these new methods.

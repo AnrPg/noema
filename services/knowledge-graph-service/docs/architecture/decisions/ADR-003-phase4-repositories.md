@@ -196,3 +196,16 @@ invalidate affected cache entries; `createNode` pre-populates the cache.
 - Phase 4 spec:
   `docs/knowledge-graph-service-implementation/PHASE-4-REPOSITORIES.md`
 - ADR-010: Remediation Phase 1 (D1 relationship type sync)
+- ADR-011: Remediation Phase 2 (repository extensions, cache key scoping)
+
+## Addendum — Phase 2 Remediation (2026-03-02, ADR-011)
+
+The following repository changes were applied during remediation Phase 2:
+
+| Decision                              | Change                                                                                                      | Rationale                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| D1 — countEdges                       | Added `countEdges(filter, userId?)` to `IEdgeRepository`; Neo4j uses `count(r)` with same filter clauses    | `listEdges` was faking totals; dedicated count enables correct pagination  |
+| D2 — getEdgesForNodes batch           | Added `getEdgesForNodes(nodeIds[], filter?, userId?)` to `IEdgeRepository`; single batched Cypher query      | Eliminates N+1 queries in `fetchDomainSubgraph`                           |
+| D5 — IReadOnlyGraphRepository         | New `IReadOnlyGraphRepository` extending `ITraversalRepository` with read-only node/edge methods             | CKG immutability enforced at type level                                   |
+| D7 — Cache key scoping                | All cache keys prefixed with `${userId ?? 'ckg'}:` via 4 private key helpers                                | Eliminates cross-user cache pollution (security fix)                      |
+| D9 — ITransactional mixin             | Extracted `ITransactional<T>` generic interface; `IGraphRepository` uses `ITransactional<IGraphRepository>`  | Enables future transactional composition on sub-interfaces                |
