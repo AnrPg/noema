@@ -19,11 +19,11 @@ import type { UserId } from '@noema/types';
 import { createHash, randomUUID } from 'node:crypto';
 
 import type {
-    ICalibrationDataRepository,
-    IConsumerLinkage,
-    IReviewRepository,
-    ISchedulerCardRepository,
-    ISchedulerEventReliabilityRepository,
+  ICalibrationDataRepository,
+  IConsumerLinkage,
+  IReviewRepository,
+  ISchedulerCardRepository,
+  ISchedulerEventReliabilityRepository,
 } from '../../domain/scheduler-service/scheduler.repository.js';
 import type { IEventPublisher } from '../../domain/shared/event-publisher.js';
 import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';

@@ -330,7 +330,15 @@ export type ScheduleConfigUpdatedEventInput = z.input<typeof ScheduleConfigUpdat
 export type ScheduleWeightsPersonalizedEventInput = z.input<
   typeof ScheduleWeightsPersonalizedEventSchema
 >;
-export type ScheduleHandshakeProposedEventInput = z.input<typeof ScheduleHandshakeProposedEventSchema>;
-export type ScheduleHandshakeAcceptedEventInput = z.input<typeof ScheduleHandshakeAcceptedEventSchema>;
-export type ScheduleHandshakeRevisedEventInput = z.input<typeof ScheduleHandshakeRevisedEventSchema>;
-export type ScheduleHandshakeCommittedEventInput = z.input<typeof ScheduleHandshakeCommittedEventSchema>;
+export type ScheduleHandshakeProposedEventInput = z.input<
+  typeof ScheduleHandshakeProposedEventSchema
+>;
+export type ScheduleHandshakeAcceptedEventInput = z.input<
+  typeof ScheduleHandshakeAcceptedEventSchema
+>;
+export type ScheduleHandshakeRevisedEventInput = z.input<
+  typeof ScheduleHandshakeRevisedEventSchema
+>;
+export type ScheduleHandshakeCommittedEventInput = z.input<
+  typeof ScheduleHandshakeCommittedEventSchema
+>;

@@ -9,7 +9,15 @@
  * @see EVENT_SCHEMA_SPECIFICATION
  */
 
-import type { CardId, CardState, CardType, DifficultyLevel, EventSource, NodeId, RemediationCardType } from '@noema/types';
+import type {
+  CardId,
+  CardState,
+  CardType,
+  DifficultyLevel,
+  EventSource,
+  NodeId,
+  RemediationCardType,
+} from '@noema/types';
 import type { ITypedEvent } from '../types.js';
 
 // ============================================================================
@@ -142,9 +150,21 @@ export interface IBatchCreatedPayload {
 export type CardCreatedEvent = ITypedEvent<'card.created', 'Card', ICardCreatedPayload>;
 export type CardUpdatedEvent = ITypedEvent<'card.updated', 'Card', ICardUpdatedPayload>;
 export type CardDeletedEvent = ITypedEvent<'card.deleted', 'Card', ICardDeletedPayload>;
-export type CardStateChangedEvent = ITypedEvent<'card.state.changed', 'Card', ICardStateChangedPayload>;
-export type CardTagsUpdatedEvent = ITypedEvent<'card.tags.updated', 'Card', ICardTagsUpdatedPayload>;
-export type CardNodesUpdatedEvent = ITypedEvent<'card.nodes.updated', 'Card', ICardNodesUpdatedPayload>;
+export type CardStateChangedEvent = ITypedEvent<
+  'card.state.changed',
+  'Card',
+  ICardStateChangedPayload
+>;
+export type CardTagsUpdatedEvent = ITypedEvent<
+  'card.tags.updated',
+  'Card',
+  ICardTagsUpdatedPayload
+>;
+export type CardNodesUpdatedEvent = ITypedEvent<
+  'card.nodes.updated',
+  'Card',
+  ICardNodesUpdatedPayload
+>;
 export type BatchCreatedEvent = ITypedEvent<'card.batch.created', 'Card', IBatchCreatedPayload>;
 
 /**

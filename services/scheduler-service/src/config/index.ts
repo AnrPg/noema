@@ -110,23 +110,17 @@ export function loadConfig(): IServiceConfig {
     },
     consumers: {
       enabled: optionalEnvBool('EVENT_CONSUMERS_ENABLED', true),
-      consumerName: optionalEnv(
-        'REDIS_CONSUMER_NAME',
-        `scheduler-service-${process.pid}`,
-      ),
+      consumerName: optionalEnv('REDIS_CONSUMER_NAME', `scheduler-service-${process.pid}`),
       streams: {
         sessionService: optionalEnv(
           'CONSUMER_STREAM_SESSION_SERVICE',
-          'noema:events:session-service',
+          'noema:events:session-service'
         ),
         contentService: optionalEnv(
           'CONSUMER_STREAM_CONTENT_SERVICE',
-          'noema:events:content-service',
+          'noema:events:content-service'
         ),
-        userService: optionalEnv(
-          'CONSUMER_STREAM_USER_SERVICE',
-          'noema:events:user-service',
-        ),
+        userService: optionalEnv('CONSUMER_STREAM_USER_SERVICE', 'noema:events:user-service'),
       },
     },
     cors: {

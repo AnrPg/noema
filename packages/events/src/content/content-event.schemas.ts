@@ -125,43 +125,43 @@ export const BatchCreatedPayloadSchema = z.object({
 export const CardCreatedEventSchema = createEventSchema(
   'card.created',
   'Card',
-  CardCreatedPayloadSchema,
+  CardCreatedPayloadSchema
 );
 
 export const CardUpdatedEventSchema = createEventSchema(
   'card.updated',
   'Card',
-  CardUpdatedPayloadSchema,
+  CardUpdatedPayloadSchema
 );
 
 export const CardDeletedEventSchema = createEventSchema(
   'card.deleted',
   'Card',
-  CardDeletedPayloadSchema,
+  CardDeletedPayloadSchema
 );
 
 export const CardStateChangedEventSchema = createEventSchema(
   'card.state.changed',
   'Card',
-  CardStateChangedPayloadSchema,
+  CardStateChangedPayloadSchema
 );
 
 export const CardTagsUpdatedEventSchema = createEventSchema(
   'card.tags.updated',
   'Card',
-  CardTagsUpdatedPayloadSchema,
+  CardTagsUpdatedPayloadSchema
 );
 
 export const CardNodesUpdatedEventSchema = createEventSchema(
   'card.nodes.updated',
   'Card',
-  CardNodesUpdatedPayloadSchema,
+  CardNodesUpdatedPayloadSchema
 );
 
 export const BatchCreatedEventSchema = createEventSchema(
   'card.batch.created',
   'Card',
-  BatchCreatedPayloadSchema,
+  BatchCreatedPayloadSchema
 );
 
 // ============================================================================

@@ -71,15 +71,17 @@ function assignLane(cardType: string | null | undefined): SchedulerLane {
 
 const CardCreatedPayloadSchema = z
   .object({
-    entity: z.object({
-      id: z.string().min(1),
-      userId: z.string().min(1),
-      cardType: z.string().min(1),
-      state: z.string().optional(),
-      difficulty: z.string().optional(),
-      knowledgeNodeIds: z.array(z.string()).default([]),
-      tags: z.array(z.string()).default([]),
-    }).passthrough(),
+    entity: z
+      .object({
+        id: z.string().min(1),
+        userId: z.string().min(1),
+        cardType: z.string().min(1),
+        state: z.string().optional(),
+        difficulty: z.string().optional(),
+        knowledgeNodeIds: z.array(z.string()).default([]),
+        tags: z.array(z.string()).default([]),
+      })
+      .passthrough(),
     source: z.string().optional(),
     batchOperation: z.boolean().optional(),
   })
@@ -104,30 +106,21 @@ const CardStateChangedPayloadSchema = z
 // Event type set
 // ============================================================================
 
-const CARD_LIFECYCLE_EVENTS = new Set([
-  'card.created',
-  'card.deleted',
-  'card.state.changed',
-]);
+const CARD_LIFECYCLE_EVENTS = new Set(['card.created', 'card.deleted', 'card.state.changed']);
 
 // ============================================================================
 // Consumer
 // ============================================================================
 
 export class CardLifecycleConsumer extends SchedulerBaseConsumer {
-  constructor(
-    redis: Redis,
-    logger: Logger,
-    consumerName: string,
-    sourceStreamKey?: string,
-  ) {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
     super(
       redis,
       buildConfig({
         sourceStreamKey: sourceStreamKey ?? 'noema:events:content-service',
         consumerName,
       }),
-      logger,
+      logger
     );
   }
 
@@ -156,10 +149,7 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
   private async handleCardCreated(envelope: IStreamEventEnvelope): Promise<void> {
     const parsed = CardCreatedPayloadSchema.safeParse(envelope.payload);
     if (!parsed.success) {
-      this.logger.warn(
-        { eventType: envelope.eventType },
-        'Skipping invalid card.created payload',
-      );
+      this.logger.warn({ eventType: envelope.eventType }, 'Skipping invalid card.created payload');
       return;
     }
 
@@ -201,7 +191,7 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
 
     this.logger.info(
       { cardId, userId, lane, cardType: entity.cardType },
-      'Created SchedulerCard from card.created event',
+      'Created SchedulerCard from card.created event'
     );
   }
 
@@ -212,15 +202,12 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
   private async handleCardDeleted(envelope: IStreamEventEnvelope): Promise<void> {
     const parsed = CardDeletedPayloadSchema.safeParse(envelope.payload);
     if (!parsed.success) {
-      this.logger.warn(
-        { eventType: envelope.eventType },
-        'Skipping invalid card.deleted payload',
-      );
+      this.logger.warn({ eventType: envelope.eventType }, 'Skipping invalid card.deleted payload');
       return;
     }
 
     const cardId = envelope.aggregateId as CardId;
-    const userId = (envelope.metadata?.['userId'] as string | undefined) as UserId | undefined;
+    const userId = envelope.metadata?.['userId'] as string | undefined as UserId | undefined;
 
     if (userId === undefined) {
       this.logger.warn({ cardId }, 'card.deleted missing userId in metadata; skipping');
@@ -243,7 +230,7 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
           suspendedReason: 'card_soft_deleted',
           state: 'suspended',
         },
-        existing.version,
+        existing.version
       );
       this.logger.info({ cardId, userId }, 'Suspended SchedulerCard (soft-deleted content card)');
     } else {
@@ -262,13 +249,13 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
     if (!parsed.success) {
       this.logger.warn(
         { eventType: envelope.eventType },
-        'Skipping invalid card.state.changed payload',
+        'Skipping invalid card.state.changed payload'
       );
       return;
     }
 
     const cardId = envelope.aggregateId as CardId;
-    const userId = (envelope.metadata?.['userId'] as string | undefined) as UserId | undefined;
+    const userId = envelope.metadata?.['userId'] as string | undefined as UserId | undefined;
 
     if (userId === undefined) {
       this.logger.warn({ cardId }, 'card.state.changed missing userId in metadata; skipping');
@@ -277,10 +264,7 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
 
     const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
     if (existing === null) {
-      this.logger.debug(
-        { cardId },
-        'No SchedulerCard found for card.state.changed; skipping',
-      );
+      this.logger.debug({ cardId }, 'No SchedulerCard found for card.state.changed; skipping');
       return;
     }
 
@@ -308,7 +292,7 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
     if (Object.keys(stateUpdate).length === 0) {
       this.logger.debug(
         { cardId, newState },
-        'card.state.changed has no scheduler-relevant state transition; skipping',
+        'card.state.changed has no scheduler-relevant state transition; skipping'
       );
       return;
     }
@@ -317,12 +301,12 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
       userId,
       cardId,
       stateUpdate,
-      existing.version,
+      existing.version
     );
 
     this.logger.info(
       { cardId, userId, contentState: newState, schedulerUpdate: stateUpdate },
-      'Updated SchedulerCard state from card.state.changed',
+      'Updated SchedulerCard state from card.state.changed'
     );
   }
 }

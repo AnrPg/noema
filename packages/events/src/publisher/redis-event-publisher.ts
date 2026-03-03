@@ -36,7 +36,7 @@ export class RedisEventPublisher implements IEventPublisher {
   constructor(
     private readonly redis: Redis,
     private readonly config: IRedisEventPublisherConfig,
-    logger: Logger,
+    logger: Logger
   ) {
     this.logger = logger.child({ component: 'RedisEventPublisher' });
   }
@@ -71,12 +71,12 @@ export class RedisEventPublisher implements IEventPublisher {
         this.config.maxLen.toString(),
         '*',
         'event',
-        JSON.stringify(fullEvent),
+        JSON.stringify(fullEvent)
       );
 
       this.logger.debug(
         { eventId, eventType: event.eventType, aggregateId: event.aggregateId },
-        'Event published',
+        'Event published'
       );
     } catch (error) {
       this.logger.error({ error, eventId, eventType: event.eventType }, 'Failed to publish event');
@@ -116,7 +116,7 @@ export class RedisEventPublisher implements IEventPublisher {
         this.config.maxLen.toString(),
         '*',
         'event',
-        JSON.stringify(fullEvent),
+        JSON.stringify(fullEvent)
       );
     }
 

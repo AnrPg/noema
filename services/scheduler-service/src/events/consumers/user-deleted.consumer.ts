@@ -56,19 +56,14 @@ const UserDeletedPayloadSchema = z
 // ============================================================================
 
 export class UserDeletedConsumer extends SchedulerBaseConsumer {
-  constructor(
-    redis: Redis,
-    logger: Logger,
-    consumerName: string,
-    sourceStreamKey?: string,
-  ) {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
     super(
       redis,
       buildConfig({
         sourceStreamKey: sourceStreamKey ?? 'noema:events:user-service',
         consumerName,
       }),
-      logger,
+      logger
     );
   }
 
@@ -83,10 +78,7 @@ export class UserDeletedConsumer extends SchedulerBaseConsumer {
   private async handleUserDeleted(envelope: IStreamEventEnvelope): Promise<void> {
     const parsed = UserDeletedPayloadSchema.safeParse(envelope.payload);
     if (!parsed.success) {
-      this.logger.warn(
-        { eventType: envelope.eventType },
-        'Skipping invalid user.deleted payload',
-      );
+      this.logger.warn({ eventType: envelope.eventType }, 'Skipping invalid user.deleted payload');
       return;
     }
 
@@ -125,20 +117,20 @@ export class UserDeletedConsumer extends SchedulerBaseConsumer {
             suspendedReason: 'user_soft_deleted',
             state: 'suspended',
           },
-          card.version,
+          card.version
         );
         suspendedCount++;
       } catch (error: unknown) {
         this.logger.warn(
           { userId, cardId: card.cardId, error },
-          'Failed to suspend SchedulerCard during user soft-delete',
+          'Failed to suspend SchedulerCard during user soft-delete'
         );
       }
     }
 
     this.logger.info(
       { userId, totalCards: cards.length, suspendedCount },
-      'Soft-deleted user: suspended all SchedulerCards',
+      'Soft-deleted user: suspended all SchedulerCards'
     );
   }
 
@@ -160,7 +152,7 @@ export class UserDeletedConsumer extends SchedulerBaseConsumer {
         deletedReviewCount,
         deletedCalibrationCount,
       },
-      'Hard-deleted user: purged all scheduler data (GDPR erasure)',
+      'Hard-deleted user: purged all scheduler data (GDPR erasure)'
     );
   }
 }

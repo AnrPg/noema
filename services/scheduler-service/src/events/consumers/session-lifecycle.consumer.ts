@@ -92,27 +92,19 @@ const SessionAbandonedPayloadSchema = z
 // ============================================================================
 
 export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
-  constructor(
-    redis: Redis,
-    logger: Logger,
-    consumerName: string,
-    sourceStreamKey?: string,
-  ) {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
     super(
       redis,
       buildConfig({
         sourceStreamKey: sourceStreamKey ?? 'noema:events:session-service',
         consumerName,
       }),
-      logger,
+      logger
     );
   }
 
   protected async dispatchEvent(envelope: IStreamEventEnvelope): Promise<void> {
-    if (
-      envelope.eventType !== 'session.completed' &&
-      envelope.eventType !== 'session.abandoned'
-    ) {
+    if (envelope.eventType !== 'session.completed' && envelope.eventType !== 'session.abandoned') {
       return;
     }
 
@@ -135,7 +127,7 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
     if (!parsed.success) {
       this.logger.warn(
         { eventType: envelope.eventType },
-        'Skipping invalid session.completed payload',
+        'Skipping invalid session.completed payload'
       );
       return;
     }
@@ -153,7 +145,7 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
     if (sessionReviews.length === 0) {
       this.logger.debug(
         { sessionId, userId },
-        'session.completed has no associated reviews; skipping scheduler update',
+        'session.completed has no associated reviews; skipping scheduler update'
       );
       return;
     }
@@ -174,7 +166,7 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
         lapsedCards: stats.lapsedCards,
         reviewsFound: sessionReviews.length,
       },
-      'Session completed: recorded scheduler analytics',
+      'Session completed: recorded scheduler analytics'
     );
 
     // Publish a scheduler-level session analytics event for downstream consumption
@@ -197,7 +189,8 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
       },
       metadata: {
         correlationId:
-          (envelope.metadata?.['correlationId'] as CorrelationId | undefined) ?? (envelope.aggregateId as CorrelationId),
+          (envelope.metadata?.['correlationId'] as CorrelationId | undefined) ??
+          (envelope.aggregateId as CorrelationId),
         userId,
       },
     });
@@ -214,7 +207,7 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
     if (!parsed.success) {
       this.logger.warn(
         { eventType: envelope.eventType },
-        'Skipping invalid session.abandoned payload',
+        'Skipping invalid session.abandoned payload'
       );
       return;
     }
@@ -239,7 +232,7 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
         retentionRate: stats.retentionRate,
         reviewsFound: sessionReviews.length,
       },
-      'Session abandoned: recorded partial scheduler analytics',
+      'Session abandoned: recorded partial scheduler analytics'
     );
 
     // Publish a scheduler-level session abandoned event for analytics pipeline
@@ -260,7 +253,8 @@ export class SessionLifecycleConsumer extends SchedulerBaseConsumer {
         },
         metadata: {
           correlationId:
-          (envelope.metadata?.['correlationId'] as CorrelationId | undefined) ?? (envelope.aggregateId as CorrelationId),
+            (envelope.metadata?.['correlationId'] as CorrelationId | undefined) ??
+            (envelope.aggregateId as CorrelationId),
         },
       });
     }

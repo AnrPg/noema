@@ -66,4 +66,3 @@ export * from './knowledge-graph/knowledge-graph.events.js';
 // Event Consumer Infrastructure
 // ============================================================================
 export * from './consumer/index.js';
-
