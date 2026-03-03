@@ -3,17 +3,21 @@
  */
 
 import type { CardId, UserId } from '@noema/types';
-import type {
+import {
   Prisma,
-  PrismaClient,
-  Rating as PrismaRating,
-  Review as PrismaReview,
-  SchedulerLane as PrismaSchedulerLane,
+  type PrismaClient,
+  type Rating as PrismaRating,
+  type Review as PrismaReview,
+  type SchedulerLane as PrismaSchedulerLane,
 } from '../../../generated/prisma/index.js';
 import type { IReviewRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type {
+  IPaginationParams,
   IReview,
+  IReviewExtendedFilters,
   IReviewFilters,
+  IReviewStatsResponse,
+  ISortParams,
   Rating,
   SchedulerLane,
 } from '../../types/scheduler.types.js';
@@ -180,5 +184,181 @@ export class PrismaReviewRepository implements IReviewRepository {
       where: { userId },
     });
     return result.count;
+  }
+
+  // ---------- Phase 3: Paginated Read + Aggregation ----------
+
+  async findByUserPaginated(
+    userId: UserId,
+    filters: IReviewExtendedFilters,
+    pagination: IPaginationParams,
+    sort: ISortParams<'reviewedAt' | 'responseTime' | 'rating'>
+  ): Promise<IReview[]> {
+    const where = this.buildExtendedWhere(userId, filters);
+    const orderBy = this.buildOrderBy(sort);
+
+    const reviews = await this.prisma.review.findMany({
+      where,
+      orderBy,
+      take: pagination.limit,
+      skip: pagination.offset,
+    });
+
+    return reviews.map(toDomain);
+  }
+
+  async countByUserFiltered(userId: UserId, filters: IReviewExtendedFilters): Promise<number> {
+    const where = this.buildExtendedWhere(userId, filters);
+    return this.prisma.review.count({ where });
+  }
+
+  async aggregateStats(
+    userId: UserId,
+    filters: IReviewExtendedFilters
+  ): Promise<Omit<IReviewStatsResponse, 'reviewsByDay'>> {
+    const where = this.buildExtendedWhere(userId, filters);
+
+    // Run aggregate + groupBy queries in parallel
+    const [aggregate, ratingGroups, outcomeGroups] = await Promise.all([
+      this.prisma.review.aggregate({
+        where,
+        _count: { id: true },
+        _avg: { responseTime: true, deltaDays: true },
+      }),
+      this.prisma.review.groupBy({
+        by: ['rating'],
+        where,
+        _count: { id: true },
+      }),
+      this.prisma.review.groupBy({
+        by: ['outcome'],
+        where,
+        _count: { id: true },
+      }),
+    ]);
+
+    const ratingDist = { again: 0, hard: 0, good: 0, easy: 0 };
+    for (const group of ratingGroups) {
+      const key = group.rating.toLowerCase() as keyof typeof ratingDist;
+      if (key in ratingDist) {
+        ratingDist[key] = group._count.id;
+      }
+    }
+
+    const outcomeDist = { correct: 0, incorrect: 0, partial: 0, skipped: 0 };
+    for (const group of outcomeGroups) {
+      const key = group.outcome.toLowerCase() as keyof typeof outcomeDist;
+      if (key in outcomeDist) {
+        outcomeDist[key] = group._count.id;
+      }
+    }
+
+    // Compute average calibration delta from reviews that have both confidence values
+    let averageCalibrationDelta: number | null = null;
+    const calibrationAgg = await this.prisma.review.aggregate({
+      where: {
+        ...where,
+        confidenceBefore: { not: null },
+        confidenceAfter: { not: null },
+      },
+      _avg: { confidenceBefore: true, confidenceAfter: true },
+      _count: { id: true },
+    });
+    if (
+      calibrationAgg._count.id > 0 &&
+      calibrationAgg._avg.confidenceAfter !== null &&
+      calibrationAgg._avg.confidenceBefore !== null
+    ) {
+      averageCalibrationDelta =
+        calibrationAgg._avg.confidenceAfter - calibrationAgg._avg.confidenceBefore;
+    }
+
+    return {
+      totalReviews: aggregate._count.id,
+      averageResponseTimeMs: aggregate._avg.responseTime ?? null,
+      ratingDistribution: ratingDist,
+      outcomeDistribution: outcomeDist,
+      averageCalibrationDelta,
+      averageInterval: aggregate._avg.deltaDays ?? null,
+    };
+  }
+
+  async reviewsByDay(
+    userId: UserId,
+    filters: IReviewExtendedFilters
+  ): Promise<Array<{ date: string; count: number }>> {
+    // Use raw query for date truncation grouping (Prisma doesn't support groupBy on date parts)
+    const results = await this.prisma.$queryRaw<Array<{ date: Date; count: bigint }>>`
+      SELECT DATE_TRUNC('day', reviewed_at) AS date, COUNT(*)::bigint AS count
+      FROM reviews
+      WHERE user_id = ${userId}
+        ${filters.startDate !== undefined ? Prisma.sql`AND reviewed_at >= ${filters.startDate}` : Prisma.empty}
+        ${filters.endDate !== undefined ? Prisma.sql`AND reviewed_at <= ${filters.endDate}` : Prisma.empty}
+        ${filters.cardId !== undefined ? Prisma.sql`AND card_id = ${filters.cardId}` : Prisma.empty}
+        ${filters.lane !== undefined ? Prisma.sql`AND lane = CAST(${filters.lane.toUpperCase()} AS "scheduler_lane")` : Prisma.empty}
+        ${filters.rating !== undefined ? Prisma.sql`AND rating = CAST(${filters.rating.toUpperCase()} AS "Rating")` : Prisma.empty}
+        ${filters.outcome !== undefined ? Prisma.sql`AND outcome = ${filters.outcome}` : Prisma.empty}
+        ${filters.sessionId !== undefined ? Prisma.sql`AND session_id = ${filters.sessionId}` : Prisma.empty}
+        ${filters.schedulingAlgorithm !== undefined ? Prisma.sql`AND scheduling_algorithm = ${filters.schedulingAlgorithm}` : Prisma.empty}
+      GROUP BY DATE_TRUNC('day', reviewed_at)
+      ORDER BY date ASC
+    `;
+
+    return results.map((row) => ({
+      date: new Date(row.date).toISOString().split('T')[0] ?? new Date(row.date).toISOString(),
+      count: Number(row.count),
+    }));
+  }
+
+  // ---------- Private Helpers ----------
+
+  private buildExtendedWhere(
+    userId: string,
+    filters: IReviewExtendedFilters
+  ): Prisma.ReviewWhereInput {
+    const where: Prisma.ReviewWhereInput = { userId };
+
+    if (filters.cardId !== undefined) {
+      where.cardId = filters.cardId;
+    }
+    if (filters.sessionId !== undefined && filters.sessionId !== '') {
+      where.sessionId = filters.sessionId;
+    }
+    if (filters.lane !== undefined) {
+      where.lane = toPrismaLane(filters.lane);
+    }
+    if (filters.schedulingAlgorithm !== undefined && filters.schedulingAlgorithm !== '') {
+      where.schedulingAlgorithm = filters.schedulingAlgorithm;
+    }
+    if (filters.rating !== undefined) {
+      where.rating = toPrismaRating(filters.rating);
+    }
+    if (filters.outcome !== undefined && filters.outcome !== '') {
+      where.outcome = filters.outcome;
+    }
+    if (filters.startDate !== undefined || filters.endDate !== undefined) {
+      where.reviewedAt = {};
+      if (filters.startDate !== undefined) {
+        (where.reviewedAt as { gte?: Date; lte?: Date }).gte = filters.startDate;
+      }
+      if (filters.endDate !== undefined) {
+        (where.reviewedAt as { gte?: Date; lte?: Date }).lte = filters.endDate;
+      }
+    }
+
+    return where;
+  }
+
+  private buildOrderBy(
+    sort: ISortParams<'reviewedAt' | 'responseTime' | 'rating'>
+  ): Record<string, 'asc' | 'desc'> {
+    const fieldMap: Record<string, string> = {
+      reviewedAt: 'reviewedAt',
+      responseTime: 'responseTime',
+      rating: 'ratingValue',
+    };
+
+    const field = fieldMap[sort.sortBy] ?? 'reviewedAt';
+    return { [field]: sort.sortOrder };
   }
 }

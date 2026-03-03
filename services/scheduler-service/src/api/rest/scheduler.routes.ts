@@ -1,11 +1,23 @@
 import type { IApiResponse } from '@noema/contracts';
-import type { CorrelationId, UserId } from '@noema/types';
+import type { CardId, CorrelationId, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import {
+  ForecastInputSchema,
+  ReviewListQuerySchema,
+  ReviewStatsQuerySchema,
+  SchedulerCardListQuerySchema,
+  SchedulerCardParamsSchema,
+} from '../../domain/scheduler-service/scheduler-read.schemas.js';
+import type { SchedulerReadService } from '../../domain/scheduler-service/scheduler-read.service.js';
 import {
   buildExecutionContext,
   type SchedulerService,
 } from '../../domain/scheduler-service/scheduler.service.js';
+import type {
+  IReviewExtendedFilters,
+  ISchedulerCardExtendedFilters,
+} from '../../types/scheduler.types.js';
 import {
   buildErrorMetadata,
   requireScopes,
@@ -39,7 +51,8 @@ function handleError(error: unknown, request: FastifyRequest, reply: FastifyRepl
 export function registerSchedulerRoutes(
   fastify: FastifyInstance,
   schedulerService: SchedulerService,
-  authMiddleware: ReturnType<typeof createAuthMiddleware>
+  authMiddleware: ReturnType<typeof createAuthMiddleware>,
+  schedulerReadService?: SchedulerReadService
 ): void {
   const maxPayloadBytes = parseInt(process.env['REQUEST_MAX_PAYLOAD_BYTES'] ?? '262144', 10);
   const authPreHandler = {
@@ -264,4 +277,269 @@ export function registerSchedulerRoutes(
     authPreHandler,
     commitBatchScheduleHandler
   );
+
+  // ==========================================================================
+  // Phase 3 — Read API (GET endpoints + POST forecast)
+  // ==========================================================================
+
+  if (schedulerReadService === undefined) {
+    return;
+  }
+
+  // T3.1 — GET /v1/scheduler/cards/:cardId
+  const getCardHandler = async (
+    request: FastifyRequest<{ Params: { cardId: string } }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+
+    try {
+      const paramsParsed = SchedulerCardParamsSchema.safeParse(request.params);
+      if (!paramsParsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_PARAMS',
+          message: `Invalid path params: ${paramsParsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const result = await schedulerReadService.getSchedulerCard(
+        userId,
+        paramsParsed.data.cardId as CardId
+      );
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected error';
+      void sendErrorEnvelope(reply, request, {
+        statusCode: 400,
+        code: message.includes('not found') ? 'CARD_NOT_FOUND' : 'SCHEDULER_ERROR',
+        message,
+        category: 'validation',
+        retryable: false,
+      });
+    }
+  };
+
+  // T3.1 — GET /v1/scheduler/cards
+  const listCardsHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+
+    try {
+      const parsed = SchedulerCardListQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_QUERY',
+          message: `Invalid query params: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const q = parsed.data;
+      const userId = q.userId as UserId;
+
+      const filters: ISchedulerCardExtendedFilters = {
+        ...(q.lane !== undefined && { lane: q.lane }),
+        ...(q.state !== undefined && { state: q.state }),
+        ...(q.algorithm !== undefined && { schedulingAlgorithm: q.algorithm }),
+        ...(q.dueBefore !== undefined && { dueBefore: new Date(q.dueBefore) }),
+        ...(q.dueAfter !== undefined && { dueAfter: new Date(q.dueAfter) }),
+      };
+
+      const result = await schedulerReadService.listSchedulerCards(
+        userId,
+        filters,
+        { limit: q.limit, offset: q.offset },
+        { sortBy: q.sortBy, sortOrder: q.sortOrder }
+      );
+
+      reply.send({
+        ...wrapResponse(request, result.data.cards, result.agentHints),
+        pagination: {
+          offset: q.offset,
+          limit: q.limit,
+          total: result.data.total,
+          hasMore: q.offset + q.limit < result.data.total,
+        },
+      });
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // T3.2 — GET /v1/scheduler/reviews
+  const listReviewsHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+
+    try {
+      const parsed = ReviewListQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_QUERY',
+          message: `Invalid query params: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const q = parsed.data;
+      const userId = q.userId as UserId;
+
+      const filters: IReviewExtendedFilters = {
+        ...(q.cardId !== undefined && { cardId: q.cardId as CardId }),
+        ...(q.sessionId !== undefined && { sessionId: q.sessionId }),
+        ...(q.lane !== undefined && { lane: q.lane }),
+        ...(q.algorithm !== undefined && { schedulingAlgorithm: q.algorithm }),
+        ...(q.rating !== undefined && { rating: q.rating }),
+        ...(q.outcome !== undefined && { outcome: q.outcome }),
+        ...(q.reviewedAfter !== undefined && { startDate: new Date(q.reviewedAfter) }),
+        ...(q.reviewedBefore !== undefined && { endDate: new Date(q.reviewedBefore) }),
+      };
+
+      const result = await schedulerReadService.listReviews(
+        userId,
+        filters,
+        { limit: q.limit, offset: q.offset },
+        { sortBy: q.sortBy, sortOrder: q.sortOrder }
+      );
+
+      reply.send({
+        ...wrapResponse(request, result.data.reviews, result.agentHints),
+        pagination: {
+          offset: q.offset,
+          limit: q.limit,
+          total: result.data.total,
+          hasMore: q.offset + q.limit < result.data.total,
+        },
+      });
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // T3.2 — GET /v1/scheduler/reviews/stats
+  const reviewStatsHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+
+    try {
+      const parsed = ReviewStatsQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_QUERY',
+          message: `Invalid query params: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const q = parsed.data;
+      const userId = q.userId as UserId;
+
+      const filters: IReviewExtendedFilters = {
+        ...(q.cardId !== undefined && { cardId: q.cardId as CardId }),
+        ...(q.sessionId !== undefined && { sessionId: q.sessionId }),
+        ...(q.lane !== undefined && { lane: q.lane }),
+        ...(q.algorithm !== undefined && { schedulingAlgorithm: q.algorithm }),
+        ...(q.rating !== undefined && { rating: q.rating }),
+        ...(q.outcome !== undefined && { outcome: q.outcome }),
+        ...(q.reviewedAfter !== undefined && { startDate: new Date(q.reviewedAfter) }),
+        ...(q.reviewedBefore !== undefined && { endDate: new Date(q.reviewedBefore) }),
+      };
+
+      const result = await schedulerReadService.getReviewStats(userId, filters);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // T3.3 — POST /v1/scheduler/forecast
+  const forecastHandler = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+    if (!(await withPayloadGuard(request, reply))) return;
+
+    try {
+      const parsed = ForecastInputSchema.safeParse(request.body);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_BODY',
+          message: `Invalid forecast input: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const result = await schedulerReadService.generateForecast({
+        ...parsed.data,
+        userId: parsed.data.userId as UserId,
+      });
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // Register Phase 3 routes
+  fastify.get<{ Params: { cardId: string } }>(
+    '/v1/scheduler/cards/:cardId',
+    authPreHandler,
+    getCardHandler
+  );
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/cards',
+    authPreHandler,
+    listCardsHandler
+  );
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/reviews',
+    authPreHandler,
+    listReviewsHandler
+  );
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/reviews/stats',
+    authPreHandler,
+    reviewStatsHandler
+  );
+  fastify.post<{ Body: unknown }>('/v1/scheduler/forecast', authPreHandler, forecastHandler);
 }

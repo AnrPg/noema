@@ -15,8 +15,11 @@ import type {
 } from '../../../generated/prisma/index.js';
 import type { ISchedulerCardRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type {
+  IPaginationParams,
   ISchedulerCard,
+  ISchedulerCardExtendedFilters,
   ISchedulerCardFilters,
+  ISortParams,
   SchedulerCardState,
   SchedulerLane,
 } from '../../types/scheduler.types.js';
@@ -395,5 +398,102 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   ): Promise<ISchedulerCard[]> {
     const created = await Promise.all(cards.map((card) => this.create(card)));
     return created;
+  }
+
+  // ---------- Phase 3: Paginated Read ----------
+
+  async findByUserPaginated(
+    userId: UserId,
+    filters: ISchedulerCardExtendedFilters,
+    pagination: IPaginationParams,
+    sort: ISortParams<'nextReviewDate' | 'stability' | 'difficulty' | 'reviewCount' | 'createdAt'>
+  ): Promise<ISchedulerCard[]> {
+    const where = this.buildExtendedWhere(userId, filters);
+    const orderBy = this.buildOrderBy(sort);
+
+    const cards = await this.prisma.schedulerCard.findMany({
+      where,
+      orderBy,
+      take: pagination.limit,
+      skip: pagination.offset,
+    });
+
+    return cards.map(toDomain);
+  }
+
+  async countByUserFiltered(
+    userId: UserId,
+    filters: ISchedulerCardExtendedFilters
+  ): Promise<number> {
+    const where = this.buildExtendedWhere(userId, filters);
+    return this.prisma.schedulerCard.count({ where });
+  }
+
+  async findReviewableByUser(userId: UserId): Promise<ISchedulerCard[]> {
+    const cards = await this.prisma.schedulerCard.findMany({
+      where: {
+        userId,
+        state: { not: 'SUSPENDED' as PrismaSchedulerCardState },
+      },
+      orderBy: { nextReviewDate: 'asc' },
+    });
+    return cards.map(toDomain);
+  }
+
+  // ---------- Private Helpers ----------
+
+  private buildExtendedWhere(
+    userId: string,
+    filters: ISchedulerCardExtendedFilters
+  ): {
+    userId: string;
+    lane?: PrismaSchedulerLane;
+    state?: PrismaSchedulerCardState;
+    schedulingAlgorithm?: string;
+    nextReviewDate?: { lte?: Date; gte?: Date };
+  } {
+    const where: {
+      userId: string;
+      lane?: PrismaSchedulerLane;
+      state?: PrismaSchedulerCardState;
+      schedulingAlgorithm?: string;
+      nextReviewDate?: { lte?: Date; gte?: Date };
+    } = { userId };
+
+    if (filters.lane !== undefined) {
+      where.lane = toPrismaLane(filters.lane);
+    }
+    if (filters.state !== undefined) {
+      where.state = toPrismaState(filters.state);
+    }
+    if (filters.schedulingAlgorithm !== undefined && filters.schedulingAlgorithm !== '') {
+      where.schedulingAlgorithm = filters.schedulingAlgorithm;
+    }
+    if (filters.dueBefore !== undefined || filters.dueAfter !== undefined) {
+      where.nextReviewDate = {};
+      if (filters.dueBefore !== undefined) {
+        where.nextReviewDate.lte = filters.dueBefore;
+      }
+      if (filters.dueAfter !== undefined) {
+        where.nextReviewDate.gte = filters.dueAfter;
+      }
+    }
+
+    return where;
+  }
+
+  private buildOrderBy(
+    sort: ISortParams<'nextReviewDate' | 'stability' | 'difficulty' | 'reviewCount' | 'createdAt'>
+  ): Record<string, 'asc' | 'desc'> {
+    const fieldMap: Record<string, string> = {
+      nextReviewDate: 'nextReviewDate',
+      stability: 'stability',
+      difficulty: 'difficultyParameter',
+      reviewCount: 'reviewCount',
+      createdAt: 'createdAt',
+    };
+
+    const field = fieldMap[sort.sortBy] ?? 'nextReviewDate';
+    return { [field]: sort.sortOrder };
   }
 }

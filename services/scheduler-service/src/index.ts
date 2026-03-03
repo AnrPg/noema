@@ -8,6 +8,7 @@ import { createToolRegistry, registerToolRoutes } from './agents/tools/index.js'
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes, registerSchedulerRoutes } from './api/rest/index.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
+import { SchedulerReadService } from './domain/scheduler-service/scheduler-read.service.js';
 import { SchedulerService } from './domain/scheduler-service/scheduler.service.js';
 import {
   CardLifecycleConsumer,
@@ -86,6 +87,12 @@ async function bootstrap(): Promise<void> {
     reviewRepository: reviewRepo,
     calibrationDataRepository: calibrationDataRepo,
     provenanceRepository: provenanceRepo,
+  });
+
+  // Phase 3: Read-only service for card state, review history, and forecast
+  const schedulerReadService = new SchedulerReadService({
+    schedulerCardRepository: schedulerCardRepo,
+    reviewRepository: reviewRepo,
   });
 
   // ==========================================================================
@@ -235,7 +242,12 @@ async function bootstrap(): Promise<void> {
     consumerGroup: 'scheduler-service:session-started',
     deadLetterStreamKey: 'noema:dlq:scheduler-service:session-started',
   });
-  registerSchedulerRoutes(fastify as unknown as FastifyInstance, schedulerService, authMiddleware);
+  registerSchedulerRoutes(
+    fastify as unknown as FastifyInstance,
+    schedulerService,
+    authMiddleware,
+    schedulerReadService
+  );
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   const shutdown = async (signal: string): Promise<void> => {

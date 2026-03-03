@@ -13,6 +13,8 @@ import type {
   ICardScheduleDecision,
   IDualLanePlan,
   IDualLanePlanInput,
+  IEnhancedCardScheduleDecision,
+  IEnhancedReviewWindowProposal,
   IExecutionContext,
   IOrchestrationMetadata,
   IPolicyVersion,
@@ -21,7 +23,6 @@ import type {
   IRetentionPredictionResult,
   IReviewQueue,
   IReviewQueueInput,
-  IReviewWindowProposal,
   IReviewWindowProposalInput,
   ISchedulerCard,
   ISchedulerLaneMix,
@@ -33,10 +34,12 @@ import type {
   ISessionCandidateProposalInput,
   ISessionCandidateSimulation,
   ISessionCandidateSimulationInput,
+  ISuggestedTimeBlock,
   SchedulerLane,
   UserId,
 } from '../../types/scheduler.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
+import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from './algorithms/fsrs.js';
 import type {
   ICalibrationDataRepository,
   ICohortLineageInput,
@@ -208,7 +211,7 @@ export class SchedulerService {
   async proposeReviewWindows(
     input: unknown,
     ctx: IExecutionContext
-  ): Promise<IServiceResult<IReviewWindowProposal>> {
+  ): Promise<IServiceResult<IEnhancedReviewWindowProposal>> {
     const parsed = ReviewWindowProposalInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new Error('Invalid review-window proposal input');
@@ -220,11 +223,42 @@ export class SchedulerService {
     }
 
     const baseTime = data.asOf ?? new Date().toISOString();
-    const decisions = data.cards.map((card) => {
+    const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+
+    const decisions: IEnhancedCardScheduleDecision[] = data.cards.map((card) => {
       const intervalDays = this.deriveIntervalDays(card.algorithm, card.stability ?? undefined);
       const nextReviewAt = new Date(
         new Date(baseTime).getTime() + intervalDays * 24 * 60 * 60 * 1000
       ).toISOString();
+
+      // T3.4: Compute retention probability inline
+      let retentionProbability: number | null = null;
+      const elapsedDays = card.lastReviewAt
+        ? Math.max(
+            0,
+            (new Date(baseTime).getTime() - new Date(card.lastReviewAt).getTime()) / 86_400_000
+          )
+        : null;
+
+      if (
+        card.algorithm === 'fsrs' &&
+        card.stability !== null &&
+        card.stability !== undefined &&
+        card.stability > 0 &&
+        elapsedDays !== null
+      ) {
+        retentionProbability = fsrs.forgettingCurve(elapsedDays, card.stability);
+      } else if (
+        card.algorithm === 'hlr' &&
+        card.stability !== null &&
+        card.stability !== undefined &&
+        card.stability > 0 &&
+        elapsedDays !== null
+      ) {
+        // For HLR, stability → halfLife. Use simplified formula: 2^(-elapsed / halfLife)
+        retentionProbability = Math.pow(2, -elapsedDays / card.stability);
+      }
+
       return {
         cardId: card.cardId,
         nextReviewAt,
@@ -232,16 +266,21 @@ export class SchedulerService {
         lane: card.algorithm === 'hlr' ? 'calibration' : 'retention',
         algorithm: card.algorithm,
         rationale: 'Deterministic review-window proposal',
-      } as ICardScheduleDecision;
+        retentionProbability,
+      } as IEnhancedCardScheduleDecision;
     });
+
+    // T3.4: Compute suggested time blocks
+    const suggestedTimeBlocks = this.computeSuggestedTimeBlocks(decisions);
 
     const orchestration = this.buildOrchestrationMetadata(ctx);
 
-    const result: IReviewWindowProposal = {
+    const result: IEnhancedReviewWindowProposal = {
       generatedAt: new Date().toISOString(),
       decisions,
       policyVersion: SchedulerService.POLICY_VERSION,
       orchestration,
+      suggestedTimeBlocks,
     };
 
     await this.recordProposalProvenance({
@@ -892,6 +931,51 @@ export class SchedulerService {
       return Math.max(1, Math.round(stability ?? 2));
     }
     return Math.max(1, Math.round(stability ?? 3));
+  }
+
+  /**
+   * T3.4 — Compute suggested time blocks for a set of review window decisions.
+   *
+   * Splits decisions into retention vs calibration groups and proposes
+   * reasonable study blocks. Uses sensible defaults (morning retention,
+   * afternoon calibration, ~2 min per card).
+   */
+  private computeSuggestedTimeBlocks(
+    decisions: IEnhancedCardScheduleDecision[]
+  ): ISuggestedTimeBlock[] {
+    const blocks: ISuggestedTimeBlock[] = [];
+    const retentionCards = decisions.filter((d) => d.lane === 'retention');
+    const calibrationCards = decisions.filter((d) => d.lane === 'calibration');
+    const secondsPerCard = 90;
+
+    if (retentionCards.length > 0) {
+      const durationMinutes = Math.max(5, Math.ceil((retentionCards.length * secondsPerCard) / 60));
+      const endHour = 9 + Math.floor(durationMinutes / 60);
+      const endMinute = durationMinutes % 60;
+      blocks.push({
+        startTime: '09:00',
+        endTime: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
+        cardCount: retentionCards.length,
+        description: 'Morning retention review',
+      });
+    }
+
+    if (calibrationCards.length > 0) {
+      const durationMinutes = Math.max(
+        5,
+        Math.ceil((calibrationCards.length * secondsPerCard) / 60)
+      );
+      const endHour = 14 + Math.floor(durationMinutes / 60);
+      const endMinute = durationMinutes % 60;
+      blocks.push({
+        startTime: '14:00',
+        endTime: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
+        cardCount: calibrationCards.length,
+        description: 'Afternoon calibration session',
+      });
+    }
+
+    return blocks;
   }
 
   private scoreCandidate(card: ISessionCandidateCard): ICandidateScore {

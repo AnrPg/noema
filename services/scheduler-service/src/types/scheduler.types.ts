@@ -303,6 +303,193 @@ export interface ISessionAdjustmentResult {
 }
 
 // ============================================================================
+// Phase 3 — Read API Types
+// ============================================================================
+
+/**
+ * Response shape for GET /v1/scheduler/cards/:cardId (single card).
+ * Includes everything needed for the Card Schedule Inspector.
+ */
+export interface ISchedulerCardResponse {
+  cardId: CardId;
+  userId: UserId;
+  lane: SchedulerLane;
+  state: SchedulerCardState;
+  schedulingAlgorithm: 'fsrs' | 'hlr' | 'sm2';
+  /** FSRS: memory stability in days */
+  stability: number | null;
+  /** FSRS: intrinsic difficulty [0-10] */
+  difficulty: number | null;
+  /** Current inter-review interval in days */
+  interval: number;
+  /** HLR: days until recall probability drops to 50% */
+  halfLife: number | null;
+  /** Current recall probability [0-1]. FSRS: forgetting curve. HLR: 2^(-deltaDays/halfLife). */
+  currentRecallProbability: number | null;
+  nextReviewDate: string;
+  lastReviewedAt: string | null;
+  reviewCount: number;
+  lapseCount: number;
+  consecutiveCorrect: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Paginated list response for GET /v1/scheduler/cards.
+ * Same shape as single-card but without inline recall probability (for performance).
+ */
+export interface ISchedulerCardListResponse {
+  cards: ISchedulerCardResponse[];
+}
+
+/**
+ * Query filters for the cards list endpoint.
+ */
+export interface ISchedulerCardQueryFilters {
+  userId: UserId;
+  lane?: SchedulerLane;
+  state?: SchedulerCardState;
+  algorithm?: 'fsrs' | 'hlr' | 'sm2';
+  dueBefore?: string;
+  dueAfter?: string;
+  sortBy?: 'nextReviewDate' | 'stability' | 'difficulty' | 'reviewCount' | 'createdAt';
+  sortOrder?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Response shape for a single review in the review history.
+ */
+export interface IReviewResponse {
+  id: string;
+  cardId: CardId;
+  userId: UserId;
+  sessionId: string;
+  attemptId: string;
+  rating: Rating;
+  ratingValue: number;
+  outcome: string;
+  deltaDays: number;
+  responseTime: number | null;
+  reviewedAt: string;
+  lane: SchedulerLane;
+  algorithm: string;
+  priorState: Record<string, unknown>;
+  newState: Record<string, unknown>;
+  confidenceBefore: number | null;
+  confidenceAfter: number | null;
+  calibrationDelta: number | null;
+  hintDepthReached: number | null;
+}
+
+/**
+ * Query filters for the reviews list endpoint.
+ */
+export interface IReviewQueryFilters {
+  userId: UserId;
+  cardId?: CardId;
+  sessionId?: string;
+  lane?: SchedulerLane;
+  algorithm?: string;
+  rating?: Rating;
+  outcome?: string;
+  reviewedAfter?: string;
+  reviewedBefore?: string;
+  sortBy?: 'reviewedAt' | 'responseTime' | 'rating';
+  sortOrder?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Aggregated review statistics response.
+ */
+export interface IReviewStatsResponse {
+  totalReviews: number;
+  averageResponseTimeMs: number | null;
+  ratingDistribution: {
+    again: number;
+    hard: number;
+    good: number;
+    easy: number;
+  };
+  outcomeDistribution: {
+    correct: number;
+    incorrect: number;
+    partial: number;
+    skipped: number;
+  };
+  averageCalibrationDelta: number | null;
+  averageInterval: number | null;
+  reviewsByDay: Array<{ date: string; count: number }>;
+}
+
+/**
+ * Request body for POST /v1/scheduler/forecast.
+ */
+export interface IForecastInput {
+  userId: UserId;
+  /** Number of days to forecast (default 7, max 90) */
+  days?: number;
+  /** Include already-overdue cards in day 0 (default true) */
+  includeOverdue?: boolean;
+}
+
+/**
+ * Per-lane breakdown in a forecast day.
+ */
+export interface IForecastLaneCounts {
+  newDue: number;
+  overdue: number;
+  total: number;
+}
+
+/**
+ * Single day in the forecast projection.
+ */
+export interface IForecastDay {
+  date: string;
+  retention: IForecastLaneCounts;
+  calibration: IForecastLaneCounts;
+  combined: IForecastLaneCounts;
+  estimatedMinutes: number;
+}
+
+/**
+ * Full forecast response.
+ */
+export interface IForecastResponse {
+  days: IForecastDay[];
+  generatedAt: string;
+  model: 'consumed';
+  averageSecondsPerCard: number;
+}
+
+/**
+ * Suggested time block for review windows.
+ */
+export interface ISuggestedTimeBlock {
+  startTime: string;
+  endTime: string;
+  cardCount: number;
+  description: string;
+}
+
+/**
+ * Enhanced review window proposal with retention probability and time blocks.
+ */
+export interface IEnhancedCardScheduleDecision extends ICardScheduleDecision {
+  retentionProbability?: number | null;
+}
+
+export interface IEnhancedReviewWindowProposal extends Omit<IReviewWindowProposal, 'decisions'> {
+  decisions: IEnhancedCardScheduleDecision[];
+  suggestedTimeBlocks: ISuggestedTimeBlock[];
+}
+
+// ============================================================================
 // Database Entity Types
 // ============================================================================
 
@@ -396,4 +583,37 @@ export interface IReviewFilters {
   lane?: SchedulerLane;
   rating?: Rating;
   sessionId?: string;
+}
+
+// ============================================================================
+// Extended Filter Types (Phase 3 — paginated queries)
+// ============================================================================
+
+export interface IPaginationParams {
+  limit: number;
+  offset: number;
+}
+
+export interface ISortParams<T extends string = string> {
+  sortBy: T;
+  sortOrder: 'asc' | 'desc';
+}
+
+export interface ISchedulerCardExtendedFilters {
+  lane?: SchedulerLane;
+  state?: SchedulerCardState;
+  schedulingAlgorithm?: string;
+  dueBefore?: Date;
+  dueAfter?: Date;
+}
+
+export interface IReviewExtendedFilters {
+  cardId?: CardId;
+  sessionId?: string;
+  lane?: SchedulerLane;
+  schedulingAlgorithm?: string;
+  rating?: Rating;
+  outcome?: string;
+  startDate?: Date;
+  endDate?: Date;
 }

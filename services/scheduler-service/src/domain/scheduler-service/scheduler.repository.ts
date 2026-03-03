@@ -8,10 +8,15 @@
 import type { CardId, UserId } from '@noema/types';
 import type {
   ICalibrationData,
+  IPaginationParams,
   IReview,
+  IReviewExtendedFilters,
   IReviewFilters,
+  IReviewStatsResponse,
   ISchedulerCard,
+  ISchedulerCardExtendedFilters,
   ISchedulerCardFilters,
+  ISortParams,
   SchedulerCardState,
   SchedulerLane,
 } from '../../types/scheduler.types.js';
@@ -138,6 +143,22 @@ export interface ISchedulerCardRepository {
 
   /** Batch create scheduler cards for efficiency. */
   createBatch(cards: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>[]): Promise<ISchedulerCard[]>;
+
+  // ---------- Phase 3: Paginated Read ----------
+
+  /** Find scheduler cards with pagination, extended filters, and sorting. */
+  findByUserPaginated(
+    userId: UserId,
+    filters: ISchedulerCardExtendedFilters,
+    pagination: IPaginationParams,
+    sort: ISortParams<'nextReviewDate' | 'stability' | 'difficulty' | 'reviewCount' | 'createdAt'>
+  ): Promise<ISchedulerCard[]>;
+
+  /** Count scheduler cards matching extended filters (for pagination metadata). */
+  countByUserFiltered(userId: UserId, filters: ISchedulerCardExtendedFilters): Promise<number>;
+
+  /** Find all reviewable cards for forecast computation. */
+  findReviewableByUser(userId: UserId): Promise<ISchedulerCard[]>;
 }
 
 // ============================================================================
@@ -181,6 +202,31 @@ export interface IReviewRepository {
 
   /** Delete all reviews for a user (GDPR erasure). */
   deleteByUser(userId: UserId): Promise<number>;
+
+  // ---------- Phase 3: Paginated Read + Aggregation ----------
+
+  /** Find reviews with pagination, extended filters, and sorting. */
+  findByUserPaginated(
+    userId: UserId,
+    filters: IReviewExtendedFilters,
+    pagination: IPaginationParams,
+    sort: ISortParams<'reviewedAt' | 'responseTime' | 'rating'>
+  ): Promise<IReview[]>;
+
+  /** Count reviews matching extended filters (for pagination metadata). */
+  countByUserFiltered(userId: UserId, filters: IReviewExtendedFilters): Promise<number>;
+
+  /** Aggregate review statistics for a user with optional filters. */
+  aggregateStats(
+    userId: UserId,
+    filters: IReviewExtendedFilters
+  ): Promise<Omit<IReviewStatsResponse, 'reviewsByDay'>>;
+
+  /** Get daily review counts for a user within a date range. */
+  reviewsByDay(
+    userId: UserId,
+    filters: IReviewExtendedFilters
+  ): Promise<Array<{ date: string; count: number }>>;
 }
 
 // ============================================================================
