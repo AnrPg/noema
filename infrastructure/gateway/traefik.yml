@@ -1,0 +1,73 @@
+# =============================================================================
+# Noema API Gateway — Traefik Static Configuration
+# =============================================================================
+# This is the static configuration for Traefik, the API gateway for the Noema
+# platform. It defines entrypoints, providers, logging, and dashboard settings.
+#
+# Dynamic routing rules are in dynamic.yml (loaded via file provider).
+#
+# Reference: docs/backend/phases/PHASE-00-API-GATEWAY.md
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Entrypoints — Ports Traefik listens on
+# -----------------------------------------------------------------------------
+entryPoints:
+  # Primary API entrypoint — all frontend/agent traffic
+  web:
+    address: ":8080"
+    # Future: add TLS termination here for production
+    # transport:
+    #   respondingTimeouts:
+    #     readTimeout: 30s
+    #     writeTimeout: 30s
+
+  # Traefik dashboard (development only)
+  traefik:
+    address: ":8082"
+
+# -----------------------------------------------------------------------------
+# Providers — Where Traefik discovers routing rules
+# -----------------------------------------------------------------------------
+providers:
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true
+
+# -----------------------------------------------------------------------------
+# API / Dashboard — Development observability
+# -----------------------------------------------------------------------------
+api:
+  dashboard: true
+  insecure: true # Dashboard without auth (dev only)
+
+# -----------------------------------------------------------------------------
+# Health Check — Traefik's own liveness probe
+# -----------------------------------------------------------------------------
+ping:
+  entryPoint: web
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  fields:
+    defaultMode: keep
+    names:
+      ClientAddr: keep
+      RequestMethod: keep
+      RequestPath: keep
+      RouterName: keep
+      entryPointName: keep
+    headers:
+      defaultMode: drop
+      names:
+        Authorization: redact
+        Content-Type: keep
+        X-Request-ID: keep
+        X-Correlation-Id: keep

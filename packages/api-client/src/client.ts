@@ -85,7 +85,13 @@ export function getApiConfig(): ApiClientConfig {
 
 function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
   const config = getApiConfig();
-  const url = new URL(path, config.baseUrl);
+
+  // Support path-prefixed base URLs (e.g., 'http://localhost:8080/api').
+  // new URL(absolutePath, baseWithPath) discards the base URL's path component,
+  // so we concatenate base + path manually to preserve the prefix.
+  const base = config.baseUrl.replace(/\/+$/, '');
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const url = new URL(`${base}${normalizedPath}`);
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

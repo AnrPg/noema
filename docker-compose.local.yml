@@ -2,13 +2,71 @@
 # Noema Local Development Overrides
 # =============================================================================
 # This file extends docker-compose.yml with local development configurations.
-# Includes additional tools and observability stack for development.
+# Includes additional tools, observability stack, and the API gateway.
 #
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#
+# The API gateway (Traefik) unifies all backend services behind a single
+# origin at http://localhost:8080. See infrastructure/gateway/ for config.
 # =============================================================================
 
 services:
+  # ===========================================================================
+  # API Gateway — Traefik (Phase 00: Spinal Cord)
+  # ===========================================================================
+  # Routes all frontend/agent traffic to the correct backend service based on
+  # URL path prefix. Handles CORS, prefix stripping, and WebSocket upgrades.
+  #
+  # Dashboard: http://localhost:8082
+  # API:       http://localhost:8080
+  gateway:
+    image: traefik:v3.2
+    container_name: noema-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"       # API entrypoint
+      - "${GATEWAY_DASHBOARD_PORT:-8082}:8082" # Traefik dashboard
+    volumes:
+      - ./infrastructure/gateway/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infrastructure/gateway/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    extra_hosts:
+      # Allow Traefik to reach services running on the host via pnpm dev
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - noema-network
+
+  # ===========================================================================
+  # Health Aggregator — Aggregates health of all downstream services
+  # ===========================================================================
+  health-aggregator:
+    build:
+      context: ./infrastructure/gateway/health
+      dockerfile: Dockerfile
+    container_name: noema-health-aggregator
+    restart: unless-stopped
+    environment:
+      PORT: "8090"
+      USER_SERVICE_URL: "http://host.docker.internal:3002"
+      SESSION_SERVICE_URL: "http://host.docker.internal:3003"
+      CONTENT_SERVICE_URL: "http://host.docker.internal:3005"
+      KNOWLEDGE_GRAPH_SERVICE_URL: "http://host.docker.internal:3006"
+      SCHEDULER_SERVICE_URL: "http://host.docker.internal:3009"
+      HLR_SIDECAR_URL: "http://hlr-sidecar:8020"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - noema-network
+
   # ===========================================================================
   # PostgreSQL Development Overrides
   # ===========================================================================
@@ -107,7 +165,7 @@ services:
       GF_USERS_ALLOW_SIGN_UP: false
       GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "${GRAFANA_PORT:-3030}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./infrastructure/docker/grafana/provisioning:/etc/grafana/provisioning:ro

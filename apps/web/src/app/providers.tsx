@@ -9,9 +9,9 @@ import { AuthProvider, useAuthStore } from '@noema/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 
-// Configure API client
+// Configure API client — routes through the API gateway (Traefik on :8080)
 configureApiClient({
-  baseUrl: process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:3002',
+  baseUrl: process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:8080/api',
   getAccessToken: () => useAuthStore.getState().accessToken,
 });
 

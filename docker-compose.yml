@@ -93,6 +93,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-noema}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-noema_minio_password}
+      # CORS configuration for browser access to presigned URLs
+      # In production, media is served via Cloudflare R2/CDN directly.
+      # Locally, MinIO serves media and needs CORS headers.
+      MINIO_API_CORS_ALLOW_ORIGIN: "${MINIO_CORS_ORIGIN:-http://localhost:3000,http://localhost:3004,http://localhost:8080}"
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"

@@ -1,0 +1,310 @@
+# =============================================================================
+# Noema API Gateway — Dynamic Routing Configuration
+# =============================================================================
+# This file defines all routing rules, middlewares, and service backends for
+# the Noema API gateway (Traefik). It is loaded by the file provider and
+# watched for changes.
+#
+# Architecture:
+#   Browser → Gateway (:8080) → /api/* → Backend Service
+#
+# Routing strategy:
+#   - All API routes are prefixed with /api at the gateway level
+#   - Most services receive requests with /api stripped (they use /auth/*, /v1/*)
+#   - knowledge-graph-service is the exception: it expects /api/v1/* paths,
+#     so its routes pass through without stripping
+#   - hlr-sidecar expects root-level paths, so /api/hlr is fully stripped
+#
+# Service ports (actual, from .env.example files):
+#   user-service:            3002
+#   session-service:         3003
+#   content-service:         3005
+#   knowledge-graph-service: 3006
+#   scheduler-service:       3009
+#   hlr-sidecar:             8020 (Docker network: hlr-sidecar:8020)
+#   health-aggregator:       8090 (Docker network: health-aggregator:8090)
+#
+# Reference: docs/backend/phases/PHASE-00-API-GATEWAY.md
+# =============================================================================
+
+http:
+  # ===========================================================================
+  # Middlewares
+  # ===========================================================================
+  middlewares:
+    # -------------------------------------------------------------------------
+    # CORS — Unified cross-origin headers for all API responses
+    # -------------------------------------------------------------------------
+    # Replaces per-service CORS configuration. The gateway is the single
+    # origin-facing layer; individual services can lock down to internal only.
+    cors-headers:
+      headers:
+        accessControlAllowOriginList:
+          - "http://localhost:3000"
+          - "http://localhost:3004"
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - X-Request-ID
+          - X-Correlation-Id
+          - X-User-Id
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
+        # Also add standard security headers
+        customResponseHeaders:
+          X-Content-Type-Options: nosniff
+          X-Frame-Options: DENY
+
+    # -------------------------------------------------------------------------
+    # Prefix stripping — Remove /api prefix for most services
+    # -------------------------------------------------------------------------
+    # Most services register routes at / (user-service) or /v1/ (content, etc.)
+    # The gateway adds /api/* for namespace separation.
+    strip-api:
+      stripPrefix:
+        prefixes:
+          - "/api"
+        forceSlash: false
+
+    # -------------------------------------------------------------------------
+    # HLR prefix stripping — Remove /api/hlr for the HLR sidecar
+    # -------------------------------------------------------------------------
+    # The HLR sidecar (Python/FastAPI) registers routes at root:
+    #   /predict, /train, /weights, /health
+    # Gateway path /api/hlr/predict must become /predict
+    strip-api-hlr:
+      stripPrefix:
+        prefixes:
+          - "/api/hlr"
+        forceSlash: false
+
+  # ===========================================================================
+  # Routers — Path-based routing rules
+  # ===========================================================================
+  routers:
+    # -------------------------------------------------------------------------
+    # User Service (port 3002)
+    # Internal routes: /auth/*, /users/*, /me/*
+    # -------------------------------------------------------------------------
+    user-auth:
+      rule: "PathPrefix(`/api/auth`)"
+      entryPoints:
+        - web
+      service: user-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    user-users:
+      rule: "PathPrefix(`/api/users`)"
+      entryPoints:
+        - web
+      service: user-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    user-me:
+      rule: "PathPrefix(`/api/me`)"
+      entryPoints:
+        - web
+      service: user-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    # -------------------------------------------------------------------------
+    # Content Service (port 3005)
+    # Internal routes: /v1/cards/*, /v1/templates/*, /v1/media/*
+    # -------------------------------------------------------------------------
+    content-cards:
+      rule: "PathPrefix(`/api/v1/cards`)"
+      entryPoints:
+        - web
+      service: content-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    content-templates:
+      rule: "PathPrefix(`/api/v1/templates`)"
+      entryPoints:
+        - web
+      service: content-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    content-media:
+      rule: "PathPrefix(`/api/v1/media`)"
+      entryPoints:
+        - web
+      service: content-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    # -------------------------------------------------------------------------
+    # Session Service (port 3003)
+    # Internal routes: /v1/sessions/*, /v1/offline-intents/*
+    # -------------------------------------------------------------------------
+    session-sessions:
+      rule: "PathPrefix(`/api/v1/sessions`)"
+      entryPoints:
+        - web
+      service: session-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    session-offline:
+      rule: "PathPrefix(`/api/v1/offline-intents`)"
+      entryPoints:
+        - web
+      service: session-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    # -------------------------------------------------------------------------
+    # Scheduler Service (port 3009)
+    # Internal routes: /v1/scheduler/*, /v1/schedule/*
+    # -------------------------------------------------------------------------
+    scheduler:
+      rule: "PathPrefix(`/api/v1/scheduler`) || PathPrefix(`/api/v1/schedule`)"
+      entryPoints:
+        - web
+      service: scheduler-service
+      middlewares:
+        - cors-headers
+        - strip-api
+
+    # -------------------------------------------------------------------------
+    # Knowledge Graph Service (port 3006)
+    # Internal routes: /api/v1/ckg/*, /api/v1/users/:userId/pkg/*,
+    #   /api/v1/users/:userId/metrics/*, /api/v1/users/:userId/misconceptions/*,
+    #   /api/v1/users/:userId/health/*, /api/v1/users/:userId/comparison/*
+    #
+    # NOTE: This is the ONLY service that expects the /api/v1/ prefix.
+    #       Routes pass through WITHOUT stripping.
+    # -------------------------------------------------------------------------
+    kg-ckg:
+      rule: "PathPrefix(`/api/v1/ckg`)"
+      entryPoints:
+        - web
+      service: knowledge-graph-service
+      middlewares:
+        - cors-headers
+      # No strip-api — service expects /api/v1/ckg/*
+
+    # Routes /api/v1/users/:userId/pkg, /metrics, /misconceptions, /health, /comparison
+    # This does NOT conflict with user-service's /api/users/* because of the /v1/ segment
+    kg-users:
+      rule: "PathPrefix(`/api/v1/users`)"
+      entryPoints:
+        - web
+      service: knowledge-graph-service
+      middlewares:
+        - cors-headers
+      # No strip-api — service expects /api/v1/users/:userId/*
+
+    # -------------------------------------------------------------------------
+    # HLR Sidecar (port 8020)
+    # Internal routes: /predict, /train, /weights
+    # -------------------------------------------------------------------------
+    hlr:
+      rule: "PathPrefix(`/api/hlr`)"
+      entryPoints:
+        - web
+      service: hlr-sidecar
+      middlewares:
+        - cors-headers
+        - strip-api-hlr
+
+    # -------------------------------------------------------------------------
+    # Health Aggregation
+    # Routes to the health-aggregator container (port 8090)
+    # -------------------------------------------------------------------------
+    health:
+      rule: "PathPrefix(`/health`)"
+      entryPoints:
+        - web
+      service: health-aggregator
+      middlewares:
+        - cors-headers
+
+  # ===========================================================================
+  # Services — Upstream backend definitions
+  # ===========================================================================
+  # Services running on the host (via pnpm dev) use host.docker.internal.
+  # Services running in Docker (hlr-sidecar, health-aggregator) use container names.
+  services:
+    user-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3002"
+        healthCheck:
+          path: /health/ready
+          interval: 15s
+          timeout: 5s
+
+    content-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3005"
+        healthCheck:
+          path: /health/ready
+          interval: 15s
+          timeout: 5s
+
+    session-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3003"
+        healthCheck:
+          path: /health/ready
+          interval: 15s
+          timeout: 5s
+
+    knowledge-graph-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3006"
+        healthCheck:
+          path: /health/ready
+          interval: 15s
+          timeout: 5s
+
+    scheduler-service:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3009"
+        healthCheck:
+          path: /health/ready
+          interval: 15s
+          timeout: 5s
+
+    hlr-sidecar:
+      loadBalancer:
+        servers:
+          - url: "http://hlr-sidecar:8020"
+        healthCheck:
+          path: /health
+          interval: 30s
+          timeout: 5s
+
+    health-aggregator:
+      loadBalancer:
+        servers:
+          - url: "http://health-aggregator:8090"
+        healthCheck:
+          path: /health
+          interval: 30s
+          timeout: 5s
