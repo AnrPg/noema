@@ -609,6 +609,8 @@ export class PrismaUserRepository implements IUserRepository {
       passwordChangeHistory,
       mfaEnabled: user.mfaEnabled,
       mfaSecret: user.mfaSecret,
+      pendingEmail: user.pendingEmail ?? null,
+      usernameChangedAt: user.usernameChangedAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
       deletedAt: user.deletedAt?.toISOString() || null,
@@ -616,5 +618,133 @@ export class PrismaUserRepository implements IUserRepository {
       updatedBy: user.updatedBy || '',
       version: user.version,
     };
+  }
+
+  // ============================================================================
+  // Username and Email Change Operations
+  // ============================================================================
+
+  async updateUsername(id: UserId, username: string, version: number): Promise<IUser> {
+    const updated = await this.prisma.user.update({
+      where: { id, version },
+      data: { username, version: { increment: 1 } },
+    });
+    return this.toDomain(updated);
+  }
+
+  async updateEmail(id: UserId, email: string, version: number): Promise<IUser> {
+    const updated = await this.prisma.user.update({
+      where: { id, version },
+      data: {
+        email,
+        pendingEmail: null,
+        version: { increment: 1 },
+      },
+    });
+    return this.toDomain(updated);
+  }
+
+  async setPendingEmail(id: UserId, pendingEmail: string | null): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { pendingEmail },
+    });
+  }
+
+  async setUsernameChangedAt(id: UserId, changedAt: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { usernameChangedAt: new Date(changedAt) },
+    });
+  }
+
+  // ============================================================================
+  // Password Reset Token Operations
+  // ============================================================================
+
+  async createPasswordResetToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        expiresAt: data.expiresAt,
+      },
+    });
+  }
+
+  async findPasswordResetTokenByHash(
+    tokenHash: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    usedAt: Date | null;
+    createdAt: Date;
+  } | null> {
+    return this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+  }
+
+  async markPasswordResetTokenUsed(id: string): Promise<void> {
+    await this.prisma.passwordResetToken.update({
+      where: { id },
+      data: { usedAt: new Date() },
+    });
+  }
+
+  // ============================================================================
+  // Email Verification Token Operations
+  // ============================================================================
+
+  async createEmailVerificationToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    // Invalidate existing active tokens for this user
+    await this.prisma.emailVerificationToken.updateMany({
+      where: {
+        userId: data.userId,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { usedAt: new Date() },
+    });
+
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        expiresAt: data.expiresAt,
+      },
+    });
+  }
+
+  async findEmailVerificationTokenByHash(
+    tokenHash: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    usedAt: Date | null;
+    createdAt: Date;
+  } | null> {
+    return this.prisma.emailVerificationToken.findUnique({
+      where: { tokenHash },
+    });
+  }
+
+  async markEmailVerificationTokenUsed(id: string): Promise<void> {
+    await this.prisma.emailVerificationToken.update({
+      where: { id },
+      data: { usedAt: new Date() },
+    });
   }
 }

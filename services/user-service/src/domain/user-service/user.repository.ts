@@ -209,6 +209,97 @@ export interface IUserRepository {
    * Restore soft-deleted user.
    */
   restore(id: UserId): Promise<void>;
+
+  // ============================================================================
+  // Username and Email Change Operations
+  // ============================================================================
+
+  /**
+   * Update username.
+   * Uses optimistic locking.
+   */
+  updateUsername(id: UserId, username: string, version: number): Promise<IUser>;
+
+  /**
+   * Update email.
+   * Uses optimistic locking.
+   */
+  updateEmail(id: UserId, email: string, version: number): Promise<IUser>;
+
+  /**
+   * Set pending email for verification-based email change.
+   */
+  setPendingEmail(id: UserId, pendingEmail: string | null): Promise<void>;
+
+  /**
+   * Record the timestamp of a username change.
+   */
+  setUsernameChangedAt(id: UserId, changedAt: string): Promise<void>;
+
+  // ============================================================================
+  // Password Reset Token Operations
+  // ============================================================================
+
+  /**
+   * Create a password reset token.
+   */
+  createPasswordResetToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void>;
+
+  /**
+   * Find a password reset token by its hash.
+   */
+  findPasswordResetTokenByHash(
+    tokenHash: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    usedAt: Date | null;
+    createdAt: Date;
+  } | null>;
+
+  /**
+   * Mark a password reset token as used.
+   */
+  markPasswordResetTokenUsed(id: string): Promise<void>;
+
+  // ============================================================================
+  // Email Verification Token Operations
+  // ============================================================================
+
+  /**
+   * Create an email verification token.
+   * Also invalidates any existing active tokens for the user.
+   */
+  createEmailVerificationToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void>;
+
+  /**
+   * Find an email verification token by its hash.
+   */
+  findEmailVerificationTokenByHash(
+    tokenHash: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+    usedAt: Date | null;
+    createdAt: Date;
+  } | null>;
+
+  /**
+   * Mark an email verification token as used.
+   */
+  markEmailVerificationTokenUsed(id: string): Promise<void>;
 }
 
 // ============================================================================

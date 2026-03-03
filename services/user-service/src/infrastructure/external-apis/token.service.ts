@@ -19,7 +19,91 @@ import type { ITokenPair, IUser } from '../../types/user.types.js';
 export interface ITokenPayload extends JWTPayload {
   sub: string;
   roles: string[];
+  scopes: string[];
   type: 'access' | 'refresh';
+}
+
+// ============================================================================
+// Scope Derivation
+// ============================================================================
+
+/**
+ * Scope definitions per role tier.
+ *
+ * User-facing roles (learner, premium, creator) all inherit the
+ * base `user` scope set.  `admin`/`super_admin` inherit everything
+ * from `user` plus administration scopes.  `agent` and `service`
+ * are included for future machine-to-machine token generation.
+ */
+const BASE_USER_SCOPES: readonly string[] = [
+  'scheduler:plan',
+  'scheduler:write',
+  'session:read',
+  'session:write',
+  'content:read',
+  'content:write',
+  'kg:read',
+  'kg:write',
+] as const;
+
+const ADMIN_SCOPES: readonly string[] = [
+  ...BASE_USER_SCOPES,
+  'admin:read',
+  'admin:write',
+  'scheduler:admin',
+  'session:system:expire',
+  'kg:admin',
+  'content:admin',
+] as const;
+
+const AGENT_SCOPES: readonly string[] = [
+  'scheduler:plan',
+  'scheduler:write',
+  'session:write',
+  'kg:read',
+  'kg:write',
+  'kg:admin',
+  'content:read',
+] as const;
+
+/**
+ * All known scopes — used for the `service` role.
+ */
+const ALL_SCOPES: readonly string[] = [...new Set([...ADMIN_SCOPES, ...AGENT_SCOPES])] as const;
+
+const ROLE_SCOPE_MAP: Record<string, readonly string[]> = {
+  // Universal base role
+  user: BASE_USER_SCOPES,
+  // User-facing roles inherit base user scopes
+  learner: BASE_USER_SCOPES,
+  premium: BASE_USER_SCOPES,
+  creator: BASE_USER_SCOPES,
+  // Administration
+  admin: ADMIN_SCOPES,
+  super_admin: ADMIN_SCOPES,
+  // Machine-to-machine (future)
+  agent: AGENT_SCOPES,
+  service: ALL_SCOPES,
+};
+
+/**
+ * Deterministic scope derivation from roles.
+ *
+ * The same set of roles always produces the same sorted, de-duplicated
+ * array of scope strings.  This function is the single source of truth
+ * for what a principal with a given role set is allowed to do.
+ */
+export function deriveScopesFromRoles(roles: string[]): string[] {
+  const scopeSet = new Set<string>();
+  for (const role of roles) {
+    const scopes = ROLE_SCOPE_MAP[role];
+    if (scopes !== undefined) {
+      for (const scope of scopes) {
+        scopeSet.add(scope);
+      }
+    }
+  }
+  return [...scopeSet].sort();
 }
 
 export interface ITokenService {
@@ -72,11 +156,16 @@ export class JwtTokenService implements ITokenService {
     const accessExpiresIn = this.parseExpiresIn(this.config.accessTokenExpiresIn);
     const refreshExpiresIn = this.parseExpiresIn(this.config.refreshTokenExpiresIn);
 
+    // Derive scopes from user roles (deterministic)
+    const scopes = deriveScopesFromRoles(user.roles);
+
     // Generate access token
     const accessToken = await new SignJWT({
       sub: user.id,
       roles: user.roles,
       type: 'access',
+      scopes,
+      scope: scopes.join(' '),
     })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt(now)

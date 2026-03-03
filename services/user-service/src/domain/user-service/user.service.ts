@@ -9,22 +9,28 @@ import type { IAgentHints } from '@noema/contracts';
 import type { CorrelationId, IOffsetPagination, IPaginatedResponse, UserId } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 import bcrypt from 'bcrypt';
+import { createHash, randomBytes } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 import type { ISessionOrchestrationService } from '../../infrastructure/external-apis/session-orchestration.service.js';
 import type { ITokenService } from '../../infrastructure/external-apis/token.service.js';
 import type {
   IAuthSession,
+  IChangeEmailInput,
   IChangePasswordInput,
+  IChangeUsernameInput,
   ICreateUserInput,
   IFailedLoginHistoryEntry,
+  IForgotPasswordInput,
   ILoginHistoryEntry,
   ILoginInput,
+  IResetPasswordInput,
   ITokenPair,
   IUpdateProfileInput,
   IUpdateSettingsInput,
   IUser,
   IUserFilters,
+  IVerifyEmailInput,
 } from '../../types/user.types.js';
 import { UserRole, UserStatus } from '../../types/user.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
@@ -36,19 +42,28 @@ import {
   InsufficientRoleError,
   InvalidAccountStatusError,
   InvalidCredentialsError,
+  TokenAlreadyUsedError,
+  TokenExpiredError,
+  TokenNotFoundError,
   TooManyLoginAttemptsError,
   UsernameAlreadyExistsError,
+  UsernameChangeTooSoonError,
   UserNotFoundError,
   ValidationError,
   VersionConflictError,
 } from './errors/index.js';
 import type { IUserRepository } from './user.repository.js';
 import {
+  ChangeEmailInputSchema,
   ChangePasswordInputSchema,
+  ChangeUsernameInputSchema,
   CreateUserInputSchema,
+  ForgotPasswordInputSchema,
   LoginInputSchema,
+  ResetPasswordInputSchema,
   UpdateProfileInputSchema,
   UpdateSettingsInputSchema,
+  VerifyEmailInputSchema,
 } from './user.schemas.js';
 
 // ============================================================================
@@ -88,6 +103,10 @@ export interface IServiceResult<T> {
 const SALT_ROUNDS = 12;
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION_MINUTES = 30;
+const PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = 15;
+const EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS = 24;
+const USERNAME_CHANGE_COOLDOWN_DAYS = 30;
+const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
 
 // ============================================================================
 // User Service
@@ -157,6 +176,14 @@ export class UserService {
     });
 
     this.logger.info({ userId: id }, 'User created successfully');
+
+    // Send verification email (T1.3)
+    try {
+      await this.sendVerificationEmail(id);
+    } catch (error) {
+      // Don't fail registration if verification email fails
+      this.logger.warn({ userId: id, error }, 'Failed to send verification email during registration');
+    }
 
     return {
       data: user,
@@ -893,6 +920,431 @@ export class UserService {
     if (existing.roles.includes(UserRole.SUPER_ADMIN)) {
       throw new BusinessRuleError('Cannot delete super admin account');
     }
+  }
+
+  // ============================================================================
+  // Forgot Password Flow (T1.2)
+  // ============================================================================
+
+  /**
+   * Request a password reset email.
+   * Always returns success to prevent email enumeration.
+   */
+  async forgotPassword(
+    input: IForgotPasswordInput,
+    _context: IExecutionContext
+  ): Promise<IServiceResult<{ message: string }>> {
+    const validated = ForgotPasswordInputSchema.parse(input);
+    this.logger.info({ email: validated.email }, 'Password reset requested');
+
+    const user = await this.repository.findByEmail(validated.email);
+    if (user !== null) {
+      // Generate cryptographically secure token
+      const rawToken = randomBytes(64).toString('hex');
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + PASSWORD_RESET_TOKEN_EXPIRY_MINUTES);
+
+      await this.repository.createPasswordResetToken({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      });
+
+      const resetUrl = `${FRONTEND_URL}/auth/reset-password?token=${rawToken}`;
+      // In development, log the URL to console.
+      // In production, this would be sent via an email provider (pluggable concern).
+      this.logger.info(
+        { userId: user.id, resetUrl },
+        '📧 Password reset link (dev): %s',
+        resetUrl
+      );
+    }
+
+    // Always return 200 regardless of whether the email exists
+    return {
+      data: { message: 'If an account with that email exists, a reset link has been sent.' },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'immediate',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.8, effort: 0.1, roi: 8.0 },
+        preferenceAlignment: [],
+        reasoning: 'Password reset requested',
+      },
+    };
+  }
+
+  /**
+   * Reset password using a valid token.
+   */
+  async resetPassword(
+    input: IResetPasswordInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ message: string }>> {
+    const validated = ResetPasswordInputSchema.parse(input);
+
+    // Hash the incoming token to find the matching row
+    const tokenHash = createHash('sha256').update(validated.token).digest('hex');
+    const tokenRow = await this.repository.findPasswordResetTokenByHash(tokenHash);
+
+    if (tokenRow === null) {
+      throw new TokenNotFoundError();
+    }
+    if (tokenRow.usedAt !== null) {
+      throw new TokenAlreadyUsedError('password_reset');
+    }
+    if (tokenRow.expiresAt.getTime() <= Date.now()) {
+      throw new TokenExpiredError('password_reset');
+    }
+
+    // Set the new password
+    const passwordHash = await bcrypt.hash(validated.newPassword, SALT_ROUNDS);
+    const user = await this.repository.findById(tokenRow.userId as UserId);
+    if (user === null) {
+      throw new UserNotFoundError(tokenRow.userId);
+    }
+
+    await this.repository.updatePassword(user.id, passwordHash, user.version, user.id);
+
+    // Mark token as used
+    await this.repository.markPasswordResetTokenUsed(tokenRow.id);
+
+    // Revoke all refresh tokens (force re-login on all devices)
+    const revokedCount = await this.tokenService.revokeAllRefreshTokensForUser(user.id);
+    this.logger.info(
+      { userId: user.id, revokedCount },
+      'Password reset: revoked all refresh tokens'
+    );
+
+    // Publish event
+    await this.eventPublisher.publish({
+      eventType: 'user.password.changed',
+      aggregateType: 'User',
+      aggregateId: user.id,
+      payload: {},
+      metadata: { correlationId: context.correlationId, userId: user.id },
+    });
+
+    return {
+      data: { message: 'Password has been reset successfully. Please log in with your new password.' },
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'login',
+            description: 'User should log in with new password',
+            priority: 'high',
+            category: 'optimization',
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'immediate',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.9, effort: 0.1, roi: 9.0 },
+        preferenceAlignment: [],
+        reasoning: 'Password reset successful',
+      },
+    };
+  }
+
+  // ============================================================================
+  // Email Verification Flow (T1.3)
+  // ============================================================================
+
+  /**
+   * Generate and "send" an email verification token.
+   * Exposed publicly for both registration hook and resend-verification.
+   */
+  async sendVerificationEmail(userId: UserId): Promise<void> {
+    const rawToken = randomBytes(64).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS);
+
+    // createEmailVerificationToken invalidates previous active tokens automatically
+    await this.repository.createEmailVerificationToken({
+      userId,
+      tokenHash,
+      expiresAt,
+    });
+
+    const verifyUrl = `${FRONTEND_URL}/auth/verify-email?token=${rawToken}`;
+    this.logger.info(
+      { userId, verifyUrl },
+      '📧 Email verification link (dev): %s',
+      verifyUrl
+    );
+  }
+
+  /**
+   * Verify email using a token.
+   */
+  async verifyEmail(
+    input: IVerifyEmailInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ message: string }>> {
+    const validated = VerifyEmailInputSchema.parse(input);
+
+    const tokenHash = createHash('sha256').update(validated.token).digest('hex');
+    const tokenRow = await this.repository.findEmailVerificationTokenByHash(tokenHash);
+
+    if (tokenRow === null) {
+      throw new TokenNotFoundError();
+    }
+    if (tokenRow.usedAt !== null) {
+      throw new TokenAlreadyUsedError('email_verification');
+    }
+    if (tokenRow.expiresAt.getTime() <= Date.now()) {
+      throw new TokenExpiredError('email_verification');
+    }
+
+    const user = await this.repository.findById(tokenRow.userId as UserId);
+    if (user === null) {
+      throw new UserNotFoundError(tokenRow.userId);
+    }
+
+    // Check if this is a pending email change verification
+    if (user.pendingEmail !== null) {
+      // This verification is for an email change — update the email
+      await this.repository.updateEmail(user.id, user.pendingEmail, user.version);
+      await this.repository.setPendingEmail(user.id, null);
+
+      await this.eventPublisher.publish({
+        eventType: 'user.updated',
+        aggregateType: 'User',
+        aggregateId: user.id,
+        payload: {
+          entity: this.sanitizeUser({ ...user, email: user.pendingEmail, pendingEmail: null }),
+          source: 'user',
+        },
+        metadata: { correlationId: context.correlationId, userId: user.id },
+      });
+    }
+
+    // Mark email as verified
+    await this.repository.updateEmailVerified(user.id, true, user.version);
+
+    // Mark token as used
+    await this.repository.markEmailVerificationTokenUsed(tokenRow.id);
+
+    // Publish event
+    await this.eventPublisher.publish({
+      eventType: 'user.email.verified',
+      aggregateType: 'User',
+      aggregateId: user.id,
+      payload: { email: user.pendingEmail ?? user.email },
+      metadata: { correlationId: context.correlationId, userId: user.id },
+    });
+
+    return {
+      data: { message: 'Email verified successfully.' },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'long',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.9, effort: 0.1, roi: 9.0 },
+        preferenceAlignment: [],
+        reasoning: 'Email verified',
+      },
+    };
+  }
+
+  /**
+   * Resend email verification (requires authentication).
+   */
+  async resendVerification(
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ message: string }>> {
+    if (context.userId === null) {
+      throw new AuthorizationError('Authentication required');
+    }
+
+    const user = await this.repository.findById(context.userId);
+    if (user === null) {
+      throw new UserNotFoundError(context.userId);
+    }
+
+    if (user.emailVerified) {
+      throw new BusinessRuleError('Email is already verified');
+    }
+
+    await this.sendVerificationEmail(user.id);
+
+    return {
+      data: { message: 'Verification email has been sent.' },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'immediate',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.7, effort: 0.1, roi: 7.0 },
+        preferenceAlignment: [],
+        reasoning: 'Verification email resent',
+      },
+    };
+  }
+
+  // ============================================================================
+  // Username & Email Change (T1.4)
+  // ============================================================================
+
+  /**
+   * Change username with uniqueness check and 30-day cooldown.
+   */
+  async changeUsername(
+    userId: UserId,
+    input: IChangeUsernameInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IUser>> {
+    this.requireSelfOrAdmin(context, userId);
+
+    const validated = ChangeUsernameInputSchema.parse(input);
+
+    const user = await this.repository.findById(userId);
+    if (user === null) {
+      throw new UserNotFoundError(userId);
+    }
+
+    // Optimistic locking
+    if (user.version !== validated.version) {
+      throw new VersionConflictError(validated.version, user.version);
+    }
+
+    // 30-day cooldown (admins bypass)
+    if (
+      user.usernameChangedAt !== null &&
+      !this.hasRole(context, [UserRole.ADMIN, UserRole.SUPER_ADMIN])
+    ) {
+      const lastChanged = new Date(user.usernameChangedAt);
+      const nextAllowed = new Date(lastChanged.getTime() + USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+      if (nextAllowed > new Date()) {
+        throw new UsernameChangeTooSoonError(nextAllowed.toISOString());
+      }
+    }
+
+    // Uniqueness check
+    if (await this.repository.usernameExists(validated.username)) {
+      throw new UsernameAlreadyExistsError(validated.username);
+    }
+
+    const oldUsername = user.username;
+    const updated = await this.repository.updateUsername(userId, validated.username, validated.version);
+    await this.repository.setUsernameChangedAt(userId, new Date().toISOString());
+
+    // Publish event
+    await this.eventPublisher.publish({
+      eventType: 'user.updated',
+      aggregateType: 'User',
+      aggregateId: userId,
+      payload: {
+        entity: this.sanitizeUser(updated),
+        source: 'user',
+      },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId ?? userId,
+      },
+    });
+
+    this.logger.info({ userId, oldUsername, newUsername: validated.username }, 'Username changed');
+
+    return {
+      data: updated,
+      agentHints: this.createAgentHints('updated', updated),
+    };
+  }
+
+  /**
+   * Start email change flow (requires password confirmation).
+   * Does NOT immediately change the email — sends verification to new address.
+   */
+  async changeEmail(
+    userId: UserId,
+    input: IChangeEmailInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<{ message: string }>> {
+    this.requireSelfOrAdmin(context, userId);
+
+    const validated = ChangeEmailInputSchema.parse(input);
+
+    const user = await this.repository.findById(userId);
+    if (user === null) {
+      throw new UserNotFoundError(userId);
+    }
+
+    // Verify password (security requirement)
+    if (user.passwordHash === null) {
+      throw new BusinessRuleError('OAuth-only accounts cannot change email through this flow');
+    }
+    const passwordValid = await bcrypt.compare(validated.password, user.passwordHash);
+    if (!passwordValid) {
+      throw new AuthorizationError('Invalid password');
+    }
+
+    // Check new email uniqueness
+    if (await this.repository.emailExists(validated.newEmail)) {
+      throw new EmailAlreadyExistsError(validated.newEmail);
+    }
+
+    // Store pending email
+    await this.repository.setPendingEmail(userId, validated.newEmail);
+
+    // Send verification to new email address
+    await this.sendVerificationEmail(userId);
+
+    this.logger.info(
+      { userId, newEmail: validated.newEmail },
+      'Email change initiated, verification email sent to new address'
+    );
+
+    return {
+      data: { message: 'A verification email has been sent to your new email address. Please verify to complete the change.' },
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'verify_email',
+            description: 'User must verify the new email address',
+            priority: 'high',
+            category: 'optimization',
+          },
+        ],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.8, effort: 0.2, roi: 4.0 },
+        preferenceAlignment: [],
+        reasoning: 'Email change initiated',
+      },
+    };
   }
 
   // ============================================================================

@@ -26,6 +26,10 @@ export type {
   IUserUnlockedPayload,
   IUserAuthProviderLinkedPayload,
   IUserAuthProviderUnlinkedPayload,
+  IUserUsernameChangedPayload,
+  IUserEmailChangeInitiatedPayload,
+  IUserEmailChangedPayload,
+  IUserPasswordResetRequestedPayload,
   IUserCreatedEvent,
   IUserProfileUpdatedEvent,
   IUserSettingsChangedEvent,
@@ -43,6 +47,10 @@ export type {
   IUserUnlockedEvent,
   IUserAuthProviderLinkedEvent,
   IUserAuthProviderUnlinkedEvent,
+  IUserUsernameChangedEvent,
+  IUserEmailChangeInitiatedEvent,
+  IUserEmailChangedEvent,
+  IUserPasswordResetRequestedEvent,
   UserDomainEvent,
 } from '@noema/events/user';
 
@@ -68,4 +76,8 @@ export {
   UserUnlockedPayloadSchema,
   UserAuthProviderLinkedPayloadSchema,
   UserAuthProviderUnlinkedPayloadSchema,
+  UserUsernameChangedPayloadSchema,
+  UserEmailChangeInitiatedPayloadSchema,
+  UserEmailChangedPayloadSchema,
+  UserPasswordResetRequestedPayloadSchema,
 } from '@noema/events/user';

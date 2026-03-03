@@ -162,6 +162,36 @@ export const UserAuthProviderUnlinkedPayloadSchema = z.object({
   provider: UserAuthProviderSchema,
 });
 
+/**
+ * Payload for `user.username.changed` event.
+ */
+export const UserUsernameChangedPayloadSchema = z.object({
+  previousUsername: z.string().min(1),
+  newUsername: z.string().min(1),
+});
+
+/**
+ * Payload for `user.email_change.initiated` event.
+ */
+export const UserEmailChangeInitiatedPayloadSchema = z.object({
+  pendingEmail: z.string().email(),
+});
+
+/**
+ * Payload for `user.email.changed` event.
+ */
+export const UserEmailChangedPayloadSchema = z.object({
+  previousEmail: z.string().email(),
+  newEmail: z.string().email(),
+});
+
+/**
+ * Payload for `user.password_reset.requested` event.
+ */
+export const UserPasswordResetRequestedPayloadSchema = z.object({
+  email: z.string().email(),
+});
+
 // ============================================================================
 // Full Event Schemas (envelope + typed payload)
 // ============================================================================
@@ -196,6 +226,30 @@ export const UserLoggedOutEventSchema = createEventSchema(
   UserLoggedOutPayloadSchema,
 );
 
+export const UserUsernameChangedEventSchema = createEventSchema(
+  'user.username.changed',
+  'User',
+  UserUsernameChangedPayloadSchema,
+);
+
+export const UserEmailChangeInitiatedEventSchema = createEventSchema(
+  'user.email_change.initiated',
+  'User',
+  UserEmailChangeInitiatedPayloadSchema,
+);
+
+export const UserEmailChangedEventSchema = createEventSchema(
+  'user.email.changed',
+  'User',
+  UserEmailChangedPayloadSchema,
+);
+
+export const UserPasswordResetRequestedEventSchema = createEventSchema(
+  'user.password_reset.requested',
+  'User',
+  UserPasswordResetRequestedPayloadSchema,
+);
+
 // ============================================================================
 // Type Inference
 // ============================================================================
@@ -205,3 +259,11 @@ export type UserProfileUpdatedEventInput = z.input<typeof UserProfileUpdatedEven
 export type UserSettingsChangedEventInput = z.input<typeof UserSettingsChangedEventSchema>;
 export type UserLoggedInEventInput = z.input<typeof UserLoggedInEventSchema>;
 export type UserLoggedOutEventInput = z.input<typeof UserLoggedOutEventSchema>;
+export type UserUsernameChangedEventInput = z.input<typeof UserUsernameChangedEventSchema>;
+export type UserEmailChangeInitiatedEventInput = z.input<
+  typeof UserEmailChangeInitiatedEventSchema
+>;
+export type UserEmailChangedEventInput = z.input<typeof UserEmailChangedEventSchema>;
+export type UserPasswordResetRequestedEventInput = z.input<
+  typeof UserPasswordResetRequestedEventSchema
+>;

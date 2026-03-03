@@ -39,6 +39,10 @@ export const UserEventType = {
   UNLOCKED: 'user.unlocked',
   AUTH_PROVIDER_LINKED: 'user.auth_provider.linked',
   AUTH_PROVIDER_UNLINKED: 'user.auth_provider.unlinked',
+  USERNAME_CHANGED: 'user.username.changed',
+  EMAIL_CHANGE_INITIATED: 'user.email_change.initiated',
+  EMAIL_CHANGED: 'user.email.changed',
+  PASSWORD_RESET_REQUESTED: 'user.password_reset.requested',
 } as const;
 
 export type UserEventType = (typeof UserEventType)[keyof typeof UserEventType];
@@ -207,6 +211,39 @@ export interface IUserAuthProviderUnlinkedPayload {
   provider: UserAuthProvider;
 }
 
+/**
+ * Payload for user.username.changed event.
+ */
+export interface IUserUsernameChangedPayload {
+  previousUsername: string;
+  newUsername: string;
+}
+
+/**
+ * Payload for user.email_change.initiated event.
+ * Emitted when a user starts the email change flow (verification email sent to new address).
+ */
+export interface IUserEmailChangeInitiatedPayload {
+  pendingEmail: string;
+}
+
+/**
+ * Payload for user.email.changed event.
+ * Emitted when the email verification token is confirmed and the email is actually updated.
+ */
+export interface IUserEmailChangedPayload {
+  previousEmail: string;
+  newEmail: string;
+}
+
+/**
+ * Payload for user.password_reset.requested event.
+ * Emitted when a password reset email is sent (only if the email exists).
+ */
+export interface IUserPasswordResetRequestedPayload {
+  email: string;
+}
+
 // ============================================================================
 // Typed Event Interfaces
 // ============================================================================
@@ -264,6 +301,26 @@ export type IUserAuthProviderUnlinkedEvent = ITypedEvent<
   'User',
   IUserAuthProviderUnlinkedPayload
 >;
+export type IUserUsernameChangedEvent = ITypedEvent<
+  'user.username.changed',
+  'User',
+  IUserUsernameChangedPayload
+>;
+export type IUserEmailChangeInitiatedEvent = ITypedEvent<
+  'user.email_change.initiated',
+  'User',
+  IUserEmailChangeInitiatedPayload
+>;
+export type IUserEmailChangedEvent = ITypedEvent<
+  'user.email.changed',
+  'User',
+  IUserEmailChangedPayload
+>;
+export type IUserPasswordResetRequestedEvent = ITypedEvent<
+  'user.password_reset.requested',
+  'User',
+  IUserPasswordResetRequestedPayload
+>;
 
 /**
  * Union of all user domain events.
@@ -285,4 +342,8 @@ export type UserDomainEvent =
   | IUserLockedEvent
   | IUserUnlockedEvent
   | IUserAuthProviderLinkedEvent
-  | IUserAuthProviderUnlinkedEvent;
+  | IUserAuthProviderUnlinkedEvent
+  | IUserUsernameChangedEvent
+  | IUserEmailChangeInitiatedEvent
+  | IUserEmailChangedEvent
+  | IUserPasswordResetRequestedEvent;

@@ -44,6 +44,8 @@ export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
  * User roles for authorization.
  */
 export const UserRole = {
+  /** Universal base role — every account has this */
+  USER: 'user',
   /** Regular learner */
   LEARNER: 'learner',
   /** Premium subscriber */
@@ -325,6 +327,12 @@ export interface IUser extends IAuditedEntity {
 
   /** MFA secret (encrypted, null if not enabled) */
   mfaSecret: string | null;
+
+  /** Pending email change (awaiting verification) */
+  pendingEmail: string | null;
+
+  /** Last username change timestamp (ISO 8601) */
+  usernameChangedAt: string | null;
 }
 
 // ============================================================================
@@ -383,6 +391,52 @@ export interface IUpdateSettingsInput {
 export interface IChangePasswordInput {
   currentPassword: string;
   newPassword: string;
+}
+
+// ============================================================================
+// Password Reset & Email Verification DTOs
+// ============================================================================
+
+/**
+ * Input for requesting a password reset.
+ */
+export interface IForgotPasswordInput {
+  email: string;
+}
+
+/**
+ * Input for resetting password with a token.
+ */
+export interface IResetPasswordInput {
+  token: string;
+  newPassword: string;
+}
+
+/**
+ * Input for verifying an email with a token.
+ */
+export interface IVerifyEmailInput {
+  token: string;
+}
+
+// ============================================================================
+// Username & Email Change DTOs
+// ============================================================================
+
+/**
+ * Input for changing username.
+ */
+export interface IChangeUsernameInput {
+  username: string;
+  version: number;
+}
+
+/**
+ * Input for changing email.
+ */
+export interface IChangeEmailInput {
+  newEmail: string;
+  password: string;
 }
 
 // ============================================================================

@@ -13,7 +13,11 @@ import {
   BusinessRuleError,
   DomainError,
   EmailAlreadyExistsError,
+  TokenAlreadyUsedError,
+  TokenExpiredError,
+  TokenNotFoundError,
   UsernameAlreadyExistsError,
+  UsernameChangeTooSoonError,
   UserNotFoundError,
   ValidationError,
   VersionConflictError,
@@ -129,6 +133,27 @@ export function registerUserRoutes(
           fieldErrors: error.fieldErrors,
         },
       });
+    } else if (error instanceof TokenExpiredError) {
+      reply.status(410).send({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+    } else if (error instanceof TokenAlreadyUsedError) {
+      reply.status(410).send({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
+    } else if (error instanceof TokenNotFoundError) {
+      reply.status(400).send({
+        error: {
+          code: error.code,
+          message: error.message,
+        },
+      });
     } else if (error instanceof UserNotFoundError) {
       reply.status(404).send({
         error: {
@@ -172,10 +197,12 @@ export function registerUserRoutes(
         },
       });
     } else if (error instanceof BusinessRuleError) {
-      reply.status(422).send({
+      const status = error instanceof UsernameChangeTooSoonError ? 429 : 422;
+      reply.status(status).send({
         error: {
           code: (error as DomainError).code,
           message: error.message,
+          ...(error instanceof UsernameChangeTooSoonError ? { nextAllowedAt: error.nextAllowedAt } : {}),
         },
       });
     } else if (error instanceof DomainError) {
@@ -374,6 +401,141 @@ export function registerUserRoutes(
 
         const accessToken = authHeader.slice(7);
         const result = await userService.logoutAll(context, accessToken);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Password Reset Routes (T1.2)
+  // ============================================================================
+
+  /**
+   * POST /auth/forgot-password - Request password reset
+   */
+  fastify.post<{ Body: { email: string } }>(
+    '/auth/forgot-password',
+    {
+      config: {
+        rateLimit: {
+          max: 3,
+          timeWindow: '1 hour',
+          keyGenerator: (request: FastifyRequest) => {
+            const body = request.body as { email?: string } | undefined;
+            return `forgot-password:${body?.email ?? request.ip}`;
+          },
+        },
+      },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Request password reset email',
+        body: {
+          type: 'object',
+          required: ['email'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await userService.forgotPassword(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  /**
+   * POST /auth/reset-password - Reset password with token
+   */
+  fastify.post<{ Body: { token: string; newPassword: string } }>(
+    '/auth/reset-password',
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Reset password using a reset token',
+        body: {
+          type: 'object',
+          required: ['token', 'newPassword'],
+          properties: {
+            token: { type: 'string' },
+            newPassword: { type: 'string', minLength: 8 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await userService.resetPassword(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Email Verification Routes (T1.3)
+  // ============================================================================
+
+  /**
+   * POST /auth/verify-email - Verify email with token
+   */
+  fastify.post<{ Body: { token: string } }>(
+    '/auth/verify-email',
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Verify email address using a verification token',
+        body: {
+          type: 'object',
+          required: ['token'],
+          properties: {
+            token: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await userService.verifyEmail(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  /**
+   * POST /auth/resend-verification - Resend verification email
+   */
+  fastify.post(
+    '/auth/resend-verification',
+    {
+      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      config: {
+        rateLimit: {
+          max: 3,
+          timeWindow: '1 hour',
+        },
+      },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Resend email verification link (requires authentication)',
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await userService.resendVerification(context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, reply);
@@ -624,6 +786,94 @@ export function registerUserRoutes(
           context
         );
         reply.status(204).send();
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  // ============================================================================
+  // Username & Email Change Routes (T1.4)
+  // ============================================================================
+
+  /**
+   * PATCH /users/:id/username - Change username
+   */
+  fastify.patch<{ Params: IIdParams; Body: { username: string; version: number } }>(
+    '/users/:id/username',
+    {
+      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      schema: {
+        tags: ['Users'],
+        summary: 'Change username (owner or admin)',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['username', 'version'],
+          properties: {
+            username: { type: 'string', minLength: 3, maxLength: 30 },
+            version: { type: 'number' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await userService.changeUsername(
+          request.params.id as UserId,
+          request.body,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, reply);
+      }
+    }
+  );
+
+  /**
+   * PATCH /users/:id/email - Start email change flow
+   */
+  fastify.patch<{ Params: IIdParams; Body: { newEmail: string; password: string } }>(
+    '/users/:id/email',
+    {
+      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      schema: {
+        tags: ['Users'],
+        summary: 'Start email change process (owner or admin)',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['newEmail', 'password'],
+          properties: {
+            newEmail: { type: 'string', format: 'email' },
+            password: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await userService.changeEmail(
+          request.params.id as UserId,
+          request.body,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, reply);
       }

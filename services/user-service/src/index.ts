@@ -5,6 +5,7 @@
  */
 
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
@@ -101,6 +102,12 @@ async function bootstrap(): Promise<void> {
     credentials: config.cors.credentials,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
+  });
+
+  // Register rate limiting (per-route only; global: false)
+  await fastify.register(rateLimit, {
+    global: false,
+    redis,
   });
 
   // Create auth middleware

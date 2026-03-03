@@ -110,6 +110,33 @@ export class InvalidTokenError extends AuthenticationError {
   }
 }
 
+/**
+ * Thrown when a reset/verification token has expired.
+ */
+export class TokenExpiredError extends DomainError {
+  constructor(tokenType: 'password_reset' | 'email_verification') {
+    super('TOKEN_EXPIRED', `${tokenType === 'password_reset' ? 'Password reset' : 'Email verification'} token has expired`);
+  }
+}
+
+/**
+ * Thrown when a reset/verification token has already been used.
+ */
+export class TokenAlreadyUsedError extends DomainError {
+  constructor(tokenType: 'password_reset' | 'email_verification') {
+    super('TOKEN_ALREADY_USED', `${tokenType === 'password_reset' ? 'Password reset' : 'Email verification'} token has already been used`);
+  }
+}
+
+/**
+ * Thrown when a token is not found.
+ */
+export class TokenNotFoundError extends DomainError {
+  constructor() {
+    super('TOKEN_NOT_FOUND', 'Token not found or invalid');
+  }
+}
+
 // ============================================================================
 // Authorization Errors
 // ============================================================================
@@ -253,6 +280,20 @@ export class TooManyLoginAttemptsError extends BusinessRuleError {
         : 'Account has been locked due to too many failed login attempts.'
     );
     this.remainingAttempts = remainingAttempts;
+  }
+}
+
+/**
+ * Thrown when username change is attempted too soon after previous change.
+ */
+export class UsernameChangeTooSoonError extends BusinessRuleError {
+  public readonly nextAllowedAt: string;
+
+  constructor(nextAllowedAt: string) {
+    super(`Username can only be changed once every 30 days. Next change allowed at ${nextAllowedAt}`, {
+      nextAllowedAt,
+    });
+    this.nextAllowedAt = nextAllowedAt;
   }
 }
 

@@ -27,6 +27,7 @@ export const UserStatusSchema = z.enum([
 ]);
 
 export const UserRoleSchema = z.enum([
+  UserRole.USER,
   UserRole.LEARNER,
   UserRole.PREMIUM,
   UserRole.CREATOR,
@@ -238,6 +239,44 @@ export const ChangePasswordInputSchema = z.object({
 });
 
 /**
+ * Schema for forgot password request.
+ */
+export const ForgotPasswordInputSchema = z.object({
+  email: EmailSchema,
+});
+
+/**
+ * Schema for password reset.
+ */
+export const ResetPasswordInputSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  newPassword: PasswordSchema,
+});
+
+/**
+ * Schema for email verification.
+ */
+export const VerifyEmailInputSchema = z.object({
+  token: z.string().min(1, 'Verification token is required'),
+});
+
+/**
+ * Schema for username change.
+ */
+export const ChangeUsernameInputSchema = z.object({
+  username: UsernameSchema,
+  version: z.number().int().min(1),
+});
+
+/**
+ * Schema for email change.
+ */
+export const ChangeEmailInputSchema = z.object({
+  newEmail: EmailSchema,
+  password: z.string().min(1, 'Password is required for email changes'),
+});
+
+/**
  * Schema for login.
  */
 export const LoginInputSchema = z.object({
@@ -276,6 +315,11 @@ export type CreateUserInputSchemaType = z.infer<typeof CreateUserInputSchema>;
 export type UpdateProfileInputSchemaType = z.infer<typeof UpdateProfileInputSchema>;
 export type UpdateSettingsInputSchemaType = z.infer<typeof UpdateSettingsInputSchema>;
 export type ChangePasswordInputSchemaType = z.infer<typeof ChangePasswordInputSchema>;
+export type ForgotPasswordInputSchemaType = z.infer<typeof ForgotPasswordInputSchema>;
+export type ResetPasswordInputSchemaType = z.infer<typeof ResetPasswordInputSchema>;
+export type VerifyEmailInputSchemaType = z.infer<typeof VerifyEmailInputSchema>;
+export type ChangeUsernameInputSchemaType = z.infer<typeof ChangeUsernameInputSchema>;
+export type ChangeEmailInputSchemaType = z.infer<typeof ChangeEmailInputSchema>;
 export type LoginInputSchemaType = z.infer<typeof LoginInputSchema>;
 export type OAuthLoginInputSchemaType = z.infer<typeof OAuthLoginInputSchema>;
 export type UserFiltersSchemaType = z.infer<typeof UserFiltersSchema>;
