@@ -83,7 +83,10 @@ export function getApiConfig(): ApiClientConfig {
 // Request Helpers
 // ============================================================================
 
-function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined>): string {
+function buildUrl(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>
+): string {
   const config = getApiConfig();
 
   // Support path-prefixed base URLs (e.g., 'http://localhost:8080/api').
@@ -106,7 +109,7 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
 
 async function parseErrorResponse(response: Response): Promise<ApiRequestError> {
   try {
-    const body = await response.json() as {
+    const body = (await response.json()) as {
       error?: {
         code?: string;
         message?: string;
@@ -114,7 +117,7 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
         details?: unknown;
       };
     };
-    
+
     return new ApiRequestError(
       body.error?.message ?? response.statusText,
       response.status,
@@ -123,11 +126,7 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
       body.error?.details
     );
   } catch {
-    return new ApiRequestError(
-      response.statusText,
-      response.status,
-      'UNKNOWN_ERROR'
-    );
+    return new ApiRequestError(response.statusText, response.status, 'UNKNOWN_ERROR');
   }
 }
 
@@ -144,9 +143,9 @@ export async function request<T>(
   const { body, params, timeout = 30000, ...init } = config;
 
   const url = buildUrl(path, params);
-  
+
   const headers = new Headers(init.headers);
-  
+
   // Set default content type for JSON
   if (body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -160,7 +159,9 @@ export async function request<T>(
 
   // Create abort controller for timeout
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => { controller.abort(); }, timeout);
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeout);
 
   try {
     const fetchInit: RequestInit = {
@@ -170,11 +171,11 @@ export async function request<T>(
       credentials: apiConfig.credentials ?? 'include',
       signal: controller.signal,
     };
-    
+
     if (body !== undefined) {
       fetchInit.body = JSON.stringify(body);
     }
-    
+
     const response = await fetch(url, fetchInit);
 
     clearTimeout(timeoutId);
@@ -222,8 +223,7 @@ export async function request<T>(
 // ============================================================================
 
 export const http = {
-  get: <T>(path: string, config?: RequestConfig) =>
-    request<T>('GET', path, config),
+  get: <T>(path: string, config?: RequestConfig) => request<T>('GET', path, config),
 
   post: <T>(path: string, body?: unknown, config?: RequestConfig) =>
     request<T>('POST', path, { ...config, body }),
@@ -234,6 +234,5 @@ export const http = {
   patch: <T>(path: string, body?: unknown, config?: RequestConfig) =>
     request<T>('PATCH', path, { ...config, body }),
 
-  delete: <T>(path: string, config?: RequestConfig) =>
-    request<T>('DELETE', path, config),
+  delete: <T>(path: string, config?: RequestConfig) => request<T>('DELETE', path, config),
 };
