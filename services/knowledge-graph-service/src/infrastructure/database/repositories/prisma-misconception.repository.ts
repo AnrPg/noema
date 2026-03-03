@@ -12,6 +12,7 @@ import type {
   InterventionType,
   Metadata,
   MisconceptionPatternId,
+  MisconceptionSeverity,
   MisconceptionStatus,
   MisconceptionType,
   NodeId,
@@ -37,6 +38,22 @@ import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Map domain severity ('low' | 'moderate' | ...) to Prisma enum (uppercase).
+ */
+function toDbSeverity(
+  severity: MisconceptionSeverity
+): 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' {
+  return severity.toUpperCase() as 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+}
+
+/**
+ * Map Prisma enum (uppercase) back to domain severity.
+ */
+function fromDbSeverity(dbSeverity: string): MisconceptionSeverity {
+  return dbSeverity.toLowerCase() as MisconceptionSeverity;
+}
 
 function generatePatternId(): MisconceptionPatternId {
   return `${ID_PREFIXES.MisconceptionPatternId}${nanoid()}` as MisconceptionPatternId;
@@ -191,6 +208,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
 
   async recordDetection(input: IRecordDetectionInput): Promise<IMisconceptionRecord> {
     const id = generateDetectionId();
+    const now = new Date();
 
     const record = await this.prisma.misconceptionDetection.create({
       data: {
@@ -200,11 +218,60 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
         misconceptionType: input.misconceptionType as string,
         affectedNodeIds: [...input.affectedNodeIds] as string[],
         confidence: input.confidence as number,
+        severity: toDbSeverity(input.severity),
+        severityScore: input.severityScore,
+        family: input.family,
+        description: input.description ?? null,
+        detectionCount: 1,
         status: 'detected',
+        detectedAt: now,
+        lastDetectedAt: now,
       },
     });
 
     return this.detectionToDomain(record);
+  }
+
+  async upsertDetection(input: IRecordDetectionInput): Promise<IMisconceptionRecord> {
+    // Try to find an active (non-resolved) detection for this user+pattern
+    const existing = await this.prisma.misconceptionDetection.findFirst({
+      where: {
+        userId: input.userId as string,
+        misconceptionPatternId: input.patternId as string,
+        status: { not: 'resolved' },
+      },
+    });
+
+    if (existing) {
+      // Bump the counter and update timestamp, keep the higher confidence
+      const record = await this.prisma.misconceptionDetection.update({
+        where: { id: existing.id },
+        data: {
+          detectionCount: { increment: 1 },
+          lastDetectedAt: new Date(),
+          confidence: Math.max(existing.confidence, input.confidence as number),
+          severity: toDbSeverity(input.severity),
+          severityScore: input.severityScore,
+          family: input.family,
+          ...(input.description ? { description: input.description } : {}),
+          // Merge affected node IDs (union)
+          affectedNodeIds: [
+            ...new Set([
+              ...existing.affectedNodeIds,
+              ...(input.affectedNodeIds as unknown as string[]),
+            ]),
+          ],
+          // If it was previously addressed/recurring, re-detect it
+          ...(existing.status === 'addressed' || existing.status === 'recurring'
+            ? { status: 'recurring' }
+            : {}),
+        },
+      });
+      return this.detectionToDomain(record);
+    }
+
+    // No active detection — create new
+    return this.recordDetection(input);
   }
 
   async getActiveMisconceptions(userId: UserId, domain?: string): Promise<IMisconceptionRecord[]> {
@@ -302,8 +369,14 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
     misconceptionType: string;
     affectedNodeIds: string[];
     confidence: number;
+    severity: string;
+    severityScore: number;
+    family: string;
+    description: string | null;
+    detectionCount: number;
     status: string;
     detectedAt: Date;
+    lastDetectedAt: Date;
     resolvedAt: Date | null;
   }): IMisconceptionRecord {
     return {
@@ -313,8 +386,14 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
       misconceptionType: record.misconceptionType as MisconceptionType,
       affectedNodeIds: record.affectedNodeIds as NodeId[],
       confidence: record.confidence as ConfidenceScore,
+      severity: fromDbSeverity(record.severity),
+      severityScore: record.severityScore,
+      family: record.family,
+      description: record.description,
+      detectionCount: record.detectionCount,
       status: record.status as MisconceptionStatus,
       detectedAt: record.detectedAt.toISOString(),
+      lastDetectedAt: record.lastDetectedAt.toISOString(),
       resolvedAt: record.resolvedAt?.toISOString() ?? null,
     };
   }

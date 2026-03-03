@@ -485,6 +485,153 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
   }
 
   /**
+   * Request revision of an escalated mutation (PENDING_REVIEW → REVISION_REQUESTED).
+   *
+   * Instead of approving or rejecting, a reviewer can request changes.
+   * The proposer must resubmit the mutation with updated operations.
+   *
+   * @param mutationId The escalated mutation to send back for revision.
+   * @param reviewerId Who is requesting the revision.
+   * @param feedback Specific feedback describing what needs to change.
+   * @param context Execution context.
+   * @returns The mutation transitioned to REVISION_REQUESTED state.
+   */
+  async requestRevision(
+    mutationId: MutationId,
+    reviewerId: string,
+    feedback: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation> {
+    const mutation = await this.getMutation(mutationId);
+
+    if (mutation.state !== 'pending_review') {
+      throw new InvalidStateTransitionError(mutation.state, 'revision_requested', [
+        'Only PENDING_REVIEW mutations can have revisions requested',
+      ]);
+    }
+
+    this.logger.info(
+      { mutationId, reviewerId },
+      'Requesting revision of escalated mutation'
+    );
+
+    // PENDING_REVIEW → REVISION_REQUESTED
+    const updated = await this.transitionState(
+      mutation,
+      'revision_requested',
+      reviewerId,
+      `Revision requested by reviewer: ${feedback}`,
+      context,
+      {
+        reviewAction: 'revision_requested',
+        reviewerId,
+        feedback,
+        revisionCount: mutation.revisionCount + 1,
+      }
+    );
+
+    // Persist the feedback on the mutation record
+    await this.mutationRepository.updateMutationFields(mutationId, {
+      revisionFeedback: feedback,
+      revisionCount: mutation.revisionCount + 1,
+    });
+
+    // Publish event
+    await this.publishEvent(
+      KnowledgeGraphEventType.CKG_MUTATION_REVISION_REQUESTED,
+      'CanonicalKnowledgeGraph',
+      mutation.mutationId,
+      {
+        mutationId: mutation.mutationId,
+        reviewerId,
+        feedback,
+        revisionCount: mutation.revisionCount + 1,
+      },
+      context
+    );
+
+    return {
+      ...updated,
+      revisionFeedback: feedback,
+      revisionCount: mutation.revisionCount + 1,
+    };
+  }
+
+  /**
+   * Resubmit a mutation after revision (REVISION_REQUESTED → PROPOSED).
+   *
+   * The proposer updates the mutation's operations and sends it back
+   * through the pipeline from the beginning.
+   *
+   * @param mutationId The mutation to resubmit.
+   * @param updatedOperations New DSL operations replacing the old ones.
+   * @param submitterId Who is resubmitting.
+   * @param context Execution context.
+   * @returns The mutation transitioned back to PROPOSED state.
+   */
+  async resubmitMutation(
+    mutationId: MutationId,
+    updatedOperations: CkgMutationOperation[],
+    submitterId: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation> {
+    const mutation = await this.getMutation(mutationId);
+
+    if (mutation.state !== 'revision_requested') {
+      throw new InvalidStateTransitionError(mutation.state, 'proposed', [
+        'Only REVISION_REQUESTED mutations can be resubmitted',
+      ]);
+    }
+
+    this.logger.info(
+      { mutationId, submitterId, revisionCount: mutation.revisionCount },
+      'Resubmitting revised mutation — re-entering pipeline'
+    );
+
+    // REVISION_REQUESTED → PROPOSED
+    const updated = await this.transitionState(
+      mutation,
+      'proposed',
+      submitterId,
+      `Mutation resubmitted after revision (cycle ${mutation.revisionCount})`,
+      context,
+      {
+        reviewAction: 'resubmitted',
+        submitterId,
+        revisionCount: mutation.revisionCount,
+        previousOperations: mutation.operations,
+      }
+    );
+
+    // Update operations and clear feedback
+    await this.mutationRepository.updateMutationFields(mutationId, {
+      operations: toSerializableOperations(updatedOperations),
+      revisionFeedback: null,
+    });
+
+    // Publish CkgMutationProposed event (re-enters pipeline)
+    await this.publishEvent(
+      KnowledgeGraphEventType.CKG_MUTATION_PROPOSED,
+      'CanonicalKnowledgeGraph',
+      mutation.mutationId,
+      {
+        mutationId: mutation.mutationId,
+        proposedBy: submitterId,
+        operationCount: updatedOperations.length,
+        isResubmission: true,
+        revisionCount: mutation.revisionCount,
+      },
+      context
+    );
+
+    return {
+      ...updated,
+      operations: toSerializableOperations(updatedOperations),
+      revisionFeedback: null,
+    };
+  }
+
+  /**
    * Record aggregation evidence and optionally create a mutation proposal.
    * This is the "intake" of the PKG→CKG aggregation pipeline.
    */

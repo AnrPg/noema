@@ -17,12 +17,13 @@ import type {
   InterventionType,
   Metadata,
   MisconceptionPatternId,
+  MisconceptionPatternKind,
+  MisconceptionSeverity,
   MisconceptionStatus,
   MisconceptionType,
   NodeId,
   UserId,
 } from '@noema/types';
-import type { MisconceptionPatternKind } from '@noema/types';
 
 // ============================================================================
 // Pattern & Template Types
@@ -118,11 +119,35 @@ export interface IMisconceptionRecord {
   /** Detection confidence (0–1) */
   readonly confidence: ConfidenceScore;
 
+  // --- Severity (per-detection) ---
+
+  /** Assessed severity of this detection instance */
+  readonly severity: MisconceptionSeverity;
+
+  /** Normalised severity score (0.0–1.0) for ranking/triage */
+  readonly severityScore: number;
+
+  // --- Family ---
+
+  /** Machine-readable family key */
+  readonly family: string;
+
+  // --- Enriched fields ---
+
+  /** Human-readable description */
+  readonly description: string | null;
+
+  /** How many times this misconception has been detected (upsert counter) */
+  readonly detectionCount: number;
+
   /** Current lifecycle status */
   status: MisconceptionStatus;
 
-  /** When detected (ISO 8601) */
+  /** When first detected (ISO 8601) */
   readonly detectedAt: string;
+
+  /** When most recently detected (ISO 8601) */
+  readonly lastDetectedAt: string;
 
   /** When resolved (ISO 8601), null if unresolved */
   resolvedAt: string | null;
@@ -166,6 +191,10 @@ export interface IRecordDetectionInput {
   readonly misconceptionType: MisconceptionType;
   readonly affectedNodeIds: readonly NodeId[];
   readonly confidence: ConfidenceScore;
+  readonly severity: MisconceptionSeverity;
+  readonly severityScore: number;
+  readonly family: string;
+  readonly description: string | null;
 }
 
 // ============================================================================
@@ -229,6 +258,13 @@ export interface IMisconceptionRepository {
    * Record a new misconception detection.
    */
   recordDetection(input: IRecordDetectionInput): Promise<IMisconceptionRecord>;
+
+  /**
+   * Upsert a misconception detection (dedup by userId + patternId on non-resolved records).
+   * If an active detection exists, increments detectionCount and updates lastDetectedAt.
+   * Otherwise, creates a new record.
+   */
+  upsertDetection(input: IRecordDetectionInput): Promise<IMisconceptionRecord>;
 
   /**
    * Get active (non-resolved) misconceptions for a user.

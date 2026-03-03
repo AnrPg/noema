@@ -291,6 +291,45 @@ export class PrismaMutationRepository implements IMutationRepository {
     }
   }
 
+  async updateMutationFields(
+    mutationId: MutationId,
+    fields: Partial<{
+      operations: Metadata[];
+      revisionFeedback: string | null;
+      revisionCount: number;
+    }>
+  ): Promise<ICkgMutation> {
+    const data: Record<string, unknown> = {};
+
+    if (fields.operations !== undefined) {
+      data['operation'] = toPrismaJsonArray(fields.operations);
+    }
+    if ('revisionFeedback' in fields) {
+      data['revisionFeedback'] = fields.revisionFeedback;
+    }
+    if (fields.revisionCount !== undefined) {
+      data['revisionCount'] = fields.revisionCount;
+    }
+
+    try {
+      const record = await this.prisma.ckgMutation.update({
+        where: { id: mutationId },
+        data,
+      });
+
+      return this.toDomain(record);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        ((error as { code?: string }).code === 'P2025' ||
+          error.message.includes('Record to update not found'))
+      ) {
+        throw new MutationNotFoundError(mutationId);
+      }
+      throw error;
+    }
+  }
+
   // ==========================================================================
   // Private
   // ==========================================================================
@@ -307,6 +346,8 @@ export class PrismaMutationRepository implements IMutationRepository {
     rationale: string | null;
     evidenceCount: number;
     recoveryAttempts: number;
+    revisionCount: number;
+    revisionFeedback: string | null;
     createdAt: Date;
     updatedAt: Date;
   }): ICkgMutation {
@@ -319,6 +360,8 @@ export class PrismaMutationRepository implements IMutationRepository {
       rationale: record.rationale ?? '',
       evidenceCount: record.evidenceCount,
       recoveryAttempts: record.recoveryAttempts,
+      revisionCount: record.revisionCount,
+      revisionFeedback: record.revisionFeedback,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),
     };

@@ -62,6 +62,12 @@ model CkgMutation {
     // Number of recovery attempts for stuck mutations (max retry enforcement)
     recoveryAttempts Int @default(0) @map("recovery_attempts")
 
+    // Number of revision cycles this mutation has been through
+    revisionCount Int @default(0) @map("revision_count")
+
+    // Latest reviewer feedback requesting changes (null if no active revision)
+    revisionFeedback String? @map("revision_feedback") @db.VarChar(4000)
+
     // Extensible metadata
     metadata Json @default("{}")
 
@@ -364,6 +370,21 @@ model MisconceptionDetection {
     // Detection confidence (branded ConfidenceScore at domain layer)
     confidence Float @default(0.0)
 
+    // Per-detection severity (defaults from pattern but can be overridden)
+    severity MisconceptionSeverity @default(MODERATE)
+
+    // Normalised severity score (0.0–1.0) for ranking and triage
+    severityScore Float @default(0.5) @map("severity_score")
+
+    // Family key (e.g. 'graph-structural') — resolved from config
+    family String @default("uncategorized") @db.VarChar(100)
+
+    // Human-readable description of this detection instance
+    description String? @db.VarChar(2000)
+
+    // How many times this misconception has been detected (upsert counter)
+    detectionCount Int @default(1) @map("detection_count")
+
     // Status lifecycle: detected → confirmed → addressed → resolved → recurring
     status String @default("detected") @map("status") @db.VarChar(50)
 
@@ -371,11 +392,15 @@ model MisconceptionDetection {
     metadata Json @default("{}")
 
     // Lifecycle timestamps
-    detectedAt DateTime  @default(now()) @map("detected_at")
-    resolvedAt DateTime? @map("resolved_at")
+    detectedAt      DateTime  @default(now()) @map("detected_at")
+    lastDetectedAt  DateTime  @default(now()) @map("last_detected_at")
+    resolvedAt      DateTime? @map("resolved_at")
 
     // Relations
     pattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id])
+
+    // Composite unique for upsert dedup (one active detection per user+pattern)
+    @@unique([userId, misconceptionPatternId, status], name: "uq_user_pattern_status")
 
     // Indexes
     @@index([userId])
@@ -383,8 +408,11 @@ model MisconceptionDetection {
     @@index([misconceptionType])
     @@index([misconceptionPatternId])
     @@index([status])
+    @@index([severity])
+    @@index([family])
     @@index([affectedNodeIds], type: Gin)
     @@index([detectedAt])
+    @@index([lastDetectedAt])
     @@map("misconception_detections")
 }
 
@@ -479,6 +507,8 @@ enum CkgMutationState {
     COMMITTING
     COMMITTED
     REJECTED
+    PENDING_REVIEW
+    REVISION_REQUESTED
 
     @@map("ckg_mutation_state")
 }

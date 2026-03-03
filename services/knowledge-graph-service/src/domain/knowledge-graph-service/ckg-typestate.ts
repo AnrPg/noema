@@ -9,8 +9,10 @@
  *               REJECTED     REJECTED   REJECTED  REJECTED   REJECTED
  *                  ↓
  *            PENDING_REVIEW → VALIDATED
- *                  ↓
- *               REJECTED
+ *                  ↓        ↓
+ *               REJECTED  REVISION_REQUESTED → PROPOSED
+ *                                            ↓
+ *                                         REJECTED
  *
  * TypeScript enforcement:
  * - State transition rules encoded as a const transition table
@@ -44,7 +46,8 @@ export const STATE_TRANSITIONS: Readonly<Record<MutationState, readonly Mutation
     committing: ['committed', 'rejected'] as const,
     committed: [] as const,
     rejected: [] as const,
-    pending_review: ['validated', 'rejected'] as const,
+    pending_review: ['validated', 'revision_requested', 'rejected'] as const,
+    revision_requested: ['proposed', 'rejected'] as const,
   });
 
 /**
@@ -63,6 +66,7 @@ export const CANCELLABLE_STATES: ReadonlySet<MutationState> = new Set<MutationSt
   'proposed',
   'validating',
   'pending_review',
+  'revision_requested',
 ]);
 
 // ============================================================================

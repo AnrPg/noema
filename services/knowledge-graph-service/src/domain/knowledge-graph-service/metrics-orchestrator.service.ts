@@ -44,6 +44,7 @@ import {
 import type { IMisconceptionRepository } from './misconception.repository.js';
 import type { IMisconceptionDetectionContext } from './misconception/index.js';
 import { MisconceptionDetectionEngine } from './misconception/index.js';
+import { resolveFamily } from './misconception/misconception-family.config.js';
 import { KG_COUNTERS, kgCounters, withSpan } from './observability.js';
 import { detectSignificantMetricChange, requireAuth } from './service-helpers.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
@@ -304,15 +305,6 @@ export class MetricsOrchestrator {
       // Get active patterns
       const patterns = await this.misconceptionRepository.getActivePatterns();
 
-      // I-3: Fetch currently active misconceptions to deduplicate detections.
-      // We skip re-recording a misconception if an active one already exists
-      // for the same (userId, patternId) pair.
-      const activeMisconceptions = await this.misconceptionRepository.getActiveMisconceptions(
-        userId,
-        domain
-      );
-      const activePatternIds = new Set(activeMisconceptions.map((m) => m.patternId));
-
       // Build detection context
       const detectionCtx: IMisconceptionDetectionContext = {
         pkgSubgraph,
@@ -334,7 +326,7 @@ export class MetricsOrchestrator {
         );
       }
 
-      // Persist detections
+      // Persist detections (upsert: dedup by userId + patternId)
       const detections: IMisconceptionDetection[] = [];
       for (const result of rawResults) {
         if (result.confidence < 0.3) continue; // Filter very low confidence
@@ -343,21 +335,24 @@ export class MetricsOrchestrator {
         const pattern = patterns.find((p) => p.patternId === result.patternId);
         if (!pattern) continue;
 
-        // I-3: Skip if an active detection already exists for this pattern
-        if (activePatternIds.has(result.patternId as MisconceptionPatternId)) {
-          this.logger.debug(
-            { patternId: result.patternId },
-            'Skipping duplicate misconception — active detection already exists'
-          );
-          continue;
-        }
+        // Compute per-detection severity
+        const clampedConfidence = ConfidenceScoreFactory.clamp(result.confidence);
+        const severityScore = computeSeverityScore(clampedConfidence as number, result.affectedNodeIds.length);
+        const severity = scoreToBand(severityScore);
 
-        const record = await this.misconceptionRepository.recordDetection({
+        // Resolve family from misconception type
+        const family = resolveFamily(pattern.misconceptionType);
+
+        const record = await this.misconceptionRepository.upsertDetection({
           userId,
           patternId: result.patternId as MisconceptionPatternId,
           misconceptionType: pattern.misconceptionType,
           affectedNodeIds: result.affectedNodeIds,
-          confidence: ConfidenceScoreFactory.clamp(result.confidence),
+          confidence: clampedConfidence,
+          severity,
+          severityScore,
+          family: family.key,
+          description: result.description || null,
         });
 
         detections.push({
@@ -367,7 +362,14 @@ export class MetricsOrchestrator {
           affectedNodeIds: record.affectedNodeIds,
           confidence: record.confidence,
           patternId: record.patternId,
+          severity: record.severity,
+          severityScore: record.severityScore,
+          family: record.family,
+          familyLabel: family.label,
+          description: record.description,
+          detectionCount: record.detectionCount,
           detectedAt: record.detectedAt,
+          lastDetectedAt: record.lastDetectedAt,
           resolvedAt: record.resolvedAt,
         });
 
@@ -413,16 +415,26 @@ export class MetricsOrchestrator {
 
     const records = await this.misconceptionRepository.getActiveMisconceptions(userId, domain);
 
-    const detections: IMisconceptionDetection[] = records.map((r) => ({
-      userId: r.userId as string,
-      misconceptionType: r.misconceptionType,
-      status: r.status,
-      affectedNodeIds: r.affectedNodeIds,
-      confidence: r.confidence,
-      patternId: r.patternId,
-      detectedAt: r.detectedAt,
-      resolvedAt: r.resolvedAt,
-    }));
+    const detections: IMisconceptionDetection[] = records.map((r) => {
+      const family = resolveFamily(r.misconceptionType);
+      return {
+        userId: r.userId as string,
+        misconceptionType: r.misconceptionType,
+        status: r.status,
+        affectedNodeIds: r.affectedNodeIds,
+        confidence: r.confidence,
+        patternId: r.patternId,
+        severity: r.severity,
+        severityScore: r.severityScore,
+        family: r.family,
+        familyLabel: family.label,
+        description: r.description,
+        detectionCount: r.detectionCount,
+        detectedAt: r.detectedAt,
+        lastDetectedAt: r.lastDetectedAt,
+        resolvedAt: r.resolvedAt,
+      };
+    });
 
     return {
       data: detections,
@@ -612,4 +624,37 @@ export class MetricsOrchestrator {
 
     return { nodes, edges };
   }
+}
+
+// ============================================================================
+// Severity scoring helpers (module-private)
+// ============================================================================
+
+import type { MisconceptionSeverity } from '@noema/types';
+import { MisconceptionSeverity as SeverityEnum } from '@noema/types';
+
+/** Weights for the severity formula */
+const CONFIDENCE_WEIGHT = 0.7;
+const AFFECTED_WEIGHT = 0.3;
+/** Max affected nodes before score saturates */
+const MAX_AFFECTED_NODES = 20;
+
+/**
+ * Compute a normalised severity score (0.0–1.0) from detection signals.
+ *
+ * Formula: `w_c * confidence + w_a * min(affectedCount / maxAffected, 1)`
+ */
+function computeSeverityScore(confidence: number, affectedCount: number): number {
+  const normAffected = Math.min(affectedCount / MAX_AFFECTED_NODES, 1.0);
+  return Math.min(CONFIDENCE_WEIGHT * confidence + AFFECTED_WEIGHT * normAffected, 1.0);
+}
+
+/**
+ * Convert a continuous severity score to a discrete severity band.
+ */
+function scoreToBand(score: number): MisconceptionSeverity {
+  if (score >= 0.85) return SeverityEnum.CRITICAL;
+  if (score >= 0.6) return SeverityEnum.HIGH;
+  if (score >= 0.35) return SeverityEnum.MODERATE;
+  return SeverityEnum.LOW;
 }

@@ -50,6 +50,17 @@ export interface ICkgMutation {
    * After exceeding `MAX_RECOVERY_ATTEMPTS`, the mutation is rejected.
    */
   readonly recoveryAttempts: number;
+
+  /**
+   * Number of revision cycles this mutation has been through.
+   * Incremented each time a reviewer requests changes and the proposer resubmits.
+   */
+  readonly revisionCount: number;
+
+  /**
+   * Latest reviewer feedback requesting changes (null if no active revision request).
+   */
+  readonly revisionFeedback: string | null;
 }
 
 /**
@@ -181,4 +192,17 @@ export interface IMutationRepository {
    * @returns The updated mutation with the incremented counter.
    */
   incrementRecoveryAttempts(mutationId: MutationId): Promise<ICkgMutation>;
+
+  /**
+   * Update mutable non-state fields on a mutation (e.g. operations, revisionFeedback).
+   * Does NOT require optimistic locking — used after a state transition has already locked.
+   */
+  updateMutationFields(
+    mutationId: MutationId,
+    fields: Partial<{
+      operations: Metadata[];
+      revisionFeedback: string | null;
+      revisionCount: number;
+    }>
+  ): Promise<ICkgMutation>;
 }

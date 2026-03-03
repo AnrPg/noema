@@ -187,6 +187,16 @@ export const CkgNodePromotedPayloadSchema = z.object({
   aggregationRunId: z.string().min(1),
 });
 
+/**
+ * Payload schema for `ckg.mutation.revision_requested` event.
+ */
+export const CkgMutationRevisionRequestedPayloadSchema = z.object({
+  mutationId: MutationIdSchema,
+  reviewerId: z.string().min(1),
+  feedback: z.string().min(1),
+  revisionCount: z.number().int().nonnegative(),
+});
+
 // ============================================================================
 // Metacognitive Event Payload Schemas
 // ============================================================================
@@ -299,6 +309,12 @@ export const CkgMutationRejectedEventSchema = createEventSchema(
   CkgMutationRejectedPayloadSchema
 );
 
+export const CkgMutationRevisionRequestedEventSchema = createEventSchema(
+  'ckg.mutation.revision_requested',
+  'CanonicalKnowledgeGraph',
+  CkgMutationRevisionRequestedPayloadSchema
+);
+
 export const CkgNodePromotedEventSchema = createEventSchema(
   'ckg.node.promoted',
   'CanonicalKnowledgeGraph',
@@ -343,6 +359,9 @@ export type CkgMutationProposedEventInput = z.input<typeof CkgMutationProposedEv
 export type CkgMutationValidatedEventInput = z.input<typeof CkgMutationValidatedEventSchema>;
 export type CkgMutationCommittedEventInput = z.input<typeof CkgMutationCommittedEventSchema>;
 export type CkgMutationRejectedEventInput = z.input<typeof CkgMutationRejectedEventSchema>;
+export type CkgMutationRevisionRequestedEventInput = z.input<
+  typeof CkgMutationRevisionRequestedEventSchema
+>;
 export type CkgNodePromotedEventInput = z.input<typeof CkgNodePromotedEventSchema>;
 
 // Metacognitive

@@ -65,6 +65,7 @@ export const KnowledgeGraphEventType = {
   CKG_MUTATION_COMMITTED: 'ckg.mutation.committed',
   CKG_MUTATION_REJECTED: 'ckg.mutation.rejected',
   CKG_MUTATION_ESCALATED: 'ckg.mutation.escalated',
+  CKG_MUTATION_REVISION_REQUESTED: 'ckg.mutation.revision_requested',
   CKG_NODE_PROMOTED: 'ckg.node.promoted',
 
   // ── Metacognitive Events ───────────────────────────────────────────────
@@ -277,6 +278,20 @@ export interface ICkgMutationEscalatedPayload {
 }
 
 /**
+ * Payload for ckg.mutation.revision_requested — reviewer asks for changes.
+ */
+export interface ICkgMutationRevisionRequestedPayload {
+  /** Mutation lifecycle ID */
+  mutationId: MutationId;
+  /** Reviewer who requested changes */
+  reviewerId: string;
+  /** Specific feedback describing what needs to change */
+  feedback: string;
+  /** How many revision cycles this mutation has been through */
+  revisionCount: number;
+}
+
+/**
  * Payload for ckg.node.promoted — a concept was promoted from PKGs to CKG.
  */
 export interface ICkgNodePromotedPayload {
@@ -417,6 +432,11 @@ export type CkgMutationEscalatedEvent = ITypedEvent<
   'CanonicalKnowledgeGraph',
   ICkgMutationEscalatedPayload
 >;
+export type CkgMutationRevisionRequestedEvent = ITypedEvent<
+  'ckg.mutation.revision_requested',
+  'CanonicalKnowledgeGraph',
+  ICkgMutationRevisionRequestedPayload
+>;
 export type CkgNodePromotedEvent = ITypedEvent<
   'ckg.node.promoted',
   'CanonicalKnowledgeGraph',
@@ -465,6 +485,7 @@ export type CkgDomainEvent =
   | CkgMutationCommittedEvent
   | CkgMutationRejectedEvent
   | CkgMutationEscalatedEvent
+  | CkgMutationRevisionRequestedEvent
   | CkgNodePromotedEvent;
 
 /**

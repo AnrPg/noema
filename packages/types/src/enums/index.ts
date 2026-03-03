@@ -403,6 +403,8 @@ export const MutationState = {
   REJECTED: 'rejected',
   /** Escalated for human/admin review (ontological conflict) */
   PENDING_REVIEW: 'pending_review',
+  /** Reviewer requested changes; awaiting submitter revision */
+  REVISION_REQUESTED: 'revision_requested',
 } as const;
 
 export type MutationState = (typeof MutationState)[keyof typeof MutationState];
@@ -1026,10 +1028,28 @@ export type InterventionType = (typeof InterventionType)[keyof typeof Interventi
 // Knowledge Graph — Misconception Status
 // ============================================================================
 
+// ============================================================================
+// Knowledge Graph — Misconception Severity
+// ============================================================================
+
 /**
- * Lifecycle states of a misconception instance.
- * Tracks from first detection through remediation to resolution.
+ * Severity levels for detected misconceptions.
+ * Indicates how harmful a misconception is for the learner's progress.
  */
+export const MisconceptionSeverity = {
+  /** Minor terminological confusion; self-corrects with exposure */
+  LOW: 'low',
+  /** Significant gap; will cause errors on related material */
+  MODERATE: 'moderate',
+  /** Fundamental misunderstanding; blocks learning in this topic */
+  HIGH: 'high',
+  /** Deeply entrenched; requires targeted intervention and propagates to neighbors */
+  CRITICAL: 'critical',
+} as const;
+
+export type MisconceptionSeverity =
+  (typeof MisconceptionSeverity)[keyof typeof MisconceptionSeverity];
+
 export const MisconceptionStatus = {
   /** Pattern match detected the misconception */
   DETECTED: 'detected',

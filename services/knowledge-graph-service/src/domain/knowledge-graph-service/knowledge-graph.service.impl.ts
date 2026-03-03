@@ -855,6 +855,60 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     };
   }
 
+  async requestMutationRevision(
+    mutationId: MutationId,
+    feedback: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    requireAuth(context);
+
+    const reviewerId = (context.userId as string | undefined) ?? 'system';
+
+    const mutation = await this.mutationPipeline.requestRevision(
+      mutationId,
+      reviewerId,
+      feedback,
+      context
+    );
+
+    this.logger.info(
+      { mutationId, reviewerId, state: mutation.state, revisionCount: mutation.revisionCount },
+      'Revision requested for escalated mutation'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.hintsFactory.createMutationHints('revision_requested', mutation),
+    };
+  }
+
+  async resubmitMutation(
+    mutationId: MutationId,
+    updatedOperations: CkgMutationOperation[],
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    requireAuth(context);
+
+    const submitterId = (context.userId as string | undefined) ?? 'system';
+
+    const mutation = await this.mutationPipeline.resubmitMutation(
+      mutationId,
+      updatedOperations,
+      submitterId,
+      context
+    );
+
+    this.logger.info(
+      { mutationId, submitterId, state: mutation.state, revisionCount: mutation.revisionCount },
+      'Mutation resubmitted after revision — re-entering pipeline'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.hintsFactory.createMutationHints('resubmitted', mutation),
+    };
+  }
+
   // ========================================================================
   // PKG Operation Log — inline delegation
   // ========================================================================

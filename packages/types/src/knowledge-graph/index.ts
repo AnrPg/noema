@@ -14,6 +14,7 @@ import type {
   GraphType,
   MetacognitiveStage,
   MetricHealthStatus,
+  MisconceptionSeverity,
   MisconceptionStatus,
   MisconceptionType,
   StructuralMetricType,
@@ -192,8 +193,35 @@ export interface IMisconceptionDetection {
   /** The pattern that detected this misconception */
   readonly patternId: MisconceptionPatternId;
 
+  // --- Severity (per-detection) ---
+
+  /** Assessed severity of this misconception instance */
+  readonly severity: MisconceptionSeverity;
+
+  /** Normalised severity score (0.0–1.0) for ranking and triage */
+  readonly severityScore: number;
+
+  // --- Family ---
+
+  /** Machine-readable family key (e.g. 'graph_structural') */
+  readonly family: string;
+
+  /** Human-readable family label */
+  readonly familyLabel: string;
+
+  // --- Enriched metadata ---
+
+  /** Free-text description of the misconception (from detection or pattern) */
+  readonly description: string | null;
+
+  /** How many times this misconception has been detected (upsert counter) */
+  readonly detectionCount: number;
+
   /** When this misconception was first detected (ISO 8601) */
   readonly detectedAt: string;
+
+  /** When the most recent detection occurred (ISO 8601) */
+  readonly lastDetectedAt: string;
 
   /** When this misconception was resolved (ISO 8601), null if unresolved */
   resolvedAt: string | null;

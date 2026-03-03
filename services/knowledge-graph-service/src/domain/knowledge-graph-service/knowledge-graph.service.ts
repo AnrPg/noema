@@ -26,7 +26,7 @@ import type {
   UserId,
 } from '@noema/types';
 
-import type { IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
+import type { CkgMutationOperation, IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -678,6 +678,30 @@ export interface IKnowledgeGraphService {
   rejectEscalatedMutation(
     mutationId: MutationId,
     reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Request revision of an escalated CKG mutation (PENDING_REVIEW → REVISION_REQUESTED).
+   *
+   * Instead of approving or rejecting, the reviewer requests changes.
+   * The proposer must resubmit with updated operations.
+   */
+  requestMutationRevision(
+    mutationId: MutationId,
+    feedback: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Resubmit a mutation after revision (REVISION_REQUESTED → PROPOSED).
+   *
+   * The proposer provides updated operations. The mutation re-enters the
+   * pipeline from the beginning.
+   */
+  resubmitMutation(
+    mutationId: MutationId,
+    updatedOperations: CkgMutationOperation[],
     context: IExecutionContext
   ): Promise<IServiceResult<ICkgMutation>>;
 

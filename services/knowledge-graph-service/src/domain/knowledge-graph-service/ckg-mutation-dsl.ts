@@ -336,6 +336,7 @@ export const MutationFilterSchema = z.object({
       'validating',
       'validated',
       'pending_review',
+      'revision_requested',
       'proving',
       'proven',
       'committing',

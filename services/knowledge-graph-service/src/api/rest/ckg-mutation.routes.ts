@@ -12,7 +12,7 @@
 
 import type { MutationId, MutationState } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
-import type { IMutationFilter } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
+import type { CkgMutationOperation, IMutationFilter } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
@@ -20,6 +20,8 @@ import {
   MutationQueryParamsSchema,
   ProposeMutationRequestSchema,
   RejectMutationRequestSchema,
+  RequestRevisionRequestSchema,
+  ResubmitMutationRequestSchema,
 } from '../schemas/ckg-mutation.schemas.js';
 import {
   type IRouteOptions,
@@ -429,6 +431,106 @@ export function registerCkgMutationRoutes(
         const result = await service.rejectEscalatedMutation(
           mutationId as MutationId,
           parsed.reason,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // POST /api/v1/ckg/mutations/:mutationId/request-revision — Request revision (Phase 6)
+  // ============================================================================
+
+  fastify.post<{ Params: { mutationId: string }; Body: unknown }>(
+    '/api/v1/ckg/mutations/:mutationId/request-revision',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Request revision of an escalated CKG mutation',
+        description:
+          'Request changes to a mutation in PENDING_REVIEW state. The mutation ' +
+          'transitions to REVISION_REQUESTED and awaits resubmission. Requires admin/agent role.',
+        params: {
+          type: 'object',
+          required: ['mutationId'],
+          properties: {
+            mutationId: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['feedback'],
+          properties: {
+            feedback: { type: 'string', minLength: 1, maxLength: 4000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
+        const parsed = RequestRevisionRequestSchema.parse(request.body);
+        const context = buildContext(request);
+
+        const result = await service.requestMutationRevision(
+          mutationId as MutationId,
+          parsed.feedback,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  // ============================================================================
+  // PATCH /api/v1/ckg/mutations/:mutationId — Resubmit a revised mutation (Phase 6)
+  // ============================================================================
+
+  fastify.patch<{ Params: { mutationId: string }; Body: unknown }>(
+    '/api/v1/ckg/mutations/:mutationId',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Resubmit a CKG mutation after revision',
+        description:
+          'Resubmit a mutation in REVISION_REQUESTED state with updated operations. ' +
+          'The mutation re-enters the pipeline from PROPOSED. Requires admin/agent role.',
+        params: {
+          type: 'object',
+          required: ['mutationId'],
+          properties: {
+            mutationId: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['operations'],
+          properties: {
+            operations: { type: 'array', minItems: 1, maxItems: 50 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
+        const parsed = ResubmitMutationRequestSchema.parse(request.body);
+        const context = buildContext(request);
+
+        const result = await service.resubmitMutation(
+          mutationId as MutationId,
+          parsed.operations as CkgMutationOperation[],
           context
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));

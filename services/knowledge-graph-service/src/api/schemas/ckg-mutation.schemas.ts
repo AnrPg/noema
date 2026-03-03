@@ -80,6 +80,28 @@ export const RejectMutationRequestSchema = z.object({
     .max(2000, 'Rejection reason must not exceed 2000 characters'),
 });
 
+/**
+ * Request body for requesting a revision of an escalated (pending_review) mutation.
+ * The reviewer provides specific feedback describing what needs to change.
+ */
+export const RequestRevisionRequestSchema = z.object({
+  feedback: z
+    .string()
+    .min(1, 'Revision feedback is required')
+    .max(4000, 'Revision feedback must not exceed 4000 characters'),
+});
+
+/**
+ * Request body for resubmitting a mutation after revision.
+ * The proposer provides updated operations replacing the old ones.
+ */
+export const ResubmitMutationRequestSchema = z.object({
+  operations: z
+    .array(CkgMutationOperationSchema)
+    .min(1, 'At least one operation is required')
+    .max(50, 'Maximum 50 operations per mutation'),
+});
+
 // ============================================================================
 // Type Inference
 // ============================================================================
@@ -89,3 +111,5 @@ export type MutationQueryParams = z.infer<typeof MutationQueryParamsSchema>;
 export type ProposeMutationRequest = z.infer<typeof ProposeMutationRequestSchema>;
 export type ApproveMutationRequest = z.infer<typeof ApproveMutationRequestSchema>;
 export type RejectMutationRequest = z.infer<typeof RejectMutationRequestSchema>;
+export type RequestRevisionRequest = z.infer<typeof RequestRevisionRequestSchema>;
+export type ResubmitMutationRequest = z.infer<typeof ResubmitMutationRequestSchema>;
