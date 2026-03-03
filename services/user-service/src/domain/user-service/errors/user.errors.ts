@@ -115,7 +115,10 @@ export class InvalidTokenError extends AuthenticationError {
  */
 export class TokenExpiredError extends DomainError {
   constructor(tokenType: 'password_reset' | 'email_verification') {
-    super('TOKEN_EXPIRED', `${tokenType === 'password_reset' ? 'Password reset' : 'Email verification'} token has expired`);
+    super(
+      'TOKEN_EXPIRED',
+      `${tokenType === 'password_reset' ? 'Password reset' : 'Email verification'} token has expired`
+    );
   }
 }
 
@@ -124,7 +127,10 @@ export class TokenExpiredError extends DomainError {
  */
 export class TokenAlreadyUsedError extends DomainError {
   constructor(tokenType: 'password_reset' | 'email_verification') {
-    super('TOKEN_ALREADY_USED', `${tokenType === 'password_reset' ? 'Password reset' : 'Email verification'} token has already been used`);
+    super(
+      'TOKEN_ALREADY_USED',
+      `${tokenType === 'password_reset' ? 'Password reset' : 'Email verification'} token has already been used`
+    );
   }
 }
 
@@ -290,9 +296,12 @@ export class UsernameChangeTooSoonError extends BusinessRuleError {
   public readonly nextAllowedAt: string;
 
   constructor(nextAllowedAt: string) {
-    super(`Username can only be changed once every 30 days. Next change allowed at ${nextAllowedAt}`, {
-      nextAllowedAt,
-    });
+    super(
+      `Username can only be changed once every 30 days. Next change allowed at ${nextAllowedAt}`,
+      {
+        nextAllowedAt,
+      }
+    );
     this.nextAllowedAt = nextAllowedAt;
   }
 }

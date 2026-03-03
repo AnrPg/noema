@@ -676,9 +676,7 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  async findPasswordResetTokenByHash(
-    tokenHash: string
-  ): Promise<{
+  async findPasswordResetTokenByHash(tokenHash: string): Promise<{
     id: string;
     userId: string;
     tokenHash: string;
@@ -726,9 +724,7 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  async findEmailVerificationTokenByHash(
-    tokenHash: string
-  ): Promise<{
+  async findEmailVerificationTokenByHash(tokenHash: string): Promise<{
     id: string;
     userId: string;
     tokenHash: string;

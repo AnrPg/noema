@@ -199,55 +199,55 @@ export const UserPasswordResetRequestedPayloadSchema = z.object({
 export const UserCreatedEventSchema = createEventSchema(
   'user.created',
   'User',
-  UserCreatedPayloadSchema,
+  UserCreatedPayloadSchema
 );
 
 export const UserProfileUpdatedEventSchema = createEventSchema(
   'user.profile.updated',
   'User',
-  UserProfileUpdatedPayloadSchema,
+  UserProfileUpdatedPayloadSchema
 );
 
 export const UserSettingsChangedEventSchema = createEventSchema(
   'user.settings.changed',
   'User',
-  UserSettingsChangedPayloadSchema,
+  UserSettingsChangedPayloadSchema
 );
 
 export const UserLoggedInEventSchema = createEventSchema(
   'user.logged_in',
   'User',
-  UserLoggedInPayloadSchema,
+  UserLoggedInPayloadSchema
 );
 
 export const UserLoggedOutEventSchema = createEventSchema(
   'user.logged_out',
   'User',
-  UserLoggedOutPayloadSchema,
+  UserLoggedOutPayloadSchema
 );
 
 export const UserUsernameChangedEventSchema = createEventSchema(
   'user.username.changed',
   'User',
-  UserUsernameChangedPayloadSchema,
+  UserUsernameChangedPayloadSchema
 );
 
 export const UserEmailChangeInitiatedEventSchema = createEventSchema(
   'user.email_change.initiated',
   'User',
-  UserEmailChangeInitiatedPayloadSchema,
+  UserEmailChangeInitiatedPayloadSchema
 );
 
 export const UserEmailChangedEventSchema = createEventSchema(
   'user.email.changed',
   'User',
-  UserEmailChangedPayloadSchema,
+  UserEmailChangedPayloadSchema
 );
 
 export const UserPasswordResetRequestedEventSchema = createEventSchema(
   'user.password_reset.requested',
   'User',
-  UserPasswordResetRequestedPayloadSchema,
+  UserPasswordResetRequestedPayloadSchema
 );
 
 // ============================================================================

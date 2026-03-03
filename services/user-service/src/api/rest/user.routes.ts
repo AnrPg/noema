@@ -202,7 +202,9 @@ export function registerUserRoutes(
         error: {
           code: (error as DomainError).code,
           message: error.message,
-          ...(error instanceof UsernameChangeTooSoonError ? { nextAllowedAt: error.nextAllowedAt } : {}),
+          ...(error instanceof UsernameChangeTooSoonError
+            ? { nextAllowedAt: error.nextAllowedAt }
+            : {}),
         },
       });
     } else if (error instanceof DomainError) {

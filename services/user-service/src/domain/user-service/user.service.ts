@@ -9,8 +9,8 @@ import type { IAgentHints } from '@noema/contracts';
 import type { CorrelationId, IOffsetPagination, IPaginatedResponse, UserId } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 import bcrypt from 'bcrypt';
-import { createHash, randomBytes } from 'node:crypto';
 import { nanoid } from 'nanoid';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { ISessionOrchestrationService } from '../../infrastructure/external-apis/session-orchestration.service.js';
 import type { ITokenService } from '../../infrastructure/external-apis/token.service.js';
@@ -182,7 +182,10 @@ export class UserService {
       await this.sendVerificationEmail(id);
     } catch (error) {
       // Don't fail registration if verification email fails
-      this.logger.warn({ userId: id, error }, 'Failed to send verification email during registration');
+      this.logger.warn(
+        { userId: id, error },
+        'Failed to send verification email during registration'
+      );
     }
 
     return {
@@ -955,11 +958,7 @@ export class UserService {
       const resetUrl = `${FRONTEND_URL}/auth/reset-password?token=${rawToken}`;
       // In development, log the URL to console.
       // In production, this would be sent via an email provider (pluggable concern).
-      this.logger.info(
-        { userId: user.id, resetUrl },
-        '📧 Password reset link (dev): %s',
-        resetUrl
-      );
+      this.logger.info({ userId: user.id, resetUrl }, '📧 Password reset link (dev): %s', resetUrl);
     }
 
     // Always return 200 regardless of whether the email exists
@@ -1034,7 +1033,9 @@ export class UserService {
     });
 
     return {
-      data: { message: 'Password has been reset successfully. Please log in with your new password.' },
+      data: {
+        message: 'Password has been reset successfully. Please log in with your new password.',
+      },
       agentHints: {
         suggestedNextActions: [
           {
@@ -1082,11 +1083,7 @@ export class UserService {
     });
 
     const verifyUrl = `${FRONTEND_URL}/auth/verify-email?token=${rawToken}`;
-    this.logger.info(
-      { userId, verifyUrl },
-      '📧 Email verification link (dev): %s',
-      verifyUrl
-    );
+    this.logger.info({ userId, verifyUrl }, '📧 Email verification link (dev): %s', verifyUrl);
   }
 
   /**
@@ -1240,7 +1237,9 @@ export class UserService {
       !this.hasRole(context, [UserRole.ADMIN, UserRole.SUPER_ADMIN])
     ) {
       const lastChanged = new Date(user.usernameChangedAt);
-      const nextAllowed = new Date(lastChanged.getTime() + USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
+      const nextAllowed = new Date(
+        lastChanged.getTime() + USERNAME_CHANGE_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+      );
       if (nextAllowed > new Date()) {
         throw new UsernameChangeTooSoonError(nextAllowed.toISOString());
       }
@@ -1252,7 +1251,11 @@ export class UserService {
     }
 
     const oldUsername = user.username;
-    const updated = await this.repository.updateUsername(userId, validated.username, validated.version);
+    const updated = await this.repository.updateUsername(
+      userId,
+      validated.username,
+      validated.version
+    );
     await this.repository.setUsernameChangedAt(userId, new Date().toISOString());
 
     // Publish event
@@ -1322,7 +1325,10 @@ export class UserService {
     );
 
     return {
-      data: { message: 'A verification email has been sent to your new email address. Please verify to complete the change.' },
+      data: {
+        message:
+          'A verification email has been sent to your new email address. Please verify to complete the change.',
+      },
       agentHints: {
         suggestedNextActions: [
           {

@@ -252,9 +252,7 @@ export interface IUserRepository {
   /**
    * Find a password reset token by its hash.
    */
-  findPasswordResetTokenByHash(
-    tokenHash: string
-  ): Promise<{
+  findPasswordResetTokenByHash(tokenHash: string): Promise<{
     id: string;
     userId: string;
     tokenHash: string;
@@ -285,9 +283,7 @@ export interface IUserRepository {
   /**
    * Find an email verification token by its hash.
    */
-  findEmailVerificationTokenByHash(
-    tokenHash: string
-  ): Promise<{
+  findEmailVerificationTokenByHash(tokenHash: string): Promise<{
     id: string;
     userId: string;
     tokenHash: string;
