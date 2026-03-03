@@ -430,7 +430,32 @@ export interface IChangeTeachingInput {
 // Session Filters (for list queries)
 // ============================================================================
 
+export type SessionSortBy =
+  | 'createdAt'
+  | 'completedAt'
+  | 'totalAttempts'
+  | 'durationMs'
+  | 'retentionRate';
+
+export type SortOrder = 'asc' | 'desc';
+
 export interface ISessionFilters {
   state?: SessionState;
   learningMode?: LearningMode;
+  /** Only sessions created on or after this ISO timestamp */
+  createdAfter?: string;
+  /** Only sessions created on or before this ISO timestamp */
+  createdBefore?: string;
+  /** Only COMPLETED sessions completed on or after this ISO timestamp */
+  completedAfter?: string;
+  /** Only COMPLETED sessions completed on or before this ISO timestamp */
+  completedBefore?: string;
+  /** Filter to sessions for a specific deck */
+  deckId?: string;
+  /** Minimum total attempts (from stats) */
+  minAttempts?: number;
+  /** Sort field */
+  sortBy?: SessionSortBy;
+  /** Sort direction */
+  sortOrder?: SortOrder;
 }

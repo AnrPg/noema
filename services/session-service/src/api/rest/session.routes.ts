@@ -23,13 +23,15 @@ import {
 import {
   AttemptListQuerySchema,
   SessionListQuerySchema,
+  StreakQuerySchema,
 } from '../../domain/session-service/session.schemas.js';
 import type {
   IExecutionContext,
   SessionService,
 } from '../../domain/session-service/session.service.js';
+import type { StreakService } from '../../domain/session-service/streak.service.js';
 import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
-import type { SessionState } from '../../types/index.js';
+import type { SessionSortBy, SessionState, SortOrder } from '../../types/index.js';
 
 // ============================================================================
 // Request types
@@ -50,7 +52,8 @@ interface AttemptParams extends SessionIdParams {
 export function registerSessionRoutes(
   fastify: FastifyInstance,
   sessionService: SessionService,
-  authMiddleware: ReturnType<typeof createAuthMiddleware>
+  authMiddleware: ReturnType<typeof createAuthMiddleware>,
+  streakService?: StreakService
 ): void {
   // ==========================================================================
   // Timing Hook
@@ -210,6 +213,14 @@ export function registerSessionRoutes(
             ...(query.learningMode !== undefined
               ? { learningMode: query.learningMode as LearningMode }
               : {}),
+            ...(query.createdAfter !== undefined ? { createdAfter: query.createdAfter } : {}),
+            ...(query.createdBefore !== undefined ? { createdBefore: query.createdBefore } : {}),
+            ...(query.completedAfter !== undefined ? { completedAfter: query.completedAfter } : {}),
+            ...(query.completedBefore !== undefined ? { completedBefore: query.completedBefore } : {}),
+            ...(query.deckId !== undefined ? { deckId: query.deckId } : {}),
+            ...(query.minAttempts !== undefined ? { minAttempts: query.minAttempts } : {}),
+            ...(query.sortBy !== undefined ? { sortBy: query.sortBy as SessionSortBy } : {}),
+            ...(query.sortOrder !== undefined ? { sortOrder: query.sortOrder as SortOrder } : {}),
           },
           query.limit,
           query.offset,
@@ -221,6 +232,32 @@ export function registerSessionRoutes(
       }
     }
   );
+
+  // ==========================================================================
+  // Streak (Phase 5, T5.2)
+  // ==========================================================================
+
+  // GET /v1/sessions/streak — Get study streak and heatmap
+  // MUST be registered BEFORE /v1/sessions/:sessionId to avoid param capture.
+  if (streakService) {
+    fastify.get<{ Querystring: Record<string, string> }>(
+      '/v1/sessions/streak',
+      { preHandler: authMiddleware },
+      async (request, reply) => {
+        try {
+          const ctx = buildContext(request);
+          const query = StreakQuerySchema.parse(request.query);
+          const result = await streakService.getStreak(
+            { days: query.days, timezone: query.timezone },
+            { userId: ctx.userId }
+          );
+          reply.send(wrapResponse(result.data, result.agentHints, request));
+        } catch (error) {
+          handleError(error, request, reply);
+        }
+      }
+    );
+  }
 
   // GET /v1/sessions/:sessionId — Get session
   fastify.get<{ Params: SessionIdParams }>(

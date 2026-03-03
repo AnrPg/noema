@@ -18,6 +18,7 @@ import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerSessionRoutes } from './api/rest/session.routes.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { SessionService } from './domain/session-service/session.service.js';
+import { StreakService } from './domain/session-service/streak.service.js';
 import { UserDeletedConsumer } from './events/consumers/index.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
@@ -25,6 +26,7 @@ import {
   PrismaSessionRepository,
 } from './infrastructure/database/index.js';
 import { SessionOutboxWorker } from './infrastructure/events/index.js';
+import { PrismaUserStreakRepository } from './infrastructure/repositories/prisma-user-streak.repository.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 // ============================================================================
@@ -115,6 +117,13 @@ async function bootstrap(): Promise<void> {
     }
   );
 
+  // Create streak infrastructure (Phase 5)
+  const userStreakRepository = new PrismaUserStreakRepository(prisma, logger);
+  const streakService = new StreakService(userStreakRepository, logger);
+
+  // Wire streak service into session service for inline updates
+  sessionService.setStreakService(streakService);
+
   // ==========================================================================
   // Event Consumers
   // ==========================================================================
@@ -175,7 +184,7 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  registerSessionRoutes(fastify as unknown as FastifyInstance, sessionService, authMiddleware);
+  registerSessionRoutes(fastify as unknown as FastifyInstance, sessionService, authMiddleware, streakService);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown

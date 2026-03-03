@@ -169,6 +169,15 @@ export class UserDeletedConsumer extends BaseEventConsumer {
       where: { userId },
     });
 
+    // Step 4: Delete streak cache (Phase 5)
+    let streakDeleted = 0;
+    try {
+      await this.prisma.userStreak.delete({ where: { userId } });
+      streakDeleted = 1;
+    } catch {
+      // Row may not exist — that's fine
+    }
+
     this.logger.info(
       {
         userId,
@@ -177,6 +186,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
         queueItemsDeleted: queueResult.count,
         handshakesDeleted: handshakeResult.count,
         outboxEventsDeleted: outboxResult.count,
+        streakDeleted,
       },
       'User session data hard-deleted (GDPR)',
     );

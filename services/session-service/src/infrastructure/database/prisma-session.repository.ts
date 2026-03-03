@@ -254,11 +254,107 @@ export class PrismaSessionRepository implements ISessionRepository {
     if (filters?.learningMode) {
       where['learningMode'] = toPrismaLearningMode(filters.learningMode);
     }
+    if (filters?.deckId) {
+      where['deckQueryId'] = filters.deckId;
+    }
+
+    // Date range filters — createdAt
+    if (filters?.createdAfter || filters?.createdBefore) {
+      const createdAt: Record<string, Date> = {};
+      if (filters.createdAfter) createdAt['gte'] = new Date(filters.createdAfter);
+      if (filters.createdBefore) createdAt['lte'] = new Date(filters.createdBefore);
+      where['createdAt'] = createdAt;
+    }
+
+    // Date range filters — completedAt
+    if (filters?.completedAfter || filters?.completedBefore) {
+      const completedAt: Record<string, Date> = {};
+      if (filters.completedAfter) completedAt['gte'] = new Date(filters.completedAfter);
+      if (filters.completedBefore) completedAt['lte'] = new Date(filters.completedBefore);
+      where['completedAt'] = completedAt;
+      // completedAt filters imply completed status
+      if (!filters.state) {
+        where['state'] = 'COMPLETED' as PrismaSessionState;
+      }
+    }
+
+    // Determine sort. For retentionRate and totalAttempts/durationMs (JSONB),
+    // we use app-level sort. For createdAt/completedAt, we use DB sort.
+    const sortBy = filters?.sortBy ?? 'createdAt';
+    const sortOrder = filters?.sortOrder ?? 'desc';
+    const isAppLevelSort = sortBy === 'retentionRate' || sortBy === 'totalAttempts' || sortBy === 'durationMs';
+
+    // DB-level orderBy
+    let orderBy: Record<string, string> = { startedAt: 'desc' };
+    if (!isAppLevelSort) {
+      if (sortBy === 'createdAt') {
+        orderBy = { createdAt: sortOrder };
+      } else if (sortBy === 'completedAt') {
+        orderBy = { completedAt: sortOrder };
+      }
+    }
+
+    if (isAppLevelSort) {
+      // Fetch all matching rows for app-level sort
+      const [allRows, total] = await Promise.all([
+        this.prisma.session.findMany({ where, orderBy }),
+        this.prisma.session.count({ where }),
+      ]);
+
+      let sessions = allRows.map(toSessionDomain);
+
+      // Apply minAttempts filter (post-fetch since it's on JSONB stats)
+      if (filters?.minAttempts !== undefined) {
+        sessions = sessions.filter((s) => s.stats.totalAttempts >= filters.minAttempts!);
+      }
+
+      // Sort by JSONB field
+      sessions.sort((a, b) => {
+        let aVal: number;
+        let bVal: number;
+        if (sortBy === 'retentionRate') {
+          aVal = a.stats.retentionRate;
+          bVal = b.stats.retentionRate;
+        } else if (sortBy === 'totalAttempts') {
+          aVal = a.stats.totalAttempts;
+          bVal = b.stats.totalAttempts;
+        } else {
+          // durationMs: compute from timestamps
+          const aStart = new Date(a.startedAt).getTime();
+          const aEnd = a.completedAt ? new Date(a.completedAt).getTime() : new Date(a.lastActivityAt).getTime();
+          aVal = aEnd - aStart - a.totalPausedDurationMs;
+          const bStart = new Date(b.startedAt).getTime();
+          const bEnd = b.completedAt ? new Date(b.completedAt).getTime() : new Date(b.lastActivityAt).getTime();
+          bVal = bEnd - bStart - b.totalPausedDurationMs;
+        }
+        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+      });
+
+      // Apply pagination
+      const paginated = sessions.slice(offset, offset + limit);
+      return {
+        sessions: paginated,
+        total: filters?.minAttempts !== undefined ? sessions.length : total,
+      };
+    }
+
+    // minAttempts: for DB-level sort, we still need to filter post-fetch
+    // because totalAttempts is in JSONB. For now, fetch extra and filter.
+    if (filters?.minAttempts !== undefined) {
+      const [allRows] = await Promise.all([
+        this.prisma.session.findMany({ where, orderBy }),
+      ]);
+
+      let sessions = allRows.map(toSessionDomain);
+      sessions = sessions.filter((s) => s.stats.totalAttempts >= filters.minAttempts!);
+      const paginated = sessions.slice(offset, offset + limit);
+      return { sessions: paginated, total: sessions.length };
+    }
 
     const [rows, total] = await Promise.all([
       this.prisma.session.findMany({
         where,
-        orderBy: { startedAt: 'desc' },
+        orderBy,
         take: limit,
         skip: offset,
       }),

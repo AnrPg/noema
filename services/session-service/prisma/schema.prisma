@@ -75,6 +75,7 @@ model Session {
     @@index([state])
     @@index([startedAt])
     @@index([lastActivityAt])
+    @@index([userId, completedAt])
     @@map("sessions")
 }
 
@@ -325,4 +326,23 @@ enum OfflineIntentTokenReplayGuardStatus {
     EXPIRED
 
     @@map("offline_intent_token_replay_guard_status")
+}
+
+// ============================================================================
+// User Streak — Materialized streak cache (Phase 5, T5.4)
+// ============================================================================
+// One row per user. Incrementally updated when a session completes.
+// Lazy-reset on read: if lastActiveDate is more than 1 day ago,
+// currentStreak returns 0.
+
+model UserStreak {
+    userId         String   @id @map("user_id") @db.VarChar(50)
+    currentStreak  Int      @default(0) @map("current_streak")
+    longestStreak  Int      @default(0) @map("longest_streak")
+    lastActiveDate DateTime @map("last_active_date") @db.Date
+    timezone       String   @default("UTC") @db.VarChar(50)
+    createdAt      DateTime @default(now()) @map("created_at")
+    updatedAt      DateTime @updatedAt @map("updated_at")
+
+    @@map("user_streaks")
 }

@@ -222,6 +222,12 @@ export class SessionService {
   private readonly activeTokenKeyId: string;
   private readonly tokenSecrets: Map<string, Uint8Array>;
 
+  /**
+   * Optional streak service — wired post-construction to avoid circular deps.
+   * When set, completeSession() will update the streak cache inline.
+   */
+  private streakService?: import('./streak.service.js').StreakService;
+
   constructor(
     private readonly repository: ISessionRepository,
     private readonly eventPublisher: IEventPublisher,
@@ -251,6 +257,14 @@ export class SessionService {
         new TextEncoder().encode(secret),
       ])
     );
+  }
+
+  /**
+   * Wire the streak service after construction.
+   * Called from bootstrap to avoid circular dependency.
+   */
+  setStreakService(service: import('./streak.service.js').StreakService): void {
+    this.streakService = service;
   }
 
   // ==========================================================================
@@ -1096,6 +1110,11 @@ export class SessionService {
     });
 
     this.logger.info({ sessionId: session.id, stats: session.stats }, 'Session completed');
+
+    // Phase 5 — Inline streak update (non-critical, errors are logged and swallowed)
+    if (this.streakService) {
+      await this.streakService.updateStreakOnCompletion(ctx.userId, now, 'UTC');
+    }
 
     return {
       data: updated,
