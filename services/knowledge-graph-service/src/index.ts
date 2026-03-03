@@ -153,8 +153,8 @@ async function bootstrap(): Promise<void> {
             };
             if (typeof payload.sub === 'string') return `user:${payload.sub}`;
           }
-        } catch {
-          /* fall through to IP */
+        } catch (err) {
+          logger.debug({ err }, 'JWT parse failed for rate-limit key — falling back to IP');
         }
       }
       return `ip:${request.ip}`;
@@ -233,7 +233,8 @@ async function bootstrap(): Promise<void> {
   logger.info('OpenAPI documentation registered at /docs');
 
   // Register routes (Phase 1: health checks only)
-  registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, neo4jClient, redis);
+  const app = fastify as unknown as FastifyInstance;
+  registerHealthRoutes(app, prisma, neo4jClient, redis);
 
   // --------------------------------------------------------------------------
   // Dependency Injection — Composition Root
@@ -333,29 +334,28 @@ async function bootstrap(): Promise<void> {
   };
 
   // PKG routes (user-scoped)
-  const f = fastify as unknown as FastifyInstance;
-  registerPkgNodeRoutes(f, service, authMiddleware, routeOptions);
-  registerPkgEdgeRoutes(f, service, authMiddleware, routeOptions);
-  registerPkgTraversalRoutes(f, service, authMiddleware, routeOptions);
+  registerPkgNodeRoutes(app, service, authMiddleware, routeOptions);
+  registerPkgEdgeRoutes(app, service, authMiddleware, routeOptions);
+  registerPkgTraversalRoutes(app, service, authMiddleware, routeOptions);
 
   // CKG routes (shared graph)
-  registerCkgNodeRoutes(f, service, authMiddleware, routeOptions);
-  registerCkgEdgeRoutes(f, service, authMiddleware, routeOptions);
-  registerCkgTraversalRoutes(f, service, authMiddleware, routeOptions);
-  registerCkgMutationRoutes(f, service, authMiddleware, routeOptions);
+  registerCkgNodeRoutes(app, service, authMiddleware, routeOptions);
+  registerCkgEdgeRoutes(app, service, authMiddleware, routeOptions);
+  registerCkgTraversalRoutes(app, service, authMiddleware, routeOptions);
+  registerCkgMutationRoutes(app, service, authMiddleware, routeOptions);
 
   // PKG operation log (user-scoped)
-  registerPkgOperationLogRoutes(f, service, authMiddleware, routeOptions);
+  registerPkgOperationLogRoutes(app, service, authMiddleware, routeOptions);
 
   // User-scoped analytics routes
-  registerMetricsRoutes(f, service, authMiddleware, routeOptions);
-  registerMisconceptionRoutes(f, service, authMiddleware, routeOptions);
-  registerStructuralHealthRoutes(f, service, authMiddleware, routeOptions);
-  registerComparisonRoutes(f, service, authMiddleware, routeOptions);
+  registerMetricsRoutes(app, service, authMiddleware, routeOptions);
+  registerMisconceptionRoutes(app, service, authMiddleware, routeOptions);
+  registerStructuralHealthRoutes(app, service, authMiddleware, routeOptions);
+  registerComparisonRoutes(app, service, authMiddleware, routeOptions);
 
   // MCP Tool Registry (Phase 9)
   const toolRegistry = createToolRegistry(service);
-  registerToolRoutes(f, toolRegistry, authMiddleware);
+  registerToolRoutes(app, toolRegistry, authMiddleware);
 
   logger.info(
     { toolCount: toolRegistry.size },
@@ -363,10 +363,10 @@ async function bootstrap(): Promise<void> {
   );
   logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2 + Phase 9 MCP tools)');
 
-  // TODO(event-consumers): Wire up Redis stream consumers for cross-service events.
+  // TODO(NOEMA-events): Wire up Redis stream consumers for cross-service events.
   // Config is ready (config.consumers.enabled, config.consumers.streams) but consumer
   // implementations are deferred until content-service and session-service publish events.
-  // See: docs/knowledge-graph-service-implementation/ for the planned consumer architecture.
+  // Tracked: Phase 10 — cross-service event consumer architecture.
   if (config.consumers.enabled) {
     logger.info(
       { streams: config.consumers.streams },
@@ -433,6 +433,6 @@ async function bootstrap(): Promise<void> {
 
 // Run
 bootstrap().catch((error: unknown) => {
-  console.error('Fatal error during bootstrap:', error);
+  pino().fatal({ error }, 'Fatal error during bootstrap');
   process.exit(1);
 });

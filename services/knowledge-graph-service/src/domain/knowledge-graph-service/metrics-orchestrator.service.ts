@@ -591,7 +591,7 @@ export class MetricsOrchestrator {
     const nodeIdSet = new Set<string>(nodes.map((n) => n.nodeId as string));
 
     // Batch-fetch all edges for these nodes in a single query (Fix 3.1: N+1 → O(1))
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- composite interface resolution limit
+     
     const allEdges = await this.graphRepository.getEdgesForNodes(
       nodes.map((n) => n.nodeId),
       {},
@@ -600,7 +600,7 @@ export class MetricsOrchestrator {
 
     // Filter to intra-domain outbound edges only
     const edges: IGraphEdge[] = [];
-    for (const edge of allEdges as IGraphEdge[]) {
+    for (const edge of allEdges) {
       // Only include edges where source is in our set (outbound) and target is too (intra-domain)
       if (
         nodeIdSet.has(edge.sourceNodeId as string) &&

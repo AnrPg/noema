@@ -16,6 +16,7 @@ import type {
   IEvidenceSummary,
 } from '../../../domain/knowledge-graph-service/aggregation-evidence.repository.js';
 import { PromotionBandUtil } from '../../../domain/knowledge-graph-service/value-objects/promotion-band.js';
+import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 
 // ============================================================================
 // Helpers
@@ -49,7 +50,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
       sourcePkgNodeId: input.sourcePkgNodeId as string,
       evidenceType: input.evidenceType,
       confidence: input.confidence as number,
-      payload: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
+      payload: toPrismaJson(input.metadata ?? {}),
     };
     if (input.ckgTargetNodeId !== undefined) {
       data.ckgTargetNodeId = input.ckgTargetNodeId as string;
@@ -177,7 +178,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
       proposedLabel: record.proposedLabel,
       evidenceType: record.evidenceType,
       confidence: record.confidence as ConfidenceScore,
-      metadata: record.payload as unknown as Metadata,
+      metadata: fromPrismaJson<Metadata>(record.payload),
       recordedAt: record.createdAt.toISOString(),
     };
   }

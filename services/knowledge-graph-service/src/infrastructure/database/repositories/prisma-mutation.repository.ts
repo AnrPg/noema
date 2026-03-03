@@ -29,6 +29,7 @@ import type {
   IMutationAuditEntry,
   IMutationRepository,
 } from '../../../domain/knowledge-graph-service/mutation.repository.js';
+import { fromPrismaJson, toPrismaJson, toPrismaJsonArray } from './prisma-json.helpers.js';
 
 // ============================================================================
 // Helpers
@@ -68,7 +69,7 @@ export class PrismaMutationRepository implements IMutationRepository {
         userId: input.proposedBy as string,
         state: 'PROPOSED',
         mutationType: 'standard',
-        operation: input.operations as unknown as Prisma.JsonArray,
+        operation: toPrismaJsonArray(input.operations),
         rationale: input.rationale,
         evidenceCount: input.evidenceCount,
         metadata: {} as Prisma.JsonObject,
@@ -119,7 +120,7 @@ export class PrismaMutationRepository implements IMutationRepository {
         fromState: toDbState(entry.fromState),
         toState: toDbState(entry.toState),
         triggeredBy: entry.performedBy,
-        snapshot: (entry.context ?? {}) as unknown as Prisma.JsonObject,
+        snapshot: toPrismaJson(entry.context ?? {}),
       },
     });
 
@@ -245,7 +246,7 @@ export class PrismaMutationRepository implements IMutationRepository {
             fromState: toDbState(auditEntry.fromState),
             toState: toDbState(auditEntry.toState),
             triggeredBy: auditEntry.performedBy,
-            snapshot: (auditEntry.context ?? {}) as unknown as Prisma.JsonObject,
+            snapshot: toPrismaJson(auditEntry.context ?? {}),
           },
         }),
       ]);
@@ -314,7 +315,7 @@ export class PrismaMutationRepository implements IMutationRepository {
       state: fromDbState(record.state),
       proposedBy: (record.createdBy ?? '') as ProposerId,
       version: record.version,
-      operations: record.operation as unknown as Metadata[],
+      operations: fromPrismaJson<Metadata[]>(record.operation),
       rationale: record.rationale ?? '',
       evidenceCount: record.evidenceCount,
       recoveryAttempts: record.recoveryAttempts,

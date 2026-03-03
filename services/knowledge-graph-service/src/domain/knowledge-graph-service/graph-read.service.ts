@@ -117,7 +117,7 @@ export class GraphReadService {
         throw new NodeNotFoundError(nodeId, GraphType.CKG);
       }
     } else {
-      if (!node || node.graphType !== GraphType.PKG) {
+      if (node?.graphType !== GraphType.PKG) {
         throw new NodeNotFoundError(nodeId, graphType);
       }
     }

@@ -203,7 +203,8 @@ export function registerHealthRoutes(
       // Check PostgreSQL
       try {
         await prisma.$queryRaw`SELECT 1`;
-      } catch {
+      } catch (err) {
+        fastify.log.warn({ err }, 'Readiness: PostgreSQL unavailable');
         reply.status(503).send({
           ready: false,
           service: SERVICE_NAME,
@@ -216,7 +217,8 @@ export function registerHealthRoutes(
       // Check Neo4j
       try {
         await neo4jClient.verifyConnectivity();
-      } catch {
+      } catch (err) {
+        fastify.log.warn({ err }, 'Readiness: Neo4j unavailable');
         reply.status(503).send({
           ready: false,
           service: SERVICE_NAME,
@@ -229,7 +231,8 @@ export function registerHealthRoutes(
       // Check Redis
       try {
         await redis.ping();
-      } catch {
+      } catch (err) {
+        fastify.log.warn({ err }, 'Readiness: Redis unavailable');
         reply.status(503).send({
           ready: false,
           service: SERVICE_NAME,

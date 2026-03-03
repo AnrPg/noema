@@ -14,6 +14,7 @@ import type {
   IMetricsHistoryOptions,
   IMetricsRepository,
 } from '../../../domain/knowledge-graph-service/metrics.repository.js';
+import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 
 // ============================================================================
 // Constants
@@ -45,7 +46,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
         id,
         userId: userId as string,
         domain,
-        metrics: metrics as unknown as Prisma.JsonObject,
+        metrics: toPrismaJson(metrics),
         schemaVersion: CURRENT_METRICS_SCHEMA_VERSION,
       },
     });
@@ -121,7 +122,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
       id: record.id,
       userId: record.userId as UserId,
       domain: record.domain ?? '',
-      metrics: record.metrics as unknown as IStructuralMetrics,
+      metrics: fromPrismaJson<IStructuralMetrics>(record.metrics),
       computedAt: record.createdAt.toISOString(),
       schemaVersion: record.schemaVersion,
     };

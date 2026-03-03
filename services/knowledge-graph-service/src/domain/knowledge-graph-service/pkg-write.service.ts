@@ -768,26 +768,26 @@ export class PkgWriteService {
     const offset = Math.max(pagination.offset, 0);
 
     // Query edges and exact total in parallel
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- composite interface resolution limit
+     
     const [edges, total] = await Promise.all([
       this.graphRepository.findEdges(scopedFilter, limit, offset),
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- composite interface resolution limit
+       
       this.graphRepository.countEdges(scopedFilter),
     ]);
 
     const result: IPaginatedResponse<IGraphEdge> = {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- composite interface resolution limit
+       
       items: edges,
-      total: total as number,
-      hasMore: offset + (edges as IGraphEdge[]).length < (total as number),
+      total: total,
+      hasMore: offset + edges.length < total,
     };
 
     return {
       data: result,
       agentHints: this.hintsFactory.createListHints(
         'edges',
-        (edges as IGraphEdge[]).length,
-        total as number
+        edges.length,
+        total
       ),
     };
   }

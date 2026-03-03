@@ -113,6 +113,7 @@ export class KgRedisCacheProvider {
     // Skip caching null/undefined to prevent negative caching of missing entities.
     // The generic T may include null at runtime (e.g., T = IGraphNode | null)
     // even if the type parameter doesn't explicitly include it.
+    // REASON: Generic T may be nullable at runtime despite the type signature.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (value !== null && value !== undefined) {
       await this.set(key, value, ttlSeconds);

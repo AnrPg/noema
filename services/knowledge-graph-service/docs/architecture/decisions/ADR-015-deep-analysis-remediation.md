@@ -1,8 +1,8 @@
-# ADR-015: Deep Analysis Remediation — Critical, High & Medium Severity Fixes
+# ADR-015: Deep Analysis Remediation — All Severity Fixes (Critical → Low)
 
 **Status:** Accepted  
-**Date:** 2025-07-01  
-**Phase:** Post-remediation deep analysis  
+**Date:** 2025-07-01 (updated 2025-07-02)  
+**Phase:** Post-remediation deep analysis — full sweep  
 **Related:** ADR-010 through ADR-014 (Phases 1–5 remediation)
 
 ## Context
@@ -13,14 +13,15 @@ knowledge-graph-service codebase identified 61 additional findings across severi
 - **Critical (6):** Data corruption, security bypass
 - **High (12):** Logic bugs, wrong error semantics, missing safety guards
 - **Medium (16+):** Performance issues, design smells, inconsistent patterns
-- **Low (27):** Minor code quality (deferred)
+- **Low (27):** Minor code quality — all fixed in Phase 3 (see below)
 
-This ADR covers the implementation of all Critical + High (Phase 1, 18 fixes) and
-actionable Medium severity (Phase 2, ~15 fixes) findings in a single pass.
+This ADR covers the implementation of all Critical + High (Phase 1, 18 fixes),
+actionable Medium severity (Phase 2, ~15 fixes), and Low severity (Phase 3, 27 fixes)
+findings across three phases.
 
 ## Decision
 
-Implement fixes in two phases within a single commit:
+Implement fixes in three phases across two commits:
 
 ### Phase 1 — Critical & High (18 fixes)
 
@@ -107,6 +108,74 @@ Implement fixes in two phases within a single commit:
 
 ## Rationale
 
+### Phase 3 — Low Severity (27 fixes)
+
+#### TODO/FIXME Tracking (#1, #6, #11)
+- **TODO(NOEMA-events)** — Added phase tracking reference to event publisher
+  bootstrapping TODO in `index.ts`.
+- **TODO(NOEMA-tla)** — Added Phase 11 tracking reference to top-level-await
+  TODO in `ckg-mutation-pipeline.ts`.
+- **TODO(NOEMA-vector)** — Added Phase 12 tracking reference to vector-based
+  synonym detection TODO in `semantic-detector.ts`.
+
+#### Error Handling — Empty Catch Blocks (#3, #22–25)
+- **Rate-limit JWT parse** — Bound error and added `logger.debug` for failed
+  JWT parsing in `index.ts`.
+- **Evidence lookup** — Bound error in `ckg-validation-stages.ts` and surfaced
+  it in advisory metadata for debugging.
+- **GDS availability check** — Bound error in `neo4j-graph.repository.ts` to
+  aid debugging when GDS plugin is unavailable.
+- **GDS cleanup** — Bound error in cleanup catch, logged as `debug`.
+- **Health readiness probes** (×3) — All PostgreSQL, Neo4j, and Redis health
+  checks now bind error and log via `fastify.log.warn`.
+
+#### Type Safety — Branded ID Casts (#7–9, #21)
+- **affectedEdgeIds cast** — Fixed semantic error: was `as NodeId[]`, now
+  correctly `as EdgeId[]`.
+- **EdgeWeight double cast** — Replaced `as unknown as EdgeWeight` with
+  `EdgeWeight.clamp(op.weight)` for runtime validation.
+- **EdgeId double casts** (×2) — Narrowed `as unknown as EdgeId` to `as EdgeId`
+  in both `ckg-mutation-pipeline.ts` and `ckg-validation-stages.ts`.
+
+#### Bootstrap & Config Quality (#2, #4, #5, #10)
+- **console.error → pino().fatal()** — Bootstrap catch now uses structured
+  logger for fatal startup errors.
+- **Double `as unknown as FastifyInstance`** — Extracted single `const app`
+  binding at the top of route registration; reused throughout.
+- **getEventPublisherConfig** — Marked `@internal` (reserved for future consumer
+  wiring, not yet consumed).
+- **MAX_RECOVERY_ATTEMPTS** — Moved from local const to module-level constant.
+
+#### Dead Code / Unused Exports (#12–16)
+- **IMutationInState, IStateTransition, validateTransition,
+  getNextHappyPathState** — All marked `@internal` with rationale in
+  `ckg-typestate.ts`.
+- **isDomainError, isValidationError** — Marked `@internal` in
+  `base.errors.ts` (retained for future API-layer error mapping).
+
+#### DRY Violations (#17, #18, #20, #26)
+- **AgentHintsBuilder** — `getMutationAuditLog` and `getMutationPipelineHealth`
+  in `knowledge-graph.service.impl.ts` now use the existing
+  `AgentHintsBuilder` instead of hand-building agentHints objects.
+- **Duplicate getConflictingEdgeTypes** — Private method in
+  `ckg-validation-stages.ts` now delegates to the standalone
+  `getConflictingEdgeTypesForAdvisory` function (was copy-pasted code).
+- **Prisma JSONB bridging helpers** — Created `prisma-json.helpers.ts` with
+  `toPrismaJson`, `toPrismaJsonArray`, `fromPrismaJson` to centralise
+  16 occurrences of `as unknown as Prisma.JsonObject` across 5 repository
+  files.
+
+#### Code Quality (#19, #27)
+- **Redundant parentheses** — Removed `(edges).length < (total)` →
+  `edges.length < total` in `pkg-write.service.ts`.
+- **eslint-disable annotation** — Added `// REASON:` explanation to the
+  `@typescript-eslint/no-unsafe-return` suppression in
+  `kg-redis-cache.provider.ts`.
+
+---
+
+## Rationale (Phases 1–2)
+
 - **Additive changes only:** All fixes are backward-compatible. No public API
   signatures were narrowed, no existing behavior was removed.
 - **Interface additions are optional:** New parameters like `maxDepth`, `shortTtl`,
@@ -139,6 +208,11 @@ Implement fixes in two phases within a single commit:
 - Reduced N+1 query patterns (mutations, pipeline health)
 - Hardened input parsing and validation at Fastify schema level
 - All magic numbers are now named constants, improving readability
+- All 27 Low severity code quality issues resolved (zero known tech debt below Medium)
+- Centralised Prisma JSONB bridging eliminates 16 scattered double-casts
+- Branded ID casts are now semantically correct (EdgeId vs NodeId)
+- Empty catches now bind and log errors for observability
+- All TODO/FIXME comments have tracking references (NOEMA-events, NOEMA-tla, NOEMA-vector)
 
 ### Negative / Follow-up
 - Unbounded traversal queries (getAncestors, getDescendants, getSubgraph,

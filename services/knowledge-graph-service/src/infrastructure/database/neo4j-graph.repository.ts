@@ -1214,9 +1214,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
       });
       this.gdsAvailable = true;
       this.logger.info('Neo4j GDS detected — native graph algorithms available');
-    } catch {
+    } catch (err) {
       this.gdsAvailable = false;
-      this.logger.info('Neo4j GDS not available — using application-code algorithms');
+      this.logger.info({ err }, 'Neo4j GDS not available — using application-code algorithms');
     } finally {
       await session.close();
     }
@@ -1350,8 +1350,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
         await session.executeWrite(async (tx: ManagedTransaction) => {
           return tx.run('CALL gds.graph.drop($graphName, false)', { graphName });
         });
-      } catch {
-        // Ignore cleanup errors
+      } catch (err) {
+        this.logger.debug({ err, graphName }, 'GDS graph cleanup failed — ignored');
       }
       await session.close();
     }

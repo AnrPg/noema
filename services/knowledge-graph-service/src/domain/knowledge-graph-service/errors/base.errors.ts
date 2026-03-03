@@ -102,6 +102,8 @@ export class RateLimitExceededError extends DomainError {
 
 /**
  * Check if error is a DomainError.
+ *
+ * @internal Not yet consumed — retained for API-layer error mapping.
  */
 export function isDomainError(error: unknown): error is DomainError {
   return error instanceof DomainError;
@@ -109,6 +111,8 @@ export function isDomainError(error: unknown): error is DomainError {
 
 /**
  * Check if error is a ValidationError.
+ *
+ * @internal Not yet consumed — retained for API-layer error mapping.
  */
 export function isValidationError(error: unknown): error is ValidationError {
   return error instanceof ValidationError;

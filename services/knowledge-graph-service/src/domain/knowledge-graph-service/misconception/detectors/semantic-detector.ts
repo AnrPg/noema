@@ -6,9 +6,10 @@
  * - When disabled: skips detection entirely (returns empty).
  * - When enabled: will perform semantic similarity checks using node embeddings.
  *
- * TODO: Implement semantic similarity checks using node embeddings
+ * TODO(NOEMA-vector): Implement semantic similarity checks using node embeddings
  *       to detect concepts that are semantically close but placed
  *       far apart in the graph (or vice versa).
+ *       Tracked: Phase 12 — vector service integration for misconception detection.
  */
 
 import { MisconceptionPatternKind } from '@noema/types';

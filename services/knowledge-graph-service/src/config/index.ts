@@ -260,6 +260,7 @@ export function getTokenVerifierConfig(config: IServiceConfig): {
   };
 }
 
+/** @internal Reserved for future event consumer wiring — not yet used in this service. */
 export function getEventPublisherConfig(config: IServiceConfig): {
   streamKey: string;
   maxLen: number;

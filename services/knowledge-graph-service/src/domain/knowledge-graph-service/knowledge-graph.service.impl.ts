@@ -41,6 +41,7 @@ import type {
 import type { Logger } from 'pino';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
+import { AgentHintsBuilder } from './agent-hints.factory.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
 import type {
   CkgMutationOperation,
@@ -703,34 +704,25 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
     return {
       data: auditLog,
-      agentHints: {
-        suggestedNextActions: [
-          {
-            action: 'get_mutation',
-            description: 'View the current mutation state',
-            priority: 'low',
-            category: 'exploration',
-          },
-        ],
-        relatedResources: [
-          {
-            type: 'CKGMutation',
-            id: mutationId as string,
-            label: `Mutation ${mutationId}`,
-            relevance: 1.0,
-          },
-        ],
-        confidence: 1.0,
-        sourceQuality: 'high',
-        validityPeriod: 'short',
-        contextNeeded: [],
-        assumptions: [],
-        riskFactors: [],
-        dependencies: [],
-        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
-        preferenceAlignment: [],
-        reasoning: `Audit log contains ${String(auditLog.length)} entries for mutation ${mutationId}`,
-      },
+      agentHints: AgentHintsBuilder.create()
+        .addAction({
+          action: 'get_mutation',
+          description: 'View the current mutation state',
+          priority: 'low',
+          category: 'exploration',
+        })
+        .addResource({
+          type: 'CKGMutation',
+          id: mutationId as string,
+          label: `Mutation ${mutationId}`,
+          relevance: 1.0,
+        })
+        .withValidityPeriod('short')
+        .withEstimatedImpact(0.3, 0.1, 3.0)
+        .withReasoning(
+          `Audit log contains ${String(auditLog.length)} entries for mutation ${mutationId}`
+        )
+        .build(),
     };
   }
 
@@ -776,39 +768,32 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
           ]
         : [];
 
+    const builder = AgentHintsBuilder.create()
+      .withValidityPeriod('short')
+      .withRiskFactors(stuckWarning)
+      .withEstimatedImpact(0.5, 0.1, 5.0)
+      .addAction({
+        action: 'list_mutations',
+        description: 'List all mutations with state filter',
+        priority: 'low',
+        category: 'exploration',
+      })
+      .withReasoning(
+        `Pipeline has ${String(totalCount)} total mutations: ${String(health.proposedCount)} proposed, ${String(health.committedCount)} committed, ${String(health.rejectedCount)} rejected, ${String(health.pendingReviewCount)} pending review, ${String(health.stuckCount)} stuck.`
+      );
+
+    if (health.stuckCount > 0) {
+      builder.addAction({
+        action: 'list_stuck_mutations',
+        description: 'List mutations in non-terminal processing states',
+        priority: 'high',
+        category: 'correction',
+      });
+    }
+
     return {
       data: result,
-      agentHints: {
-        suggestedNextActions: [
-          ...(health.stuckCount > 0
-            ? [
-                {
-                  action: 'list_stuck_mutations',
-                  description: 'List mutations in non-terminal processing states',
-                  priority: 'high' as const,
-                  category: 'correction' as const,
-                },
-              ]
-            : []),
-          {
-            action: 'list_mutations',
-            description: 'List all mutations with state filter',
-            priority: 'low' as const,
-            category: 'exploration' as const,
-          },
-        ],
-        relatedResources: [],
-        confidence: 1.0,
-        sourceQuality: 'high' as const,
-        validityPeriod: 'short' as const,
-        contextNeeded: [],
-        assumptions: [],
-        riskFactors: stuckWarning,
-        dependencies: [],
-        estimatedImpact: { benefit: 0.5, effort: 0.1, roi: 5.0 },
-        preferenceAlignment: [],
-        reasoning: `Pipeline has ${String(totalCount)} total mutations: ${String(health.proposedCount)} proposed, ${String(health.committedCount)} committed, ${String(health.rejectedCount)} rejected, ${String(health.pendingReviewCount)} pending review, ${String(health.stuckCount)} stuck.`,
-      },
+      agentHints: builder.build(),
     };
   }
 
@@ -922,7 +907,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       paginatedEntries = entries;
       const countFilter =
         filters.operationType !== undefined ? { operationType: filters.operationType } : undefined;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- composite interface resolution limit
+       
       total = await this.operationLogRepository.countOperations(userId, countFilter);
       hasMore = offset + paginatedEntries.length < total;
     } else {

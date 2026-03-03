@@ -32,6 +32,7 @@ import type {
   IUpsertInterventionTemplateInput,
   IUpsertPatternInput,
 } from '../../../domain/knowledge-graph-service/misconception.repository.js';
+import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 
 // ============================================================================
 // Helpers
@@ -99,7 +100,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
         patternKind: input.kind as string,
         name: input.name,
         description: input.description,
-        spec: input.config as unknown as Prisma.JsonObject,
+        spec: toPrismaJson(input.config),
         threshold: input.threshold,
         active: input.active ?? true,
       },
@@ -108,7 +109,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
         patternKind: input.kind as string,
         name: input.name,
         description: input.description,
-        spec: input.config as unknown as Prisma.JsonObject,
+        spec: toPrismaJson(input.config),
         threshold: input.threshold,
         ...(input.active !== undefined ? { active: input.active } : {}),
       },
@@ -170,14 +171,14 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
         interventionType: input.interventionType as string,
         name: input.name,
         description: input.description,
-        spec: input.config as unknown as Prisma.JsonObject,
+        spec: toPrismaJson(input.config),
         priority: input.priority ?? 0,
       },
       update: {
         interventionType: input.interventionType as string,
         name: input.name,
         description: input.description,
-        spec: input.config as unknown as Prisma.JsonObject,
+        spec: toPrismaJson(input.config),
         ...(input.priority !== undefined ? { priority: input.priority } : {}),
       },
       include: { misconceptionPattern: { select: { misconceptionType: true } } },
@@ -262,7 +263,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
       kind: record.patternKind as MisconceptionPatternKind,
       name: record.name,
       description: record.description ?? '',
-      config: record.spec as unknown as Metadata,
+      config: fromPrismaJson<Metadata>(record.spec),
       threshold: record.threshold,
       active: record.active,
       createdAt: record.createdAt.toISOString(),
@@ -287,7 +288,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
       interventionType: record.interventionType as InterventionType,
       name: record.name,
       description: record.description ?? '',
-      config: record.spec as unknown as Metadata,
+      config: fromPrismaJson<Metadata>(record.spec),
       priority: record.priority,
       createdAt: record.createdAt.toISOString(),
       updatedAt: record.updatedAt.toISOString(),

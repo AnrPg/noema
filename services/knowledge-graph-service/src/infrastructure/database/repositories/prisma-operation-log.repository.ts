@@ -18,6 +18,7 @@ import type {
   PkgOperation,
   PkgOperationType,
 } from '../../../domain/knowledge-graph-service/value-objects/operation-log.js';
+import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 
 // ============================================================================
 // Helpers
@@ -90,7 +91,7 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
           userId: userId as string,
           sequenceNumber: nextSeq,
           operationType: operation.operationType,
-          operation: operation as unknown as Prisma.JsonObject,
+          operation: toPrismaJson(operation),
           affectedNodeIds: nodeIds,
           affectedEdgeIds: edgeIds,
         },
@@ -216,7 +217,7 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
     return {
       id: record.id,
       userId: record.userId as UserId,
-      operation: record.operation as unknown as PkgOperation,
+      operation: fromPrismaJson<PkgOperation>(record.operation),
       createdAt: record.createdAt.toISOString(),
     };
   }

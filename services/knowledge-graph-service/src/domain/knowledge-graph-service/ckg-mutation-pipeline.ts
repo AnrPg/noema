@@ -21,7 +21,6 @@ import { z } from 'zod';
 import type {
   AgentId,
   EdgeId,
-  EdgeWeight,
   GraphType,
   IGraphEdge,
   IGraphNode,
@@ -31,6 +30,7 @@ import type {
   NodeId,
   ProposerId,
 } from '@noema/types';
+import { EdgeWeight } from '@noema/types';
 
 import type { IEventPublisher, IEventToPublish } from '../shared/event-publisher.js';
 import type { IExecutionContext } from './execution-context.js';
@@ -68,6 +68,9 @@ import { KG_COUNTERS, kgCounters, withSpan } from './observability.js';
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** Maximum recovery attempts before a stuck mutation is permanently rejected. */
+const MAX_RECOVERY_ATTEMPTS = 3;
 
 const CkgMutationOperationsSchema = z.array(CkgMutationOperationSchema);
 
@@ -831,9 +834,10 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     );
 
     if (this.proofStageEnabled) {
-      // TODO: Run actual TLA+ invariant checking when implemented.
+      // TODO(NOEMA-tla): Run actual TLA+ invariant checking when implemented.
       // For now, even when enabled, we auto-approve since TLA+ integration
       // is not yet available. This flag gates future implementation.
+      // Tracked: Phase 11 — formal verification with TLA+ proofs.
       this.logger.warn(
         { mutationId: mutation.mutationId },
         'Proof stage enabled but TLA+ integration not yet implemented — auto-approving'
@@ -909,7 +913,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
             mutationId: mutation.mutationId,
             appliedOperations: mutation.operations,
             affectedNodeIds: extractAffectedNodeIds(operations) as NodeId[],
-            affectedEdgeIds: extractAffectedEdgeIds(operations) as unknown as NodeId[],
+            affectedEdgeIds: extractAffectedEdgeIds(operations) as EdgeId[],
           },
           context
         );
@@ -1020,14 +1024,14 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
               sourceNodeId: op.sourceNodeId as NodeId,
               targetNodeId: op.targetNodeId as NodeId,
               edgeType: op.edgeType,
-              weight: op.weight as unknown as EdgeWeight,
+              weight: EdgeWeight.clamp(op.weight),
             });
             createdEdgeIds.push(edge.edgeId as string);
             break;
           }
 
           case CkgOperationType.REMOVE_EDGE: {
-            await txRepo.removeEdge(op.edgeId as unknown as EdgeId);
+            await txRepo.removeEdge(op.edgeId as EdgeId);
             deletedEdgeIds.push(op.edgeId);
             break;
           }
@@ -1465,7 +1469,6 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
    */
   async recoverStuckMutations(context: IExecutionContext): Promise<number> {
     const stuckStates: MutationState[] = ['validating', 'proving', 'committing'];
-    const MAX_RECOVERY_ATTEMPTS = 3;
     let recoveredCount = 0;
 
     for (const state of stuckStates) {

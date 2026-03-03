@@ -453,7 +453,7 @@ export class StructuralIntegrityStage implements IValidationStage {
     const violations: IValidationViolation[] = [];
 
     if (op.type === CkgOperationType.REMOVE_EDGE) {
-      const edge = await this.graphRepository.getEdge(op.edgeId as unknown as EdgeId);
+      const edge = await this.graphRepository.getEdge(op.edgeId as EdgeId);
       if (!edge) {
         violations.push({
           code: 'EDGE_NOT_FOUND',
@@ -639,14 +639,14 @@ export class EvidenceSufficiencyStage implements IValidationStage {
             },
           });
         }
-      } catch {
+      } catch (err) {
         // If evidence lookup fails, it's not a blocking error
         violations.push({
           code: 'EVIDENCE_LOOKUP_FAILED',
           message: `Could not verify evidence for node '${nodeId}'`,
           severity: 'warning',
           affectedOperationIndex: -1,
-          metadata: { nodeId },
+          metadata: { nodeId, error: err instanceof Error ? err.message : String(err) },
         });
       }
     }
@@ -948,15 +948,7 @@ export class OntologicalConsistencyStage implements IValidationStage {
    * conflict with it according to the conflict pairs table.
    */
   private getConflictingEdgeTypes(edgeType: GraphEdgeType): GraphEdgeType[] {
-    const conflicting: GraphEdgeType[] = [];
-    for (const pair of ONTOLOGICAL_CONFLICT_PAIRS) {
-      if (pair.edgeTypeA === edgeType) {
-        conflicting.push(pair.edgeTypeB);
-      } else if (pair.edgeTypeB === edgeType) {
-        conflicting.push(pair.edgeTypeA);
-      }
-    }
-    return conflicting;
+    return getConflictingEdgeTypesForAdvisory(edgeType);
   }
 }
 
