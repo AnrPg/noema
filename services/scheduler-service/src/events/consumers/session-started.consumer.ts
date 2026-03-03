@@ -3,13 +3,41 @@
  *
  * Handles 'session.started' events. Bootstraps scheduler cards
  * for the initial card IDs included in the session.
+ *
+ * @see SchedulerBaseConsumer   — reliability, observability, inbox dedup
+ * @see ADR-003                 — Event consumer architecture unification
  */
 
+import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import type { CardId, UserId } from '@noema/types';
+import type { Redis } from 'ioredis';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 
-import type { IStreamEventEnvelope } from './base-consumer.js';
-import { BaseEventConsumer } from './base-consumer.js';
+import { SchedulerBaseConsumer } from './scheduler-base-consumer.js';
+
+// ============================================================================
+// Default config
+// ============================================================================
+
+function buildConfig(overrides: {
+  sourceStreamKey: string;
+  consumerName: string;
+}): IEventConsumerConfig {
+  return {
+    sourceStreamKey: overrides.sourceStreamKey,
+    consumerGroup: 'scheduler-service:session-started',
+    consumerName: overrides.consumerName,
+    batchSize: 20,
+    blockMs: 5000,
+    retryBaseDelayMs: 250,
+    maxProcessAttempts: 5,
+    pendingIdleMs: 30_000,
+    pendingBatchSize: 50,
+    drainTimeoutMs: 15_000,
+    deadLetterStreamKey: 'noema:dlq:scheduler-service:session-started',
+  };
+}
 
 // ============================================================================
 // Payload schema
@@ -27,7 +55,18 @@ const SessionStartedPayloadSchema = z
 // Consumer
 // ============================================================================
 
-export class SessionStartedConsumer extends BaseEventConsumer {
+export class SessionStartedConsumer extends SchedulerBaseConsumer {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
+    super(
+      redis,
+      buildConfig({
+        sourceStreamKey: sourceStreamKey ?? 'noema:events:session-service',
+        consumerName,
+      }),
+      logger
+    );
+  }
+
   protected async dispatchEvent(envelope: IStreamEventEnvelope): Promise<void> {
     if (envelope.eventType !== 'session.started') {
       return;

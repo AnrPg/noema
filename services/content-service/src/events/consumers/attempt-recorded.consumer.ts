@@ -13,11 +13,11 @@
  * - Per-attempt granularity gives more accurate card-level insights.
  */
 
+import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
+import { BaseEventConsumer } from '@noema/events/consumer';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import type { PrismaClient } from '../../../generated/prisma/index.js';
-import type { IEventConsumerConfig, IStreamEventEnvelope } from './base-consumer.js';
-import { BaseEventConsumer } from './base-consumer.js';
 
 // ============================================================================
 // Types

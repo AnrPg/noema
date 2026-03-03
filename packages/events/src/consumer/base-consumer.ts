@@ -1,8 +1,11 @@
 /**
- * @noema/content-service - Base Event Consumer
+ * @noema/events - Shared Base Event Consumer
  *
  * Production-grade abstract consumer using Redis Streams XREADGROUP
- * with consumer groups. Provides:
+ * with consumer groups. Single source of truth for event consumption
+ * lifecycle across all Noema services.
+ *
+ * Provides:
  * - Idempotent consumer group creation (handles BUSYGROUP)
  * - XAUTOCLAIM-based pending message recovery
  * - Exponential backoff retry with configurable max attempts
@@ -10,8 +13,11 @@
  * - In-flight tracking with drain timeout for graceful shutdown
  * - Single 'event' field parsing (aligned with RedisEventPublisher)
  *
- * Modelled after the scheduler-service's SchedulerEventConsumer for
- * production-grade reliability.
+ * Concrete consumers extend this class and implement `handleEvent()`.
+ * Services that need extra middleware (e.g., inbox dedup, observability)
+ * can create a service-local subclass that wraps `handleEvent()`.
+ *
+ * @see ADR-003 — Event consumer architecture unification
  */
 
 import type { Redis } from 'ioredis';
@@ -24,41 +30,56 @@ import type { Logger } from 'pino';
 /**
  * Envelope structure parsed from the single 'event' JSON field
  * published by RedisEventPublisher.
+ *
+ * Every event published via `RedisEventPublisher.publish()` produces
+ * a Redis Stream entry with a single `event` field containing JSON
+ * matching this shape.
  */
 export interface IStreamEventEnvelope {
+  /** Dot-separated event type (e.g., 'card.created', 'user.deleted') */
   eventType: string;
+  /** Aggregate root type (e.g., 'Card', 'User', 'Session') */
   aggregateType: string;
+  /** Aggregate root ID (e.g., cardId, userId, sessionId) */
   aggregateId: string;
+  /** Event-specific payload — shape depends on eventType */
   payload: Record<string, unknown>;
+  /** Publisher-injected metadata (correlationId, userId, timestamps, etc.) */
   metadata: Record<string, unknown>;
+  /** ISO timestamp of event creation */
   timestamp?: string;
+  /** Event schema version */
   version?: number;
+  /** Unique event identifier */
   eventId?: string;
 }
 
 /**
  * Configuration for an event consumer instance.
+ *
+ * Consumer-specific defaults should be set in each consumer's
+ * `buildConfig()` static factory rather than in global service config.
  */
 export interface IEventConsumerConfig {
   /** Redis stream key to consume from */
   sourceStreamKey: string;
-  /** Consumer group name (shared across instances) */
+  /** Consumer group name (shared across instances of same logical consumer) */
   consumerGroup: string;
   /** Unique consumer name within the group (typically hostname + pid) */
   consumerName: string;
-  /** Max messages per XREADGROUP call (default: 10) */
+  /** Max messages per XREADGROUP call */
   batchSize: number;
-  /** XREADGROUP block timeout in ms (default: 5000) */
+  /** XREADGROUP block timeout in ms */
   blockMs: number;
-  /** Base delay in ms for exponential backoff (default: 500) */
+  /** Base delay in ms for exponential backoff */
   retryBaseDelayMs: number;
-  /** Max processing attempts before dead-lettering (default: 5) */
+  /** Max processing attempts before dead-lettering */
   maxProcessAttempts: number;
-  /** Idle time in ms before XAUTOCLAIM can claim pending messages (default: 60000) */
+  /** Idle time in ms before XAUTOCLAIM can claim pending messages */
   pendingIdleMs: number;
-  /** Max messages per XAUTOCLAIM batch (default: 50) */
+  /** Max messages per XAUTOCLAIM batch */
   pendingBatchSize: number;
-  /** Max time in ms to wait for in-flight messages during shutdown (default: 10000) */
+  /** Max time in ms to wait for in-flight messages during shutdown */
   drainTimeoutMs: number;
   /** Dead-letter stream key */
   deadLetterStreamKey: string;
@@ -66,12 +87,34 @@ export interface IEventConsumerConfig {
 
 /**
  * Processing metadata attached to retry/DLQ envelopes.
+ * Uses a generic prefix ('noema') to avoid service-specific coupling.
  */
 interface IProcessingMetadata {
-  contentProcessingAttempts: number;
-  contentLastError: string;
-  contentDeadLetteredAt?: string;
+  noemaProcessingAttempts: number;
+  noemaLastError: string;
+  noemaDeadLetteredAt?: string;
 }
+
+// ============================================================================
+// Default Config Values
+// ============================================================================
+
+/**
+ * Default consumer configuration values.
+ * Consumers override these via their `buildConfig()` factories.
+ */
+export const DEFAULT_CONSUMER_CONFIG: Omit<
+  IEventConsumerConfig,
+  'sourceStreamKey' | 'consumerGroup' | 'consumerName' | 'deadLetterStreamKey'
+> = {
+  batchSize: 10,
+  blockMs: 5000,
+  retryBaseDelayMs: 500,
+  maxProcessAttempts: 5,
+  pendingIdleMs: 60_000,
+  pendingBatchSize: 50,
+  drainTimeoutMs: 10_000,
+};
 
 // ============================================================================
 // Abstract Base Consumer
@@ -96,7 +139,7 @@ export abstract class BaseEventConsumer {
 
   /**
    * Create consumer group idempotently.
-   * Must be called before start().
+   * Must be called before start(). Handles BUSYGROUP (group already exists).
    */
   async initialize(): Promise<void> {
     await this.ensureConsumerGroup();
@@ -104,7 +147,7 @@ export abstract class BaseEventConsumer {
 
   /**
    * Begin consuming messages. Recovers pending messages, then enters poll loop.
-   * Does NOT block — returns a promise that resolves when the consumer stops.
+   * Returns a promise that resolves when the consumer stops.
    */
   async start(): Promise<void> {
     this.isRunning = true;
@@ -118,7 +161,7 @@ export abstract class BaseEventConsumer {
   }
 
   /**
-   * Signal the consumer to stop. Waits for in-flight messages to drain.
+   * Signal the consumer to stop after current batch completes.
    */
   stop(): void {
     this.isRunning = false;
@@ -127,6 +170,7 @@ export abstract class BaseEventConsumer {
 
   /**
    * Wait for in-flight messages to finish processing, with a timeout.
+   * Call after stop() during graceful shutdown.
    */
   async drain(): Promise<void> {
     if (this.inFlight.size === 0) return;
@@ -160,7 +204,7 @@ export abstract class BaseEventConsumer {
    * to handle specific event types.
    *
    * @returns true if the event was processed (or intentionally skipped),
-   *          false or throw to trigger retry/DLQ.
+   *          false to trigger retry. Throwing also triggers retry/DLQ.
    */
   protected abstract handleEvent(envelope: IStreamEventEnvelope): Promise<boolean>;
 
@@ -186,7 +230,7 @@ export abstract class BaseEventConsumer {
       if (!message.includes('BUSYGROUP')) {
         throw error;
       }
-      // Group already exists — this is fine (idempotent init)
+      // Group already exists — idempotent, no-op
     }
   }
 
@@ -210,11 +254,7 @@ export abstract class BaseEventConsumer {
           '>'
         );
 
-        if (rawEntries === null || !Array.isArray(rawEntries)) {
-          continue;
-        }
-
-        if (rawEntries.length === 0) {
+        if (rawEntries === null || !Array.isArray(rawEntries) || rawEntries.length === 0) {
           continue;
         }
 
@@ -343,9 +383,9 @@ export abstract class BaseEventConsumer {
         ...parsedEnvelope,
         metadata: {
           ...parsedEnvelope.metadata,
-          contentProcessingAttempts: nextAttempt,
-          contentLastError: errorMessage,
-          contentDeadLetteredAt: new Date().toISOString(),
+          noemaProcessingAttempts: nextAttempt,
+          noemaLastError: errorMessage,
+          noemaDeadLetteredAt: new Date().toISOString(),
         },
       };
 
@@ -373,8 +413,8 @@ export abstract class BaseEventConsumer {
     // Re-enqueue with updated attempt metadata
     const metadata: IStreamEventEnvelope['metadata'] & IProcessingMetadata = {
       ...parsedEnvelope.metadata,
-      contentProcessingAttempts: nextAttempt,
-      contentLastError: errorMessage,
+      noemaProcessingAttempts: nextAttempt,
+      noemaLastError: errorMessage,
     };
 
     await this.redis.xadd(
@@ -439,8 +479,8 @@ export abstract class BaseEventConsumer {
   }
 
   private readAttempts(metadata: IStreamEventEnvelope['metadata']): number {
-    if ('contentProcessingAttempts' in metadata) {
-      const value = (metadata as unknown as IProcessingMetadata).contentProcessingAttempts;
+    if ('noemaProcessingAttempts' in metadata) {
+      const value = (metadata as unknown as IProcessingMetadata).noemaProcessingAttempts;
       if (typeof value === 'number') {
         return value;
       }

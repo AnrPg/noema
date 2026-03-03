@@ -3,13 +3,41 @@
  *
  * Handles 'content.seeded' events. Creates scheduler cards for
  * newly seeded content with the appropriate lane assignment.
+ *
+ * @see SchedulerBaseConsumer   — reliability, observability, inbox dedup
+ * @see ADR-003                 — Event consumer architecture unification
  */
 
+import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import type { CardId, UserId } from '@noema/types';
+import type { Redis } from 'ioredis';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 
-import type { IStreamEventEnvelope } from './base-consumer.js';
-import { BaseEventConsumer } from './base-consumer.js';
+import { SchedulerBaseConsumer } from './scheduler-base-consumer.js';
+
+// ============================================================================
+// Default config
+// ============================================================================
+
+function buildConfig(overrides: {
+  sourceStreamKey: string;
+  consumerName: string;
+}): IEventConsumerConfig {
+  return {
+    sourceStreamKey: overrides.sourceStreamKey,
+    consumerGroup: 'scheduler-service:content-seeded',
+    consumerName: overrides.consumerName,
+    batchSize: 20,
+    blockMs: 5000,
+    retryBaseDelayMs: 250,
+    maxProcessAttempts: 5,
+    pendingIdleMs: 30_000,
+    pendingBatchSize: 50,
+    drainTimeoutMs: 15_000,
+    deadLetterStreamKey: 'noema:dlq:scheduler-service:content-seeded',
+  };
+}
 
 // ============================================================================
 // Payload schema
@@ -28,7 +56,18 @@ const ContentSeededPayloadSchema = z
 // Consumer
 // ============================================================================
 
-export class ContentSeededConsumer extends BaseEventConsumer {
+export class ContentSeededConsumer extends SchedulerBaseConsumer {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
+    super(
+      redis,
+      buildConfig({
+        sourceStreamKey: sourceStreamKey ?? 'noema:events:content-service',
+        consumerName,
+      }),
+      logger
+    );
+  }
+
   protected async dispatchEvent(envelope: IStreamEventEnvelope): Promise<void> {
     if (envelope.eventType !== 'content.seeded') {
       return;

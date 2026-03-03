@@ -14,6 +14,7 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import type { BaseEventConsumer } from '@noema/events/consumer';
 import { createToolRegistry } from './agents/tools/tool.registry.js';
 import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerContentRoutes } from './api/rest/content.routes.js';
@@ -30,7 +31,6 @@ import { ContentService } from './domain/content-service/content.service.js';
 import { MediaService } from './domain/content-service/media.service.js';
 import { TemplateService } from './domain/content-service/template.service.js';
 import { AttemptRecordedConsumer } from './events/consumers/attempt-recorded.consumer.js';
-import type { BaseEventConsumer } from './events/consumers/base-consumer.js';
 import { KgNodeDeletedConsumer } from './events/consumers/kg-node-deleted.consumer.js';
 import { UserDeletedConsumer } from './events/consumers/user-deleted.consumer.js';
 import { CachedContentRepository } from './infrastructure/cache/cached-content.repository.js';

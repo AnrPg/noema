@@ -9,17 +9,45 @@
  *
  * Persists handshake state transitions via the reliability repository
  * and publishes corresponding schedule.handshake.* acknowledgement events.
+ *
+ * @see SchedulerBaseConsumer   — reliability, observability, inbox dedup
+ * @see ADR-003                 — Event consumer architecture unification
  */
 
+import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import type { CorrelationId, UserId } from '@noema/types';
+import type { Redis } from 'ioredis';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 
 import type {
   HandshakeState,
   IConsumerLinkage,
-} from '../../../domain/scheduler-service/scheduler.repository.js';
-import type { IStreamEventEnvelope } from './base-consumer.js';
-import { BaseEventConsumer } from './base-consumer.js';
+} from '../../domain/scheduler-service/scheduler.repository.js';
+import { SchedulerBaseConsumer } from './scheduler-base-consumer.js';
+
+// ============================================================================
+// Default config
+// ============================================================================
+
+function buildConfig(overrides: {
+  sourceStreamKey: string;
+  consumerName: string;
+}): IEventConsumerConfig {
+  return {
+    sourceStreamKey: overrides.sourceStreamKey,
+    consumerGroup: 'scheduler-service:session-cohort',
+    consumerName: overrides.consumerName,
+    batchSize: 20,
+    blockMs: 5000,
+    retryBaseDelayMs: 250,
+    maxProcessAttempts: 5,
+    pendingIdleMs: 30_000,
+    pendingBatchSize: 50,
+    drainTimeoutMs: 15_000,
+    deadLetterStreamKey: 'noema:dlq:scheduler-service:session-cohort',
+  };
+}
 
 // ============================================================================
 // Payload schemas
@@ -89,7 +117,18 @@ const EVENT_TO_STATE: Record<string, HandshakeState> = {
   'session.cohort.committed': 'committed',
 };
 
-export class SessionCohortConsumer extends BaseEventConsumer {
+export class SessionCohortConsumer extends SchedulerBaseConsumer {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
+    super(
+      redis,
+      buildConfig({
+        sourceStreamKey: sourceStreamKey ?? 'noema:events:session-service',
+        consumerName,
+      }),
+      logger
+    );
+  }
+
   protected async dispatchEvent(envelope: IStreamEventEnvelope): Promise<void> {
     if (!COHORT_EVENT_TYPES.has(envelope.eventType)) {
       return;

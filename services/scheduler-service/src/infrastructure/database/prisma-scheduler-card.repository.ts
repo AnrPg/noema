@@ -383,6 +383,13 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     });
   }
 
+  async deleteByUser(userId: UserId): Promise<number> {
+    const result = await this.prisma.schedulerCard.deleteMany({
+      where: { userId },
+    });
+    return result.count;
+  }
+
   async createBatch(
     cards: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>[]
   ): Promise<ISchedulerCard[]> {

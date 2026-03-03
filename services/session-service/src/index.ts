@@ -10,12 +10,15 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import type { BaseEventConsumer } from '@noema/events/consumer';
+
 import { createToolRegistry } from './agents/tools/tool.registry.js';
 import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerSessionRoutes } from './api/rest/session.routes.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { SessionService } from './domain/session-service/session.service.js';
+import { UserDeletedConsumer } from './events/consumers/index.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaOutboxRepository,
@@ -112,6 +115,38 @@ async function bootstrap(): Promise<void> {
     }
   );
 
+  // ==========================================================================
+  // Event Consumers
+  // ==========================================================================
+
+  const consumers: BaseEventConsumer[] = [];
+
+  if (config.consumers.enabled) {
+    const { consumerName, streams } = config.consumers;
+
+    const userDeletedConsumer = new UserDeletedConsumer(
+      redis,
+      prisma,
+      logger,
+      consumerName,
+      streams.userService
+    );
+
+    consumers.push(userDeletedConsumer);
+
+    // Initialize consumer groups (idempotent)
+    await Promise.all(consumers.map((c) => c.initialize()));
+
+    // Start consumers (non-blocking — they run in background loops)
+    for (const consumer of consumers) {
+      consumer.start().catch((error: unknown) => {
+        logger.error({ error, consumer: consumer.constructor.name }, 'Consumer crashed');
+      });
+    }
+
+    logger.info({ consumerCount: consumers.length }, 'Event consumers started');
+  }
+
   // Create tool registry
   const toolRegistry = createToolRegistry(sessionService);
 
@@ -146,6 +181,12 @@ async function bootstrap(): Promise<void> {
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');
+
+    // Stop consumers first and drain in-flight messages
+    for (const consumer of consumers) {
+      consumer.stop();
+    }
+    await Promise.all(consumers.map((c) => c.drain()));
 
     await fastify.close();
     await outboxWorker.stop();

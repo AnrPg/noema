@@ -10,6 +10,7 @@
  *   @noema/events/content   — Content domain events
  *   @noema/events/user      — User domain events
  *   @noema/events/publisher  — Event publisher interface + Redis implementation
+ *   @noema/events/consumer  — Base event consumer + Redis Streams lifecycle
  *
  * @packageDocumentation
  */
@@ -60,4 +61,9 @@ export type * from './user/user.events.js';
 // ============================================================================
 export * from './knowledge-graph/knowledge-graph-event.schemas.js';
 export * from './knowledge-graph/knowledge-graph.events.js';
+
+// ============================================================================
+// Event Consumer Infrastructure
+// ============================================================================
+export * from './consumer/index.js';
 

@@ -4,18 +4,18 @@
 
 import type { CardId, UserId } from '@noema/types';
 import type {
-    Prisma,
-    PrismaClient,
-    Rating as PrismaRating,
-    Review as PrismaReview,
-    SchedulerLane as PrismaSchedulerLane,
+  Prisma,
+  PrismaClient,
+  Rating as PrismaRating,
+  Review as PrismaReview,
+  SchedulerLane as PrismaSchedulerLane,
 } from '../../../generated/prisma/index.js';
 import type { IReviewRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type {
-    IReview,
-    IReviewFilters,
-    Rating,
-    SchedulerLane,
+  IReview,
+  IReviewFilters,
+  Rating,
+  SchedulerLane,
 } from '../../types/scheduler.types.js';
 
 function toPrismaRating(rating: string): PrismaRating {
@@ -167,5 +167,18 @@ export class PrismaReviewRepository implements IReviewRepository {
   async createBatch(reviews: Omit<IReview, 'createdAt'>[]): Promise<IReview[]> {
     const created = await Promise.all(reviews.map((review) => this.create(review)));
     return created;
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.prisma.review.delete({ where: { id } }).catch(() => {
+      // Silently ignore if already deleted
+    });
+  }
+
+  async deleteByUser(userId: UserId): Promise<number> {
+    const result = await this.prisma.review.deleteMany({
+      where: { userId },
+    });
+    return result.count;
   }
 }

@@ -9,6 +9,19 @@ import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes, registerSchedulerRoutes } from './api/rest/index.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { SchedulerService } from './domain/scheduler-service/scheduler.service.js';
+import {
+  CardLifecycleConsumer,
+  ContentSeededConsumer,
+  ReviewRecordedConsumer,
+  SessionCohortConsumer,
+  SessionLifecycleConsumer,
+  SessionStartedConsumer,
+  UserDeletedConsumer,
+} from './events/consumers/index.js';
+import type {
+  ISchedulerConsumerDependencies,
+  SchedulerBaseConsumer,
+} from './events/consumers/scheduler-base-consumer.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaCalibrationDataRepository,
@@ -17,7 +30,6 @@ import {
   PrismaReviewRepository,
   PrismaSchedulerCardRepository,
 } from './infrastructure/database/index.js';
-import { SchedulerEventConsumer } from './infrastructure/events/index.js';
 import { schedulerObservability } from './infrastructure/observability/scheduler-observability.js';
 
 async function bootstrap(): Promise<void> {
@@ -76,31 +88,93 @@ async function bootstrap(): Promise<void> {
     provenanceRepository: provenanceRepo,
   });
 
-  const eventConsumer = new SchedulerEventConsumer(
-    redis,
-    {
-      sourceStreamKey: config.redis.sourceStreamKey,
-      consumerGroup: config.redis.consumerGroup,
-      consumerName: config.redis.consumerName,
-      blockMs: config.redis.consumerBlockMs,
-      batchSize: config.redis.consumerBatchSize,
-      retryBaseDelayMs: config.redis.consumerRetryBaseDelayMs,
-      maxProcessAttempts: config.redis.consumerMaxProcessAttempts,
-      pendingIdleMs: config.redis.consumerPendingIdleMs,
-      pendingBatchSize: config.redis.consumerPendingBatchSize,
-      drainTimeoutMs: config.redis.consumerDrainTimeoutMs,
-      deadLetterStreamKey: config.redis.deadLetterStreamKey,
-    },
-    {
-      schedulerCardRepository: schedulerCardRepo,
-      reviewRepository: reviewRepo,
-      calibrationDataRepository: calibrationDataRepo,
-      reliabilityRepository: eventReliabilityRepo,
-      eventPublisher,
-    },
-    logger
-  );
-  await eventConsumer.start();
+  // ==========================================================================
+  // Event Consumers
+  // ==========================================================================
+
+  const consumerDependencies: ISchedulerConsumerDependencies = {
+    schedulerCardRepository: schedulerCardRepo,
+    reviewRepository: reviewRepo,
+    calibrationDataRepository: calibrationDataRepo,
+    reliabilityRepository: eventReliabilityRepo,
+    eventPublisher,
+  };
+
+  const consumers: SchedulerBaseConsumer[] = [];
+
+  if (config.consumers.enabled) {
+    const { consumerName, streams } = config.consumers;
+
+    const sessionStartedConsumer = new SessionStartedConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.sessionService
+    );
+    const reviewRecordedConsumer = new ReviewRecordedConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.sessionService
+    );
+    const contentSeededConsumer = new ContentSeededConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.contentService
+    );
+    const sessionCohortConsumer = new SessionCohortConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.sessionService
+    );
+    const cardLifecycleConsumer = new CardLifecycleConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.contentService
+    );
+    const sessionLifecycleConsumer = new SessionLifecycleConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.sessionService
+    );
+    const userDeletedConsumer = new UserDeletedConsumer(
+      redis,
+      logger,
+      consumerName,
+      streams.userService
+    );
+
+    consumers.push(
+      sessionStartedConsumer,
+      reviewRecordedConsumer,
+      contentSeededConsumer,
+      sessionCohortConsumer,
+      cardLifecycleConsumer,
+      sessionLifecycleConsumer,
+      userDeletedConsumer
+    );
+
+    // Inject shared dependencies into all scheduler consumers
+    for (const consumer of consumers) {
+      consumer.setDependencies(consumerDependencies);
+    }
+
+    // Initialize consumer groups (idempotent)
+    await Promise.all(consumers.map((c) => c.initialize()));
+
+    // Start consumers (non-blocking — they run in background loops)
+    for (const consumer of consumers) {
+      consumer.start().catch((error: unknown) => {
+        logger.error({ error, consumer: consumer.constructor.name }, 'Consumer crashed');
+      });
+    }
+
+    logger.info({ consumerCount: consumers.length }, 'Event consumers started');
+  }
 
   const toolRegistry = createToolRegistry(schedulerService);
 
@@ -157,9 +231,9 @@ async function bootstrap(): Promise<void> {
   });
 
   registerHealthRoutes(fastify as unknown as FastifyInstance, redis, prisma, {
-    sourceStreamKey: config.redis.sourceStreamKey,
-    consumerGroup: config.redis.consumerGroup,
-    deadLetterStreamKey: config.redis.deadLetterStreamKey,
+    sourceStreamKey: config.consumers.streams.sessionService,
+    consumerGroup: 'scheduler-service:session-started',
+    deadLetterStreamKey: 'noema:dlq:scheduler-service:session-started',
   });
   registerSchedulerRoutes(fastify as unknown as FastifyInstance, schedulerService, authMiddleware);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
@@ -167,8 +241,13 @@ async function bootstrap(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');
 
+    // Stop consumers first and drain in-flight messages
+    for (const consumer of consumers) {
+      consumer.stop();
+    }
+    await Promise.all(consumers.map((c) => c.drain()));
+
     await fastify.close();
-    await eventConsumer.stop();
     await prisma.$disconnect();
     await redis.quit();
 

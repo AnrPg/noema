@@ -5,9 +5,9 @@
 import type { CardId, UserId } from '@noema/types';
 import { randomUUID } from 'node:crypto';
 import type {
-    Prisma,
-    CalibrationData as PrismaCalibrationData,
-    PrismaClient,
+  Prisma,
+  CalibrationData as PrismaCalibrationData,
+  PrismaClient,
 } from '../../../generated/prisma/index.js';
 import type { ICalibrationDataRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type { ICalibrationData } from '../../types/scheduler.types.js';
@@ -182,5 +182,12 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
 
   async delete(id: string): Promise<void> {
     await this.prisma.calibrationData.delete({ where: { id } });
+  }
+
+  async deleteByUser(userId: UserId): Promise<number> {
+    const result = await this.prisma.calibrationData.deleteMany({
+      where: { userId },
+    });
+    return result.count;
   }
 }

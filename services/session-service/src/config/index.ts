@@ -39,6 +39,13 @@ export interface IServiceConfig {
     defaultTimeoutHours: number;
     maxConcurrentSessions: number;
   };
+  consumers: {
+    enabled: boolean;
+    consumerName: string;
+    streams: {
+      userService: string;
+    };
+  };
   cors: {
     origin: string[];
     credentials: boolean;
@@ -203,6 +210,13 @@ export function loadConfig(): IServiceConfig {
     session: {
       defaultTimeoutHours: optionalEnvInt('SESSION_TIMEOUT_HOURS', 24),
       maxConcurrentSessions: optionalEnvInt('MAX_CONCURRENT_SESSIONS', 1),
+    },
+    consumers: {
+      enabled: optionalEnvBool('CONSUMERS_ENABLED', true),
+      consumerName: optionalEnv('CONSUMER_NAME', `session-service-${process.pid}`),
+      streams: {
+        userService: optionalEnv('CONSUMER_STREAM_USER_SERVICE', 'noema:events:user-service'),
+      },
     },
     cors: {
       origin: optionalEnv(

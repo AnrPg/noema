@@ -16,17 +16,18 @@ export interface IServiceConfig {
     url: string;
     eventStreamKey: string;
     maxStreamLen: number;
-    sourceStreamKey: string;
-    consumerGroup: string;
+  };
+  consumers: {
+    /** Whether event consumers are enabled */
+    enabled: boolean;
+    /** Unique consumer name within the group (typically hostname + pid) */
     consumerName: string;
-    consumerBlockMs: number;
-    consumerBatchSize: number;
-    consumerRetryBaseDelayMs: number;
-    consumerMaxProcessAttempts: number;
-    consumerPendingIdleMs: number;
-    consumerPendingBatchSize: number;
-    consumerDrainTimeoutMs: number;
-    deadLetterStreamKey: string;
+    /** Stream keys for the source services */
+    streams: {
+      sessionService: string;
+      contentService: string;
+      userService: string;
+    };
   };
   cors: {
     origin: string[];
@@ -106,20 +107,27 @@ export function loadConfig(): IServiceConfig {
       url: requireEnv('REDIS_URL'),
       eventStreamKey: optionalEnv('REDIS_EVENT_STREAM', 'noema:events:scheduler-service'),
       maxStreamLen: optionalEnvInt('REDIS_STREAM_MAX_LEN', 10000),
-      sourceStreamKey: optionalEnv('REDIS_SOURCE_STREAM', 'noema:events:session-service'),
-      consumerGroup: optionalEnv('REDIS_CONSUMER_GROUP', 'scheduler-service-group'),
-      consumerName: optionalEnv('REDIS_CONSUMER_NAME', 'scheduler-service-1'),
-      consumerBlockMs: optionalEnvInt('REDIS_CONSUMER_BLOCK_MS', 5000),
-      consumerBatchSize: optionalEnvInt('REDIS_CONSUMER_BATCH_SIZE', 20),
-      consumerRetryBaseDelayMs: optionalEnvInt('REDIS_CONSUMER_RETRY_BASE_DELAY_MS', 250),
-      consumerMaxProcessAttempts: optionalEnvInt('REDIS_CONSUMER_MAX_PROCESS_ATTEMPTS', 5),
-      consumerPendingIdleMs: optionalEnvInt('REDIS_CONSUMER_PENDING_IDLE_MS', 30000),
-      consumerPendingBatchSize: optionalEnvInt('REDIS_CONSUMER_PENDING_BATCH_SIZE', 50),
-      consumerDrainTimeoutMs: optionalEnvInt('REDIS_CONSUMER_DRAIN_TIMEOUT_MS', 15000),
-      deadLetterStreamKey: optionalEnv(
-        'REDIS_DEAD_LETTER_STREAM',
-        'noema:events:scheduler-service:dlq'
+    },
+    consumers: {
+      enabled: optionalEnvBool('EVENT_CONSUMERS_ENABLED', true),
+      consumerName: optionalEnv(
+        'REDIS_CONSUMER_NAME',
+        `scheduler-service-${process.pid}`,
       ),
+      streams: {
+        sessionService: optionalEnv(
+          'CONSUMER_STREAM_SESSION_SERVICE',
+          'noema:events:session-service',
+        ),
+        contentService: optionalEnv(
+          'CONSUMER_STREAM_CONTENT_SERVICE',
+          'noema:events:content-service',
+        ),
+        userService: optionalEnv(
+          'CONSUMER_STREAM_USER_SERVICE',
+          'noema:events:user-service',
+        ),
+      },
     },
     cors: {
       origin: optionalEnv(

@@ -5,22 +5,49 @@
  * Applies FSRS (retention lane) or HLR (calibration lane) algorithms,
  * updates scheduler card state via the state machine, and persists
  * calibration data for incremental model updates.
+ *
+ * This is the core scheduling recomputation consumer (Task T2.2).
+ *
+ * @see SchedulerBaseConsumer   — reliability, observability, inbox dedup
+ * @see ADR-003                 — Event consumer architecture unification
  */
 
+import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import type { CardId, UserId } from '@noema/types';
+import type { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 
-import {
-  DEFAULT_FSRS_WEIGHTS,
-  FSRSModel,
-} from '../../../domain/scheduler-service/algorithms/fsrs.js';
-import { HLRModel, type Feature } from '../../../domain/scheduler-service/algorithms/hlr.js';
-import { computeNextState } from '../../../domain/scheduler-service/state-machine.js';
-import type { Rating, SchedulerCardState, SchedulerLane } from '../../../types/scheduler.types.js';
-import { schedulerObservability } from '../../observability/scheduler-observability.js';
-import type { IStreamEventEnvelope } from './base-consumer.js';
-import { BaseEventConsumer } from './base-consumer.js';
+import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from '../../domain/scheduler-service/algorithms/fsrs.js';
+import { HLRModel, type Feature } from '../../domain/scheduler-service/algorithms/hlr.js';
+import { computeNextState } from '../../domain/scheduler-service/state-machine.js';
+import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';
+import type { Rating, SchedulerCardState, SchedulerLane } from '../../types/scheduler.types.js';
+import { SchedulerBaseConsumer } from './scheduler-base-consumer.js';
+
+// ============================================================================
+// Default config
+// ============================================================================
+
+function buildConfig(overrides: {
+  sourceStreamKey: string;
+  consumerName: string;
+}): IEventConsumerConfig {
+  return {
+    sourceStreamKey: overrides.sourceStreamKey,
+    consumerGroup: 'scheduler-service:review-recorded',
+    consumerName: overrides.consumerName,
+    batchSize: 20,
+    blockMs: 5000,
+    retryBaseDelayMs: 250,
+    maxProcessAttempts: 5,
+    pendingIdleMs: 30_000,
+    pendingBatchSize: 50,
+    drainTimeoutMs: 15_000,
+    deadLetterStreamKey: 'noema:dlq:scheduler-service:review-recorded',
+  };
+}
 
 // ============================================================================
 // Payload schema
@@ -50,7 +77,18 @@ const AttemptRecordedPayloadSchema = z
 // Consumer
 // ============================================================================
 
-export class ReviewRecordedConsumer extends BaseEventConsumer {
+export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
+  constructor(redis: Redis, logger: Logger, consumerName: string, sourceStreamKey?: string) {
+    super(
+      redis,
+      buildConfig({
+        sourceStreamKey: sourceStreamKey ?? 'noema:events:session-service',
+        consumerName,
+      }),
+      logger
+    );
+  }
+
   protected async dispatchEvent(envelope: IStreamEventEnvelope): Promise<void> {
     if (envelope.eventType !== 'attempt.recorded' && envelope.eventType !== 'review.submitted') {
       return;
@@ -61,7 +99,7 @@ export class ReviewRecordedConsumer extends BaseEventConsumer {
 
   private async handleReviewRecorded(envelope: IStreamEventEnvelope): Promise<void> {
     const traceId =
-      envelope.metadata?.correlationId ??
+      (envelope.metadata?.['correlationId'] as string | undefined) ??
       (typeof envelope.aggregateId === 'string' && envelope.aggregateId.length > 0
         ? envelope.aggregateId
         : `evt_${randomUUID()}`);
@@ -70,10 +108,10 @@ export class ReviewRecordedConsumer extends BaseEventConsumer {
       component: 'event',
     };
     if (
-      typeof envelope.metadata?.correlationId === 'string' &&
-      envelope.metadata.correlationId.length > 0
+      typeof envelope.metadata?.['correlationId'] === 'string' &&
+      envelope.metadata['correlationId'].length > 0
     ) {
-      spanContext.correlationId = envelope.metadata.correlationId;
+      spanContext.correlationId = envelope.metadata['correlationId'];
     }
     const span = schedulerObservability.startSpan('event.consumer.handleReviewRecorded', {
       ...spanContext,
@@ -110,6 +148,7 @@ export class ReviewRecordedConsumer extends BaseEventConsumer {
       const cardId = parsed.data.cardId as CardId;
       const attemptId = parsed.data.attemptId;
 
+      // Domain-level idempotency check (belt-and-suspenders in addition to inbox dedup)
       const existingReview = await this.dependencies.reviewRepository.findByAttemptId(attemptId);
       if (existingReview !== null) {
         this.logger.debug({ attemptId }, 'Skipping duplicate review event');

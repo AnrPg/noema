@@ -133,6 +133,9 @@ export interface ISchedulerCardRepository {
   /** Delete a scheduler card. */
   delete(userId: UserId, cardId: CardId): Promise<void>;
 
+  /** Delete all scheduler cards for a user (GDPR erasure). */
+  deleteByUser(userId: UserId): Promise<number>;
+
   /** Batch create scheduler cards for efficiency. */
   createBatch(cards: Omit<ISchedulerCard, 'createdAt' | 'updatedAt'>[]): Promise<ISchedulerCard[]>;
 }
@@ -172,6 +175,12 @@ export interface IReviewRepository {
 
   /** Batch create reviews for efficiency. */
   createBatch(reviews: Omit<IReview, 'createdAt'>[]): Promise<IReview[]>;
+
+  /** Delete a single review. */
+  delete(id: string): Promise<void>;
+
+  /** Delete all reviews for a user (GDPR erasure). */
+  deleteByUser(userId: UserId): Promise<number>;
 }
 
 // ============================================================================
@@ -218,6 +227,9 @@ export interface ICalibrationDataRepository {
 
   /** Delete calibration data. */
   delete(id: string): Promise<void>;
+
+  /** Delete all calibration data for a user (GDPR erasure). */
+  deleteByUser(userId: UserId): Promise<number>;
 }
 
 export interface ISchedulerProvenanceRepository {

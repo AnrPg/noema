@@ -17,6 +17,7 @@ import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
 import { RedisEventPublisher } from '@noema/events';
+import type { BaseEventConsumer } from '@noema/events/consumer';
 import { createToolRegistry } from './agents/tools/tool.registry.js';
 import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
@@ -48,6 +49,7 @@ import {
   StructuralIntegrityStage,
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
+import { UserDeletedConsumer } from './events/consumers/index.js';
 import { CachedGraphRepository } from './infrastructure/cache/cached-graph.repository.js';
 import { KgRedisCacheProvider } from './infrastructure/cache/kg-redis-cache.provider.js';
 import { Neo4jClient } from './infrastructure/database/neo4j-client.js';
@@ -363,15 +365,37 @@ async function bootstrap(): Promise<void> {
   );
   logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2 + Phase 9 MCP tools)');
 
-  // TODO(NOEMA-events): Wire up Redis stream consumers for cross-service events.
-  // Config is ready (config.consumers.enabled, config.consumers.streams) but consumer
-  // implementations are deferred until content-service and session-service publish events.
-  // Tracked: Phase 10 — cross-service event consumer architecture.
+  // ==========================================================================
+  // Event Consumers
+  // ==========================================================================
+
+  const consumers: BaseEventConsumer[] = [];
+
   if (config.consumers.enabled) {
-    logger.info(
-      { streams: config.consumers.streams },
-      'Event consumers configured but not yet wired — consumer implementations pending'
+    const { consumerName, streams } = config.consumers;
+
+    const userDeletedConsumer = new UserDeletedConsumer(
+      redis,
+      prisma,
+      neo4jClient,
+      logger,
+      consumerName,
+      streams.userService
     );
+
+    consumers.push(userDeletedConsumer);
+
+    // Initialize consumer groups (idempotent)
+    await Promise.all(consumers.map((c) => c.initialize()));
+
+    // Start consumers (non-blocking — they run in background loops)
+    for (const consumer of consumers) {
+      consumer.start().catch((error: unknown) => {
+        logger.error({ error, consumer: consumer.constructor.name }, 'Consumer crashed');
+      });
+    }
+
+    logger.info({ consumerCount: consumers.length }, 'Event consumers started');
   }
 
   // Graceful shutdown
@@ -392,6 +416,12 @@ async function bootstrap(): Promise<void> {
     forceExitTimer.unref(); // Don't keep event loop alive for this timer
 
     try {
+      // Stop consumers first and drain in-flight messages
+      for (const consumer of consumers) {
+        consumer.stop();
+      }
+      await Promise.all(consumers.map((c) => c.drain()));
+
       await fastify.close();
       await redis.quit();
       await neo4jClient.close();
