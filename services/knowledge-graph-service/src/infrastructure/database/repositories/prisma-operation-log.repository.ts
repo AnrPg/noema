@@ -75,28 +75,31 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
     const { nodeIds, edgeIds } = extractAffectedIds(operation);
 
     // Get next sequence number for this user (atomic via serializable transaction)
-    const record = await this.prisma.$transaction(async (tx) => {
-      // Find current max sequence number for this user
-      const latest = await tx.pkgOperationLog.findFirst({
-        where: { userId: userId as string },
-        orderBy: { sequenceNumber: 'desc' },
-        select: { sequenceNumber: true },
-      });
+    const record = await this.prisma.$transaction(
+      async (tx) => {
+        // Find current max sequence number for this user
+        const latest = await tx.pkgOperationLog.findFirst({
+          where: { userId: userId as string },
+          orderBy: { sequenceNumber: 'desc' },
+          select: { sequenceNumber: true },
+        });
 
-      const nextSeq = (latest?.sequenceNumber ?? 0) + 1;
+        const nextSeq = (latest?.sequenceNumber ?? 0) + 1;
 
-      return tx.pkgOperationLog.create({
-        data: {
-          id,
-          userId: userId as string,
-          sequenceNumber: nextSeq,
-          operationType: operation.operationType,
-          operation: toPrismaJson(operation),
-          affectedNodeIds: nodeIds,
-          affectedEdgeIds: edgeIds,
-        },
-      });
-    }, { isolationLevel: 'Serializable' });
+        return tx.pkgOperationLog.create({
+          data: {
+            id,
+            userId: userId as string,
+            sequenceNumber: nextSeq,
+            operationType: operation.operationType,
+            operation: toPrismaJson(operation),
+            affectedNodeIds: nodeIds,
+            affectedEdgeIds: edgeIds,
+          },
+        });
+      },
+      { isolationLevel: 'Serializable' }
+    );
 
     return this.toDomain(record);
   }

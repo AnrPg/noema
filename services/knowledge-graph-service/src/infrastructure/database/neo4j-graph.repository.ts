@@ -529,7 +529,11 @@ export class Neo4jGraphRepository implements IGraphRepository {
     }
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, _userId?: string): Promise<IGraphEdge[]> {
+  async getEdgesForNode(
+    nodeId: NodeId,
+    direction: EdgeDirection,
+    _userId?: string
+  ): Promise<IGraphEdge[]> {
     const relTypePattern = ALL_REL_TYPES.join('|');
 
     const session = this.neo4j.getSession();
@@ -732,7 +736,14 @@ export class Neo4jGraphRepository implements IGraphRepository {
     userId?: string,
     maxDepth?: number
   ): Promise<IGraphNode[]> {
-    return this.findFilteredShortestPath(fromNodeId, toNodeId, undefined, undefined, userId, maxDepth);
+    return this.findFilteredShortestPath(
+      fromNodeId,
+      toNodeId,
+      undefined,
+      undefined,
+      userId,
+      maxDepth
+    );
   }
 
   async findFilteredShortestPath(
@@ -2251,7 +2262,11 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('countEdges is not supported within a transaction context');
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, _userId?: string): Promise<IGraphEdge[]> {
+  async getEdgesForNode(
+    nodeId: NodeId,
+    direction: EdgeDirection,
+    _userId?: string
+  ): Promise<IGraphEdge[]> {
     const relTypePattern = ALL_REL_TYPES.join('|');
     let query: string;
 

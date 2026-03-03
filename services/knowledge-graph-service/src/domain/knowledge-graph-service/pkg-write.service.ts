@@ -768,15 +768,14 @@ export class PkgWriteService {
     const offset = Math.max(pagination.offset, 0);
 
     // Query edges and exact total in parallel
-     
+
     const [edges, total] = await Promise.all([
       this.graphRepository.findEdges(scopedFilter, limit, offset),
-       
+
       this.graphRepository.countEdges(scopedFilter),
     ]);
 
     const result: IPaginatedResponse<IGraphEdge> = {
-       
       items: edges,
       total: total,
       hasMore: offset + edges.length < total,
@@ -784,11 +783,7 @@ export class PkgWriteService {
 
     return {
       data: result,
-      agentHints: this.hintsFactory.createListHints(
-        'edges',
-        edges.length,
-        total
-      ),
+      agentHints: this.hintsFactory.createListHints('edges', edges.length, total),
     };
   }
 

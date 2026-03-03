@@ -524,18 +524,27 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     rejectedCount: number;
     stuckCount: number;
   }> {
-    const [proposed, validating, validated, pendingReview, committed, rejected, proving, proven, committing] =
-      await Promise.all([
-        this.mutationRepository.countMutationsByState('proposed'),
-        this.mutationRepository.countMutationsByState('validating'),
-        this.mutationRepository.countMutationsByState('validated'),
-        this.mutationRepository.countMutationsByState('pending_review'),
-        this.mutationRepository.countMutationsByState('committed'),
-        this.mutationRepository.countMutationsByState('rejected'),
-        this.mutationRepository.countMutationsByState('proving'),
-        this.mutationRepository.countMutationsByState('proven'),
-        this.mutationRepository.countMutationsByState('committing'),
-      ]);
+    const [
+      proposed,
+      validating,
+      validated,
+      pendingReview,
+      committed,
+      rejected,
+      proving,
+      proven,
+      committing,
+    ] = await Promise.all([
+      this.mutationRepository.countMutationsByState('proposed'),
+      this.mutationRepository.countMutationsByState('validating'),
+      this.mutationRepository.countMutationsByState('validated'),
+      this.mutationRepository.countMutationsByState('pending_review'),
+      this.mutationRepository.countMutationsByState('committed'),
+      this.mutationRepository.countMutationsByState('rejected'),
+      this.mutationRepository.countMutationsByState('proving'),
+      this.mutationRepository.countMutationsByState('proven'),
+      this.mutationRepository.countMutationsByState('committing'),
+    ]);
 
     // "Stuck" = in non-terminal non-proposed state (could indicate processing failure)
     const stuckCount = validating + proving + proven + committing;

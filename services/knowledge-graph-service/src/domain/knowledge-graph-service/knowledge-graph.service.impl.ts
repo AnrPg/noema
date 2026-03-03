@@ -41,8 +41,8 @@ import type {
 import type { Logger } from 'pino';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
-import { AgentHintsBuilder } from './agent-hints.factory.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
+import { AgentHintsBuilder } from './agent-hints.factory.js';
 import type {
   CkgMutationOperation,
   IMutationFilter,
@@ -907,7 +907,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       paginatedEntries = entries;
       const countFilter =
         filters.operationType !== undefined ? { operationType: filters.operationType } : undefined;
-       
+
       total = await this.operationLogRepository.countOperations(userId, countFilter);
       hasMore = offset + paginatedEntries.length < total;
     } else {
