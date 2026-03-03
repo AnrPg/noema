@@ -50,6 +50,7 @@ const ADMIN_SCOPES: readonly string[] = [
   ...BASE_USER_SCOPES,
   'admin:read',
   'admin:write',
+  'admin:users',
   'scheduler:admin',
   'session:system:expire',
   'kg:admin',

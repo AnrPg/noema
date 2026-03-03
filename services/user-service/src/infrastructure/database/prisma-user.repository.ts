@@ -445,6 +445,14 @@ export class PrismaUserRepository implements IUserRepository {
     }
   }
 
+  async setRoles(id: UserId, roles: string[], version: number): Promise<IUser> {
+    const user = await this.prisma.user.update({
+      where: { id, version },
+      data: { roles, version: { increment: 1 } },
+    });
+    return this.toDomain(user);
+  }
+
   // ============================================================================
   // Delete Operations
   // ============================================================================
@@ -666,12 +674,16 @@ export class PrismaUserRepository implements IUserRepository {
     userId: string;
     tokenHash: string;
     expiresAt: Date;
+    initiator?: 'USER' | 'ADMIN';
+    initiatedBy?: string;
   }): Promise<void> {
     await this.prisma.passwordResetToken.create({
       data: {
         userId: data.userId,
         tokenHash: data.tokenHash,
         expiresAt: data.expiresAt,
+        ...(data.initiator !== undefined ? { initiator: data.initiator } : {}),
+        ...(data.initiatedBy !== undefined ? { initiatedBy: data.initiatedBy } : {}),
       },
     });
   }

@@ -43,6 +43,13 @@ export const UserEventType = {
   EMAIL_CHANGE_INITIATED: 'user.email_change.initiated',
   EMAIL_CHANGED: 'user.email.changed',
   PASSWORD_RESET_REQUESTED: 'user.password_reset.requested',
+
+  // Phase 4: Admin User Management events
+  SUSPENDED: 'user.suspended',
+  BANNED: 'user.banned',
+  REACTIVATED: 'user.reactivated',
+  ROLES_CHANGED: 'user.roles.changed',
+  ADMIN_PASSWORD_RESET: 'user.admin.password_reset',
 } as const;
 
 export type UserEventType = (typeof UserEventType)[keyof typeof UserEventType];
@@ -245,6 +252,57 @@ export interface IUserPasswordResetRequestedPayload {
 }
 
 // ============================================================================
+// Phase 4: Admin Action Event Payloads
+// ============================================================================
+
+/**
+ * Payload for user.suspended event.
+ * Emitted when an admin suspends a user account.
+ */
+export interface IUserSuspendedPayload {
+  suspendedBy: UserId;
+  reason: string;
+  expiresAt: string | null;
+}
+
+/**
+ * Payload for user.banned event.
+ * Emitted when an admin permanently bans a user account.
+ */
+export interface IUserBannedPayload {
+  bannedBy: UserId;
+  reason: string;
+}
+
+/**
+ * Payload for user.reactivated event.
+ * Emitted when an admin reactivates a suspended or banned user.
+ */
+export interface IUserReactivatedPayload {
+  reactivatedBy: UserId;
+  previousStatus: string;
+}
+
+/**
+ * Payload for user.roles.changed event.
+ * Emitted when an admin declaratively sets a user's roles.
+ */
+export interface IUserRolesChangedPayload {
+  oldRoles: string[];
+  newRoles: string[];
+  changedBy: UserId;
+}
+
+/**
+ * Payload for user.admin.password_reset event.
+ * Emitted when an admin triggers a password reset for a user.
+ */
+export interface IUserAdminPasswordResetPayload {
+  triggeredBy: UserId;
+  email: string;
+}
+
+// ============================================================================
 // Typed Event Interfaces
 // ============================================================================
 
@@ -322,6 +380,25 @@ export type IUserPasswordResetRequestedEvent = ITypedEvent<
   IUserPasswordResetRequestedPayload
 >;
 
+// Phase 4: Admin Action Events
+export type IUserSuspendedEvent = ITypedEvent<'user.suspended', 'User', IUserSuspendedPayload>;
+export type IUserBannedEvent = ITypedEvent<'user.banned', 'User', IUserBannedPayload>;
+export type IUserReactivatedEvent = ITypedEvent<
+  'user.reactivated',
+  'User',
+  IUserReactivatedPayload
+>;
+export type IUserRolesChangedEvent = ITypedEvent<
+  'user.roles.changed',
+  'User',
+  IUserRolesChangedPayload
+>;
+export type IUserAdminPasswordResetEvent = ITypedEvent<
+  'user.admin.password_reset',
+  'User',
+  IUserAdminPasswordResetPayload
+>;
+
 /**
  * Union of all user domain events.
  */
@@ -346,4 +423,9 @@ export type UserDomainEvent =
   | IUserUsernameChangedEvent
   | IUserEmailChangeInitiatedEvent
   | IUserEmailChangedEvent
-  | IUserPasswordResetRequestedEvent;
+  | IUserPasswordResetRequestedEvent
+  | IUserSuspendedEvent
+  | IUserBannedEvent
+  | IUserReactivatedEvent
+  | IUserRolesChangedEvent
+  | IUserAdminPasswordResetEvent;

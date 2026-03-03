@@ -189,6 +189,13 @@ export interface IUserRepository {
    */
   removeRole(id: UserId, role: string): Promise<void>;
 
+  /**
+   * Declaratively set all roles for a user (replaces existing roles).
+   * Used by admin role management.
+   * @returns Updated user
+   */
+  setRoles(id: UserId, roles: string[], version: number): Promise<IUser>;
+
   // ============================================================================
   // Delete Operations
   // ============================================================================
@@ -247,6 +254,8 @@ export interface IUserRepository {
     userId: string;
     tokenHash: string;
     expiresAt: Date;
+    initiator?: 'USER' | 'ADMIN';
+    initiatedBy?: string;
   }): Promise<void>;
 
   /**

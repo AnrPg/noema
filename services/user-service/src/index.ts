@@ -11,6 +11,7 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import { registerAdminRoutes } from './api/rest/admin.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerUserRoutes } from './api/rest/user.routes.js';
 import {
@@ -19,11 +20,14 @@ import {
   getTokenConfig,
   loadConfig,
 } from './config/index.js';
+import { AdminUserService } from './domain/admin/admin-user.service.js';
 import { UserService } from './domain/user-service/user.service.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import { PrismaUserRepository } from './infrastructure/database/prisma-user.repository.js';
 import { SessionOrchestrationService } from './infrastructure/external-apis/session-orchestration.service.js';
 import { JwtTokenService } from './infrastructure/external-apis/token.service.js';
+import { PrismaSessionRepository } from './infrastructure/repositories/prisma-session.repository.js';
+import { PrismaUserStatusChangeRepository } from './infrastructure/repositories/prisma-user-status-change.repository.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 // ============================================================================
@@ -88,6 +92,18 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  // Create admin infrastructure + service (Phase 4)
+  const statusChangeRepository = new PrismaUserStatusChangeRepository(prisma);
+  const sessionRepository = new PrismaSessionRepository(prisma);
+  const adminService = new AdminUserService({
+    userRepository,
+    statusChangeRepository,
+    sessionRepository,
+    eventPublisher,
+    tokenService,
+    logger,
+  });
+
   // Create Fastify instance
   const fastify = Fastify({
     loggerInstance: logger,
@@ -121,6 +137,7 @@ async function bootstrap(): Promise<void> {
     authMiddleware,
     tokenService
   );
+  registerAdminRoutes(fastify as unknown as FastifyInstance, adminService, authMiddleware);
 
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {

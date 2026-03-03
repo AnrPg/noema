@@ -150,6 +150,10 @@ model PasswordResetToken {
   usedAt    DateTime? @map("used_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
+  // Phase 4: Admin-triggered password reset tracking
+  initiator   PasswordResetInitiator @default(USER)
+  initiatedBy String?                @map("initiated_by") @db.VarChar(50)
+
   @@index([userId])
   @@index([expiresAt])
   @@map("password_reset_tokens")
@@ -170,4 +174,48 @@ model EmailVerificationToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("email_verification_tokens")
+}
+
+// ============================================================================
+// Phase 4: Admin User Management — Audit Log
+// ============================================================================
+
+// Append-only audit trail for all admin actions on user accounts.
+// Never issue UPDATE or DELETE against this table.
+model UserStatusChange {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @map("user_id") @db.VarChar(50)
+  changedBy     String             @map("changed_by") @db.VarChar(50)
+  action        StatusChangeAction
+  previousValue Json               @map("previous_value")
+  newValue      Json               @map("new_value")
+  reason        String?            @db.VarChar(1000)
+  expiresAt     DateTime?          @map("expires_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([changedBy])
+  @@index([action])
+  @@index([createdAt])
+  @@map("user_status_changes")
+}
+
+// ============================================================================
+// Phase 4: Enums
+// ============================================================================
+
+enum StatusChangeAction {
+  STATUS_CHANGE
+  ROLE_CHANGE
+  PASSWORD_RESET
+  SESSION_REVOCATION
+
+  @@map("status_change_action")
+}
+
+enum PasswordResetInitiator {
+  USER
+  ADMIN
+
+  @@map("password_reset_initiator")
 }

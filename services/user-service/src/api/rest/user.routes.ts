@@ -90,12 +90,13 @@ export function registerUserRoutes(
    * Build execution context from request.
    */
   function buildContext(request: FastifyRequest): IExecutionContext {
-    const user = request.user as { sub?: string; roles?: string[] } | undefined;
+    const user = request.user as { sub?: string; roles?: string[]; scopes?: string[] } | undefined;
     const userAgent = request.headers['user-agent'];
     const context: IExecutionContext = {
       userId: (user?.sub as UserId | undefined) ?? null,
       correlationId: request.id as CorrelationId,
       roles: (user?.roles as UserRole[] | undefined) ?? [],
+      scopes: user?.scopes ?? [],
       clientIp: request.ip,
     };
     if (userAgent !== undefined) {

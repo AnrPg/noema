@@ -80,6 +80,8 @@ export interface IExecutionContext {
   correlationId: CorrelationId;
   /** User roles for authorization */
   roles: UserRole[];
+  /** JWT scopes for scope-based authorization */
+  scopes: string[];
   /** Client IP for audit */
   clientIp?: string;
   /** User agent */

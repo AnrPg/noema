@@ -205,15 +205,33 @@ http:
       # No strip-api — service expects /api/v1/ckg/*
 
     # Routes /api/v1/users/:userId/pkg, /metrics, /misconceptions, /health, /comparison
-    # This does NOT conflict with user-service's /api/users/* because of the /v1/ segment
+    # Uses PathRegexp to match ONLY knowledge-graph sub-paths under /api/v1/users.
+    # This avoids a conflict with user-service admin routes at /api/v1/users/:id/status,
+    # /roles, /sessions, /audit-log, /reset-password (Phase 4).
     kg-users:
-      rule: "PathPrefix(`/api/v1/users`)"
+      rule: "PathRegexp(`^/api/v1/users/[^/]+/(pkg|metrics|misconceptions|health|comparison)(/.*)?$`)"
       entryPoints:
         - web
       service: knowledge-graph-service
       middlewares:
         - cors-headers
       # No strip-api — service expects /api/v1/users/:userId/*
+
+    # -------------------------------------------------------------------------
+    # User Service — Admin v1 routes (port 3002)
+    # Internal routes: /v1/users/:id/status, /roles, /sessions,
+    #   /audit-log, /reset-password
+    # Added in Phase 4 (Admin User Management).
+    # -------------------------------------------------------------------------
+    user-v1:
+      rule: "PathPrefix(`/api/v1/users`)"
+      entryPoints:
+        - web
+      service: user-service
+      priority: 1
+      middlewares:
+        - cors-headers
+        - strip-api
 
     # -------------------------------------------------------------------------
     # HLR Sidecar (port 8020)
