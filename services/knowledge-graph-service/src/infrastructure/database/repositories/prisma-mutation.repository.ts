@@ -166,6 +166,15 @@ export class PrismaMutationRepository implements IMutationRepository {
     return records.map((r) => this.toDomain(r));
   }
 
+  async findMutationsByStates(states: MutationState[]): Promise<ICkgMutation[]> {
+    const records = await this.prisma.ckgMutation.findMany({
+      where: { state: { in: states.map(toDbState) } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return records.map((r) => this.toDomain(r));
+  }
+
   async findMutationsByProposer(proposerId: ProposerId): Promise<ICkgMutation[]> {
     const records = await this.prisma.ckgMutation.findMany({
       where: { createdBy: proposerId as string },
@@ -220,39 +229,43 @@ export class PrismaMutationRepository implements IMutationRepository {
     expectedVersion: number,
     auditEntry: Omit<IMutationAuditEntry, 'timestamp'>
   ): Promise<{ mutation: ICkgMutation; audit: IMutationAuditEntry }> {
-    const [updatedRecord, auditRecord] = await this.prisma.$transaction([
-      this.prisma.ckgMutation.update({
-        where: { id: mutationId, version: expectedVersion },
-        data: {
-          state: toDbState(newState),
-          version: { increment: 1 },
-        },
-      }),
-      this.prisma.ckgMutationAuditLog.create({
-        data: {
-          id: generateAuditId(),
-          mutationId: auditEntry.mutationId,
-          fromState: toDbState(auditEntry.fromState),
-          toState: toDbState(auditEntry.toState),
-          triggeredBy: auditEntry.performedBy,
-          snapshot: (auditEntry.context ?? {}) as unknown as Prisma.JsonObject,
-        },
-      }),
-    ]);
+    try {
+      const [updatedRecord, auditRecord] = await this.prisma.$transaction([
+        this.prisma.ckgMutation.update({
+          where: { id: mutationId, version: expectedVersion },
+          data: {
+            state: toDbState(newState),
+            version: { increment: 1 },
+          },
+        }),
+        this.prisma.ckgMutationAuditLog.create({
+          data: {
+            id: generateAuditId(),
+            mutationId: auditEntry.mutationId,
+            fromState: toDbState(auditEntry.fromState),
+            toState: toDbState(auditEntry.toState),
+            triggeredBy: auditEntry.performedBy,
+            snapshot: (auditEntry.context ?? {}) as unknown as Prisma.JsonObject,
+          },
+        }),
+      ]);
 
-    const mutation = this.toDomain(updatedRecord);
-    const audit: IMutationAuditEntry = {
-      mutationId: auditRecord.mutationId as MutationId,
-      fromState: fromDbState(auditRecord.fromState),
-      toState: fromDbState(auditRecord.toState),
-      performedBy: auditRecord.triggeredBy,
-      timestamp: auditRecord.createdAt.toISOString(),
-    };
-    if (auditRecord.snapshot !== null) {
-      (audit as { context: Metadata }).context = auditRecord.snapshot as Metadata;
+      const mutation = this.toDomain(updatedRecord);
+      const audit: IMutationAuditEntry = {
+        mutationId: auditRecord.mutationId as MutationId,
+        fromState: fromDbState(auditRecord.fromState),
+        toState: fromDbState(auditRecord.toState),
+        performedBy: auditRecord.triggeredBy,
+        timestamp: auditRecord.createdAt.toISOString(),
+      };
+      if (auditRecord.snapshot !== null) {
+        (audit as { context: Metadata }).context = auditRecord.snapshot as Metadata;
+      }
+
+      return { mutation, audit };
+    } catch (error) {
+      return this.handleOptimisticLockError(error, mutationId, expectedVersion);
     }
-
-    return { mutation, audit };
   }
 
   async incrementRecoveryAttempts(mutationId: MutationId): Promise<ICkgMutation> {

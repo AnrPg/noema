@@ -141,7 +141,7 @@ export function registerPkgEdgeRoutes(
             nodeId: { type: 'string' },
             direction: { type: 'string', enum: ['inbound', 'outbound', 'both'] },
             page: { type: 'number' },
-            pageSize: { type: 'number' },
+            pageSize: { type: 'number', minimum: 1, maximum: 200 },
           },
         },
       },
@@ -163,7 +163,9 @@ export function registerPkgEdgeRoutes(
           ...(query.nodeId !== undefined && query.nodeId !== '' && query.direction === 'inbound'
             ? { targetNodeId: query.nodeId as NodeId }
             : {}),
-          ...(query.nodeId !== undefined && query.nodeId !== '' && query.direction === 'both'
+          ...(query.nodeId !== undefined &&
+          query.nodeId !== '' &&
+          (query.direction === 'both' || query.direction === undefined)
             ? { nodeId: query.nodeId as NodeId }
             : {}),
         };

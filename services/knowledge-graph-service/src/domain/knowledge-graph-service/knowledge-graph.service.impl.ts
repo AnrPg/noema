@@ -276,9 +276,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     userId: UserId,
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>> {
-    return this.graphRead.findPath(userId, fromNodeId, toNodeId, context);
+    return this.graphRead.findPath(userId, fromNodeId, toNodeId, context, maxDepth);
   }
 
   getSiblings(
@@ -414,9 +415,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   findCkgPath(
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>> {
-    return this.graphRead.findCkgPath(fromNodeId, toNodeId, context);
+    return this.graphRead.findCkgPath(fromNodeId, toNodeId, context, maxDepth);
   }
 
   getCkgSiblings(

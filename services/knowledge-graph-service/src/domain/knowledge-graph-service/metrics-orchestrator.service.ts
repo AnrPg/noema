@@ -58,6 +58,15 @@ import type { INodeFilter } from './value-objects/graph.value-objects.js';
 export class MetricsOrchestrator {
   private readonly metricsEngine: StructuralMetricsEngine;
   private readonly misconceptionEngine: MisconceptionDetectionEngine;
+  /** Single-flight map: prevents duplicate concurrent metric computations for the same scope. */
+  private readonly inflightMetrics = new Map<string, Promise<IServiceResult<IStructuralMetrics>>>();
+
+  /** Max nodes fetched for domain-wide metrics computation. */
+  private static readonly MAX_DOMAIN_NODES_FOR_METRICS = 10_000;
+  /** Number of historical snapshots for structural health trend analysis. */
+  private static readonly HEALTH_SNAPSHOT_HISTORY_DEPTH = 5;
+  /** Number of historical snapshots for metacognitive stage regression detection. */
+  private static readonly METACOGNITIVE_STAGE_HISTORY_DEPTH = 2;
 
   constructor(
     private readonly graphRepository: IGraphRepository,
@@ -77,6 +86,28 @@ export class MetricsOrchestrator {
   // ========================================================================
 
   async computeMetrics(
+    userId: UserId,
+    domain: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IStructuralMetrics>> {
+    // Single-flight: coalesce concurrent computations for the same userId+domain
+    const flightKey = `${userId as string}:${domain}`;
+    const inflight = this.inflightMetrics.get(flightKey);
+    if (inflight) {
+      this.logger.debug({ userId, domain }, 'Coalescing duplicate metrics computation');
+      return inflight;
+    }
+
+    const promise = this.doComputeMetrics(userId, domain, context);
+    this.inflightMetrics.set(flightKey, promise);
+    try {
+      return await promise;
+    } finally {
+      this.inflightMetrics.delete(flightKey);
+    }
+  }
+
+  private async doComputeMetrics(
     userId: UserId,
     domain: string,
     context: IExecutionContext
@@ -445,7 +476,7 @@ export class MetricsOrchestrator {
     const { data: metrics } = await this.getMetrics(userId, domain, context);
 
     // Get recent snapshots for trend
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: 5 });
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: MetricsOrchestrator.HEALTH_SNAPSHOT_HISTORY_DEPTH });
 
     // Get misconception count
     const misconceptions = await this.misconceptionRepository.getActiveMisconceptions(
@@ -484,7 +515,7 @@ export class MetricsOrchestrator {
     const { data: metrics } = await this.getMetrics(userId, domain, context);
 
     // Get previous metrics for regression detection
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: 2 });
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: MetricsOrchestrator.METACOGNITIVE_STAGE_HISTORY_DEPTH });
     const prevSnapshot = snapshots.length > 1 ? snapshots[1] : undefined;
     const previousMetrics = prevSnapshot?.metrics ?? null;
 
@@ -542,7 +573,15 @@ export class MetricsOrchestrator {
     };
 
     // Fetch all nodes in this domain — use a generous limit
-    const nodes = await this.graphRepository.findNodes(filter, 10_000, 0);
+    const maxNodes = MetricsOrchestrator.MAX_DOMAIN_NODES_FOR_METRICS;
+    const nodes = await this.graphRepository.findNodes(filter, maxNodes, 0);
+
+    if (nodes.length >= maxNodes) {
+      this.logger.warn(
+        { domain, graphType, nodeCount: nodes.length, limit: maxNodes },
+        'Domain node count reached metrics fetch limit — metrics may be incomplete'
+      );
+    }
 
     if (nodes.length === 0) {
       return { nodes: [], edges: [] };

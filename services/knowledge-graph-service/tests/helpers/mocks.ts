@@ -155,6 +155,7 @@ export function mockMutationRepository(): {
     appendAuditEntry: vi.fn().mockImplementation(notConfigured),
     getAuditLog: vi.fn().mockImplementation(notConfigured),
     findMutationsByState: vi.fn().mockImplementation(notConfigured),
+    findMutationsByStates: vi.fn().mockImplementation(notConfigured),
     findMutationsByProposer: vi.fn().mockImplementation(notConfigured),
     countMutationsByState: vi.fn().mockImplementation(notConfigured),
     findMutations: vi.fn().mockImplementation(notConfigured),

@@ -57,7 +57,7 @@ export function registerCkgEdgeRoutes(
             nodeId: { type: 'string', description: 'Filter to edges connected to this node' },
             direction: { type: 'string', enum: ['inbound', 'outbound', 'both'] },
             page: { type: 'number' },
-            pageSize: { type: 'number' },
+            pageSize: { type: 'number', minimum: 1, maximum: 200 },
           },
         },
       },
@@ -76,7 +76,8 @@ export function registerCkgEdgeRoutes(
           ...(query.nodeId !== undefined && query.direction === 'inbound'
             ? { targetNodeId: query.nodeId as NodeId }
             : {}),
-          ...(query.nodeId !== undefined && query.direction === 'both'
+          ...(query.nodeId !== undefined &&
+          (query.direction === 'both' || query.direction === undefined)
             ? { nodeId: query.nodeId as NodeId }
             : {}),
         };

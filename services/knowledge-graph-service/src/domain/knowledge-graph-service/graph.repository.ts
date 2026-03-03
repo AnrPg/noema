@@ -212,8 +212,9 @@ export interface IEdgeRepository {
 
   /**
    * Get all edges for a node in a given direction.
+   * @param userId Optional user scope for PKG edge isolation.
    */
-  getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]>;
+  getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, userId?: string): Promise<IGraphEdge[]>;
 
   /**
    * Batch-fetch edges for multiple nodes in a single query.
@@ -260,9 +261,15 @@ export interface ITraversalRepository {
 
   /**
    * Find shortest path between two nodes.
+   * @param maxDepth Optional maximum path length (hops). If omitted, unlimited.
    * @returns Ordered array of nodes forming the path, or empty if no path exists.
    */
-  findShortestPath(fromNodeId: NodeId, toNodeId: NodeId, userId?: string): Promise<IGraphNode[]>;
+  findShortestPath(
+    fromNodeId: NodeId,
+    toNodeId: NodeId,
+    userId?: string,
+    maxDepth?: number
+  ): Promise<IGraphNode[]>;
 
   /**
    * Find shortest path between two nodes with edge type and node type filters.
@@ -273,7 +280,8 @@ export interface ITraversalRepository {
     toNodeId: NodeId,
     edgeTypeFilter?: readonly GraphEdgeType[],
     nodeTypeFilter?: readonly string[],
-    userId?: string
+    userId?: string,
+    maxDepth?: number
   ): Promise<IGraphNode[]>;
 
   /**
@@ -508,8 +516,9 @@ export interface IReadOnlyGraphRepository extends ITraversalRepository {
 
   /**
    * Get all edges for a node in a given direction.
+   * @param userId Optional user scope for PKG edge isolation.
    */
-  getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]>;
+  getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, userId?: string): Promise<IGraphEdge[]>;
 
   /**
    * Batch-fetch edges for multiple nodes.

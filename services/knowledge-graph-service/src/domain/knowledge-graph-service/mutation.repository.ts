@@ -138,6 +138,12 @@ export interface IMutationRepository {
   findMutationsByState(state: MutationState): Promise<ICkgMutation[]>;
 
   /**
+   * Find mutations matching any of the given states in a single query.
+   * Avoids N+1 sequential queries when listing multiple states.
+   */
+  findMutationsByStates(states: MutationState[]): Promise<ICkgMutation[]>;
+
+  /**
    * Find mutations by proposer (agent or admin user).
    */
   findMutationsByProposer(proposerId: ProposerId): Promise<ICkgMutation[]>;

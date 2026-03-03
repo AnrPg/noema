@@ -100,7 +100,7 @@ export function registerCkgMutationRoutes(
         const proposal = {
           operations: parsed.operations,
           rationale: parsed.rationale,
-          evidenceCount: 0,
+          evidenceCount: parsed.evidence !== undefined ? 1 : 0,
           priority: 0,
         };
 
@@ -130,7 +130,7 @@ export function registerCkgMutationRoutes(
             state: { type: 'string' },
             proposedBy: { type: 'string' },
             page: { type: 'number' },
-            pageSize: { type: 'number' },
+            pageSize: { type: 'number', minimum: 1, maximum: 200 },
           },
         },
       },

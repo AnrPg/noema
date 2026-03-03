@@ -82,7 +82,7 @@ export function registerPkgOperationLogRoutes(
             edgeId: { type: 'string' },
             since: { type: 'string', format: 'date-time' },
             page: { type: 'number' },
-            pageSize: { type: 'number' },
+            pageSize: { type: 'number', minimum: 1, maximum: 200 },
           },
         },
       },

@@ -253,7 +253,8 @@ export function registerCkgTraversalRoutes(
         const result = await service.findCkgPath(
           query.fromNodeId as NodeId,
           query.toNodeId as NodeId,
-          context
+          context,
+          query.maxDepth
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {

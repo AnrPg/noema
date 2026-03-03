@@ -55,12 +55,18 @@ import type { KgRedisCacheProvider } from './kg-redis-cache.provider.js';
 // ============================================================================
 
 export class CachedGraphRepository implements IGraphRepository {
+  /** Short TTL for mastery-sensitive data (frontier, centrality). */
+  private readonly shortTtl: number;
+
   constructor(
     private readonly inner: IGraphRepository,
     private readonly cache: KgRedisCacheProvider,
     private readonly entityTtl: number,
-    private readonly queryTtl: number
-  ) {}
+    private readonly queryTtl: number,
+    shortTtl = 60
+  ) {
+    this.shortTtl = shortTtl;
+  }
 
   // ==========================================================================
   // Cache key helpers — all keys include userId scope to prevent cross-user
@@ -160,9 +166,10 @@ export class CachedGraphRepository implements IGraphRepository {
     const edge = await this.inner.getEdge(edgeId);
     await this.inner.removeEdge(edgeId);
     if (edge) {
-      // Invalidate for both CKG and per-user scopes (we don't know the user here)
-      await this.cache.delPattern(this.scopedEdgesForNodePattern(edge.sourceNodeId));
-      await this.cache.delPattern(this.scopedEdgesForNodePattern(edge.targetNodeId));
+      // Invalidate for the owning user's scope (or CKG if no userId)
+      const scope = edge.userId ?? undefined;
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(edge.sourceNodeId, scope));
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(edge.targetNodeId, scope));
     }
   }
 
@@ -171,8 +178,10 @@ export class CachedGraphRepository implements IGraphRepository {
     const existingEdge = await this.inner.getEdge(edgeId);
     const updatedEdge = await this.inner.updateEdge(edgeId, updates);
     if (existingEdge) {
-      await this.cache.delPattern(this.scopedEdgesForNodePattern(existingEdge.sourceNodeId));
-      await this.cache.delPattern(this.scopedEdgesForNodePattern(existingEdge.targetNodeId));
+      // Invalidate for the owning user's scope (or CKG if no userId)
+      const scope = existingEdge.userId ?? undefined;
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(existingEdge.sourceNodeId, scope));
+      await this.cache.delPattern(this.scopedEdgesForNodePattern(existingEdge.targetNodeId, scope));
     }
     return updatedEdge;
   }
@@ -187,9 +196,15 @@ export class CachedGraphRepository implements IGraphRepository {
     return this.inner.countEdges(filter);
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
-    return this.cache.getOrLoad(this.scopedEdgesForNodeKey(nodeId, direction), this.queryTtl, () =>
-      this.inner.getEdgesForNode(nodeId, direction)
+  async getEdgesForNode(
+    nodeId: NodeId,
+    direction: EdgeDirection,
+    userId?: string
+  ): Promise<IGraphEdge[]> {
+    return this.cache.getOrLoad(
+      this.scopedEdgesForNodeKey(nodeId, direction, userId),
+      this.queryTtl,
+      () => this.inner.getEdgesForNode(nodeId, direction, userId)
     );
   }
 
@@ -225,9 +240,10 @@ export class CachedGraphRepository implements IGraphRepository {
   async findShortestPath(
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    userId?: string
+    userId?: string,
+    maxDepth?: number
   ): Promise<IGraphNode[]> {
-    return this.inner.findShortestPath(fromNodeId, toNodeId, userId);
+    return this.inner.findShortestPath(fromNodeId, toNodeId, userId, maxDepth);
   }
 
   async findFilteredShortestPath(
@@ -235,14 +251,16 @@ export class CachedGraphRepository implements IGraphRepository {
     toNodeId: NodeId,
     edgeTypeFilter?: readonly GraphEdgeType[],
     nodeTypeFilter?: readonly string[],
-    userId?: string
+    userId?: string,
+    maxDepth?: number
   ): Promise<IGraphNode[]> {
     return this.inner.findFilteredShortestPath(
       fromNodeId,
       toNodeId,
       edgeTypeFilter,
       nodeTypeFilter,
-      userId
+      userId,
+      maxDepth
     );
   }
 
@@ -266,7 +284,7 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<ISiblingsResult> {
     const userKey = userId ?? 'ckg';
-    const cacheKey = `siblings:${userKey}:${nodeId}:${query.edgeType}:${query.direction}`;
+    const cacheKey = `siblings:${userKey}:${nodeId}:${query.edgeType}:${query.direction}:${String(query.includeParentDetails)}:${String(query.maxSiblingsPerGroup)}`;
 
     return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
       this.inner.getSiblings(nodeId, query, userId)
@@ -279,7 +297,7 @@ export class CachedGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<ICoParentsResult> {
     const userKey = userId ?? 'ckg';
-    const cacheKey = `co-parents:${userKey}:${nodeId}:${query.edgeType}:${query.direction}`;
+    const cacheKey = `co-parents:${userKey}:${nodeId}:${query.edgeType}:${query.direction}:${String(query.includeChildDetails)}:${String(query.maxCoParentsPerGroup)}`;
 
     return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
       this.inner.getCoParents(nodeId, query, userId)
@@ -308,9 +326,6 @@ export class CachedGraphRepository implements IGraphRepository {
   }
 
   // Phase 8c: Structural analysis — cached
-
-  /** Short TTL for mastery-sensitive data (60s) */
-  private readonly shortTtl = 60;
 
   async getDomainSubgraph(
     domain: string,
@@ -372,7 +387,7 @@ export class CachedGraphRepository implements IGraphRepository {
         ? [...query.edgeTypes].sort().join(',')
         : 'all';
     const userKey = userId ?? 'ckg';
-    const cacheKey = `centrality-degree:${userKey}:${query.domain}:${etKey}`;
+    const cacheKey = `centrality-degree:${userKey}:${query.domain}:${etKey}:${String(query.topK)}:${String(query.normalise)}`;
 
     return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
       this.inner.getDegreeCentrality(query, userId)

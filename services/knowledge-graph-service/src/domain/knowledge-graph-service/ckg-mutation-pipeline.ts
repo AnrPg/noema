@@ -131,6 +131,9 @@ export interface IPipelineErrorMetrics {
  * repository and use the typestate machine for transition enforcement.
  */
 export class CkgMutationPipeline implements ICkgMutationPipeline {
+  /** Default priority for mutations created via aggregation pipeline. */
+  private static readonly AGGREGATION_DEFAULT_PRIORITY = 10;
+
   /** In-process pipeline error metrics (4.8). */
   private readonly pipelineMetrics: IPipelineErrorMetrics = {
     pipelineSuccessCount: 0,
@@ -266,7 +269,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       return this.mutationRepository.findMutations(filters);
     }
 
-    // No filters — return all (via all non-terminal states)
+    // No filters — return all (via all states in a single query)
     const states: MutationState[] = [
       'proposed',
       'validating',
@@ -278,12 +281,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       'committed',
       'rejected',
     ];
-    const results: ICkgMutation[] = [];
-    for (const state of states) {
-      const batch = await this.mutationRepository.findMutationsByState(state);
-      results.push(...batch);
-    }
-    return results;
+    return this.mutationRepository.findMutationsByStates(states);
   }
 
   /**
@@ -301,12 +299,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       'proven',
       'committing',
     ];
-    const results: ICkgMutation[] = [];
-    for (const state of activeStates) {
-      const batch = await this.mutationRepository.findMutationsByState(state);
-      results.push(...batch);
-    }
-    return results;
+    return this.mutationRepository.findMutationsByStates(activeStates);
   }
 
   /**
@@ -511,7 +504,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       operations,
       rationale,
       evidenceCount,
-      10, // Aggregation mutations get higher default priority
+      CkgMutationPipeline.AGGREGATION_DEFAULT_PRIORITY,
       context
     );
   }
@@ -528,21 +521,20 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     rejectedCount: number;
     stuckCount: number;
   }> {
-    const [proposed, validating, validated, pendingReview, committed, rejected] = await Promise.all(
-      [
+    const [proposed, validating, validated, pendingReview, committed, rejected, proving, proven, committing] =
+      await Promise.all([
         this.mutationRepository.countMutationsByState('proposed'),
         this.mutationRepository.countMutationsByState('validating'),
         this.mutationRepository.countMutationsByState('validated'),
         this.mutationRepository.countMutationsByState('pending_review'),
         this.mutationRepository.countMutationsByState('committed'),
         this.mutationRepository.countMutationsByState('rejected'),
-      ]
-    );
+        this.mutationRepository.countMutationsByState('proving'),
+        this.mutationRepository.countMutationsByState('proven'),
+        this.mutationRepository.countMutationsByState('committing'),
+      ]);
 
     // "Stuck" = in non-terminal non-proposed state (could indicate processing failure)
-    const proving = await this.mutationRepository.countMutationsByState('proving');
-    const proven = await this.mutationRepository.countMutationsByState('proven');
-    const committing = await this.mutationRepository.countMutationsByState('committing');
     const stuckCount = validating + proving + proven + committing;
 
     return {
@@ -597,6 +589,26 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
         },
         'Pipeline processing failed (fire-and-forget)'
       );
+
+      // Durable audit: persist failure so it survives process restarts
+      try {
+        await this.mutationRepository.appendAuditEntry({
+          mutationId,
+          fromState: 'proposed' as MutationState,
+          toState: 'rejected' as MutationState,
+          performedBy: 'system',
+          context: {
+            action: 'pipeline_failure',
+            error: message,
+            correlationId: context.correlationId,
+          },
+        });
+      } catch (auditError: unknown) {
+        this.logger.error(
+          { mutationId, auditError },
+          'Failed to persist pipeline failure audit entry'
+        );
+      }
       // Pipeline errors should not propagate — they're recorded as REJECTED state
     }
   }

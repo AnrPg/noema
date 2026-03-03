@@ -493,13 +493,15 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    // Build pagination clause
+    // Build pagination clause (parameterized for query plan caching)
     let paginationClause = '';
     if (offset !== undefined && offset > 0) {
-      paginationClause += ` SKIP ${String(offset)}`;
+      paginationClause += ' SKIP $paginationOffset';
+      params['paginationOffset'] = neo4j.int(offset);
     }
     if (limit !== undefined) {
-      paginationClause += ` LIMIT ${String(limit)}`;
+      paginationClause += ' LIMIT $paginationLimit';
+      params['paginationLimit'] = neo4j.int(limit);
     }
 
     const session = this.neo4j.getSession();
@@ -527,7 +529,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
     }
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
+  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, _userId?: string): Promise<IGraphEdge[]> {
     const relTypePattern = ALL_REL_TYPES.join('|');
 
     const session = this.neo4j.getSession();
@@ -727,9 +729,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
   async findShortestPath(
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    userId?: string
+    userId?: string,
+    maxDepth?: number
   ): Promise<IGraphNode[]> {
-    return this.findFilteredShortestPath(fromNodeId, toNodeId, undefined, undefined, userId);
+    return this.findFilteredShortestPath(fromNodeId, toNodeId, undefined, undefined, userId, maxDepth);
   }
 
   async findFilteredShortestPath(
@@ -737,10 +740,12 @@ export class Neo4jGraphRepository implements IGraphRepository {
     toNodeId: NodeId,
     edgeTypeFilter?: readonly GraphEdgeType[],
     nodeTypeFilter?: readonly string[],
-    userId?: string
+    userId?: string,
+    maxDepth?: number
   ): Promise<IGraphNode[]> {
     const relPattern = buildRelTypePattern(edgeTypeFilter);
     const params: Record<string, unknown> = { fromNodeId, toNodeId };
+    const depthRange = maxDepth !== undefined ? `*..${String(maxDepth)}` : '*';
 
     if (userId !== undefined) {
       params['userId'] = userId;
@@ -760,7 +765,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const result = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH (from {nodeId: $fromNodeId}), (to {nodeId: $toNodeId})
-           MATCH path = shortestPath((from)-[:${relPattern}*]-(to))
+           MATCH path = shortestPath((from)-[:${relPattern}${depthRange}]-(to))
            WHERE all(x IN nodes(path) WHERE x.isDeleted = false)
            ${nodeFilterClause} ${userClause}
            RETURN [n IN nodes(path) | n] AS pathNodes`,
@@ -816,16 +821,19 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
       // Build node map for edge source/target resolution
       const nodeIdMap = new Map<string, NodeId>();
+      const nodeLabelsMap = new Map<string, string[]>();
       for (const node of nodes) {
         const graphNode = mapNodeToGraphNode(node);
-        nodeIdMap.set(node.identity.toString(), graphNode.nodeId);
+        const identity = node.identity.toString();
+        nodeIdMap.set(identity, graphNode.nodeId);
+        nodeLabelsMap.set(identity, node.labels);
       }
 
       const relMappings = rels.map((rel) => ({
         rel,
         sourceNodeId: nodeIdMap.get(rel.start.toString()) ?? ('' as NodeId),
         targetNodeId: nodeIdMap.get(rel.end.toString()) ?? ('' as NodeId),
-        graphType: inferGraphType(nodes[0]?.labels ?? []),
+        graphType: inferGraphType(nodeLabelsMap.get(rel.start.toString()) ?? []),
       }));
 
       return buildSubgraph(nodes, relMappings, rootNodeId);
@@ -1617,7 +1625,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
   // ==========================================================================
 
   async getDegreeCentrality(query: ICentralityQuery, userId?: string): Promise<ICentralityEntry[]> {
-    const primaryLabel = graphTypeToLabel(query.domain);
+    const primaryLabel = userId !== undefined ? 'PkgNode' : 'CkgNode';
     const relPattern = buildRelTypePattern(query.edgeTypes);
 
     const cypher = `
@@ -1629,9 +1637,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
       WITH n, count(DISTINCT rIn) AS inDeg, count(DISTINCT rOut) AS outDeg
       RETURN n, inDeg, outDeg, (inDeg + outDeg) AS totalDeg
       ORDER BY totalDeg DESC
+      LIMIT $topK
     `;
 
-    const params: Record<string, unknown> = { domain: query.domain };
+    const params: Record<string, unknown> = { domain: query.domain, topK: neo4j.int(query.topK) };
     if (userId !== undefined) {
       params['userId'] = userId;
     }
@@ -2107,6 +2116,15 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
   }
 
   async deleteNode(nodeId: NodeId, userId?: string): Promise<void> {
+    // Soft-delete connected edges first to prevent orphaned references
+    await this.tx.run(
+      `MATCH (n {nodeId: $nodeId, isDeleted: false})-[r]-(m)
+       ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
+       SET r.isDeleted = true, r.deletedAt = $deletedAt, r.updatedAt = $deletedAt`,
+      { nodeId, deletedAt: new Date().toISOString(), ...(userId !== undefined ? { userId } : {}) }
+    );
+
+    // Then soft-delete the node itself
     const result = await this.tx.run(
       `MATCH (n {nodeId: $nodeId, isDeleted: false})
        ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
@@ -2233,7 +2251,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('countEdges is not supported within a transaction context');
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
+  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, _userId?: string): Promise<IGraphEdge[]> {
     const relTypePattern = ALL_REL_TYPES.join('|');
     let query: string;
 

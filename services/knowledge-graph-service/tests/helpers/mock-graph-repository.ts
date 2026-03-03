@@ -382,7 +382,7 @@ export class MockGraphRepository implements IGraphRepository {
     return all.length;
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection): Promise<IGraphEdge[]> {
+  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, _userId?: string): Promise<IGraphEdge[]> {
     const results: IGraphEdge[] = [];
 
     if (direction === 'outbound' || direction === 'both') {
@@ -496,7 +496,8 @@ export class MockGraphRepository implements IGraphRepository {
   async findShortestPath(
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    _userId?: string
+    _userId?: string,
+    _maxDepth?: number
   ): Promise<IGraphNode[]> {
     if (fromNodeId === toNodeId) {
       const node = this.nodes.get(fromNodeId);
@@ -546,7 +547,8 @@ export class MockGraphRepository implements IGraphRepository {
     toNodeId: NodeId,
     edgeTypeFilter?: readonly GraphEdgeType[],
     _nodeTypeFilter?: readonly string[],
-    _userId?: string
+    _userId?: string,
+    _maxDepth?: number
   ): Promise<IGraphNode[]> {
     if (fromNodeId === toNodeId) {
       const node = this.nodes.get(fromNodeId);

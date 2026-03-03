@@ -211,12 +211,14 @@ export interface IKnowledgeGraphService {
 
   /**
    * Find the shortest path between two nodes in the user's PKG.
+   * @param maxDepth Optional maximum path length (hops).
    */
   findPath(
     userId: UserId,
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>>;
 
   /**
@@ -393,7 +395,8 @@ export interface IKnowledgeGraphService {
   findCkgPath(
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>>;
 
   /**

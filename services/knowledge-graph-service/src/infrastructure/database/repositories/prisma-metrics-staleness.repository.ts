@@ -53,7 +53,7 @@ export class PrismaMetricsStalenessRepository implements IMetricsStalenessReposi
       },
     });
 
-    if (!record) return false;
+    if (!record) return true;
 
     return record.lastStructuralChangeAt.getTime() > new Date(lastComputedAt).getTime();
   }

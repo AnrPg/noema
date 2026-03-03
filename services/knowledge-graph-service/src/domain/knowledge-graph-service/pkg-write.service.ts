@@ -699,6 +699,16 @@ export class PkgWriteService {
       throw new UnauthorizedError('Not authorized to delete this edge', userId);
     }
 
+    // Capture source node domain before deletion to avoid race conditions
+    const sourceNode = await this.graphRepository.getNode(existingEdge.sourceNodeId, userId);
+    const domain = sourceNode?.domain ?? 'unknown';
+    if (!sourceNode) {
+      this.logger.warn(
+        { edgeId, sourceNodeId: existingEdge.sourceNodeId },
+        'Source node not found before edge deletion — using fallback domain'
+      );
+    }
+
     // Hard-delete edge (edges have no soft-delete semantics)
     await this.graphRepository.removeEdge(edgeId);
 
@@ -709,11 +719,6 @@ export class PkgWriteService {
       timestamp: new Date().toISOString(),
       edgeId: existingEdge.edgeId,
     };
-
-    const sourceNode = await this.graphRepository.getNode(existingEdge.sourceNodeId, userId);
-    if (!sourceNode) {
-      throw new NodeNotFoundError(existingEdge.sourceNodeId as string);
-    }
 
     await Promise.all([
       this.safeAppendOperation(userId, operation),
@@ -731,7 +736,7 @@ export class PkgWriteService {
           userId: context.userId,
         },
       }),
-      this.markMetricsStale(userId, sourceNode.domain, 'edge_deleted'),
+      this.markMetricsStale(userId, domain, 'edge_deleted'),
     ]);
 
     this.logger.info({ edgeId, edgeType: existingEdge.edgeType }, 'PKG edge deleted');
@@ -739,7 +744,7 @@ export class PkgWriteService {
 
     return {
       data: undefined,
-      agentHints: this.hintsFactory.createDeleteHints('edge', edgeId, sourceNode.domain),
+      agentHints: this.hintsFactory.createDeleteHints('edge', edgeId, domain),
     };
   }
 

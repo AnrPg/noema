@@ -61,6 +61,26 @@ import type {
   ITraversalOptions,
 } from './value-objects/graph.value-objects.js';
 
+// ========================================================================
+// Readiness String Parsing Helpers
+// ========================================================================
+
+/** Parse numerator from "X/Y" readiness string. Returns 0 on malformed input. */
+function parseReadinessNumerator(readiness: string): number {
+  const parts = readiness.split('/');
+  if (parts.length !== 2) return 0;
+  const value = Number(parts[0]);
+  return Number.isFinite(value) ? value : 0;
+}
+
+/** Parse denominator from "X/Y" readiness string. Returns 0 on malformed input. */
+function parseReadinessDenominator(readiness: string): number {
+  const parts = readiness.split('/');
+  if (parts.length !== 2) return 0;
+  const value = Number(parts[1]);
+  return Number.isFinite(value) ? value : 0;
+}
+
 /**
  * Read-only graph operations sub-service.
  *
@@ -97,7 +117,7 @@ export class GraphReadService {
         throw new NodeNotFoundError(nodeId, GraphType.CKG);
       }
     } else {
-      if (!node) {
+      if (!node || node.graphType !== GraphType.PKG) {
         throw new NodeNotFoundError(nodeId, graphType);
       }
     }
@@ -142,11 +162,12 @@ export class GraphReadService {
     context: IExecutionContext,
     label: string,
     graphType: GraphType,
-    userId?: string
+    userId?: string,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>> {
     requireAuth(context);
     this.logger.debug(
-      { ...(userId !== undefined ? { userId } : {}), fromNodeId, toNodeId },
+      { ...(userId !== undefined ? { userId } : {}), fromNodeId, toNodeId, maxDepth },
       `Finding path in ${label}`
     );
 
@@ -167,7 +188,7 @@ export class GraphReadService {
       if (!toNode) throw new NodeNotFoundError(toNodeId, GraphType.PKG);
     }
 
-    const path = await this.graphRepository.findShortestPath(fromNodeId, toNodeId, userId);
+    const path = await this.graphRepository.findShortestPath(fromNodeId, toNodeId, userId, maxDepth);
 
     return {
       data: path,
@@ -542,9 +563,10 @@ export class GraphReadService {
     userId: UserId,
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>> {
-    return this.doFindPath(fromNodeId, toNodeId, context, 'PKG', GraphType.PKG, userId);
+    return this.doFindPath(fromNodeId, toNodeId, context, 'PKG', GraphType.PKG, userId, maxDepth);
   }
 
   getSiblings(
@@ -611,9 +633,9 @@ export class GraphReadService {
     if (query.sortBy === 'centrality') {
       // Sort by prerequisite count descending (proxy for centrality)
       const sorted = [...result.frontier].sort((a, b) => {
-        const [aTotal] = a.prerequisiteReadiness.split('/').map(Number);
-        const [bTotal] = b.prerequisiteReadiness.split('/').map(Number);
-        return (bTotal ?? 0) - (aTotal ?? 0);
+        const aTotal = parseReadinessNumerator(a.prerequisiteReadiness);
+        const bTotal = parseReadinessNumerator(b.prerequisiteReadiness);
+        return bTotal - aTotal;
       });
       const resorted: IKnowledgeFrontierResult = {
         ...result,
@@ -628,10 +650,8 @@ export class GraphReadService {
     if (query.sortBy === 'depth') {
       // Sort by number of prerequisites ascending (shallower concepts first)
       const sorted = [...result.frontier].sort((a, b) => {
-        const aParts = a.prerequisiteReadiness.split('/');
-        const bParts = b.prerequisiteReadiness.split('/');
-        const aTotal = Number(aParts[1] ?? 0);
-        const bTotal = Number(bParts[1] ?? 0);
+        const aTotal = parseReadinessDenominator(a.prerequisiteReadiness);
+        const bTotal = parseReadinessDenominator(b.prerequisiteReadiness);
         return aTotal - bTotal;
       });
       const resorted: IKnowledgeFrontierResult = {
@@ -835,15 +855,17 @@ export class GraphReadService {
       ...(filters.targetNodeId !== undefined ? { targetNodeId: filters.targetNodeId } : {}),
     };
 
-    // Fetch limit+1 to know if there are more results without a separate count query
-    const edges = await this.graphRepository.findEdges(ckgFilter, limit + 1, offset);
+    // Fetch edges and total count in parallel for accurate pagination
+    const [edges, total] = await Promise.all([
+      this.graphRepository.findEdges(ckgFilter, limit, offset),
+      this.graphRepository.countEdges(ckgFilter),
+    ]);
 
-    const hasMore = edges.length > limit;
-    const paginatedEdges = hasMore ? edges.slice(0, limit) : edges;
+    const hasMore = offset + edges.length < total;
 
     const result: IPaginatedResponse<IGraphEdge> = {
-      items: paginatedEdges,
-      total: offset + edges.length,
+      items: edges,
+      total,
       hasMore,
     };
 
@@ -851,7 +873,7 @@ export class GraphReadService {
       data: result,
       agentHints: this.hintsFactory.createListHints(
         'CKG edges',
-        paginatedEdges.length,
+        edges.length,
         result.total ?? 0
       ),
     };
@@ -880,9 +902,10 @@ export class GraphReadService {
   findCkgPath(
     fromNodeId: NodeId,
     toNodeId: NodeId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>> {
-    return this.doFindPath(fromNodeId, toNodeId, context, 'CKG', GraphType.CKG);
+    return this.doFindPath(fromNodeId, toNodeId, context, 'CKG', GraphType.CKG, undefined, maxDepth);
   }
 
   getCkgSiblings(

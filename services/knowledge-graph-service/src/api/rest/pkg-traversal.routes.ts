@@ -283,7 +283,8 @@ export function registerPkgTraversalRoutes(
           userId as UserId,
           query.fromNodeId as NodeId,
           query.toNodeId as NodeId,
-          context
+          context,
+          query.maxDepth
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {

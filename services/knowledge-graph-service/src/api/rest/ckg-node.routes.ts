@@ -57,7 +57,7 @@ export function registerCkgNodeRoutes(
             domain: { type: 'string' },
             search: { type: 'string' },
             page: { type: 'number' },
-            pageSize: { type: 'number' },
+            pageSize: { type: 'number', minimum: 1, maximum: 200 },
             sortBy: { type: 'string', enum: ['label', 'createdAt', 'updatedAt'] },
             sortOrder: { type: 'string', enum: ['asc', 'desc'] },
           },

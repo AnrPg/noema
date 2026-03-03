@@ -10,7 +10,7 @@
 
 import type { IGraphEdge, IGraphNode, IStructuralMetrics } from '@noema/types';
 
-import { ValidationError } from './errors/base.errors.js';
+import { UnauthorizedError, ValidationError } from './errors/base.errors.js';
 import type { IExecutionContext } from './execution-context.js';
 import type { IUpdateEdgeInput, IUpdateNodeInput } from './graph.repository.js';
 import { SIGNIFICANT_CHANGE_THRESHOLD } from './policies/analysis-thresholds.js';
@@ -34,9 +34,10 @@ export const MAX_PAGE_SIZE = 200;
  */
 export function requireAuth(context: IExecutionContext): void {
   if (!context.userId) {
-    throw new ValidationError('Authentication required', {
-      userId: ['Must be authenticated to access knowledge graph operations'],
-    });
+    throw new UnauthorizedError(
+      'Authentication required: must be authenticated to access knowledge graph operations',
+      undefined
+    );
   }
 }
 

@@ -25,7 +25,8 @@ function hasRequiredScopes(
   user: IScopeUser | undefined,
   requirement: { match: 'all' | 'any'; requiredScopes: string[] }
 ): boolean {
-  if (process.env['AUTH_DISABLED'] === 'true') return true;
+  if (process.env['NODE_ENV'] !== 'production' && process.env['AUTH_DISABLED'] === 'true')
+    return true;
   const granted = new Set(user?.scopes ?? []);
   if (user?.roles?.includes('admin') === true) return true;
   if (requirement.requiredScopes.length === 0) return true;

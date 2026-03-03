@@ -73,7 +73,7 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
     const id = generateLogId();
     const { nodeIds, edgeIds } = extractAffectedIds(operation);
 
-    // Get next sequence number for this user (atomic via transaction)
+    // Get next sequence number for this user (atomic via serializable transaction)
     const record = await this.prisma.$transaction(async (tx) => {
       // Find current max sequence number for this user
       const latest = await tx.pkgOperationLog.findFirst({
@@ -95,7 +95,7 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
           affectedEdgeIds: edgeIds,
         },
       });
-    });
+    }, { isolationLevel: 'Serializable' });
 
     return this.toDomain(record);
   }
