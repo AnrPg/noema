@@ -71,7 +71,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         keywords: ['graph', 'kg', 'knowledge'],
         category: 'Navigation',
         action: () => {
-          router.push('/knowledge' as never);
+          router.push('/knowledge' as never); // route pending Phase 04
         },
       },
       {
@@ -80,7 +80,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         keywords: ['study', 'session', 'cards'],
         category: 'Navigation',
         action: () => {
-          router.push('/learning' as never);
+          router.push('/learning' as never); // route pending Phase 04
         },
       },
       {
@@ -89,7 +89,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         keywords: ['flashcard', 'deck'],
         category: 'Navigation',
         action: () => {
-          router.push('/cards' as never);
+          router.push('/cards' as never); // route pending Phase 04
         },
       },
       {
@@ -117,7 +117,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         keywords: ['review', 'study', 'start', 'begin'],
         category: 'Actions',
         action: () => {
-          router.push('/learning/new' as never);
+          router.push('/learning/new' as never); // route pending Phase 04
         },
       },
       {
@@ -126,7 +126,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         keywords: ['add', 'new card', 'flashcard'],
         category: 'Actions',
         action: () => {
-          router.push('/cards/new' as never);
+          router.push('/cards/new' as never); // route pending Phase 04
         },
       },
       {
@@ -135,7 +135,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         keywords: ['analyze', 'check', 'detect'],
         category: 'Actions',
         action: () => {
-          router.push('/knowledge/misconceptions' as never);
+          router.push('/knowledge/misconceptions' as never); // route pending Phase 04
         },
       },
     ],
