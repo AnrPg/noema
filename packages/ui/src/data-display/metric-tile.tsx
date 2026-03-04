@@ -65,7 +65,7 @@ function Sparkline({
     .join(' ');
 
   return (
-    <svg width={W} height={H} aria-hidden="true">
+    <svg width={W} height={H} overflow="visible" aria-hidden="true">
       <polyline
         points={points}
         fill="none"
