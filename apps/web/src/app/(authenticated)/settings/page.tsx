@@ -32,7 +32,8 @@ import {
   useTheme,
 } from '@noema/ui';
 import { Moon, Sun, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { toast } from '@/hooks/use-toast';
@@ -126,6 +127,15 @@ function AppearanceSection(): React.JSX.Element {
 function StudyPreferencesSection(): React.JSX.Element {
   const { data: settings, isLoading } = useMySettings();
   const updateSettings = useUpdateSettings();
+  // Controlled local state so the slider label stays in sync after re-fetches
+  const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoal ?? 20);
+
+  // Sync controlled value when server data arrives or cache updates
+  useEffect(() => {
+    if (settings !== undefined) {
+      setDailyGoal(settings.dailyGoal);
+    }
+  }, [settings]);
 
   const handleDailyGoalChange = async (value: number): Promise<void> => {
     try {
@@ -171,7 +181,7 @@ function StudyPreferencesSection(): React.JSX.Element {
                   <p className="text-sm font-medium">Daily goal</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Cards to review per day:{' '}
-                    <span className="font-mono font-medium">{settings?.dailyGoal ?? 20}</span>
+                    <span className="font-mono font-medium">{dailyGoal}</span>
                   </p>
                 </div>
               </div>
@@ -179,8 +189,12 @@ function StudyPreferencesSection(): React.JSX.Element {
                 type="range"
                 min={1}
                 max={100}
-                defaultValue={settings?.dailyGoal ?? 20}
-                className="w-full accent-primary"
+                value={dailyGoal}
+                disabled={updateSettings.isPending}
+                className="w-full accent-primary disabled:opacity-50"
+                onChange={(e) => {
+                  setDailyGoal(Number(e.target.value));
+                }}
                 onMouseUp={(e) => {
                   void handleDailyGoalChange(Number((e.target as HTMLInputElement).value));
                 }}
@@ -205,10 +219,11 @@ function StudyPreferencesSection(): React.JSX.Element {
                 type="button"
                 role="switch"
                 aria-checked={settings?.studyReminders ?? false}
+                disabled={updateSettings.isPending}
                 onClick={() => {
                   void handleToggle('studyReminders', !(settings?.studyReminders ?? false));
                 }}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 ${
                   (settings?.studyReminders ?? false) ? 'bg-primary' : 'bg-input'
                 }`}
               >
@@ -291,10 +306,11 @@ function NotificationsSection(): React.JSX.Element {
                   type="button"
                   role="switch"
                   aria-checked={settings?.[item.key] ?? false}
+                  disabled={updateSettings.isPending}
                   onClick={() => {
                     void handleToggle(item.key, !(settings?.[item.key] ?? false));
                   }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 ${
                     (settings?.[item.key] ?? false) ? 'bg-primary' : 'bg-input'
                   }`}
                 >
@@ -378,10 +394,11 @@ function AccessibilitySection(): React.JSX.Element {
                   type="button"
                   role="switch"
                   aria-checked={settings?.[item.key] ?? false}
+                  disabled={updateSettings.isPending}
                   onClick={() => {
                     void handleToggle(item.key, !(settings?.[item.key] ?? false));
                   }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 ${
                     (settings?.[item.key] ?? false) ? 'bg-primary' : 'bg-input'
                   }`}
                 >
@@ -418,13 +435,15 @@ function ChangePasswordSection(): React.JSX.Element {
   });
 
   const onSubmit = async (data: PasswordFormData): Promise<void> => {
+    // user is always defined on an authenticated route; guard satisfies type safety
+    if (user === null) return;
     try {
       await changePassword.mutateAsync({
         data: {
           currentPassword: data.currentPassword,
           newPassword: data.newPassword,
         },
-        version: user?.version ?? 0,
+        version: user.version,
       });
       toast.success('Password changed successfully.');
       reset();
@@ -485,6 +504,7 @@ function ChangePasswordSection(): React.JSX.Element {
 function DeleteAccountSection(): React.JSX.Element {
   const { user, logout } = useAuth();
   const deleteAccount = useDeleteAccount();
+  const router = useRouter();
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmUsername, setConfirmUsername] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -498,6 +518,7 @@ function DeleteAccountSection(): React.JSX.Element {
       setIsDeleting(true);
       await deleteAccount.mutateAsync();
       await logout();
+      router.push('/login');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Account deletion failed.');
       setIsDeleting(false);
