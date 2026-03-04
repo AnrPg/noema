@@ -22,6 +22,14 @@
       "types": "./dist/layouts/index.d.ts",
       "import": "./dist/layouts/index.js"
     },
+    "./data-display": {
+      "types": "./dist/data-display/index.d.ts",
+      "import": "./dist/data-display/index.js"
+    },
+    "./feedback": {
+      "types": "./dist/feedback/index.d.ts",
+      "import": "./dist/feedback/index.js"
+    },
     "./styles.css": "./dist/styles.css",
     "./tailwind.config": "./tailwind.config.cjs"
   },
