@@ -3,4 +3,4 @@
  */
 
 export * from './api.js';
-export * from './types.js';
+export type * from './types.js';

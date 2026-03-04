@@ -34,6 +34,10 @@ export default tseslint.config(
       'eslint.config.mjs',
       // Vitest test setup files (not part of src build, not linted)
       'packages/ui/src/test/**',
+      // Stale compiled artifacts that tsc may emit into src/ instead of dist/
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.d.ts',
+      'packages/*/src/**/*.map',
     ],
   },
 

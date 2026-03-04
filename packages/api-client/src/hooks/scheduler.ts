@@ -85,7 +85,7 @@ export function useSchedulerCard(
   return useQuery({
     queryKey: schedulerKeys.card(cardId),
     queryFn: () => schedulerCardsApi.getCard(cardId),
-    enabled: !!cardId,
+    enabled: cardId !== '',
     ...options,
   });
 }

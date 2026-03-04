@@ -27,7 +27,7 @@ import type {
   UserResponse,
   UserSettingsDto,
   UserSettingsResponse,
-  UsersListResponse
+  UsersListResponse,
 } from '../user/types.js';
 
 // ============================================================================
@@ -49,9 +49,7 @@ export const userKeys = {
 // Auth Hooks
 // ============================================================================
 
-export function useLogin(
-  options?: UseMutationOptions<AuthResponse, Error, LoginInput>
-) {
+export function useLogin(options?: UseMutationOptions<AuthResponse, Error, LoginInput>) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -64,9 +62,7 @@ export function useLogin(
   });
 }
 
-export function useRegister(
-  options?: UseMutationOptions<AuthResponse, Error, RegisterInput>
-) {
+export function useRegister(options?: UseMutationOptions<AuthResponse, Error, RegisterInput>) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -92,9 +88,7 @@ export function useLogout(options?: UseMutationOptions<void>) {
   });
 }
 
-export function useRefreshToken(
-  options?: UseMutationOptions<TokenRefreshResponse, Error, string>
-) {
+export function useRefreshToken(options?: UseMutationOptions<TokenRefreshResponse, Error, string>) {
   return useMutation({
     mutationFn: authApi.refresh,
     ...options,
@@ -118,7 +112,10 @@ export function useMe(
 }
 
 export function useMySettings(
-  options?: Omit<UseQueryOptions<UserSettingsResponse, Error, UserSettingsDto>, 'queryKey' | 'queryFn'>
+  options?: Omit<
+    UseQueryOptions<UserSettingsResponse, Error, UserSettingsDto>,
+    'queryKey' | 'queryFn'
+  >
 ) {
   return useQuery({
     queryKey: userKeys.meSettings(),
@@ -144,7 +141,11 @@ export function useUpdateProfile(
 }
 
 export function useUpdateSettings(
-  options?: UseMutationOptions<UserSettingsResponse, Error, { data: UpdateSettingsInput; version: number }>
+  options?: UseMutationOptions<
+    UserSettingsResponse,
+    Error,
+    { data: UpdateSettingsInput; version: number }
+  >
 ) {
   const queryClient = useQueryClient();
 
@@ -179,9 +180,7 @@ export function useDeleteAccount(options?: UseMutationOptions<void>) {
   });
 }
 
-export function useMyProgress(
-  options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>
-) {
+export function useMyProgress(options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>) {
   // Placeholder for future learning progress API
   return useQuery({
     queryKey: ['me', 'progress'],
@@ -214,7 +213,7 @@ export function useUser(
     queryKey: userKeys.detail(id),
     queryFn: () => usersApi.getById(id),
     select: (response) => response.data,
-    enabled: !!id,
+    enabled: id !== '',
     ...options,
   });
 }
@@ -229,8 +228,9 @@ export function usePublicProfile(
 ) {
   return useQuery({
     queryKey: userKeys.publicProfile(username),
+    // eslint-disable-next-line @typescript-eslint/no-deprecated
     queryFn: () => usersApi.getPublicProfile(username),
-    enabled: !!username,
+    enabled: username !== '',
     ...options,
   });
 }
@@ -243,7 +243,7 @@ export function useDeleteUser(
   return useMutation({
     mutationFn: ({ id, soft }) => usersApi.delete(id, soft),
     onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+      void queryClient.invalidateQueries({ queryKey: userKeys.lists() });
       queryClient.removeQueries({ queryKey: userKeys.detail(id) });
     },
     ...options,
@@ -252,7 +252,9 @@ export function useDeleteUser(
 
 // Scheduler Service Hooks
 export {
-  schedulerKeys, usePredictRetention, useReviewQueue, useSchedulerCard,
-  useSchedulerCards
+  schedulerKeys,
+  usePredictRetention,
+  useReviewQueue,
+  useSchedulerCard,
+  useSchedulerCards,
 } from './scheduler.js';
-

@@ -8,36 +8,42 @@
 // Types
 // ============================================================================
 
-export interface RequestConfig extends Omit<RequestInit, 'body'> {
+export interface IRequestConfig extends Omit<RequestInit, 'body'> {
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
   timeout?: number;
+  baseUrl?: string; // Override global base URL (e.g. for HLR sidecar)
 }
 
-export interface ApiClientConfig {
+export interface IApiClientConfig {
   baseUrl: string;
   credentials?: RequestCredentials;
   onUnauthorized?: () => void;
-  onError?: (error: ApiError) => void;
+  onError?: (error: IApiError) => void;
   getAccessToken?: () => string | null;
 }
 
-export interface ApiError extends Error {
+export interface IApiError extends Error {
   status: number;
   code: string;
   fieldErrors?: Record<string, string[]> | undefined;
   details?: unknown;
 }
 
+// Backward-compatible aliases (used by index.ts re-exports)
+export type RequestConfig = IRequestConfig;
+export type ApiClientConfig = IApiClientConfig;
+export type ApiError = IApiError;
+
 // ============================================================================
 // Error Class
 // ============================================================================
 
-export class ApiRequestError extends Error implements ApiError {
+export class ApiRequestError extends Error implements IApiError {
   status: number;
   code: string;
   fieldErrors: Record<string, string[]> | undefined;
-  details: unknown | undefined;
+  details: unknown;
 
   constructor(
     message: string,
@@ -59,20 +65,20 @@ export class ApiRequestError extends Error implements ApiError {
 // Client Factory
 // ============================================================================
 
-let globalConfig: ApiClientConfig | null = null;
+let globalConfig: IApiClientConfig | null = null;
 
 /**
  * Configure the global API client.
  * Must be called before making any API requests.
  */
-export function configureApiClient(config: ApiClientConfig): void {
+export function configureApiClient(config: IApiClientConfig): void {
   globalConfig = config;
 }
 
 /**
  * Get the current API client configuration.
  */
-export function getApiConfig(): ApiClientConfig {
+export function getApiConfig(): IApiClientConfig {
   if (!globalConfig) {
     throw new Error('API client not configured. Call configureApiClient() first.');
   }
@@ -85,14 +91,15 @@ export function getApiConfig(): ApiClientConfig {
 
 function buildUrl(
   path: string,
-  params?: Record<string, string | number | boolean | undefined>
+  params?: Record<string, string | number | boolean | undefined>,
+  overrideBaseUrl?: string
 ): string {
   const config = getApiConfig();
 
   // Support path-prefixed base URLs (e.g., 'http://localhost:8080/api').
   // new URL(absolutePath, baseWithPath) discards the base URL's path component,
   // so we concatenate base + path manually to preserve the prefix.
-  const base = config.baseUrl.replace(/\/+$/, '');
+  const base = (overrideBaseUrl ?? config.baseUrl).replace(/\/+$/, '');
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const url = new URL(`${base}${normalizedPath}`);
 
@@ -137,23 +144,23 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
 export async function request<T>(
   method: string,
   path: string,
-  config: RequestConfig = {}
+  config: IRequestConfig = {}
 ): Promise<T> {
   const apiConfig = getApiConfig();
-  const { body, params, timeout = 30000, ...init } = config;
+  const { body, params, timeout = 30000, baseUrl: overrideBaseUrl, ...init } = config;
 
-  const url = buildUrl(path, params);
+  const url = buildUrl(path, params, overrideBaseUrl);
 
   const headers = new Headers(init.headers);
 
   // Set default content type for JSON
-  if (body && !headers.has('Content-Type')) {
+  if (body !== undefined && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
   // Add auth token if available
   const token = apiConfig.getAccessToken?.();
-  if (token && !headers.has('Authorization')) {
+  if (token !== null && token !== undefined && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
@@ -194,11 +201,11 @@ export async function request<T>(
 
     // Handle empty responses
     const contentType = response.headers.get('Content-Type');
-    if (response.status === 204 || !contentType?.includes('application/json')) {
+    if (response.status === 204 || contentType?.includes('application/json') !== true) {
       return undefined as T;
     }
 
-    return response.json() as Promise<T>;
+    return await (response.json() as Promise<T>);
   } catch (error) {
     clearTimeout(timeoutId);
 
@@ -223,16 +230,17 @@ export async function request<T>(
 // ============================================================================
 
 export const http = {
-  get: <T>(path: string, config?: RequestConfig) => request<T>('GET', path, config),
+  get: <T>(path: string, config?: IRequestConfig): Promise<T> => request<T>('GET', path, config),
 
-  post: <T>(path: string, body?: unknown, config?: RequestConfig) =>
+  post: <T>(path: string, body?: unknown, config?: IRequestConfig): Promise<T> =>
     request<T>('POST', path, { ...config, body }),
 
-  put: <T>(path: string, body?: unknown, config?: RequestConfig) =>
+  put: <T>(path: string, body?: unknown, config?: IRequestConfig): Promise<T> =>
     request<T>('PUT', path, { ...config, body }),
 
-  patch: <T>(path: string, body?: unknown, config?: RequestConfig) =>
+  patch: <T>(path: string, body?: unknown, config?: IRequestConfig): Promise<T> =>
     request<T>('PATCH', path, { ...config, body }),
 
-  delete: <T>(path: string, config?: RequestConfig) => request<T>('DELETE', path, config),
+  delete: <T>(path: string, config?: IRequestConfig): Promise<T> =>
+    request<T>('DELETE', path, config),
 };

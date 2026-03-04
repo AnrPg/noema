@@ -11,13 +11,13 @@ import type { UserId } from '@noema/types';
 // Auth Types
 // ============================================================================
 
-export interface LoginInput {
+export interface ILoginInput {
   identifier: string;
   password: string;
   mfaCode?: string;
 }
 
-export interface RegisterInput {
+export interface IRegisterInput {
   username: string;
   email: string;
   password: string;
@@ -27,15 +27,15 @@ export interface RegisterInput {
   country: string;
 }
 
-export interface TokenPair {
+export interface ITokenPair {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
 }
 
-export interface AuthResult {
-  user: UserDto;
-  tokens: TokenPair;
+export interface IAuthResult {
+  user: IUserDto;
+  tokens: ITokenPair;
 }
 
 // ============================================================================
@@ -45,7 +45,7 @@ export interface AuthResult {
 export type UserStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DEACTIVATED';
 export type UserRole = 'user' | 'admin' | 'moderator';
 
-export interface UserDto {
+export interface IUserDto {
   id: UserId;
   username: string;
   email: string;
@@ -64,7 +64,7 @@ export interface UserDto {
   version: number;
 }
 
-export interface PublicUserDto {
+export interface IPublicUserDto {
   id: UserId;
   username: string;
   displayName: string;
@@ -73,7 +73,7 @@ export interface PublicUserDto {
   createdAt: string;
 }
 
-export interface UserSettingsDto {
+export interface IUserSettingsDto {
   userId: UserId;
   theme: 'light' | 'dark' | 'system';
   emailNotifications: boolean;
@@ -90,7 +90,7 @@ export interface UserSettingsDto {
 // Update Types
 // ============================================================================
 
-export interface UpdateProfileInput {
+export interface IUpdateProfileInput {
   displayName?: string;
   bio?: string | null;
   avatarUrl?: string | null;
@@ -99,7 +99,7 @@ export interface UpdateProfileInput {
   country?: string | null;
 }
 
-export interface UpdateSettingsInput {
+export interface IUpdateSettingsInput {
   theme?: 'light' | 'dark' | 'system';
   emailNotifications?: boolean;
   pushNotifications?: boolean;
@@ -110,7 +110,7 @@ export interface UpdateSettingsInput {
   hapticEnabled?: boolean;
 }
 
-export interface ChangePasswordInput {
+export interface IChangePasswordInput {
   currentPassword: string;
   newPassword: string;
 }
@@ -119,14 +119,14 @@ export interface ChangePasswordInput {
 // List Types
 // ============================================================================
 
-export interface UserFilters {
+export interface IUserFilters {
   status?: UserStatus;
   emailVerified?: boolean;
   search?: string;
 }
 
-export interface PaginatedUsersResult {
-  items: UserDto[];
+export interface IPaginatedUsersResult {
+  items: IUserDto[];
   total?: number;
   hasMore: boolean;
 }
@@ -135,9 +135,26 @@ export interface PaginatedUsersResult {
 // Response Types (with API wrapper)
 // ============================================================================
 
-export type AuthResponse = IApiResponse<AuthResult>;
-export type UserResponse = IApiResponse<UserDto>;
-export type PublicUserResponse = IApiResponse<PublicUserDto>;
-export type UserSettingsResponse = IApiResponse<UserSettingsDto>;
-export type UsersListResponse = IApiResponse<PaginatedUsersResult>;
-export type TokenRefreshResponse = IApiResponse<TokenPair>;
+export type AuthResponse = IApiResponse<IAuthResult>;
+export type UserResponse = IApiResponse<IUserDto>;
+export type PublicUserResponse = IApiResponse<IPublicUserDto>;
+export type UserSettingsResponse = IApiResponse<IUserSettingsDto>;
+export type UsersListResponse = IApiResponse<IPaginatedUsersResult>;
+export type TokenRefreshResponse = IApiResponse<ITokenPair>;
+
+// ============================================================================
+// Backward-compat aliases (for consumers using the un-prefixed names)
+// ============================================================================
+
+export type LoginInput = ILoginInput;
+export type RegisterInput = IRegisterInput;
+export type TokenPair = ITokenPair;
+export type AuthResult = IAuthResult;
+export type UserDto = IUserDto;
+export type PublicUserDto = IPublicUserDto;
+export type UserSettingsDto = IUserSettingsDto;
+export type UpdateProfileInput = IUpdateProfileInput;
+export type UpdateSettingsInput = IUpdateSettingsInput;
+export type ChangePasswordInput = IChangePasswordInput;
+export type UserFilters = IUserFilters;
+export type PaginatedUsersResult = IPaginatedUsersResult;

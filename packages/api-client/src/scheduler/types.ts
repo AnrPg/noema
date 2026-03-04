@@ -8,7 +8,7 @@
 // Common
 // ============================================================================
 
-export interface SchedulerPolicyVersion {
+export interface ISchedulerPolicyVersion {
   version: string;
 }
 
@@ -16,13 +16,13 @@ export interface SchedulerPolicyVersion {
 // Review Queue (H5)
 // ============================================================================
 
-export interface ReviewQueueParams {
+export interface IReviewQueueParams {
   lane?: 'retention' | 'calibration';
   limit?: number;
   asOf?: string;
 }
 
-export interface ReviewQueueCard {
+export interface IReviewQueueCard {
   cardId: string;
   userId: string;
   lane: 'retention' | 'calibration';
@@ -36,31 +36,31 @@ export interface ReviewQueueCard {
   state: string;
 }
 
-export interface ReviewQueueResponse {
-  cards: ReviewQueueCard[];
+export interface IReviewQueueResponse {
+  cards: IReviewQueueCard[];
   totalDue: number;
   retentionDue: number;
   calibrationDue: number;
   asOf: string;
-  policyVersion: SchedulerPolicyVersion;
+  policyVersion: ISchedulerPolicyVersion;
 }
 
 // ============================================================================
 // Retention Prediction (H6)
 // ============================================================================
 
-export interface RetentionPredictionRequest {
+export interface IRetentionPredictionRequest {
   cardId: string;
   algorithm: 'fsrs' | 'hlr' | 'sm2';
   asOf?: string;
 }
 
-export interface PredictRetentionInput {
+export interface IPredictRetentionInput {
   userId: string;
-  cards: RetentionPredictionRequest[];
+  cards: IRetentionPredictionRequest[];
 }
 
-export interface RetentionPrediction {
+export interface IRetentionPrediction {
   cardId: string;
   algorithm: string;
   retentionProbability: number;
@@ -69,21 +69,21 @@ export interface RetentionPrediction {
   confidence: number;
 }
 
-export interface RetentionPredictionResponse {
-  predictions: RetentionPrediction[];
+export interface IRetentionPredictionResponse {
+  predictions: IRetentionPrediction[];
   generatedAt: string;
-  policyVersion: SchedulerPolicyVersion;
+  policyVersion: ISchedulerPolicyVersion;
 }
 
 // ============================================================================
 // Scheduler Card
 // ============================================================================
 
-export interface SchedulerCardResponse {
-  card: ReviewQueueCard;
+export interface ISchedulerCardResponse {
+  card: IReviewQueueCard;
 }
 
-export interface SchedulerCardListParams {
+export interface ISchedulerCardListParams {
   userId: string;
   lane?: string;
   state?: string;
@@ -96,8 +96,8 @@ export interface SchedulerCardListParams {
   sortOrder?: 'asc' | 'desc';
 }
 
-export interface SchedulerCardListResponse {
-  data: ReviewQueueCard[];
+export interface ISchedulerCardListResponse {
+  data: IReviewQueueCard[];
   pagination: {
     offset: number;
     limit: number;
@@ -105,3 +105,19 @@ export interface SchedulerCardListResponse {
     hasMore: boolean;
   };
 }
+
+// ============================================================================
+// Backward-compat aliases
+// ============================================================================
+
+export type SchedulerPolicyVersion = ISchedulerPolicyVersion;
+export type ReviewQueueParams = IReviewQueueParams;
+export type ReviewQueueCard = IReviewQueueCard;
+export type ReviewQueueResponse = IReviewQueueResponse;
+export type RetentionPredictionRequest = IRetentionPredictionRequest;
+export type PredictRetentionInput = IPredictRetentionInput;
+export type RetentionPrediction = IRetentionPrediction;
+export type RetentionPredictionResponse = IRetentionPredictionResponse;
+export type SchedulerCardResponse = ISchedulerCardResponse;
+export type SchedulerCardListParams = ISchedulerCardListParams;
+export type SchedulerCardListResponse = ISchedulerCardListResponse;
