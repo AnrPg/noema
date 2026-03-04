@@ -32,6 +32,8 @@ export default tseslint.config(
       'services/vector-service/**',
       // Config files at root level
       'eslint.config.mjs',
+      // Vitest test setup files (not part of src build, not linted)
+      'packages/ui/src/test/**',
     ],
   },
 
@@ -47,7 +49,13 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['*.config.cjs', '*.config.mjs', 'packages/*/tailwind.config.cjs'],
+          allowDefaultProject: [
+            '*.config.cjs',
+            '*.config.mjs',
+            'packages/*/tailwind.config.cjs',
+            'packages/ui/src/lib/*.test.ts',
+            'packages/ui/src/lib/*.test.tsx',
+          ],
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -155,6 +163,10 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-dynamic-delete': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
       'no-console': 'off',
     },
   },

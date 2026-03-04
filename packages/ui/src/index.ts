@@ -15,3 +15,14 @@ export * from './forms/index.js';
 
 // Layouts
 export * from './layouts/index.js';
+
+// Theme
+export { ThemeProvider, useTheme } from './lib/theme.js';
+export type {
+  Theme,
+  ResolvedTheme,
+  IThemeContextValue,
+  IThemeProviderProps,
+  ThemeContextValue,
+  ThemeProviderProps,
+} from './lib/theme.js';
