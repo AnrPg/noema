@@ -1,7 +1,8 @@
 # Comprehensive Cross-Service Audit
 
-**Date:** 2025-01-XX **Scope:** All services, shared packages, frontend apps
-**Methodology:** Automated sub-agent audits per service + manual cross-reference
+**Date:** 2025-01-XX (updated 2026-03-04) **Scope:** All services, shared
+packages, frontend apps **Methodology:** Automated sub-agent audits per service +
+manual cross-reference
 
 ---
 
@@ -22,21 +23,21 @@
 
 ## CRITICAL Findings (10)
 
-### C1 — @noema/types: `TemplateId` Missing Factory Object
+### C1 — @noema/types: `TemplateId` Missing Factory Object — **RESOLVED** (`39db93c`)
 
 - **File:** `packages/types/src/branded-ids/index.ts`
 - **Impact:** No runtime `TemplateId.create()` / `TemplateId.isValid()` /
   `TemplateId.prefix` — consumers must cast manually
 - **Fix:** Add factory object after `AgentId` factory
 
-### C2 — @noema/types: `TemplateId` Missing From `AnyBrandedId` Union
+### C2 — @noema/types: `TemplateId` Missing From `AnyBrandedId` Union — **RESOLVED** (`39db93c`)
 
 - **File:** `packages/types/src/branded-ids/index.ts` L474-507
 - **Impact:** Generic ID handling (serialization, validation) silently skips
   TemplateId
 - **Fix:** Add `| TemplateId` to union
 
-### C3–C5 — KG-Service: `revision_requested` Omitted From 3 Query Methods
+### C3–C5 — KG-Service: `revision_requested` Omitted From 3 Query Methods — **RESOLVED** (`39db93c`)
 
 - **File:**
   `services/knowledge-graph-service/src/domain/knowledge-graph-service/ckg-mutation-pipeline.ts`
@@ -47,7 +48,7 @@
 - **Fix:** Add `'revision_requested'` to state arrays; add count in health
   metrics
 
-### C6 — Session-Service: `expiresAt` on `never` — Closure Mutation Not Narrowed
+### C6 — Session-Service: `expiresAt` on `never` — Closure Mutation Not Narrowed — **RESOLVED** (`39db93c`)
 
 - **File:**
   `services/session-service/src/domain/session-service/session.service.ts`
@@ -57,7 +58,7 @@
   `claims.expiresAt` remains `never` type internally.
 - **Fix:** Extract to const after null guard: `const validClaims = claims;`
 
-### C7 — Scheduler-Service: `'leitner'` Accepted With Zero Implementation
+### C7 — Scheduler-Service: `'leitner'` Accepted With Zero Implementation — **RESOLVED** (`39db93c`)
 
 - **File:**
   `services/scheduler-service/src/domain/scheduler-service/scheduler.schemas.ts`
@@ -81,7 +82,7 @@
 - **Status:** Architectural pattern — acceptable if constructor validates
   middleware presence
 
-### C10 — Content-Service: `fromDbCardType` Returns Hyphens Instead of Underscores
+### C10 — Content-Service: `fromDbCardType` Returns Hyphens Instead of Underscores — **RESOLVED** (`39db93c`)
 
 - **File:**
   `services/content-service/src/infrastructure/database/prisma-template.repository.ts`
@@ -96,14 +97,14 @@
 
 ## HIGH Findings (22) — Actionable Subset
 
-### H1 — @noema/types: `Environment` Enum Missing `'test'`
+### H1 — @noema/types: `Environment` Enum Missing `'test'` — **RESOLVED** (`39db93c`)
 
 - **File:** `packages/types/src/enums/index.ts` L179-185
 - **Impact:** Session-service `config.service.environment === 'test'` always
   false; comparison flagged by TS strict
 - **Fix:** Add `TEST: 'test'` to Environment enum
 
-### H2 — User-Service: `TooManyLoginAttemptsError` Returns 422, Should Be 429
+### H2 — User-Service: `TooManyLoginAttemptsError` Returns 422, Should Be 429 — **RESOLVED** (`39db93c`)
 
 - **File:** `services/user-service/src/api/rest/user.routes.ts` ~L210
 - **Impact:** Rate limiting semantics lost — HTTP 429 triggers retry-after
@@ -111,13 +112,13 @@
 - **Fix:** Add specific `instanceof TooManyLoginAttemptsError` check before
   BusinessRuleError
 
-### H3 — User-Service: `ExternalServiceError` Returns 400, Should Be 502
+### H3 — User-Service: `ExternalServiceError` Returns 400, Should Be 502 — **RESOLVED** (`39db93c`)
 
 - **File:** `services/user-service/src/api/rest/user.routes.ts`
 - **Impact:** Client cannot distinguish user error from upstream failure
 - **Fix:** Add `instanceof ExternalServiceError` check mapping to 502
 
-### H4 — Content-Service: `ExternalServiceError` Returns 400, Should Be 502
+### H4 — Content-Service: `ExternalServiceError` Returns 400, Should Be 502 — **RESOLVED** (`39db93c`)
 
 - **File:** `services/content-service/src/api/shared/route-helpers.ts`
 - **Impact:** Same as H3
@@ -141,7 +142,7 @@
 - **Status:** Documented inconsistency — both are valid approximations for
   different contexts
 
-### H8 — Session-Service: `null` Not Assignable to Prisma Nullable JSON (Needs `Prisma.DbNull`)
+### H8 — Session-Service: `null` Not Assignable to Prisma Nullable JSON (Needs `Prisma.DbNull`) — **RESOLVED** (`39db93c`)
 
 - **File:**
   `services/session-service/src/infrastructure/database/prisma-session.repository.ts`
@@ -150,14 +151,14 @@
   never cleared
 - **Fix:** Use `Prisma.DbNull` for JSON null semantics
 
-### H9 — Frontend: `version: 0` Hardcoded in 3 Mutation Hooks
+### H9 — Frontend: `version: 0` Hardcoded in 3 Mutation Hooks — **RESOLVED** (`39db93c`)
 
 - **File:** `packages/api-client/src/hooks/index.ts` L140, L153, L167
 - **Impact:** Optimistic locking silently bypassed — concurrent edits can
   overwrite
 - **Fix:** Accept version as part of mutation input
 
-### H10 — Frontend: `getPublicProfile` Calls Non-Existent Route
+### H10 — Frontend: `getPublicProfile` Calls Non-Existent Route — **RESOLVED** (`39db93c`)
 
 - **File:** `packages/api-client/src/user/api.ts` L67-68
 - **Impact:** Runtime 404 if called

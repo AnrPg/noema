@@ -19,9 +19,14 @@ Three isolated but related deficiencies needed fixing:
    approve or reject; there was no "request changes" action. Partially-good
    mutations had to be rejected and re-proposed, destroying context.
 
-3. **Leitner not in scheduler schema** — the Zod enum for `schedulingAlgorithm`
-   accepted `fsrs`, `hlr`, and `sm2` but rejected `leitner`, causing validation
-   failures for card configurations that reference the Leitner box system.
+3. **~~Leitner not in scheduler schema~~** — the Zod enum for
+   `schedulingAlgorithm` accepted `fsrs`, `hlr`, and `sm2` but rejected
+   `leitner`. Originally added in Phase 6, `'leitner'` was **subsequently
+   removed** during the cross-service audit (commit `39db93c`) because no
+   scheduling logic exists for it — requests would silently fall through to
+   FSRS. The `SchedulingAlgorithm` enum in `@noema/types` retains `LEITNER` as
+   a future-planned domain concept, but the API-facing Zod schema no longer
+   accepts it until an implementation exists.
 
 ## Decisions
 
@@ -188,6 +193,7 @@ detections are excluded so a misconception can be re-detected after resolution.
 
 **Scheduler-service:**
 - `scheduler.schemas.ts` — Added `'leitner'` to scheduling algorithm Zod enum
+  (**subsequently removed** — see Context §3 and Post-Implementation Update)
 
 ### Emergent Decisions During Implementation
 
@@ -220,3 +226,33 @@ detections are excluded so a misconception can be re-detected after resolution.
   - ML-based family classification
   - Consumer-driven contract tests for new endpoints
   - OpenAPI/AsyncAPI spec update for new routes and event
+
+## Post-Implementation Update (Cross-Service Audit — `39db93c`)
+
+A comprehensive cross-service audit identified and fixed several issues related
+to Phase 6 changes:
+
+### Fixes Applied
+
+1. **`revision_requested` omitted from 3 query methods** (CRITICAL) —
+   `listMutations`, `listActiveMutations`, and `getPipelineHealth` all used
+   explicit state arrays that were missing `'revision_requested'`. Mutations in
+   this state were invisible to all queries and health monitoring. Fixed by
+   adding the state to all three arrays and adding `revisionRequestedCount` to
+   the health metrics return type, interface, and service implementation.
+
+2. **`'leitner'` removed from scheduler schema** (CRITICAL) — Added in Phase 6
+   but no scheduling logic exists. API accepted `algorithm: 'leitner'` which
+   silently fell through to FSRS. Removed from `SchedulerAlgorithmSchema`; the
+   `@noema/types` enum retains it as a planned domain concept.
+
+### Outstanding KG-Service Issues (from audit, not fixed)
+
+- **In-memory pagination** (HIGH) — `listMutations` and operation log methods
+  fetch unbounded results, then slice in-memory.
+- **Non-atomic side effects** (HIGH) — `requestRevision` and `resubmitMutation`
+  perform state transition and field update in separate DB calls.
+- **Hardcoded fromState in failure audit** (HIGH) — `runPipelineAsync` error
+  handler records `fromState: 'proposed'` regardless of actual state.
+- **7 unmapped CkgMutation fields** (MEDIUM) — Schema stores `mutationType`,
+  `targetNodeIds`, `proofResult`, etc. but `toDomain()` doesn't expose them.
