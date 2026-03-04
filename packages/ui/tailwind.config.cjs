@@ -143,6 +143,9 @@ module.exports = {
         'slide-in-from-bottom': 'slide-in-from-bottom 0.3s ease-out',
         'spin-slow': 'spin-slow 3s linear infinite',
       },
+      fontFamily: {
+        mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
     },
   },
   plugins: [require('tailwindcss-animate')],

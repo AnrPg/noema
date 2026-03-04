@@ -83,6 +83,8 @@
     --accent: var(--dendrite-200);
     --accent-foreground: var(--dendrite-900);
     --ring: var(--synapse-600);
+
+    --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
   }
 
   .dark {
@@ -173,5 +175,30 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .text-page-title {
+    @apply text-3xl font-bold tracking-tight;
+  }
+  .text-section-title {
+    @apply text-xl font-semibold tracking-tight;
+  }
+  .text-card-title {
+    @apply text-base font-semibold;
+  }
+  .text-metric-value {
+    font-family: var(--font-mono);
+    @apply text-4xl font-bold tabular-nums;
+  }
+  .text-metric-label {
+    @apply text-xs font-medium uppercase tracking-widest text-muted-foreground;
+  }
+  .text-body {
+    @apply text-sm leading-relaxed;
+  }
+  .text-caption {
+    @apply text-xs text-muted-foreground;
   }
 }
