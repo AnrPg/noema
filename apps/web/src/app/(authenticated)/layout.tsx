@@ -37,6 +37,7 @@ import {
   User,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
+import { CommandPalette } from '@/components/command-palette';
 
 const navItems = [
   {
@@ -70,11 +71,13 @@ function UserMenu() {
   };
 
   const initials =
-    user?.displayName
-      ?.split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase() || 'U';
+    user?.displayName !== undefined
+      ? user.displayName
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .toUpperCase()
+      : 'U';
 
   return (
     <DropdownMenu>
@@ -113,7 +116,11 @@ function UserMenu() {
           Settings
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
+        <DropdownMenuItem
+          onClick={() => {
+            void handleLogout();
+          }}
+        >
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>
@@ -132,6 +139,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
         router.push('/login');
       }}
     >
+      <CommandPalette />
       <DashboardLayout>
         <DashboardSidebar
           header={
