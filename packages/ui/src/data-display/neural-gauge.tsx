@@ -1,4 +1,8 @@
-// packages/ui/src/data-display/neural-gauge.tsx
+/**
+ * @noema/ui - NeuralGauge
+ *
+ * 270° SVG arc gauge for 0–1 scalar values.
+ */
 import type { JSX } from 'react';
 import { cn } from '../lib/utils.js';
 import type { ColorFamily } from '../lib/types.js';

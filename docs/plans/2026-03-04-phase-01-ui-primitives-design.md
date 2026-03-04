@@ -153,3 +153,28 @@ All components consume Phase 00 tokens exclusively:
   State maps in `StateChip` are plain `Record` objects — no service coupling.
 - `ConfidenceMeter` is a controlled component when `onChange` is provided;
   uncontrolled (display-only) otherwise. No internal state in controlled mode.
+
+---
+
+## Implementation Notes (Emergent — discovered during Task 1)
+
+### N1: animate-pulse-glow on SVG elements — transform-origin limitation
+
+The `pulse-glow` keyframe includes `transform: scale(1.05)`. On SVG elements,
+`transform-origin` defaults to the SVG viewport origin `(0, 0)`, not the element
+center. This causes scale animations to visually shift toward the top-left
+rather than pulsing in place. The fix — adding
+`transform-box: fill-box; transform-origin: center;` to the
+`.animate-pulse-glow` class — belongs in the Phase 00 token stylesheet, not in
+individual components. Tracked as a Phase 00 follow-up.
+
+### N2: animate-ring-fill produces a slide-reveal, not a fill-from-zero
+
+D1 chose `stroke-dasharray` (not `stroke-dashoffset`) to control arc length. The
+`ring-fill` token animates `stroke-dashoffset`, so when combined with a fixed
+`stroke-dasharray`, the result is a 100px slide-reveal, not a progressive fill
+from 0. A true fill animation requires animating `stroke-dashoffset` from
+`circumference` to `circumference - filledArc` using per-instance CSS custom
+properties (`--ring-fill-target`). This is an accepted limitation of D1's design
+— the visual result is a slide-in rather than a fill-in. Revisit in a future
+phase if needed.
