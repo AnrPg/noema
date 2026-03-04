@@ -87,6 +87,12 @@ function getInitials(displayName: string | undefined | null): string {
 }
 
 // ============================================================================
+// Module-level constants (computed once, not per render)
+// ============================================================================
+
+const SORTED_TIMEZONES = getSortedTimezones();
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -95,7 +101,6 @@ export default function ProfilePage(): React.JSX.Element {
   const { data: user, isLoading } = useMe();
   const updateProfile = useUpdateProfile();
   const [isEditing, setIsEditing] = useState(false);
-  const sortedTimezones = getSortedTimezones();
 
   const {
     register,
@@ -114,9 +119,10 @@ export default function ProfilePage(): React.JSX.Element {
     },
   });
 
-  // Populate form when user data loads (or updates after a successful save)
+  // Populate form when user data loads. Guard on !isEditing so a background
+  // refetch or mutation-triggered cache update does not silently discard edits.
   useEffect(() => {
-    if (user !== undefined) {
+    if (user !== undefined && !isEditing) {
       reset({
         displayName: user.displayName,
         bio: user.bio ?? '',
@@ -125,7 +131,7 @@ export default function ProfilePage(): React.JSX.Element {
         country: user.country ?? '',
       });
     }
-  }, [user, reset]);
+  }, [user, isEditing, reset]);
 
   const handleCancelEdit = (): void => {
     if (user !== undefined) {
@@ -141,7 +147,9 @@ export default function ProfilePage(): React.JSX.Element {
   };
 
   const onSubmit = async (data: ProfileFormData): Promise<void> => {
-    const version = user?.version ?? authUser?.version ?? 0;
+    // user is guaranteed defined here — Save is disabled while user is undefined
+    if (user === undefined) return;
+    const version = user.version;
     try {
       await updateProfile.mutateAsync({
         data: {
@@ -182,6 +190,7 @@ export default function ProfilePage(): React.JSX.Element {
         {!isEditing && (
           <Button
             variant="outline"
+            disabled={isLoading}
             onClick={() => {
               setIsEditing(true);
             }}
@@ -265,7 +274,7 @@ export default function ProfilePage(): React.JSX.Element {
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <option value="">Select timezone...</option>
-                    {sortedTimezones.map((tz) => (
+                    {SORTED_TIMEZONES.map((tz) => (
                       <option key={tz.timezone} value={tz.timezone}>
                         {tz.label} ({tz.utcOffset})
                       </option>
@@ -288,7 +297,7 @@ export default function ProfilePage(): React.JSX.Element {
                 </FormField>
               </CardContent>
               <CardFooter className="flex gap-2">
-                <Button type="submit" disabled={isSubmitting || !isDirty}>
+                <Button type="submit" disabled={isSubmitting || !isDirty || user === undefined}>
                   {isSubmitting ? 'Saving...' : 'Save changes'}
                 </Button>
                 <Button
