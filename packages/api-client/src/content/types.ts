@@ -338,14 +338,3 @@ export type SessionSeedResponse = IApiResponse<ISessionSeedDto>;
 export type CardsCursorResponse = IApiResponse<ICardsCursorResult>;
 export type CardCountResponse = IApiResponse<ICardCountResult>;
 export type CardValidationResponse = IApiResponse<ICardValidationResult>;
-
-// ============================================================================
-// Backward-compat aliases
-// ============================================================================
-
-/** @deprecated Use `CardDto` instead. */
-export type ICardDto = CardDto;
-/** @deprecated Use `TemplateDto` instead. */
-export type ITemplateDto = TemplateDto;
-/** @deprecated Use `CreateTemplateInput` instead. */
-export type ICreateTemplateInput = CreateTemplateInput;
