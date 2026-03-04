@@ -28,17 +28,26 @@ const SEGMENT_FILL = [
 // Default fill for non-standard segment counts
 const DEFAULT_FILL = 'bg-myelin-400';
 
+function clamp(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
 function getFilledCount(value: number, segments: number): number {
-  return Math.round(Math.min(1, Math.max(0, value)) * segments);
+  return Math.round(clamp(value) * segments);
 }
 
 function getLabel(value: number): string {
-  const clamped = Math.min(1, Math.max(0, value));
-  const index = Math.min(4, Math.floor(clamped * 5));
-  return CONFIDENCE_LABELS[index] ?? CONFIDENCE_LABELS[4];
+  const clamped = clamp(value);
+  // Math.min ensures index is always 0–4; ?? guards TypeScript's strict tuple access
+  const index = Math.min(CONFIDENCE_LABELS.length - 1, Math.floor(clamped * 5));
+  return CONFIDENCE_LABELS[index] ?? CONFIDENCE_LABELS[CONFIDENCE_LABELS.length - 1];
 }
 
-export interface IConfidenceMeterProps {
+function getPercent(value: number): number {
+  return Math.round(clamp(value) * 100);
+}
+
+interface IConfidenceMeterProps {
   value: number; // 0–1
   onChange?: (value: number) => void;
   segments?: number;
@@ -54,9 +63,19 @@ export function ConfidenceMeter({
   className,
 }: IConfidenceMeterProps): JSX.Element {
   const filledCount = getFilledCount(value, segments);
+  const percent = getPercent(value);
 
   return (
-    <div className={cn('flex flex-col gap-1', className)}>
+    <div
+      className={cn('flex flex-col gap-1', className)}
+      role={onChange === undefined ? 'meter' : undefined}
+      aria-valuenow={onChange === undefined ? percent : undefined}
+      aria-valuemin={onChange === undefined ? 0 : undefined}
+      aria-valuemax={onChange === undefined ? 100 : undefined}
+      aria-label={
+        onChange === undefined ? (showLabel ? getLabel(value) : 'Confidence level') : undefined
+      }
+    >
       <div className="relative h-3">
         {/* Visual segmented bar */}
         <div className="absolute inset-0 flex gap-0.5">
@@ -91,7 +110,10 @@ export function ConfidenceMeter({
             onChange={(e) => {
               onChange(parseFloat(e.target.value));
             }}
-            aria-label="Confidence level"
+            aria-label={`Confidence level: ${String(percent)}%`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
           />
         )}

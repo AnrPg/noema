@@ -43,6 +43,28 @@ describe('ConfidenceMeter — value clamping', () => {
   });
 });
 
+describe('ConfidenceMeter — showLabel', () => {
+  it('renders label text when showLabel is true', () => {
+    render(React.createElement(ConfidenceMeter, { value: 0.6, showLabel: true }));
+    expect(screen.getByText('Confident')).toBeTruthy();
+  });
+
+  it('renders Certain at value 1', () => {
+    render(React.createElement(ConfidenceMeter, { value: 1, showLabel: true }));
+    expect(screen.getByText('Certain')).toBeTruthy();
+  });
+
+  it('renders Guessing at value 0', () => {
+    render(React.createElement(ConfidenceMeter, { value: 0, showLabel: true }));
+    expect(screen.getByText('Guessing')).toBeTruthy();
+  });
+
+  it('does not render label when showLabel is false', () => {
+    render(React.createElement(ConfidenceMeter, { value: 0.8, showLabel: false }));
+    expect(screen.queryByText('Certain')).toBeNull();
+  });
+});
+
 describe('ConfidenceMeter — controlled / uncontrolled mode', () => {
   it('renders a slider in controlled (interactive) mode', () => {
     const onChange = vi.fn();
