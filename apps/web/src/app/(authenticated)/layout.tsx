@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { CommandPalette } from '@/components/command-palette';
+import { ShortcutReferencePanel } from '@/components/shortcut-reference-panel';
 
 const navItems = [
   {
@@ -61,11 +62,11 @@ const navItems = [
   },
 ];
 
-function UserMenu() {
+function UserMenu(): React.JSX.Element {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     await logout();
     router.push('/login');
   };
@@ -129,7 +130,11 @@ function UserMenu() {
   );
 }
 
-export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+export default function AuthenticatedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -140,6 +145,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
       }}
     >
       <CommandPalette />
+      <ShortcutReferencePanel />
       <DashboardLayout>
         <DashboardSidebar
           header={
