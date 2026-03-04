@@ -15,7 +15,11 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface IProps {
   children: ReactNode;
-  /** Optional custom fallback — overrides the default EmptyState */
+  /**
+   * Optional custom fallback — overrides the default EmptyState.
+   * Note: custom fallbacks receive no built-in retry mechanism; the consumer
+   * is responsible for any recovery UX.
+   */
   fallback?: ReactNode;
 }
 
@@ -60,7 +64,12 @@ export class SectionErrorBoundary extends Component<IProps, IState> {
       return this.props.fallback;
     }
 
-    const message = this.state.error?.message ?? 'An unexpected error occurred.';
+    // Show the raw error message only in development — production surfaces a
+    // generic string to avoid leaking internal details to end users.
+    const message =
+      process.env.NODE_ENV === 'development'
+        ? (this.state.error?.message ?? 'An unexpected error occurred.')
+        : 'An unexpected error occurred.';
 
     return (
       <EmptyState
