@@ -40,7 +40,7 @@ function getLabel(value: number): string {
   const clamped = clamp(value);
   // Math.min ensures index is always 0–4; ?? guards TypeScript's strict tuple access
   const index = Math.min(CONFIDENCE_LABELS.length - 1, Math.floor(clamped * 5));
-  return CONFIDENCE_LABELS[index] ?? CONFIDENCE_LABELS[CONFIDENCE_LABELS.length - 1];
+  return CONFIDENCE_LABELS[index] ?? 'Certain';
 }
 
 function getPercent(value: number): number {
