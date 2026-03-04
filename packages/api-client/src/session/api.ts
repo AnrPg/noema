@@ -4,7 +4,7 @@
  * API methods for Session Service endpoints.
  */
 
-import type { SessionId } from '@noema/types';
+import type { CardId, SessionId } from '@noema/types';
 
 import { http } from '../client.js';
 import type {
@@ -81,10 +81,10 @@ export const queueApi = {
   getQueue: (sessionId: SessionId): Promise<SessionQueueResponse> =>
     http.get(`/v1/sessions/${sessionId}/queue`),
 
-  injectCard: (sessionId: SessionId, cardId: string): Promise<SessionQueueResponse> =>
+  injectCard: (sessionId: SessionId, cardId: CardId): Promise<SessionQueueResponse> =>
     http.post(`/v1/sessions/${sessionId}/queue/inject`, { cardId }),
 
-  removeCard: (sessionId: SessionId, cardId: string): Promise<SessionQueueResponse> =>
+  removeCard: (sessionId: SessionId, cardId: CardId): Promise<SessionQueueResponse> =>
     http.post(`/v1/sessions/${sessionId}/queue/remove`, { cardId }),
 };
 
@@ -141,7 +141,7 @@ export const blueprintApi = {
 // ============================================================================
 
 export const offlineApi = {
-  getToken: (cardIds: string[]): Promise<OfflineTokenResponse> =>
+  getToken: (cardIds: CardId[]): Promise<OfflineTokenResponse> =>
     http.post('/v1/sessions/offline-intents', { cardIds }),
 
   verifyAndSubmit: (data: IOfflineIntentVerifyInput): Promise<AttemptsListResponse> =>

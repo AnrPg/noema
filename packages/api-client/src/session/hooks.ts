@@ -11,7 +11,7 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from '@tanstack/react-query';
-import type { SessionId } from '@noema/types';
+import type { CardId, SessionId } from '@noema/types';
 
 import {
   attemptsApi,
@@ -51,8 +51,8 @@ export const sessionKeys = {
   all: ['sessions'] as const,
   list: (filters?: ISessionFilters) => [...sessionKeys.all, 'list', filters] as const,
   detail: (id: SessionId) => [...sessionKeys.all, 'detail', id] as const,
-  queue: (id: SessionId) => [...sessionKeys.all, 'queue', id] as const,
-  attempts: (id: SessionId) => [...sessionKeys.all, 'attempts', id] as const,
+  queue: (id: SessionId) => [...sessionKeys.detail(id), 'queue'] as const,
+  attempts: (id: SessionId) => [...sessionKeys.detail(id), 'attempts'] as const,
 };
 
 // ============================================================================
@@ -133,6 +133,7 @@ export function usePauseSession(options?: UseMutationOptions<SessionResponse, Er
     mutationFn: sessionsApi.pauseSession,
     onSuccess: (data, id) => {
       queryClient.setQueryData(sessionKeys.detail(id), data);
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,
   });
@@ -144,6 +145,7 @@ export function useResumeSession(options?: UseMutationOptions<SessionResponse, E
     mutationFn: sessionsApi.resumeSession,
     onSuccess: (data, id) => {
       queryClient.setQueryData(sessionKeys.detail(id), data);
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,
   });
@@ -309,7 +311,7 @@ export function useValidateBlueprint(
 // ============================================================================
 
 export function useOfflineIntentToken(
-  options?: UseMutationOptions<OfflineTokenResponse, Error, string[]>
+  options?: UseMutationOptions<OfflineTokenResponse, Error, CardId[]>
 ) {
   return useMutation({
     mutationFn: offlineApi.getToken,

@@ -6,12 +6,14 @@
 
 // Client
 export {
-  ApiRequestError, configureApiClient,
+  ApiRequestError,
+  configureApiClient,
   getApiConfig,
   http,
-  request, type ApiClientConfig,
+  request,
+  type ApiClientConfig,
   type ApiError,
-  type RequestConfig
+  type RequestConfig,
 } from './client.js';
 
 // User Service
@@ -20,5 +22,17 @@ export * from './user/index.js';
 // Scheduler Service
 export * from './scheduler/index.js';
 
-// React Query Hooks
+// Content Service
+export * from './content/index.js';
+
+// Session Service
+export * from './session/index.js';
+
+// Knowledge Graph Service
+export * from './knowledge-graph/index.js';
+
+// HLR Sidecar
+export * from './hlr/index.js';
+
+// React Query Hooks (user + scheduler — for backward compat)
 export * from './hooks/index.js';
