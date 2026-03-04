@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@noema/api-client": "workspace:*",
     "@noema/auth": "workspace:*",
+    "@noema/contracts": "workspace:*",
     "@noema/ui": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.2",
     "@tanstack/react-query": "^5.60.0",

@@ -65,6 +65,9 @@ importers:
       '@noema/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@noema/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@noema/ui':
         specifier: workspace:*
         version: link:../../packages/ui
