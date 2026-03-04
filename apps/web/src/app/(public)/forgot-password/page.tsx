@@ -1,27 +1,33 @@
 /**
  * Forgot Password Page
+ *
+ * Sends a password reset request via authApi (when endpoint is available).
+ * Shows a success confirmation state after submission with the submitted
+ * email address displayed. Implements anti-enumeration UX: the message is
+ * identical whether or not the account exists.
+ *
+ * TODO: replace the setTimeout placeholder with authApi.requestPasswordReset()
+ * once the backend endpoint is implemented.
  */
 
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import {
-  AuthLayout,
   AuthHeader,
+  AuthLayout,
+  Button,
   Card,
   CardContent,
   CardFooter,
-  Button,
-  Input,
   FormField,
-  Alert,
-  AlertDescription,
+  Input,
 } from '@noema/ui';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { Brain, CheckCircle, Mail } from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -29,9 +35,9 @@ const forgotPasswordSchema = z.object({
 
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
-export default function ForgotPasswordPage() {
-  const [error, setError] = useState<string | null>(null);
+export default function ForgotPasswordPage(): React.JSX.Element {
   const [success, setSuccess] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState('');
 
   const {
     register,
@@ -41,98 +47,96 @@ export default function ForgotPasswordPage() {
     resolver: zodResolver(forgotPasswordSchema),
   });
 
-  const onSubmit = async (data: ForgotPasswordFormData) => {
-    try {
-      setError(null);
-      // TODO: Implement password reset API call
-      // await authApi.requestPasswordReset(data.email);
-      console.log('Password reset requested for:', data.email);
-      setSuccess(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Request failed');
-    }
+  const onSubmit = async (data: ForgotPasswordFormData): Promise<void> => {
+    // TODO: replace with authApi.requestPasswordReset(data.email) when endpoint exists
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 800);
+    });
+    setSubmittedEmail(data.email);
+    setSuccess(true);
   };
 
   if (success) {
     return (
-      <AuthLayout>
+      <AuthLayout className="auth-neural-bg">
         <AuthHeader
           title="Check your email"
           description="We've sent you a password reset link"
+          logo={
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neuron-400/10 shadow-[0_0_20px_hsl(var(--neuron-400)/0.3)]">
+              <CheckCircle className="h-7 w-7 text-neuron-400" />
+            </div>
+          }
         />
-
-        <Card>
-          <CardContent className="pt-6">
-            <Alert variant="success">
-              <CheckCircle className="h-4 w-4" />
-              <AlertDescription>
-                If an account exists with that email, you'll receive a password
-                reset link shortly.
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-
-          <CardFooter>
-            <Link href="/login" className="w-full">
-              <Button variant="outline" className="w-full">
-                Back to login
-              </Button>
-            </Link>
-          </CardFooter>
-        </Card>
+        <div className="animate-auth-card">
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-muted-foreground text-center">
+                If an account exists for{' '}
+                <span className="font-medium text-foreground">{submittedEmail}</span>, you will
+                receive a password reset link shortly. Check your spam folder if you don&apos;t see
+                it within a few minutes.
+              </p>
+            </CardContent>
+            <CardFooter className="flex-col gap-3">
+              <Link href="/login" className="w-full">
+                <Button className="w-full">Back to sign in</Button>
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setSuccess(false);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Try a different email
+              </button>
+            </CardFooter>
+          </Card>
+        </div>
       </AuthLayout>
     );
   }
 
   return (
-    <AuthLayout>
+    <AuthLayout className="auth-neural-bg">
       <AuthHeader
         title="Forgot password?"
         description="Enter your email and we'll send you a reset link"
+        logo={
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-synapse-400/10 shadow-[0_0_20px_hsl(var(--synapse-400)/0.3)]">
+            <Brain className="h-7 w-7 text-synapse-400" />
+          </div>
+        }
       />
-
-      <Card>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-4 pt-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <FormField
-              label="Email"
-              error={errors.email?.message}
-              required
-            >
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                autoComplete="email"
-                {...register('email')}
-              />
-            </FormField>
-          </CardContent>
-
-          <CardFooter className="flex-col gap-4">
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Sending...' : 'Send reset link'}
-            </Button>
-
-            <Link
-              href="/login"
-              className="text-sm text-muted-foreground hover:text-primary"
-            >
-              Back to login
-            </Link>
-          </CardFooter>
-        </form>
-      </Card>
+      <div className="animate-auth-card">
+        <Card>
+          <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+            <CardContent className="space-y-4 pt-6">
+              <FormField label="Email address" error={errors.email?.message} required>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  {...register('email')}
+                />
+              </FormField>
+            </CardContent>
+            <CardFooter className="flex-col gap-4">
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                <Mail className="mr-2 h-4 w-4" />
+                {isSubmitting ? 'Sending...' : 'Send reset link'}
+              </Button>
+              <Link
+                href="/login"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Back to sign in
+              </Link>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
     </AuthLayout>
   );
 }

@@ -19,7 +19,7 @@ import {
   Input,
   PasswordInput,
 } from '@noema/ui';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Brain } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -63,57 +63,67 @@ export default function LoginPage(): React.JSX.Element {
   };
 
   return (
-    <AuthLayout>
-      <AuthHeader title="Welcome back" description="Sign in to your Noema account" />
+    <AuthLayout className="auth-neural-bg">
+      <AuthHeader
+        title="Welcome back"
+        description="Sign in to your Noema account"
+        logo={
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-synapse-400/10 shadow-[0_0_20px_hsl(var(--synapse-400)/0.3)]">
+            <Brain className="h-7 w-7 text-synapse-400" />
+          </div>
+        }
+      />
 
-      <Card>
-        <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
-          <CardContent className="space-y-4 pt-6">
-            {error !== null && error !== '' && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+      <div className="animate-auth-card">
+        <Card>
+          <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+            <CardContent className="space-y-4 pt-6">
+              {error !== null && error !== '' && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
-            <FormField label="Email" error={errors.email?.message} required>
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                autoComplete="email"
-                {...register('email')}
-              />
-            </FormField>
+              <FormField label="Email" error={errors.email?.message} required>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  {...register('email')}
+                />
+              </FormField>
 
-            <FormField label="Password" error={errors.password?.message} required>
-              <PasswordInput
-                placeholder="Enter password"
-                autoComplete="current-password"
-                {...register('password')}
-              />
-            </FormField>
+              <FormField label="Password" error={errors.password?.message} required>
+                <PasswordInput
+                  placeholder="Enter password"
+                  autoComplete="current-password"
+                  {...register('password')}
+                />
+              </FormField>
 
-            <div className="flex justify-end">
-              <Link href="/forgot-password" className="text-sm text-primary hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-          </CardContent>
+              <div className="flex justify-end">
+                <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+            </CardContent>
 
-          <CardFooter className="flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in...' : 'Sign in'}
-            </Button>
+            <CardFooter className="flex-col gap-4">
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? 'Signing in...' : 'Sign in'}
+              </Button>
 
-            <p className="text-sm text-muted-foreground">
-              {"Don't have an account? "}
-              <Link href="/register" className="text-primary hover:underline">
-                Sign up
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+              <p className="text-sm text-muted-foreground">
+                {"Don't have an account? "}
+                <Link href="/register" className="text-primary hover:underline">
+                  Sign up
+                </Link>
+              </p>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
     </AuthLayout>
   );
 }

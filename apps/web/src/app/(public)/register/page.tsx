@@ -24,7 +24,16 @@ import {
   Input,
   PasswordInput,
 } from '@noema/ui';
-import { AlertCircle, ArrowLeft, ArrowRight, Check, Globe, MapPin, User } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Brain,
+  Check,
+  Globe,
+  MapPin,
+  User,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
@@ -212,10 +221,15 @@ export default function RegisterPage(): React.JSX.Element {
   const sortedTimezones = getSortedTimezones();
 
   return (
-    <AuthLayout className="py-8">
+    <AuthLayout className="auth-neural-bg py-8">
       <AuthHeader
         title="Create an account"
         description="Start your personalized learning journey"
+        logo={
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-synapse-400/10 shadow-[0_0_20px_hsl(var(--synapse-400)/0.3)]">
+            <Brain className="h-7 w-7 text-synapse-400" />
+          </div>
+        }
       />
 
       {/* Step indicator */}
@@ -230,7 +244,7 @@ export default function RegisterPage(): React.JSX.Element {
               {index > 0 && (
                 <div
                   className={`h-px w-8 mx-1 transition-colors duration-300 ${
-                    isCompleted ? 'bg-primary' : 'bg-border'
+                    isCompleted ? 'bg-synapse-400' : 'bg-border'
                   }`}
                 />
               )}
@@ -245,10 +259,10 @@ export default function RegisterPage(): React.JSX.Element {
                   transition-all duration-300
                   ${
                     isActive
-                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      ? 'bg-synapse-400 text-synapse-50 shadow-[0_0_12px_hsl(var(--synapse-400)/0.4)]'
                       : isCompleted
-                        ? 'bg-primary/10 text-primary cursor-pointer hover:bg-primary/20'
-                        : 'bg-muted text-muted-foreground'
+                        ? 'bg-neuron-400/15 text-neuron-400 cursor-pointer hover:bg-neuron-400/25'
+                        : 'bg-axon-200/30 text-axon-400'
                   }
                 `}
               >
@@ -277,191 +291,201 @@ export default function RegisterPage(): React.JSX.Element {
         {currentStep} of {STEPS.length} completed
       </p>
 
-      <Card>
-        <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
-          <CardContent className="space-y-4 pt-6">
-            {error !== null && error !== '' && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+      <div className="animate-auth-card">
+        <Card>
+          <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+            <CardContent className="space-y-4 pt-6">
+              {error !== null && error !== '' && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
-            {/* ============== Step 1: Account ============== */}
-            {currentStep === 0 && (
-              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-300">
-                <FormField label="Email" error={errors.email?.message} required>
-                  <Input
-                    type="email"
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    {...register('email', { onBlur: handleEmailBlur })}
-                  />
-                </FormField>
+              {/* ============== Step 1: Account ============== */}
+              {currentStep === 0 && (
+                <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-300">
+                  <FormField label="Email" error={errors.email?.message} required>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      {...register('email', { onBlur: handleEmailBlur })}
+                    />
+                  </FormField>
 
-                <FormField
-                  label="Username"
-                  error={errors.username?.message}
-                  description="3-30 characters, starts with a letter, alphanumeric and underscores"
-                  required
-                >
-                  <Input placeholder="john_doe" autoComplete="username" {...register('username')} />
-                </FormField>
-
-                <FormField label="Password" error={errors.password?.message} required>
-                  <PasswordInput
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    {...register('password')}
-                  />
-                  <PasswordStrength password={password} />
-                </FormField>
-
-                <FormField
-                  label="Confirm password"
-                  error={errors.confirmPassword?.message}
-                  required
-                >
-                  <PasswordInput
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    {...register('confirmPassword')}
-                  />
-                </FormField>
-              </div>
-            )}
-
-            {/* ============== Step 2: Profile ============== */}
-            {currentStep === 1 && (
-              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-300">
-                <FormField
-                  label="Display name"
-                  error={errors.displayName?.message}
-                  description="How others will see you"
-                >
-                  <Input placeholder="John Doe" autoComplete="name" {...register('displayName')} />
-                </FormField>
-
-                <FormField
-                  label="Preferred language"
-                  error={errors.language?.message}
-                  description="Language for the user interface"
-                >
-                  <select
-                    {...register('language')}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  <FormField
+                    label="Username"
+                    error={errors.username?.message}
+                    description="3-30 characters, starts with a letter, alphanumeric and underscores"
+                    required
                   >
-                    {LANGUAGES.map((lang) => (
-                      <option key={lang.value} value={lang.value}>
-                        {lang.label}
-                      </option>
-                    ))}
-                  </select>
-                </FormField>
-              </div>
-            )}
+                    <Input
+                      placeholder="john_doe"
+                      autoComplete="username"
+                      {...register('username')}
+                    />
+                  </FormField>
 
-            {/* ============== Step 3: Location ============== */}
-            {currentStep === 2 && (
-              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-300">
-                <FormField
-                  label="Timezone"
-                  error={errors.timezone?.message}
-                  description="Select from the map or the dropdown below"
-                >
-                  <Controller
-                    name="timezone"
-                    control={control}
-                    render={({ field }) => (
-                      <div className="space-y-3">
-                        <TimezoneMap value={field.value ?? ''} onChange={field.onChange} />
-                        <select
-                          value={field.value ?? ''}
-                          onChange={(e) => {
-                            field.onChange(e.target.value);
-                          }}
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        >
-                          <option value="" disabled>
-                            Select timezone...
-                          </option>
-                          {sortedTimezones.map((tz) => (
-                            <option key={tz.timezone} value={tz.timezone}>
-                              {tz.label} ({tz.utcOffset})
+                  <FormField label="Password" error={errors.password?.message} required>
+                    <PasswordInput
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      {...register('password')}
+                    />
+                    <PasswordStrength password={password} />
+                  </FormField>
+
+                  <FormField
+                    label="Confirm password"
+                    error={errors.confirmPassword?.message}
+                    required
+                  >
+                    <PasswordInput
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      {...register('confirmPassword')}
+                    />
+                  </FormField>
+                </div>
+              )}
+
+              {/* ============== Step 2: Profile ============== */}
+              {currentStep === 1 && (
+                <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-300">
+                  <FormField
+                    label="Display name"
+                    error={errors.displayName?.message}
+                    description="How others will see you"
+                  >
+                    <Input
+                      placeholder="John Doe"
+                      autoComplete="name"
+                      {...register('displayName')}
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="Preferred language"
+                    error={errors.language?.message}
+                    description="Language for the user interface"
+                  >
+                    <select
+                      {...register('language')}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      {LANGUAGES.map((lang) => (
+                        <option key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                </div>
+              )}
+
+              {/* ============== Step 3: Location ============== */}
+              {currentStep === 2 && (
+                <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-4 duration-300">
+                  <FormField
+                    label="Timezone"
+                    error={errors.timezone?.message}
+                    description="Select from the map or the dropdown below"
+                  >
+                    <Controller
+                      name="timezone"
+                      control={control}
+                      render={({ field }) => (
+                        <div className="space-y-3">
+                          <TimezoneMap value={field.value ?? ''} onChange={field.onChange} />
+                          <select
+                            value={field.value ?? ''}
+                            onChange={(e) => {
+                              field.onChange(e.target.value);
+                            }}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            <option value="" disabled>
+                              Select timezone...
                             </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  />
-                </FormField>
+                            {sortedTimezones.map((tz) => (
+                              <option key={tz.timezone} value={tz.timezone}>
+                                {tz.label} ({tz.utcOffset})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    />
+                  </FormField>
 
-                <FormField
-                  label="Country"
-                  error={errors.country?.message}
-                  description="Required for compliance and content localization"
-                  required
-                >
-                  <Controller
-                    name="country"
-                    control={control}
-                    render={({ field }) => (
-                      <CountrySelector
-                        value={field.value}
-                        onChange={field.onChange}
-                        error={!!errors.country}
-                      />
-                    )}
-                  />
-                </FormField>
+                  <FormField
+                    label="Country"
+                    error={errors.country?.message}
+                    description="Required for compliance and content localization"
+                    required
+                  >
+                    <Controller
+                      name="country"
+                      control={control}
+                      render={({ field }) => (
+                        <CountrySelector
+                          value={field.value}
+                          onChange={field.onChange}
+                          error={!!errors.country}
+                        />
+                      )}
+                    />
+                  </FormField>
+                </div>
+              )}
+            </CardContent>
+
+            <CardFooter className="flex-col gap-4">
+              {/* Navigation buttons */}
+              <div className="flex w-full gap-3">
+                {currentStep > 0 && (
+                  <Button type="button" variant="outline" onClick={handleBack} className="flex-1">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back
+                  </Button>
+                )}
+
+                {isLastStep ? (
+                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating account...' : 'Create account'}
+                  </Button>
+                ) : (
+                  <Button type="button" onClick={() => void handleNext()} className="flex-1">
+                    Next
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                )}
               </div>
-            )}
-          </CardContent>
 
-          <CardFooter className="flex-col gap-4">
-            {/* Navigation buttons */}
-            <div className="flex w-full gap-3">
-              {currentStep > 0 && (
-                <Button type="button" variant="outline" onClick={handleBack} className="flex-1">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back
-                </Button>
+              {/* Skip optional steps link — only for fully optional steps */}
+              {currentStep === 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentStep((s) => s + 1);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Skip this step
+                </button>
               )}
 
-              {isLastStep ? (
-                <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating account...' : 'Create account'}
-                </Button>
-              ) : (
-                <Button type="button" onClick={() => void handleNext()} className="flex-1">
-                  Next
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              )}
-            </div>
-
-            {/* Skip optional steps link — only for fully optional steps */}
-            {currentStep === 1 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentStep((s) => s + 1);
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Skip this step
-              </button>
-            )}
-
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{' '}
-              <Link href="/login" className="text-primary hover:underline">
-                Sign in
-              </Link>
-            </p>
-          </CardFooter>
-        </form>
-      </Card>
+              <p className="text-sm text-muted-foreground">
+                Already have an account?{' '}
+                <Link href="/login" className="text-primary hover:underline">
+                  Sign in
+                </Link>
+              </p>
+            </CardFooter>
+          </form>
+        </Card>
+      </div>
     </AuthLayout>
   );
 }
