@@ -42,6 +42,7 @@ export default function ForgotPasswordPage(): React.JSX.Element {
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -68,7 +69,8 @@ export default function ForgotPasswordPage(): React.JSX.Element {
             </div>
           }
         />
-        <div className="animate-auth-card">
+        {/* aria-live announces the success state to screen readers on transition */}
+        <div aria-live="polite" aria-atomic="true" className="animate-auth-card">
           <Card>
             <CardContent className="pt-6 space-y-4">
               <p className="text-sm text-muted-foreground text-center">
@@ -86,6 +88,7 @@ export default function ForgotPasswordPage(): React.JSX.Element {
                 type="button"
                 onClick={() => {
                   setSuccess(false);
+                  reset();
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >

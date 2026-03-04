@@ -158,7 +158,7 @@ export default function RegisterPage(): React.JSX.Element {
   const email = watch('email');
 
   // Auto-suggest username from email when user tabs out of email field
-  const handleEmailBlur = useCallback(() => {
+  const handleEmailBlur = useCallback((): void => {
     const currentUsername = watch('username');
     if (currentUsername === '' && email !== '') {
       const suggested = email
@@ -287,8 +287,6 @@ export default function RegisterPage(): React.JSX.Element {
           : currentStep === 2
             ? 'Country required'
             : 'All fields optional'}
-        <span className="mx-1.5">·</span>
-        {currentStep} of {STEPS.length} completed
       </p>
 
       <div className="animate-auth-card">
