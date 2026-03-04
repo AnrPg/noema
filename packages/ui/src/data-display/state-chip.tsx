@@ -32,7 +32,7 @@ export interface IStateConfig {
   icon?: ReactNode;
 }
 
-interface IStateChipProps {
+export interface IStateChipProps {
   state: string;
   stateMap: Record<string, IStateConfig>;
   size?: 'sm' | 'md';
@@ -101,7 +101,8 @@ export function StateChip({
         'inline-flex items-center rounded-full font-medium',
         BG_TINT[config.color],
         sizeClass,
-        pulse && `ring-1 ring-offset-0 animate-pulse-glow ${RING_COLOR[config.color]}`,
+        pulse && 'ring-1 ring-offset-0 animate-pulse-glow',
+        pulse && RING_COLOR[config.color],
         className
       )}
     >
