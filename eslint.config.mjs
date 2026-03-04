@@ -46,7 +46,9 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['*.config.cjs', '*.config.mjs', 'packages/*/tailwind.config.cjs'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
       globals: {
@@ -171,7 +173,11 @@ export default tseslint.config(
 
   // Config files - relaxed rules
   {
-    files: ['*.config.{js,mjs,ts,mts}', '*.config.*.{js,mjs,ts,mts}'],
+    files: [
+      '*.config.{js,cjs,mjs,ts,mts}',
+      '*.config.*.{js,cjs,mjs,ts,mts}',
+      '**/tailwind.config.cjs',
+    ],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },
