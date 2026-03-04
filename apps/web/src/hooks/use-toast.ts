@@ -27,9 +27,20 @@ export interface IToastItem {
 // ============================================================================
 
 type Listener = (toasts: IToastItem[]) => void;
-const _listeners = new Set<Listener>();
-let _toasts: IToastItem[] = [];
-let _idCounter = 0;
+
+// Hoist singleton state onto globalThis so it survives HMR re-execution of
+// this module in Next.js Fast Refresh. The assignment is a no-op in production.
+interface IToastState {
+  listeners: Set<Listener>;
+  toasts: IToastItem[];
+  counter: number;
+}
+const _g = globalThis as typeof globalThis & { __noema_toast_state?: IToastState };
+const _state: IToastState = (_g.__noema_toast_state ??= {
+  listeners: new Set(),
+  toasts: [],
+  counter: 0,
+});
 
 const DURATIONS: Record<ToastVariant, number> = {
   success: 3000,
@@ -39,18 +50,19 @@ const DURATIONS: Record<ToastVariant, number> = {
 };
 
 function addToast(message: string, variant: ToastVariant): void {
-  const id = String(++_idCounter);
+  const id = String(++_state.counter);
   const item: IToastItem = { id, message, variant, durationMs: DURATIONS[variant] };
-  _toasts = [..._toasts, item];
-  _listeners.forEach((l) => {
-    l(_toasts);
+  _state.toasts = [..._state.toasts, item];
+  // Iterate over a snapshot to guard against re-entrant addToast calls from listeners.
+  [..._state.listeners].forEach((l) => {
+    l(_state.toasts);
   });
 }
 
 function removeToast(id: string): void {
-  _toasts = _toasts.filter((t) => t.id !== id);
-  _listeners.forEach((l) => {
-    l(_toasts);
+  _state.toasts = _state.toasts.filter((t) => t.id !== id);
+  [..._state.listeners].forEach((l) => {
+    l(_state.toasts);
   });
 }
 
@@ -78,15 +90,15 @@ export const toast = {
 // ============================================================================
 
 export function useToastList(): { toasts: IToastItem[]; dismiss: (id: string) => void } {
-  const [toasts, setToasts] = useState<IToastItem[]>(_toasts);
+  const [toasts, setToasts] = useState<IToastItem[]>(_state.toasts);
 
   useEffect(() => {
     const listener: Listener = (items) => {
       setToasts(items);
     };
-    _listeners.add(listener);
+    _state.listeners.add(listener);
     return () => {
-      _listeners.delete(listener);
+      _state.listeners.delete(listener);
     };
   }, []);
 
