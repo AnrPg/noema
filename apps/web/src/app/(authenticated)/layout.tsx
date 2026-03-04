@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { CommandPalette } from '@/components/command-palette';
+import { SessionExpiryModal } from '@/components/session-expiry-modal';
 import { ShortcutReferencePanel } from '@/components/shortcut-reference-panel';
 
 const navItems = [
@@ -146,6 +147,7 @@ export default function AuthenticatedLayout({
     >
       <CommandPalette />
       <ShortcutReferencePanel />
+      <SessionExpiryModal />
       <DashboardLayout>
         <DashboardSidebar
           header={

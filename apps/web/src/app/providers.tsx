@@ -11,6 +11,12 @@ import { ToastProvider } from '@/components/toast-provider';
 configureApiClient({
   baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
   getAccessToken: () => useAuthStore.getState().accessToken,
+  onUnauthorized: () => {
+    const state = useAuthStore.getState();
+    if (state.isInitialized && state.isAuthenticated) {
+      state.setSessionExpired(true);
+    }
+  },
 });
 
 // Inner component so it has access to QueryClientProvider context
