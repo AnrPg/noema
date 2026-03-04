@@ -5,7 +5,7 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CategoryId, MediaId, NodeId, TemplateId, UserId } from '@noema/types';
+import type { CardId, CategoryId, JobId, MediaId, NodeId, TemplateId, UserId } from '@noema/types';
 
 // ============================================================================
 // Enums
@@ -49,6 +49,11 @@ export interface ITrueFalseCardContent {
   isTrue: boolean;
 }
 
+/**
+ * Discriminated union of all card content types, enveloped with the `type`
+ * discriminant. Used in history snapshots, card creation/update inputs, and
+ * anywhere the type + content pair travel together as a unit.
+ */
 export type CardContentDto =
   | { type: 'basic'; content: IBasicCardContent }
   | { type: 'cloze'; content: IClozeCardContent }
@@ -56,17 +61,31 @@ export type CardContentDto =
   | { type: 'multiple_choice'; content: IMultipleChoiceCardContent }
   | { type: 'true_false'; content: ITrueFalseCardContent };
 
+/**
+ * Union of raw card structure objects (without the `type` envelope).
+ * Used by template `structure` fields where the discriminant is carried on
+ * the parent object rather than inside the structure itself.
+ */
+export type CardStructure =
+  | IBasicCardContent
+  | IClozeCardContent
+  | IShortAnswerCardContent
+  | IMultipleChoiceCardContent
+  | ITrueFalseCardContent;
+
 // ============================================================================
 // Card DTO
 // ============================================================================
 
-export interface ICardDto {
+/**
+ * Shared fields present on all card variants.
+ * Not exported — consumers should use `CardDto` (the discriminated union type).
+ */
+interface ICardDtoBase {
   id: CardId;
   userId: UserId;
-  type: CardType;
   state: CardState;
   learningState: CardLearningState;
-  content: CardContentDto;
   tags: string[];
   categoryId: CategoryId | null;
   templateId: TemplateId | null;
@@ -75,6 +94,23 @@ export interface ICardDto {
   updatedAt: string;
   version: number;
 }
+
+/**
+ * A card returned from the API. The `type` field discriminates which `content`
+ * variant is present, enabling full narrowing:
+ *
+ * @example
+ * if (card.type === 'basic') {
+ *   // card.content is narrowed to IBasicCardContent
+ *   console.log(card.content.front);
+ * }
+ */
+export type CardDto =
+  | (ICardDtoBase & { type: 'basic'; content: IBasicCardContent })
+  | (ICardDtoBase & { type: 'cloze'; content: IClozeCardContent })
+  | (ICardDtoBase & { type: 'short_answer'; content: IShortAnswerCardContent })
+  | (ICardDtoBase & { type: 'multiple_choice'; content: IMultipleChoiceCardContent })
+  | (ICardDtoBase & { type: 'true_false'; content: ITrueFalseCardContent });
 
 // ============================================================================
 // Deck Query
@@ -122,24 +158,53 @@ export interface ICardHistoryDto {
 // Templates
 // ============================================================================
 
-export interface ITemplateDto {
+/**
+ * Shared fields present on all template variants.
+ * Not exported — consumers should use `TemplateDto` (the discriminated union type).
+ */
+interface ITemplateDtoBase {
   id: TemplateId;
   name: string;
-  type: CardType;
-  structure: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface ICreateTemplateInput {
-  name: string;
-  type: CardType;
-  structure: Record<string, unknown>;
-}
+/**
+ * A template returned from the API. The `type` field discriminates which
+ * `structure` variant is present, enabling full narrowing:
+ *
+ * @example
+ * if (template.type === 'basic') {
+ *   // template.structure is narrowed to IBasicCardContent
+ *   console.log(template.structure.front);
+ * }
+ */
+export type TemplateDto =
+  | (ITemplateDtoBase & { type: 'basic'; structure: IBasicCardContent })
+  | (ITemplateDtoBase & { type: 'cloze'; structure: IClozeCardContent })
+  | (ITemplateDtoBase & { type: 'short_answer'; structure: IShortAnswerCardContent })
+  | (ITemplateDtoBase & { type: 'multiple_choice'; structure: IMultipleChoiceCardContent })
+  | (ITemplateDtoBase & { type: 'true_false'; structure: ITrueFalseCardContent });
 
+/**
+ * Input for creating a new template. The `type` discriminant determines which
+ * `structure` shape is required.
+ */
+export type CreateTemplateInput =
+  | { name: string; type: 'basic'; structure: IBasicCardContent }
+  | { name: string; type: 'cloze'; structure: IClozeCardContent }
+  | { name: string; type: 'short_answer'; structure: IShortAnswerCardContent }
+  | { name: string; type: 'multiple_choice'; structure: IMultipleChoiceCardContent }
+  | { name: string; type: 'true_false'; structure: ITrueFalseCardContent };
+
+/**
+ * Input for partially updating an existing template. Because this is a partial
+ * update the caller may omit `type`, so `structure` is typed as the raw union
+ * of all content shapes (`CardStructure`) rather than a discriminated envelope.
+ */
 export interface IUpdateTemplateInput {
   name?: string;
-  structure?: Record<string, unknown>;
+  structure?: CardStructure;
 }
 
 // ============================================================================
@@ -174,7 +239,8 @@ export interface IBatchCreateError {
 }
 
 export interface IBatchCreateResult {
-  batchId: string;
+  /** Branded job identifier for tracking the asynchronous batch operation. */
+  batchId: JobId;
   created: number;
   failed: number;
   errors: IBatchCreateError[];
@@ -185,7 +251,7 @@ export interface IBatchCreateResult {
 // ============================================================================
 
 export interface ICardsCursorResult {
-  cards: ICardDto[];
+  cards: CardDto[];
   nextCursor: string | null;
   hasMore: boolean;
 }
@@ -258,17 +324,28 @@ export interface IUpdateCardNodeLinksInput {
 // Response aliases
 // ============================================================================
 
-export type CardResponse = IApiResponse<ICardDto>;
-export type CardsListResponse = IApiResponse<ICardDto[]>;
+export type CardResponse = IApiResponse<CardDto>;
+export type CardsListResponse = IApiResponse<CardDto[]>;
 export type CardStatsResponse = IApiResponse<ICardStatsDto>;
 export type CardHistoryResponse = IApiResponse<ICardHistoryDto>;
 export type CardVersionResponse = IApiResponse<ICardVersionSnapshot>;
 export type BatchCreateResponse = IApiResponse<IBatchCreateResult>;
-export type TemplateResponse = IApiResponse<ITemplateDto>;
-export type TemplatesListResponse = IApiResponse<ITemplateDto[]>;
+export type TemplateResponse = IApiResponse<TemplateDto>;
+export type TemplatesListResponse = IApiResponse<TemplateDto[]>;
 export type MediaResponse = IApiResponse<IMediaFileDto>;
 export type UploadUrlResponse = IApiResponse<IUploadUrlResult>;
 export type SessionSeedResponse = IApiResponse<ISessionSeedDto>;
 export type CardsCursorResponse = IApiResponse<ICardsCursorResult>;
 export type CardCountResponse = IApiResponse<ICardCountResult>;
 export type CardValidationResponse = IApiResponse<ICardValidationResult>;
+
+// ============================================================================
+// Backward-compat aliases
+// ============================================================================
+
+/** @deprecated Use `CardDto` instead. */
+export type ICardDto = CardDto;
+/** @deprecated Use `TemplateDto` instead. */
+export type ITemplateDto = TemplateDto;
+/** @deprecated Use `CreateTemplateInput` instead. */
+export type ICreateTemplateInput = CreateTemplateInput;
