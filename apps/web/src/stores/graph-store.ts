@@ -59,7 +59,7 @@ const initialState: IGraphState = {
   zoom: 1,
   selectedNodeId: null,
   hoveredNodeId: null,
-  activeOverlays: new Set(),
+  activeOverlays: new Set(), // NOTE: Set is not JSON-serializable; do not add persist() without a custom storage adapter
   layoutMode: 'force',
 };
 

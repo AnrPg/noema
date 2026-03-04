@@ -22,13 +22,17 @@ interface IScheduleActions {
   clearPlan: () => void;
 }
 
+const initialState: IScheduleState = {
+  currentPlan: null,
+  lastPlanTime: null,
+};
+
 // ============================================================================
 // Store
 // ============================================================================
 
 export const useScheduleStore = create<IScheduleState & IScheduleActions>()((set) => ({
-  currentPlan: null,
-  lastPlanTime: null,
+  ...initialState,
 
   setPlan: (plan) => {
     set({ currentPlan: plan, lastPlanTime: Date.now() });
