@@ -26,7 +26,7 @@ import {
 } from '@noema/ui';
 import { AlertCircle, ArrowLeft, ArrowRight, Check, Globe, MapPin, User } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -116,6 +116,7 @@ const STEPS = [
 
 export default function RegisterPage(): React.JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { register: registerUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -194,7 +195,8 @@ export default function RegisterPage(): React.JSX.Element {
         ...(data.timezone !== undefined && data.timezone !== '' && { timezone: data.timezone }),
         country: data.country,
       });
-      router.push('/dashboard');
+      const redirect = searchParams.get('redirect');
+      router.push((redirect !== null && redirect !== '' ? redirect : '/dashboard') as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
       // Go back to account step where most server errors occur

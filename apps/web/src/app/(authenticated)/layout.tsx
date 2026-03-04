@@ -141,7 +141,7 @@ export default function AuthenticatedLayout({
   return (
     <AuthGuard
       onUnauthenticated={() => {
-        router.push('/login');
+        router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
       }}
     >
       <CommandPalette />

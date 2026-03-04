@@ -5,15 +5,21 @@
 'use client';
 
 import { GuestGuard } from '@noema/auth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function PublicLayout({ children }: { children: React.ReactNode }) {
+export default function PublicLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   return (
     <GuestGuard
       onAuthenticated={() => {
-        router.push('/dashboard');
+        const redirect = searchParams.get('redirect');
+        router.push((redirect !== null && redirect !== '' ? redirect : '/dashboard') as never);
       }}
     >
       {children}

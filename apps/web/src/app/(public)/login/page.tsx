@@ -21,7 +21,7 @@ import {
 } from '@noema/ui';
 import { AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -33,8 +33,9 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+export default function LoginPage(): React.JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
@@ -46,11 +47,12 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: LoginFormData): Promise<void> => {
     try {
       setError(null);
       await login({ identifier: data.email, password: data.password });
-      router.push('/dashboard');
+      const redirect = searchParams.get('redirect');
+      router.push((redirect !== null && redirect !== '' ? redirect : '/dashboard') as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
@@ -61,9 +63,9 @@ export default function LoginPage() {
       <AuthHeader title="Welcome back" description="Sign in to your Noema account" />
 
       <Card>
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
           <CardContent className="space-y-4 pt-6">
-            {error && (
+            {error !== null && error !== '' && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>
