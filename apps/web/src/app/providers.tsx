@@ -6,6 +6,7 @@ import { ThemeProvider } from '@noema/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
+import { ToastProvider } from '@/components/toast-provider';
 
 configureApiClient({
   baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
@@ -32,7 +33,9 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
     <QueryClientProvider client={queryClient}>
       <QueryCacheWatcher />
       <ThemeProvider defaultTheme="dark">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
