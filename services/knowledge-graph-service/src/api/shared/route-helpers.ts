@@ -459,9 +459,9 @@ export function handleError(
     return;
   }
 
-  // 422 — Mutation already committed
+  // 409 — Mutation already committed (conflict, not validation)
   if (error instanceof MutationAlreadyCommittedError) {
-    reply.status(422).send({
+    reply.status(409).send({
       error: {
         code: error.code,
         message: error.message,

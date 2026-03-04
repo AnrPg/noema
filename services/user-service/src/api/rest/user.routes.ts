@@ -70,11 +70,14 @@ interface IUpdateBody<T> {
 
 /**
  * Register user routes.
+ *
+ * @param authMiddleware — REQUIRED. If not provided, the service fails fast
+ *   at startup to prevent silently unprotected routes.
  */
 export function registerUserRoutes(
   fastify: FastifyInstance,
   userService: UserService,
-  authMiddleware?: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
+  authMiddleware: (request: FastifyRequest, reply: FastifyReply) => Promise<void>,
   tokenService?: {
     generateTokenPair(user: unknown): Promise<{
       accessToken: string;
@@ -356,7 +359,7 @@ export function registerUserRoutes(
   fastify.post<{ Body: { refreshToken: string } }>(
     '/auth/logout',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Auth'],
         summary: 'Logout user and revoke current refresh token',
@@ -398,7 +401,7 @@ export function registerUserRoutes(
   fastify.post(
     '/auth/logout-all',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Auth'],
         summary: 'Logout all devices and revoke all refresh tokens',
@@ -539,7 +542,7 @@ export function registerUserRoutes(
   fastify.post(
     '/auth/resend-verification',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       config: {
         rateLimit: {
           max: 3,
@@ -572,7 +575,7 @@ export function registerUserRoutes(
   fastify.get<{ Params: IIdParams }>(
     '/users/:id',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Get user by ID',
@@ -602,7 +605,7 @@ export function registerUserRoutes(
   fastify.get<{ Querystring: IUserFilters & { offset?: number; limit?: number } }>(
     '/users',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'List users (admin only)',
@@ -636,7 +639,7 @@ export function registerUserRoutes(
   fastify.patch<{ Params: IIdParams; Body: IUpdateBody<IUpdateProfileInput> }>(
     '/users/:id/profile',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Update user profile',
@@ -689,7 +692,7 @@ export function registerUserRoutes(
   fastify.patch<{ Params: IIdParams; Body: IUpdateBody<IUpdateSettingsInput> }>(
     '/users/:id/settings',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Update user settings',
@@ -732,7 +735,7 @@ export function registerUserRoutes(
   fastify.post<{ Params: IIdParams; Body: IChangePasswordInput & { version: number } }>(
     '/users/:id/password',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Change user password',
@@ -777,7 +780,7 @@ export function registerUserRoutes(
   fastify.delete<{ Params: IIdParams; Querystring: { soft?: boolean } }>(
     '/users/:id',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Delete user',
@@ -821,7 +824,7 @@ export function registerUserRoutes(
   fastify.patch<{ Params: IIdParams; Body: { username: string; version: number } }>(
     '/users/:id/username',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Change username (owner or admin)',
@@ -863,7 +866,7 @@ export function registerUserRoutes(
   fastify.patch<{ Params: IIdParams; Body: { newEmail: string; password: string } }>(
     '/users/:id/email',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Users'],
         summary: 'Start email change process (owner or admin)',
@@ -909,7 +912,7 @@ export function registerUserRoutes(
   fastify.get(
     '/me',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Me'],
         summary: 'Get current user profile',
@@ -941,7 +944,7 @@ export function registerUserRoutes(
   fastify.patch<{ Body: IUpdateBody<IUpdateProfileInput> }>(
     '/me/profile',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Me'],
         summary: 'Update current user profile',
@@ -978,7 +981,7 @@ export function registerUserRoutes(
   fastify.get(
     '/me/settings',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Me'],
         summary: 'Get current user settings',
@@ -1010,7 +1013,7 @@ export function registerUserRoutes(
   fastify.patch<{ Body: IUpdateBody<IUpdateSettingsInput> }>(
     '/me/settings',
     {
-      ...(authMiddleware !== undefined ? { preHandler: [authMiddleware] } : {}),
+      preHandler: [authMiddleware],
       schema: {
         tags: ['Me'],
         summary: 'Update current user settings',

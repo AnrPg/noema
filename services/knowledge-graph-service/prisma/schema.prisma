@@ -258,10 +258,12 @@ model MisconceptionPattern {
     // Structure depends on patternKind (graph pattern, statistical, heuristic)
     spec Json
 
-    // Scoring model configuration
+    // Scoring model configuration (reserved for future per-pattern scoring
+    // customization; not yet surfaced in domain IMisconceptionPattern)
     scoringModel Json @default("{}") @map("scoring_model")
 
     // Domain scope — which knowledge domains this pattern applies to
+    // (reserved for future domain-scoped detection; not yet in domain model)
     domains String[] @default([])
 
     // Severity level (how critical is this misconception type)
@@ -321,7 +323,8 @@ model InterventionTemplate {
     // Priority relative to other interventions for the same misconception
     priority Int @default(0)
 
-    // Effectiveness tracking
+    // Effectiveness tracking (reserved for future A/B testing of interventions;
+    // not yet surfaced in the domain model — written by background analytics job)
     useCount    Int   @default(0) @map("use_count")
     successRate Float @default(0.0) @map("success_rate")
 

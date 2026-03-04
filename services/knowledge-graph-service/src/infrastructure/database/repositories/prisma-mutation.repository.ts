@@ -336,13 +336,20 @@ export class PrismaMutationRepository implements IMutationRepository {
 
   /**
    * Map a Prisma record to the domain ICkgMutation interface.
+   *
+   * Note: The Prisma schema stores additional write-only columns
+   * (`mutationType`, `targetNodeIds`, `targetEdgeIds`, `proofResult`,
+   * `commitResult`, `rejectionReason`, `priority`) for DB-level indexing
+   * and future admin query capabilities. These are intentionally not
+   * surfaced in the domain model — their data lives in the `operation`
+   * JSON blob or the audit log.
    */
   private toDomain(record: {
     id: string;
     state: PrismaCkgMutationState;
     createdBy: string | null;
     version: number;
-    operation: Prisma.JsonValue;
+    operation: Prisma.JsonValue; // DB column is singular `operation` (Json); domain uses plural `operations` (Metadata[]). Migration deferred — no functional impact.
     rationale: string | null;
     evidenceCount: number;
     recoveryAttempts: number;

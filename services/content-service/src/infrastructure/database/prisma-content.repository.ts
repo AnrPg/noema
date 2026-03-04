@@ -542,22 +542,24 @@ export class PrismaContentRepository implements IContentRepository {
   }
 
   async softDeleteByBatchId(batchId: string, userId: UserId): Promise<number> {
-    const result = await this.prisma.card.updateMany({
-      where: {
-        userId,
-        deletedAt: null,
-        metadata: {
-          path: ['_batchId'],
-          equals: batchId,
-        },
-      },
-      data: {
-        deletedAt: new Date(),
-        state: 'ARCHIVED',
-        updatedBy: userId,
-      },
+    // Use $transaction with $executeRaw to atomically soft-delete AND increment
+    // version. Prisma's updateMany doesn't support `{ increment: 1 }`, so we
+    // use raw SQL for the version bump to preserve optimistic locking semantics.
+    const count = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.$executeRaw`
+        UPDATE "cards"
+        SET "deleted_at" = NOW(),
+            "state" = 'ARCHIVED',
+            "updated_by" = ${userId}::varchar,
+            "updated_at" = NOW(),
+            "version" = "version" + 1
+        WHERE "user_id" = ${userId}::varchar
+          AND "deleted_at" IS NULL
+          AND "metadata" @> ${`{"_batchId":"${batchId}"}`}::jsonb
+      `;
+      return result;
     });
-    return result.count;
+    return count;
   }
 
   // ============================================================================

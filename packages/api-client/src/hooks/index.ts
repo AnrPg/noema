@@ -1,33 +1,33 @@
 /**
  * @noema/api-client - TanStack Query Hooks
  *
- * React Query hooks for User Service API.
+ * React Query hooks for Noema service APIs.
  */
 
 import {
-    useMutation,
-    useQuery,
-    useQueryClient,
-    type UseMutationOptions,
-    type UseQueryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationOptions,
+  type UseQueryOptions,
 } from '@tanstack/react-query';
 
 import { authApi, meApi, usersApi } from '../user/api.js';
 import type {
-    AuthResponse,
-    ChangePasswordInput,
-    LoginInput,
-    PublicUserResponse,
-    RegisterInput,
-    TokenRefreshResponse,
-    UpdateProfileInput,
-    UpdateSettingsInput,
-    UserDto,
-    UserFilters,
-    UserResponse,
-    UserSettingsDto,
-    UserSettingsResponse,
-    UsersListResponse
+  AuthResponse,
+  ChangePasswordInput,
+  LoginInput,
+  PublicUserResponse,
+  RegisterInput,
+  TokenRefreshResponse,
+  UpdateProfileInput,
+  UpdateSettingsInput,
+  UserDto,
+  UserFilters,
+  UserResponse,
+  UserSettingsDto,
+  UserSettingsResponse,
+  UsersListResponse
 } from '../user/types.js';
 
 // ============================================================================
@@ -78,7 +78,7 @@ export function useRegister(
   });
 }
 
-export function useLogout(options?: UseMutationOptions<void, Error, void>) {
+export function useLogout(options?: UseMutationOptions<void>) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -166,7 +166,7 @@ export function useChangePassword(
   });
 }
 
-export function useDeleteAccount(options?: UseMutationOptions<void, Error, void>) {
+export function useDeleteAccount(options?: UseMutationOptions<void>) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -180,7 +180,7 @@ export function useDeleteAccount(options?: UseMutationOptions<void, Error, void>
 }
 
 export function useMyProgress(
-  options?: Omit<UseQueryOptions<unknown, Error>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>
 ) {
   // Placeholder for future learning progress API
   return useQuery({
@@ -197,7 +197,7 @@ export function useMyProgress(
 export function useUsers(
   filters?: UserFilters,
   pagination?: { offset?: number; limit?: number },
-  options?: Omit<UseQueryOptions<UsersListResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<UsersListResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: userKeys.list(filters),
@@ -225,7 +225,7 @@ export function useUser(
  */
 export function usePublicProfile(
   username: string,
-  options?: Omit<UseQueryOptions<PublicUserResponse, Error>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<PublicUserResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: userKeys.publicProfile(username),
@@ -249,3 +249,10 @@ export function useDeleteUser(
     ...options,
   });
 }
+
+// Scheduler Service Hooks
+export {
+  schedulerKeys, usePredictRetention, useReviewQueue, useSchedulerCard,
+  useSchedulerCards
+} from './scheduler.js';
+

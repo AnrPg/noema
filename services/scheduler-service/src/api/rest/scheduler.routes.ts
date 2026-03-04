@@ -542,4 +542,71 @@ export function registerSchedulerRoutes(
     reviewStatsHandler
   );
   fastify.post<{ Body: unknown }>('/v1/scheduler/forecast', authPreHandler, forecastHandler);
+
+  // ==========================================================================
+  // Phase 4 — Review Queue & Retention Prediction (H5/H6)
+  // ==========================================================================
+
+  // H5 — GET /v1/scheduler/review-queue
+  const getReviewQueueHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+
+    try {
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const query = request.query;
+
+      const input = {
+        userId,
+        lane: query['lane'],
+        limit: query['limit'] !== undefined ? parseInt(query['limit'], 10) : undefined,
+        asOf: query['asOf'],
+      };
+
+      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
+      const result = await schedulerService.getReviewQueue(input, ctx);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // H6 — POST /v1/scheduler/retention/predict
+  const predictRetentionHandler = async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+    if (!(await withPayloadGuard(request, reply))) return;
+
+    try {
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
+      const result = await schedulerService.predictRetention(request.body, ctx);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/review-queue',
+    authPreHandler,
+    getReviewQueueHandler
+  );
+  fastify.post<{ Body: unknown }>(
+    '/v1/scheduler/retention/predict',
+    authPreHandler,
+    predictRetentionHandler
+  );
 }

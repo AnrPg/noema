@@ -11,6 +11,7 @@
 import type { IGraphEdge, IGraphNode, IStructuralMetrics } from '@noema/types';
 
 import { UnauthorizedError, ValidationError } from './errors/base.errors.js';
+import { MaxDepthExceededError } from './errors/graph.errors.js';
 import type { IExecutionContext } from './execution-context.js';
 import type { IUpdateEdgeInput, IUpdateNodeInput } from './graph.repository.js';
 import { SIGNIFICANT_CHANGE_THRESHOLD } from './policies/analysis-thresholds.js';
@@ -84,10 +85,7 @@ export function validateTraversalDepth(depth: number): void {
     });
   }
   if (depth > MAX_TRAVERSAL_DEPTH) {
-    throw new ValidationError(
-      `Traversal depth ${String(depth)} exceeds maximum allowed ${String(MAX_TRAVERSAL_DEPTH)}`,
-      { maxDepth: [`Must be ≤ ${String(MAX_TRAVERSAL_DEPTH)}`] }
-    );
+    throw new MaxDepthExceededError(depth, MAX_TRAVERSAL_DEPTH);
   }
 }
 

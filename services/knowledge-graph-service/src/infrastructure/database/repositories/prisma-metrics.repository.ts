@@ -110,6 +110,14 @@ export class PrismaMetricsRepository implements IMetricsRepository {
   // Private
   // ==========================================================================
 
+  /**
+   * Map Prisma record → domain IMetricSnapshot.
+   *
+   * Note: The Prisma schema also stores `graphRegion`, `metacognitiveStage`,
+   * and `nodeCount` for DB-level indexing and future admin UI features.
+   * These are intentionally not surfaced in the domain model — the full
+   * data is encoded in the `metrics` JSONB blob.
+   */
   private toDomain(record: {
     id: string;
     userId: string;

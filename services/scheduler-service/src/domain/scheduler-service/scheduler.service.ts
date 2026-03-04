@@ -779,8 +779,18 @@ export class SchedulerService {
       const intervalDays = this.deriveIntervalDays(req.algorithm, stability);
       const nextReviewAt = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
 
-      // Simplified retention calculation (forgetting curve approximation)
-      const retentionProbability = Math.exp(-intervalDays / (stability * 3));
+      // Use algorithm-specific retention formula (matches proposeReviewWindows)
+      let retentionProbability: number;
+      if (req.algorithm === 'fsrs') {
+        const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+        retentionProbability = fsrs.forgettingCurve(intervalDays, stability);
+      } else if (req.algorithm === 'hlr') {
+        // HLR: stability → halfLife, closed-form 2^(-t/halfLife)
+        retentionProbability = Math.pow(2, -intervalDays / stability);
+      } else {
+        // SM2 fallback — no established formula; use conservative approximation
+        retentionProbability = Math.exp(-intervalDays / (stability * 3));
+      }
 
       predictions.push({
         cardId: req.cardId,
@@ -788,7 +798,7 @@ export class SchedulerService {
         retentionProbability: this.clamp01(retentionProbability),
         daysUntilDue: intervalDays,
         nextReviewAt: nextReviewAt.toISOString(),
-        confidence: 0.85,
+        confidence: req.algorithm === 'sm2' ? 0.5 : 0.85,
       });
     }
 

@@ -71,8 +71,9 @@ export interface IPkgOperationLogRepository {
   /**
    * Get operations since a timestamp (for sync reconciliation).
    * Ordered by sequence number ascending (oldest first, for replay).
+   * @param limit Maximum number of entries to return (default: 1000).
    */
-  getOperationsSince(userId: UserId, since: string): Promise<IPkgOperationLogEntry[]>;
+  getOperationsSince(userId: UserId, since: string, limit?: number): Promise<IPkgOperationLogEntry[]>;
 
   /**
    * Get operations by type (for analytics).
@@ -86,13 +87,23 @@ export interface IPkgOperationLogRepository {
 
   /**
    * Get operations affecting a specific node (for undo context).
+   * @param limit Maximum number of entries to return (default: 200).
    */
-  getOperationsForNode(userId: UserId, nodeId: NodeId): Promise<IPkgOperationLogEntry[]>;
+  getOperationsForNode(
+    userId: UserId,
+    nodeId: NodeId,
+    limit?: number
+  ): Promise<IPkgOperationLogEntry[]>;
 
   /**
    * Get operations affecting a specific edge (for undo context).
+   * @param limit Maximum number of entries to return (default: 200).
    */
-  getOperationsForEdge(userId: UserId, edgeId: EdgeId): Promise<IPkgOperationLogEntry[]>;
+  getOperationsForEdge(
+    userId: UserId,
+    edgeId: EdgeId,
+    limit?: number
+  ): Promise<IPkgOperationLogEntry[]>;
 
   /**
    * Count operations matching optional filters (for exact pagination totals).

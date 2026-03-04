@@ -128,13 +128,18 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
     };
   }
 
-  async getOperationsSince(userId: UserId, since: string): Promise<IPkgOperationLogEntry[]> {
+  async getOperationsSince(
+    userId: UserId,
+    since: string,
+    limit = 1000
+  ): Promise<IPkgOperationLogEntry[]> {
     const records = await this.prisma.pkgOperationLog.findMany({
       where: {
         userId: userId as string,
         createdAt: { gte: new Date(since) },
       },
       orderBy: { sequenceNumber: 'asc' },
+      take: limit,
     });
 
     return records.map((r) => this.toDomain(r));
@@ -168,25 +173,35 @@ export class PrismaOperationLogRepository implements IPkgOperationLogRepository 
     };
   }
 
-  async getOperationsForNode(userId: UserId, nodeId: NodeId): Promise<IPkgOperationLogEntry[]> {
+  async getOperationsForNode(
+    userId: UserId,
+    nodeId: NodeId,
+    limit = 200
+  ): Promise<IPkgOperationLogEntry[]> {
     const records = await this.prisma.pkgOperationLog.findMany({
       where: {
         userId: userId as string,
         affectedNodeIds: { has: nodeId as string },
       },
       orderBy: { sequenceNumber: 'desc' },
+      take: limit,
     });
 
     return records.map((r) => this.toDomain(r));
   }
 
-  async getOperationsForEdge(userId: UserId, edgeId: EdgeId): Promise<IPkgOperationLogEntry[]> {
+  async getOperationsForEdge(
+    userId: UserId,
+    edgeId: EdgeId,
+    limit = 200
+  ): Promise<IPkgOperationLogEntry[]> {
     const records = await this.prisma.pkgOperationLog.findMany({
       where: {
         userId: userId as string,
         affectedEdgeIds: { has: edgeId as string },
       },
       orderBy: { sequenceNumber: 'desc' },
+      take: limit,
     });
 
     return records.map((r) => this.toDomain(r));
