@@ -52,7 +52,7 @@ export const schedulerKeys = {
   reviewQueue: (params?: ReviewQueueParams) =>
     [...schedulerKeys.all, 'review-queue', params] as const,
   cards: () => [...schedulerKeys.all, 'cards'] as const,
-  card: (cardId: string) => [...schedulerKeys.cards(), cardId] as const,
+  card: (cardId: CardId) => [...schedulerKeys.cards(), cardId] as const,
   cardList: (params?: SchedulerCardListParams) =>
     [...schedulerKeys.cards(), 'list', params] as const,
   retention: () => [...schedulerKeys.all, 'retention'] as const,
@@ -74,6 +74,7 @@ export function useReviewQueue(
   return useQuery({
     queryKey: schedulerKeys.reviewQueue(params),
     queryFn: () => reviewQueueApi.getReviewQueue(params),
+    staleTime: 30 * 1000,
     ...options,
   });
 }
@@ -88,13 +89,14 @@ export function usePredictRetention(
 }
 
 export function useSchedulerCard(
-  cardId: string,
+  cardId: CardId,
   options?: Omit<UseQueryOptions<SchedulerCardResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: schedulerKeys.card(cardId),
     queryFn: () => schedulerCardsApi.getCard(cardId),
     enabled: cardId !== '',
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }
@@ -106,6 +108,7 @@ export function useSchedulerCards(
   return useQuery({
     queryKey: schedulerKeys.cardList(params),
     queryFn: () => schedulerCardsApi.listCards(params),
+    staleTime: 2 * 60 * 1000,
     ...options,
   });
 }

@@ -61,7 +61,7 @@ export const schedulerCardsApi = {
   /**
    * Get a single scheduler card by ID.
    */
-  getCard: (cardId: string): Promise<SchedulerCardResponse> =>
+  getCard: (cardId: CardId): Promise<SchedulerCardResponse> =>
     http.get(`/v1/scheduler/cards/${cardId}`),
 
   /**
