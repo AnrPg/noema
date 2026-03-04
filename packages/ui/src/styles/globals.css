@@ -207,3 +207,25 @@
     @apply text-xs text-muted-foreground;
   }
 }
+
+@layer utilities {
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--axon-100)) 25%,
+      hsl(var(--axon-50))  50%,
+      hsl(var(--axon-100)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+  .dark .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--axon-900)) 25%,
+      hsl(var(--axon-600)) 50%,
+      hsl(var(--axon-900)) 75%
+    );
+    background-size: 200% 100%;
+  }
+}

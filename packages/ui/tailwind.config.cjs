@@ -133,6 +133,28 @@ module.exports = {
           from: { transform: 'rotate(0deg)' },
           to: { transform: 'rotate(360deg)' },
         },
+        'pulse-glow': {
+          '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+          '50%': { opacity: '1', transform: 'scale(1.05)' },
+        },
+        'fade-slide-in': {
+          from: { opacity: '0', transform: 'translateY(-8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'ring-fill': {
+          from: { 'stroke-dashoffset': '100' },
+          to: { 'stroke-dashoffset': 'var(--ring-fill-target, 0)' },
+        },
+        'particle-flow': {
+          '0%': { 'offset-distance': '0%', opacity: '0' },
+          '10%': { opacity: '1' },
+          '90%': { opacity: '1' },
+          '100%': { 'offset-distance': '100%', opacity: '0' },
+        },
+        shimmer: {
+          from: { 'background-position': '200% 0' },
+          to: { 'background-position': '-200% 0' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
@@ -142,6 +164,11 @@ module.exports = {
         'slide-in-from-top': 'slide-in-from-top 0.3s ease-out',
         'slide-in-from-bottom': 'slide-in-from-bottom 0.3s ease-out',
         'spin-slow': 'spin-slow 3s linear infinite',
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'fade-slide-in': 'fade-slide-in 300ms ease-out',
+        'ring-fill': 'ring-fill 800ms ease-out forwards',
+        'particle-flow': 'particle-flow 3s linear infinite',
+        shimmer: 'shimmer 1.5s linear infinite',
       },
       fontFamily: {
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
