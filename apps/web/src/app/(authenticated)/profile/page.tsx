@@ -30,9 +30,9 @@ import { Edit2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { toast } from '../../../hooks/use-toast';
-import { CountrySelector } from '../../../components/country-selector';
-import { getSortedTimezones } from '../../../lib/timezone-data';
+import { toast } from '@/hooks/use-toast';
+import { CountrySelector } from '@/components/country-selector';
+import { getSortedTimezones } from '@/lib/timezone-data';
 
 // ============================================================================
 // Schema
