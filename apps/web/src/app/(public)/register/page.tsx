@@ -196,7 +196,11 @@ export default function RegisterPage(): React.JSX.Element {
         country: data.country,
       });
       const redirect = searchParams.get('redirect');
-      router.push((redirect !== null && redirect !== '' ? redirect : '/dashboard') as never);
+      const target =
+        redirect !== null && redirect.startsWith('/') && !redirect.startsWith('//')
+          ? redirect
+          : '/dashboard';
+      router.push(target as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
       // Go back to account step where most server errors occur

@@ -52,7 +52,11 @@ export default function LoginPage(): React.JSX.Element {
       setError(null);
       await login({ identifier: data.email, password: data.password });
       const redirect = searchParams.get('redirect');
-      router.push((redirect !== null && redirect !== '' ? redirect : '/dashboard') as never);
+      const target =
+        redirect !== null && redirect.startsWith('/') && !redirect.startsWith('//')
+          ? redirect
+          : '/dashboard';
+      router.push(target as never);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }
