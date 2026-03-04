@@ -55,6 +55,8 @@ export default tseslint.config(
             'packages/*/tailwind.config.cjs',
             'packages/ui/src/lib/*.test.ts',
             'packages/ui/src/lib/*.test.tsx',
+            'packages/ui/src/data-display/*.test.ts',
+            'packages/ui/src/data-display/*.test.tsx',
           ],
         },
         tsconfigRootDir: import.meta.dirname,
