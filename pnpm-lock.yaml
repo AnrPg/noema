@@ -68,6 +68,9 @@ importers:
       '@noema/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@radix-ui/react-dialog':
+        specifier: ^1.1.2
+        version: 1.1.15(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-query':
         specifier: ^5.60.0
         version: 5.90.21(react@18.3.1)
@@ -95,6 +98,9 @@ importers:
       zod:
         specifier: ^3.23.8
         version: 3.25.76
+      zustand:
+        specifier: ^5.0.0
+        version: 5.0.11(@types/react@18.3.28)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
     devDependencies:
       '@types/d3-geo':
         specifier: ^3.1.0
