@@ -6,7 +6,7 @@
 
 import type { UserDto, UserRole, UserSettingsDto } from '@noema/api-client/user';
 
-export interface AuthState {
+export interface IAuthState {
   /** Current user (null if not authenticated) */
   user: UserDto | null;
 
@@ -28,11 +28,14 @@ export interface AuthState {
   /** Whether auth has been initialized */
   isInitialized: boolean;
 
+  /** Whether the current session has expired (token expired, 401 received) */
+  isSessionExpired: boolean;
+
   /** Last auth error */
   error: string | null;
 }
 
-export interface AuthActions {
+export interface IAuthActions {
   /** Set user data */
   setUser: (user: UserDto | null) => void;
 
@@ -54,6 +57,9 @@ export interface AuthActions {
   /** Reset auth state (logout) */
   reset: () => void;
 
+  /** Mark whether the session has expired */
+  setSessionExpired: (expired: boolean) => void;
+
   /** Check if user has role */
   hasRole: (role: UserRole) => boolean;
 
@@ -61,4 +67,9 @@ export interface AuthActions {
   hasAnyRole: (roles: UserRole[]) => boolean;
 }
 
-export type AuthStore = AuthState & AuthActions;
+export type IAuthStore = IAuthState & IAuthActions;
+
+// Backward-compat aliases
+export type AuthState = IAuthState;
+export type AuthActions = IAuthActions;
+export type AuthStore = IAuthStore;

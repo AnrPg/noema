@@ -12,17 +12,13 @@ export {
   selectIsAuthenticated,
   selectIsLoading,
   selectIsInitialized,
+  selectIsSessionExpired,
   selectAuthError,
   selectUserRoles,
 } from './store.js';
 
 // Context
-export {
-  AuthProvider,
-  useAuth,
-  type AuthProviderProps,
-  type AuthContextValue,
-} from './context.js';
+export { AuthProvider, useAuth, type AuthProviderProps, type AuthContextValue } from './context.js';
 
 // Guards
 export {
@@ -35,4 +31,12 @@ export {
 } from './guards.js';
 
 // Types
-export type { AuthState, AuthActions, AuthStore } from './types.js';
+export type {
+  IAuthState,
+  IAuthActions,
+  IAuthStore,
+  // Backward-compat aliases
+  AuthState,
+  AuthActions,
+  AuthStore,
+} from './types.js';

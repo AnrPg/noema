@@ -4,16 +4,16 @@
  * Zustand store for authentication state.
  */
 
-import type { UserDto, UserSettingsDto } from '@noema/api-client/user';
+import type { UserDto, UserRole, UserSettingsDto } from '@noema/api-client/user';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { AuthState, AuthStore } from './types.js';
+import type { IAuthState, IAuthStore } from './types.js';
 
 // ============================================================================
 // Initial State
 // ============================================================================
 
-const initialState: AuthState = {
+const initialState: IAuthState = {
   user: null,
   settings: null,
   accessToken: null,
@@ -21,6 +21,7 @@ const initialState: AuthState = {
   isAuthenticated: false,
   isLoading: true,
   isInitialized: false,
+  isSessionExpired: false,
   error: null,
 };
 
@@ -28,7 +29,7 @@ const initialState: AuthState = {
 // Store
 // ============================================================================
 
-export const useAuthStore = create<AuthStore>()(
+export const useAuthStore = create<IAuthStore>()(
   persist(
     (set, get) => ({
       ...initialState,
@@ -69,14 +70,18 @@ export const useAuthStore = create<AuthStore>()(
         });
       },
 
-      hasRole: (role) => {
+      setSessionExpired: (expired: boolean) => {
+        set({ isSessionExpired: expired });
+      },
+
+      hasRole: (role: UserRole) => {
         const { user } = get();
         return user?.roles.includes(role) ?? false;
       },
 
-      hasAnyRole: (roles) => {
+      hasAnyRole: (roles: UserRole[]) => {
         const { user } = get();
-        return roles.some((role) => user?.roles.includes(role)) ?? false;
+        return roles.some((role) => user?.roles.includes(role) === true);
       },
     }),
     {
@@ -97,10 +102,11 @@ export const useAuthStore = create<AuthStore>()(
 // Selectors
 // ============================================================================
 
-export const selectUser = (state: AuthStore) => state.user;
-export const selectSettings = (state: AuthStore) => state.settings;
-export const selectIsAuthenticated = (state: AuthStore) => state.isAuthenticated;
-export const selectIsLoading = (state: AuthStore) => state.isLoading;
-export const selectIsInitialized = (state: AuthStore) => state.isInitialized;
-export const selectAuthError = (state: AuthStore) => state.error;
-export const selectUserRoles = (state: AuthStore) => state.user?.roles ?? [];
+export const selectUser = (state: IAuthStore): UserDto | null => state.user;
+export const selectSettings = (state: IAuthStore): UserSettingsDto | null => state.settings;
+export const selectIsAuthenticated = (state: IAuthStore): boolean => state.isAuthenticated;
+export const selectIsLoading = (state: IAuthStore): boolean => state.isLoading;
+export const selectIsInitialized = (state: IAuthStore): boolean => state.isInitialized;
+export const selectIsSessionExpired = (state: IAuthStore): boolean => state.isSessionExpired;
+export const selectAuthError = (state: IAuthStore): string | null => state.error;
+export const selectUserRoles = (state: IAuthStore): UserRole[] => state.user?.roles ?? [];
