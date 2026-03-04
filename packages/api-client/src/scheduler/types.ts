@@ -4,6 +4,9 @@
  * TypeScript types for Scheduler Service API endpoints.
  */
 
+import type { IApiResponse } from '@noema/contracts';
+import type { CardId } from '@noema/types';
+
 // ============================================================================
 // Common
 // ============================================================================
@@ -107,7 +110,7 @@ export interface ISchedulerCardListResponse {
 }
 
 // ============================================================================
-// Backward-compat aliases
+// Backward-compat aliases (Phase 01)
 // ============================================================================
 
 export type SchedulerPolicyVersion = ISchedulerPolicyVersion;
@@ -121,3 +124,141 @@ export type RetentionPredictionResponse = IRetentionPredictionResponse;
 export type SchedulerCardResponse = ISchedulerCardResponse;
 export type SchedulerCardListParams = ISchedulerCardListParams;
 export type SchedulerCardListResponse = ISchedulerCardListResponse;
+
+// ============================================================================
+// Phase 02 — Dual-Lane Plan
+// ============================================================================
+
+export interface IDualLanePlanInput {
+  userId: string;
+  asOf?: string;
+  horizonDays?: number;
+}
+
+export interface ILaneSlot {
+  cardId: CardId;
+  scheduledAt: string;
+  lane: 'retention' | 'calibration';
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+}
+
+export interface IDualLanePlanResult {
+  slots: ILaneSlot[];
+  totalRetention: number;
+  totalCalibration: number;
+  generatedAt: string;
+}
+
+// ============================================================================
+// Phase 02 — Review Windows
+// ============================================================================
+
+export interface IReviewWindowInput {
+  userId: string;
+  date?: string;
+  timezone?: string;
+}
+
+export interface IReviewWindowDto {
+  startAt: string;
+  endAt: string;
+  cardsDue: number;
+  lane: 'retention' | 'calibration';
+  loadScore: number;
+}
+
+// ============================================================================
+// Phase 02 — Session Candidates
+// ============================================================================
+
+export interface ISessionCandidatesInput {
+  userId: string;
+  lane?: 'retention' | 'calibration';
+  limit?: number;
+  asOf?: string;
+}
+
+export interface ISessionCandidateDto {
+  cardId: CardId;
+  lane: 'retention' | 'calibration';
+  priority: number;
+  daysOverdue: number;
+  retentionProbability: number;
+}
+
+// ============================================================================
+// Phase 02 — Simulation
+// ============================================================================
+
+export interface ISimulationInput {
+  userId: string;
+  sessionDurationMinutes: number;
+  lane?: 'retention' | 'calibration';
+  asOf?: string;
+}
+
+export interface ISimulationResult {
+  simulatedCards: ISessionCandidateDto[];
+  projectedRetentionGain: number;
+  estimatedDurationMinutes: number;
+}
+
+// ============================================================================
+// Phase 02 — Schedule Commits
+// ============================================================================
+
+export interface IScheduleCommitInput {
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  grade: number;
+  reviewedAt?: string;
+}
+
+export interface ISchedulerCardDto {
+  cardId: CardId;
+  userId: string;
+  lane: 'retention' | 'calibration';
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  nextReviewDate: string;
+  stability: number | null;
+  difficulty: number | null;
+  reviewCount: number;
+}
+
+export interface IBatchScheduleCommitInput {
+  commits: ({ cardId: CardId } & IScheduleCommitInput)[];
+}
+
+export interface IBatchScheduleCommitResult {
+  committed: number;
+  failed: number;
+  errors: { cardId: CardId; error: string }[];
+}
+
+// ============================================================================
+// Backward-compat aliases (Phase 02)
+// ============================================================================
+
+export type DualLanePlanInput = IDualLanePlanInput;
+export type LaneSlot = ILaneSlot;
+export type DualLanePlanResult = IDualLanePlanResult;
+export type ReviewWindowInput = IReviewWindowInput;
+export type ReviewWindowDto = IReviewWindowDto;
+export type SessionCandidatesInput = ISessionCandidatesInput;
+export type SessionCandidateDto = ISessionCandidateDto;
+export type SimulationInput = ISimulationInput;
+export type SimulationResult = ISimulationResult;
+export type ScheduleCommitInput = IScheduleCommitInput;
+export type SchedulerCardDto = ISchedulerCardDto;
+export type BatchScheduleCommitInput = IBatchScheduleCommitInput;
+export type BatchScheduleCommitResult = IBatchScheduleCommitResult;
+
+// ============================================================================
+// Response aliases (Phase 02)
+// ============================================================================
+
+export type DualLanePlanResponse = IApiResponse<IDualLanePlanResult>;
+export type ReviewWindowsResponse = IApiResponse<IReviewWindowDto[]>;
+export type SessionCandidatesResponse = IApiResponse<ISessionCandidateDto[]>;
+export type SimulationResponse = IApiResponse<ISimulationResult>;
+export type ScheduleCommitResponse = IApiResponse<ISchedulerCardDto>;
+export type BatchScheduleCommitResponse = IApiResponse<IBatchScheduleCommitResult>;
