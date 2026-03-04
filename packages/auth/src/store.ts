@@ -38,6 +38,7 @@ export const useAuthStore = create<IAuthStore>()(
         set({
           user,
           isAuthenticated: user !== null,
+          isSessionExpired: false,
           error: null,
         });
       },
