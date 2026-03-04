@@ -3,7 +3,7 @@
  *
  * Compact stat card with optional sparkline and trend indicator.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { cn } from '../lib/utils.js';
 import { Card, CardContent } from '../primitives/card.js';
 import type { ColorFamily } from '../lib/types.js';
@@ -36,7 +36,7 @@ interface IMetricTileProps {
   label: string;
   value: string | number;
   trend?: ITrend;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   colorFamily?: ColorFamily;
   sparklineData?: number[];
   className?: string;
