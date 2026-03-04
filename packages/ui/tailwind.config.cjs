@@ -146,6 +146,12 @@ module.exports = {
       fontFamily: {
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'monospace'],
       },
+      spacing: {
+        section: 'var(--space-section)',
+        'card-gap': 'var(--space-card-gap)',
+        inset: 'var(--space-inset)',
+        tight: 'var(--space-tight)',
+      },
     },
   },
   plugins: [require('tailwindcss-animate')],

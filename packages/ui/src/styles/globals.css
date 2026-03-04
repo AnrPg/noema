@@ -85,6 +85,11 @@
     --ring: var(--synapse-600);
 
     --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+
+    --space-section:  1.5rem;
+    --space-card-gap: 1rem;
+    --space-inset:    1.5rem;
+    --space-tight:    0.5rem;
   }
 
   .dark {
