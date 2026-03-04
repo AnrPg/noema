@@ -24,6 +24,65 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /* ── Neuroscience palette — light mode ── */
+
+    /* synapse — Steel Blue */
+    --synapse-50:  213 80% 97%;
+    --synapse-100: 213 75% 90%;
+    --synapse-200: 213 70% 78%;
+    --synapse-400: 213 70% 50%;
+    --synapse-600: 213 75% 35%;
+    --synapse-900: 213 80% 12%;
+
+    /* dendrite — Soft Lavender */
+    --dendrite-50:  267 60% 97%;
+    --dendrite-100: 267 55% 90%;
+    --dendrite-200: 267 50% 78%;
+    --dendrite-400: 267 55% 55%;
+    --dendrite-600: 267 60% 38%;
+    --dendrite-900: 267 65% 12%;
+
+    /* myelin — Warm Ochre */
+    --myelin-50:  43 90% 97%;
+    --myelin-100: 43 85% 90%;
+    --myelin-200: 43 80% 78%;
+    --myelin-400: 43 75% 48%;
+    --myelin-600: 43 75% 32%;
+    --myelin-900: 43 70% 10%;
+
+    /* neuron — Sage Green */
+    --neuron-50:  152 65% 97%;
+    --neuron-100: 152 60% 88%;
+    --neuron-200: 152 55% 72%;
+    --neuron-400: 152 55% 40%;
+    --neuron-600: 152 55% 28%;
+    --neuron-900: 152 55% 10%;
+
+    /* cortex — Dusty Red */
+    --cortex-50:  4 80% 97%;
+    --cortex-100: 4 70% 90%;
+    --cortex-200: 4 65% 76%;
+    --cortex-400: 4 65% 48%;
+    --cortex-600: 4 65% 34%;
+    --cortex-900: 4 60% 12%;
+
+    /* axon — Cool Gray */
+    --axon-50:  220 20% 98%;
+    --axon-100: 220 18% 92%;
+    --axon-200: 220 15% 82%;
+    --axon-400: 220 12% 60%;
+    --axon-600: 220 12% 40%;
+    --axon-900: 220 15% 8%;
+
+    /* ── Remap shadcn generic tokens to neuroscience palette ── */
+    --primary: var(--synapse-400);
+    --primary-foreground: var(--synapse-50);
+    --destructive: var(--cortex-400);
+    --destructive-foreground: var(--cortex-50);
+    --accent: var(--dendrite-200);
+    --accent-foreground: var(--dendrite-900);
+    --ring: var(--synapse-600);
   }
 
   .dark {
@@ -46,6 +105,65 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    /* ── Neuroscience palette — dark mode (bioluminescent) ── */
+
+    /* synapse — Synaptic Blue */
+    --synapse-50:  213 60% 95%;
+    --synapse-100: 213 70% 85%;
+    --synapse-200: 213 80% 70%;
+    --synapse-400: 213 100% 60%;
+    --synapse-600: 213 100% 45%;
+    --synapse-900: 213 100% 15%;
+
+    /* dendrite — Dendrite Violet */
+    --dendrite-50:  267 50% 95%;
+    --dendrite-100: 267 60% 85%;
+    --dendrite-200: 267 65% 72%;
+    --dendrite-400: 267 80% 62%;
+    --dendrite-600: 267 80% 45%;
+    --dendrite-900: 267 80% 15%;
+
+    /* myelin — Myelin Gold */
+    --myelin-50:  43 80% 95%;
+    --myelin-100: 43 85% 85%;
+    --myelin-200: 43 90% 72%;
+    --myelin-400: 43 95% 58%;
+    --myelin-600: 43 90% 40%;
+    --myelin-900: 43 80% 12%;
+
+    /* neuron — Neural Green */
+    --neuron-50:  152 60% 95%;
+    --neuron-100: 152 65% 85%;
+    --neuron-200: 152 70% 70%;
+    --neuron-400: 152 80% 50%;
+    --neuron-600: 152 75% 35%;
+    --neuron-900: 152 70% 12%;
+
+    /* cortex — Cortex Rose */
+    --cortex-50:  4 80% 96%;
+    --cortex-100: 4 80% 88%;
+    --cortex-200: 4 75% 74%;
+    --cortex-400: 4 90% 58%;
+    --cortex-600: 4 85% 42%;
+    --cortex-900: 4 75% 15%;
+
+    /* axon — Axon Gray */
+    --axon-50:  220 20% 97%;
+    --axon-100: 220 18% 90%;
+    --axon-200: 220 15% 78%;
+    --axon-400: 220 12% 55%;
+    --axon-600: 220 12% 35%;
+    --axon-900: 220 15% 10%;
+
+    /* ── Remap shadcn generic tokens to neuroscience palette ── */
+    --primary: var(--synapse-400);
+    --primary-foreground: var(--synapse-900);
+    --destructive: var(--cortex-400);
+    --destructive-foreground: var(--cortex-900);
+    --accent: var(--dendrite-200);
+    --accent-foreground: var(--dendrite-900);
+    --ring: var(--synapse-600);
   }
 }
 
