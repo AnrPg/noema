@@ -1,10 +1,16 @@
 /**
- * Schedule Store — Cached scheduling plan.
- * Not persisted — always fresh from API.
+ * Schedule Store — Cached scheduling intelligence.
+ *
+ * Holds the latest dual-lane plan from the scheduler service.
+ * Not persisted — always fetched fresh on page load.
  */
 
 import type { IDualLanePlanResult } from '@noema/api-client/scheduler';
 import { create } from 'zustand';
+
+// ============================================================================
+// State + Actions
+// ============================================================================
 
 interface IScheduleState {
   currentPlan: IDualLanePlanResult | null;
@@ -15,6 +21,10 @@ interface IScheduleActions {
   setPlan: (plan: IDualLanePlanResult) => void;
   clearPlan: () => void;
 }
+
+// ============================================================================
+// Store
+// ============================================================================
 
 export const useScheduleStore = create<IScheduleState & IScheduleActions>()((set) => ({
   currentPlan: null,

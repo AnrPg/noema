@@ -1,9 +1,15 @@
 /**
  * Graph Store — Knowledge graph viewport state.
+ *
+ * Controls camera, selection, overlays, and layout mode.
  * Not persisted — viewport resets on navigation.
  */
 
 import { create } from 'zustand';
+
+// ============================================================================
+// Domain Types
+// ============================================================================
 
 export type OverlayType =
   | 'centrality'
@@ -18,6 +24,10 @@ interface IViewportCenter {
   y: number;
 }
 
+// ============================================================================
+// State Shape
+// ============================================================================
+
 interface IGraphState {
   viewportCenter: IViewportCenter;
   zoom: number;
@@ -27,6 +37,10 @@ interface IGraphState {
   layoutMode: LayoutMode;
 }
 
+// ============================================================================
+// Actions
+// ============================================================================
+
 interface IGraphActions {
   selectNode: (nodeId: string) => void;
   deselectNode: () => void;
@@ -35,6 +49,10 @@ interface IGraphActions {
   resetViewport: () => void;
   setHoveredNode: (nodeId: string | null) => void;
 }
+
+// ============================================================================
+// Store
+// ============================================================================
 
 const initialState: IGraphState = {
   viewportCenter: { x: 0, y: 0 },

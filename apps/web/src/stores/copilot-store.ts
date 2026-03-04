@@ -1,11 +1,16 @@
 /**
  * Copilot Store — Cognitive Copilot sidebar state.
- * isOpen is persisted to localStorage; hints are ephemeral.
+ *
+ * Tracks sidebar open/close (persisted) and per-page hints (ephemeral).
  */
 
 import type { IAgentHints } from '@noema/contracts';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+
+// ============================================================================
+// State + Actions
+// ============================================================================
 
 interface ICopilotState {
   isOpen: boolean;
@@ -22,6 +27,10 @@ interface ICopilotActions {
   setActivePage: (pageKey: string) => void;
 }
 
+// ============================================================================
+// Store
+// ============================================================================
+
 export const useCopilotStore = create<ICopilotState & ICopilotActions>()(
   persist(
     (set) => ({
@@ -36,6 +45,7 @@ export const useCopilotStore = create<ICopilotState & ICopilotActions>()(
       pushHints: (pageKey, hints) =>
         set((s) => {
           const existing = s.hintsByPage[pageKey] ?? [];
+          // Deduplicate: skip if all action IDs from incoming hints are already present
           const existingActionIds = new Set(
             existing.flatMap((h) => h.suggestedNextActions.map((a) => a.action))
           );
@@ -55,6 +65,7 @@ export const useCopilotStore = create<ICopilotState & ICopilotActions>()(
     {
       name: 'noema-copilot',
       storage: createJSONStorage(() => localStorage),
+      // Only persist sidebar open/close preference
       partialize: (state) => ({ isOpen: state.isOpen }),
     }
   )

@@ -1,10 +1,16 @@
 /**
  * Session Store — Active learning session working memory.
- * Not persisted — ephemeral.
+ *
+ * Holds ephemeral state for a single review session.
+ * Not persisted — cleared when the user navigates away.
  */
 
 import type { IAttemptInput, ISessionDto, ISessionQueueDto } from '@noema/api-client/session';
 import { create } from 'zustand';
+
+// ============================================================================
+// State Shape
+// ============================================================================
 
 interface ISessionState {
   activeSession: ISessionDto | null;
@@ -15,6 +21,10 @@ interface ISessionState {
   isPaused: boolean;
 }
 
+// ============================================================================
+// Actions
+// ============================================================================
+
 interface ISessionActions {
   setSession: (session: ISessionDto) => void;
   advanceCard: () => void;
@@ -24,6 +34,10 @@ interface ISessionActions {
   resetAttempt: () => void;
   clear: () => void;
 }
+
+// ============================================================================
+// Store
+// ============================================================================
 
 const initialState: ISessionState = {
   activeSession: null,
