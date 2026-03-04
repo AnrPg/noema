@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 // ============================================================================
 // Types
@@ -34,26 +34,26 @@ export interface IShortcutDef {
 // Platform detection
 // ============================================================================
 
-function isMac(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /mac/i.test(navigator.userAgent);
-}
+// Cached once at module load time — platform does not change at runtime.
+const _isMac: boolean = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
 
 function modPressed(e: KeyboardEvent, mod: IShortcutDef['mod']): boolean {
   if (mod === undefined) return true;
   switch (mod) {
     case 'cmd':
-      return isMac() ? e.metaKey : e.ctrlKey;
+      return _isMac ? e.metaKey : e.ctrlKey;
     case 'ctrl':
       return e.ctrlKey;
     case 'shift':
       return e.shiftKey;
     case 'alt':
       return e.altKey;
+    default:
+      return false;
   }
 }
 
-function isInputFocused(): boolean {
+export function isInputFocused(): boolean {
   const el = document.activeElement;
   if (el === null) return false;
   const tag = el.tagName.toLowerCase();
@@ -64,12 +64,13 @@ function isInputFocused(): boolean {
 
 // ============================================================================
 // Global shortcut registry (module-level for the reference panel)
+// Registry stores refs so getRegisteredShortcuts() always returns live values.
 // ============================================================================
 
-const _registry = new Map<string, IShortcutDef[]>();
+const _registry = new Map<string, { current: IShortcutDef[] }>();
 
 export function getRegisteredShortcuts(): IShortcutDef[] {
-  return [..._registry.values()].flat();
+  return [..._registry.values()].flatMap((r) => r.current);
 }
 
 // ============================================================================
@@ -79,12 +80,20 @@ export function getRegisteredShortcuts(): IShortcutDef[] {
 let _idCounter = 0;
 
 export function useKeyboardShortcuts(shortcuts: IShortcutDef[]): void {
+  // Keep a stable ref so the keydown handler always calls the latest shortcuts
+  // without needing to re-register the listener on every render.
+  const ref = useRef(shortcuts);
+
+  useEffect(() => {
+    ref.current = shortcuts;
+  }, [shortcuts]);
+
   useEffect(() => {
     const id = String(++_idCounter);
-    _registry.set(id, shortcuts);
+    _registry.set(id, ref); // store ref — getRegisteredShortcuts() reads .current
 
     const handler = (e: KeyboardEvent): void => {
-      for (const shortcut of shortcuts) {
+      for (const shortcut of ref.current) {
         if (e.key !== shortcut.key) continue;
         if (!modPressed(e, shortcut.mod)) continue;
         if (!(shortcut.ignoreInputs === true) && isInputFocused()) continue;
@@ -101,5 +110,5 @@ export function useKeyboardShortcuts(shortcuts: IShortcutDef[]): void {
       window.removeEventListener('keydown', handler);
       _registry.delete(id);
     };
-  }, []); // shortcuts are registered once per mount
+  }, []); // handler reads through ref; effect runs once per mount
 }

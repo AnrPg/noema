@@ -6,8 +6,12 @@
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { getRegisteredShortcuts, type IShortcutDef } from '@/hooks/use-keyboard-shortcuts';
+import { useEffect, useRef, useState } from 'react';
+import {
+  getRegisteredShortcuts,
+  isInputFocused,
+  type IShortcutDef,
+} from '@/hooks/use-keyboard-shortcuts';
 
 function formatShortcut(s: IShortcutDef): string {
   const parts: string[] = [];
@@ -22,11 +26,14 @@ function formatShortcut(s: IShortcutDef): string {
 export function ShortcutReferencePanel(): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [shortcuts, setShortcuts] = useState<IShortcutDef[]>([]);
+  // Capture the previously focused element so focus can be restored on close.
+  const triggerRef = useRef<Element | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === '?' && e.shiftKey && !(document.activeElement instanceof HTMLInputElement)) {
+      if (e.key === '?' && e.shiftKey && !isInputFocused()) {
         e.preventDefault();
+        triggerRef.current = document.activeElement;
         setShortcuts(getRegisteredShortcuts());
         setOpen(true);
       }
@@ -37,8 +44,15 @@ export function ShortcutReferencePanel(): React.JSX.Element {
     };
   }, []);
 
+  const handleOpenChange = (nextOpen: boolean): void => {
+    setOpen(nextOpen);
+    if (!nextOpen && triggerRef.current instanceof HTMLElement) {
+      triggerRef.current.focus();
+    }
+  };
+
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
         <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-6">
@@ -57,8 +71,11 @@ export function ShortcutReferencePanel(): React.JSX.Element {
             All active keyboard shortcuts on the current page.
           </Dialog.Description>
           <ul className="space-y-2">
-            {shortcuts.map((s, i) => (
-              <li key={i} className="flex items-center justify-between text-sm">
+            {shortcuts.map((s) => (
+              <li
+                key={`${s.mod ?? ''}-${s.key}`}
+                className="flex items-center justify-between text-sm"
+              >
                 <span className="text-foreground">{s.label}</span>
                 <kbd className="inline-flex items-center rounded border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   {formatShortcut(s)}
