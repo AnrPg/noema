@@ -32,6 +32,9 @@ However, this audit identified **3 CRITICAL**, **4 HIGH**, **6 MEDIUM**, and **5
 LOW** findings — mostly concentrated in the CKG mutation pipeline's state
 enumeration blind spots and Prisma schema alignment gaps.
 
+**Resolution status**: 3/3 CRITICAL fixed (`39db93c`), 0/4 HIGH open, 6/6
+MEDIUM resolved (`fe2664d`), 3/5 LOW resolved (`fe2664d`).
+
 | Severity | Count | Category                                                             |
 | -------- | ----- | -------------------------------------------------------------------- |
 | CRITICAL | 3     | Missing `revision_requested` state in 3 key enumeration methods      |
@@ -100,12 +103,17 @@ The facade pattern cleanly divides responsibilities:
 | `IMetricsStalenessRepository` (3 methods)    | `PrismaMetricsStalenessRepository`    | ✅ All 3                   |
 | `IGraphRepository` (~36 methods)             | `Neo4jGraphRepository`                | Not audited (Neo4j driver) |
 
-### Finding 2.1 [MEDIUM] — Operation Log Unbounded Queries
+### Finding 2.1 [MEDIUM] — Operation Log Unbounded Queries — **RESOLVED** (`fe2664d`)
 
 **File**:
 `src/infrastructure/database/repositories/prisma-operation-log.repository.ts`  
 **Lines**: 152–176 (`getOperationsForNode`, `getOperationsForEdge`,
 `getOperationsSince`)
+
+**Status**: Resolved — Added optional `limit` parameter (defaults: 200 for
+node/edge, 1000 for time-range) to all three methods in both the interface
+(`IPkgOperationLogRepository`) and the Prisma implementation. Queries now use
+`take: limit`.
 
 These three repository methods return **all matching results without limit**.
 The consumer (`KnowledgeGraphService.getOperationLog`) applies in-memory
@@ -466,11 +474,15 @@ The misconception detection system is well-designed:
 
 ## 5. Prisma Schema Alignment
 
-### Finding 5.1 [MEDIUM] — `StructuralMetricSnapshot` Write-Only Fields
+### Finding 5.1 [MEDIUM] — `StructuralMetricSnapshot` Write-Only Fields — **RESOLVED** (`fe2664d`)
 
 **File**: `prisma/schema.prisma` — `StructuralMetricSnapshot` model  
 **File**: `src/infrastructure/database/repositories/prisma-metrics.repository.ts`
 — `toDomain()`
+
+**Status**: Resolved — Added JSDoc to `toDomain()` documenting that
+`graphRegion`, `metacognitiveStage`, and `nodeCount` are intentionally not
+surfaced (DB-level indexing only).
 
 The Prisma schema defines:
 
@@ -510,9 +522,14 @@ and `toDomain()`.
 
 ---
 
-### Finding 5.2 [MEDIUM] — `CkgMutation` Schema Has Unmapped Fields
+### Finding 5.2 [MEDIUM] — `CkgMutation` Schema Has Unmapped Fields — **RESOLVED** (`fe2664d`)
 
 **File**: `prisma/schema.prisma` — `CkgMutation` model
+
+**Status**: Resolved — Added JSDoc to `toDomain()` documenting 7 write-only
+columns (`mutationType`, `targetNodeIds`, `targetEdgeIds`, `proofResult`,
+`commitResult`, `rejectionReason`, `priority`) as DB-level indexed columns
+not surfaced to domain consumers.
 
 The Prisma schema defines fields that don't appear in `toDomain()` or
 `createMutation`:
@@ -546,11 +563,15 @@ document them as DB-only indexed columns with a code comment.
 
 ---
 
-### Finding 5.3 [MEDIUM] — Column Name Mismatch: `operation` (singular) vs `operations` (plural)
+### Finding 5.3 [MEDIUM] — Column Name Mismatch: `operation` (singular) vs `operations` (plural) — **RESOLVED** (`fe2664d`)
 
 **File**: `prisma/schema.prisma` — `CkgMutation.operation Json`  
 **File**: `src/infrastructure/database/repositories/prisma-mutation.repository.ts`
 — `toDomain()`
+
+**Status**: Resolved — Added inline comment documenting the singular/plural
+naming discrepancy. Migration deferred (column rename is a breaking schema
+change requiring coordinated deploy).
 
 The Prisma column is `operation` (singular `Json`), but the domain interface
 uses `operations` (plural `Metadata[]`):
@@ -576,7 +597,7 @@ naming inconsistency is confusing and increases onboarding friction.
 
 ---
 
-### Finding 5.4 [LOW] — `InterventionTemplate` Has Usage Tracking Fields Not in Domain
+### Finding 5.4 [LOW] — `InterventionTemplate` Has Usage Tracking Fields Not in Domain — **RESOLVED** (`fe2664d`)
 
 **File**: `prisma/schema.prisma` — `InterventionTemplate` model
 
@@ -596,11 +617,12 @@ tracking.
 
 **Impact**: None currently — fields have defaults and aren't blocking.
 
-**Recommendation**: Document the intended future use in a comment.
+**Status**: Resolved — Added schema comments documenting these fields as
+reserved for future A/B testing / intervention effectiveness tracking.
 
 ---
 
-### Finding 5.5 [LOW] — `MisconceptionPattern.scoringModel` and `domains[]` Not in Domain
+### Finding 5.5 [LOW] — `MisconceptionPattern.scoringModel` and `domains[]` Not in Domain — **RESOLVED** (`fe2664d`)
 
 **File**: `prisma/schema.prisma` — `MisconceptionPattern` model
 
@@ -618,6 +640,9 @@ Appears reserved for future per-pattern scoring customization and domain
 scoping.
 
 **Impact**: None currently.
+
+**Status**: Resolved — Added schema comments documenting these fields as
+reserved for future per-pattern scoring customization and domain scoping.
 
 ---
 
@@ -694,13 +719,18 @@ checks directly.
 
 ---
 
-### Finding 6.4 [LOW] — `MaxDepthExceededError` Never Thrown
+### Finding 6.4 [LOW] — `MaxDepthExceededError` Never Thrown — **RESOLVED** (`fe2664d`)
 
 **File**: `src/domain/knowledge-graph-service/errors/graph.errors.ts`  
 **Lines**: 156–172
 
-`MaxDepthExceededError` is defined but never instantiated anywhere. The actual
-max-depth validation in `service-helpers.ts` throws `ValidationError` instead:
+**Status**: Resolved — `validateTraversalDepth()` in `service-helpers.ts` now
+throws `MaxDepthExceededError` instead of `ValidationError`, which correctly
+matches the `handleError()` mapping in `route-helpers.ts` and returns HTTP 422.
+The error class is no longer dead code.
+
+`MaxDepthExceededError` was defined but never instantiated anywhere. The actual
+max-depth validation in `service-helpers.ts` threw `ValidationError` instead:
 
 ```typescript
 // service-helpers.ts:
@@ -727,12 +757,15 @@ Meanwhile, `handleError()` in `route-helpers.ts` imports and checks for
 
 ---
 
-### Finding 6.5 [MEDIUM] — `MutationAlreadyCommittedError` Mapped as 422
+### Finding 6.5 [MEDIUM] — `MutationAlreadyCommittedError` Mapped as 422 — **RESOLVED** (`fe2664d`)
 
 **File**: `src/api/shared/route-helpers.ts`  
 **Lines**: 463–473
 
-`MutationAlreadyCommittedError` is mapped to HTTP 422 (Unprocessable Entity):
+**Status**: Resolved — `MutationAlreadyCommittedError` now returns HTTP 409
+(Conflict) instead of 422, matching correct REST semantics.
+
+`MutationAlreadyCommittedError` was mapped to HTTP 422 (Unprocessable Entity):
 
 ```typescript
 if (error instanceof MutationAlreadyCommittedError) {
@@ -809,24 +842,24 @@ objects. No missing exports detected.
 
 ### MEDIUM (Address in Sprint)
 
-| #   | Finding                                                               | File                                    | Line(s)      |
-| --- | --------------------------------------------------------------------- | --------------------------------------- | ------------ |
-| 2.1 | Operation log unbounded queries for node/edge/since filters           | `prisma-operation-log.repository.ts`    | 152–176      |
-| 5.1 | `StructuralMetricSnapshot` write-only fields                          | `prisma-metrics.repository.ts`          | `toDomain()` |
-| 5.2 | `CkgMutation` schema has 7 unmapped fields                            | `prisma-mutation.repository.ts`         | `toDomain()` |
-| 5.3 | Column naming: `operation` (singular) vs `operations` (plural)        | `prisma-mutation.repository.ts`         | 345, 328     |
-| 6.4 | `MaxDepthExceededError` never thrown — wrong HTTP status (400 vs 422) | `service-helpers.ts`, `graph.errors.ts` | 82, 156      |
-| 6.5 | `MutationAlreadyCommittedError` mapped as 422 instead of 409          | `route-helpers.ts`                      | 463          |
+| #   | Finding                                                               | File                                    | Line(s)      | Status      |
+| --- | --------------------------------------------------------------------- | --------------------------------------- | ------------ | ----------- |
+| 2.1 | Operation log unbounded queries for node/edge/since filters           | `prisma-operation-log.repository.ts`    | 152–176      | **RESOLVED** |
+| 5.1 | `StructuralMetricSnapshot` write-only fields                          | `prisma-metrics.repository.ts`          | `toDomain()` | **RESOLVED** |
+| 5.2 | `CkgMutation` schema has 7 unmapped fields                            | `prisma-mutation.repository.ts`         | `toDomain()` | **RESOLVED** |
+| 5.3 | Column naming: `operation` (singular) vs `operations` (plural)        | `prisma-mutation.repository.ts`         | 345, 328     | **RESOLVED** |
+| 6.4 | `MaxDepthExceededError` never thrown — wrong HTTP status (400 vs 422) | `service-helpers.ts`, `graph.errors.ts` | 82, 156      | **RESOLVED** |
+| 6.5 | `MutationAlreadyCommittedError` mapped as 422 instead of 409          | `route-helpers.ts`                      | 463          | **RESOLVED** |
 
 ### LOW (Backlog)
 
-| #         | Finding                                                       | File                       | Line(s) |
-| --------- | ------------------------------------------------------------- | -------------------------- | ------- |
-| 5.4       | `InterventionTemplate.useCount`/`successRate` not in domain   | `schema.prisma`            | —       |
-| 5.5       | `MisconceptionPattern.scoringModel`/`domains[]` not in domain | `schema.prisma`            | —       |
-| 6.3       | Dead type guards (`isDomainError`, `isValidationError`)       | `base.errors.ts`           | 104–121 |
-| 6.4 (alt) | `MaxDepthExceededError` class is dead code                    | `graph.errors.ts`          | 156–172 |
-| —         | `proofStageEnabled` config exists but TLA+ not implemented    | `ckg-mutation-pipeline.ts` | ~990    |
+| #         | Finding                                                       | File                       | Line(s) | Status      |
+| --------- | ------------------------------------------------------------- | -------------------------- | ------- | ----------- |
+| 5.4       | `InterventionTemplate.useCount`/`successRate` not in domain   | `schema.prisma`            | —       | **RESOLVED** |
+| 5.5       | `MisconceptionPattern.scoringModel`/`domains[]` not in domain | `schema.prisma`            | —       | **RESOLVED** |
+| 6.3       | Dead type guards (`isDomainError`, `isValidationError`)       | `base.errors.ts`           | 104–121 |             |
+| 6.4 (alt) | `MaxDepthExceededError` class is dead code                    | `graph.errors.ts`          | 156–172 | **RESOLVED** |
+| —         | `proofStageEnabled` config exists but TLA+ not implemented    | `ckg-mutation-pipeline.ts` | ~990    |             |
 
 ---
 

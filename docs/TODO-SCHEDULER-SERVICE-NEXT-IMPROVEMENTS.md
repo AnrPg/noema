@@ -34,8 +34,8 @@ before a cutoff date and return them ranked by urgency.
 - [ ] Add types: `IReviewQueueInput`, `IReviewQueueResult` in
       `scheduler.types.ts`
 - [ ] Add Zod schema: `ReviewQueueInputSchema` in `scheduler.schemas.ts`
-- [ ] Add REST route: `GET /v1/scheduler/review-queue` in
-      `scheduler.routes.ts`
+- [x] Add REST route: `GET /v1/scheduler/review-queue` in
+      `scheduler.routes.ts` — **DONE** (`fe2664d`)
   - Auth: enforce `query.userId === ctx.userId`
   - Remove `501` placeholder from OpenAPI
 - [ ] Add MCP tool definition: `get-srs-schedule` in `scheduler.tools.ts`
@@ -94,14 +94,15 @@ P(recall). Used by agents for urgency scoring and by the UI for
 "forgetting risk" indicators.
 
 - [ ] Add `predictRetention(input, ctx)` to `SchedulerService`
-  - For FSRS cards: `P(recall) = (1 + deltaDays / (9 * stability))^(-1)`
-    (FSRS-5 formula)
-  - For HLR cards: delegate to `HLRModel.predict(features, deltaDays)`
+  - For FSRS cards: uses `FSRSModel.forgettingCurve(deltaDays, stability)` —
+    **formula corrected** (`fe2664d`)
+  - For HLR cards: `Math.pow(2, -deltaDays / stability)` —
+    **formula corrected** (`fe2664d`)
   - Return per-card `{ cardId, algorithm, retentionProbability, halfLifeDays?,
     asOf }`
 - [ ] Add types: `IRetentionPredictionInput`, `IRetentionPredictionResult`
 - [ ] Add Zod schema
-- [ ] Add REST route: `POST /v1/scheduler/retention/predict`
+- [x] Add REST route: `POST /v1/scheduler/retention/predict` — **DONE** (`fe2664d`)
 - [ ] Add MCP tool: `predict-retention`
 - [ ] Unit tests: FSRS prediction, HLR prediction, mixed-algorithm batch,
       edge cases (0 stability, huge deltaDays)
