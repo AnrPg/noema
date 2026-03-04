@@ -41,11 +41,11 @@ import type {
 // ============================================================================
 
 function toDbCardType(cardType: string): PrismaCardType {
-  return cardType.toUpperCase().replace(/-/g, '_') as PrismaCardType;
+  return cardType.toUpperCase() as PrismaCardType;
 }
 
 function fromDbCardType(dbCardType: PrismaCardType): CardType | RemediationCardType {
-  return dbCardType.toLowerCase().replace(/_/g, '-') as CardType | RemediationCardType;
+  return dbCardType.toLowerCase() as CardType | RemediationCardType;
 }
 
 function toDbDifficulty(difficulty: string): PrismaDifficultyLevel {

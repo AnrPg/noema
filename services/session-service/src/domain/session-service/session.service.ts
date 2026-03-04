@@ -2221,13 +2221,18 @@ export class SessionService {
       });
     }
 
+    // Bind to const with type assertion — TS control-flow cannot track
+    // closure mutations, so claims/token remain typed as null|never after the guard.
+    const validClaims = claims as unknown as IOfflineIntentTokenClaims;
+    const validToken = token as unknown as string;
+
     this.logger.info(
-      { userId: ctx.userId, kid: this.activeTokenKeyId, expiresAt: claims.expiresAt },
+      { userId: ctx.userId, kid: this.activeTokenKeyId, expiresAt: validClaims.expiresAt },
       'Issued offline intent token'
     );
 
     return {
-      data: { token, expiresAt: claims.expiresAt },
+      data: { token: validToken, expiresAt: validClaims.expiresAt },
       agentHints: buildHints(
         [
           {

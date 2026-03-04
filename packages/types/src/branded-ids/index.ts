@@ -386,6 +386,14 @@ export const AgentId = {
   prefix: ID_PREFIXES.AgentId,
 } as const;
 
+// Template ID
+export const TemplateId = {
+  create: (value: string): TemplateId =>
+    createId<'TemplateId'>(value, ID_PREFIXES.TemplateId, 'TemplateId'),
+  isValid: (value: unknown): value is TemplateId => isValidId(value, ID_PREFIXES.TemplateId),
+  prefix: ID_PREFIXES.TemplateId,
+} as const;
+
 // Media ID
 export const MediaId = {
   create: (value: string): MediaId => createId<'MediaId'>(value, ID_PREFIXES.MediaId, 'MediaId'),
@@ -492,6 +500,7 @@ export type AnyBrandedId =
   | CausationId
   | ToolId
   | AgentId
+  | TemplateId
   | MediaId
   | NotificationId
   | RoomId

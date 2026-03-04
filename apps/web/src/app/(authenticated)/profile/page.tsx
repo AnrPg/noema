@@ -58,8 +58,11 @@ export default function ProfilePage() {
       setError(null);
       setSuccess(false);
       await updateProfile.mutateAsync({
-        displayName: data.displayName,
-        bio: data.bio ?? null,
+        data: {
+          displayName: data.displayName,
+          bio: data.bio ?? null,
+        },
+        version: user?.version ?? 0,
       });
       setSuccess(true);
     } catch (err) {

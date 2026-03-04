@@ -130,12 +130,12 @@ export function useMySettings(
 }
 
 export function useUpdateProfile(
-  options?: UseMutationOptions<UserResponse, Error, UpdateProfileInput>
+  options?: UseMutationOptions<UserResponse, Error, { data: UpdateProfileInput; version: number }>
 ) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data) => meApi.updateProfile(data, 0), // Version handled server-side
+    mutationFn: ({ data, version }) => meApi.updateProfile(data, version),
     onSuccess: (response) => {
       queryClient.setQueryData(userKeys.me(), response);
     },
@@ -144,12 +144,12 @@ export function useUpdateProfile(
 }
 
 export function useUpdateSettings(
-  options?: UseMutationOptions<UserSettingsResponse, Error, UpdateSettingsInput>
+  options?: UseMutationOptions<UserSettingsResponse, Error, { data: UpdateSettingsInput; version: number }>
 ) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data) => meApi.updateSettings(data, 0),
+    mutationFn: ({ data, version }) => meApi.updateSettings(data, version),
     onSuccess: (response) => {
       queryClient.setQueryData(userKeys.meSettings(), response);
     },
@@ -158,10 +158,10 @@ export function useUpdateSettings(
 }
 
 export function useChangePassword(
-  options?: UseMutationOptions<UserResponse, Error, ChangePasswordInput>
+  options?: UseMutationOptions<UserResponse, Error, { data: ChangePasswordInput; version: number }>
 ) {
   return useMutation({
-    mutationFn: (data) => meApi.changePassword(data, 0),
+    mutationFn: ({ data, version }) => meApi.changePassword(data, version),
     ...options,
   });
 }
@@ -219,6 +219,10 @@ export function useUser(
   });
 }
 
+/**
+ * @deprecated Backend route `/users/username/:username/public` does not exist.
+ * Calls will return 404. Remove once a public profile endpoint is implemented.
+ */
 export function usePublicProfile(
   username: string,
   options?: Omit<UseQueryOptions<PublicUserResponse, Error>, 'queryKey' | 'queryFn'>

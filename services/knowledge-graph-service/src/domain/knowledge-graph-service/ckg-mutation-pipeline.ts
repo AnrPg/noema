@@ -278,6 +278,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       'validating',
       'validated',
       'pending_review',
+      'revision_requested',
       'proving',
       'proven',
       'committing',
@@ -298,6 +299,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       'validating',
       'validated',
       'pending_review',
+      'revision_requested',
       'proving',
       'proven',
       'committing',
@@ -667,6 +669,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     validatingCount: number;
     validatedCount: number;
     pendingReviewCount: number;
+    revisionRequestedCount: number;
     committedCount: number;
     rejectedCount: number;
     stuckCount: number;
@@ -681,6 +684,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       proving,
       proven,
       committing,
+      revisionRequested,
     ] = await Promise.all([
       this.mutationRepository.countMutationsByState('proposed'),
       this.mutationRepository.countMutationsByState('validating'),
@@ -691,6 +695,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       this.mutationRepository.countMutationsByState('proving'),
       this.mutationRepository.countMutationsByState('proven'),
       this.mutationRepository.countMutationsByState('committing'),
+      this.mutationRepository.countMutationsByState('revision_requested'),
     ]);
 
     // "Stuck" = in non-terminal non-proposed state (could indicate processing failure)
@@ -701,6 +706,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       validatingCount: validating,
       validatedCount: validated,
       pendingReviewCount: pendingReview,
+      revisionRequestedCount: revisionRequested,
       committedCount: committed,
       rejectedCount: rejected,
       stuckCount,

@@ -17,7 +17,7 @@ export const DualLanePlanInputSchema = z.object({
   commit: z.boolean().optional(),
 });
 
-const SchedulerAlgorithmSchema = z.enum(['fsrs', 'hlr', 'sm2', 'leitner']);
+const SchedulerAlgorithmSchema = z.enum(['fsrs', 'hlr', 'sm2']);
 const SchedulerLaneSchema = z.enum(['retention', 'calibration']);
 
 export const CardScheduleInputSchema = z.object({

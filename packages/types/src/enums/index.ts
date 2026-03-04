@@ -178,6 +178,7 @@ export type AttemptOutcome = (typeof AttemptOutcome)[keyof typeof AttemptOutcome
  */
 export const Environment = {
   DEVELOPMENT: 'development',
+  TEST: 'test',
   STAGING: 'staging',
   PRODUCTION: 'production',
 } as const;

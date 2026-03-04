@@ -18,6 +18,7 @@ import {
   CardNotFoundError,
   DomainError,
   DuplicateCardError,
+  ExternalServiceError,
   ValidationError,
   VersionConflictError,
 } from '../../domain/content-service/errors/index.js';
@@ -275,6 +276,18 @@ export function handleError(
     reply.status(422).send({
       error: {
         code: (error as DomainError).code,
+        message: error.message,
+      },
+      metadata,
+    });
+    return;
+  }
+
+  // 502 — External service failure
+  if (error instanceof ExternalServiceError) {
+    reply.status(502).send({
+      error: {
+        code: error.code,
         message: error.message,
       },
       metadata,

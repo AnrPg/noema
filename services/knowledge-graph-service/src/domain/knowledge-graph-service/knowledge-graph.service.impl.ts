@@ -739,6 +739,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       health.validatingCount +
       health.validatedCount +
       health.pendingReviewCount +
+      health.revisionRequestedCount +
       health.committedCount +
       health.rejectedCount;
 
@@ -747,6 +748,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       validatingCount: health.validatingCount,
       validatedCount: health.validatedCount,
       pendingReviewCount: health.pendingReviewCount,
+      revisionRequestedCount: health.revisionRequestedCount,
       committedCount: health.committedCount,
       rejectedCount: health.rejectedCount,
       stuckCount: health.stuckCount,

@@ -101,6 +101,7 @@ export interface ICkgMutationPipeline {
     validatingCount: number;
     validatedCount: number;
     pendingReviewCount: number;
+    revisionRequestedCount: number;
     committedCount: number;
     rejectedCount: number;
     stuckCount: number;

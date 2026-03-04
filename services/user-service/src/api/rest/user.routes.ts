@@ -13,9 +13,11 @@ import {
   BusinessRuleError,
   DomainError,
   EmailAlreadyExistsError,
+  ExternalServiceError,
   TokenAlreadyUsedError,
   TokenExpiredError,
   TokenNotFoundError,
+  TooManyLoginAttemptsError,
   UsernameAlreadyExistsError,
   UsernameChangeTooSoonError,
   UserNotFoundError,
@@ -198,7 +200,11 @@ export function registerUserRoutes(
         },
       });
     } else if (error instanceof BusinessRuleError) {
-      const status = error instanceof UsernameChangeTooSoonError ? 429 : 422;
+      const status = error instanceof UsernameChangeTooSoonError
+        ? 429
+        : error instanceof TooManyLoginAttemptsError
+          ? 429
+          : 422;
       reply.status(status).send({
         error: {
           code: (error as DomainError).code,
@@ -206,6 +212,16 @@ export function registerUserRoutes(
           ...(error instanceof UsernameChangeTooSoonError
             ? { nextAllowedAt: error.nextAllowedAt }
             : {}),
+          ...(error instanceof TooManyLoginAttemptsError
+            ? { remainingAttempts: error.remainingAttempts }
+            : {}),
+        },
+      });
+    } else if (error instanceof ExternalServiceError) {
+      reply.status(502).send({
+        error: {
+          code: error.code,
+          message: error.message,
         },
       });
     } else if (error instanceof DomainError) {

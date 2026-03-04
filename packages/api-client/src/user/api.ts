@@ -63,6 +63,8 @@ export const usersApi = {
 
   /**
    * Get public profile by username.
+   * @deprecated Backend route `/users/username/:username/public` does not exist.
+   * TODO: Implement backend route or remove this method.
    */
   getPublicProfile: (username: string): Promise<PublicUserResponse> =>
     http.get(`/users/username/${username}/public`),

@@ -746,6 +746,7 @@ export interface IPipelineHealthResult {
   readonly validatingCount: number;
   readonly validatedCount: number;
   readonly pendingReviewCount: number;
+  readonly revisionRequestedCount: number;
   readonly committedCount: number;
   readonly rejectedCount: number;
   readonly stuckCount: number;

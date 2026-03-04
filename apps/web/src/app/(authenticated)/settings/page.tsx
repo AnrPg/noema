@@ -45,6 +45,7 @@ type PasswordFormData = z.infer<typeof passwordSchema>;
 
 function ChangePasswordCard() {
   const changePassword = useChangePassword();
+  const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -62,8 +63,11 @@ function ChangePasswordCard() {
       setError(null);
       setSuccess(false);
       await changePassword.mutateAsync({
-        currentPassword: data.currentPassword,
-        newPassword: data.newPassword,
+        data: {
+          currentPassword: data.currentPassword,
+          newPassword: data.newPassword,
+        },
+        version: user?.version ?? 0,
       });
       setSuccess(true);
       reset();

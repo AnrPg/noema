@@ -18,16 +18,16 @@ import type {
   UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
-import type {
+import {
   Prisma,
-  AttemptOutcome as PrismaAttemptOutcome,
-  CardQueueStatus as PrismaCardQueueStatus,
-  PrismaClient,
-  HintDepth as PrismaHintDepth,
-  LearningMode as PrismaLearningMode,
-  Rating as PrismaRating,
-  SessionCohortHandshakeStatus as PrismaSessionCohortHandshakeStatus,
-  SessionState as PrismaSessionState,
+  type AttemptOutcome as PrismaAttemptOutcome,
+  type CardQueueStatus as PrismaCardQueueStatus,
+  type PrismaClient,
+  type HintDepth as PrismaHintDepth,
+  type LearningMode as PrismaLearningMode,
+  type Rating as PrismaRating,
+  type SessionCohortHandshakeStatus as PrismaSessionCohortHandshakeStatus,
+  type SessionState as PrismaSessionState,
 } from '../../../generated/prisma/index.js';
 
 import {
@@ -786,8 +786,8 @@ export class PrismaSessionRepository implements ISessionRepository {
         revision: 'newRevision' in input ? input.newRevision : input.revision,
         status: toPrismaSessionCohortHandshakeStatus(status),
         candidateCardIds: input.candidateCardIds as unknown as object,
-        acceptedCardIds: null,
-        rejectedCardIds: null,
+        acceptedCardIds: Prisma.DbNull,
+        rejectedCardIds: Prisma.DbNull,
         metadata: (input.metadata ?? {}) as object,
       },
     });
@@ -813,7 +813,9 @@ export class PrismaSessionRepository implements ISessionRepository {
       },
       data: {
         status: toPrismaSessionCohortHandshakeStatus(nextStatus),
-        acceptedCardIds: input.acceptedCardIds as unknown as object,
+        acceptedCardIds: ('acceptedCardIds' in input
+          ? input.acceptedCardIds
+          : input.committedCardIds) as unknown as object,
         rejectedCardIds: input.rejectedCardIds as unknown as object,
         metadata: (input.metadata ?? {}) as object,
       },
