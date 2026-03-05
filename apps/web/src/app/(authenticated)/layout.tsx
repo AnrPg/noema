@@ -31,6 +31,7 @@ import {
   Brain,
   ChevronDown,
   LayoutDashboard,
+  LibraryBig,
   LogOut,
   Settings,
   Target,
@@ -52,6 +53,7 @@ const navItems = [
       { href: '/learning', label: 'Study Sessions', icon: BookOpen },
       { href: '/knowledge', label: 'Knowledge Map', icon: Brain },
       { href: '/goals', label: 'Goals', icon: Target },
+      { href: '/cards', label: 'Card Library', icon: LibraryBig },
     ],
   },
   {

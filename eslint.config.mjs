@@ -34,6 +34,9 @@ export default tseslint.config(
       'eslint.config.mjs',
       // Vitest test setup files (not part of src build, not linted)
       'packages/ui/src/test/**',
+      // Web app test files — no vitest/testing-library configured yet in apps/web
+      'apps/web/src/**/*.test.ts',
+      'apps/web/src/**/*.test.tsx',
       // Stale compiled artifacts that tsc may emit into src/ instead of dist/
       'packages/*/src/**/*.js',
       'packages/*/src/**/*.d.ts',
@@ -165,7 +168,16 @@ export default tseslint.config(
 
   // Test files - relaxed rules
   {
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/__tests__/**/*.ts', '**/tests/**/*.ts'],
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/__tests__/**/*.ts',
+      '**/__tests__/**/*.tsx',
+      '**/tests/**/*.ts',
+      '**/tests/**/*.tsx',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
