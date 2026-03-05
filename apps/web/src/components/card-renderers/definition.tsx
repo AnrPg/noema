@@ -18,6 +18,9 @@ export default function DefinitionRenderer(props: ICardRendererProps): React.JSX
     return (
       <CardShell {...props}>
         <span className="font-bold text-foreground">{content.term}</span>
+        {content.partOfSpeech !== undefined && (
+          <span className="text-muted-foreground ml-1">({content.partOfSpeech})</span>
+        )}
       </CardShell>
     );
   }

@@ -253,6 +253,7 @@ export interface IOrderingContent extends ICardContentBase {
 // 19. DEFINITION — definition recall
 export interface IDefinitionContent extends ICardContentBase {
   term: string;
+  partOfSpeech?: string;
   definition: string;
   examples?: string[];
   relatedTerms?: string[];
