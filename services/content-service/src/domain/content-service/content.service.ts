@@ -35,7 +35,7 @@ import { generateContentHash } from '../../utils/content-hash.js';
 import { sanitizeCardContent } from '../../utils/content-sanitizer.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import { validateCardContent } from './card-content.schemas.js';
-import type { IContentRepository } from './content.repository.js';
+import type { IBatchSummary, IContentRepository } from './content.repository.js';
 import {
   BatchCreateCardInputSchema,
   ChangeCardStateInputSchema,
@@ -147,7 +147,10 @@ export class ContentService {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const existingCard = await this.repository.findByContentHash(context.userId!, contentHash);
     if (existingCard) {
-      throw new DuplicateCardError(existingCard.id, existingCard as unknown as Record<string, unknown>);
+      throw new DuplicateCardError(
+        existingCard.id,
+        existingCard as unknown as Record<string, unknown>
+      );
     }
 
     // Generate ID
@@ -437,7 +440,7 @@ export class ContentService {
     context: IExecutionContext,
     cursor?: string,
     limit?: number,
-    direction?: 'forward' | 'backward',
+    direction?: 'forward' | 'backward'
   ): Promise<IServiceResult<ICursorPaginatedResponse<ICardSummary>>> {
     this.requireAuth(context);
     this.logger.debug({ query: queryInput, cursor, limit, direction }, 'Cursor query cards');
@@ -456,7 +459,13 @@ export class ContentService {
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       this.isAdmin(context) && validated.userId ? validated.userId : context.userId!;
 
-    const result = await this.repository.queryCursor(validated, effectiveUserId, cursor, limit, direction);
+    const result = await this.repository.queryCursor(
+      validated,
+      effectiveUserId,
+      cursor,
+      limit,
+      direction
+    );
 
     return {
       data: result,
@@ -545,7 +554,13 @@ export class ContentService {
 
     let card: ICard;
     try {
-      card = await this.repository.update(id, parseResult.data as IUpdateCardInput, version, context.userId ?? undefined, contentHash);
+      card = await this.repository.update(
+        id,
+        parseResult.data as IUpdateCardInput,
+        version,
+        context.userId ?? undefined,
+        contentHash
+      );
     } catch (error) {
       if (error instanceof VersionConflictError) throw error;
       throw error;
@@ -609,7 +624,7 @@ export class ContentService {
       id,
       parseResult.data as IChangeCardStateInput,
       version,
-      context.userId ?? undefined,
+      context.userId ?? undefined
     );
 
     // Publish event
@@ -721,7 +736,12 @@ export class ContentService {
       await this.snapshotBeforeChange(existingForNodes, 'node_links_update', context);
     }
 
-    const card = await this.repository.updateKnowledgeNodeIds(id, knowledgeNodeIds, version, context.userId ?? undefined);
+    const card = await this.repository.updateKnowledgeNodeIds(
+      id,
+      knowledgeNodeIds,
+      version,
+      context.userId ?? undefined
+    );
 
     // Publish event
     await this.eventPublisher.publish({
@@ -1077,10 +1097,7 @@ export class ContentService {
   /**
    * Restore a soft-deleted card (clear deletedAt, set state to DRAFT).
    */
-  async restore(
-    id: CardId,
-    context: IExecutionContext
-  ): Promise<IServiceResult<ICard>> {
+  async restore(id: CardId, context: IExecutionContext): Promise<IServiceResult<ICard>> {
     this.requireAuth(context);
     this.logger.info({ cardId: id }, 'Restoring card');
 
@@ -1154,20 +1171,25 @@ export class ContentService {
     return {
       data: result,
       agentHints: {
-        suggestedNextActions: result.entries.length > 0
-          ? [{
-              action: 'compare_versions',
-              description: 'Compare version snapshots to see what changed',
-              priority: 'low',
-              category: 'exploration',
-            }]
-          : [],
-        relatedResources: [{
-          type: 'Card',
-          id: id as string,
-          label: `Card ${id} history`,
-          relevance: 1.0,
-        }],
+        suggestedNextActions:
+          result.entries.length > 0
+            ? [
+                {
+                  action: 'compare_versions',
+                  description: 'Compare version snapshots to see what changed',
+                  priority: 'low',
+                  category: 'exploration',
+                },
+              ]
+            : [],
+        relatedResources: [
+          {
+            type: 'Card',
+            id: id as string,
+            label: `Card ${id} history`,
+            relevance: 1.0,
+          },
+        ],
         confidence: 1.0,
         sourceQuality: 'high',
         validityPeriod: 'medium',
@@ -1209,18 +1231,22 @@ export class ContentService {
     return {
       data: entry,
       agentHints: {
-        suggestedNextActions: [{
-          action: 'restore_version',
-          description: `Restore card to version ${String(version)}`,
-          priority: 'low',
-          category: 'correction',
-        }],
-        relatedResources: [{
-          type: 'Card',
-          id: id as string,
-          label: `Card ${id} v${String(version)}`,
-          relevance: 1.0,
-        }],
+        suggestedNextActions: [
+          {
+            action: 'restore_version',
+            description: `Restore card to version ${String(version)}`,
+            priority: 'low',
+            category: 'correction',
+          },
+        ],
+        relatedResources: [
+          {
+            type: 'Card',
+            id: id as string,
+            label: `Card ${id} v${String(version)}`,
+            relevance: 1.0,
+          },
+        ],
         confidence: 1.0,
         sourceQuality: 'high',
         validityPeriod: 'long',
@@ -1242,9 +1268,7 @@ export class ContentService {
   /**
    * Get aggregate statistics for a user's card collection.
    */
-  async getStats(
-    context: IExecutionContext
-  ): Promise<IServiceResult<ICardStats>> {
+  async getStats(context: IExecutionContext): Promise<IServiceResult<ICardStats>> {
     this.requireAuth(context);
     this.logger.info('Getting card statistics');
 
@@ -1256,20 +1280,24 @@ export class ContentService {
       agentHints: {
         suggestedNextActions: [
           ...(stats.totalCards === 0
-            ? [{
-                action: 'create_cards',
-                description: 'No cards found — start by creating cards',
-                priority: 'high' as const,
-                category: 'learning' as const,
-              }]
+            ? [
+                {
+                  action: 'create_cards',
+                  description: 'No cards found — start by creating cards',
+                  priority: 'high' as const,
+                  category: 'learning' as const,
+                },
+              ]
             : []),
           ...(stats.byState['draft'] !== undefined && stats.byState['draft'] > 0
-            ? [{
-                action: 'activate_drafts',
-                description: `${String(stats.byState['draft'])} draft cards can be activated`,
-                priority: 'medium' as const,
-                category: 'optimization' as const,
-              }]
+            ? [
+                {
+                  action: 'activate_drafts',
+                  description: `${String(stats.byState['draft'])} draft cards can be activated`,
+                  priority: 'medium' as const,
+                  category: 'optimization' as const,
+                },
+              ]
             : []),
         ],
         relatedResources: [],
@@ -1349,16 +1377,17 @@ export class ContentService {
     return {
       data: cards,
       agentHints: {
-        suggestedNextActions: cards.length > 0
-          ? [
-              {
-                action: 'rollback_batch',
-                description: `Rollback batch ${batchId} (${String(cards.length)} cards)`,
-                priority: 'low',
-                category: 'correction',
-              },
-            ]
-          : [],
+        suggestedNextActions:
+          cards.length > 0
+            ? [
+                {
+                  action: 'rollback_batch',
+                  description: `Rollback batch ${batchId} (${String(cards.length)} cards)`,
+                  priority: 'low',
+                  category: 'correction',
+                },
+              ]
+            : [],
         relatedResources: cards.map((c) => ({
           type: 'Card',
           id: c.id as string,
@@ -1430,6 +1459,49 @@ export class ContentService {
         },
         preferenceAlignment: [],
         reasoning: `Rolled back batch ${batchId}: ${String(deletedCount)} cards soft-deleted`,
+      },
+    };
+  }
+
+  /**
+   * Find recent batches for the authenticated user, grouped by batchId.
+   * Returns a summary of each batch (batchId, count, newest card createdAt).
+   */
+  async findRecentBatches(
+    context: IExecutionContext,
+    limit?: number
+  ): Promise<IServiceResult<IBatchSummary[]>> {
+    this.requireAuth(context);
+    this.logger.info({ limit }, 'Finding recent batches');
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const batches = await this.repository.findRecentBatches(context.userId!, limit);
+
+    return {
+      data: batches,
+      agentHints: {
+        suggestedNextActions:
+          batches.length > 0
+            ? [
+                {
+                  action: 'view_batch',
+                  description: `View cards from most recent batch ${batches[0]?.batchId ?? ''}`,
+                  priority: 'medium',
+                  category: 'exploration',
+                },
+              ]
+            : [],
+        relatedResources: [],
+        confidence: 1.0,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3.0 },
+        preferenceAlignment: [],
+        reasoning: `Found ${String(batches.length)} recent batches`,
       },
     };
   }

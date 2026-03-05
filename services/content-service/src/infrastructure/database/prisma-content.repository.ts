@@ -16,8 +16,8 @@ import type {
   RemediationCardType,
   UserId,
 } from '@noema/types';
+import { Prisma } from '../../../generated/prisma/index.js';
 import type {
-  Prisma,
   Card as PrismaCard,
   CardState as PrismaCardState,
   CardType as PrismaCardType,
@@ -25,8 +25,14 @@ import type {
   DifficultyLevel as PrismaDifficultyLevel,
   EventSource as PrismaEventSource,
 } from '../../../generated/prisma/index.js';
-import type { IContentRepository } from '../../domain/content-service/content.repository.js';
-import { CardNotFoundError, VersionConflictError } from '../../domain/content-service/errors/index.js';
+import type {
+  IBatchSummary,
+  IContentRepository,
+} from '../../domain/content-service/content.repository.js';
+import {
+  CardNotFoundError,
+  VersionConflictError,
+} from '../../domain/content-service/errors/index.js';
 import { generatePreview } from '../../domain/content-service/value-objects/content.value-objects.js';
 import type {
   IBatchCreateResult,
@@ -198,7 +204,9 @@ export class PrismaContentRepository implements IContentRepository {
   // Write Operations
   // ============================================================================
 
-  async create(input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }): Promise<ICard> {
+  async create(
+    input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }
+  ): Promise<ICard> {
     const card = await this.prisma.card.create({
       data: {
         id: input.id,
@@ -278,7 +286,13 @@ export class PrismaContentRepository implements IContentRepository {
     };
   }
 
-  async update(id: CardId, input: IUpdateCardInput, version: number, userId?: UserId, contentHash?: string): Promise<ICard> {
+  async update(
+    id: CardId,
+    input: IUpdateCardInput,
+    version: number,
+    userId?: UserId,
+    contentHash?: string
+  ): Promise<ICard> {
     // For metadata merge we need the current record
     let mergedMetadata: Prisma.JsonObject | undefined;
     if (input.metadata !== undefined) {
@@ -327,7 +341,12 @@ export class PrismaContentRepository implements IContentRepository {
     }
   }
 
-  async changeState(id: CardId, input: IChangeCardStateInput, version: number, userId?: UserId): Promise<ICard> {
+  async changeState(
+    id: CardId,
+    input: IChangeCardStateInput,
+    version: number,
+    userId?: UserId
+  ): Promise<ICard> {
     try {
       const card = await this.prisma.card.update({
         where: { id, version },
@@ -409,7 +428,7 @@ export class PrismaContentRepository implements IContentRepository {
     id: CardId,
     knowledgeNodeIds: string[],
     version: number,
-    userId?: UserId,
+    userId?: UserId
   ): Promise<ICard> {
     try {
       const card = await this.prisma.card.update({
@@ -562,6 +581,37 @@ export class PrismaContentRepository implements IContentRepository {
     return count;
   }
 
+  async findRecentBatches(userId: string, limit = 20): Promise<IBatchSummary[]> {
+    interface IRawBatchRow {
+      batch_id: string;
+      count: bigint;
+      created_at: Date | string;
+    }
+
+    const effectiveLimit = Math.min(limit, 100);
+
+    const rows = await this.prisma.$queryRaw<IRawBatchRow[]>(Prisma.sql`
+      SELECT
+        metadata->>'_batchId' as batch_id,
+        COUNT(*) as count,
+        MAX(created_at) as created_at
+      FROM cards
+      WHERE
+        user_id = ${userId}
+        AND deleted_at IS NULL
+        AND metadata->>'_batchId' IS NOT NULL
+      GROUP BY metadata->>'_batchId'
+      ORDER BY MAX(created_at) DESC
+      LIMIT ${effectiveLimit}
+    `);
+
+    return rows.map((row) => ({
+      batchId: row.batch_id,
+      count: Number(row.count),
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    }));
+  }
+
   // ============================================================================
   // Private Optimistic Lock Error Handler
   // ============================================================================
@@ -572,7 +622,11 @@ export class PrismaContentRepository implements IContentRepository {
    * This catch-and-re-query approach keeps the happy path atomic (single UPDATE
    * with WHERE id + version) while providing precise error reporting.
    */
-  private async handleOptimisticLockError(error: unknown, id: CardId, expectedVersion: number): Promise<never> {
+  private async handleOptimisticLockError(
+    error: unknown,
+    id: CardId,
+    expectedVersion: number
+  ): Promise<never> {
     if (
       error instanceof Error &&
       (error.message.includes('Record to update not found') ||
@@ -615,7 +669,7 @@ export class PrismaContentRepository implements IContentRepository {
    */
   private async countExactNodeMode(
     where: Prisma.CardWhereInput,
-    expectedLength: number,
+    expectedLength: number
   ): Promise<number> {
     const candidates = await this.prisma.card.findMany({
       where,
@@ -645,9 +699,7 @@ export class PrismaContentRepository implements IContentRepository {
 
     if (words.length === 0) return '';
 
-    return words
-      .map((word) => (word.length <= 3 ? `${word}:*` : word))
-      .join(' & ');
+    return words.map((word) => (word.length <= 3 ? `${word}:*` : word)).join(' & ');
   }
 
   /**
@@ -659,7 +711,7 @@ export class PrismaContentRepository implements IContentRepository {
     userId: UserId,
     searchTerm: string,
     offset: number,
-    limit: number,
+    limit: number
   ): Promise<IPaginatedResponse<ICardSummary>> {
     const tsQuery = this.buildTsQuery(searchTerm);
     if (tsQuery === '') {
@@ -743,7 +795,7 @@ export class PrismaContentRepository implements IContentRepository {
     // Count query
     const countResult = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
       `SELECT COUNT(*) as count FROM "cards" WHERE ${whereClause}`,
-      ...params,
+      ...params
     );
     let total = Number(countResult[0]?.count ?? 0);
 
@@ -757,7 +809,7 @@ export class PrismaContentRepository implements IContentRepository {
          FROM "cards"
          WHERE ${whereClause}
          ORDER BY rank DESC, "created_at" DESC`,
-        ...params,
+        ...params
       );
       const filtered = allRows.filter((r) => {
         return r.knowledge_node_ids.length === expectedLen;
@@ -780,7 +832,7 @@ export class PrismaContentRepository implements IContentRepository {
        OFFSET $${paramIdx.toString()} LIMIT $${(paramIdx + 1).toString()}`,
       ...params,
       offset,
-      limit,
+      limit
     );
 
     return {
@@ -794,7 +846,9 @@ export class PrismaContentRepository implements IContentRepository {
    * Map a raw SQL row to ICardSummary.
    */
   private rawRowToSummary(row: IRawCardRow): ICardSummary {
-    const content = (typeof row.content === 'string' ? JSON.parse(row.content) : row.content) as ICardContent;
+    const content = (
+      typeof row.content === 'string' ? JSON.parse(row.content) : row.content
+    ) as ICardContent;
     const front = typeof content.front === 'string' ? content.front : '';
 
     return {
@@ -822,28 +876,37 @@ export class PrismaContentRepository implements IContentRepository {
     userId: UserId,
     cursor?: string,
     limit = 20,
-    direction: 'forward' | 'backward' = 'forward',
+    direction: 'forward' | 'backward' = 'forward'
   ): Promise<ICursorPaginatedResponse<ICardSummary>> {
     const where = this.buildWhereClause(query, userId);
     const sortField = query.sortBy ?? 'createdAt';
     const sortOrder = query.sortOrder ?? 'desc';
 
     // Map domain sort field to Prisma column name
-    const dbSortField = sortField === 'createdAt' ? 'createdAt'
-      : sortField === 'updatedAt' ? 'updatedAt'
-      : 'difficulty';
+    const dbSortField =
+      sortField === 'createdAt'
+        ? 'createdAt'
+        : sortField === 'updatedAt'
+          ? 'updatedAt'
+          : 'difficulty';
 
     // Parse cursor if provided
     if (cursor !== undefined && cursor !== '') {
       const cursorData = decodeCursor(cursor);
       if (cursorData) {
-        const comparison = (direction === 'forward')
-          ? (sortOrder === 'desc' ? 'lt' : 'gt')
-          : (sortOrder === 'desc' ? 'gt' : 'lt');
+        const comparison =
+          direction === 'forward'
+            ? sortOrder === 'desc'
+              ? 'lt'
+              : 'gt'
+            : sortOrder === 'desc'
+              ? 'gt'
+              : 'lt';
 
-        const cursorSortValue = (dbSortField === 'createdAt' || dbSortField === 'updatedAt')
-          ? new Date(cursorData.sortValue)
-          : cursorData.sortValue;
+        const cursorSortValue =
+          dbSortField === 'createdAt' || dbSortField === 'updatedAt'
+            ? new Date(cursorData.sortValue)
+            : cursorData.sortValue;
 
         where.AND = [
           ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
@@ -865,10 +928,7 @@ export class PrismaContentRepository implements IContentRepository {
     const cards = await this.prisma.card.findMany({
       where,
       take: fetchLimit,
-      orderBy: [
-        { [dbSortField]: sortOrder },
-        { id: sortOrder },
-      ],
+      orderBy: [{ [dbSortField]: sortOrder }, { id: sortOrder }],
     });
 
     const hasMore = cards.length > limit;
@@ -887,20 +947,22 @@ export class PrismaContentRepository implements IContentRepository {
 
     return {
       items: pageCards.map((c) => this.toSummary(c)),
-      nextCursor: hasMore && lastCard
-        ? encodeCursor({
-            id: lastCard.id,
-            sortValue: getSortValue(lastCard),
-            sortField,
-          })
-        : null,
-      prevCursor: cursor !== undefined && cursor !== '' && firstCard
-        ? encodeCursor({
-            id: firstCard.id,
-            sortValue: getSortValue(firstCard),
-            sortField,
-          })
-        : null,
+      nextCursor:
+        hasMore && lastCard
+          ? encodeCursor({
+              id: lastCard.id,
+              sortValue: getSortValue(lastCard),
+              sortField,
+            })
+          : null,
+      prevCursor:
+        cursor !== undefined && cursor !== '' && firstCard
+          ? encodeCursor({
+              id: firstCard.id,
+              sortValue: getSortValue(firstCard),
+              sortField,
+            })
+          : null,
       hasMore,
     };
   }

@@ -4,6 +4,7 @@
  * Vi-compatible mock implementations for all repository and infrastructure interfaces.
  */
 
+import type { Logger } from 'pino';
 import { vi } from 'vitest';
 import type { IContentRepository } from '../../src/domain/content-service/content.repository.js';
 import type {
@@ -39,6 +40,7 @@ export function mockContentRepository(): {
     updateKnowledgeNodeIds: vi.fn(),
     findByBatchId: vi.fn(),
     softDeleteByBatchId: vi.fn(),
+    findRecentBatches: vi.fn().mockResolvedValue([]),
     restore: vi.fn(),
     getStats: vi.fn(),
   };
@@ -125,5 +127,5 @@ export function mockLogger() {
   };
   // child() returns the same mock logger
   logger.child.mockReturnValue(logger);
-  return logger as unknown as import('pino').Logger;
+  return logger as unknown as Logger;
 }

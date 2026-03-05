@@ -9,6 +9,7 @@ import type { CardId, CardState } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { ContentService } from '../../domain/content-service/content.service.js';
 import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
+import type { IBatchSummary } from '../../domain/content-service/content.repository.js';
 import type {
   IBatchChangeStateItem,
   IChangeCardStateInput,
@@ -182,7 +183,7 @@ export function registerContentRoutes(
         tags: ['Cards'],
         summary: 'Get aggregate card statistics',
         description:
-          'Returns aggregate statistics for the authenticated user\'s card collection, including counts by state, difficulty, type, and source.',
+          "Returns aggregate statistics for the authenticated user's card collection, including counts by state, difficulty, type, and source.",
       },
     },
     async (request, reply) => {
@@ -321,7 +322,11 @@ export function registerContentRoutes(
             difficulties: { type: 'string', description: 'Comma-separated difficulties' },
             tags: { type: 'string', description: 'Comma-separated tags' },
             sources: { type: 'string', description: 'Comma-separated sources' },
-            sortBy: { type: 'string', enum: ['createdAt', 'updatedAt', 'difficulty'], default: 'createdAt' },
+            sortBy: {
+              type: 'string',
+              enum: ['createdAt', 'updatedAt', 'difficulty'],
+              default: 'createdAt',
+            },
             sortOrder: { type: 'string', enum: ['asc', 'desc'], default: 'desc' },
             direction: { type: 'string', enum: ['forward', 'backward'], default: 'forward' },
           },
@@ -335,13 +340,17 @@ export function registerContentRoutes(
 
         const deckQuery: IDeckQuery = {};
         if (queryParams.cardTypes !== undefined && queryParams.cardTypes !== '') {
-          deckQuery.cardTypes = queryParams.cardTypes.split(',') as NonNullable<IDeckQuery['cardTypes']>;
+          deckQuery.cardTypes = queryParams.cardTypes.split(',') as NonNullable<
+            IDeckQuery['cardTypes']
+          >;
         }
         if (queryParams.states !== undefined && queryParams.states !== '') {
           deckQuery.states = queryParams.states.split(',') as NonNullable<IDeckQuery['states']>;
         }
         if (queryParams.difficulties !== undefined && queryParams.difficulties !== '') {
-          deckQuery.difficulties = queryParams.difficulties.split(',') as NonNullable<IDeckQuery['difficulties']>;
+          deckQuery.difficulties = queryParams.difficulties.split(',') as NonNullable<
+            IDeckQuery['difficulties']
+          >;
         }
         if (queryParams.tags !== undefined && queryParams.tags !== '') {
           deckQuery.tags = queryParams.tags.split(',');
@@ -361,7 +370,7 @@ export function registerContentRoutes(
           context,
           cursor,
           limit,
-          direction as 'forward' | 'backward' | undefined,
+          direction as 'forward' | 'backward' | undefined
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
@@ -951,6 +960,41 @@ export function registerContentRoutes(
   // ============================================================================
   // Batch Recovery & Rollback Routes
   // ============================================================================
+
+  // NOTE: /recent must be registered before /:batchId to prevent Fastify matching "recent" as a batchId parameter
+  /**
+   * GET /v1/cards/batch/recent - List recent batches for the authenticated user
+   */
+  fastify.get<{ Querystring: { limit?: number } }>(
+    '/v1/cards/batch/recent',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Cards'],
+        summary: 'List recent batches',
+        description:
+          'Returns a summary of the most recent batch creates for the authenticated user, grouped by batchId.',
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', minimum: 1, maximum: 100, default: 20 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const limit = request.query.limit ?? 20;
+        const result = await contentService.findRecentBatches(context, limit);
+        reply.send(
+          wrapResponse(result.data as unknown as IBatchSummary[], result.agentHints, request)
+        );
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
 
   /**
    * GET /v1/cards/batch/:batchId - Recover/discover batch cards

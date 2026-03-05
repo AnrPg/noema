@@ -16,7 +16,10 @@
 
 import type { CardId, IPaginatedResponse, UserId } from '@noema/types';
 import { createHash } from 'node:crypto';
-import type { IContentRepository } from '../../domain/content-service/content.repository.js';
+import type {
+  IBatchSummary,
+  IContentRepository,
+} from '../../domain/content-service/content.repository.js';
 import type {
   IBatchCreateResult,
   ICard,
@@ -63,18 +66,10 @@ export class CachedContentRepository implements IContentRepository {
     return card;
   }
 
-  async query(
-    query: IDeckQuery,
-    userId: UserId
-  ): Promise<IPaginatedResponse<ICardSummary>> {
-    const queryHash = createHash('md5')
-      .update(JSON.stringify(query))
-      .digest('hex')
-      .slice(0, 12);
-    return this.cache.getOrLoad(
-      this.cache.queryKey(userId, queryHash),
-      this.queryTtl,
-      () => this.inner.query(query, userId)
+  async query(query: IDeckQuery, userId: UserId): Promise<IPaginatedResponse<ICardSummary>> {
+    const queryHash = createHash('md5').update(JSON.stringify(query)).digest('hex').slice(0, 12);
+    return this.cache.getOrLoad(this.cache.queryKey(userId, queryHash), this.queryTtl, () =>
+      this.inner.query(query, userId)
     );
   }
 
@@ -174,12 +169,7 @@ export class CachedContentRepository implements IContentRepository {
     return card;
   }
 
-  async updateTags(
-    id: CardId,
-    tags: string[],
-    version: number,
-    userId?: UserId
-  ): Promise<ICard> {
+  async updateTags(id: CardId, tags: string[], version: number, userId?: UserId): Promise<ICard> {
     const card = await this.inner.updateTags(id, tags, version, userId);
     await this.cache.del(this.cache.cardKey(id));
     await this.invalidateForUser(card.userId);
@@ -222,6 +212,10 @@ export class CachedContentRepository implements IContentRepository {
       await this.invalidateForUser(userId);
     }
     return count;
+  }
+
+  findRecentBatches(userId: string, limit?: number): Promise<IBatchSummary[]> {
+    return this.inner.findRecentBatches(userId, limit);
   }
 
   // ============================================================================
