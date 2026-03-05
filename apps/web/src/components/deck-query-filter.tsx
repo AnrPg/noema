@@ -214,6 +214,7 @@ export function DeckQueryFilter({
       <FilterSection title="Search">
         <input
           type="search"
+          aria-label="Search cards"
           placeholder="Full-text search…"
           value={query.search ?? ''}
           onChange={(e) => {
@@ -285,6 +286,7 @@ export function DeckQueryFilter({
       <FilterSection title="Tags">
         <input
           type="text"
+          aria-label="Filter by tags (comma-separated)"
           placeholder="tag1, tag2, tag3"
           value={tagsValue}
           onChange={(e) => {
@@ -301,6 +303,7 @@ export function DeckQueryFilter({
       <FilterSection title="Source">
         <input
           type="text"
+          aria-label="Filter by source"
           placeholder="e.g. import, manual, ai-generated"
           value={query.source ?? ''}
           onChange={(e) => {
@@ -319,6 +322,7 @@ export function DeckQueryFilter({
         <div className="flex items-center gap-2">
           <input
             type="number"
+            aria-label="Minimum difficulty (0 to 1)"
             min={0}
             max={1}
             step={0.01}
@@ -332,6 +336,7 @@ export function DeckQueryFilter({
           <span className="shrink-0 text-muted-foreground">–</span>
           <input
             type="number"
+            aria-label="Maximum difficulty (0 to 1)"
             min={0}
             max={1}
             step={0.01}
