@@ -25,6 +25,13 @@ import ImageOcclusionRenderer from './image-occlusion.js';
 import AudioCardRenderer from './audio-card.js';
 import DiagramRenderer from './diagram.js';
 import MultimodalRenderer from './multimodal.js';
+import ComparisonRenderer from './comparison.js';
+import ExceptionRenderer from './exception.js';
+import ErrorSpottingRenderer from './error-spotting.js';
+import ConceptGraphRenderer from './concept-graph.js';
+import CaseBasedRenderer from './case-based.js';
+import TransferRenderer from './transfer.js';
+import ProgressiveDisclosureRenderer from './progressive-disclosure.js';
 
 // Renderer imports will be added in Tasks T6–T12.
 // Replace FallbackRenderer with the specific renderer as each task completes.
@@ -36,15 +43,16 @@ export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps
   [CardType.IMAGE_OCCLUSION]: ImageOcclusionRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.AUDIO]: AudioCardRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.PROCESS]: ProcessRenderer as React.ComponentType<ICardRendererProps>,
-  [CardType.COMPARISON]: FallbackRenderer,
-  [CardType.EXCEPTION]: FallbackRenderer,
-  [CardType.ERROR_SPOTTING]: FallbackRenderer,
+  [CardType.COMPARISON]: ComparisonRenderer as React.ComponentType<ICardRendererProps>,
+  [CardType.EXCEPTION]: ExceptionRenderer as React.ComponentType<ICardRendererProps>,
+  [CardType.ERROR_SPOTTING]: ErrorSpottingRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.CONFIDENCE_RATED]: ConfidenceRatedRenderer as React.ComponentType<ICardRendererProps>,
-  [CardType.CONCEPT_GRAPH]: FallbackRenderer,
-  [CardType.CASE_BASED]: FallbackRenderer,
+  [CardType.CONCEPT_GRAPH]: ConceptGraphRenderer as React.ComponentType<ICardRendererProps>,
+  [CardType.CASE_BASED]: CaseBasedRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.MULTIMODAL]: MultimodalRenderer as React.ComponentType<ICardRendererProps>,
-  [CardType.TRANSFER]: FallbackRenderer,
-  [CardType.PROGRESSIVE_DISCLOSURE]: FallbackRenderer,
+  [CardType.TRANSFER]: TransferRenderer as React.ComponentType<ICardRendererProps>,
+  [CardType.PROGRESSIVE_DISCLOSURE]:
+    ProgressiveDisclosureRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.MULTIPLE_CHOICE]: MultipleChoiceRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.TRUE_FALSE]: TrueFalseRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.MATCHING]: MatchingRenderer as React.ComponentType<ICardRendererProps>,
