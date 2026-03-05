@@ -266,9 +266,9 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
                     cx={pos.x}
                     cy={pos.y}
                     r={r + 3}
-                    className="fill-none stroke-synapse-400/40"
+                    // animate-pulse forces Tailwind JIT to include @keyframes pulse
+                    className="animate-pulse fill-none stroke-synapse-400/40"
                     strokeWidth={1.5}
-                    style={{ animation: 'pulse 2s ease-in-out infinite' }}
                   />
                 )}
                 <circle cx={pos.x} cy={pos.y} r={r} className={fillClass} />
