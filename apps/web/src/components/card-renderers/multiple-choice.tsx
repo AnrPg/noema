@@ -7,7 +7,7 @@
 
 import * as React from 'react';
 import type { IMultipleChoiceContent } from '@noema/api-client';
-import { Button } from '@noema/ui';
+import { Button, cn } from '@noema/ui';
 import { CardShell } from './card-shell.js';
 import type { ICardRendererProps } from './types.js';
 
@@ -19,6 +19,10 @@ export default function MultipleChoiceRenderer(
   const { card, mode, isRevealed, onAnswer } = props;
   const content = card.content as unknown as IMultipleChoiceContent;
   const [selectedIndex, setSelectedIndex] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    setSelectedIndex(null);
+  }, [card.id]);
 
   // Cast to base props for CardShell which uses ICardRendererProps<unknown>.
   const baseProps = props as unknown as ICardRendererProps;
@@ -39,8 +43,8 @@ export default function MultipleChoiceRenderer(
 
   const choices = content.choices;
 
-  return (
-    <CardShell {...baseProps} {...(content.hint !== undefined ? { hint: content.hint } : {})}>
+  const actionSlot = (
+    <>
       <p className="text-base font-medium text-foreground">{content.front}</p>
       <div className="space-y-2">
         {choices.map((choice, i) => {
@@ -62,8 +66,9 @@ export default function MultipleChoiceRenderer(
               onClick={() => {
                 handleSelect(i);
               }}
-              className={`w-full justify-start ${colorClass}`}
+              className={cn('w-full justify-start', colorClass)}
               aria-label={`Option ${label}: ${choice.text}`}
+              aria-pressed={selectedIndex === i}
             >
               <span className="font-mono mr-2">{label}.</span>
               {choice.text}
@@ -71,7 +76,16 @@ export default function MultipleChoiceRenderer(
           );
         })}
       </div>
-      {isRevealed && content.explanation !== undefined && content.explanation !== '' && (
+    </>
+  );
+
+  return (
+    <CardShell
+      {...baseProps}
+      {...(content.hint !== undefined ? { hint: content.hint } : {})}
+      actions={actionSlot}
+    >
+      {content.explanation !== undefined && content.explanation !== '' && (
         <p className="text-sm text-muted-foreground">{content.explanation}</p>
       )}
     </CardShell>

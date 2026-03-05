@@ -16,6 +16,10 @@ export default function TrueFalseRenderer(props: ICardRendererProps<boolean>): R
   const content = card.content as unknown as ITrueFalseContent;
   const [answered, setAnswered] = React.useState<boolean | null>(null);
 
+  React.useEffect(() => {
+    setAnswered(null);
+  }, [card.id]);
+
   // Cast to base props for CardShell which uses ICardRendererProps<unknown>.
   const baseProps = props as unknown as ICardRendererProps;
 
@@ -33,8 +37,8 @@ export default function TrueFalseRenderer(props: ICardRendererProps<boolean>): R
     );
   }
 
-  return (
-    <CardShell {...baseProps} {...(content.hint !== undefined ? { hint: content.hint } : {})}>
+  const actionSlot = (
+    <>
       <p className="text-base font-medium text-foreground">{content.statement}</p>
       <div className="flex gap-3">
         <Button
@@ -74,7 +78,16 @@ export default function TrueFalseRenderer(props: ICardRendererProps<boolean>): R
           {isRevealed && !content.isTrue ? '\u2713 ' : ''}False
         </Button>
       </div>
-      {isRevealed && content.explanation !== undefined && content.explanation !== '' && (
+    </>
+  );
+
+  return (
+    <CardShell
+      {...baseProps}
+      {...(content.hint !== undefined ? { hint: content.hint } : {})}
+      actions={actionSlot}
+    >
+      {content.explanation !== undefined && content.explanation !== '' && (
         <p className="text-sm text-muted-foreground">{content.explanation}</p>
       )}
     </CardShell>

@@ -12,6 +12,7 @@ import type { ICardRendererProps } from './types.js';
 interface ICardShellProps extends ICardRendererProps {
   children?: React.ReactNode;
   hint?: string; // optional hint text to display
+  actions?: React.ReactNode; // pre-reveal interactive controls (buttons) for interactive renderers
 }
 
 export function CardShell({
@@ -20,6 +21,7 @@ export function CardShell({
   isRevealed,
   onReveal,
   hint,
+  actions,
   children,
   className = '',
 }: ICardShellProps): React.JSX.Element {
@@ -39,13 +41,15 @@ export function CardShell({
   return (
     <Card className={`w-full ${className}`}>
       <CardContent className="p-6 space-y-4">
-        {!isRevealed && hint !== undefined && hint !== '' && (
+        {hint !== undefined && hint !== '' && !isRevealed && (
           <p className="text-sm text-muted-foreground italic border-l-2 border-synapse-400/40 pl-3">
             Hint: {hint}
           </p>
         )}
 
-        {!isRevealed && onReveal !== undefined && (
+        {actions !== undefined && actions}
+
+        {!isRevealed && onReveal !== undefined && actions === undefined && (
           <Button
             variant="outline"
             size="sm"
