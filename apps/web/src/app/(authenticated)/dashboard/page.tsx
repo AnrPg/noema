@@ -1,109 +1,85 @@
 /**
- * User Dashboard Page
+ * Dashboard Page — Cognitive Vitals
+ *
+ * Codename: Thalamus
+ * Composes all 5 dashboard sections with staggered entrance animation.
+ * Each section is independently isolated via SectionErrorBoundary.
  */
 
 'use client';
 
 import { useAuth } from '@noema/auth';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@noema/ui';
-import { BookOpen, Brain, Clock, Target, type LucideIcon } from 'lucide-react';
+import { SectionErrorBoundary } from '@/components/section-error-boundary';
+import { CognitiveVitals } from '@/components/dashboard/cognitive-vitals';
+import { CopilotSuggestions } from '@/components/dashboard/copilot-suggestions';
+import { KnowledgePulse } from '@/components/dashboard/knowledge-pulse';
+import { RecentSessions } from '@/components/dashboard/recent-sessions';
+import { ReviewForecast } from '@/components/dashboard/review-forecast';
 
-function StatCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-}: {
-  title: string;
-  value: string | number;
-  description: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
-export default function DashboardPage() {
+// ============================================================================
+// Page
+// ============================================================================
+
+export default function DashboardPage(): React.JSX.Element {
   const { user } = useAuth();
+  const firstName = user?.displayName.split(' ')[0] ?? 'there';
+
+  if (user === null) return <></>;
+  const userId = user.id;
 
   return (
     <div className="space-y-6">
-      <div>
+      {/* Header */}
+      <div className="animate-fade-slide-in" style={{ animationDelay: '0ms' }}>
         <h1 className="text-3xl font-bold">
-          Welcome back, {user?.displayName?.split(' ')[0]}!
+          {getGreeting()}, {firstName}
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Here's an overview of your learning progress.
-        </p>
+        <p className="text-muted-foreground mt-1">Here&apos;s your cognitive health at a glance.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Study Sessions"
-          value={0}
-          description="This week"
-          icon={BookOpen}
-        />
-        <StatCard
-          title="Concepts Mastered"
-          value={0}
-          description="Total learned"
-          icon={Brain}
-        />
-        <StatCard
-          title="Goals Completed"
-          value={0}
-          description="This month"
-          icon={Target}
-        />
-        <StatCard
-          title="Study Time"
-          value="0h"
-          description="This week"
-          icon={Clock}
-        />
+      {/* Vitals row */}
+      <div className="animate-fade-slide-in" style={{ animationDelay: '100ms' }}>
+        <SectionErrorBoundary>
+          <CognitiveVitals userId={userId} />
+        </SectionErrorBoundary>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Your latest learning sessions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No recent activity. Start a study session to see your progress here!
-            </p>
-          </CardContent>
-        </Card>
+      {/* Review Forecast */}
+      <div className="animate-fade-slide-in" style={{ animationDelay: '200ms' }}>
+        <SectionErrorBoundary>
+          <ReviewForecast userId={userId} />
+        </SectionErrorBoundary>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Upcoming Reviews</CardTitle>
-            <CardDescription>Concepts due for review</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No reviews scheduled yet. Learn some concepts to get started!
-            </p>
-          </CardContent>
-        </Card>
+      {/* Knowledge Pulse + Recent Sessions (side-by-side on desktop) */}
+      <div
+        className="grid gap-6 animate-fade-slide-in md:grid-cols-2"
+        style={{ animationDelay: '300ms' }}
+      >
+        <SectionErrorBoundary>
+          <KnowledgePulse userId={userId} />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary>
+          <RecentSessions userId={userId} />
+        </SectionErrorBoundary>
+      </div>
+
+      {/* Copilot Suggestions */}
+      <div className="animate-fade-slide-in" style={{ animationDelay: '400ms' }}>
+        <SectionErrorBoundary>
+          <CopilotSuggestions />
+        </SectionErrorBoundary>
       </div>
     </div>
   );
