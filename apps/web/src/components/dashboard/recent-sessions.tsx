@@ -58,15 +58,16 @@ const MODE_BADGE_CLASS: Record<SessionMode, string> = {
 
 function relativeTime(dateStr: string): string {
   const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  // Derive each unit directly from diffMs to avoid double-rounding at threshold boundaries
   const diffMs = new Date(dateStr).getTime() - Date.now();
   const diffSec = Math.round(diffMs / 1000);
-  const diffMin = Math.round(diffSec / 60);
-  const diffHr = Math.round(diffMin / 60);
-  const diffDay = Math.round(diffHr / 24);
+  const diffMin = Math.round(diffMs / 60_000);
+  const diffHr = Math.round(diffMs / 3_600_000);
+  const diffDay = Math.round(diffMs / 86_400_000);
 
-  if (Math.abs(diffMin) < 1) return rtf.format(diffSec, 'second');
-  if (Math.abs(diffHr) < 1) return rtf.format(diffMin, 'minute');
-  if (Math.abs(diffDay) < 1) return rtf.format(diffHr, 'hour');
+  if (Math.abs(diffSec) < 60) return rtf.format(diffSec, 'second');
+  if (Math.abs(diffMin) < 60) return rtf.format(diffMin, 'minute');
+  if (Math.abs(diffHr) < 24) return rtf.format(diffHr, 'hour');
   return rtf.format(diffDay, 'day');
 }
 
@@ -152,6 +153,12 @@ interface IRecentSessionsProps {
   userId: UserId;
 }
 
+/**
+ * `userId` is accepted for API interface parity with sibling dashboard components.
+ * `useSessions` is auth-scoped and does not accept a userId filter — the prop is
+ * reserved for when the API adds per-user scoped access (e.g. admin view of another
+ * user's sessions). Until then the underscore prefix suppresses the unused-variable lint rule.
+ */
 export function RecentSessions({ userId: _userId }: IRecentSessionsProps): React.JSX.Element {
   const router = useRouter();
   const { data, isLoading } = useSessions({ limit: 5 });
