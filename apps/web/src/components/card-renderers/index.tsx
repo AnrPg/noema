@@ -32,6 +32,13 @@ import ConceptGraphRenderer from './concept-graph.js';
 import CaseBasedRenderer from './case-based.js';
 import TransferRenderer from './transfer.js';
 import ProgressiveDisclosureRenderer from './progressive-disclosure.js';
+import ContrastivePairRenderer from './remediation/contrastive-pair.js';
+import MinimalPairRenderer from './remediation/minimal-pair.js';
+import FalseFriendRenderer from './remediation/false-friend.js';
+import OldVsNewDefinitionRenderer from './remediation/old-vs-new-definition.js';
+import BoundaryCaseRenderer from './remediation/boundary-case.js';
+import RuleScopeRenderer from './remediation/rule-scope.js';
+import DiscriminantFeatureRenderer from './remediation/discriminant-feature.js';
 
 // Renderer imports will be added in Tasks T6–T12.
 // Replace FallbackRenderer with the specific renderer as each task completes.
@@ -62,13 +69,19 @@ export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps
   [CardType.TIMELINE]: TimelineRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.DIAGRAM]: DiagramRenderer as React.ComponentType<ICardRendererProps>,
   // ── Remediation Card Types (20) ─────────────────────────────────────────────
-  [RemediationCardType.CONTRASTIVE_PAIR]: FallbackRenderer,
-  [RemediationCardType.MINIMAL_PAIR]: FallbackRenderer,
-  [RemediationCardType.FALSE_FRIEND]: FallbackRenderer,
-  [RemediationCardType.OLD_VS_NEW_DEFINITION]: FallbackRenderer,
-  [RemediationCardType.BOUNDARY_CASE]: FallbackRenderer,
-  [RemediationCardType.RULE_SCOPE]: FallbackRenderer,
-  [RemediationCardType.DISCRIMINANT_FEATURE]: FallbackRenderer,
+  [RemediationCardType.CONTRASTIVE_PAIR]:
+    ContrastivePairRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.MINIMAL_PAIR]:
+    MinimalPairRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.FALSE_FRIEND]:
+    FalseFriendRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.OLD_VS_NEW_DEFINITION]:
+    OldVsNewDefinitionRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.BOUNDARY_CASE]:
+    BoundaryCaseRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.RULE_SCOPE]: RuleScopeRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.DISCRIMINANT_FEATURE]:
+    DiscriminantFeatureRenderer as React.ComponentType<ICardRendererProps>,
   [RemediationCardType.ASSUMPTION_CHECK]: FallbackRenderer,
   [RemediationCardType.COUNTEREXAMPLE]: FallbackRenderer,
   [RemediationCardType.REPRESENTATION_SWITCH]: FallbackRenderer,
