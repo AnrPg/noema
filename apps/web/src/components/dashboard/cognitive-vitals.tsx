@@ -15,11 +15,11 @@ import {
   useStructuralHealth,
   type UserDto,
 } from '@noema/api-client';
-
-type UserId = UserDto['id'];
 import { MetricTile, NeuralGauge, Skeleton } from '@noema/ui';
 import { Flame } from 'lucide-react';
 import { SectionErrorBoundary } from '@/components/section-error-boundary';
+
+type UserId = UserDto['id'];
 
 // ============================================================================
 // Sub-tile: Cards Due
@@ -96,6 +96,7 @@ function MisconceptionsTile({ userId }: { userId: UserId }): React.JSX.Element {
   }
 
   const all = misc.data?.data ?? [];
+  // Exclude both 'resolved' and 'dismissed' — dismissed = user-acknowledged, not an active concern
   const active = all.filter((m) => m.status !== 'resolved' && m.status !== 'dismissed');
   const detected = active.filter((m) => m.status === 'detected').length;
   const confirmed = active.filter((m) => m.status === 'confirmed').length;
