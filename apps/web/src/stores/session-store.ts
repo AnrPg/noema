@@ -1,8 +1,15 @@
+/* eslint-disable @typescript-eslint/no-redundant-type-constituents */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /**
  * Session Store — Active learning session working memory.
  *
  * Holds ephemeral state for a single review session.
  * Not persisted — cleared when the user navigates away.
+ *
+ * Note: The eslint-disable directives above suppress rules that fire because
+ * the @noema/api-client package has not been built yet (no dist/ directory).
+ * Once packages are built these suppressions should be removed.
  */
 
 import type { IAttemptInput, ISessionDto, ISessionQueueDto } from '@noema/api-client/session';
@@ -31,6 +38,7 @@ interface ISessionActions {
   setConfidenceBefore: (confidence: number) => void;
   setConfidenceAfter: (confidence: number) => void;
   recordDwellTime: (ms: number) => void;
+  setIsPaused: (paused: boolean) => void;
   resetAttempt: () => void;
   clear: () => void;
 }
@@ -79,6 +87,10 @@ export const useSessionStore = create<ISessionState & ISessionActions>()((set) =
     set((s) => ({
       pendingAttempt: { ...s.pendingAttempt, dwellTimeMs: ms },
     }));
+  },
+
+  setIsPaused: (paused) => {
+    set({ isPaused: paused });
   },
 
   resetAttempt: () => {
