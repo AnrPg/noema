@@ -39,6 +39,12 @@ import OldVsNewDefinitionRenderer from './remediation/old-vs-new-definition.js';
 import BoundaryCaseRenderer from './remediation/boundary-case.js';
 import RuleScopeRenderer from './remediation/rule-scope.js';
 import DiscriminantFeatureRenderer from './remediation/discriminant-feature.js';
+import AssumptionCheckRenderer from './remediation/assumption-check.js';
+import CounterexampleRenderer from './remediation/counterexample.js';
+import RepresentationSwitchRenderer from './remediation/representation-switch.js';
+import RetrievalCueRenderer from './remediation/retrieval-cue.js';
+import EncodingRepairRenderer from './remediation/encoding-repair.js';
+import OverwriteDrillRenderer from './remediation/overwrite-drill.js';
 
 // Renderer imports will be added in Tasks T6–T12.
 // Replace FallbackRenderer with the specific renderer as each task completes.
@@ -82,12 +88,18 @@ export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps
   [RemediationCardType.RULE_SCOPE]: RuleScopeRenderer as React.ComponentType<ICardRendererProps>,
   [RemediationCardType.DISCRIMINANT_FEATURE]:
     DiscriminantFeatureRenderer as React.ComponentType<ICardRendererProps>,
-  [RemediationCardType.ASSUMPTION_CHECK]: FallbackRenderer,
-  [RemediationCardType.COUNTEREXAMPLE]: FallbackRenderer,
-  [RemediationCardType.REPRESENTATION_SWITCH]: FallbackRenderer,
-  [RemediationCardType.RETRIEVAL_CUE]: FallbackRenderer,
-  [RemediationCardType.ENCODING_REPAIR]: FallbackRenderer,
-  [RemediationCardType.OVERWRITE_DRILL]: FallbackRenderer,
+  [RemediationCardType.ASSUMPTION_CHECK]:
+    AssumptionCheckRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.COUNTEREXAMPLE]:
+    CounterexampleRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.REPRESENTATION_SWITCH]:
+    RepresentationSwitchRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.RETRIEVAL_CUE]:
+    RetrievalCueRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.ENCODING_REPAIR]:
+    EncodingRepairRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.OVERWRITE_DRILL]:
+    OverwriteDrillRenderer as React.ComponentType<ICardRendererProps>,
   [RemediationCardType.AVAILABILITY_BIAS_DISCONFIRMATION]: FallbackRenderer,
   [RemediationCardType.SELF_CHECK_RITUAL]: FallbackRenderer,
   [RemediationCardType.CALIBRATION_TRAINING]: FallbackRenderer,
