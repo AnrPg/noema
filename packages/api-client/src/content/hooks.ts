@@ -66,6 +66,7 @@ export const contentKeys = {
   stats: () => [...contentKeys.cards(), 'stats'] as const,
   history: (id: CardId) => [...contentKeys.cards(), 'history', id] as const,
   batch: (batchId?: string) => [...contentKeys.cards(), 'batch', batchId] as const,
+  batchCards: (batchId?: string) => [...contentKeys.cards(), 'batchCards', batchId] as const,
   recentBatches: () => [...contentKeys.cards(), 'recentBatches'] as const,
   templates: () => [...contentKeys.all, 'templates'] as const,
   template: (id: TemplateId) => [...contentKeys.templates(), id] as const,
@@ -206,18 +207,6 @@ export function useBatch(
   });
 }
 
-export function useCardsByBatchId(
-  batchId: string,
-  options?: Omit<UseQueryOptions<CardsListResponse>, 'queryKey' | 'queryFn'>
-) {
-  return useQuery({
-    queryKey: contentKeys.batch(batchId),
-    queryFn: () => cardsApi.findCardsByBatchId(batchId),
-    enabled: batchId !== '',
-    ...options,
-  });
-}
-
 export function useRecentBatches(
   limit?: number,
   options?: Omit<UseQueryOptions<BatchSummariesResponse>, 'queryKey' | 'queryFn'>
@@ -334,7 +323,7 @@ export function useValidateCardContent(
 
 export function useRollbackBatch(options?: UseMutationOptions<void, Error, { batchId: string }>) {
   return useMutation({
-    mutationFn: ({ batchId }) => cardsApi.rollbackBatch(batchId),
+    mutationFn: ({ batchId }) => cardsApi.deleteBatch(batchId as JobId),
     ...options,
   });
 }
@@ -343,7 +332,7 @@ export function useBatchCardStateTransition(
   options?: UseMutationOptions<void, Error, IBatchStateUpdateInput>
 ) {
   return useMutation({
-    mutationFn: (data) => cardsApi.batchChangeState(data),
+    mutationFn: (data) => cardsApi.batchUpdateState(data),
     ...options,
   });
 }
