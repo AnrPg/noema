@@ -9,6 +9,7 @@ import type { CardId, JobId, MediaId, TemplateId } from '@noema/types';
 import { http } from '../client.js';
 import type {
   BatchCreateResponse,
+  BatchSummariesResponse,
   CardCountResponse,
   CardHistoryResponse,
   CardResponse,
@@ -108,6 +109,21 @@ export const cardsApi = {
 
   /** Cancel a pending batch creation job. */
   deleteBatch: (batchId: JobId): Promise<void> => http.delete(`/v1/cards/batch/${batchId}`),
+
+  /** Get cards belonging to a specific batch by batchId. */
+  findCardsByBatchId: (batchId: string): Promise<CardsListResponse> =>
+    http.get(`/v1/cards/batch/${batchId}`),
+
+  /** Rollback (soft-delete) all cards in a batch. */
+  rollbackBatch: (batchId: string): Promise<void> => http.delete(`/v1/cards/batch/${batchId}`),
+
+  /** Get recent card creation batches for the current user. */
+  findRecentBatches: (limit?: number): Promise<BatchSummariesResponse> =>
+    http.get('/v1/cards/batch/recent', { params: { limit } }),
+
+  /** Batch FSM state transition for multiple cards (alias for batchUpdateState). */
+  batchChangeState: (data: IBatchStateUpdateInput): Promise<void> =>
+    http.post('/v1/cards/batch/state', data),
 
   /** Build a session seed (ordered card IDs) from a DeckQuery. */
   getSessionSeed: (query: ISessionSeedQuery): Promise<SessionSeedResponse> =>

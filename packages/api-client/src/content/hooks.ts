@@ -20,8 +20,9 @@ import type { CardId, JobId, MediaId, TemplateId } from '@noema/types';
 import { cardsApi, mediaApi, templatesApi } from './api.js';
 import type {
   BatchCreateResponse,
+  BatchSummariesResponse,
   CardCountResponse,
-  CardDto,
+  ICardDto,
   CardHistoryResponse,
   CardResponse,
   CardStatsResponse,
@@ -31,6 +32,7 @@ import type {
   CardsCursorResponse,
   CreateTemplateInput,
   IBatchCreateInput,
+  IBatchStateUpdateInput,
   ICardHistoryDto,
   ICardStatsDto,
   ICreateCardInput,
@@ -63,7 +65,8 @@ export const contentKeys = {
   detail: (id: CardId) => [...contentKeys.cards(), 'detail', id] as const,
   stats: () => [...contentKeys.cards(), 'stats'] as const,
   history: (id: CardId) => [...contentKeys.cards(), 'history', id] as const,
-  batch: (batchId: JobId) => [...contentKeys.cards(), 'batch', batchId] as const,
+  batch: (batchId?: string) => [...contentKeys.cards(), 'batch', batchId] as const,
+  recentBatches: () => [...contentKeys.cards(), 'recentBatches'] as const,
   templates: () => [...contentKeys.all, 'templates'] as const,
   template: (id: TemplateId) => [...contentKeys.templates(), id] as const,
   media: (id: MediaId) => [...contentKeys.all, 'media', id] as const,
@@ -112,7 +115,7 @@ export function useCardsCursor(
 
 export function useCard(
   id: CardId,
-  options?: Omit<UseQueryOptions<CardResponse, Error, CardDto>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<CardResponse, Error, ICardDto>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: contentKeys.detail(id),
@@ -199,6 +202,29 @@ export function useBatch(
     queryKey: contentKeys.batch(batchId),
     queryFn: () => cardsApi.getBatch(batchId),
     enabled: batchId !== '',
+    ...options,
+  });
+}
+
+export function useCardsByBatchId(
+  batchId: string,
+  options?: Omit<UseQueryOptions<CardsListResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: contentKeys.batch(batchId),
+    queryFn: () => cardsApi.findCardsByBatchId(batchId),
+    enabled: batchId !== '',
+    ...options,
+  });
+}
+
+export function useRecentBatches(
+  limit?: number,
+  options?: Omit<UseQueryOptions<BatchSummariesResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: contentKeys.recentBatches(),
+    queryFn: () => cardsApi.findRecentBatches(limit),
     ...options,
   });
 }
@@ -302,6 +328,22 @@ export function useValidateCardContent(
 ) {
   return useMutation({
     mutationFn: cardsApi.validateCard,
+    ...options,
+  });
+}
+
+export function useRollbackBatch(options?: UseMutationOptions<void, Error, { batchId: string }>) {
+  return useMutation({
+    mutationFn: ({ batchId }) => cardsApi.rollbackBatch(batchId),
+    ...options,
+  });
+}
+
+export function useBatchCardStateTransition(
+  options?: UseMutationOptions<void, Error, IBatchStateUpdateInput>
+) {
+  return useMutation({
+    mutationFn: (data) => cardsApi.batchChangeState(data),
     ...options,
   });
 }
