@@ -27,7 +27,9 @@ export default function ClozeRenderer(props: ICardRendererProps<string[]>): Reac
   const content = card.content as unknown as IClozeContent;
 
   const blankCount = countBlanks(content.template);
-  const clozes = content.clozes ?? [];
+  const safeClozes = content.clozes ?? [];
+  // Only use cloze entries that have a corresponding {{blank}} in the template
+  const answers = safeClozes.slice(0, blankCount);
 
   const [userAnswers, setUserAnswers] = React.useState<string[]>(() =>
     Array.from<string>({ length: blankCount }).fill('')
@@ -89,7 +91,7 @@ export default function ClozeRenderer(props: ICardRendererProps<string[]>): Reac
                   submitted &&
                     isRevealed &&
                     (() => {
-                      const correct = clozes[i]?.answer ?? '';
+                      const correct = answers[i]?.answer ?? '';
                       return (userAnswers[i] ?? '').trim().toLowerCase() ===
                         correct.trim().toLowerCase()
                         ? 'border-green-500 bg-green-50 text-green-800'
@@ -115,13 +117,13 @@ export default function ClozeRenderer(props: ICardRendererProps<string[]>): Reac
       {...(content.hint !== undefined ? { hint: content.hint } : {})}
       actions={actionSlot}
     >
-      {submitted && clozes.length > 0 && (
+      {submitted && answers.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Correct answers
           </p>
           <ol className="list-decimal list-inside space-y-1">
-            {clozes.map((cloze, i) => {
+            {answers.map((cloze, i) => {
               const userAns = (userAnswers[i] ?? '').trim();
               const correct = cloze.answer.trim();
               const isCorrect = userAns.toLowerCase() === correct.toLowerCase();

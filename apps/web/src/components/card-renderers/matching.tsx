@@ -43,7 +43,8 @@ export default function MatchingRenderer(
     [content.pairs, card.id]
   );
 
-  const [selections, setSelections] = React.useState<Record<string, string>>(() => ({}));
+  // selections maps left → index into shuffledRight (index-based to handle duplicate right values)
+  const [selections, setSelections] = React.useState<Record<string, number>>(() => ({}));
   const [submitted, setSubmitted] = React.useState(false);
 
   React.useEffect(() => {
@@ -62,18 +63,21 @@ export default function MatchingRenderer(
 
   const baseProps = props as unknown as ICardRendererProps;
 
-  const allSelected = content.pairs.every(
-    (p) => selections[p.left] !== undefined && selections[p.left] !== ''
-  );
+  const allSelected = content.pairs.every((p) => selections[p.left] !== undefined);
 
-  function handleSelect(left: string, right: string): void {
+  function handleSelect(left: string, rightIndex: number): void {
     if (submitted) return;
-    setSelections((prev) => ({ ...prev, [left]: right }));
+    setSelections((prev) => ({ ...prev, [left]: rightIndex }));
   }
 
   function handleCheck(): void {
     setSubmitted(true);
-    onAnswer?.(selections);
+    // Convert index-based selections back to string map for the onAnswer callback
+    const stringSelections: Record<string, string> = {};
+    for (const [left, idx] of Object.entries(selections)) {
+      stringSelections[left] = shuffledRight[idx] ?? '';
+    }
+    onAnswer?.(stringSelections);
   }
 
   const actionSlot = (
@@ -83,7 +87,9 @@ export default function MatchingRenderer(
       </p>
       <div className="space-y-2">
         {content.pairs.map((pair, i) => {
-          const selected = selections[pair.left] ?? '';
+          const selectedIndex = selections[pair.left];
+          const selected = selectedIndex !== undefined ? (shuffledRight[selectedIndex] ?? '') : '';
+          // Correctness: compare the selected right value (via index) to the expected right value
           const isCorrect = submitted && selected === pair.right;
           const isWrong = submitted && selected !== '' && selected !== pair.right;
 
@@ -101,10 +107,11 @@ export default function MatchingRenderer(
               </span>
               <span className="text-muted-foreground">→</span>
               <select
-                value={selected}
+                value={selectedIndex !== undefined ? String(selectedIndex) : ''}
                 disabled={submitted}
                 onChange={(e) => {
-                  handleSelect(pair.left, e.target.value);
+                  const idx = e.target.value !== '' ? Number(e.target.value) : undefined;
+                  if (idx !== undefined) handleSelect(pair.left, idx);
                 }}
                 aria-label={`Match for: ${pair.left}`}
                 className={cn(
@@ -117,7 +124,7 @@ export default function MatchingRenderer(
               >
                 <option value="">— select —</option>
                 {shuffledRight.map((right, j) => (
-                  <option key={j} value={right}>
+                  <option key={j} value={String(j)}>
                     {right}
                   </option>
                 ))}

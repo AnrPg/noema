@@ -100,8 +100,8 @@ export default function OrderingRenderer(props: ICardRendererProps<string[]>): R
       )}
       <div className="space-y-2">
         {currentOrder.map((text, i) => {
-          const isCorrect = submitted && text === correctOrder[i];
-          const isWrong = submitted && text !== correctOrder[i];
+          const isCorrect = submitted && i < correctOrder.length && text === correctOrder[i];
+          const isWrong = submitted && !(i < correctOrder.length && text === correctOrder[i]);
           return (
             <div
               key={text}

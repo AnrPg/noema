@@ -32,13 +32,14 @@ export default function ProcessRenderer(props: ICardRendererProps): React.JSX.El
     );
   }
 
-  function toggleStep(index: number): void {
+  // toggleStep uses step.order as a stable key (not positional index)
+  function toggleStep(stepOrder: number): void {
     setExpandedSteps((prev) => {
       const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
+      if (next.has(stepOrder)) {
+        next.delete(stepOrder);
       } else {
-        next.add(index);
+        next.add(stepOrder);
       }
       return next;
     });
@@ -53,14 +54,14 @@ export default function ProcessRenderer(props: ICardRendererProps): React.JSX.El
         {String(steps.length)} steps — click a step to expand
       </p>
       <div className="space-y-1">
-        {steps.map((step, i) => {
-          const isExpanded = isRevealed || expandedSteps.has(i);
+        {steps.map((step) => {
+          const isExpanded = isRevealed || expandedSteps.has(step.order);
           return (
-            <div key={i} className="rounded border border-border overflow-hidden">
+            <div key={step.order} className="rounded border border-border overflow-hidden">
               <button
                 type="button"
                 onClick={() => {
-                  toggleStep(i);
+                  toggleStep(step.order);
                 }}
                 aria-expanded={isExpanded}
                 aria-label={`Step ${String(step.order)}: ${step.title}`}

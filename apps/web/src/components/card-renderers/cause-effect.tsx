@@ -61,7 +61,9 @@ export default function CauseEffectRenderer(props: ICardRendererProps): React.JS
       {...(content.hint !== undefined ? { hint: content.hint } : {})}
       actions={actionSlot}
     >
-      {/* Effects — shown after reveal */}
+      {/* Effects — passed as children to CardShell.
+          CardShell gates children behind isRevealed in interactive mode,
+          so this section is only rendered after the user reveals the card. */}
       <div className="space-y-1">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           {content.effects.length === 1 ? 'Effect' : 'Effects'}
