@@ -14,7 +14,7 @@ import type { ICardRendererProps } from './types.js';
 // Renderer imports will be added in Tasks T6–T12.
 // Replace FallbackRenderer with the specific renderer as each task completes.
 
-const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps>> = {
+export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps>> = {
   // ── Standard Card Types (22) ────────────────────────────────────────────────
   [CardType.ATOMIC]: FallbackRenderer,
   [CardType.CLOZE]: FallbackRenderer,

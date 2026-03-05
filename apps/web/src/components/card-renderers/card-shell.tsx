@@ -7,23 +7,16 @@
 
 import * as React from 'react';
 import { Card, CardContent } from '@noema/ui';
-import type { CardRendererMode } from './types.js';
+import type { ICardRendererProps } from './types.js';
 
-interface ICardShellProps {
-  mode: CardRendererMode;
-  frontContent: React.ReactNode;
-  backContent?: React.ReactNode;
-  isRevealed: boolean;
-  onReveal?: () => void;
-  hint?: string;
+interface ICardShellProps extends ICardRendererProps {
   children?: React.ReactNode;
-  className?: string;
+  hint?: string; // optional hint text to display
 }
 
 export function CardShell({
+  card,
   mode,
-  frontContent,
-  backContent,
   isRevealed,
   onReveal,
   hint,
@@ -34,7 +27,10 @@ export function CardShell({
     return (
       <Card className={`h-full ${className}`}>
         <CardContent className="p-4">
-          <div className="text-sm text-foreground line-clamp-3">{frontContent}</div>
+          <span className="text-xs text-muted-foreground font-mono mb-2 block">
+            {card.cardType}
+          </span>
+          <div className="text-sm text-foreground line-clamp-3">{children}</div>
         </CardContent>
       </Card>
     );
@@ -43,22 +39,13 @@ export function CardShell({
   return (
     <Card className={`w-full ${className}`}>
       <CardContent className="p-6 space-y-4">
-        <div className="text-base leading-relaxed">{frontContent}</div>
-
         {!isRevealed && hint !== undefined && hint !== '' && (
           <p className="text-sm text-muted-foreground italic border-l-2 border-synapse-400/40 pl-3">
             Hint: {hint}
           </p>
         )}
 
-        {isRevealed && backContent !== undefined && (
-          <>
-            <div className="border-t border-border" />
-            <div className="text-base leading-relaxed text-foreground/90">{backContent}</div>
-          </>
-        )}
-
-        {!isRevealed && onReveal !== undefined && backContent !== undefined && (
+        {!isRevealed && onReveal !== undefined && (
           <button
             type="button"
             onClick={onReveal}
@@ -66,6 +53,12 @@ export function CardShell({
           >
             Show Answer
           </button>
+        )}
+
+        {isRevealed && (
+          <>
+            <div className="border-t border-border" />
+          </>
         )}
 
         {children}
