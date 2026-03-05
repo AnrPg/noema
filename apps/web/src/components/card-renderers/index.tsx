@@ -45,9 +45,13 @@ import RepresentationSwitchRenderer from './remediation/representation-switch.js
 import RetrievalCueRenderer from './remediation/retrieval-cue.js';
 import EncodingRepairRenderer from './remediation/encoding-repair.js';
 import OverwriteDrillRenderer from './remediation/overwrite-drill.js';
-
-// Renderer imports will be added in Tasks T6–T12.
-// Replace FallbackRenderer with the specific renderer as each task completes.
+import AvailabilityBiasDisconfirmationRenderer from './remediation/availability-bias-disconfirmation.js';
+import SelfCheckRitualRenderer from './remediation/self-check-ritual.js';
+import CalibrationTrainingRenderer from './remediation/calibration-training.js';
+import AttributionReframingRenderer from './remediation/attribution-reframing.js';
+import StrategyReminderRenderer from './remediation/strategy-reminder.js';
+import ConfusableSetDrillRenderer from './remediation/confusable-set-drill.js';
+import PartialKnowledgeDecompositionRenderer from './remediation/partial-knowledge-decomposition.js';
 
 export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps>> = {
   // ── Standard Card Types (22) ────────────────────────────────────────────────
@@ -100,13 +104,20 @@ export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps
     EncodingRepairRenderer as React.ComponentType<ICardRendererProps>,
   [RemediationCardType.OVERWRITE_DRILL]:
     OverwriteDrillRenderer as React.ComponentType<ICardRendererProps>,
-  [RemediationCardType.AVAILABILITY_BIAS_DISCONFIRMATION]: FallbackRenderer,
-  [RemediationCardType.SELF_CHECK_RITUAL]: FallbackRenderer,
-  [RemediationCardType.CALIBRATION_TRAINING]: FallbackRenderer,
-  [RemediationCardType.ATTRIBUTION_REFRAMING]: FallbackRenderer,
-  [RemediationCardType.STRATEGY_REMINDER]: FallbackRenderer,
-  [RemediationCardType.CONFUSABLE_SET_DRILL]: FallbackRenderer,
-  [RemediationCardType.PARTIAL_KNOWLEDGE_DECOMPOSITION]: FallbackRenderer,
+  [RemediationCardType.AVAILABILITY_BIAS_DISCONFIRMATION]:
+    AvailabilityBiasDisconfirmationRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.SELF_CHECK_RITUAL]:
+    SelfCheckRitualRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.CALIBRATION_TRAINING]:
+    CalibrationTrainingRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.ATTRIBUTION_REFRAMING]:
+    AttributionReframingRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.STRATEGY_REMINDER]:
+    StrategyReminderRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.CONFUSABLE_SET_DRILL]:
+    ConfusableSetDrillRenderer as React.ComponentType<ICardRendererProps>,
+  [RemediationCardType.PARTIAL_KNOWLEDGE_DECOMPOSITION]:
+    PartialKnowledgeDecompositionRenderer as React.ComponentType<ICardRendererProps>,
 };
 
 export function CardRenderer(props: ICardRendererProps): React.JSX.Element {
