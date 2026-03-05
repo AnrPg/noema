@@ -15,6 +15,12 @@ import DefinitionRenderer from './definition.js';
 import TrueFalseRenderer from './true-false.js';
 import MultipleChoiceRenderer from './multiple-choice.js';
 import ConfidenceRatedRenderer from './confidence-rated.js';
+import ClozeRenderer from './cloze.js';
+import MatchingRenderer from './matching.js';
+import OrderingRenderer from './ordering.js';
+import ProcessRenderer from './process.js';
+import TimelineRenderer from './timeline.js';
+import CauseEffectRenderer from './cause-effect.js';
 
 // Renderer imports will be added in Tasks T6–T12.
 // Replace FallbackRenderer with the specific renderer as each task completes.
@@ -22,10 +28,10 @@ import ConfidenceRatedRenderer from './confidence-rated.js';
 export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps>> = {
   // ── Standard Card Types (22) ────────────────────────────────────────────────
   [CardType.ATOMIC]: AtomicRenderer as React.ComponentType<ICardRendererProps>,
-  [CardType.CLOZE]: FallbackRenderer,
+  [CardType.CLOZE]: ClozeRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.IMAGE_OCCLUSION]: FallbackRenderer,
   [CardType.AUDIO]: FallbackRenderer,
-  [CardType.PROCESS]: FallbackRenderer,
+  [CardType.PROCESS]: ProcessRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.COMPARISON]: FallbackRenderer,
   [CardType.EXCEPTION]: FallbackRenderer,
   [CardType.ERROR_SPOTTING]: FallbackRenderer,
@@ -37,11 +43,11 @@ export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps
   [CardType.PROGRESSIVE_DISCLOSURE]: FallbackRenderer,
   [CardType.MULTIPLE_CHOICE]: MultipleChoiceRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.TRUE_FALSE]: TrueFalseRenderer as React.ComponentType<ICardRendererProps>,
-  [CardType.MATCHING]: FallbackRenderer,
-  [CardType.ORDERING]: FallbackRenderer,
+  [CardType.MATCHING]: MatchingRenderer as React.ComponentType<ICardRendererProps>,
+  [CardType.ORDERING]: OrderingRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.DEFINITION]: DefinitionRenderer as React.ComponentType<ICardRendererProps>,
-  [CardType.CAUSE_EFFECT]: FallbackRenderer,
-  [CardType.TIMELINE]: FallbackRenderer,
+  [CardType.CAUSE_EFFECT]: CauseEffectRenderer as React.ComponentType<ICardRendererProps>,
+  [CardType.TIMELINE]: TimelineRenderer as React.ComponentType<ICardRendererProps>,
   [CardType.DIAGRAM]: FallbackRenderer,
   // ── Remediation Card Types (20) ─────────────────────────────────────────────
   [RemediationCardType.CONTRASTIVE_PAIR]: FallbackRenderer,
