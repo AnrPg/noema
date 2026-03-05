@@ -63,6 +63,8 @@ export default function CardLibraryPage(): React.JSX.Element {
   const deleteCard = useDeleteCard();
   const batchStateTransition = useBatchCardStateTransition();
 
+  const isMutating = deleteCard.isPending || batchStateTransition.isPending;
+
   // --------------------------------------------------------------------------
   // Bulk action handlers
   // --------------------------------------------------------------------------
@@ -99,27 +101,30 @@ export default function CardLibraryPage(): React.JSX.Element {
   // Bulk actions config
   // --------------------------------------------------------------------------
 
-  const bulkActions: IBulkAction[] = [
-    {
-      label: 'Activate Selected',
-      onClick: (ids) => {
-        handleActivateSelected(ids);
+  const bulkActions: IBulkAction[] = React.useMemo(
+    () => [
+      {
+        label: 'Activate Selected',
+        onClick: (ids) => {
+          if (!isMutating) handleActivateSelected(ids);
+        },
       },
-    },
-    {
-      label: 'Suspend Selected',
-      onClick: (ids) => {
-        handleSuspendSelected(ids);
+      {
+        label: 'Suspend Selected',
+        onClick: (ids) => {
+          if (!isMutating) handleSuspendSelected(ids);
+        },
       },
-    },
-    {
-      label: 'Delete Selected',
-      variant: 'destructive',
-      onClick: (ids) => {
-        void handleBulkDelete(ids);
+      {
+        label: 'Delete Selected',
+        variant: 'destructive' as const,
+        onClick: (ids) => {
+          if (!isMutating) void handleBulkDelete(ids);
+        },
       },
-    },
-  ];
+    ],
+    [isMutating, handleBulkDelete, handleSuspendSelected, handleActivateSelected]
+  );
 
   // --------------------------------------------------------------------------
   // Navigation
@@ -203,12 +208,14 @@ export default function CardLibraryPage(): React.JSX.Element {
           {/* Batch Operations */}
           <button
             type="button"
+            disabled={isMutating}
             onClick={handleBatchOperations}
             className={[
               'inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5',
               'text-sm font-medium text-muted-foreground transition-colors',
               'hover:border-foreground/30 hover:text-foreground',
               'focus:outline-none focus:ring-2 focus:ring-ring',
+              'disabled:pointer-events-none disabled:opacity-50',
             ].join(' ')}
           >
             <Layers className="h-4 w-4" />
@@ -218,12 +225,14 @@ export default function CardLibraryPage(): React.JSX.Element {
           {/* New Card */}
           <button
             type="button"
+            disabled={isMutating}
             onClick={handleNewCard}
             className={[
               'inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5',
               'text-sm font-medium text-primary-foreground transition-colors',
               'hover:bg-primary/90',
               'focus:outline-none focus:ring-2 focus:ring-ring',
+              'disabled:pointer-events-none disabled:opacity-50',
             ].join(' ')}
           >
             <Plus className="h-4 w-4" />
