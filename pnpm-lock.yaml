@@ -68,6 +68,9 @@ importers:
       '@noema/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@noema/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@noema/ui':
         specifier: workspace:*
         version: link:../../packages/ui
