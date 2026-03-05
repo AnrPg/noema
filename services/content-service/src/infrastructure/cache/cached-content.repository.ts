@@ -214,7 +214,7 @@ export class CachedContentRepository implements IContentRepository {
     return count;
   }
 
-  findRecentBatches(userId: string, limit?: number): Promise<IBatchSummary[]> {
+  findRecentBatches(userId: UserId, limit?: number): Promise<IBatchSummary[]> {
     return this.inner.findRecentBatches(userId, limit);
   }
 

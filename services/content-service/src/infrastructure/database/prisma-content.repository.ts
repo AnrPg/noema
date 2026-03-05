@@ -581,7 +581,7 @@ export class PrismaContentRepository implements IContentRepository {
     return count;
   }
 
-  async findRecentBatches(userId: string, limit = 20): Promise<IBatchSummary[]> {
+  async findRecentBatches(userId: UserId, limit = 20): Promise<IBatchSummary[]> {
     interface IRawBatchRow {
       batch_id: string;
       count: bigint;

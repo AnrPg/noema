@@ -987,9 +987,7 @@ export function registerContentRoutes(
         const context = buildContext(request);
         const limit = request.query.limit ?? 20;
         const result = await contentService.findRecentBatches(context, limit);
-        reply.send(
-          wrapResponse(result.data as unknown as IBatchSummary[], result.agentHints, request)
-        );
+        reply.send(wrapResponse<IBatchSummary[]>(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

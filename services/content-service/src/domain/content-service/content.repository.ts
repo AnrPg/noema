@@ -215,5 +215,5 @@ export interface IContentRepository {
    * @param userId - Owner user ID
    * @param limit - Maximum number of batches to return (default 20)
    */
-  findRecentBatches(userId: string, limit?: number): Promise<IBatchSummary[]>;
+  findRecentBatches(userId: UserId, limit?: number): Promise<IBatchSummary[]>;
 }
