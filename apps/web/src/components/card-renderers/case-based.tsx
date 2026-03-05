@@ -58,7 +58,7 @@ export default function CaseBasedRenderer(props: ICardRendererProps<string>): Re
         <div className="space-y-2">
           {content.options.map((option, idx) => (
             <div
-              key={idx}
+              key={option.text}
               className="rounded border border-border bg-background px-3 py-2 text-sm text-foreground"
             >
               {String.fromCharCode(65 + idx)}. {option.text}
@@ -115,7 +115,7 @@ export default function CaseBasedRenderer(props: ICardRendererProps<string>): Re
             </p>
             {content.options.map((option, idx) => (
               <div
-                key={idx}
+                key={option.text}
                 className={`rounded border px-3 py-2 text-sm ${
                   option.correct
                     ? 'border-green-500/40 bg-green-50/10 text-foreground'

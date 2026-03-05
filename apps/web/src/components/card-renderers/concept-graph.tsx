@@ -52,12 +52,12 @@ export default function ConceptGraphRenderer(props: ICardRendererProps): React.J
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Relationships ({String(content.edges.length)})
         </p>
-        {content.edges.map((edge, idx) => {
+        {content.edges.map((edge) => {
           const fromNode = content.nodes.find((n) => n.id === edge.from);
           const toNode = content.nodes.find((n) => n.id === edge.to);
           return (
             <div
-              key={idx}
+              key={`${edge.from}-${edge.to}-${edge.label}`}
               className="flex items-center gap-2 text-sm rounded border border-border bg-muted/20 px-3 py-2"
             >
               <span className="font-medium text-foreground">{fromNode?.label ?? edge.from}</span>

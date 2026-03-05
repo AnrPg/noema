@@ -58,9 +58,9 @@ export default function ExceptionRenderer(props: ICardRendererProps): React.JSX.
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
           Exceptions
         </p>
-        {content.exceptions.map((exc, idx) => (
+        {content.exceptions.map((exc) => (
           <div
-            key={idx}
+            key={exc.condition}
             className="rounded border border-amber-500/30 bg-amber-50/10 p-3 space-y-1"
           >
             <p className="text-sm font-medium text-foreground">{exc.condition}</p>

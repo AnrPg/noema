@@ -15,6 +15,15 @@ export default function ComparisonRenderer(props: ICardRendererProps): React.JSX
   const { card, mode } = props;
   const content = card.content as unknown as IComparisonContent;
 
+  // Collect all attribute keys across all items, using comparisonCriteria as the preferred order
+  const allKeys = React.useMemo(() => {
+    const fromCriteria = content.comparisonCriteria ?? [];
+    const fromItems = content.items.flatMap((item) => Object.keys(item.attributes));
+    const seen = new Set<string>(fromCriteria);
+    fromItems.forEach((k) => seen.add(k));
+    return Array.from(seen);
+  }, [content.items, content.comparisonCriteria]);
+
   if (mode === 'preview') {
     const labels = content.items.map((item) => item.label).join(' vs ');
     return (
@@ -28,15 +37,6 @@ export default function ComparisonRenderer(props: ICardRendererProps): React.JSX
       </CardShell>
     );
   }
-
-  // Collect all attribute keys across all items, using comparisonCriteria as the preferred order
-  const allKeys = React.useMemo(() => {
-    const fromCriteria = content.comparisonCriteria ?? [];
-    const fromItems = content.items.flatMap((item) => Object.keys(item.attributes));
-    const seen = new Set<string>(fromCriteria);
-    fromItems.forEach((k) => seen.add(k));
-    return Array.from(seen);
-  }, [content.items, content.comparisonCriteria]);
 
   const actionSlot = (
     <div className="space-y-4">

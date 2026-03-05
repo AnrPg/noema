@@ -59,9 +59,9 @@ export default function ProgressiveDisclosureRenderer(
 
       {/* Layer progress indicator */}
       <div className="flex items-center gap-1">
-        {sortedLayers.map((_, idx) => (
+        {sortedLayers.map((layer, idx) => (
           <div
-            key={idx}
+            key={layer.order}
             className={cn(
               'h-1.5 flex-1 rounded-full transition-colors',
               idx < visibleCount ? 'bg-synapse-400' : 'bg-muted/40'
