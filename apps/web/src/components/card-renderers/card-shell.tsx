@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react';
-import { Card, CardContent } from '@noema/ui';
+import { Card, CardContent, Button } from '@noema/ui';
 import type { ICardRendererProps } from './types.js';
 
 interface ICardShellProps extends ICardRendererProps {
@@ -46,22 +46,22 @@ export function CardShell({
         )}
 
         {!isRevealed && onReveal !== undefined && (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onReveal}
-            className="w-full rounded-lg border border-synapse-400/30 py-2 text-sm text-synapse-400 hover:bg-synapse-400/5 transition-colors"
+            aria-label={`Show answer for card ${card.id}`}
           >
             Show Answer
-          </button>
+          </Button>
         )}
 
         {isRevealed && (
           <>
-            <div className="border-t border-border" />
+            <div className="border-t border-border my-2" />
+            {children}
           </>
         )}
-
-        {children}
       </CardContent>
     </Card>
   );

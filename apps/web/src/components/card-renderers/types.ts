@@ -7,11 +7,11 @@ import type { ICardDto } from '@noema/api-client';
 
 export type CardRendererMode = 'preview' | 'interactive';
 
-export interface ICardRendererProps {
+export interface ICardRendererProps<TAnswer = unknown> {
   card: ICardDto;
   mode: CardRendererMode;
   isRevealed: boolean;
-  onAnswer?: (answer: unknown) => void;
+  onAnswer?: (answer: TAnswer) => void;
   onHintRequest?: () => void;
   onReveal?: () => void;
   className?: string;
