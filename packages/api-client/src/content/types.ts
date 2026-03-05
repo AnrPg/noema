@@ -2,129 +2,695 @@
  * @noema/api-client - Content Service Types
  *
  * DTOs for Content Service API requests and responses.
+ * Authoritative field names derived from card-content.schemas.ts (content-service).
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CategoryId, JobId, MediaId, NodeId, TemplateId, UserId } from '@noema/types';
+import type { CardId, MediaId, TemplateId } from '@noema/types';
+import type { CardType, RemediationCardType } from '@noema/types';
 
 // ============================================================================
-// Enums
+// Card State
 // ============================================================================
 
-export type CardType = 'basic' | 'cloze' | 'short_answer' | 'multiple_choice' | 'true_false';
-
-export type CardState = 'draft' | 'active' | 'archived' | 'deleted';
-
-export type CardLearningState = 'new' | 'learning' | 'review' | 'relearning' | 'suspended';
+/** Lifecycle states for a card (matches backend CardState enum). */
+export type CardState = 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
 
 // ============================================================================
-// Card Content (polymorphic by CardType)
+// Media Attachment (shared across content interfaces)
 // ============================================================================
 
-export interface IBasicCardContent {
-  front: string;
-  back: string;
+export interface IMediaAttachment {
+  id: string;
+  url: string;
+  mimeType: string;
+  altText?: string;
 }
 
-export interface IClozeCardContent {
+// ============================================================================
+// Base Content Fields (every card type extends these)
+// ============================================================================
+
+interface ICardContentBase {
+  front?: string;
+  back?: string;
+  hint?: string;
+  explanation?: string;
+  media?: IMediaAttachment[];
+}
+
+// ============================================================================
+// Standard Card Types (22)
+// ============================================================================
+
+// 1. ATOMIC — simple question/answer pair
+export interface IAtomicContent extends ICardContentBase {
+  front?: string;
+  back?: string;
+}
+
+// 2. CLOZE — fill-in-the-blank
+export interface IClozeItem {
   text: string;
-  /** Cloze deletions — substrings of `text` that should be hidden */
-  cloze: string[];
-}
-
-export interface IShortAnswerCardContent {
-  question: string;
   answer: string;
-  acceptedAnswers?: string[];
+  position: number;
 }
 
-export interface IMultipleChoiceCardContent {
+export interface IClozeContent extends ICardContentBase {
+  template: string;
+  clozes?: IClozeItem[];
+}
+
+// 3. IMAGE_OCCLUSION — image with masked regions
+export interface IOcclusionRegion {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  shape?: 'rect' | 'ellipse' | 'polygon';
+}
+
+export interface IImageOcclusionContent extends ICardContentBase {
+  imageUrl: string;
+  regions: IOcclusionRegion[];
+}
+
+// 4. AUDIO — listen and recall
+export interface IAudioContent extends ICardContentBase {
+  audioUrl: string;
+  transcript?: string;
+  playbackSpeed?: number;
+  startTime?: number;
+  endTime?: number;
+}
+
+// 5. PROCESS — step-by-step sequences
+export interface IProcessStep {
+  order: number;
+  title: string;
+  description: string;
+  imageUrl?: string;
+}
+
+export interface IProcessContent extends ICardContentBase {
+  processName: string;
+  steps: IProcessStep[];
+}
+
+// 6. COMPARISON — compare A vs B vs C
+export interface IComparisonItem {
+  label: string;
+  attributes: Record<string, string>;
+}
+
+export interface IComparisonContent extends ICardContentBase {
+  items: IComparisonItem[];
+  comparisonCriteria?: string[];
+}
+
+// 7. EXCEPTION — boundary conditions / exceptions to rules
+export interface IExceptionCase {
+  condition: string;
+  explanation: string;
+}
+
+export interface IExceptionContent extends ICardContentBase {
+  rule: string;
+  generalPrinciple?: string;
+  exceptions: IExceptionCase[];
+}
+
+// 8. ERROR_SPOTTING — find the mistake
+export interface IErrorSpottingContent extends ICardContentBase {
+  errorText: string;
+  correctedText: string;
+  errorType?: string;
+  errorExplanation?: string;
+}
+
+// 9. CONFIDENCE_RATED — metacognition training
+export interface IConfidenceScale {
+  min: number;
+  max: number;
+  labels?: Record<string, string>;
+}
+
+export interface IConfidenceRatedContent extends ICardContentBase {
+  correctAnswer: string;
+  confidenceScale?: IConfidenceScale;
+  calibrationFeedback?: string;
+}
+
+// 10. CONCEPT_GRAPH — relation mapping
+export interface IConceptNode {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface IConceptEdge {
+  from: string;
+  to: string;
+  label: string;
+  description?: string;
+}
+
+export interface IConceptGraphContent extends ICardContentBase {
+  targetConcept: string;
+  nodes: IConceptNode[];
+  edges: IConceptEdge[];
+}
+
+// 11. CASE_BASED — vignette -> decision
+export interface ICaseOption {
+  text: string;
+  correct: boolean;
+  feedback?: string;
+}
+
+export interface ICaseBasedContent extends ICardContentBase {
+  scenario: string;
   question: string;
-  choices: string[];
-  correctIndex: number;
+  options?: ICaseOption[];
+  analysis?: string;
 }
 
-export interface ITrueFalseCardContent {
+// 12. MULTIMODAL — text + image + audio
+export interface IMultimodalItem {
+  type: 'text' | 'image' | 'audio' | 'video';
+  content: string;
+  description?: string;
+  order?: number;
+}
+
+export interface IMultimodalContent extends ICardContentBase {
+  mediaItems: IMultimodalItem[];
+  synthesisPrompt?: string;
+}
+
+// 13. TRANSFER — novel contexts
+export interface ITransferContent extends ICardContentBase {
+  originalContext: string;
+  novelContext: string;
+  transferPrompt: string;
+  structuralMapping?: string;
+}
+
+// 14. PROGRESSIVE_DISCLOSURE — layered complexity
+export interface IDisclosureLayer {
+  order: number;
+  content: string;
+  revealCondition?: string;
+}
+
+export interface IProgressiveDisclosureContent extends ICardContentBase {
+  layers: IDisclosureLayer[];
+}
+
+// 15. MULTIPLE_CHOICE — multiple choice
+export interface IMultipleChoiceOption {
+  text: string;
+  correct: boolean;
+  feedback?: string;
+}
+
+export interface IMultipleChoiceContent extends ICardContentBase {
+  choices: IMultipleChoiceOption[];
+  shuffleChoices?: boolean;
+  allowMultiple?: boolean;
+}
+
+// 16. TRUE_FALSE — true/false statement
+export interface ITrueFalseContent extends ICardContentBase {
   statement: string;
   isTrue: boolean;
 }
 
-/**
- * Discriminated union of all card content types, enveloped with the `type`
- * discriminant. Used in history snapshots, card creation/update inputs, and
- * anywhere the type + content pair travel together as a unit.
- */
-export type CardContentDto =
-  | { type: 'basic'; content: IBasicCardContent }
-  | { type: 'cloze'; content: IClozeCardContent }
-  | { type: 'short_answer'; content: IShortAnswerCardContent }
-  | { type: 'multiple_choice'; content: IMultipleChoiceCardContent }
-  | { type: 'true_false'; content: ITrueFalseCardContent };
+// 17. MATCHING — match items
+export interface IMatchingPair {
+  left: string;
+  right: string;
+}
 
-/**
- * Union of raw card structure objects (without the `type` envelope).
- * Used by template `structure` fields where the discriminant is carried on
- * the parent object rather than inside the structure itself.
- */
-export type CardStructure =
-  | IBasicCardContent
-  | IClozeCardContent
-  | IShortAnswerCardContent
-  | IMultipleChoiceCardContent
-  | ITrueFalseCardContent;
+export interface IMatchingContent extends ICardContentBase {
+  pairs: IMatchingPair[];
+  shufflePairs?: boolean;
+}
+
+// 18. ORDERING — order items
+export interface IOrderingItem {
+  text: string;
+  correctPosition: number;
+}
+
+export interface IOrderingContent extends ICardContentBase {
+  items: IOrderingItem[];
+  orderingCriterion: string;
+}
+
+// 19. DEFINITION — definition recall
+export interface IDefinitionContent extends ICardContentBase {
+  term: string;
+  definition: string;
+  examples?: string[];
+  relatedTerms?: string[];
+}
+
+// 20. CAUSE_EFFECT — cause-effect relationships
+export interface ICauseEffectItem {
+  description: string;
+}
+
+export interface ICauseEffectRelationship {
+  causeIndex: number;
+  effectIndex: number;
+  explanation?: string;
+}
+
+export interface ICauseEffectContent extends ICardContentBase {
+  causes: ICauseEffectItem[];
+  effects: ICauseEffectItem[];
+  relationships: ICauseEffectRelationship[];
+}
+
+// 21. TIMELINE — timeline ordering
+export interface ITimelineEvent {
+  date: string;
+  title: string;
+  description?: string;
+}
+
+export interface ITimelineContent extends ICardContentBase {
+  events: ITimelineEvent[];
+  timelineScope?: string;
+}
+
+// 22. DIAGRAM — diagram labeling
+export interface IDiagramLabel {
+  x: number;
+  y: number;
+  text: string;
+  answer: string;
+}
+
+export interface IDiagramContent extends ICardContentBase {
+  imageUrl: string;
+  labels: IDiagramLabel[];
+  diagramType?: string;
+}
 
 // ============================================================================
-// Card DTO
+// Remediation Card Types (20)
 // ============================================================================
 
-/**
- * Shared fields present on all card variants.
- * Not exported — consumers should use `CardDto` (the discriminated union type).
- */
-interface ICardDtoBase {
+// R1. CONTRASTIVE_PAIR
+export interface IContrastivePairContent extends ICardContentBase {
+  itemA: string;
+  itemB: string;
+  sharedContext: string;
+  keyDifferences: string[];
+}
+
+// R2. MINIMAL_PAIR
+export interface IMinimalPairContent extends ICardContentBase {
+  itemA: string;
+  itemB: string;
+  discriminatingFeature: string;
+  differenceContext?: string;
+}
+
+// R3. FALSE_FRIEND
+export interface IFalseFriendContent extends ICardContentBase {
+  termA: string;
+  termB: string;
+  actualMeaning: string;
+  domainContext?: string;
+}
+
+// R4. OLD_VS_NEW_DEFINITION
+export interface IOldVsNewDefinitionContent extends ICardContentBase {
+  term: string;
+  oldDefinition: string;
+  newDefinition: string;
+  changeReason: string;
+}
+
+// R5. BOUNDARY_CASE
+export interface IBoundaryCaseContent extends ICardContentBase {
+  concept: string;
+  boundaryCondition: string;
+  isIncluded: boolean;
+  reasoning: string;
+}
+
+// R6. RULE_SCOPE
+export interface IRuleScopeContent extends ICardContentBase {
+  rule: string;
+  appliesWhen: string[];
+  doesNotApplyWhen: string[];
+}
+
+// R7. DISCRIMINANT_FEATURE
+export interface IDiscriminantFeatureItem {
+  name: string;
+  diagnostic: boolean;
+  value: string;
+}
+
+export interface IDiscriminantFeatureContent extends ICardContentBase {
+  concept: string;
+  features: IDiscriminantFeatureItem[];
+}
+
+// R8. ASSUMPTION_CHECK
+export interface IAssumptionCheckContent extends ICardContentBase {
+  statement: string;
+  hiddenAssumption: string;
+  consequence: string;
+}
+
+// R9. COUNTEREXAMPLE
+export interface ICounterexampleContent extends ICardContentBase {
+  claim: string;
+  counterexample: string;
+  significance?: string;
+}
+
+// R10. REPRESENTATION_SWITCH
+export interface IRepresentationItem {
+  type: string;
+  content: string;
+}
+
+export interface IRepresentationSwitchContent extends ICardContentBase {
+  concept: string;
+  representations: IRepresentationItem[];
+}
+
+// R11. RETRIEVAL_CUE
+export interface IRetrievalCueItem {
+  cue: string;
+  effectiveness: 'strong' | 'moderate' | 'weak';
+}
+
+export interface IRetrievalCueContent extends ICardContentBase {
+  target: string;
+  cues: IRetrievalCueItem[];
+  context?: string;
+}
+
+// R12. ENCODING_REPAIR
+export interface IEncodingRepairContent extends ICardContentBase {
+  concept: string;
+  incorrectEncoding: string;
+  correctEncoding: string;
+  repairStrategy: string;
+}
+
+// R13. OVERWRITE_DRILL
+export interface IOverwriteDrillContent extends ICardContentBase {
+  incorrectResponse: string;
+  correctResponse: string;
+  drillPrompts: string[];
+}
+
+// R14. AVAILABILITY_BIAS_DISCONFIRMATION
+export interface IAvailabilityBiasDisconfirmationContent extends ICardContentBase {
+  biasedBelief: string;
+  evidence: string;
+  baseRate?: string;
+  biasExplanation?: string;
+}
+
+// R15. SELF_CHECK_RITUAL
+export interface ISelfCheckStep {
+  step: number;
+  question: string;
+}
+
+export interface ISelfCheckRitualContent extends ICardContentBase {
+  concept: string;
+  checkSteps: ISelfCheckStep[];
+  trigger: string;
+}
+
+// R16. CALIBRATION_TRAINING
+export interface ICalibrationTrainingContent extends ICardContentBase {
+  statement: string;
+  trueConfidence: number;
+  calibrationPrompt: string;
+}
+
+// R17. ATTRIBUTION_REFRAMING
+export interface IAttributionReframingContent extends ICardContentBase {
+  outcome: string;
+  emotionalAttribution: string;
+  processAttribution: string;
+}
+
+// R18. STRATEGY_REMINDER
+export interface IStrategyReminderContent extends ICardContentBase {
+  strategy: string;
+  whenToUse: string;
+  whenNotToUse: string;
+  exampleApplication: string;
+}
+
+// R19. CONFUSABLE_SET_DRILL
+export interface IConfusableItem {
+  term: string;
+  definition: string;
+  distinguishingFeature: string;
+}
+
+export interface IConfusableSetDrillContent extends ICardContentBase {
+  items: IConfusableItem[];
+  confusionPattern: string;
+}
+
+// R20. PARTIAL_KNOWLEDGE_DECOMPOSITION
+export interface IPartialKnowledgeDecompositionContent extends ICardContentBase {
+  concept: string;
+  knownParts: string[];
+  unknownParts: string[];
+  bridgingStrategy: string;
+}
+
+// ============================================================================
+// CardContentByType — Mapped type for discriminated narrowing
+// ============================================================================
+
+export type CardContentByType = {
+  [K in keyof typeof CardType as (typeof CardType)[K]]: K extends 'ATOMIC'
+    ? IAtomicContent
+    : K extends 'CLOZE'
+      ? IClozeContent
+      : K extends 'IMAGE_OCCLUSION'
+        ? IImageOcclusionContent
+        : K extends 'AUDIO'
+          ? IAudioContent
+          : K extends 'PROCESS'
+            ? IProcessContent
+            : K extends 'COMPARISON'
+              ? IComparisonContent
+              : K extends 'EXCEPTION'
+                ? IExceptionContent
+                : K extends 'ERROR_SPOTTING'
+                  ? IErrorSpottingContent
+                  : K extends 'CONFIDENCE_RATED'
+                    ? IConfidenceRatedContent
+                    : K extends 'CONCEPT_GRAPH'
+                      ? IConceptGraphContent
+                      : K extends 'CASE_BASED'
+                        ? ICaseBasedContent
+                        : K extends 'MULTIMODAL'
+                          ? IMultimodalContent
+                          : K extends 'TRANSFER'
+                            ? ITransferContent
+                            : K extends 'PROGRESSIVE_DISCLOSURE'
+                              ? IProgressiveDisclosureContent
+                              : K extends 'MULTIPLE_CHOICE'
+                                ? IMultipleChoiceContent
+                                : K extends 'TRUE_FALSE'
+                                  ? ITrueFalseContent
+                                  : K extends 'MATCHING'
+                                    ? IMatchingContent
+                                    : K extends 'ORDERING'
+                                      ? IOrderingContent
+                                      : K extends 'DEFINITION'
+                                        ? IDefinitionContent
+                                        : K extends 'CAUSE_EFFECT'
+                                          ? ICauseEffectContent
+                                          : K extends 'TIMELINE'
+                                            ? ITimelineContent
+                                            : K extends 'DIAGRAM'
+                                              ? IDiagramContent
+                                              : ICardContentBase;
+} & {
+  [K in keyof typeof RemediationCardType as (typeof RemediationCardType)[K]]: K extends 'CONTRASTIVE_PAIR'
+    ? IContrastivePairContent
+    : K extends 'MINIMAL_PAIR'
+      ? IMinimalPairContent
+      : K extends 'FALSE_FRIEND'
+        ? IFalseFriendContent
+        : K extends 'OLD_VS_NEW_DEFINITION'
+          ? IOldVsNewDefinitionContent
+          : K extends 'BOUNDARY_CASE'
+            ? IBoundaryCaseContent
+            : K extends 'RULE_SCOPE'
+              ? IRuleScopeContent
+              : K extends 'DISCRIMINANT_FEATURE'
+                ? IDiscriminantFeatureContent
+                : K extends 'ASSUMPTION_CHECK'
+                  ? IAssumptionCheckContent
+                  : K extends 'COUNTEREXAMPLE'
+                    ? ICounterexampleContent
+                    : K extends 'REPRESENTATION_SWITCH'
+                      ? IRepresentationSwitchContent
+                      : K extends 'RETRIEVAL_CUE'
+                        ? IRetrievalCueContent
+                        : K extends 'ENCODING_REPAIR'
+                          ? IEncodingRepairContent
+                          : K extends 'OVERWRITE_DRILL'
+                            ? IOverwriteDrillContent
+                            : K extends 'AVAILABILITY_BIAS_DISCONFIRMATION'
+                              ? IAvailabilityBiasDisconfirmationContent
+                              : K extends 'SELF_CHECK_RITUAL'
+                                ? ISelfCheckRitualContent
+                                : K extends 'CALIBRATION_TRAINING'
+                                  ? ICalibrationTrainingContent
+                                  : K extends 'ATTRIBUTION_REFRAMING'
+                                    ? IAttributionReframingContent
+                                    : K extends 'STRATEGY_REMINDER'
+                                      ? IStrategyReminderContent
+                                      : K extends 'CONFUSABLE_SET_DRILL'
+                                        ? IConfusableSetDrillContent
+                                        : K extends 'PARTIAL_KNOWLEDGE_DECOMPOSITION'
+                                          ? IPartialKnowledgeDecompositionContent
+                                          : ICardContentBase;
+};
+
+// ============================================================================
+// Card DTOs
+// ============================================================================
+
+/** Full card shape returned by the API. */
+export interface ICardDto {
   id: CardId;
-  userId: UserId;
+  userId: string;
+  cardType: string;
   state: CardState;
-  learningState: CardLearningState;
+  difficulty: number;
+  content: Record<string, unknown>;
+  knowledgeNodeIds: string[];
   tags: string[];
-  categoryId: CategoryId | null;
-  templateId: TemplateId | null;
-  nodeLinks: NodeId[];
+  source?: string;
+  metadata: Record<string, unknown>;
+  contentHash?: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
-  version: number;
+  deletedAt?: string;
 }
 
 /**
- * A card returned from the API. The `type` field discriminates which `content`
- * variant is present, enabling full narrowing:
- *
- * @example
- * if (card.type === 'basic') {
- *   // card.content is narrowed to IBasicCardContent
- *   console.log(card.content.front);
- * }
+ * Alias for backward compatibility with hooks.ts which imports `CardDto`.
+ * @deprecated Use ICardDto directly for new code.
  */
-export type CardDto =
-  | (ICardDtoBase & { type: 'basic'; content: IBasicCardContent })
-  | (ICardDtoBase & { type: 'cloze'; content: IClozeCardContent })
-  | (ICardDtoBase & { type: 'short_answer'; content: IShortAnswerCardContent })
-  | (ICardDtoBase & { type: 'multiple_choice'; content: IMultipleChoiceCardContent })
-  | (ICardDtoBase & { type: 'true_false'; content: ITrueFalseCardContent });
+export type CardDto = ICardDto;
+
+/** List-safe card shape (no content blob). */
+export interface ICardSummaryDto {
+  id: CardId;
+  cardType: string;
+  state: CardState;
+  tags: string[];
+  knowledgeNodeIds: string[];
+  difficulty: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Batch summary returned after a batch creation job completes. */
+export interface IBatchSummaryDto {
+  batchId: string;
+  count: number;
+  createdAt: string;
+}
 
 // ============================================================================
 // Deck Query
 // ============================================================================
 
 export interface IDeckQueryInput {
-  tags?: string[];
-  categoryIds?: CategoryId[];
-  nodeIds?: NodeId[];
-  learningStates?: CardLearningState[];
-  types?: CardType[];
+  search?: string;
+  cardTypes?: string[];
   states?: CardState[];
-  cursor?: string;
+  tags?: string[];
+  knowledgeNodeIds?: string[];
+  source?: string;
+  difficulty?: { min?: number; max?: number };
+  sortBy?: 'createdAt' | 'updatedAt' | 'difficulty' | 'nextReviewAt';
+  sortDir?: 'asc' | 'desc';
   limit?: number;
+  cursor?: string;
+}
+
+// ============================================================================
+// Create / Update Inputs
+// ============================================================================
+
+export interface ICreateCardInput {
+  cardType: string;
+  content: Record<string, unknown>;
+  tags?: string[];
+  knowledgeNodeIds?: string[];
+  source?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface IUpdateCardInput {
+  content?: Record<string, unknown>;
+  tags?: string[];
+  knowledgeNodeIds?: string[];
+  source?: string;
+  metadata?: Record<string, unknown>;
+  version: number;
+}
+
+export interface IUpdateCardStateInput {
+  state: CardState;
+}
+
+export interface IBatchStateUpdateInput {
+  cardIds: string[];
+  state: CardState;
+}
+
+export interface IUpdateCardTagsInput {
+  tags: string[];
+}
+
+export interface IUpdateCardNodeLinksInput {
+  knowledgeNodeIds: string[];
+}
+
+// ============================================================================
+// Batch Operations
+// ============================================================================
+
+export interface IBatchCreateInput {
+  cards: ICreateCardInput[];
+}
+
+/** IMPORTANT: `created` is ICardDto[] not a number. */
+export interface IBatchCreateResult {
+  batchId: string;
+  created: ICardDto[];
+  failed: number;
+  total: number;
 }
 
 // ============================================================================
@@ -134,77 +700,83 @@ export interface IDeckQueryInput {
 export interface ICardStatsDto {
   total: number;
   byState: Record<CardState, number>;
-  byLearningState: Record<CardLearningState, number>;
-  byType: Record<CardType, number>;
+  byType: Record<string, number>;
+  averageDifficulty: number;
 }
 
 // ============================================================================
 // History
 // ============================================================================
 
-export interface ICardVersionSnapshot {
+/** A single version snapshot within a card's history. */
+export interface ICardHistoryEntryDto {
   version: number;
-  content: CardContentDto;
+  content: Record<string, unknown>;
   changedAt: string;
-  changedBy: UserId;
+  changedBy: string;
 }
 
+/**
+ * Full version history for a card.
+ * CardHistoryResponse wraps this so that `select: (r) => r.data` returns ICardHistoryDto.
+ */
 export interface ICardHistoryDto {
-  cardId: CardId;
-  snapshots: ICardVersionSnapshot[];
+  cardId: string;
+  snapshots: ICardHistoryEntryDto[];
+}
+
+// ============================================================================
+// Session Seed
+// ============================================================================
+
+export interface ISessionSeedDto {
+  cardIds: string[];
+  totalCount: number;
+}
+
+export interface ISessionSeedQuery {
+  limit?: number;
+  strategy?: 'due' | 'new' | 'mixed';
+  cardTypes?: string[];
+  tags?: string[];
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
+export interface ICardValidationResult {
+  valid: boolean;
+  errors?: string[];
 }
 
 // ============================================================================
 // Templates
 // ============================================================================
 
-/**
- * Shared fields present on all template variants.
- * Not exported — consumers should use `TemplateDto` (the discriminated union type).
- */
-interface ITemplateDtoBase {
+export interface ITemplateDto {
   id: TemplateId;
   name: string;
+  cardType: string;
+  defaultContent: Record<string, unknown>;
   createdAt: string;
-  updatedAt: string;
 }
 
-/**
- * A template returned from the API. The `type` field discriminates which
- * `structure` variant is present, enabling full narrowing:
- *
- * @example
- * if (template.type === 'basic') {
- *   // template.structure is narrowed to IBasicCardContent
- *   console.log(template.structure.front);
- * }
- */
-export type TemplateDto =
-  | (ITemplateDtoBase & { type: 'basic'; structure: IBasicCardContent })
-  | (ITemplateDtoBase & { type: 'cloze'; structure: IClozeCardContent })
-  | (ITemplateDtoBase & { type: 'short_answer'; structure: IShortAnswerCardContent })
-  | (ITemplateDtoBase & { type: 'multiple_choice'; structure: IMultipleChoiceCardContent })
-  | (ITemplateDtoBase & { type: 'true_false'; structure: ITrueFalseCardContent });
+/** Alias for backward compatibility with api.ts and hooks.ts. */
+export type TemplateDto = ITemplateDto;
 
-/**
- * Input for creating a new template. The `type` discriminant determines which
- * `structure` shape is required.
- */
-export type CreateTemplateInput =
-  | { name: string; type: 'basic'; structure: IBasicCardContent }
-  | { name: string; type: 'cloze'; structure: IClozeCardContent }
-  | { name: string; type: 'short_answer'; structure: IShortAnswerCardContent }
-  | { name: string; type: 'multiple_choice'; structure: IMultipleChoiceCardContent }
-  | { name: string; type: 'true_false'; structure: ITrueFalseCardContent };
+export interface ICreateTemplateInput {
+  name: string;
+  cardType: string;
+  defaultContent: Record<string, unknown>;
+}
 
-/**
- * Input for partially updating an existing template. Because this is a partial
- * update the caller may omit `type`, so `structure` is typed as the raw union
- * of all content shapes (`CardStructure`) rather than a discriminated envelope.
- */
+/** Alias for backward compatibility with api.ts and hooks.ts. */
+export type CreateTemplateInput = ICreateTemplateInput;
+
 export interface IUpdateTemplateInput {
   name?: string;
-  structure?: CardStructure;
+  defaultContent?: Record<string, unknown>;
 }
 
 // ============================================================================
@@ -226,115 +798,28 @@ export interface IUploadUrlResult {
 }
 
 // ============================================================================
-// Batch Operations
+// Response wrapper types
 // ============================================================================
 
-export interface IBatchCreateInput {
-  cards: ICreateCardInput[];
-}
-
-export interface IBatchCreateError {
-  index: number;
-  error: string;
-}
-
-export interface IBatchCreateResult {
-  /** Branded job identifier for tracking the asynchronous batch operation. */
-  batchId: JobId;
-  created: number;
-  failed: number;
-  errors: IBatchCreateError[];
-}
-
-// ============================================================================
-// Cursor Pagination
-// ============================================================================
-
-export interface ICardsCursorResult {
-  cards: CardDto[];
+export type CardResponse = IApiResponse<ICardDto>;
+export type CardsListResponse = IApiResponse<{ cards: ICardSummaryDto[]; total: number }>;
+export type CardsCursorResponse = IApiResponse<{
+  cards: ICardSummaryDto[];
   nextCursor: string | null;
-  hasMore: boolean;
-}
-
-export interface ICardCountResult {
-  count: number;
-}
-
-// ============================================================================
-// Session Seed
-// ============================================================================
-
-export interface ISessionSeedQuery {
-  deckQuery: IDeckQueryInput;
-  limit?: number;
-}
-
-export interface ISessionSeedDto {
-  cardIds: CardId[];
-  totalAvailable: number;
-}
-
-// ============================================================================
-// Validation
-// ============================================================================
-
-export interface ICardValidationResult {
-  valid: boolean;
-  errors: string[];
-}
-
-// ============================================================================
-// Create / Update Inputs
-// ============================================================================
-
-export interface ICreateCardInput {
-  type: CardType;
-  content: CardContentDto;
-  tags?: string[];
-  categoryId?: CategoryId;
-  templateId?: TemplateId;
-  nodeLinks?: NodeId[];
-}
-
-export interface IUpdateCardInput {
-  content?: CardContentDto;
-  tags?: string[];
-  categoryId?: CategoryId | null;
-  nodeLinks?: NodeId[];
-}
-
-export interface IUpdateCardStateInput {
-  state: CardState;
-}
-
-export interface IBatchStateUpdateInput {
-  cardIds: CardId[];
-  state: CardState;
-}
-
-export interface IUpdateCardTagsInput {
-  tags: string[];
-}
-
-export interface IUpdateCardNodeLinksInput {
-  nodeLinks: NodeId[];
-}
-
-// ============================================================================
-// Response aliases
-// ============================================================================
-
-export type CardResponse = IApiResponse<CardDto>;
-export type CardsListResponse = IApiResponse<CardDto[]>;
+}>;
+export type CardCountResponse = IApiResponse<{ count: number }>;
 export type CardStatsResponse = IApiResponse<ICardStatsDto>;
-export type CardHistoryResponse = IApiResponse<ICardHistoryDto>;
-export type CardVersionResponse = IApiResponse<ICardVersionSnapshot>;
 export type BatchCreateResponse = IApiResponse<IBatchCreateResult>;
+export type BatchSummariesResponse = IApiResponse<IBatchSummaryDto[]>;
+export type CardHistoryResponse = IApiResponse<ICardHistoryDto>;
+export type CardVersionResponse = IApiResponse<{
+  version: number;
+  content: Record<string, unknown>;
+  changedAt: string;
+}>;
+export type CardValidationResponse = IApiResponse<ICardValidationResult>;
+export type SessionSeedResponse = IApiResponse<ISessionSeedDto>;
+export type UploadUrlResponse = IApiResponse<IUploadUrlResult>;
+export type MediaResponse = IApiResponse<IMediaFileDto>;
 export type TemplateResponse = IApiResponse<TemplateDto>;
 export type TemplatesListResponse = IApiResponse<TemplateDto[]>;
-export type MediaResponse = IApiResponse<IMediaFileDto>;
-export type UploadUrlResponse = IApiResponse<IUploadUrlResult>;
-export type SessionSeedResponse = IApiResponse<ISessionSeedDto>;
-export type CardsCursorResponse = IApiResponse<ICardsCursorResult>;
-export type CardCountResponse = IApiResponse<ICardCountResult>;
-export type CardValidationResponse = IApiResponse<ICardValidationResult>;
