@@ -135,19 +135,33 @@ function MisconceptionsTile({ userId }: { userId: UserId }): React.JSX.Element {
 // Sub-tile: Study Streak
 // ============================================================================
 
-function StudyStreakTile({ userId: _userId }: { userId: UserId }): React.JSX.Element {
+/**
+ * userId is used only to ensure this tile renders only when auth is settled.
+ * useSessions is auth-scoped server-side and does not accept a userId filter.
+ */
+function StudyStreakTile({ userId }: { userId: UserId }): React.JSX.Element {
   const sessions = useSessions({ state: 'COMPLETED', limit: STREAK_LOOKBACK_DAYS });
 
   if (sessions.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
+  if (userId === '') {
+    return <Skeleton variant="metric-tile" className="h-32" />;
+  }
+
   const list = sessions.data?.data ?? [];
 
-  // Compute consecutive days with at least one completed session
+  // Compute consecutive days with at least one completed session.
+  // If the user has not yet studied today, begin the check from yesterday so
+  // that a prior streak is not zeroed out before the first session of the day.
   const completedDays = new Set(list.map((s) => localDateStr(new Date(s.startedAt))));
-  let streak = 0;
   const check = new Date();
+  const today = localDateStr(check);
+  if (!completedDays.has(today)) {
+    check.setDate(check.getDate() - 1);
+  }
+  let streak = 0;
   while (completedDays.has(localDateStr(check))) {
     streak += 1;
     check.setDate(check.getDate() - 1);
