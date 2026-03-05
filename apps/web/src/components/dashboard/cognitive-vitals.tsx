@@ -21,13 +21,24 @@ import { SectionErrorBoundary } from '@/components/section-error-boundary';
 
 type UserId = UserDto['id'];
 
+// Returns YYYY-MM-DD in local timezone (not UTC) for consistent day bucketing
+function localDateStr(d: Date): string {
+  const y = String(d.getFullYear());
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Maximum look-back for streak calculation. Streak will be capped if exceeded.
+const STREAK_LOOKBACK_DAYS = 30;
+
 // ============================================================================
 // Sub-tile: Cards Due
 // ============================================================================
 
 function CardsDueTile({ userId }: { userId: UserId }): React.JSX.Element {
-  const plan = useDualLanePlan({ userId });
-  const windows = useReviewWindows({ userId });
+  const plan = useDualLanePlan({ userId }, { enabled: userId !== '' });
+  const windows = useReviewWindows({ userId }, { enabled: userId !== '' });
 
   if (plan.isLoading || windows.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
@@ -40,13 +51,13 @@ function CardsDueTile({ userId }: { userId: UserId }): React.JSX.Element {
   const windowData = windows.data?.data ?? [];
   const byDay = new Map<string, number>();
   for (const w of windowData) {
-    const day = w.startAt.slice(0, 10);
+    const day = localDateStr(new Date(w.startAt));
     byDay.set(day, (byDay.get(day) ?? 0) + w.cardsDue);
   }
   const sparklineData = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
     d.setDate(d.getDate() + i);
-    return byDay.get(d.toISOString().slice(0, 10)) ?? 0;
+    return byDay.get(localDateStr(d)) ?? 0;
   });
 
   return (
@@ -125,7 +136,7 @@ function MisconceptionsTile({ userId }: { userId: UserId }): React.JSX.Element {
 // ============================================================================
 
 function StudyStreakTile({ userId: _userId }: { userId: UserId }): React.JSX.Element {
-  const sessions = useSessions({ state: 'COMPLETED', limit: 30 });
+  const sessions = useSessions({ state: 'COMPLETED', limit: STREAK_LOOKBACK_DAYS });
 
   if (sessions.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
@@ -134,10 +145,10 @@ function StudyStreakTile({ userId: _userId }: { userId: UserId }): React.JSX.Ele
   const list = sessions.data?.data ?? [];
 
   // Compute consecutive days with at least one completed session
-  const completedDays = new Set(list.map((s) => new Date(s.startedAt).toISOString().slice(0, 10)));
+  const completedDays = new Set(list.map((s) => localDateStr(new Date(s.startedAt))));
   let streak = 0;
   const check = new Date();
-  while (completedDays.has(check.toISOString().slice(0, 10))) {
+  while (completedDays.has(localDateStr(check))) {
     streak += 1;
     check.setDate(check.getDate() - 1);
   }
