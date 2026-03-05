@@ -14,14 +14,27 @@ import type { ICardRendererProps } from './types.js';
 function MultimodalItemView({
   item,
   index,
+  imgError,
+  onImgError,
+  audioRefCallback,
 }: {
   item: IMultimodalItem;
   index: number;
+  imgError: boolean;
+  onImgError: () => void;
+  audioRefCallback: (el: HTMLAudioElement | null) => void;
 }): React.JSX.Element {
   switch (item.type) {
     case 'image':
+      if (imgError) {
+        return (
+          <div className="space-y-1">
+            <span className="block text-sm text-muted-foreground italic">Image unavailable</span>
+          </div>
+        );
+      }
       return (
-        <div key={index} className="space-y-1">
+        <div className="space-y-1">
           <img
             src={item.content}
             alt={
@@ -30,9 +43,7 @@ function MultimodalItemView({
                 : `Image ${String(index + 1)}`
             }
             className="w-full rounded object-contain max-h-64"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
-            }}
+            onError={onImgError}
           />
           {item.description !== undefined && item.description !== '' && (
             <p className="text-xs text-muted-foreground italic">{item.description}</p>
@@ -42,12 +53,13 @@ function MultimodalItemView({
 
     case 'audio':
       return (
-        <div key={index} className="space-y-1">
+        <div className="space-y-1">
           {item.description !== undefined && item.description !== '' && (
             <p className="text-xs text-muted-foreground">{item.description}</p>
           )}
           <div className="rounded border border-border bg-muted/30 p-3">
             <audio
+              ref={audioRefCallback}
               controls
               className="w-full"
               aria-label={item.description ?? `Audio ${String(index + 1)}`}
@@ -61,7 +73,7 @@ function MultimodalItemView({
 
     case 'video':
       return (
-        <div key={index} className="space-y-1">
+        <div className="space-y-1">
           {item.description !== undefined && item.description !== '' && (
             <p className="text-xs text-muted-foreground">{item.description}</p>
           )}
@@ -80,17 +92,16 @@ function MultimodalItemView({
 
     case 'text':
     default:
-      return (
-        <p key={index} className="text-sm text-foreground leading-relaxed">
-          {item.content}
-        </p>
-      );
+      return <p className="text-sm text-foreground leading-relaxed">{item.content}</p>;
   }
 }
 
 export default function MultimodalRenderer(props: ICardRendererProps): React.JSX.Element {
   const { card, mode, isRevealed } = props;
   const content = card.content as unknown as IMultimodalContent;
+
+  const [imgErrors, setImgErrors] = React.useState<Set<number>>(new Set());
+  const audioRefs = React.useRef<Map<number, HTMLAudioElement>>(new Map());
 
   // Sort items by optional order field if present
   const sortedItems = React.useMemo(() => {
@@ -102,7 +113,11 @@ export default function MultimodalRenderer(props: ICardRendererProps): React.JSX
   }, [content.mediaItems]);
 
   React.useEffect(() => {
-    // No internal state to reset, but keep effect for potential future state
+    audioRefs.current.forEach((audio) => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    setImgErrors(new Set());
   }, [card.id]);
 
   if (mode === 'preview') {
@@ -133,7 +148,22 @@ export default function MultimodalRenderer(props: ICardRendererProps): React.JSX
 
       <div className="space-y-4">
         {sortedItems.map((item, idx) => (
-          <MultimodalItemView key={idx} item={item} index={idx} />
+          <MultimodalItemView
+            key={idx}
+            item={item}
+            index={idx}
+            imgError={imgErrors.has(idx)}
+            onImgError={() => {
+              setImgErrors((prev) => new Set(prev).add(idx));
+            }}
+            audioRefCallback={(el) => {
+              if (el !== null) {
+                audioRefs.current.set(idx, el);
+              } else {
+                audioRefs.current.delete(idx);
+              }
+            }}
+          />
         ))}
       </div>
 
@@ -156,9 +186,11 @@ export default function MultimodalRenderer(props: ICardRendererProps): React.JSX
         <p className="text-sm text-muted-foreground">{content.explanation}</p>
       )}
       {/* isRevealed guard — extra info only after reveal */}
-      {isRevealed && content.back === undefined && content.explanation === undefined && (
-        <p className="text-sm text-muted-foreground italic">No additional answer provided.</p>
-      )}
+      {isRevealed &&
+        (content.back === undefined || content.back === '') &&
+        (content.explanation === undefined || content.explanation === '') && (
+          <p className="text-sm text-muted-foreground italic">No additional answer provided.</p>
+        )}
     </CardShell>
   );
 }

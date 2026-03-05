@@ -84,7 +84,7 @@ export default function DiagramRenderer(props: ICardRendererProps): React.JSX.El
             {imgLoaded &&
               content.labels.map((label: IDiagramLabel, idx: number) => (
                 <div
-                  key={idx}
+                  key={`${String(label.x)}-${String(label.y)}`}
                   style={{
                     position: 'absolute',
                     left: `${String(label.x)}%`,
@@ -133,7 +133,7 @@ export default function DiagramRenderer(props: ICardRendererProps): React.JSX.El
       {/* Revealed: show full label list with answers */}
       <div className="space-y-2">
         {content.labels.map((label: IDiagramLabel, idx: number) => (
-          <div key={idx} className="flex gap-3 items-start">
+          <div key={`${String(label.x)}-${String(label.y)}`} className="flex gap-3 items-start">
             <span className="w-5 h-5 rounded-full bg-synapse-500/20 text-synapse-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
               {String(idx + 1)}
             </span>
