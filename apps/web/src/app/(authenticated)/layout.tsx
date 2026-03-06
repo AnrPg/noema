@@ -55,6 +55,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import { CommandPalette } from '@/components/command-palette';
 import { SessionExpiryModal } from '@/components/session-expiry-modal';
 import { ShortcutReferencePanel } from '@/components/shortcut-reference-panel';
+import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
+import { CopilotSidebar, CopilotToggle } from '@/components/copilot';
 
 const navItems = [
   {
@@ -160,6 +162,8 @@ export default function AuthenticatedLayout({
   const pathname = usePathname();
   const router = useRouter();
 
+  useAgentHintsInterceptor();
+
   return (
     <AuthGuard
       onUnauthenticated={() => {
@@ -205,6 +209,8 @@ export default function AuthenticatedLayout({
           <div className="p-6">{children}</div>
         </DashboardMain>
       </DashboardLayout>
+      <CopilotSidebar />
+      <CopilotToggle />
     </AuthGuard>
   );
 }
