@@ -120,7 +120,9 @@ export function useStartSession(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: sessionsApi.startSession,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Pre-populate the session detail cache so the session page doesn't need an extra round-trip
+      queryClient.setQueryData(sessionKeys.detail(data.data.id), data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,

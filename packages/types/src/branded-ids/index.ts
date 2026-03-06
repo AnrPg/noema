@@ -203,12 +203,13 @@ export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
 // ============================================================================
 
 /**
- * Validates an ID string has the correct prefix and minimum length.
+ * Validates an ID string has the correct prefix and exactly 21 alphanumeric suffix chars.
+ * Matches the Zod schema: ^{prefix}[a-zA-Z0-9]{21}$
  */
 function validateIdFormat(value: string, prefix: string): boolean {
-  return (
-    typeof value === 'string' && value.startsWith(prefix) && value.length > prefix.length + 5 // prefix + at least 6 chars
-  );
+  if (!value.startsWith(prefix)) return false;
+  const suffix = value.slice(prefix.length);
+  return suffix.length === 21 && /^[a-zA-Z0-9]{21}$/.test(suffix);
 }
 
 /**
@@ -222,7 +223,7 @@ function createId<T extends string>(
 ): Brand<string, T> {
   if (!validateIdFormat(value, prefix)) {
     throw new Error(
-      `Invalid ${typeName}: must start with "${prefix}" and have at least 6 characters after prefix. Got: "${value}"`
+      `Invalid ${typeName}: must start with "${prefix}" followed by exactly 21 alphanumeric characters. Got: "${value}"`
     );
   }
   return value as Brand<string, T>;

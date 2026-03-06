@@ -67,6 +67,7 @@ export const contentKeys = {
   history: (id: CardId) => [...contentKeys.cards(), 'history', id] as const,
   batch: (batchId?: string) => [...contentKeys.cards(), 'batch', batchId] as const,
   batchCards: (batchId?: string) => [...contentKeys.cards(), 'batchCards', batchId] as const,
+  counts: (query?: IDeckQueryInput) => [...contentKeys.cards(), 'count', query ?? null] as const,
   recentBatches: () => [...contentKeys.cards(), 'recentBatches'] as const,
   templates: () => [...contentKeys.all, 'templates'] as const,
   template: (id: TemplateId) => [...contentKeys.templates(), id] as const,
@@ -189,7 +190,7 @@ export function useCardCount(
   options?: Omit<UseQueryOptions<CardCountResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
-    queryKey: [...contentKeys.list(query), 'count'] as const,
+    queryKey: contentKeys.counts(query),
     queryFn: () => cardsApi.countCards(query),
     ...options,
   });
