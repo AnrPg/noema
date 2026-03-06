@@ -3,9 +3,11 @@
  * @noema/web-admin - AdminCardBrowser
  *
  * Platform-wide card browser for admin use. Lists cards with type badge,
- * state, difficulty, created date, and inline delete with confirmation.
+ * label, session ID, state, difficulty, created date, and inline delete
+ * with confirmation. Each row links to the session via View.
  */
 import * as React from 'react';
+import Link from 'next/link';
 import type { ICardSummaryDto } from '@noema/api-client';
 import { useCards, useDeleteCard } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
@@ -71,7 +73,7 @@ function CardRow({
   const createdDate = new Date(card.createdAt).toLocaleDateString();
 
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
+    <div className="flex items-center gap-3 py-3">
       {/* ID */}
       <span
         className="font-mono text-xs text-muted-foreground shrink-0 w-28 truncate"
@@ -85,6 +87,19 @@ function CardRow({
         className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${typeBadgeClass(card.cardType)}`}
       >
         {card.cardType}
+      </span>
+
+      {/* Label */}
+      <span className="flex-1 min-w-0 truncate text-sm" title={card.label}>
+        {card.label}
+      </span>
+
+      {/* Session ID */}
+      <span
+        className="font-mono text-xs text-muted-foreground shrink-0 w-28 truncate hidden md:block"
+        title={card.sessionId}
+      >
+        {truncateId(card.sessionId)}
       </span>
 
       {/* State badge */}
@@ -106,6 +121,12 @@ function CardRow({
 
       {/* Actions */}
       <div className="shrink-0 flex items-center gap-2">
+        <Link
+          href={`/dashboard/users?sessionId=${card.sessionId}`}
+          className="text-xs text-primary underline-offset-2 hover:underline shrink-0"
+        >
+          View
+        </Link>
         {confirming ? (
           <>
             <span className="text-xs text-destructive">Delete?</span>
@@ -183,10 +204,12 @@ export function AdminCardBrowser(): React.JSX.Element {
             <div className="flex items-center gap-3 pb-2 border-b text-xs font-medium text-muted-foreground">
               <span className="w-28 shrink-0">ID</span>
               <span className="shrink-0">Type</span>
+              <span className="flex-1 min-w-0">Label</span>
+              <span className="hidden md:block shrink-0 w-28">Session</span>
               <span className="shrink-0">State</span>
               <span className="hidden lg:block shrink-0 w-16 text-right">Diff</span>
               <span className="hidden sm:block shrink-0 w-20 text-right">Created</span>
-              <span className="ml-auto shrink-0">Actions</span>
+              <span className="shrink-0">Actions</span>
             </div>
             <div className="divide-y">
               {cards.map((card) => (
