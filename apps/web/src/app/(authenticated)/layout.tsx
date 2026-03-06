@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   BookOpen,
   Brain,
+  CalendarClock,
   ChevronDown,
   ClipboardList,
   GitCompare,
@@ -64,6 +65,7 @@ const navItems = [
     title: 'Learning',
     items: [
       { href: '/learning', label: 'Study Sessions', icon: BookOpen },
+      { href: '/reviews', label: 'Reviews', icon: CalendarClock },
       { href: '/knowledge', label: 'Knowledge Map', icon: Brain },
       { href: '/knowledge/health', label: 'KG Health', icon: Activity },
       { href: '/knowledge/misconceptions', label: 'Misconceptions', icon: AlertTriangle },
