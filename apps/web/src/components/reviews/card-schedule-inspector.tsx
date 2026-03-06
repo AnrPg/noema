@@ -18,7 +18,7 @@ import * as React from 'react';
 import { useAuth } from '@noema/auth';
 import { useSchedulerCard, useHLRPredict } from '@noema/api-client';
 import type { UserId, CardId } from '@noema/types';
-import { NeuralGauge } from '@noema/ui';
+import { NeuralGauge, StateChip, CARD_LEARNING_STATE_MAP } from '@noema/ui';
 import { Loader2, X } from 'lucide-react';
 import { RecallTimeline } from '@/components/reviews/recall-timeline';
 import type { IReviewEvent } from '@/components/reviews/recall-timeline';
@@ -31,19 +31,12 @@ export interface ICardScheduleInspectorProps {
   onClose: () => void;
 }
 
-// ── Algorithm state chip colors ──────────────────────────────────────────────
+// ── Algorithm chip colors ─────────────────────────────────────────────────────
 
 const ALGO_COLORS: Record<string, string> = {
   fsrs: 'bg-synapse-400/15 text-synapse-400',
   hlr: 'bg-myelin-400/15 text-myelin-400',
   sm2: 'bg-neuron-400/15 text-neuron-400',
-};
-
-const STATE_COLORS: Record<string, string> = {
-  new: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  learning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  review: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  relearning: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
 };
 
 function formatDate(iso: string | null): string {
@@ -69,7 +62,7 @@ export function CardScheduleInspector({
   });
 
   const { data: hlrData, isLoading: hlrLoading } = useHLRPredict(
-    { userId, cardId },
+    { userId, cardId: cardId as CardId },
     { enabled: userId !== '' && cardId !== '' }
   );
 
@@ -155,14 +148,11 @@ export function CardScheduleInspector({
                 </span>
               )}
               {state !== '' && state !== '—' && (
-                <span
-                  className={[
-                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                    STATE_COLORS[state] ?? 'bg-muted text-muted-foreground',
-                  ].join(' ')}
-                >
-                  {state}
-                </span>
+                <StateChip
+                  state={state.toUpperCase()}
+                  stateMap={CARD_LEARNING_STATE_MAP}
+                  size="sm"
+                />
               )}
             </div>
 
