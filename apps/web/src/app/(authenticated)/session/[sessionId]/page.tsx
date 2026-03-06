@@ -58,7 +58,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Route param validation ─────────────────────────────────────────────────
   const raw = params['sessionId'];
-  if (!raw || typeof raw !== 'string') {
+  if (raw === undefined || typeof raw !== 'string') {
     return <div>Invalid session ID.</div>;
   }
   const sessionId = raw as SessionId;
@@ -108,9 +108,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const currentCardId = currentItem?.cardId ?? ('' as SessionId);
 
   // useCard uses select: (r) => r.data — so cardData is already ICardDto | undefined
-  const { data: card, isLoading: cardLoading } = useCard(currentCardId as Parameters<typeof useCard>[0], {
-    enabled: currentCardId !== '',
-  });
+  const { data: card, isLoading: cardLoading } = useCard(
+    currentCardId as Parameters<typeof useCard>[0],
+    {
+      enabled: currentCardId !== '',
+    }
+  );
 
   // ── API — mutations ───────────────────────────────────────────────────────
   const recordAttempt = useRecordAttempt(sessionId);
@@ -180,7 +183,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Grade / record attempt ────────────────────────────────────────────────
   const handleGrade = useCallback(
     (grade: Grade): void => {
-      if (card === null || card === undefined) return;
+      if (card === undefined) return;
 
       const confidenceBefore = pendingAttempt?.confidenceBefore ?? null;
       const confidenceAfter = pendingAttempt?.confidenceAfter ?? null;
@@ -202,8 +205,11 @@ export default function ActiveSessionPage(): React.JSX.Element {
         },
         {
           onSuccess: () => {
+            // `remaining` is the count of cards still left in the queue *after*
+            // the current attempt has been recorded (i.e. the current card is
+            // no longer counted). When it reaches 0 the queue is exhausted.
             const remaining = queueData?.data.remaining ?? 0;
-            if (remaining <= 1) {
+            if (remaining <= 0) {
               completeSession.mutate(sessionId, {
                 onSuccess: () => {
                   router.push(`/session/${sessionId}/summary` as never);
@@ -404,7 +410,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
             </div>
-          ) : card !== null && card !== undefined ? (
+          ) : card !== undefined ? (
             <CardRenderer
               card={card}
               mode="interactive"
@@ -419,7 +425,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
           )}
 
           {/* Reveal button (before reveal) */}
-          {!isRevealed && card !== null && card !== undefined && (
+          {!isRevealed && card !== undefined && (
             <div className="flex justify-center pt-2">
               <Button
                 size="lg"

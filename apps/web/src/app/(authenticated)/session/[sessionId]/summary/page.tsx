@@ -63,10 +63,40 @@ export default function SessionSummaryPage(): React.JSX.Element {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId as SessionId;
 
-  const { data: sessionData, isLoading: sessionLoading } = useSession(sessionId);
-  const { data: attemptsData, isLoading: attemptsLoading } = useSessionAttempts(sessionId);
+  const {
+    data: sessionData,
+    isLoading: sessionLoading,
+    isError: sessionError,
+    refetch: refetchSession,
+  } = useSession(sessionId);
+  const {
+    data: attemptsData,
+    isLoading: attemptsLoading,
+    isError: attemptsError,
+    refetch: refetchAttempts,
+  } = useSessionAttempts(sessionId);
 
   const isLoading = sessionLoading || attemptsLoading;
+
+  // ── Error state ────────────────────────────────────────────────────────────
+
+  if (sessionError || attemptsError) {
+    return (
+      <div className="flex h-screen items-center justify-center flex-col gap-4">
+        <p className="text-sm text-destructive">Failed to load session summary.</p>
+        <button
+          type="button"
+          className="text-xs text-primary hover:underline"
+          onClick={() => {
+            void refetchSession();
+            void refetchAttempts();
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   // ── Loading state ──────────────────────────────────────────────────────────
 
@@ -136,7 +166,8 @@ export default function SessionSummaryPage(): React.JSX.Element {
                 : '—'}
             </span>
             <span className="text-xs text-muted-foreground">
-              ({String(attempts.filter((a) => a.grade >= PASSING_GRADE).length)}/{String(attempts.length)} cards)
+              ({String(attempts.filter((a) => a.grade >= PASSING_GRADE).length)}/
+              {String(attempts.length)} cards)
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
