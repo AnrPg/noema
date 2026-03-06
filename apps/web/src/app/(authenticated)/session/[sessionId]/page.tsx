@@ -1,11 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-/* eslint-disable @typescript-eslint/no-unnecessary-condition */
-
 'use client';
 
 /**
@@ -23,11 +15,6 @@
  *   ResponseControls (sticky bottom, if revealed)
  *   PauseOverlay (absolute z-20, if paused)
  *   Abandon confirmation dialog (z-30, if open)
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because the @noema/api-client, @noema/auth, and @noema/ui packages
- * have not been built yet (no dist/ directory). Once packages are built these
- * suppressions should be removed.
  */
 
 import * as React from 'react';
@@ -36,6 +23,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Loader2, Eye } from 'lucide-react';
 import { Button } from '@noema/ui';
 import type { SessionId } from '@noema/types';
+import type { ICheckpointDirectiveDto } from '@noema/api-client';
 
 import {
   useSession,
@@ -61,24 +49,19 @@ import { AdaptiveCheckpoint } from '@/components/session/adaptive-checkpoint';
 import { CardRenderer } from '@/components/card-renderers';
 
 // ============================================================================
-// Local type for checkpoint directive
-// Mirrors ICheckpointDirectiveDto from @noema/api-client/session.
-// ============================================================================
-
-interface ILocalCheckpointDirective {
-  action: 'continue' | 'pause' | 'complete' | 'switch_mode';
-  reason: string;
-  suggestedMode?: string;
-}
-
-// ============================================================================
 // ActiveSessionPage
 // ============================================================================
 
 export default function ActiveSessionPage(): React.JSX.Element {
   const params = useParams();
   const router = useRouter();
-  const sessionId = params['sessionId'] as string as SessionId;
+
+  // ── Route param validation ─────────────────────────────────────────────────
+  const raw = params['sessionId'];
+  if (!raw || typeof raw !== 'string') {
+    return <div>Invalid session ID.</div>;
+  }
+  const sessionId = raw as SessionId;
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const {
@@ -99,26 +82,35 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const [hintDepth, setHintDepth] = useState(0);
   const [hintText, setHintText] = useState<string | null>(null);
   const [selfReportedGuess, setSelfReportedGuess] = useState(false);
-  const [checkpoint, setCheckpoint] = useState<ILocalCheckpointDirective | null>(null);
+  const [checkpoint, setCheckpoint] = useState<ICheckpointDirectiveDto | null>(null);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
 
   // Track card start time for dwell time calculation
   const cardStartRef = useRef<number>(Date.now());
 
   // ── API — session data ────────────────────────────────────────────────────
-  const { data: sessionData, isLoading: sessionLoading } = useSession(sessionId);
-  const { data: queueData, isLoading: queueLoading } = useSessionQueue(sessionId);
+  const {
+    data: sessionData,
+    isLoading: sessionLoading,
+    isError: sessionError,
+    refetch: refetchSession,
+  } = useSession(sessionId);
+
+  const {
+    data: queueData,
+    isLoading: queueLoading,
+    isError: queueError,
+    refetch: refetchQueue,
+  } = useSessionQueue(sessionId);
 
   // ── Current card ──────────────────────────────────────────────────────────
-  const currentItem = (queueData as any)?.data?.items?.[currentCardIndex] as
-    | { cardId: string }
-    | undefined;
-  const currentCardId = (currentItem?.cardId ?? '') as any;
+  const currentItem = queueData?.data.items[currentCardIndex];
+  const currentCardId = currentItem?.cardId ?? ('' as SessionId);
 
-  const { data: cardData, isLoading: cardLoading } = useCard(currentCardId, {
-    enabled: (currentCardId as string) !== '',
+  // useCard uses select: (r) => r.data — so cardData is already ICardDto | undefined
+  const { data: card, isLoading: cardLoading } = useCard(currentCardId as Parameters<typeof useCard>[0], {
+    enabled: currentCardId !== '',
   });
-  const card = (cardData as any)?.data ?? (cardData as any) ?? null;
 
   // ── API — mutations ───────────────────────────────────────────────────────
   const recordAttempt = useRecordAttempt(sessionId);
@@ -178,15 +170,9 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Hint ──────────────────────────────────────────────────────────────────
   const handleHint = useCallback((): void => {
     requestHint.mutate(undefined, {
-      onSuccess: (res: any) => {
-        const hint = res?.data?.hint as string | undefined;
-        const depth = res?.data?.depth as number | undefined;
-        if (hint !== undefined) {
-          setHintText(hint);
-        }
-        if (depth !== undefined) {
-          setHintDepth(depth);
-        }
+      onSuccess: (res) => {
+        setHintText(res.data.hint);
+        setHintDepth(res.data.depth);
       },
     });
   }, [requestHint]);
@@ -216,8 +202,8 @@ export default function ActiveSessionPage(): React.JSX.Element {
         },
         {
           onSuccess: () => {
-            const remaining = (queueData as any)?.data?.remaining ?? 0;
-            if ((remaining as number) <= 1) {
+            const remaining = queueData?.data.remaining ?? 0;
+            if (remaining <= 1) {
               completeSession.mutate(sessionId, {
                 onSuccess: () => {
                   router.push(`/session/${sessionId}/summary` as never);
@@ -228,9 +214,9 @@ export default function ActiveSessionPage(): React.JSX.Element {
               // Check checkpoint every 5 cards
               if ((currentCardIndex + 1) % 5 === 0) {
                 evaluateCheckpoint.mutate(undefined, {
-                  onSuccess: (res: any) => {
-                    const directive = res?.data as ILocalCheckpointDirective | undefined;
-                    if (directive !== undefined && directive.action !== 'continue') {
+                  onSuccess: (res) => {
+                    const directive = res.data;
+                    if (directive.action !== 'continue') {
                       setCheckpoint(directive);
                     }
                   },
@@ -323,14 +309,33 @@ export default function ActiveSessionPage(): React.JSX.Element {
   ]);
 
   // ── Derived values ────────────────────────────────────────────────────────
-  const session = (sessionData as any)?.data ?? null;
-  const totalCards = (session?.cardIds as unknown[])?.length ?? 0;
-  const lane = (session?.mode as string) === 'standard' ? 'retention' : null;
+  const sessionDto = sessionData?.data ?? null;
+  const totalCards = sessionDto?.cardIds.length ?? 0;
+  const lane = sessionDto?.mode === 'standard' ? 'retention' : null;
 
   const isLoading = sessionLoading || queueLoading;
-  const isCardLoading = cardLoading && (currentCardId as string) !== '';
+  const isCardLoading = cardLoading && currentCardId !== '';
 
   const maxHints = 3; // configurable; 3 is a reasonable default
+
+  // ── Error state ───────────────────────────────────────────────────────────
+  if (sessionError || queueError) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-sm text-destructive">
+          Failed to load session.{' '}
+          <button
+            onClick={() => {
+              void refetchSession();
+              void refetchQueue();
+            }}
+          >
+            Retry
+          </button>
+        </p>
+      </div>
+    );
+  }
 
   // ── Loading state ─────────────────────────────────────────────────────────
   if (isLoading) {
@@ -363,7 +368,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
       {checkpoint !== null && (
         <div className="px-4 pt-3">
           <AdaptiveCheckpoint
-            directive={checkpoint as any}
+            directive={checkpoint}
             onDismiss={() => {
               setCheckpoint(null);
             }}
