@@ -93,9 +93,10 @@ export function ReviewForecastFull({ userId }: IReviewForecastFullProps): React.
 
   const [expandedDate, setExpandedDate] = React.useState<string | null>(null);
 
-  const rawWindows: any[] = (windowsData as any)?.data ?? [];
-  const days = React.useMemo(() => buildDays(rawWindows), [rawWindows]);
+  const days = React.useMemo(() => buildDays((windowsData as any)?.data ?? []), [windowsData]);
   const maxTotal = Math.max(...days.map((d) => d.retention + d.calibration), 1);
+  const expandedDay =
+    expandedDate !== null ? (days.find((d) => d.date === expandedDate) ?? null) : null;
 
   if (isLoading === true) {
     return (
@@ -183,57 +184,51 @@ export function ReviewForecastFull({ userId }: IReviewForecastFullProps): React.
       </div>
 
       {/* Expanded day detail */}
-      {expandedDate !== null &&
-        (() => {
-          const day = days.find((d) => d.date === expandedDate);
-          if (day === undefined) return null;
-          return (
-            <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-sm font-medium text-foreground">
-                  {formatShortDate(day.date)}
-                  {day.isToday ? ' — Today' : ''}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExpandedDate(null);
-                  }}
-                  className="text-xs text-muted-foreground hover:text-foreground"
+      {expandedDay !== null && (
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-foreground">
+              {formatShortDate(expandedDay.date)}
+              {expandedDay.isToday ? ' — Today' : ''}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setExpandedDate(null);
+              }}
+              aria-label="Close day detail"
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Close
+            </button>
+          </div>
+          {expandedDay.windows.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No cards due this day.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {expandedDay.windows.map((w, i) => (
+                <div
+                  key={`${w.startAt}-${String(i)}`}
+                  className="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-xs"
                 >
-                  Close
-                </button>
-              </div>
-              {day.windows.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No cards due this day.</p>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {day.windows.map((w, i) => (
-                    <div
-                      key={`${w.startAt}-${String(i)}`}
-                      className="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-xs"
-                    >
-                      <span className="text-muted-foreground">
-                        {formatTime(w.startAt)} – {formatTime(w.endAt)}
-                      </span>
-                      <span
-                        className={[
-                          'font-medium',
-                          w.lane === 'retention' ? 'text-synapse-400' : 'text-myelin-400',
-                        ].join(' ')}
-                      >
-                        {w.lane}
-                      </span>
-                      <span className="tabular-nums text-foreground">
-                        {String(w.cardsDue)} cards
-                      </span>
-                    </div>
-                  ))}
+                  <span className="text-muted-foreground">
+                    {formatTime(w.startAt)} – {formatTime(w.endAt)}
+                  </span>
+                  <span
+                    className={[
+                      'font-medium',
+                      w.lane === 'retention' ? 'text-synapse-400' : 'text-myelin-400',
+                    ].join(' ')}
+                  >
+                    {w.lane}
+                  </span>
+                  <span className="tabular-nums text-foreground">{String(w.cardsDue)} cards</span>
                 </div>
-              )}
+              ))}
             </div>
-          );
-        })()}
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -40,6 +40,7 @@ export default function ReviewsPage(): React.JSX.Element {
           onClick={() => {
             setShowSimulator((prev) => !prev);
           }}
+          aria-expanded={showSimulator}
           className={[
             'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
             'focus:outline-none focus:ring-2 focus:ring-ring',

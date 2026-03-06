@@ -19,6 +19,13 @@ export interface IReviewWindowsProps {
   userId: UserId;
 }
 
+function localDateStr(d: Date): string {
+  const y = String(d.getFullYear());
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
@@ -33,29 +40,16 @@ function formatDuration(startAt: string, endAt: string): string {
 export function ReviewWindows({ userId }: IReviewWindowsProps): React.JSX.Element {
   const { data: windowsData, isLoading } = useReviewWindows({ userId }, { enabled: userId !== '' });
 
-  const allWindows: any[] = (windowsData as any)?.data ?? [];
-
   // Only show today's windows
-  const today = new Date();
-  const todayStr = [
-    String(today.getFullYear()),
-    String(today.getMonth() + 1).padStart(2, '0'),
-    String(today.getDate()).padStart(2, '0'),
-  ].join('-');
-
-  const todayWindows = React.useMemo(
-    () =>
-      allWindows.filter((w) => {
-        const d = new Date(String(w.startAt));
-        const ds = [
-          String(d.getFullYear()),
-          String(d.getMonth() + 1).padStart(2, '0'),
-          String(d.getDate()).padStart(2, '0'),
-        ].join('-');
-        return ds === todayStr;
-      }),
-    [allWindows, todayStr]
-  );
+  const todayWindows = React.useMemo(() => {
+    const allWindows: any[] = (windowsData as any)?.data ?? [];
+    const today = new Date();
+    const todayStr = localDateStr(today);
+    return allWindows.filter((w) => {
+      const ds = localDateStr(new Date(String(w.startAt)));
+      return ds === todayStr;
+    });
+  }, [windowsData]);
 
   if (isLoading === true) {
     return (
