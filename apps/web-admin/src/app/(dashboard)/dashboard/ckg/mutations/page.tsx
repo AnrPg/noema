@@ -4,6 +4,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useCKGMutations } from '@noema/api-client';
 import type { ICkgMutationDto, MutationStatus } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
@@ -60,6 +61,21 @@ export default function CKGMutationsPage(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = React.useState<MutationStatus>('pending');
   const { data: mutations = [], isLoading } = useCKGMutations({ status: statusFilter });
 
+  const searchParams = useSearchParams();
+  const nodeIdFilter = searchParams.get('nodeId');
+
+  const displayedMutations =
+    nodeIdFilter !== null
+      ? mutations.filter((m) => {
+          const p = m.payload;
+          return (
+            p['nodeId'] === nodeIdFilter ||
+            p['sourceId'] === nodeIdFilter ||
+            p['targetId'] === nodeIdFilter
+          );
+        })
+      : mutations;
+
   return (
     <div className="space-y-6">
       <div>
@@ -72,13 +88,28 @@ export default function CKGMutationsPage(): React.JSX.Element {
         </p>
       </div>
 
+      {nodeIdFilter !== null && (
+        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+          <span>
+            Filtered by node: <code className="font-mono">{nodeIdFilter}</code>
+          </span>
+          <Link
+            href="/dashboard/ckg/mutations"
+            className="ml-auto text-xs text-primary underline-offset-2 hover:underline"
+          >
+            Clear
+          </Link>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Mutations</CardTitle>
               <CardDescription>
-                {mutations.length} mutation{mutations.length !== 1 ? 's' : ''} found
+                {displayedMutations.length} mutation{displayedMutations.length !== 1 ? 's' : ''}{' '}
+                found
               </CardDescription>
             </div>
             <select
@@ -99,13 +130,14 @@ export default function CKGMutationsPage(): React.JSX.Element {
         <CardContent>
           {isLoading ? (
             <div className="py-8 text-center text-muted-foreground">Loading mutations...</div>
-          ) : mutations.length === 0 ? (
+          ) : displayedMutations.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
-              No mutations found with status &quot;{statusFilter}&quot;.
+              No mutations found with status &quot;{statusFilter}&quot;
+              {nodeIdFilter !== null ? ` for node ${nodeIdFilter}` : ''}.
             </div>
           ) : (
             <div>
-              {mutations.map((m) => (
+              {displayedMutations.map((m) => (
                 <MutationRow key={String(m.id)} mutation={m} />
               ))}
             </div>

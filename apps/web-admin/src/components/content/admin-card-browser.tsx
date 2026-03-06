@@ -4,10 +4,9 @@
  *
  * Platform-wide card browser for admin use. Lists cards with type badge,
  * label, session ID, state, difficulty, created date, and inline delete
- * with confirmation. Each row links to the session via View.
+ * with confirmation.
  */
 import * as React from 'react';
-import Link from 'next/link';
 import type { ICardSummaryDto } from '@noema/api-client';
 import { useCards, useDeleteCard } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
@@ -118,12 +117,6 @@ function CardRow({
 
       {/* Actions */}
       <div className="shrink-0 flex items-center gap-2">
-        <Link
-          href={`/dashboard/users?sessionId=${card.sessionId}`}
-          className="text-xs text-primary underline-offset-2 hover:underline shrink-0"
-        >
-          View
-        </Link>
         {confirming ? (
           <>
             <span className="text-xs text-destructive">Delete?</span>

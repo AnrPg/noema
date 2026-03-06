@@ -55,9 +55,13 @@ function statusColor(status: UserStatus): string {
 function UserRow({
   user,
   onAction,
+  deletingUserId,
+  setDeletingUserId,
 }: {
   user: UserDto;
   onAction: (action: 'view' | 'suspend' | 'unsuspend' | 'delete', user: UserDto) => void;
+  deletingUserId: string | null;
+  setDeletingUserId: (id: string | null) => void;
 }): React.JSX.Element {
   const rawInitials = user.displayName
     .split(' ')
@@ -132,15 +136,37 @@ function UserRow({
                 Unsuspend
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem
-              className="text-destructive"
-              onClick={() => {
-                onAction('delete', user);
-              }}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
+            {deletingUserId === user.id ? (
+              <div className="flex items-center gap-1 px-2 py-1.5">
+                <span className="text-xs text-destructive">Delete?</span>
+                <button
+                  className="text-xs text-destructive underline underline-offset-2 hover:no-underline"
+                  onClick={() => {
+                    onAction('delete', user);
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:no-underline"
+                  onClick={() => {
+                    setDeletingUserId(null);
+                  }}
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <DropdownMenuItem
+                className="text-destructive"
+                onClick={() => {
+                  setDeletingUserId(user.id as string);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -153,6 +179,7 @@ export default function UsersPage(): React.JSX.Element {
   const [statusFilter, setStatusFilter] = useState<UserStatus | ''>('');
   const [roleFilter, setRoleFilter] = useState<UserRole | ''>('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const router = useRouter();
 
   const filters = {
@@ -195,17 +222,17 @@ export default function UsersPage(): React.JSX.Element {
         });
       }
     } else {
-      if (confirm(`Are you sure you want to delete ${user.displayName}?`)) {
-        try {
-          await deleteUser.mutateAsync({ id: user.id, soft: true });
-          setMessage({ type: 'success', text: 'User deleted successfully' });
-          void refetch();
-        } catch (err) {
-          setMessage({
-            type: 'error',
-            text: err instanceof Error ? err.message : 'Failed to delete user',
-          });
-        }
+      try {
+        await deleteUser.mutateAsync({ id: user.id, soft: true });
+        setMessage({ type: 'success', text: 'User deleted successfully' });
+        setDeletingUserId(null);
+        void refetch();
+      } catch (err) {
+        setMessage({
+          type: 'error',
+          text: err instanceof Error ? err.message : 'Failed to delete user',
+        });
+        setDeletingUserId(null);
       }
     }
   };
@@ -290,6 +317,8 @@ export default function UsersPage(): React.JSX.Element {
                   onAction={(action, u) => {
                     void handleAction(action, u);
                   }}
+                  deletingUserId={deletingUserId}
+                  setDeletingUserId={setDeletingUserId}
                 />
               ))}
             </div>
