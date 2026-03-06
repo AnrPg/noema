@@ -1,12 +1,26 @@
 /**
- * @noema/graph — Shared graph visualization package
+ * @noema/graph - Shared graph visualization package
  *
- * Provides canvas-based force-directed graph components and types
- * for both the learner app (apps/web) and admin app (apps/web-admin).
+ * Canvas-based force-directed graph components and types for both
+ * apps/web (learner app) and apps/web-admin (admin app).
  */
 
-// Types (always export first — consumers often only need types)
+// Types
 export type { OverlayType, LayoutMode } from './types.js';
 
-// Remaining component exports will be added in T11.0b
-// after graph files are copied from apps/web
+// Canvas draw helpers (exported for consumers needing canvas primitives)
+export { drawNode, nodeRadius, NODE_TYPE_COLOR } from './graph-node.js';
+export type { INodeDrawOptions, NodeType } from './graph-node.js';
+export { drawEdge, EDGE_COLOR_MAP } from './graph-edge.js';
+export type { IEdgeDrawOptions, EdgeType } from './graph-edge.js';
+
+// Components
+export { GraphCanvas } from './graph-canvas.js';
+export type { IGraphCanvasProps } from './graph-canvas.js';
+export { GraphControls } from './graph-controls.js';
+export type { IGraphControlsProps } from './graph-controls.js';
+export { GraphLegend } from './graph-legend.js';
+export type { IGraphLegendProps } from './graph-legend.js';
+export { GraphMinimap } from './graph-minimap.js';
+export { NodeDetailPanel } from './node-detail-panel.js';
+export type { INodeDetailPanelProps } from './node-detail-panel.js';

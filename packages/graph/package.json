@@ -27,6 +27,7 @@
   "dependencies": {
     "@noema/api-client": "workspace:*",
     "@noema/ui": "workspace:*",
+    "lucide-react": "^0.460.0",
     "react-force-graph": "^1.47.6"
   },
   "devDependencies": {
