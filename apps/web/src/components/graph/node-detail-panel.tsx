@@ -112,10 +112,9 @@ export function NodeDetailPanel({
               </span>
             </div>
           )}
-
-          {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 0 && (
+          {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 1 && (
             <div className="flex flex-wrap gap-1">
-              {(nodeAny.tags as string[]).map((tag) => (
+              {(nodeAny.tags as string[]).slice(1).map((tag) => (
                 <span
                   key={tag}
                   className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
@@ -140,10 +139,8 @@ export function NodeDetailPanel({
             )}
             <button
               type="button"
-              className="text-left text-xs text-primary hover:underline"
-              onClick={() => {
-                /* stub — will be wired in a future task */
-              }}
+              disabled
+              className="cursor-not-allowed text-left text-xs text-muted-foreground line-through"
             >
               Find related concepts
             </button>

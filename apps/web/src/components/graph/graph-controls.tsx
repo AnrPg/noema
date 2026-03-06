@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 'use client';
 /**
  * @noema/web — Graph / GraphControls
@@ -60,19 +59,18 @@ export function GraphControls({
   onToggleType,
   selectedNodeId,
 }: IGraphControlsProps): React.JSX.Element {
-  const filteredNodes = React.useMemo(
-    () =>
-      nodes
-        .filter(
-          (n) =>
-            searchQuery === '' ||
-            String((n as any).label)
-              .toLowerCase()
-              .includes(searchQuery.toLowerCase())
-        )
-        .sort((a, b) => String((a as any).label).localeCompare(String((b as any).label))),
-    [nodes, searchQuery]
-  );
+  const filteredNodes = React.useMemo(() => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+    return nodes
+      .filter(
+        (n) =>
+          searchQuery === '' ||
+          String((n as any).label)
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())
+      )
+      .sort((a, b) => String((a as any).label).localeCompare(String((b as any).label)));
+  }, [nodes, searchQuery]);
 
   return (
     <aside className="flex h-full w-[280px] flex-shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card p-3">
@@ -84,6 +82,7 @@ export function GraphControls({
         />
         <input
           type="search"
+          aria-label="Search nodes"
           placeholder="Search nodes…"
           value={searchQuery}
           onChange={(e) => {

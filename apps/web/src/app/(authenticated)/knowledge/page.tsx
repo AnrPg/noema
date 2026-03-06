@@ -146,6 +146,29 @@ export default function KnowledgePage(): React.JSX.Element {
     [selectNode]
   );
 
+  const handleViewPrerequisites = React.useCallback(
+    (nodeId: string) => {
+      selectNode(nodeId);
+      toggleOverlay('prerequisites');
+    },
+    [selectNode, toggleOverlay]
+  );
+
+  const activeOverlaysArray = React.useMemo(() => [...activeOverlays], [activeOverlays]);
+
+  React.useEffect(() => {
+    if (contextMenu === null) return;
+    function handleKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        setContextMenu(null);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -189,7 +212,7 @@ export default function KnowledgePage(): React.JSX.Element {
           edges={edges}
           selectedNodeId={selectedNodeId}
           hoveredNodeId={hoveredNodeId}
-          activeOverlays={[...activeOverlays]}
+          activeOverlays={activeOverlaysArray}
           layoutMode={layoutMode}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
@@ -207,10 +230,7 @@ export default function KnowledgePage(): React.JSX.Element {
               allNodes={nodes}
               allEdges={edges}
               onClose={deselectNode}
-              onViewPrerequisites={(nodeId) => {
-                selectNode(nodeId);
-                toggleOverlay('prerequisites');
-              }}
+              onViewPrerequisites={handleViewPrerequisites}
             />
           </div>
         )}
