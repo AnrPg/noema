@@ -36,10 +36,13 @@ import {
   SidebarNavItem,
 } from '@noema/ui';
 import {
+  Activity,
+  AlertTriangle,
   BookOpen,
   Brain,
   ChevronDown,
   ClipboardList,
+  GitCompare,
   LayoutDashboard,
   LibraryBig,
   LogOut,
@@ -62,6 +65,9 @@ const navItems = [
     items: [
       { href: '/learning', label: 'Study Sessions', icon: BookOpen },
       { href: '/knowledge', label: 'Knowledge Map', icon: Brain },
+      { href: '/knowledge/health', label: 'KG Health', icon: Activity },
+      { href: '/knowledge/misconceptions', label: 'Misconceptions', icon: AlertTriangle },
+      { href: '/knowledge/comparison', label: 'KG Comparison', icon: GitCompare },
       { href: '/goals', label: 'Goals', icon: Target },
       { href: '/sessions', label: 'Sessions', icon: ClipboardList },
       { href: '/cards', label: 'Card Library', icon: LibraryBig },
