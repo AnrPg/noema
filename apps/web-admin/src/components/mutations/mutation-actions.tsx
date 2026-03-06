@@ -10,8 +10,10 @@ import {
   useCancelMutation,
   useRejectMutation,
   useRequestRevision,
+  kgKeys,
 } from '@noema/api-client';
 import type { ICkgMutationDto } from '@noema/api-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 import { Check, MessageSquare, RotateCcw, X } from 'lucide-react';
 
@@ -23,6 +25,8 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
   const [mode, setMode] = React.useState<ActionMode>('idle');
   const [rejectNote, setRejectNote] = React.useState('');
   const [revisionFeedback, setRevisionFeedback] = React.useState('');
+
+  const queryClient = useQueryClient();
 
   const approve = useApproveMutation();
   const reject = useRejectMutation();
@@ -58,6 +62,8 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                   {
                     onSuccess: () => {
                       setMode('idle');
+                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                     },
                   }
                 );
@@ -119,6 +125,8 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                       onSuccess: () => {
                         setRejectNote('');
                         setMode('idle');
+                        void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                        void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                       },
                     }
                   );
@@ -160,6 +168,8 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                       onSuccess: () => {
                         setRevisionFeedback('');
                         setMode('idle');
+                        void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                        void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                       },
                     }
                   );
@@ -193,6 +203,8 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                   cancel.mutate(id, {
                     onSuccess: () => {
                       setMode('idle');
+                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                     },
                   });
                 }}

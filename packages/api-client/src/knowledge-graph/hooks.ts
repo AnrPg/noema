@@ -135,6 +135,7 @@ export function useCreatePKGNode(
     mutationFn: (data) => pkgNodesApi.create(userId, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: kgKeys.pkgNodes(userId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.comparison(userId) });
     },
     ...options,
   });
