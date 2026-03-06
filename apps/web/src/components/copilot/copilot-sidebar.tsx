@@ -118,10 +118,9 @@ export function CopilotSidebar(): React.JSX.Element {
         className={[
           'fixed right-0 top-0 z-40 flex h-full w-[360px] flex-col',
           'border-l border-border bg-card shadow-2xl',
-          'transition-transform duration-300 ease-in-out',
+          'transition-[transform,opacity] duration-300 ease-in-out',
           isOpen ? 'translate-x-0' : 'translate-x-full',
           isExpiring ? 'opacity-30' : 'opacity-100',
-          'transition-opacity duration-300',
         ].join(' ')}
       >
         {/* Header */}
