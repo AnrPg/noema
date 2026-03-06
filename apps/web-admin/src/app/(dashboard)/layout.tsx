@@ -28,6 +28,7 @@ import {
 import {
   Activity,
   BookOpen,
+  Calendar,
   ChevronDown,
   FileText,
   GitPullRequest,
@@ -71,6 +72,7 @@ const navGroups: INavGroup[] = [
     items: [
       { href: '/dashboard/content', label: 'Content Oversight', icon: BookOpen },
       { href: '/dashboard/content/templates', label: 'Card Templates', icon: FileText },
+      { href: '/dashboard/content/sessions', label: 'Sessions', icon: Calendar },
     ],
   },
   {

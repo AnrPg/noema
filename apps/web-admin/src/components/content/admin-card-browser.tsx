@@ -11,6 +11,7 @@ import type { ICardSummaryDto } from '@noema/api-client';
 import { useCards, useDeleteCard } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import { Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { formatDate, truncateId } from '@/lib/format.js';
 
 type CardId = ICardSummaryDto['id'];
@@ -117,6 +118,14 @@ function CardRow({
 
       {/* Actions */}
       <div className="shrink-0 flex items-center gap-2">
+        {/* View session link */}
+        <Link
+          href={`/dashboard/content/sessions/${card.sessionId}`}
+          className="text-xs text-primary hover:underline"
+        >
+          View
+        </Link>
+
         {confirming ? (
           <>
             <span className="text-xs text-destructive">Delete?</span>
