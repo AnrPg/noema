@@ -29,6 +29,7 @@ import {
 } from './api.js';
 import type {
   ICentralityDto,
+  ICkgMutationAuditLogDto,
   ICkgMutationDto,
   ICkgMutationFilters,
   ICommonAncestorsInput,
@@ -42,6 +43,7 @@ import type {
   IUpdateNodeInput,
   BridgeNodesResponse,
   CentralityResponse,
+  CkgMutationAuditLogResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
   ComparisonResponse,
@@ -386,6 +388,50 @@ export function useRejectMutation(
   return useMutation({
     mutationFn: ({ id, note }) => ckgMutationsApi.reject(id, note),
     onSuccess: (response, { id }) => {
+      queryClient.setQueryData(kgKeys.ckgMutation(id), response);
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useCKGMutationAuditLog(
+  id: MutationId,
+  options?: Omit<
+    UseQueryOptions<CkgMutationAuditLogResponse, Error, ICkgMutationAuditLogDto>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: [...kgKeys.ckgMutation(id), 'audit-log'] as const,
+    queryFn: () => ckgMutationsApi.getAuditLog(id),
+    select: (r) => r.data,
+    enabled: id !== '',
+    ...options,
+  });
+}
+
+export function useRequestRevision(
+  options?: UseMutationOptions<CkgMutationResponse, Error, { id: MutationId; feedback: string }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, feedback }) => ckgMutationsApi.requestRevision(id, feedback),
+    onSuccess: (response, { id }) => {
+      queryClient.setQueryData(kgKeys.ckgMutation(id), response);
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useCancelMutation(
+  options?: UseMutationOptions<CkgMutationResponse, Error, MutationId>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => ckgMutationsApi.cancel(id),
+    onSuccess: (response, id) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), response);
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },

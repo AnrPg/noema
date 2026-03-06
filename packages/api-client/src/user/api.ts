@@ -8,12 +8,17 @@ import { http } from '../client.js';
 import type {
   AuthResponse,
   ChangePasswordInput,
+  IUpdateUserRolesInput,
+  IUpdateUserStatusInput,
   LoginInput,
   PublicUserResponse,
   RegisterInput,
   TokenRefreshResponse,
+  TriggerPasswordResetResponse,
   UpdateProfileInput,
   UpdateSettingsInput,
+  UpdateUserRolesResponse,
+  UpdateUserStatusResponse,
   UserFilters,
   UserResponse,
   UserSettingsResponse,
@@ -28,14 +33,12 @@ export const authApi = {
   /**
    * Register a new user account.
    */
-  register: (data: RegisterInput): Promise<AuthResponse> =>
-    http.post('/auth/register', data),
+  register: (data: RegisterInput): Promise<AuthResponse> => http.post('/auth/register', data),
 
   /**
    * Login with username/email and password.
    */
-  login: (data: LoginInput): Promise<AuthResponse> =>
-    http.post('/auth/login', data),
+  login: (data: LoginInput): Promise<AuthResponse> => http.post('/auth/login', data),
 
   /**
    * Refresh access token using refresh token.
@@ -46,8 +49,7 @@ export const authApi = {
   /**
    * Logout and invalidate tokens.
    */
-  logout: (): Promise<void> =>
-    http.post('/auth/logout'),
+  logout: (): Promise<void> => http.post('/auth/logout'),
 };
 
 // ============================================================================
@@ -58,8 +60,7 @@ export const usersApi = {
   /**
    * Get user by ID.
    */
-  getById: (id: string): Promise<UserResponse> =>
-    http.get(`/users/${id}`),
+  getById: (id: string): Promise<UserResponse> => http.get(`/users/${id}`),
 
   /**
    * Get public profile by username.
@@ -87,11 +88,7 @@ export const usersApi = {
   /**
    * Update user profile.
    */
-  updateProfile: (
-    id: string,
-    data: UpdateProfileInput,
-    version: number
-  ): Promise<UserResponse> =>
+  updateProfile: (id: string, data: UpdateProfileInput, version: number): Promise<UserResponse> =>
     http.patch(`/users/${id}/profile`, { data, version }),
 
   /**
@@ -99,6 +96,24 @@ export const usersApi = {
    */
   delete: (id: string, soft = true): Promise<void> =>
     http.delete(`/users/${id}`, { params: { soft } }),
+
+  /**
+   * Update user status (admin only).
+   */
+  patchStatus: (id: string, data: IUpdateUserStatusInput): Promise<UpdateUserStatusResponse> =>
+    http.patch(`/users/${id}/status`, data),
+
+  /**
+   * Update user roles (admin only).
+   */
+  patchRoles: (id: string, data: IUpdateUserRolesInput): Promise<UpdateUserRolesResponse> =>
+    http.patch(`/users/${id}/roles`, data),
+
+  /**
+   * Trigger a password reset email for a user (admin only).
+   */
+  triggerPasswordReset: (id: string): Promise<TriggerPasswordResetResponse> =>
+    http.post(`/users/${id}/password-reset`, {}),
 };
 
 // ============================================================================
@@ -109,8 +124,7 @@ export const meApi = {
   /**
    * Get current user profile.
    */
-  get: (): Promise<UserResponse> =>
-    http.get('/me'),
+  get: (): Promise<UserResponse> => http.get('/me'),
 
   /**
    * Update current user profile.
@@ -121,8 +135,7 @@ export const meApi = {
   /**
    * Get current user settings.
    */
-  getSettings: (): Promise<UserSettingsResponse> =>
-    http.get('/me/settings'),
+  getSettings: (): Promise<UserSettingsResponse> => http.get('/me/settings'),
 
   /**
    * Update current user settings.
@@ -139,6 +152,5 @@ export const meApi = {
   /**
    * Delete current user account.
    */
-  deleteAccount: (): Promise<void> =>
-    http.delete('/me'),
+  deleteAccount: (): Promise<void> => http.delete('/me'),
 };

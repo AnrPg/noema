@@ -4,70 +4,108 @@
 
 'use client';
 
+import type { ElementType, JSX, ReactNode } from 'react';
 import { AdminGuard, useAuth } from '@noema/auth';
 import {
-    Avatar,
-    AvatarFallback,
-    AvatarImage,
-    Button,
-    DashboardHeader,
-    DashboardLayout as DashboardLayoutUI,
-    DashboardMain,
-    DashboardSidebar,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-    SidebarNav,
-    SidebarNavGroup,
-    SidebarNavItem,
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Button,
+  DashboardHeader,
+  DashboardLayout as DashboardLayoutUI,
+  DashboardMain,
+  DashboardSidebar,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  SidebarNav,
+  SidebarNavGroup,
+  SidebarNavItem,
 } from '@noema/ui';
 import {
-    Activity,
-    ChevronDown,
-    LayoutDashboard,
-    LogOut,
-    Settings,
-    Shield,
-    Users,
+  Activity,
+  BookOpen,
+  Calendar,
+  ChevronDown,
+  FileText,
+  GitPullRequest,
+  LayoutDashboard,
+  LogOut,
+  Network,
+  Settings,
+  Shield,
+  Users,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 
-const navItems = [
+const ACCENT = '#86efac';
+
+interface INavItemDef {
+  href: string;
+  label: string;
+  icon: ElementType;
+  exact?: boolean;
+}
+
+interface INavGroup {
+  title: string;
+  items: INavItemDef[];
+}
+
+const navGroups: INavGroup[] = [
   {
     title: 'Overview',
+    items: [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true }],
+  },
+  {
+    title: 'Knowledge',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-      { href: '/dashboard/activity', label: 'Activity', icon: Activity },
+      { href: '/dashboard/ckg/graph', label: 'CKG Graph', icon: Network },
+      { href: '/dashboard/ckg/mutations', label: 'Mutation Pipeline', icon: GitPullRequest },
     ],
   },
   {
-    title: 'Management',
-    items: [{ href: '/dashboard/users', label: 'Users', icon: Users }],
+    title: 'Content',
+    items: [
+      { href: '/dashboard/content', label: 'Content Oversight', icon: BookOpen },
+      { href: '/dashboard/content/templates', label: 'Card Templates', icon: FileText },
+      { href: '/dashboard/content/sessions', label: 'Sessions', icon: Calendar },
+    ],
+  },
+  {
+    title: 'Users',
+    items: [{ href: '/dashboard/users', label: 'User Management', icon: Users }],
   },
   {
     title: 'System',
-    items: [{ href: '/dashboard/settings', label: 'Settings', icon: Settings }],
+    items: [
+      { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+      { href: '/dashboard/activity', label: 'Activity Log', icon: Activity },
+    ],
   },
 ];
 
-function AdminMenu() {
+function AdminMenu(): JSX.Element {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  const handleLogout = async () => {
+  const handleLogout = async (): Promise<void> => {
     await logout();
     router.push('/login');
   };
 
+  const displayName = user?.displayName ?? '';
   const initials =
-    user?.displayName
-      ?.split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase() || 'A';
+    displayName !== ''
+      ? displayName
+          .split(' ')
+          .map((n) => n[0] ?? '')
+          .join('')
+          .toUpperCase()
+      : 'A';
 
   return (
     <DropdownMenu>
@@ -89,7 +127,11 @@ function AdminMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
+        <DropdownMenuItem
+          onClick={() => {
+            void handleLogout();
+          }}
+        >
           <LogOut className="mr-2 h-4 w-4" />
           Log out
         </DropdownMenuItem>
@@ -98,34 +140,49 @@ function AdminMenu() {
   );
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({ children }: { children: ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
 
   return (
-    <AdminGuard onUnauthenticated={() => { router.push('/login'); }}>
+    <AdminGuard
+      onUnauthenticated={() => {
+        router.push('/login');
+      }}
+    >
       <DashboardLayoutUI>
         <DashboardSidebar
           header={
             <div className="flex items-center gap-2">
-              <Shield className="h-6 w-6 text-primary" />
-              <span className="font-bold text-lg">Noema Admin</span>
+              <Shield className="h-6 w-6" style={{ color: ACCENT }} />
+              <span className="font-bold text-lg" style={{ color: ACCENT }}>
+                Noema Admin
+              </span>
             </div>
           }
         >
-          {navItems.map((group) => (
+          {navGroups.map((group) => (
             <SidebarNavGroup key={group.title} title={group.title}>
               <SidebarNav>
-                {group.items.map((item) => (
-                  <SidebarNavItem
-                    key={item.href}
-                    href={item.href}
-                    icon={<item.icon className="h-4 w-4" />}
-                    active={pathname === item.href}
-                  >
-                    {item.label}
-                  </SidebarNavItem>
-                ))}
+                {group.items.map((item) => {
+                  const isActive =
+                    item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+                  return (
+                    <SidebarNavItem
+                      key={item.href}
+                      href={item.href}
+                      icon={
+                        <item.icon
+                          className="h-4 w-4"
+                          style={isActive ? { color: ACCENT } : undefined}
+                        />
+                      }
+                      active={isActive}
+                    >
+                      <span style={isActive ? { color: ACCENT } : undefined}>{item.label}</span>
+                    </SidebarNavItem>
+                  );
+                })}
               </SidebarNav>
             </SidebarNavGroup>
           ))}

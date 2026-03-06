@@ -211,6 +211,24 @@ export interface ICkgMutationDto {
   reviewedAt: string | null;
 }
 
+export interface ICkgMutationAuditEntry {
+  id: string;
+  mutationId: MutationId;
+  fromStatus: MutationStatus | null;
+  toStatus: MutationStatus;
+  actorId: string;
+  actorType: 'admin' | 'system';
+  reason: string | null;
+  transitionedAt: string;
+}
+
+export interface ICkgMutationAuditLogDto {
+  mutationId: MutationId;
+  entries: ICkgMutationAuditEntry[];
+}
+
+export type CkgMutationAuditLogResponse = IApiResponse<ICkgMutationAuditLogDto>;
+
 export interface ICkgMutationFilters {
   status?: MutationStatus;
   proposedBy?: ProposerId;
@@ -259,6 +277,8 @@ export type UpdateMisconceptionStatusInput = IUpdateMisconceptionStatusInput;
 export type CkgMutationDto = ICkgMutationDto;
 export type CkgMutationFilters = ICkgMutationFilters;
 export type PkgCkgComparisonDto = IPkgCkgComparisonDto;
+export type CkgMutationAuditEntry = ICkgMutationAuditEntry;
+export type CkgMutationAuditLogDto = ICkgMutationAuditLogDto;
 
 // ============================================================================
 // Response aliases

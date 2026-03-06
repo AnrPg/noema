@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^3.9.1",
     "@noema/api-client": "workspace:*",
     "@noema/auth": "workspace:*",
+    "@noema/graph": "workspace:*",
     "@noema/ui": "workspace:*",
     "@tanstack/react-query": "^5.60.0",
     "lucide-react": "^0.460.0",

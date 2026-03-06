@@ -605,6 +605,8 @@ export type CardDto = ICardDto;
 /** List-safe card shape (no content blob). */
 export interface ICardSummaryDto {
   id: CardId;
+  sessionId: string;
+  label: string;
   cardType: string;
   state: CardState;
   tags: string[];

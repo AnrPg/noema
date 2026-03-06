@@ -399,6 +399,18 @@ export function useUpdateTemplate(
   });
 }
 
+export function useDeleteTemplate(options?: UseMutationOptions<void, Error, TemplateId>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: templatesApi.deleteTemplate,
+    onSuccess: (_, id) => {
+      queryClient.removeQueries({ queryKey: contentKeys.template(id) });
+      void queryClient.invalidateQueries({ queryKey: contentKeys.templates() });
+    },
+    ...options,
+  });
+}
+
 // ============================================================================
 // Media Hooks
 // ============================================================================

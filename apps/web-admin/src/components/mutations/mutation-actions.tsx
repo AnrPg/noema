@@ -1,0 +1,216 @@
+'use client';
+/**
+ * @noema/web-admin - MutationActions
+ *
+ * Admin action panel for a CKG mutation (approve/reject/revision/cancel).
+ */
+import * as React from 'react';
+import {
+  useApproveMutation,
+  useCancelMutation,
+  useRejectMutation,
+  useRequestRevision,
+} from '@noema/api-client';
+import type { ICkgMutationDto } from '@noema/api-client';
+import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
+import { Check, MessageSquare, RotateCcw, X } from 'lucide-react';
+
+const ACTIONABLE_STATUSES: string[] = ['pending', 'retrying'];
+
+type ActionMode = 'idle' | 'reject' | 'revision' | 'cancel';
+
+export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): React.JSX.Element {
+  const [mode, setMode] = React.useState<ActionMode>('idle');
+  const [rejectNote, setRejectNote] = React.useState('');
+  const [revisionFeedback, setRevisionFeedback] = React.useState('');
+
+  const approve = useApproveMutation();
+  const reject = useRejectMutation();
+  const requestRevision = useRequestRevision();
+  const cancel = useCancelMutation();
+
+  const id = mutation.id;
+
+  if (!ACTIONABLE_STATUSES.includes(mutation.status)) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-muted-foreground text-center">
+            No actions available — mutation is in <strong>{mutation.status}</strong> state.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Admin Actions</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {mode === 'idle' && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                approve.mutate(
+                  { id },
+                  {
+                    onSuccess: () => {
+                      setMode('idle');
+                    },
+                  }
+                );
+              }}
+              disabled={approve.isPending}
+              className="gap-2"
+            >
+              <Check className="h-4 w-4" /> Approve
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setMode('reject');
+              }}
+              className="gap-2"
+            >
+              <X className="h-4 w-4" /> Reject
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMode('revision');
+              }}
+              className="gap-2"
+            >
+              <MessageSquare className="h-4 w-4" /> Request Revision
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMode('cancel');
+              }}
+              className="gap-2"
+            >
+              <RotateCcw className="h-4 w-4" /> Cancel
+            </Button>
+          </div>
+        )}
+
+        {mode === 'reject' && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Rejection reason (required):</p>
+            <textarea
+              className="w-full rounded-md border bg-transparent px-3 py-2 text-sm min-h-20 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              placeholder="Explain why this mutation is being rejected..."
+              value={rejectNote}
+              onChange={(e) => {
+                setRejectNote(e.target.value);
+              }}
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                disabled={rejectNote.trim() === '' || reject.isPending}
+                onClick={() => {
+                  reject.mutate(
+                    { id, note: rejectNote },
+                    {
+                      onSuccess: () => {
+                        setRejectNote('');
+                        setMode('idle');
+                      },
+                    }
+                  );
+                }}
+              >
+                Confirm Reject
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setMode('idle');
+                  setRejectNote('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'revision' && (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Feedback for submitter:</p>
+            <textarea
+              className="w-full rounded-md border bg-transparent px-3 py-2 text-sm min-h-20 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              placeholder="What needs to be revised?"
+              value={revisionFeedback}
+              onChange={(e) => {
+                setRevisionFeedback(e.target.value);
+              }}
+            />
+            <div className="flex gap-2">
+              <Button
+                disabled={revisionFeedback.trim() === '' || requestRevision.isPending}
+                onClick={() => {
+                  requestRevision.mutate(
+                    { id, feedback: revisionFeedback },
+                    {
+                      onSuccess: () => {
+                        setRevisionFeedback('');
+                        setMode('idle');
+                      },
+                    }
+                  );
+                }}
+              >
+                Send Feedback
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setMode('idle');
+                  setRevisionFeedback('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'cancel' && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Cancel this mutation permanently? This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                disabled={cancel.isPending}
+                onClick={() => {
+                  cancel.mutate(id, {
+                    onSuccess: () => {
+                      setMode('idle');
+                    },
+                  });
+                }}
+              >
+                Confirm Cancel
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setMode('idle');
+                }}
+              >
+                Back
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

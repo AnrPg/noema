@@ -6,18 +6,10 @@
  */
 
 import { create } from 'zustand';
+import type { OverlayType, LayoutMode } from '@noema/graph';
 
-// ============================================================================
-// Domain Types
-// ============================================================================
-
-export type OverlayType =
-  | 'centrality'
-  | 'frontier'
-  | 'misconceptions'
-  | 'bridges'
-  | 'prerequisites';
-export type LayoutMode = 'force' | 'hierarchical' | 'radial';
+// Re-export so existing imports from this module continue to work
+export type { OverlayType, LayoutMode };
 
 interface IViewportCenter {
   x: number;
