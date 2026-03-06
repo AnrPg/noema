@@ -83,6 +83,21 @@ export function CardScheduleInspector({
   // Review history — real data would come from a per-card attempts API
   const reviewEvents: IReviewEvent[] = [];
 
+  const closeButtonRef = React.useRef<HTMLButtonElement>(null);
+  const previousFocusRef = React.useRef<HTMLElement | null>(null);
+
+  // Focus management
+  React.useEffect(() => {
+    // Save currently focused element
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    // Focus close button on mount
+    closeButtonRef.current?.focus();
+    return () => {
+      // Restore focus on unmount
+      previousFocusRef.current?.focus();
+    };
+  }, []);
+
   // Escape key closes
   React.useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -105,8 +120,10 @@ export function CardScheduleInspector({
 
       {/* Panel */}
       <aside
-        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col overflow-y-auto border-l border-border bg-card shadow-2xl"
+        role="dialog"
+        aria-modal="true"
         aria-label="Card schedule inspector"
+        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col overflow-y-auto border-l border-border bg-card shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -115,6 +132,7 @@ export function CardScheduleInspector({
             <p className="font-mono text-xs text-muted-foreground">{cardId.slice(0, 12)}…</p>
           </div>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="Close inspector"
@@ -157,7 +175,7 @@ export function CardScheduleInspector({
             </div>
 
             {/* FSRS Parameters */}
-            {(algorithm === 'fsrs' || algorithm === 'sm2') && (
+            {algorithm === 'fsrs' && (
               <div className="flex flex-col gap-3">
                 <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   FSRS Parameters
