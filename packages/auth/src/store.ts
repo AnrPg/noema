@@ -91,9 +91,8 @@ export const useAuthStore = create<IAuthStore>()(
       partialize: (state) => ({
         user: state.user,
         settings: state.settings,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
+        isInitialized: state.isInitialized,
       }),
     }
   )
