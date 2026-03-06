@@ -48,11 +48,11 @@ function extractMutationNodeIds(mutations: ICkgMutationDto[]): Set<string> {
 
 export default function CKGGraphBrowserPage(): React.JSX.Element {
   // --- Data ---
-  const { data: nodesData, isLoading: nodesLoading } = useCKGNodes();
-  const { data: edgesData, isLoading: edgesLoading } = useCKGEdges();
+  const { data: nodesData = [], isLoading: nodesLoading, isError: nodesError } = useCKGNodes();
+  const { data: edgesData = [], isLoading: edgesLoading, isError: edgesError } = useCKGEdges();
 
-  const nodes: IGraphNodeDto[] = nodesData ?? [];
-  const edges: IGraphEdgeDto[] = edgesData ?? [];
+  const nodes: IGraphNodeDto[] = nodesData;
+  const edges: IGraphEdgeDto[] = edgesData;
 
   // --- Local graph state ---
   const [layoutMode, setLayoutMode] = React.useState<LayoutMode>('force');
@@ -64,7 +64,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
   // --- pending_mutations overlay ---
   const pendingMutationsActive = activeOverlays.has('pending_mutations');
-  const { data: pendingMutations = [] } = useCKGMutations(
+  const { data: pendingMutations = [], isLoading: pendingMutationsLoading } = useCKGMutations(
     { status: 'pending' },
     { enabled: pendingMutationsActive }
   );
@@ -112,7 +112,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       const q = searchQuery.toLowerCase();
       for (const n of nodes) {
         if (n.label.toLowerCase().includes(q)) {
-          set.add(n.id as unknown as string);
+          set.add(n.id as string);
         }
       }
     }
@@ -122,19 +122,19 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const activeOverlaysArray = React.useMemo(() => [...activeOverlays], [activeOverlays]);
 
   const selectedNode = React.useMemo(
-    () => nodes.find((n) => (n.id as unknown as string) === selectedNodeId) ?? null,
+    () => nodes.find((n) => (n.id as string) === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
 
   // --- Handlers ---
 
   const handleNodeClick = React.useCallback((node: IGraphNodeDto) => {
-    const id = node.id as unknown as string;
+    const id = node.id as string;
     setSelectedNodeId((prev) => (prev === id ? null : id));
   }, []);
 
   const handleNodeHover = React.useCallback((node: IGraphNodeDto | null) => {
-    setHoveredNodeId(node !== null ? (node.id as unknown as string) : null);
+    setHoveredNodeId(node !== null ? (node.id as string) : null);
   }, []);
 
   const handleBackgroundClick = React.useCallback(() => {
@@ -142,7 +142,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   }, []);
 
   const handleNodeSelect = React.useCallback((node: IGraphNodeDto) => {
-    setSelectedNodeId(node.id as unknown as string);
+    setSelectedNodeId(node.id as string);
   }, []);
 
   const handleClose = React.useCallback(() => {
@@ -150,6 +150,14 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   }, []);
 
   // --- Loading / empty states ---
+
+  if (nodesError || edgesError) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+        <p className="text-sm text-destructive">Failed to load CKG data.</p>
+      </div>
+    );
+  }
 
   const isLoading = nodesLoading || edgesLoading;
 
@@ -171,7 +179,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 4rem)' }}>
+    <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Page heading */}
       <div className="flex flex-shrink-0 items-center gap-2 border-b border-border px-4 py-2">
         <Network className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
@@ -200,6 +208,11 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
         {/* Canvas + overlaid panels */}
         <div className="relative flex-1 overflow-hidden">
+          {pendingMutationsActive && pendingMutationsLoading && (
+            <div className="absolute left-2 top-2 z-10">
+              <span className="text-xs text-muted-foreground">(loading…)</span>
+            </div>
+          )}
           <GraphCanvas
             nodes={visibleNodes}
             edges={edges}
@@ -225,7 +238,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
               />
               <div className="mt-1 flex justify-end px-1">
                 <Link
-                  href={`/dashboard/ckg/mutations?nodeId=${selectedNodeId ?? ''}`}
+                  href={`/dashboard/ckg/mutations?nodeId=${String(selectedNodeId)}`}
                   className="text-xs text-primary hover:underline"
                 >
                   View pending mutations for this node

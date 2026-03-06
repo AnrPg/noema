@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 /**
  * @noema/graph — Graph / GraphControls
@@ -63,13 +60,9 @@ export function GraphControls({
   const filteredNodes = React.useMemo(() => {
     return nodes
       .filter(
-        (n) =>
-          searchQuery === '' ||
-          String((n as any).label)
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())
+        (n) => searchQuery === '' || n.label.toLowerCase().includes(searchQuery.toLowerCase())
       )
-      .sort((a, b) => String((a as any).label).localeCompare(String((b as any).label)));
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [nodes, searchQuery]);
 
   return (
@@ -148,9 +141,8 @@ export function GraphControls({
           Nodes ({String(filteredNodes.length)})
         </p>
         {filteredNodes.map((n) => {
-          const nAny = n as any;
-          const nodeId = String(nAny.id);
-          const nodeLabel = String(nAny.label);
+          const nodeId = n.id as string;
+          const nodeLabel = n.label;
           return (
             <button
               key={nodeId}
