@@ -30,6 +30,7 @@ const OVERLAY_OPTIONS: { key: OverlayType; label: string }[] = [
   { key: 'bridges', label: 'Bridge Nodes' },
   { key: 'misconceptions', label: 'Misconceptions' },
   { key: 'centrality', label: 'Mastery Heat' },
+  { key: 'pending_mutations', label: 'Pending Mutations' },
 ];
 
 export interface IGraphControlsProps {
