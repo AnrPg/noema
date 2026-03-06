@@ -4,7 +4,14 @@
 
 'use client';
 
-import { useUser } from '@noema/api-client';
+import type { UserRole } from '@noema/api-client';
+import {
+  useDeleteUser,
+  useTriggerPasswordReset,
+  useUpdateUserRoles,
+  useUpdateUserStatus,
+  useUser,
+} from '@noema/api-client';
 import {
   Avatar,
   AvatarFallback,
@@ -15,15 +22,29 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Input,
   Separator,
 } from '@noema/ui';
 import { ArrowLeft, Calendar, Clock, Globe, Mail, Shield, type LucideIcon } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
+import React from 'react';
 
-export default function UserDetailPage() {
+export default function UserDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { data: user, isLoading, error } = useUser(params.id);
+
+  const updateRoles = useUpdateUserRoles();
+  const updateStatus = useUpdateUserStatus();
+  const triggerReset = useTriggerPasswordReset();
+  const deleteUser = useDeleteUser({
+    onSuccess: () => {
+      router.push('/dashboard/users');
+    },
+  });
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = React.useState('');
 
   if (isLoading) {
     return (
@@ -33,7 +54,7 @@ export default function UserDetailPage() {
     );
   }
 
-  if (error || !user) {
+  if (error !== null || user === undefined) {
     return (
       <div className="space-y-4">
         <Button
@@ -52,19 +73,39 @@ export default function UserDetailPage() {
     );
   }
 
-  const initials =
-    user.displayName
-      ?.split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase() || 'U';
+  const rawInitials = user.displayName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase();
+  const initials = rawInitials !== '' ? rawInitials : 'U';
 
-  const statusColor =
+  const statusColorClass =
     user.status === 'ACTIVE'
       ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
       : user.status === 'SUSPENDED'
         ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
-        : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+        : user.status === 'BANNED'
+          ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+          : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+
+  const isAdmin = user.roles.includes('admin' as UserRole);
+
+  const handleToggleAdmin = async (): Promise<void> => {
+    const newRoles: UserRole[] = isAdmin
+      ? user.roles.filter((r) => r !== ('admin' as UserRole))
+      : [...user.roles, 'admin' as UserRole];
+    await updateRoles.mutateAsync({ id: user.id, roles: newRoles });
+  };
+
+  const handleToggleSuspend = async (): Promise<void> => {
+    const newStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    await updateStatus.mutateAsync({ id: user.id, status: newStatus });
+  };
+
+  const handleConfirmDelete = async (): Promise<void> => {
+    await deleteUser.mutateAsync({ id: user.id, soft: true });
+  };
 
   return (
     <div className="space-y-6">
@@ -83,14 +124,16 @@ export default function UserDetailPage() {
         <CardHeader>
           <div className="flex items-center gap-6">
             <Avatar className="h-20 w-20">
-              <AvatarImage src={user.avatarUrl || undefined} />
+              <AvatarImage src={user.avatarUrl ?? undefined} />
               <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
             </Avatar>
             <div className="space-y-1">
               <CardTitle className="text-2xl">{user.displayName}</CardTitle>
               <CardDescription className="text-base">@{user.username}</CardDescription>
               <div className="flex items-center gap-2 pt-1">
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColor}`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColorClass}`}
+                >
                   {user.status}
                 </span>
                 {user.roles.map((role) => (
@@ -117,9 +160,13 @@ export default function UserDetailPage() {
               label="Email Verified"
               value={user.emailVerified ? 'Yes' : 'No'}
             />
-            <InfoRow icon={Globe} label="Language" value={user.language?.toUpperCase() || '—'} />
-            <InfoRow icon={Clock} label="Timezone" value={user.timezone || '—'} />
-            {user.country && <InfoRow icon={Globe} label="Country" value={user.country} />}
+            <InfoRow icon={Globe} label="Language" value={user.language.toUpperCase()} />
+            <InfoRow
+              icon={Clock}
+              label="Timezone"
+              value={user.timezone !== '' ? user.timezone : '—'}
+            />
+            {user.country !== null && <InfoRow icon={Globe} label="Country" value={user.country} />}
           </CardContent>
         </Card>
 
@@ -142,7 +189,7 @@ export default function UserDetailPage() {
               icon={Calendar}
               label="Last Login"
               value={
-                user.lastLoginAt
+                user.lastLoginAt !== null
                   ? new Date(user.lastLoginAt).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
@@ -169,14 +216,14 @@ export default function UserDetailPage() {
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Version</span>
-              <span>{user.version}</span>
+              <span>{String(user.version)}</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Bio */}
-      {user.bio && (
+      {user.bio !== null && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Bio</CardTitle>
@@ -186,11 +233,152 @@ export default function UserDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Admin Actions Panel */}
+      <Card className="border-orange-500/30">
+        <CardHeader>
+          <CardTitle className="text-lg">Admin Actions</CardTitle>
+          <CardDescription>Manage this user&apos;s access and account state.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Toggle Admin Role */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Admin Role</p>
+              <p className="text-xs text-muted-foreground">
+                {isAdmin
+                  ? 'User currently has admin privileges.'
+                  : 'User does not have admin privileges.'}
+              </p>
+            </div>
+            <Button
+              variant={isAdmin ? 'destructive' : 'default'}
+              onClick={() => {
+                void handleToggleAdmin();
+              }}
+              disabled={updateRoles.isPending}
+            >
+              {isAdmin ? 'Remove Admin' : 'Grant Admin'}
+            </Button>
+          </div>
+
+          <Separator />
+
+          {/* Suspend / Unsuspend */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Account Status</p>
+              <p className="text-xs text-muted-foreground">
+                Current status: <span className="font-semibold">{user.status}</span>
+              </p>
+            </div>
+            <Button
+              variant={user.status === 'ACTIVE' ? 'destructive' : 'default'}
+              onClick={() => {
+                void handleToggleSuspend();
+              }}
+              disabled={updateStatus.isPending}
+            >
+              {user.status === 'ACTIVE' ? 'Suspend Account' : 'Unsuspend Account'}
+            </Button>
+          </div>
+
+          <Separator />
+
+          {/* Password Reset */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Password Reset</p>
+              <p className="text-xs text-muted-foreground">
+                Send a password reset email to {user.email}.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                void triggerReset.mutateAsync(user.id);
+              }}
+              disabled={triggerReset.isPending || triggerReset.isSuccess}
+            >
+              {triggerReset.isSuccess ? 'Email Sent ✓' : 'Send Password Reset Email'}
+            </Button>
+          </div>
+
+          <Separator />
+
+          {/* Delete Account */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-destructive">Delete Account</p>
+                <p className="text-xs text-muted-foreground">
+                  Permanently remove this user and all associated data.
+                </p>
+              </div>
+              {!showDeleteConfirm && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setShowDeleteConfirm(true);
+                    setDeleteConfirmInput('');
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
+            {showDeleteConfirm && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Type <span className="font-mono font-semibold">{user.username}</span> to confirm
+                  deletion.
+                </p>
+                <Input
+                  value={deleteConfirmInput}
+                  onChange={(e) => {
+                    setDeleteConfirmInput(e.target.value);
+                  }}
+                  placeholder={user.username}
+                  className="max-w-xs"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    disabled={deleteConfirmInput !== user.username || deleteUser.isPending}
+                    onClick={() => {
+                      void handleConfirmDelete();
+                    }}
+                  >
+                    Confirm Delete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteConfirmInput('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function InfoRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function InfoRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}): React.JSX.Element {
   return (
     <div className="flex items-center justify-between text-sm">
       <div className="flex items-center gap-2 text-muted-foreground">
