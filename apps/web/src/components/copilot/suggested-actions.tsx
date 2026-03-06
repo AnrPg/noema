@@ -102,7 +102,11 @@ export function SuggestedActions(): React.JSX.Element {
     seen.add(a.action);
     return true;
   });
-  uniqueActions.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+  uniqueActions.sort(
+    (a, b) =>
+      (PRIORITY_ORDER[a.priority as ActionPriority] ?? 99) -
+      (PRIORITY_ORDER[b.priority as ActionPriority] ?? 99)
+  );
 
   // Group by category
   const grouped = new Map<ActionCategory, ISuggestedAction[]>();
@@ -141,7 +145,7 @@ export function SuggestedActions(): React.JSX.Element {
     <div className="flex flex-col">
       {CATEGORY_ORDER.filter((cat) => grouped.has(cat)).map((cat) => {
         const actions = grouped.get(cat) ?? [];
-        const Icon = CATEGORY_ICON[cat];
+        const Icon = (CATEGORY_ICON[cat] ?? BookOpen) as React.FC<React.SVGProps<SVGSVGElement>>;
         const isCollapsed = collapsedGroups.has(cat);
         const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
 
@@ -225,7 +229,7 @@ export function SuggestedActions(): React.JSX.Element {
                       {/* Prerequisites */}
                       {action.prerequisites !== undefined && action.prerequisites.length > 0 && (
                         <div className="flex flex-wrap gap-1">
-                          {action.prerequisites.map((prereq) => (
+                          {action.prerequisites.map((prereq: string) => (
                             <span
                               key={prereq}
                               className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"

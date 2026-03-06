@@ -63,7 +63,11 @@ export function CopilotSuggestions(): React.JSX.Element {
     return true;
   });
   const top3 = deduplicated
-    .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])
+    .sort(
+      (a, b) =>
+        (PRIORITY_ORDER[a.priority as ActionPriority] ?? 99) -
+        (PRIORITY_ORDER[b.priority as ActionPriority] ?? 99)
+    )
     .slice(0, 3);
 
   if (top3.length === 0) {
@@ -100,7 +104,9 @@ export function CopilotSuggestions(): React.JSX.Element {
         <div className="grid gap-3 sm:grid-cols-3">
           {top3.map((action) => {
             const category: ActionCategory = action.category ?? 'learning';
-            const Icon = CATEGORY_ICON[category];
+            const Icon = (CATEGORY_ICON[category] ?? BookOpen) as React.FC<
+              React.SVGProps<SVGSVGElement>
+            >;
             const colorClass = PRIORITY_COLOR[action.priority];
 
             return (

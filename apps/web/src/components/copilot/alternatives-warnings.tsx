@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
@@ -83,7 +82,7 @@ export function AlternativesWarnings(): React.JSX.Element {
                         <div className="mb-1">
                           <span className="font-medium text-synapse-400">Pros:</span>
                           <ul className="mt-0.5 space-y-0.5">
-                            {alt.pros.map((p, j) => (
+                            {alt.pros.map((p: string, j: number) => (
                               <li key={j} className="text-foreground/80">
                                 + {p}
                               </li>
@@ -95,7 +94,7 @@ export function AlternativesWarnings(): React.JSX.Element {
                         <div>
                           <span className="font-medium text-cortex-400">Cons:</span>
                           <ul className="mt-0.5 space-y-0.5">
-                            {alt.cons.map((c, j) => (
+                            {alt.cons.map((c: string, j: number) => (
                               <li key={j} className="text-foreground/80">
                                 − {c}
                               </li>
