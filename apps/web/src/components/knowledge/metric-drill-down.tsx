@@ -136,7 +136,7 @@ export function MetricDrillDown({
       {historyScores.length > 0 && (
         <div className="mt-3">
           <p className="mb-1 text-xs text-muted-foreground">
-            Trend ({String(historyScores.length)} snapshots)
+            Health trend ({String(historyScores.length)} snapshots)
           </p>
           <Sparkline values={historyScores} />
         </div>

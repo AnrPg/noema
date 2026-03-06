@@ -118,6 +118,23 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
     );
   }
 
+  if (health === null) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-3xl font-bold">Structural Health</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            How well-structured and internally consistent your knowledge graph is.
+          </p>
+        </div>
+        <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-16 text-sm text-muted-foreground">
+          No health data available yet. Complete study sessions to generate your first health
+          report.
+        </div>
+      </div>
+    );
+  }
+
   const score: number = typeof health?.score === 'number' ? (health.score as number) : 0;
   const grade: string = typeof health?.grade === 'string' ? (health.grade as string) : 'fair';
   const issues: string[] = Array.isArray(health?.issues) ? (health.issues as string[]) : [];
@@ -209,14 +226,6 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
             ))}
           </div>
         </section>
-      )}
-
-      {/* Empty state */}
-      {health === null && (
-        <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-12 text-sm text-muted-foreground">
-          No health data available yet. Complete study sessions to generate your first health
-          report.
-        </div>
       )}
     </div>
   );
