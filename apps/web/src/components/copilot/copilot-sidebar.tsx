@@ -15,6 +15,10 @@ import type { IAgentHints, SourceQuality } from '@noema/contracts';
 import { NeuralGauge } from '@noema/ui';
 import { X } from 'lucide-react';
 import { useCopilotStore } from '@/stores/copilot-store';
+import { SuggestedActions } from '@/components/copilot/suggested-actions';
+import { RiskAlerts } from '@/components/copilot/risk-alerts';
+import { TransparencySection } from '@/components/copilot/transparency-section';
+import { AlternativesWarnings } from '@/components/copilot/alternatives-warnings';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -160,19 +164,10 @@ export function CopilotSidebar(): React.JSX.Element {
             </div>
           ) : (
             <>
-              {/* Placeholder sections — replaced by T10.C–T10.F */}
-              <div className="border-b border-border px-4 py-3 text-xs text-muted-foreground">
-                Suggested Actions section (T10.C)
-              </div>
-              <div className="border-b border-border px-4 py-3 text-xs text-muted-foreground">
-                Risk Alerts section (T10.D)
-              </div>
-              <div className="border-b border-border px-4 py-3 text-xs text-muted-foreground">
-                Transparency section (T10.E)
-              </div>
-              <div className="px-4 py-3 text-xs text-muted-foreground">
-                Alternatives &amp; Warnings section (T10.F)
-              </div>
+              <SuggestedActions />
+              <RiskAlerts />
+              <TransparencySection />
+              <AlternativesWarnings />
             </>
           )}
         </div>
