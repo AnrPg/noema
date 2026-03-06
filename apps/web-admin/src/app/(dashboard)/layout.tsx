@@ -4,7 +4,7 @@
 
 'use client';
 
-import { type JSX } from 'react';
+import type { ElementType, JSX, ReactNode } from 'react';
 import { AdminGuard, useAuth } from '@noema/auth';
 import {
   Avatar,
@@ -45,7 +45,7 @@ const ACCENT = '#86efac';
 interface INavItemDef {
   href: string;
   label: string;
-  icon: React.ElementType;
+  icon: ElementType;
   exact?: boolean;
 }
 
@@ -138,7 +138,7 @@ function AdminMenu(): JSX.Element {
   );
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }): JSX.Element {
+export default function DashboardLayout({ children }: { children: ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
 
