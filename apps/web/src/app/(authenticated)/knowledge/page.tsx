@@ -47,6 +47,7 @@ export default function KnowledgePage(): React.JSX.Element {
   } = useGraphStore();
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = React.useState<{
     node: IGraphNodeDto;
     x: number;
@@ -55,7 +56,25 @@ export default function KnowledgePage(): React.JSX.Element {
 
   const isLoading = nodesLoading === true || edgesLoading === true;
 
-  // Build highlighted node set from active overlays
+  const handleToggleType = React.useCallback((type: string) => {
+    setHiddenTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  }, []);
+
+  // Nodes visible after legend type filter
+  const visibleNodes = React.useMemo(
+    () => nodes.filter((n) => !hiddenTypes.has(String((n as any).type))),
+    [nodes, hiddenTypes]
+  );
+
+  // Build highlighted node set from active overlays + search query
   const highlightedNodeIds = React.useMemo(() => {
     const set = new Set<string>();
     if (activeOverlays.has('frontier') && frontierData !== undefined) {
@@ -70,8 +89,20 @@ export default function KnowledgePage(): React.JSX.Element {
         set.add(String(n.id));
       }
     }
+    if (searchQuery !== '') {
+      const q = searchQuery.toLowerCase();
+      for (const n of nodes) {
+        if (
+          String((n as any).label)
+            .toLowerCase()
+            .includes(q)
+        ) {
+          set.add(String((n as any).id));
+        }
+      }
+    }
     return set;
-  }, [activeOverlays, frontierData, bridgesData]);
+  }, [activeOverlays, frontierData, bridgesData, searchQuery, nodes]);
 
   const selectedNode = React.useMemo(
     () => nodes.find((n) => String((n as any).id) === selectedNodeId) ?? null,
@@ -138,21 +169,23 @@ export default function KnowledgePage(): React.JSX.Element {
     <div className="relative flex h-full w-full overflow-hidden">
       {/* Left control panel */}
       <GraphControls
-        nodes={nodes}
+        nodes={visibleNodes}
         layoutMode={layoutMode}
         activeOverlays={activeOverlays}
         searchQuery={searchQuery}
+        hiddenTypes={hiddenTypes}
         onLayoutChange={setLayoutMode}
         onOverlayToggle={toggleOverlay}
         onSearchChange={setSearchQuery}
         onNodeSelect={handleNodeSelect}
+        onToggleType={handleToggleType}
         selectedNodeId={selectedNodeId}
       />
 
       {/* Graph canvas */}
       <div className="relative flex-1 overflow-hidden">
         <GraphCanvas
-          nodes={nodes}
+          nodes={visibleNodes}
           edges={edges}
           selectedNodeId={selectedNodeId}
           hoveredNodeId={hoveredNodeId}
@@ -174,6 +207,10 @@ export default function KnowledgePage(): React.JSX.Element {
               allNodes={nodes}
               allEdges={edges}
               onClose={deselectNode}
+              onViewPrerequisites={(nodeId) => {
+                selectNode(nodeId);
+                toggleOverlay('prerequisites');
+              }}
             />
           </div>
         )}
@@ -193,6 +230,7 @@ export default function KnowledgePage(): React.JSX.Element {
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               {[
+                'View card linked to this concept',
                 'Show prerequisite chain',
                 'Show neighborhood (2 hops)',
                 'Check for misconceptions',

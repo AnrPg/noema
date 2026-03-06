@@ -38,10 +38,12 @@ export interface IGraphControlsProps {
   layoutMode: LayoutMode;
   activeOverlays: Set<OverlayType>;
   searchQuery: string;
+  hiddenTypes: Set<string>;
   onLayoutChange: (mode: LayoutMode) => void;
   onOverlayToggle: (overlay: OverlayType) => void;
   onSearchChange: (q: string) => void;
   onNodeSelect: (node: IGraphNodeDto) => void;
+  onToggleType: (type: string) => void;
   selectedNodeId?: string | null;
 }
 
@@ -50,38 +52,27 @@ export function GraphControls({
   layoutMode,
   activeOverlays,
   searchQuery,
+  hiddenTypes,
   onLayoutChange,
   onOverlayToggle,
   onSearchChange,
   onNodeSelect,
+  onToggleType,
   selectedNodeId,
 }: IGraphControlsProps): React.JSX.Element {
-  const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
-
   const filteredNodes = React.useMemo(
     () =>
-      nodes.filter(
-        (n) =>
-          !hiddenTypes.has(String((n as any).type)) &&
-          (searchQuery === '' ||
+      nodes
+        .filter(
+          (n) =>
+            searchQuery === '' ||
             String((n as any).label)
               .toLowerCase()
-              .includes(searchQuery.toLowerCase()))
-      ),
-    [nodes, hiddenTypes, searchQuery]
+              .includes(searchQuery.toLowerCase())
+        )
+        .sort((a, b) => String((a as any).label).localeCompare(String((b as any).label))),
+    [nodes, searchQuery]
   );
-
-  const handleToggleType = React.useCallback((type: string) => {
-    setHiddenTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) {
-        next.delete(type);
-      } else {
-        next.add(type);
-      }
-      return next;
-    });
-  }, []);
 
   return (
     <aside className="flex h-full w-[280px] flex-shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-card p-3">
@@ -150,7 +141,7 @@ export function GraphControls({
       </div>
 
       {/* Legend */}
-      <GraphLegend hiddenTypes={hiddenTypes} onToggleType={handleToggleType} />
+      <GraphLegend hiddenTypes={hiddenTypes} onToggleType={onToggleType} />
 
       {/* Node list */}
       <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">

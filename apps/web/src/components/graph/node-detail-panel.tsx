@@ -48,6 +48,15 @@ export function NodeDetailPanel({
     [allEdges, node]
   );
 
+  const edgesByType = React.useMemo(() => {
+    const groups: Record<string, typeof connectedEdges> = {};
+    for (const edge of connectedEdges) {
+      const type = String((edge as any).type);
+      groups[type] = [...(groups[type] ?? []), edge];
+    }
+    return groups;
+  }, [connectedEdges]);
+
   const nodeAny = node as any;
   const color: string = NODE_TYPE_COLOR[String(nodeAny.type)] ?? '#6b7280';
   const mastery: number = masteryMap[String(nodeAny.id)] ?? 0;
@@ -96,6 +105,15 @@ export function NodeDetailPanel({
           </div>
 
           {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Domain:</span>
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                {String((nodeAny.tags as string[])[0])}
+              </span>
+            </div>
+          )}
+
+          {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 0 && (
             <div className="flex flex-wrap gap-1">
               {(nodeAny.tags as string[]).map((tag) => (
                 <span
@@ -120,6 +138,15 @@ export function NodeDetailPanel({
                 View prerequisites
               </button>
             )}
+            <button
+              type="button"
+              className="text-left text-xs text-primary hover:underline"
+              onClick={() => {
+                /* stub — will be wired in a future task */
+              }}
+            >
+              Find related concepts
+            </button>
             <Link
               href={'/knowledge/comparison' as never}
               className="text-xs text-primary hover:underline"
@@ -127,38 +154,60 @@ export function NodeDetailPanel({
               Compare with CKG
             </Link>
           </div>
+
+          {/* Linked cards (shown if metadata contains cardIds) */}
+          {Array.isArray(nodeAny.metadata?.cardIds) && (
+            <div className="mt-2">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Linked Cards
+              </p>
+              {(nodeAny.metadata.cardIds as string[]).slice(0, 5).map((cardId: string) => (
+                <Link
+                  key={cardId}
+                  href={`/cards/${cardId}` as never}
+                  className="block truncate text-xs text-primary hover:underline"
+                >
+                  {cardId}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Right: Connected edges */}
+        {/* Right: Connected edges grouped by type */}
         <div className="flex w-1/2 flex-col overflow-y-auto p-3">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Connected ({String(connectedEdges.length)})
           </p>
           <div className="flex flex-col gap-1">
-            {connectedEdges.slice(0, 12).map((edge) => {
-              const edgeAny = edge as any;
-              const otherId =
-                String(edgeAny.sourceId) === String(nodeAny.id)
-                  ? String(edgeAny.targetId)
-                  : String(edgeAny.sourceId);
-              const other = nodeIndex[otherId];
-              const otherAny = other as any;
-              return (
-                <div key={String(edgeAny.id)} className="flex items-center justify-between text-xs">
-                  <span className="truncate text-foreground">
-                    {otherAny !== undefined ? String(otherAny.label) : otherId}
-                  </span>
-                  <span className="ml-2 flex-shrink-0 rounded bg-muted px-1 text-muted-foreground">
-                    {String(edgeAny.type)}
-                  </span>
-                </div>
-              );
-            })}
-            {connectedEdges.length > 12 && (
-              <p className="text-xs text-muted-foreground">
-                +{String(connectedEdges.length - 12)} more
-              </p>
-            )}
+            {Object.entries(edgesByType).map(([type, typeEdges]) => (
+              <div key={type} className="mb-2">
+                <p className="mb-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {type}
+                </p>
+                {typeEdges.slice(0, 6).map((edge) => {
+                  const edgeAny = edge as any;
+                  const otherId =
+                    String(edgeAny.sourceId) === String(nodeAny.id)
+                      ? String(edgeAny.targetId)
+                      : String(edgeAny.sourceId);
+                  const other = nodeIndex[otherId];
+                  return (
+                    <div
+                      key={String(edgeAny.id)}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <span className="truncate text-foreground">
+                        {other !== undefined ? String((other as any).label) : otherId}
+                      </span>
+                      <span className="ml-2 flex-shrink-0 tabular-nums text-muted-foreground">
+                        {Number(edgeAny.weight).toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
       </div>
