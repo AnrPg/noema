@@ -132,12 +132,13 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
           // Non-critical
         }
 
-        store.setLoading(false);
         onLogin?.(response.data.user);
       } catch (error) {
         const message = error instanceof ApiRequestError ? error.message : 'Login failed';
         store.setError(message);
         throw error;
+      } finally {
+        store.setLoading(false);
       }
     },
     [onLogin]
@@ -152,12 +153,13 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
         const response = await authApi.register(input);
         store.setUser(response.data.user);
         store.setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
-        store.setLoading(false);
         onLogin?.(response.data.user);
       } catch (error) {
         const message = error instanceof ApiRequestError ? error.message : 'Registration failed';
         store.setError(message);
         throw error;
+      } finally {
+        store.setLoading(false);
       }
     },
     [onLogin]

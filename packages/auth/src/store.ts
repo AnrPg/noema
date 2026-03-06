@@ -56,7 +56,7 @@ export const useAuthStore = create<IAuthStore>()(
       },
 
       setError: (error: string | null) => {
-        set({ error, isLoading: false });
+        set({ error });
       },
 
       setInitialized: () => {

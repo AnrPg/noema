@@ -99,30 +99,6 @@ export default function SessionSummaryPage(): React.JSX.Element {
   const passing = attempts.filter((a) => a.grade >= PASSING_GRADE).length;
   const accuracy = total > 0 ? Math.round((passing / total) * 100) : 0;
 
-  // ── Lane breakdown ─────────────────────────────────────────────────────────
-  //
-  // The session queue doesn't directly tag each attempt with its originating
-  // lane. We use a simple approximation: the first half of the attempts array
-  // is treated as the Retention Lane (pre-loaded from the scheduled SRS queue)
-  // and the second half as the Calibration Lane (injected cards for weak areas).
-  // This is a display-only heuristic — no scheduling decisions are made here.
-
-  const midpoint = Math.ceil(total / 2);
-  const retentionAttempts = attempts.slice(0, midpoint);
-  const calibrationAttempts = attempts.slice(midpoint);
-
-  const retentionPassing = retentionAttempts.filter((a) => a.grade >= PASSING_GRADE).length;
-  const retentionAccuracy =
-    retentionAttempts.length > 0
-      ? Math.round((retentionPassing / retentionAttempts.length) * 100)
-      : 0;
-
-  const calibrationPassing = calibrationAttempts.filter((a) => a.grade >= PASSING_GRADE).length;
-  const calibrationAccuracy =
-    calibrationAttempts.length > 0
-      ? Math.round((calibrationPassing / calibrationAttempts.length) * 100)
-      : 0;
-
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const startedAt: string = (session?.startedAt as string | undefined) ?? '';
@@ -146,41 +122,26 @@ export default function SessionSummaryPage(): React.JSX.Element {
         </section>
       )}
 
-      {/* ── Section 3: Lane Breakdown ────────────────────────────────────── */}
-      <section aria-label="Lane breakdown">
+      {/* ── Section 3: Accuracy ──────────────────────────────────────────── */}
+      <section aria-label="Accuracy">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Lane Breakdown
+          Accuracy
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Retention Lane */}
-          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Retention Lane
-            </p>
-            <p className="text-2xl font-semibold tabular-nums text-foreground">
-              {String(retentionAttempts.length)}
-              <span className="ml-1 text-sm font-normal text-muted-foreground">cards</span>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Accuracy:{' '}
-              <span className="font-medium text-foreground">{String(retentionAccuracy)}%</span>
-            </p>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">Overall Accuracy</span>
+            <span className="text-lg font-semibold">
+              {attempts.length > 0
+                ? `${String(Math.round((attempts.filter((a) => a.grade >= PASSING_GRADE).length / attempts.length) * 100))}%`
+                : '—'}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              ({String(attempts.filter((a) => a.grade >= PASSING_GRADE).length)}/{String(attempts.length)} cards)
+            </span>
           </div>
-
-          {/* Calibration Lane */}
-          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Calibration Lane
-            </p>
-            <p className="text-2xl font-semibold tabular-nums text-foreground">
-              {String(calibrationAttempts.length)}
-              <span className="ml-1 text-sm font-normal text-muted-foreground">cards</span>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Accuracy:{' '}
-              <span className="font-medium text-foreground">{String(calibrationAccuracy)}%</span>
-            </p>
-          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Per-lane breakdown requires server-side lane attribution on attempts.
+          </p>
         </div>
       </section>
 
