@@ -13,8 +13,6 @@ import {
 } from '@noema/api-client';
 import type { ICkgMutationDto } from '@noema/api-client';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
-
-type MutationId = ICkgMutationDto['id'];
 import { Check, MessageSquare, RotateCcw, X } from 'lucide-react';
 
 const ACTIONABLE_STATUSES: string[] = ['pending', 'retrying'];
@@ -31,7 +29,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
   const requestRevision = useRequestRevision();
   const cancel = useCancelMutation();
 
-  const id = mutation.id as unknown as MutationId;
+  const id = mutation.id;
 
   if (!ACTIONABLE_STATUSES.includes(mutation.status)) {
     return (
@@ -55,7 +53,14 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
-                approve.mutate({ id });
+                approve.mutate(
+                  { id },
+                  {
+                    onSuccess: () => {
+                      setMode('idle');
+                    },
+                  }
+                );
               }}
               disabled={approve.isPending}
               className="gap-2"
@@ -108,7 +113,15 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 variant="destructive"
                 disabled={rejectNote.trim() === '' || reject.isPending}
                 onClick={() => {
-                  reject.mutate({ id, note: rejectNote });
+                  reject.mutate(
+                    { id, note: rejectNote },
+                    {
+                      onSuccess: () => {
+                        setRejectNote('');
+                        setMode('idle');
+                      },
+                    }
+                  );
                 }}
               >
                 Confirm Reject
@@ -141,7 +154,15 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
               <Button
                 disabled={revisionFeedback.trim() === '' || requestRevision.isPending}
                 onClick={() => {
-                  requestRevision.mutate({ id, feedback: revisionFeedback });
+                  requestRevision.mutate(
+                    { id, feedback: revisionFeedback },
+                    {
+                      onSuccess: () => {
+                        setRevisionFeedback('');
+                        setMode('idle');
+                      },
+                    }
+                  );
                 }}
               >
                 Send Feedback
@@ -169,7 +190,11 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 variant="destructive"
                 disabled={cancel.isPending}
                 onClick={() => {
-                  cancel.mutate(id);
+                  cancel.mutate(id, {
+                    onSuccess: () => {
+                      setMode('idle');
+                    },
+                  });
                 }}
               >
                 Confirm Cancel

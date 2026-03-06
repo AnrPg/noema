@@ -8,16 +8,16 @@ import { useParams } from 'next/navigation';
 import { useCKGMutation } from '@noema/api-client';
 import type { ICkgMutationDto } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
-
-type MutationId = ICkgMutationDto['id'];
 import { ArrowLeft } from 'lucide-react';
 import { MutationGraphDiff } from '@/components/mutations/mutation-graph-diff';
 import { MutationAuditTrail } from '@/components/mutations/mutation-audit-trail';
 import { MutationActions } from '@/components/mutations/mutation-actions';
 
+type MutationId = ICkgMutationDto['id'];
+
 export default function MutationDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
-  const mutationId = params.id as unknown as MutationId;
+  const mutationId = params.id as MutationId;
   const { data: mutation, isLoading, error } = useCKGMutation(mutationId);
 
   if (isLoading) {
