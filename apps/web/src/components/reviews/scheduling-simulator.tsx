@@ -34,15 +34,22 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
   const [result, setResult] = React.useState<any>(null);
 
   const simulate = useSimulateSession();
+  const { mutateAsync: simulateMutate } = simulate;
+  const [simError, setSimError] = React.useState<string | null>(null);
 
   const handleRun = React.useCallback(async (): Promise<void> => {
-    const response: any = await simulate.mutateAsync({
-      userId,
-      sessionDurationMinutes: durationMinutes,
-      ...(lane !== 'all' ? { lane } : {}),
-    });
-    setResult(response?.data ?? null);
-  }, [simulate, userId, durationMinutes, lane]);
+    setSimError(null);
+    try {
+      const response: any = await simulateMutate({
+        userId,
+        sessionDurationMinutes: durationMinutes,
+        ...(lane !== 'all' ? { lane } : {}),
+      });
+      setResult(response?.data ?? null);
+    } catch (err) {
+      setSimError(err instanceof Error ? err.message : 'Simulation failed. Please try again.');
+    }
+  }, [simulateMutate, userId, durationMinutes, lane]);
 
   const simulatedCards: any[] = (result?.simulatedCards as any[] | undefined) ?? [];
   const retentionGain: number = (result?.projectedRetentionGain as number | undefined) ?? 0;
@@ -64,15 +71,18 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
       {/* Controls */}
       <div className="flex flex-wrap items-end gap-4">
         {/* Duration */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Session Duration</label>
+        <fieldset className="flex flex-col gap-1.5 border-0 p-0 m-0">
+          <legend className="text-xs font-medium text-muted-foreground">Session Duration</legend>
           <div className="flex gap-1">
             {DURATION_OPTIONS.map((d) => (
               <button
                 key={d}
                 type="button"
+                aria-pressed={durationMinutes === d}
                 onClick={() => {
                   setDurationMinutes(d);
+                  setResult(null);
+                  setSimError(null);
                 }}
                 className={[
                   'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
@@ -86,18 +96,21 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* Lane filter */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Lane</label>
+        <fieldset className="flex flex-col gap-1.5 border-0 p-0 m-0">
+          <legend className="text-xs font-medium text-muted-foreground">Lane</legend>
           <div className="flex gap-1">
             {(['all', 'retention', 'calibration'] as LaneFilter[]).map((l) => (
               <button
                 key={l}
                 type="button"
+                aria-pressed={lane === l}
                 onClick={() => {
                   setLane(l);
+                  setResult(null);
+                  setSimError(null);
                 }}
                 className={[
                   'rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors',
@@ -111,7 +124,7 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* Run button */}
         <Button
@@ -129,6 +142,16 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
           Run Simulation
         </Button>
       </div>
+
+      {/* Error */}
+      {simError !== null && (
+        <div
+          className="rounded-lg border border-cortex-400/30 bg-cortex-400/5 px-3 py-2 text-sm text-cortex-400"
+          role="alert"
+        >
+          {simError}
+        </div>
+      )}
 
       {/* Results */}
       {result !== null && (
