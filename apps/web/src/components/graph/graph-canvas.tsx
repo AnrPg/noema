@@ -244,7 +244,9 @@ export function GraphCanvas({
         onNodeRightClick: handleNodeRightClick,
         onBackgroundClick,
         backgroundColor: '#0a0a12',
-        ...(layoutMode === 'hierarchical' ? { dagMode: 'td', dagLevelDistance: 80 } : {}),
+        dagMode:
+          layoutMode === 'hierarchical' ? 'td' : layoutMode === 'radial' ? 'radialout' : undefined,
+        dagLevelDistance: layoutMode === 'hierarchical' ? 80 : undefined,
         cooldownTicks: layoutMode === 'force' ? 300 : 50,
         d3AlphaDecay: layoutMode === 'radial' ? 0.05 : 0.0228,
         d3VelocityDecay: 0.4,

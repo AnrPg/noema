@@ -8,13 +8,15 @@ import * as React from 'react';
 import type { NodeType } from '@noema/api-client';
 import { NODE_TYPE_COLOR } from './graph-node.js';
 
-const NODE_TYPE_LABELS: string[] = [
+const NODE_TYPES: string[] = [
   'concept',
   'skill',
   'fact',
   'procedure',
   'principle',
   'example',
+  'counterexample',
+  'misconception',
 ];
 
 interface IGraphLegendProps {
@@ -29,7 +31,7 @@ export function GraphLegend({
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Legend</p>
-      {NODE_TYPE_LABELS.map((type) => {
+      {NODE_TYPES.map((type) => {
         const color: string = NODE_TYPE_COLOR[type] ?? '#6b7280';
         const isHidden = hiddenTypes.has(type);
         return (

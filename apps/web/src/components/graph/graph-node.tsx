@@ -37,9 +37,9 @@ export interface INodeDrawOptions {
   recentlyActive?: boolean; // pulse animation
 }
 
-/** Returns node radius in graph units based on degree (min 6, max 20). */
+/** Returns node radius in graph units based on degree (min 8, max 32). */
 export function nodeRadius(degree: number): number {
-  return Math.max(6, Math.min(20, 6 + degree * 1.4));
+  return Math.max(8, Math.min(32, 8 + degree * 2.4));
 }
 
 /** Draws a single node onto the canvas context. */
@@ -75,17 +75,23 @@ export function drawNode({
   // -- Pulse ring for recently active nodes --
   if (recentlyActive) {
     ctx.save();
-    ctx.strokeStyle = color + '80';
-    ctx.lineWidth = 1.5 / globalScale;
+    const pulse = 0.4 + 0.4 * Math.sin(Date.now() / 500);
+    ctx.strokeStyle =
+      color +
+      Math.round(pulse * 255)
+        .toString(16)
+        .padStart(2, '0');
+    ctx.lineWidth = 2 / globalScale;
     ctx.beginPath();
-    ctx.arc(x, y, r * 1.7, 0, 2 * Math.PI);
+    ctx.arc(x, y, r * (1.5 + 0.3 * Math.sin(Date.now() / 600)), 0, 2 * Math.PI);
     ctx.stroke();
     ctx.restore();
   }
 
-  // -- Main fill circle --
+  // -- Main fill circle (enlarged when selected) --
+  const displayR = isSelected ? r * 1.35 : r;
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, 2 * Math.PI);
+  ctx.arc(x, y, displayR, 0, 2 * Math.PI);
   ctx.fillStyle = color;
   ctx.fill();
 
@@ -93,7 +99,7 @@ export function drawNode({
   if (mastery > 0) {
     ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, r + 2.5 / globalScale, -Math.PI / 2, -Math.PI / 2 + mastery * 2 * Math.PI);
+    ctx.arc(x, y, displayR + 2.5 / globalScale, -Math.PI / 2, -Math.PI / 2 + mastery * 2 * Math.PI);
     ctx.strokeStyle = color;
     ctx.lineWidth = 2.5 / globalScale;
     ctx.globalAlpha = 0.5 + mastery * 0.5;
@@ -104,7 +110,7 @@ export function drawNode({
   // -- Selection ring --
   if (isSelected) {
     ctx.beginPath();
-    ctx.arc(x, y, r + 5 / globalScale, 0, 2 * Math.PI);
+    ctx.arc(x, y, displayR + 5 / globalScale, 0, 2 * Math.PI);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2.5 / globalScale;
     ctx.stroke();
