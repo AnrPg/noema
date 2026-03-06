@@ -17,6 +17,8 @@ import { AdminCardBrowser } from '../../../../components/content/admin-card-brow
 
 export default function ContentOversightPage(): JSX.Element {
   const { data: cardStats } = useCardStats();
+  // TODO: Replace with a dedicated session count endpoint when available.
+  // Currently fetches all sessions to derive a count — may be slow at scale.
   const { data: sessionsData } = useSessions();
   const { data: templates } = useTemplates();
 

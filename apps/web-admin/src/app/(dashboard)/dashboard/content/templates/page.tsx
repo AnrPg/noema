@@ -13,6 +13,7 @@ import type { ITemplateDto } from '@noema/api-client';
 import { useDeleteTemplate, useTemplates } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import { Trash2 } from 'lucide-react';
+import { formatDate, truncateId } from '@/lib/format.js';
 
 type TemplateId = ITemplateDto['id'];
 
@@ -23,14 +24,14 @@ type TemplateId = ITemplateDto['id'];
 function TemplateRow({
   template,
   onDelete,
-  isDeleting,
+  deletingId,
 }: {
   template: ITemplateDto;
-  onDelete: (id: TemplateId) => void;
-  isDeleting: boolean;
+  onDelete: (id: TemplateId, callbacks: { onSuccess: () => void; onError: () => void }) => void;
+  deletingId: string | null;
 }): React.JSX.Element {
   const [confirming, setConfirming] = React.useState(false);
-  const createdDate = new Date(template.createdAt).toLocaleDateString();
+  const createdDate = formatDate(template.createdAt);
 
   return (
     <div className="flex items-center justify-between gap-4 py-4">
@@ -40,9 +41,7 @@ function TemplateRow({
           className="font-mono text-xs text-muted-foreground shrink-0 w-36 truncate"
           title={template.id}
         >
-          {template.id.length > 14
-            ? template.id.slice(0, 10) + '…' + template.id.slice(-4)
-            : template.id}
+          {truncateId(template.id)}
         </span>
 
         {/* Name */}
@@ -65,10 +64,16 @@ function TemplateRow({
             <Button
               size="sm"
               variant="destructive"
-              disabled={isDeleting}
+              disabled={deletingId === template.id}
               onClick={() => {
-                onDelete(template.id);
-                setConfirming(false);
+                onDelete(template.id, {
+                  onSuccess: () => {
+                    setConfirming(false);
+                  },
+                  onError: () => {
+                    setConfirming(false);
+                  },
+                });
               }}
             >
               Yes
@@ -105,13 +110,27 @@ function TemplateRow({
 // ---------------------------------------------------------------------------
 
 export default function TemplatesPage(): JSX.Element {
-  const { data: templates, isLoading } = useTemplates();
+  const { data: templates, isLoading, isError } = useTemplates();
   const deleteTemplate = useDeleteTemplate();
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const items = templates ?? [];
 
-  const handleDelete = (id: TemplateId): void => {
-    deleteTemplate.mutate(id);
+  const handleDelete = (
+    id: TemplateId,
+    callbacks: { onSuccess: () => void; onError: () => void }
+  ): void => {
+    setDeletingId(id);
+    deleteTemplate.mutate(id, {
+      onSuccess: () => {
+        setDeletingId(null);
+        callbacks.onSuccess();
+      },
+      onError: () => {
+        setDeletingId(null);
+        callbacks.onError();
+      },
+    });
   };
 
   return (
@@ -136,6 +155,10 @@ export default function TemplatesPage(): JSX.Element {
         <CardContent>
           {isLoading ? (
             <div className="py-8 text-center text-muted-foreground">Loading templates…</div>
+          ) : isError ? (
+            <div className="py-8 text-center text-sm text-destructive">
+              Failed to load templates. Please try again.
+            </div>
           ) : items.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">No templates found.</div>
           ) : (
@@ -154,7 +177,7 @@ export default function TemplatesPage(): JSX.Element {
                     key={template.id}
                     template={template}
                     onDelete={handleDelete}
-                    isDeleting={deleteTemplate.isPending}
+                    deletingId={deletingId}
                   />
                 ))}
               </div>

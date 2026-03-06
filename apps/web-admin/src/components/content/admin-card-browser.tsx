@@ -12,6 +12,7 @@ import type { ICardSummaryDto } from '@noema/api-client';
 import { useCards, useDeleteCard } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import { Trash2 } from 'lucide-react';
+import { formatDate, truncateId } from '@/lib/format.js';
 
 type CardId = ICardSummaryDto['id'];
 
@@ -51,10 +52,6 @@ function stateBadgeClass(state: string): string {
   return STATE_COLORS[state] ?? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
 }
 
-function truncateId(id: string): string {
-  return id.length > 12 ? id.slice(0, 8) + '…' + id.slice(-4) : id;
-}
-
 // ---------------------------------------------------------------------------
 // Card Row
 // ---------------------------------------------------------------------------
@@ -62,15 +59,15 @@ function truncateId(id: string): string {
 function CardRow({
   card,
   onDelete,
-  isDeleting,
+  deletingId,
 }: {
   card: ICardSummaryDto;
-  onDelete: (id: CardId) => void;
-  isDeleting: boolean;
+  onDelete: (id: CardId, callbacks: { onSuccess: () => void; onError: () => void }) => void;
+  deletingId: string | null;
 }): React.JSX.Element {
   const [confirming, setConfirming] = React.useState(false);
 
-  const createdDate = new Date(card.createdAt).toLocaleDateString();
+  const createdDate = formatDate(card.createdAt);
 
   return (
     <div className="flex items-center gap-3 py-3">
@@ -133,10 +130,16 @@ function CardRow({
             <Button
               size="sm"
               variant="destructive"
-              disabled={isDeleting}
+              disabled={deletingId === card.id}
               onClick={() => {
-                onDelete(card.id);
-                setConfirming(false);
+                onDelete(card.id, {
+                  onSuccess: () => {
+                    setConfirming(false);
+                  },
+                  onError: () => {
+                    setConfirming(false);
+                  },
+                });
               }}
             >
               Yes
@@ -173,14 +176,32 @@ function CardRow({
 // ---------------------------------------------------------------------------
 
 export function AdminCardBrowser(): React.JSX.Element {
-  const { data, isLoading } = useCards({ limit: 50, sortBy: 'createdAt', sortDir: 'desc' });
+  const { data, isLoading, isError } = useCards({
+    limit: 50,
+    sortBy: 'createdAt',
+    sortDir: 'desc',
+  });
   const deleteCard = useDeleteCard();
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const cards = data?.data.cards ?? [];
   const total = data?.data.total ?? 0;
 
-  const handleDelete = (id: CardId): void => {
-    deleteCard.mutate(id);
+  const handleDelete = (
+    id: CardId,
+    callbacks: { onSuccess: () => void; onError: () => void }
+  ): void => {
+    setDeletingId(id);
+    deleteCard.mutate(id, {
+      onSuccess: () => {
+        setDeletingId(null);
+        callbacks.onSuccess();
+      },
+      onError: () => {
+        setDeletingId(null);
+        callbacks.onError();
+      },
+    });
   };
 
   return (
@@ -196,6 +217,10 @@ export function AdminCardBrowser(): React.JSX.Element {
       <CardContent>
         {isLoading ? (
           <div className="py-8 text-center text-muted-foreground">Loading cards…</div>
+        ) : isError ? (
+          <div className="py-8 text-center text-sm text-destructive">
+            Failed to load cards. Please try again.
+          </div>
         ) : cards.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground">No cards found.</div>
         ) : (
@@ -217,7 +242,7 @@ export function AdminCardBrowser(): React.JSX.Element {
                   key={card.id}
                   card={card}
                   onDelete={handleDelete}
-                  isDeleting={deleteCard.isPending}
+                  deletingId={deletingId}
                 />
               ))}
             </div>
