@@ -19,7 +19,7 @@ const NODE_TYPES: string[] = [
   'misconception',
 ];
 
-interface IGraphLegendProps {
+export interface IGraphLegendProps {
   hiddenTypes?: Set<string>;
   onToggleType: (type: string) => void;
 }

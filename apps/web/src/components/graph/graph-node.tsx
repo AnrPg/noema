@@ -64,7 +64,7 @@ export function drawNode({
     ctx.save();
     const grd = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 2.2);
     grd.addColorStop(0, color + '60');
-    grd.addColorStop(1, 'transparent');
+    grd.addColorStop(1, color + '00');
     ctx.fillStyle = grd;
     ctx.beginPath();
     ctx.arc(x, y, r * 2.2, 0, 2 * Math.PI);
@@ -75,15 +75,15 @@ export function drawNode({
   // -- Pulse ring for recently active nodes --
   if (recentlyActive) {
     ctx.save();
-    const pulse = 0.4 + 0.4 * Math.sin(Date.now() / 500);
-    ctx.strokeStyle =
-      color +
-      Math.round(pulse * 255)
-        .toString(16)
-        .padStart(2, '0');
+    const now = Date.now();
+    const pulse = 0.4 + 0.4 * Math.sin(now / 500);
+    const alphaHex = Math.round(pulse * 255)
+      .toString(16)
+      .padStart(2, '0');
+    ctx.strokeStyle = color + alphaHex;
     ctx.lineWidth = 2 / globalScale;
     ctx.beginPath();
-    ctx.arc(x, y, r * (1.5 + 0.3 * Math.sin(Date.now() / 600)), 0, 2 * Math.PI);
+    ctx.arc(x, y, r * (1.5 + 0.3 * Math.sin(now / 600)), 0, 2 * Math.PI);
     ctx.stroke();
     ctx.restore();
   }
@@ -109,17 +109,21 @@ export function drawNode({
 
   // -- Selection ring --
   if (isSelected) {
+    ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, displayR + 5 / globalScale, 0, 2 * Math.PI);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2.5 / globalScale;
     ctx.stroke();
+    ctx.restore();
   } else if (isHovered) {
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(x, y, r + 3 / globalScale, 0, 2 * Math.PI);
+    ctx.arc(x, y, displayR + 3 / globalScale, 0, 2 * Math.PI);
     ctx.strokeStyle = '#ffffff80';
     ctx.lineWidth = 1.5 / globalScale;
     ctx.stroke();
+    ctx.restore();
   }
 
   // -- Label (visible when zoomed in enough) --

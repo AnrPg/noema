@@ -70,6 +70,14 @@ export interface IGraphCanvasProps {
 }
 
 // ============================================================================
+// Stable fallback constants — hoisted to module scope to avoid breaking
+// useCallback memoisation when callers omit optional Set/object props.
+// ============================================================================
+
+const EMPTY_SET = new Set<string>();
+const EMPTY_MASTERY_MAP: Record<string, number> = {};
+
+// ============================================================================
 // GraphCanvas
 // ============================================================================
 
@@ -84,9 +92,9 @@ export function GraphCanvas({
   onNodeHover,
   onNodeRightClick,
   onBackgroundClick,
-  masteryMap = {},
-  recentNodeIds = new Set(),
-  highlightedNodeIds = new Set(),
+  masteryMap = EMPTY_MASTERY_MAP,
+  recentNodeIds = EMPTY_SET,
+  highlightedNodeIds = EMPTY_SET,
   className,
 }: IGraphCanvasProps): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null);
