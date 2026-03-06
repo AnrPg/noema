@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+
 /**
  * Authenticated Routes Layout
  *
@@ -89,7 +89,7 @@ function UserMenu(): React.JSX.Element {
     user?.displayName !== undefined
       ? user.displayName
           .split(' ')
-          .map((n) => n[0])
+          .map((n: string) => n[0])
           .join('')
           .toUpperCase()
       : 'U';
