@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
+
 /* eslint-disable @typescript-eslint/no-unnecessary-condition */
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
+
 'use client';
 
 /**
@@ -207,9 +207,9 @@ export default function ActiveSessionPage(): React.JSX.Element {
         {
           cardId: card.id,
           grade,
-          confidenceBefore: confidenceBefore ?? undefined,
-          confidenceAfter: confidenceAfter ?? undefined,
-          calibrationDelta,
+          ...(confidenceBefore !== null ? { confidenceBefore } : {}),
+          ...(confidenceAfter !== null ? { confidenceAfter } : {}),
+          ...(calibrationDelta !== undefined ? { calibrationDelta } : {}),
           hintDepthUsed: hintDepth,
           dwellTimeMs: pendingAttempt?.dwellTimeMs ?? Date.now() - cardStartRef.current,
           selfReportedGuess,
@@ -220,7 +220,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
             if ((remaining as number) <= 1) {
               completeSession.mutate(sessionId, {
                 onSuccess: () => {
-                  router.push(`/session/${sessionId}/summary`);
+                  router.push(`/session/${sessionId}/summary` as never);
                 },
               });
             } else {
@@ -262,7 +262,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
     abandonSession.mutate(sessionId, {
       onSuccess: () => {
         clear();
-        router.push('/sessions');
+        router.push('/sessions' as never);
       },
     });
   }, [abandonSession, sessionId, clear, router]);

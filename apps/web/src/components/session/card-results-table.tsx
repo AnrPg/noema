@@ -128,7 +128,7 @@ export function CardResultsTable({ attempts }: ICardResultsTableProps): React.JS
               <tr key={attempt.id} className="bg-background transition-colors hover:bg-muted/30">
                 <td className="px-4 py-2 font-mono">
                   <Link
-                    href={`/cards/${attempt.cardId}`}
+                    href={`/cards/${attempt.cardId}` as never}
                     className="text-synapse-400 underline-offset-2 hover:underline"
                   >
                     {truncateId(attempt.cardId)}

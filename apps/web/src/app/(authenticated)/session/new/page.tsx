@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
@@ -22,6 +20,7 @@ import { Loader2, Play } from 'lucide-react';
 import { useAuth } from '@noema/auth';
 import { useDualLanePlan, useSessionCandidates, useStartSession } from '@noema/api-client';
 import type { IDeckQueryInput } from '@noema/api-client';
+import type { CardId } from '@noema/types';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 
 import { ModeSelector, MODE_TO_API } from '@/components/session/mode-selector';
@@ -72,17 +71,17 @@ export default function SessionNewPage(): React.JSX.Element {
 
   // ── Start handler ────────────────────────────────────────────────────────
   async function handleStart(): Promise<void> {
-    let cardIds: string[] | undefined;
+    let cardIds: CardId[] | undefined;
 
     if (useQuickStart && plan !== undefined) {
       cardIds = (plan.slots as any[])
         .slice(0, sessionSize)
-        .map((slot: any) => slot.cardId as string);
+        .map((slot: any) => slot.cardId as unknown as CardId);
     }
 
     const response: any = await startSession.mutateAsync({
       mode: MODE_TO_API[mode],
-      cardIds,
+      ...(cardIds !== undefined ? { cardIds } : {}),
     });
 
     const sessionId = String(response.data.id);
@@ -157,13 +156,13 @@ export default function SessionNewPage(): React.JSX.Element {
               <p className="text-sm text-muted-foreground">
                 Uses your dual-lane plan — optimally chosen cards based on your schedule.
               </p>
-              {dualLanePlan.isLoading === true && (
+              {dualLanePlan.isLoading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   Loading your plan…
                 </div>
               )}
-              {dualLanePlan.isSuccess === true && plan !== undefined && (
+              {dualLanePlan.isSuccess && plan !== undefined && (
                 <p className="text-sm text-foreground">
                   <span className="font-medium text-blue-600 dark:text-blue-400">
                     {String(plan.totalRetention)} retention
@@ -195,14 +194,13 @@ export default function SessionNewPage(): React.JSX.Element {
 
               {showCandidates && (
                 <div className="rounded-xl border border-border bg-muted/30 p-4">
-                  {sessionCandidates.isLoading === true && (
+                  {sessionCandidates.isLoading && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                       Loading candidates…
                     </div>
                   )}
-                  {sessionCandidates.isSuccess === true &&
-                    sessionCandidates.data !== undefined &&
+                  {sessionCandidates.isSuccess &&
                     ((sessionCandidates.data.data as any[]).length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         No candidates match the current filters.
@@ -289,12 +287,12 @@ export default function SessionNewPage(): React.JSX.Element {
       <Button
         className="w-full"
         size="lg"
-        disabled={startSession.isPending === true}
+        disabled={startSession.isPending}
         onClick={() => {
           void handleStart();
         }}
       >
-        {startSession.isPending === true ? (
+        {startSession.isPending ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
             Starting…

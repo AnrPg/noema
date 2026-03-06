@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
@@ -172,9 +172,9 @@ export default function SessionsPage(): React.JSX.Element {
         <div>
           <h1 className="text-3xl font-bold">Session History</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isLoading === true
+            {isLoading
               ? 'Loading sessions\u2026'
-              : isError === true
+              : isError
                 ? 'Failed to load sessions.'
                 : [String(sessions.length), sessions.length === 1 ? 'session' : 'sessions'].join(
                     ' '
@@ -183,7 +183,7 @@ export default function SessionsPage(): React.JSX.Element {
         </div>
 
         <Link
-          href="/session/new"
+          href={'/session/new' as never}
           className={[
             'inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5',
             'text-sm font-medium text-primary-foreground transition-colors',
@@ -219,7 +219,7 @@ export default function SessionsPage(): React.JSX.Element {
       </div>
 
       {/* Error banner */}
-      {isError === true && (
+      {isError && (
         <div
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
@@ -230,7 +230,7 @@ export default function SessionsPage(): React.JSX.Element {
 
       {/* Session list */}
       <div className="flex flex-col gap-2">
-        {isLoading === true ? (
+        {isLoading ? (
           <>
             <SkeletonRow />
             <SkeletonRow />
@@ -242,7 +242,7 @@ export default function SessionsPage(): React.JSX.Element {
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border py-16 text-center">
             <p className="text-sm text-muted-foreground">No sessions yet.</p>
             <Link
-              href="/session/new"
+              href={'/session/new' as never}
               className="text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               Start your first session

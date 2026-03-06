@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
-/* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
+
 'use client';
 
 /**
@@ -210,13 +209,13 @@ export default function SessionSummaryPage(): React.JSX.Element {
         </h2>
         <div className="flex flex-wrap gap-3">
           <Button asChild>
-            <Link href="/session/new">Start Another Session</Link>
+            <Link href={'/session/new' as never}>Start Another Session</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/dashboard">Back to Dashboard</Link>
+            <Link href={'/dashboard' as never}>Back to Dashboard</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/knowledge">Knowledge Graph</Link>
+            <Link href={'/knowledge' as never}>Knowledge Graph</Link>
           </Button>
         </div>
       </section>
