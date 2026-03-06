@@ -1,5 +1,5 @@
 /**
- * @noema/graph — Domain Types
+ * @noema/graph - Domain Types
  *
  * OverlayType and LayoutMode are defined here so both apps/web and
  * apps/web-admin can share them without a circular dependency through
