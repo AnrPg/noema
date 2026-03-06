@@ -121,9 +121,23 @@ export interface IChangePasswordInput {
 
 export interface IUserFilters {
   status?: UserStatus;
+  role?: UserRole;
   emailVerified?: boolean;
   search?: string;
 }
+
+export interface IUpdateUserStatusInput {
+  status: UserStatus;
+}
+
+export interface IUpdateUserRolesInput {
+  roles: UserRole[];
+}
+
+// Response type aliases
+export type UpdateUserStatusResponse = IApiResponse<IUserDto>;
+export type UpdateUserRolesResponse = IApiResponse<IUserDto>;
+export type TriggerPasswordResetResponse = IApiResponse<{ message: string }>;
 
 export interface IPaginatedUsersResult {
   items: IUserDto[];

@@ -12,6 +12,7 @@ import type { EdgeId, MutationId, NodeId, UserId } from '@noema/types';
 import type {
   BridgeNodesResponse,
   CentralityResponse,
+  CkgMutationAuditLogResponse,
   ICkgMutationFilters,
   CkgMutationResponse,
   CkgMutationsResponse,
@@ -167,6 +168,12 @@ export const ckgMutationsApi = {
 
   retry: (mutationId: MutationId): Promise<CkgMutationResponse> =>
     http.post(`${ckgBase}/mutations/${mutationId}/retry`, {}),
+
+  getAuditLog: (mutationId: MutationId): Promise<CkgMutationAuditLogResponse> =>
+    http.get(`${ckgBase}/mutations/${mutationId}/audit-log`),
+
+  requestRevision: (mutationId: MutationId, feedback: string): Promise<CkgMutationResponse> =>
+    http.post(`${ckgBase}/mutations/${mutationId}/request-revision`, { feedback }),
 };
 
 // ============================================================================

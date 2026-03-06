@@ -20,13 +20,18 @@ import type {
   PublicUserResponse,
   RegisterInput,
   TokenRefreshResponse,
+  TriggerPasswordResetResponse,
   UpdateProfileInput,
   UpdateSettingsInput,
+  UpdateUserRolesResponse,
+  UpdateUserStatusResponse,
   UserDto,
   UserFilters,
   UserResponse,
+  UserRole,
   UserSettingsDto,
   UserSettingsResponse,
+  UserStatus,
   UsersListResponse,
 } from '../user/types.js';
 
@@ -246,6 +251,43 @@ export function useDeleteUser(
       void queryClient.invalidateQueries({ queryKey: userKeys.lists() });
       queryClient.removeQueries({ queryKey: userKeys.detail(id) });
     },
+    ...options,
+  });
+}
+
+export function useUpdateUserStatus(
+  options?: UseMutationOptions<UpdateUserStatusResponse, Error, { id: string; status: UserStatus }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }) => usersApi.patchStatus(id, { status }),
+    onSuccess: (response, { id }) => {
+      queryClient.setQueryData(userKeys.detail(id), response);
+      void queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+    },
+    ...options,
+  });
+}
+
+export function useUpdateUserRoles(
+  options?: UseMutationOptions<UpdateUserRolesResponse, Error, { id: string; roles: UserRole[] }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, roles }) => usersApi.patchRoles(id, { roles }),
+    onSuccess: (response, { id }) => {
+      queryClient.setQueryData(userKeys.detail(id), response);
+      void queryClient.invalidateQueries({ queryKey: userKeys.lists() });
+    },
+    ...options,
+  });
+}
+
+export function useTriggerPasswordReset(
+  options?: UseMutationOptions<TriggerPasswordResetResponse, Error, string>
+) {
+  return useMutation({
+    mutationFn: (id) => usersApi.triggerPasswordReset(id),
     ...options,
   });
 }
