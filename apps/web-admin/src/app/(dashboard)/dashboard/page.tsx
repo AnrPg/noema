@@ -1,129 +1,189 @@
 /**
  * Admin Dashboard Overview Page
+ *
+ * Three sections:
+ *  1. System Health Row — 4 MetricTile components (users, cards, pending mutations, sessions)
+ *  2. Pending Actions List — items requiring admin attention with links
+ *  3. Recent Activity Feed — last 5 registered users
  */
 
 'use client';
 
-import { useUsers } from '@noema/api-client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
-import { Activity, UserCheck, Users, UserX, type LucideIcon } from 'lucide-react';
+import * as React from 'react';
+import Link from 'next/link';
+import { type JSX } from 'react';
+import { useCKGMutations, useCardStats, useUsers } from '@noema/api-client';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  MetricTile,
+} from '@noema/ui';
+import { Activity, AlertTriangle, ArrowRight, Clock, GitMerge, Users } from 'lucide-react';
 
-function StatCard({
-  title,
-  value,
-  description,
-  icon: Icon,
-}: {
-  title: string;
-  value: string | number;
-  description: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function relativeTime(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${String(minutes)}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${String(hours)}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${String(days)}d ago`;
 }
 
-export default function AdminDashboardPage() {
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function AdminDashboardPage(): JSX.Element {
   const { data: usersData } = useUsers();
+  const { data: cardStats } = useCardStats();
+  const { data: pendingMutations } = useCKGMutations({ status: 'pending' });
 
-  const users = usersData?.data.items || [];
-  const totalUsers = usersData?.data.total || 0;
+  const totalUsers = usersData?.data.total ?? 0;
+  const totalCards = cardStats?.total ?? 0;
+  const pendingMutationCount = pendingMutations?.length ?? 0;
+  const draftCards = cardStats?.byState.DRAFT ?? 0;
 
-  // Compute stats from user data
-  const now = new Date();
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-  const activeUsers = users.filter(
-    (u) => u.status === 'ACTIVE' && u.lastLoginAt && new Date(u.lastLoginAt) >= sevenDaysAgo
-  ).length;
-  const inactiveUsers = users.filter(
-    (u) => !u.lastLoginAt || new Date(u.lastLoginAt) < thirtyDaysAgo
-  ).length;
-  const recentRegistrations = [...users]
-    .filter((u) => u.createdAt && new Date(u.createdAt) >= thirtyDaysAgo)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+  // Recent activity: last 5 users sorted by createdAt desc
+  const recentUsers = React.useMemo(() => {
+    const items = usersData?.data.items ?? [];
+    return [...items]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+  }, [usersData]);
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground mt-1">Platform overview and statistics.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Total Users"
+      {/* ------------------------------------------------------------------ */}
+      {/* Section 1 — System Health Row                                       */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricTile
+          label="Total Users"
           value={totalUsers}
-          description="Registered accounts"
-          icon={Users}
+          icon={<Users className="h-4 w-4" />}
+          colorFamily="synapse"
         />
-        <StatCard
-          title="Active Users"
-          value={activeUsers}
-          description="Last 7 days"
-          icon={UserCheck}
+        <MetricTile
+          label="Total Cards"
+          value={totalCards}
+          icon={<GitMerge className="h-4 w-4" />}
+          colorFamily="dendrite"
         />
-        <StatCard
-          title="Inactive Users"
-          value={inactiveUsers}
-          description="No activity in 30 days"
-          icon={UserX}
+        <MetricTile
+          label="Pending Mutations"
+          value={pendingMutationCount}
+          icon={<AlertTriangle className="h-4 w-4" />}
+          colorFamily={pendingMutationCount > 0 ? 'cortex' : 'axon'}
         />
-        <StatCard title="Daily Sessions" value={0} description="Today" icon={Activity} />
+        <MetricTile
+          label="Active Sessions"
+          value="—"
+          icon={<Activity className="h-4 w-4" />}
+          colorFamily="axon"
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Registrations</CardTitle>
-            <CardDescription>Newly registered users</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentRegistrations.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent registrations.</p>
-            ) : (
-              <div className="space-y-3">
-                {recentRegistrations.map((user) => (
-                  <div key={user.id} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{user.displayName || user.username}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </span>
+      {/* ------------------------------------------------------------------ */}
+      {/* Section 2 — Pending Actions                                         */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pending Actions</CardTitle>
+          <CardDescription>Items requiring admin attention</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {pendingMutationCount === 0 && draftCards === 0 ? (
+            <p className="text-sm text-muted-foreground">No pending actions.</p>
+          ) : (
+            <div className="divide-y">
+              {/* Mutations awaiting review */}
+              {pendingMutationCount > 0 && (
+                <div className="flex items-center justify-between border-l-4 border-yellow-400 py-3 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {String(pendingMutationCount)} mutation
+                      {pendingMutationCount !== 1 ? 's' : ''} awaiting review
+                    </p>
+                    <p className="text-xs text-muted-foreground">CKG mutation pipeline</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/dashboard/ckg/mutations">
+                      Review <ArrowRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
+              )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>System Health</CardTitle>
-            <CardDescription>Service status</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-green-500" />
-              <span className="text-sm">All systems operational</span>
+              {/* Draft cards */}
+              {draftCards > 0 && (
+                <div className="flex items-center justify-between border-l-4 border-orange-400 py-3 pl-4">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {String(draftCards)} draft card{draftCards !== 1 ? 's' : ''} unpublished
+                    </p>
+                    <p className="text-xs text-muted-foreground">Content oversight</p>
+                  </div>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/dashboard/content">
+                      View <ArrowRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Section 3 — Recent Activity Feed                                    */}
+      {/* ------------------------------------------------------------------ */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+          <CardDescription>Latest user registrations</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {recentUsers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recent activity.</p>
+          ) : (
+            <div className="space-y-3">
+              {recentUsers.map((user) => (
+                <div key={user.id} className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {relativeTime(user.createdAt)}
+                    </span>
+                    <span className="text-sm font-medium truncate">
+                      {user.displayName !== '' ? user.displayName : user.username}
+                    </span>
+                    <span className="text-xs text-muted-foreground shrink-0">registered</span>
+                  </div>
+                  <Button variant="ghost" size="sm" asChild className="shrink-0">
+                    <Link href={`/dashboard/users/${user.id}`}>View</Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
