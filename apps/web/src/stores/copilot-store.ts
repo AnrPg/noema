@@ -1,9 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/restrict-plus-operands */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions */
 /**
  * Copilot Store — Cognitive Copilot sidebar state.
  *
@@ -80,7 +74,10 @@ export const useCopilotStore = create<ICopilotState & ICopilotActions>()(
             : 0;
 
           return {
-            hintsByPage: { ...s.hintsByPage, [pageKey]: [...existing, hints] },
+            hintsByPage: {
+              ...s.hintsByPage,
+              [pageKey]: [...existing, hints].slice(-10),
+            },
             lastReceivedAt: { ...s.lastReceivedAt, [pageKey]: Date.now() },
             unreadHighCount: s.unreadHighCount + newHighCount,
             // Clear expiring state for this page since we just received fresh hints

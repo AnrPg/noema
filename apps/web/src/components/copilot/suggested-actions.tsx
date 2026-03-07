@@ -1,9 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-
 'use client';
 /**
  * @noema/web — Copilot / SuggestedActions
@@ -94,19 +88,18 @@ export function SuggestedActions(): React.JSX.Element {
 
   const hints = hintsByPage[activePageKey] ?? [];
 
-  // Flatten → deduplicate → sort
+  // Flatten → deduplicate (keep most recent occurrence) → sort
   const allActions = hints.flatMap((h) => h.suggestedNextActions);
-  const seen = new Set<string>();
-  const uniqueActions = allActions.filter((a) => {
-    if (seen.has(a.action)) return false;
-    seen.add(a.action);
-    return true;
-  });
-  uniqueActions.sort(
-    (a, b) =>
-      (PRIORITY_ORDER[a.priority as ActionPriority] ?? 99) -
-      (PRIORITY_ORDER[b.priority as ActionPriority] ?? 99)
-  );
+  const seenIds = new Set<string>();
+  const uniqueActions = [...allActions]
+    .reverse()
+    .filter((a) => {
+      if (seenIds.has(a.action)) return false;
+      seenIds.add(a.action);
+      return true;
+    })
+    .reverse();
+  uniqueActions.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
 
   // Group by category
   const grouped = new Map<ActionCategory, ISuggestedAction[]>();
@@ -144,8 +137,10 @@ export function SuggestedActions(): React.JSX.Element {
   return (
     <div className="flex flex-col">
       {CATEGORY_ORDER.filter((cat) => grouped.has(cat)).map((cat) => {
-        const actions = grouped.get(cat) ?? [];
-        const Icon = (CATEGORY_ICON[cat] ?? BookOpen) as React.FC<React.SVGProps<SVGSVGElement>>;
+        // grouped.has(cat) is guaranteed by the .filter above
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const actions = grouped.get(cat)!;
+        const Icon = CATEGORY_ICON[cat] as React.FC<React.SVGProps<SVGSVGElement>>;
         const isCollapsed = collapsedGroups.has(cat);
         const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;
 

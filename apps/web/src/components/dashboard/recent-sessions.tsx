@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * Recent Sessions Panel
  *
  * Lists the 5 most recent study sessions with state chips, mode badges,
  * card progress, and a NeuralGauge showing completion percentage.
+ *
+ * Note: eslint-disable directive above suppresses no-unsafe-assignment that fires
+ * because @noema/ui has not been built yet. Remove once packages are built.
  */
 
 'use client';
@@ -72,6 +76,7 @@ function relativeTime(dateStr: string): string {
 }
 
 function sessionProgress(session: ISessionDto): number {
+  if (session.state === 'COMPLETED') return 100;
   if (session.cardIds.length === 0) return 0;
   return Math.round((session.currentCardIndex / session.cardIds.length) * 100);
 }

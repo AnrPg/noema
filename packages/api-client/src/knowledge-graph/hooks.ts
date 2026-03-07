@@ -54,6 +54,7 @@ import type {
   MetricHistoryResponse,
   MetricsResponse,
   MisconceptionDetectionResponse,
+  MisconceptionResponse,
   MisconceptionsResponse,
   NodeResponse,
   NodesListResponse,
@@ -515,7 +516,7 @@ export function useDetectMisconceptions(
 export function useUpdateMisconceptionStatus(
   userId: UserId,
   options?: UseMutationOptions<
-    unknown,
+    MisconceptionResponse,
     Error,
     { id: string; data: IUpdateMisconceptionStatusInput }
   >

@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * Agent Hints Interceptor
  *
@@ -8,6 +6,8 @@
  * keyed by the current route.
  *
  * Expiry: per-hint setTimeout schedules markPageExpiring → 300ms fade → clearPage.
+ * Per-page timer IDs are tracked so overlapping expiry timers are cancelled before
+ * rescheduling, preventing stale timers from firing after fresh hints arrive.
  * A 30s polling interval catches orphaned hints (e.g. stored hints whose timers
  * were cancelled when the component unmounted and remounted).
  */
@@ -17,7 +17,7 @@
 import type { IAgentHints, ValidityPeriod } from '@noema/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useCopilotStore } from '@/stores/copilot-store';
 
 // ============================================================================
@@ -69,6 +69,9 @@ export function useAgentHintsInterceptor(): void {
   const markPageExpiring = useCopilotStore((s) => s.markPageExpiring);
   const setActivePage = useCopilotStore((s) => s.setActivePage);
 
+  // Per-page timer IDs so we can cancel previous timers before scheduling new ones
+  const expiryTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   useEffect(() => {
     setActivePage(pathname);
   }, [pathname, setActivePage]);
@@ -77,10 +80,14 @@ export function useAgentHintsInterceptor(): void {
     const cache = queryClient.getQueryCache();
     const timers = new Set<ReturnType<typeof setTimeout>>();
 
-    // Helper: schedule fade + clear for a page
+    // Helper: schedule fade + clear for a page, cancelling any existing timer first
     const scheduleExpiry = (pageKey: string, expiryMs: number): void => {
+      const existing = expiryTimers.current.get(pageKey);
+      if (existing !== undefined) clearTimeout(existing);
+
       const timerId = setTimeout(() => {
         markPageExpiring(pageKey);
+        expiryTimers.current.delete(pageKey);
         const clearId = setTimeout(() => {
           clearPage(pageKey);
           timers.delete(clearId);
@@ -88,6 +95,7 @@ export function useAgentHintsInterceptor(): void {
         timers.add(clearId);
         timers.delete(timerId);
       }, expiryMs);
+      expiryTimers.current.set(pageKey, timerId);
       timers.add(timerId);
     };
 
@@ -142,6 +150,10 @@ export function useAgentHintsInterceptor(): void {
         clearTimeout(id);
       });
       timers.clear();
+      expiryTimers.current.forEach((id) => {
+        clearTimeout(id);
+      });
+      expiryTimers.current.clear();
     };
   }, [queryClient, pathname, pushHints, clearPage, markPageExpiring]);
 }

@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
 'use client';
 /**
  * @noema/web — Copilot / RiskAlerts
@@ -54,7 +49,7 @@ export function RiskAlerts(): React.JSX.Element {
   const allRisks: IRiskFactor[] = hints.flatMap((h) => h.riskFactors);
   const visibleRisks = allRisks
     .filter((r) => r.severity !== 'low')
-    .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99));
+    .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 
   if (visibleRisks.length === 0) return <></>;
 
@@ -81,7 +76,7 @@ export function RiskAlerts(): React.JSX.Element {
                 <div className="flex flex-1 flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold capitalize">
-                      {risk.type.replace('-', ' ')}
+                      {risk.type.replaceAll('-', ' ')}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
                       {probabilityLabel(risk.probability)}

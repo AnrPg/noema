@@ -11,6 +11,8 @@ import type { OverlayType, LayoutMode } from '@noema/graph';
 // Re-export so existing imports from this module continue to work
 export type { OverlayType, LayoutMode };
 
+const EMPTY_OVERLAYS = new Set<OverlayType>();
+
 interface IViewportCenter {
   x: number;
   y: number;
@@ -51,7 +53,7 @@ const initialState: IGraphState = {
   zoom: 1,
   selectedNodeId: null,
   hoveredNodeId: null,
-  activeOverlays: new Set(), // NOTE: Set is not JSON-serializable; do not add persist() without a custom storage adapter
+  activeOverlays: EMPTY_OVERLAYS, // NOTE: Set is not JSON-serializable; do not add persist() without a custom storage adapter
   layoutMode: 'force',
 };
 
@@ -82,7 +84,13 @@ export const useGraphStore = create<IGraphState & IGraphActions>()((set) => ({
   },
 
   resetViewport: () => {
-    set({ viewportCenter: { x: 0, y: 0 }, zoom: 1, selectedNodeId: null, hoveredNodeId: null });
+    set({
+      viewportCenter: { x: 0, y: 0 },
+      zoom: 1,
+      selectedNodeId: null,
+      hoveredNodeId: null,
+      activeOverlays: EMPTY_OVERLAYS,
+    });
   },
 
   setHoveredNode: (nodeId) => {

@@ -1,17 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 /**
  * @noema/web - Session History Page
  *
  * /sessions — filterable list of past study sessions.
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because the @noema/api-client package has not been built yet (no dist/
- * directory). Once the package is built these suppressions should be removed.
  */
 
 import * as React from 'react';
@@ -98,16 +90,16 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 // ============================================================================
 
 function SessionRow({ session }: { session: ISessionDto }): React.JSX.Element {
-  const sessionId = String((session as any).id);
-  const state = String((session as any).state);
-  const mode = String((session as any).mode);
-  const startedAt = String((session as any).startedAt);
-  const completedAt = (session as any).completedAt as string | null;
-  const cardIds = (session as any).cardIds as unknown[];
+  const sessionId = session.id;
+  const state = session.state;
+  const mode = session.mode;
+  const startedAt = session.startedAt;
+  const completedAt = session.completedAt;
+  const cardIds = session.cardIds;
 
   return (
     <Link
-      href={('/session/' + sessionId + '/summary') as never}
+      href={`/session/${sessionId}/summary` as never}
       className={[
         'group flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3',
         'transition-colors hover:border-foreground/20 hover:bg-muted/40',
@@ -163,7 +155,7 @@ export default function SessionsPage(): React.JSX.Element {
     stateFilter !== '' ? { state: stateFilter as SessionState, limit: 50 } : { limit: 50 }
   );
 
-  const sessions: ISessionDto[] = (data as any)?.data ?? [];
+  const sessions: ISessionDto[] = data?.data ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -249,9 +241,7 @@ export default function SessionsPage(): React.JSX.Element {
             </Link>
           </div>
         ) : (
-          sessions.map((session) => (
-            <SessionRow key={String((session as any).id)} session={session} />
-          ))
+          sessions.map((session) => <SessionRow key={session.id} session={session} />)
         )}
       </div>
     </div>

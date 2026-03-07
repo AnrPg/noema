@@ -66,7 +66,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Store ─────────────────────────────────────────────────────────────────
   const {
     pendingAttempt,
-    currentCardIndex,
+    completedCardCount,
     elapsedTime,
     isPaused,
     setConfidenceBefore,
@@ -74,6 +74,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
     setIsPaused,
     advanceCard,
     resetAttempt,
+    tickElapsedTime,
     clear,
   } = useSessionStore();
 
@@ -104,7 +105,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   } = useSessionQueue(sessionId);
 
   // ── Current card ──────────────────────────────────────────────────────────
-  const currentItem = queueData?.data.items[currentCardIndex];
+  const currentItem = queueData?.data.items[completedCardCount];
   const currentCardId = currentItem?.cardId ?? ('' as SessionId);
 
   // useCard uses select: (r) => r.data — so cardData is already ICardDto | undefined
@@ -128,12 +129,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
-      useSessionStore.setState((s) => ({ elapsedTime: s.elapsedTime + 1000 }));
+      tickElapsedTime();
     }, 1000);
     return () => {
       clearInterval(interval);
     };
-  }, [isPaused]);
+  }, [isPaused, tickElapsedTime]);
 
   // ── Reset local state when the current card changes ───────────────────────
   useEffect(() => {
@@ -218,7 +219,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
             } else {
               advanceCard();
               // Check checkpoint every 5 cards
-              if ((currentCardIndex + 1) % 5 === 0) {
+              if ((completedCardCount + 1) % 5 === 0) {
                 evaluateCheckpoint.mutate(undefined, {
                   onSuccess: (res) => {
                     const directive = res.data;
@@ -240,7 +241,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
       selfReportedGuess,
       recordAttempt,
       queueData,
-      currentCardIndex,
+      completedCardCount,
       completeSession,
       advanceCard,
       evaluateCheckpoint,
@@ -358,7 +359,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
       {/* ── SessionBar ─────────────────────────────────────────────────────── */}
       <SessionBar
         sessionId={sessionId}
-        completed={currentCardIndex}
+        completed={completedCardCount}
         total={totalCards}
         elapsedMs={elapsedTime}
         lane={lane as 'retention' | 'calibration' | null}

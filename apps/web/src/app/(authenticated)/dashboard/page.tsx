@@ -1,9 +1,16 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /**
  * Dashboard Page — Cognitive Vitals
  *
  * Codename: Thalamus
  * Composes all 5 dashboard sections with staggered entrance animation.
  * Each section is independently isolated via SectionErrorBoundary.
+ *
+ * Note: The eslint-disable directives above suppress no-unsafe-* rules that
+ * fire because @noema/auth has not been built yet (no dist/ directory).
+ * Once packages are built these suppressions should be removed.
  */
 
 'use client';
@@ -31,11 +38,14 @@ function getGreeting(): string {
 // Page
 // ============================================================================
 
-export default function DashboardPage(): React.JSX.Element {
+export default function DashboardPage(): React.JSX.Element | null {
   const { user } = useAuth();
   const firstName = user?.displayName.split(' ')[0] ?? 'there';
 
-  if (user === null) return <></>;
+  // user is null during the brief window between mount and the auth store hydrating.
+  // The authenticated layout handles the full loading skeleton; returning null here
+  // avoids rendering dashboard content with an undefined userId.
+  if (user === null) return null;
   const userId = user.id;
 
   return (

@@ -322,9 +322,9 @@ export function useValidateCardContent(
   });
 }
 
-export function useRollbackBatch(options?: UseMutationOptions<void, Error, { batchId: string }>) {
+export function useRollbackBatch(options?: UseMutationOptions<void, Error, { batchId: JobId }>) {
   return useMutation({
-    mutationFn: ({ batchId }) => cardsApi.deleteBatch(batchId as JobId),
+    mutationFn: ({ batchId }) => cardsApi.deleteBatch(batchId),
     ...options,
   });
 }

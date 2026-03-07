@@ -6,7 +6,7 @@
  */
 
 import type { Metadata } from '../base/index.js';
-import type { EdgeId, MisconceptionPatternId, NodeId } from '../branded-ids/index.js';
+import type { EdgeId, MisconceptionPatternId, NodeId, UserId } from '../branded-ids/index.js';
 import type { ConfidenceScore, EdgeWeight, MasteryLevel } from '../branded-numerics/index.js';
 import type {
   GraphEdgeType,
@@ -51,7 +51,7 @@ export interface IGraphNode {
   domain: string;
 
   /** Owner user ID — present for PKG nodes, absent for CKG nodes */
-  userId?: string;
+  userId?: UserId;
 
   /** Extensible key-value properties */
   properties: Metadata;
@@ -89,7 +89,7 @@ export interface IGraphEdge {
   readonly targetNodeId: NodeId;
 
   /** Owner user ID — present for PKG edges, absent for CKG edges */
-  userId?: string;
+  userId?: UserId;
 
   /** Relationship strength (0–1) */
   weight: EdgeWeight;
