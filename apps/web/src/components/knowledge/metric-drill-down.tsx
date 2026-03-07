@@ -65,6 +65,7 @@ function Sparkline({ values, width = 160, height = 36 }: ISparklineProps): React
       width={width}
       height={height}
       viewBox={`0 0 ${String(width)} ${String(height)}`}
+      overflow="visible"
       aria-label={`Trend sparkline — ${String(values.length)} data points`}
       role="img"
     >

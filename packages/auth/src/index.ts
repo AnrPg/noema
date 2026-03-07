@@ -18,7 +18,17 @@ export {
 } from './store.js';
 
 // Context
-export { AuthProvider, useAuth, type AuthProviderProps, type AuthContextValue } from './context.js';
+export {
+  AuthProvider,
+  useAuth,
+  type IAuthProviderProps,
+  type IAuthContextValue,
+} from './context.js';
+// Backward-compat aliases
+export type {
+  IAuthProviderProps as AuthProviderProps,
+  IAuthContextValue as AuthContextValue,
+} from './context.js';
 
 // Guards
 export {

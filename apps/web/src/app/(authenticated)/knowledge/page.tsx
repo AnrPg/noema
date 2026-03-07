@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-redundant-type-constituents */
+
 'use client';
 /**
  * @noema/web — /knowledge
@@ -12,6 +12,7 @@
  * left control panel and node detail panel.
  */
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@noema/auth';
 import { usePKGNodes, usePKGEdges, useKnowledgeFrontier, useBridgeNodes } from '@noema/api-client';
 import type { IGraphNodeDto, IGraphEdgeDto } from '@noema/api-client';
@@ -23,6 +24,7 @@ import { GraphControls } from '@/components/graph/graph-controls';
 import { NodeDetailPanel } from '@/components/graph/node-detail-panel';
 
 export default function KnowledgePage(): React.JSX.Element {
+  const router = useRouter();
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
 
@@ -48,13 +50,14 @@ export default function KnowledgePage(): React.JSX.Element {
 
   const [searchQuery, setSearchQuery] = React.useState('');
   const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
+  const [neighborhoodHighlight, setNeighborhoodHighlight] = React.useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = React.useState<{
     node: IGraphNodeDto;
     x: number;
     y: number;
   } | null>(null);
 
-  const isLoading = nodesLoading === true || edgesLoading === true;
+  const isLoading = nodesLoading || edgesLoading;
 
   const handleToggleType = React.useCallback((type: string) => {
     setHiddenTypes((prev) => {
@@ -74,7 +77,7 @@ export default function KnowledgePage(): React.JSX.Element {
     [nodes, hiddenTypes]
   );
 
-  // Build highlighted node set from active overlays + search query
+  // Build highlighted node set from active overlays + search query + neighborhood
   const highlightedNodeIds = React.useMemo(() => {
     const set = new Set<string>();
     if (activeOverlays.has('frontier') && frontierData !== undefined) {
@@ -101,8 +104,11 @@ export default function KnowledgePage(): React.JSX.Element {
         }
       }
     }
+    for (const id of neighborhoodHighlight) {
+      set.add(id);
+    }
     return set;
-  }, [activeOverlays, frontierData, bridgesData, searchQuery, nodes]);
+  }, [activeOverlays, frontierData, bridgesData, searchQuery, nodes, neighborhoodHighlight]);
 
   const selectedNode = React.useMemo(
     () => nodes.find((n) => String((n as any).id) === selectedNodeId) ?? null,
@@ -249,24 +255,92 @@ export default function KnowledgePage(): React.JSX.Element {
               className="absolute z-50 min-w-[180px] rounded-lg border border-border bg-card py-1 shadow-lg"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
-              {[
-                'View card linked to this concept',
-                'Show prerequisite chain',
-                'Show neighborhood (2 hops)',
-                'Check for misconceptions',
-                'Compare with CKG',
-              ].map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                  onClick={() => {
-                    setContextMenu(null);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+              {/* View card linked to this concept */}
+              <button
+                type="button"
+                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onClick={() => {
+                  router.push(`/cards?conceptId=${String((contextMenu.node as any).id)}` as never);
+                  setContextMenu(null);
+                }}
+              >
+                View card linked to this concept
+              </button>
+
+              {/* Show prerequisite chain */}
+              <button
+                type="button"
+                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onClick={() => {
+                  setLayoutMode('hierarchical');
+                  if (!activeOverlays.has('prerequisites')) {
+                    toggleOverlay('prerequisites');
+                  }
+                  selectNode(String((contextMenu.node as any).id));
+                  setContextMenu(null);
+                }}
+              >
+                Show prerequisite chain
+              </button>
+
+              {/* Show neighborhood (2 hops) */}
+              <button
+                type="button"
+                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onClick={() => {
+                  const nodeId = String((contextMenu.node as any).id);
+                  const hop1 = new Set(
+                    edges
+                      .filter(
+                        (e) =>
+                          String((e as any).sourceId) === nodeId ||
+                          String((e as any).targetId) === nodeId
+                      )
+                      .flatMap((e) => [String((e as any).sourceId), String((e as any).targetId)])
+                  );
+                  const hop2 = new Set([
+                    ...hop1,
+                    ...[...hop1].flatMap((id) =>
+                      edges
+                        .filter(
+                          (e) =>
+                            String((e as any).sourceId) === id || String((e as any).targetId) === id
+                        )
+                        .flatMap((e) => [String((e as any).sourceId), String((e as any).targetId)])
+                    ),
+                  ]);
+                  setNeighborhoodHighlight(hop2);
+                  setContextMenu(null);
+                }}
+              >
+                Show neighborhood (2 hops)
+              </button>
+
+              {/* Check for misconceptions */}
+              <button
+                type="button"
+                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onClick={() => {
+                  router.push(
+                    `/knowledge/misconceptions?nodeId=${String((contextMenu.node as any).id)}` as never
+                  );
+                  setContextMenu(null);
+                }}
+              >
+                Check for misconceptions
+              </button>
+
+              {/* Compare with CKG */}
+              <button
+                type="button"
+                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                onClick={() => {
+                  router.push('/knowledge/comparison' as never);
+                  setContextMenu(null);
+                }}
+              >
+                Compare with CKG
+              </button>
             </div>
           </>
         )}

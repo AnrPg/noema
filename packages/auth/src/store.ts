@@ -56,7 +56,7 @@ export const useAuthStore = create<IAuthStore>()(
       },
 
       setError: (error: string | null) => {
-        set({ error, isLoading: false });
+        set({ error });
       },
 
       setInitialized: () => {
@@ -91,9 +91,8 @@ export const useAuthStore = create<IAuthStore>()(
       partialize: (state) => ({
         user: state.user,
         settings: state.settings,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
+        isInitialized: state.isInitialized,
       }),
     }
   )

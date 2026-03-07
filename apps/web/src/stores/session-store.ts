@@ -1,15 +1,8 @@
-/* eslint-disable @typescript-eslint/no-redundant-type-constituents */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /**
  * Session Store — Active learning session working memory.
  *
  * Holds ephemeral state for a single review session.
  * Not persisted — cleared when the user navigates away.
- *
- * Note: The eslint-disable directives above suppress rules that fire because
- * the @noema/api-client package has not been built yet (no dist/ directory).
- * Once packages are built these suppressions should be removed.
  */
 
 import type { IAttemptInput, ISessionDto, ISessionQueueDto } from '@noema/api-client/session';
@@ -21,7 +14,7 @@ import { create } from 'zustand';
 
 interface ISessionState {
   activeSession: ISessionDto | null;
-  currentCardIndex: number;
+  completedCardCount: number;
   queue: ISessionQueueDto | null;
   pendingAttempt: Partial<IAttemptInput> | null;
   elapsedTime: number;
@@ -40,6 +33,7 @@ interface ISessionActions {
   recordDwellTime: (ms: number) => void;
   setIsPaused: (paused: boolean) => void;
   resetAttempt: () => void;
+  tickElapsedTime: () => void;
   clear: () => void;
 }
 
@@ -49,7 +43,7 @@ interface ISessionActions {
 
 const initialState: ISessionState = {
   activeSession: null,
-  currentCardIndex: 0,
+  completedCardCount: 0,
   queue: null,
   pendingAttempt: null,
   elapsedTime: 0,
@@ -60,12 +54,12 @@ export const useSessionStore = create<ISessionState & ISessionActions>()((set) =
   ...initialState,
 
   setSession: (session) => {
-    set({ activeSession: session, currentCardIndex: session.currentCardIndex });
+    set({ activeSession: session, completedCardCount: session.currentCardIndex });
   },
 
   advanceCard: () => {
     set((s) => ({
-      currentCardIndex: s.currentCardIndex + 1,
+      completedCardCount: s.completedCardCount + 1,
       pendingAttempt: null,
       elapsedTime: 0,
     }));
@@ -95,6 +89,10 @@ export const useSessionStore = create<ISessionState & ISessionActions>()((set) =
 
   resetAttempt: () => {
     set({ pendingAttempt: null, elapsedTime: 0 });
+  },
+
+  tickElapsedTime: () => {
+    set((s) => ({ elapsedTime: s.elapsedTime + 1000 }));
   },
 
   clear: () => {

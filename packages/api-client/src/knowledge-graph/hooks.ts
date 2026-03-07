@@ -54,6 +54,7 @@ import type {
   MetricHistoryResponse,
   MetricsResponse,
   MisconceptionDetectionResponse,
+  MisconceptionResponse,
   MisconceptionsResponse,
   NodeResponse,
   NodesListResponse,
@@ -135,6 +136,7 @@ export function useCreatePKGNode(
     mutationFn: (data) => pkgNodesApi.create(userId, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: kgKeys.pkgNodes(userId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.comparison(userId) });
     },
     ...options,
   });
@@ -514,7 +516,7 @@ export function useDetectMisconceptions(
 export function useUpdateMisconceptionStatus(
   userId: UserId,
   options?: UseMutationOptions<
-    unknown,
+    MisconceptionResponse,
     Error,
     { id: string; data: IUpdateMisconceptionStatusInput }
   >

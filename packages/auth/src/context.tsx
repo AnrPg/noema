@@ -15,14 +15,14 @@ import {
   type UserDto,
   type UserSettingsDto,
 } from '@noema/api-client/user';
-import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, type JSX, type ReactNode } from 'react';
 import { useAuthStore } from './store.js';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export interface AuthContextValue {
+export interface IAuthContextValue {
   /** Current user */
   user: UserDto | null;
 
@@ -64,13 +64,13 @@ export interface AuthContextValue {
 // Context
 // ============================================================================
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+const AuthContext = createContext<IAuthContextValue | null>(null);
 
 // ============================================================================
 // Provider
 // ============================================================================
 
-export interface AuthProviderProps {
+export interface IAuthProviderProps {
   children: ReactNode;
   /** Called after successful login */
   onLogin?: (user: UserDto) => void;
@@ -78,89 +78,108 @@ export interface AuthProviderProps {
   onLogout?: () => void;
 }
 
-export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps) {
-  const store = useAuthStore();
+export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps): JSX.Element {
+  // Individual selectors — each subscribes only to its own slice of state,
+  // preventing the entire component from re-rendering on every store update.
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const settings = useAuthStore((s) => s.settings);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const error = useAuthStore((s) => s.error);
+
+  // Actions are stable references in Zustand (never recreated), so selecting
+  // them individually is safe and avoids closing over a stale store object.
+  const setUser = useAuthStore((s) => s.setUser);
+  const setSettings = useAuthStore((s) => s.setSettings);
+  const setLoading = useAuthStore((s) => s.setLoading);
+  const setError = useAuthStore((s) => s.setError);
+  const setInitialized = useAuthStore((s) => s.setInitialized);
+  const reset = useAuthStore((s) => s.reset);
+  const setTokens = useAuthStore((s) => s.setTokens);
 
   // Initialize auth on mount
   useEffect(() => {
-    const initAuth = async () => {
-      if (store.isInitialized) return;
+    const initAuth = async (): Promise<void> => {
+      if (isInitialized) return;
 
       try {
         // Try to get current user
         const response = await meApi.get();
-        store.setUser(response.data);
+        setUser(response.data);
 
         // Also fetch settings
         try {
           const settingsResponse = await meApi.getSettings();
-          store.setSettings(settingsResponse.data);
+          setSettings(settingsResponse.data);
         } catch {
           // Settings fetch failure is non-critical
         }
-      } catch (error) {
+      } catch (err) {
         // Not authenticated or error
-        if (error instanceof ApiRequestError && error.status === 401) {
+        if (err instanceof ApiRequestError && err.status === 401) {
           // Normal - not authenticated
         } else {
-          console.error('Auth init error:', error);
+          console.error('Auth init error:', err);
         }
-        store.reset();
+        reset();
       } finally {
-        store.setInitialized();
+        setInitialized();
       }
     };
 
-    initAuth();
-  }, [store.isInitialized]);
+    void initAuth();
+  }, [isInitialized, setUser, setSettings, reset, setInitialized]);
 
   const login = useCallback(
     async (input: LoginInput) => {
-      store.setLoading(true);
-      store.setError(null);
+      setLoading(true);
+      setError(null);
 
       try {
         const response = await authApi.login(input);
-        store.setUser(response.data.user);
-        store.setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
+        setUser(response.data.user);
+        setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
 
         // Fetch settings after login
         try {
           const settingsResponse = await meApi.getSettings();
-          store.setSettings(settingsResponse.data);
+          setSettings(settingsResponse.data);
         } catch {
           // Non-critical
         }
 
-        store.setLoading(false);
         onLogin?.(response.data.user);
-      } catch (error) {
-        const message = error instanceof ApiRequestError ? error.message : 'Login failed';
-        store.setError(message);
-        throw error;
+      } catch (err) {
+        const message = err instanceof ApiRequestError ? err.message : 'Login failed';
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
     },
-    [onLogin]
+    [setLoading, setError, setUser, setTokens, setSettings, onLogin]
   );
 
   const register = useCallback(
     async (input: RegisterInput) => {
-      store.setLoading(true);
-      store.setError(null);
+      setLoading(true);
+      setError(null);
 
       try {
         const response = await authApi.register(input);
-        store.setUser(response.data.user);
-        store.setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
-        store.setLoading(false);
+        setUser(response.data.user);
+        setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
         onLogin?.(response.data.user);
-      } catch (error) {
-        const message = error instanceof ApiRequestError ? error.message : 'Registration failed';
-        store.setError(message);
-        throw error;
+      } catch (err) {
+        const message = err instanceof ApiRequestError ? err.message : 'Registration failed';
+        setError(message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
     },
-    [onLogin]
+    [setLoading, setError, setUser, setTokens, onLogin]
   );
 
   const logout = useCallback(async () => {
@@ -169,43 +188,43 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
     } catch {
       // Ignore logout errors
     } finally {
-      store.reset();
+      reset();
       onLogout?.();
     }
-  }, [onLogout]);
+  }, [reset, onLogout]);
 
   const refreshUser = useCallback(async () => {
     try {
       const response = await meApi.get();
-      store.setUser(response.data);
-    } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 401) {
-        store.reset();
+      setUser(response.data);
+    } catch (err) {
+      if (err instanceof ApiRequestError && err.status === 401) {
+        reset();
       }
-      throw error;
+      throw err;
     }
-  }, []);
+  }, [setUser, reset]);
 
   const hasRole = useCallback(
     (role: string) => {
-      return store.user?.roles.includes(role as never) ?? false;
+      return user?.roles.includes(role as never) ?? false;
     },
-    [store.user]
+    [user]
   );
 
-  const value: AuthContextValue = {
-    user: store.user,
-    settings: store.settings,
-    isAuthenticated: store.isAuthenticated,
-    isLoading: store.isLoading,
-    isInitialized: store.isInitialized,
-    error: store.error,
+  const value: IAuthContextValue = {
+    user,
+    settings,
+    isAuthenticated,
+    isLoading,
+    isInitialized,
+    error,
     login,
     register,
     logout,
     refreshUser,
     hasRole,
-    isAdmin: store.user?.roles.includes('admin') ?? false,
+    isAdmin: user?.roles.includes('admin') ?? false,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -215,7 +234,7 @@ export function AuthProvider({ children, onLogin, onLogout }: AuthProviderProps)
 // Hook
 // ============================================================================
 
-export function useAuth(): AuthContextValue {
+export function useAuth(): IAuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error('useAuth must be used within AuthProvider');

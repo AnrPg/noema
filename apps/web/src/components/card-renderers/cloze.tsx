@@ -1,8 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client';
 
 /**
  * @noema/web - Card Renderers
  * ClozeRenderer — fill-in-the-blank card with {{blank}} template placeholders.
+ * Note: eslint-disable directives above suppress no-unsafe-* rules that fire
+ * because @noema/ui has not been built yet. Remove once packages are built.
  */
 
 import * as React from 'react';
@@ -12,6 +16,18 @@ import { CardShell } from './card-shell.js';
 import type { ICardRendererProps } from './types.js';
 
 const BLANK_PATTERN = /\{\{blank\}\}/g;
+
+function getAnswerClass(
+  submitted: boolean,
+  isRevealed: boolean,
+  userAnswer: string,
+  correctAnswer: string
+): string {
+  if (!submitted || !isRevealed) return '';
+  return userAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase()
+    ? 'border-dendrite-400 bg-dendrite-400/10 text-dendrite-300'
+    : 'border-cortex-400 bg-cortex-400/10 text-cortex-300';
+}
 
 /** Replace each {{blank}} with a numbered token for splitting. */
 function splitTemplate(template: string): string[] {
@@ -88,15 +104,12 @@ export default function ClozeRenderer(props: ICardRendererProps<string[]>): Reac
                 className={cn(
                   'inline-block mx-1 px-2 py-0.5 w-28 rounded border text-sm',
                   'border-border bg-background focus:outline-none focus:ring-1 focus:ring-synapse-400',
-                  submitted &&
-                    isRevealed &&
-                    (() => {
-                      const correct = answers[i]?.answer ?? '';
-                      return (userAnswers[i] ?? '').trim().toLowerCase() ===
-                        correct.trim().toLowerCase()
-                        ? 'border-green-500 bg-green-50 text-green-800'
-                        : 'border-red-400 bg-red-50 text-red-700';
-                    })()
+                  getAnswerClass(
+                    submitted,
+                    isRevealed,
+                    userAnswers[i] ?? '',
+                    answers[i]?.answer ?? ''
+                  )
                 )}
               />
             )}

@@ -35,7 +35,9 @@ import {
   UserX,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import React, { useState } from 'react';
+
+const PAGE_SIZE = 20;
 
 function statusColor(status: UserStatus): string {
   switch (status) {
@@ -180,6 +182,8 @@ export default function UsersPage(): React.JSX.Element {
   const [roleFilter, setRoleFilter] = useState<UserRole | ''>('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [allUsers, setAllUsers] = React.useState<UserDto[]>([]);
   const router = useRouter();
 
   const filters = {
@@ -189,9 +193,34 @@ export default function UsersPage(): React.JSX.Element {
   };
 
   const hasFilters = search !== '' || statusFilter !== '' || roleFilter !== '';
-  const { data: usersData, isLoading, refetch } = useUsers(hasFilters ? filters : undefined);
+  const {
+    data: usersData,
+    isLoading,
+    refetch,
+  } = useUsers(hasFilters ? filters : undefined, {
+    offset: (page - 1) * PAGE_SIZE,
+    limit: PAGE_SIZE,
+  });
   const deleteUser = useDeleteUser();
   const updateStatus = useUpdateUserStatus();
+
+  // Accumulate pages of users into allUsers
+  React.useEffect(() => {
+    if (usersData) {
+      const incoming = usersData.data.items;
+      if (page === 1) {
+        setAllUsers(incoming);
+      } else {
+        setAllUsers((prev) => [...prev, ...incoming]);
+      }
+    }
+  }, [usersData, page]);
+
+  // Reset pagination when filters change
+  React.useEffect(() => {
+    setPage(1);
+    setAllUsers([]);
+  }, [statusFilter, roleFilter, search]);
 
   const handleAction = async (
     action: 'view' | 'suspend' | 'unsuspend' | 'delete',
@@ -237,8 +266,7 @@ export default function UsersPage(): React.JSX.Element {
     }
   };
 
-  const users = usersData?.data.items ?? [];
-  const total = usersData?.data.total ?? 0;
+  const total = usersData?.data.total;
 
   return (
     <div className="space-y-6">
@@ -261,7 +289,9 @@ export default function UsersPage(): React.JSX.Element {
       <Card>
         <CardHeader>
           <CardTitle>User List</CardTitle>
-          <CardDescription>{String(total)} users total</CardDescription>
+          <CardDescription>
+            {total !== undefined ? String(total) : String(allUsers.length)} users total
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 mb-6 flex-wrap">
@@ -270,7 +300,7 @@ export default function UsersPage(): React.JSX.Element {
               <Input
                 placeholder="Search users..."
                 value={search}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                   setSearch(e.target.value);
                 }}
                 className="pl-10"
@@ -304,13 +334,13 @@ export default function UsersPage(): React.JSX.Element {
             </select>
           </div>
 
-          {isLoading ? (
+          {isLoading && allUsers.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">Loading users...</div>
-          ) : users.length === 0 ? (
+          ) : allUsers.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">No users found</div>
           ) : (
             <div className="divide-y">
-              {users.map((user) => (
+              {allUsers.map((user) => (
                 <UserRow
                   key={user.id}
                   user={user}
@@ -324,10 +354,16 @@ export default function UsersPage(): React.JSX.Element {
             </div>
           )}
 
-          {total > users.length && (
+          {(total === undefined || allUsers.length < total) && (
             <div className="mt-4 flex justify-center">
-              <Button variant="outline" disabled>
-                Load more
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPage((p) => p + 1);
+                }}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Loading…' : 'Load more'}
               </Button>
             </div>
           )}

@@ -88,12 +88,24 @@ const navGroups: INavGroup[] = [
   },
 ];
 
+interface IAuthContext {
+  user: { displayName: string; email: string; avatarUrl: string | null } | null;
+  logout: () => Promise<void>;
+}
+
 function AdminMenu(): JSX.Element {
-  const { user, logout } = useAuth();
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+  const auth = useAuth() as IAuthContext;
+  const user: IAuthContext['user'] = auth.user;
+  const logout: () => Promise<void> = auth.logout;
   const router = useRouter();
 
   const handleLogout = async (): Promise<void> => {
-    await logout();
+    try {
+      await logout();
+    } catch {
+      // Token revocation failed — navigate anyway, session is invalid
+    }
     router.push('/login');
   };
 
@@ -102,7 +114,7 @@ function AdminMenu(): JSX.Element {
     displayName !== ''
       ? displayName
           .split(' ')
-          .map((n) => n[0] ?? '')
+          .map((n: string) => n[0] ?? '')
           .join('')
           .toUpperCase()
       : 'A';
@@ -166,7 +178,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }): 
               <SidebarNav>
                 {group.items.map((item) => {
                   const isActive =
-                    item.exact === true ? pathname === item.href : pathname.startsWith(item.href);
+                    item.exact === true
+                      ? pathname === item.href
+                      : pathname === item.href || pathname.startsWith(item.href + '/');
                   return (
                     <SidebarNavItem
                       key={item.href}

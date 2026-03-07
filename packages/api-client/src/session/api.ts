@@ -35,10 +35,15 @@ export const sessionsApi = {
   startSession: (data: IStartSessionInput): Promise<SessionResponse> =>
     http.post('/v1/sessions', data),
 
-  listSessions: (filters?: ISessionFilters): Promise<SessionsListResponse> =>
-    http.get('/v1/sessions', {
-      params: filters as unknown as Record<string, string | number | boolean | undefined>,
-    }),
+  listSessions: (filters?: ISessionFilters): Promise<SessionsListResponse> => {
+    if (!filters) return http.get('/v1/sessions');
+    const params: Record<string, string | number | boolean | undefined> = {};
+    if (filters.state !== undefined) params['state'] = filters.state;
+    if (filters.mode !== undefined) params['mode'] = filters.mode;
+    if (filters.limit !== undefined) params['limit'] = filters.limit;
+    if (filters.offset !== undefined) params['offset'] = filters.offset;
+    return http.get('/v1/sessions', { params });
+  },
 
   getSession: (id: SessionId): Promise<SessionResponse> => http.get(`/v1/sessions/${id}`),
 

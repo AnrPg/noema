@@ -64,7 +64,7 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
   const { data: healthResponse, isLoading: healthLoading } = useStructuralHealth(userId);
   const { data: historyResponse, isLoading: historyLoading } = useMetricHistory(userId);
 
-  const isLoading = healthLoading === true || historyLoading === true;
+  const isLoading = healthLoading || historyLoading;
 
   const health: any = (healthResponse as any)?.data ?? null;
   const historyEntries: any[] = (historyResponse as any)?.data?.entries ?? [];
@@ -76,13 +76,10 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
     }
     return METRIC_DEFS.map((d) => {
       const raw = health[d.key];
-      // If individual metric not present, use overall score as a fallback
-      const value =
-        typeof raw === 'number'
-          ? raw
-          : typeof health.score === 'number'
-            ? (health.score as number) * 0.5
-            : 0;
+      // If individual metric is not present, use 0 — fabricating a balanced polygon
+      // from the overall score would misrepresent "no data" as meaningful structure.
+      const rawScore: number = typeof raw === 'number' ? raw : 0;
+      const value = Math.min(1, Math.max(0, rawScore));
       return { ...d, value };
     });
   }, [health]);
