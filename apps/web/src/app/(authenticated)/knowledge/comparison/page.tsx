@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 
 'use client';
 /**
@@ -213,7 +212,7 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
           )}
 
           <Button asChild variant="outline" size="sm">
-            <Link href={'/session/new' as never}>Review This Concept</Link>
+            <Link href="/session/new">Review This Concept</Link>
           </Button>
         </div>
       )}

@@ -163,3 +163,4 @@ GoogleService-Info.plist
 
 # Prisma generated clients
 **/generated/prisma
+.worktrees/

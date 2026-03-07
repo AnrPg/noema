@@ -209,7 +209,7 @@ export default function RegisterPage(): React.JSX.Element {
         redirect !== null && redirect.startsWith('/') && !redirect.startsWith('//')
           ? redirect
           : '/dashboard';
-      router.push(target as never);
+      router.push(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
       // Go back to account step where most server errors occur

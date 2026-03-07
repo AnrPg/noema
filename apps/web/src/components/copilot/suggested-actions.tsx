@@ -122,7 +122,7 @@ export function SuggestedActions(): React.JSX.Element {
   const handleDoIt = (action: ISuggestedAction): void => {
     const route = ACTION_ROUTES[action.action];
     if (route !== undefined) {
-      router.push(route as never);
+      router.push(route);
     }
   };
 

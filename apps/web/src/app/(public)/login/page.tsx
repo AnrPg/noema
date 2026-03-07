@@ -56,7 +56,7 @@ export default function LoginPage(): React.JSX.Element {
         redirect !== null && redirect.startsWith('/') && !redirect.startsWith('//')
           ? redirect
           : '/dashboard';
-      router.push(target as never);
+      router.push(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }

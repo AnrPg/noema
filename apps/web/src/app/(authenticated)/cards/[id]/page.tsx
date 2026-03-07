@@ -190,7 +190,7 @@ export default function CardDetailPage(): React.JSX.Element {
       await deleteCard.mutateAsync(cardId);
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
       toast.success('Card deleted.');
-      router.push('/cards' as never);
+      router.push('/cards');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Delete failed';
       toast.error(message);
@@ -245,7 +245,7 @@ export default function CardDetailPage(): React.JSX.Element {
         <Button
           variant="ghost"
           onClick={() => {
-            router.push('/cards' as never);
+            router.push('/cards');
           }}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
@@ -444,7 +444,7 @@ export default function CardDetailPage(): React.JSX.Element {
           <Button
             variant="ghost"
             onClick={() => {
-              router.push('/cards' as never);
+              router.push('/cards');
             }}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -618,9 +618,12 @@ export default function CardDetailPage(): React.JSX.Element {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {card.knowledgeNodeIds.map((nodeId) => (
+                // Links to knowledge graph with nodeId query param — the graph page
+                // will auto-select this node. A dedicated /knowledge/[nodeId] detail
+                // page is planned for a future phase.
                 <a
                   key={nodeId}
-                  href={('/knowledge/' + nodeId) as never}
+                  href={`/knowledge?nodeId=${nodeId}`}
                   className="rounded-full border px-3 py-1 text-xs font-mono text-foreground hover:bg-muted transition-colors"
                 >
                   {nodeId}

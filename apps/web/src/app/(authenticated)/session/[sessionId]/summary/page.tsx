@@ -161,13 +161,10 @@ export default function SessionSummaryPage(): React.JSX.Element {
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">Overall Accuracy</span>
             <span className="text-lg font-semibold">
-              {attempts.length > 0
-                ? `${String(Math.round((attempts.filter((a) => a.grade >= PASSING_GRADE).length / attempts.length) * 100))}%`
-                : '—'}
+              {total > 0 ? `${String(accuracy)}%` : '—'}
             </span>
             <span className="text-xs text-muted-foreground">
-              ({String(attempts.filter((a) => a.grade >= PASSING_GRADE).length)}/
-              {String(attempts.length)} cards)
+              ({String(passing)}/{String(total)} cards)
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
@@ -201,13 +198,13 @@ export default function SessionSummaryPage(): React.JSX.Element {
         </h2>
         <div className="flex flex-wrap gap-3">
           <Button asChild>
-            <Link href={'/session/new' as never}>Start Another Session</Link>
+            <Link href="/session/new">Start Another Session</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={'/dashboard' as never}>Back to Dashboard</Link>
+            <Link href="/dashboard">Back to Dashboard</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href={'/knowledge' as never}>Knowledge Graph</Link>
+            <Link href="/knowledge">Knowledge Graph</Link>
           </Button>
         </div>
       </section>

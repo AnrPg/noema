@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * Recent Sessions Panel
  *
@@ -191,7 +190,7 @@ export function RecentSessions({ userId: _userId }: IRecentSessionsProps): React
             action={{
               label: 'Start studying',
               onClick: () => {
-                router.push('/study' as never);
+                router.push('/session/new');
               },
             }}
           />
@@ -202,7 +201,9 @@ export function RecentSessions({ userId: _userId }: IRecentSessionsProps): React
                 key={session.id}
                 session={session}
                 onClick={() => {
-                  router.push(`/sessions/${session.id}` as never);
+                  // Navigate to session summary. A dedicated session detail page
+                  // is planned for a future phase; summary is the closest equivalent.
+                  router.push(`/session/${session.id}/summary`);
                 }}
               />
             ))}

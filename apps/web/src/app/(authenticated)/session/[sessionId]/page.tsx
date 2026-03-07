@@ -213,7 +213,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
             if (remaining <= 0) {
               completeSession.mutate(sessionId, {
                 onSuccess: () => {
-                  router.push(`/session/${sessionId}/summary` as never);
+                  router.push(`/session/${sessionId}/summary`);
                 },
               });
             } else {
@@ -255,7 +255,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
     abandonSession.mutate(sessionId, {
       onSuccess: () => {
         clear();
-        router.push('/sessions' as never);
+        router.push('/sessions');
       },
     });
   }, [abandonSession, sessionId, clear, router]);

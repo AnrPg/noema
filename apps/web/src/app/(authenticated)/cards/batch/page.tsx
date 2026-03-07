@@ -11,6 +11,7 @@ import * as React from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRecentBatches, useRollbackBatch, useBatch, contentKeys } from '@noema/api-client';
 import type { IBatchSummaryDto, IBatchCreateResult } from '@noema/api-client';
+import type { JobId } from '@noema/types';
 import { ArrowLeft, Plus, ChevronDown, ChevronRight, Loader2, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -41,7 +42,7 @@ interface IBatchDetailsPanelProps {
 }
 
 function BatchDetailsPanel({ batchId }: IBatchDetailsPanelProps): React.JSX.Element {
-  const { data, isLoading, isError } = useBatch(batchId as never);
+  const { data, isLoading, isError } = useBatch(batchId as JobId);
   const result: IBatchCreateResult | undefined = data?.data;
 
   if (isLoading) {
@@ -287,11 +288,11 @@ export default function BatchOperationsPage(): React.JSX.Element {
   }
 
   function handleBackToLibrary(): void {
-    router.push('/cards' as never);
+    router.push('/cards');
   }
 
   function handleCreateNewBatch(): void {
-    router.push('/cards/new' as never);
+    router.push('/cards/new');
   }
 
   // --------------------------------------------------------------------------

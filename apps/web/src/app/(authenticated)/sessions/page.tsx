@@ -99,7 +99,7 @@ function SessionRow({ session }: { session: ISessionDto }): React.JSX.Element {
 
   return (
     <Link
-      href={`/session/${sessionId}/summary` as never}
+      href={`/session/${sessionId}/summary`}
       className={[
         'group flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3',
         'transition-colors hover:border-foreground/20 hover:bg-muted/40',
@@ -175,7 +175,7 @@ export default function SessionsPage(): React.JSX.Element {
         </div>
 
         <Link
-          href={'/session/new' as never}
+          href={'/session/new'}
           className={[
             'inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5',
             'text-sm font-medium text-primary-foreground transition-colors',
@@ -234,7 +234,7 @@ export default function SessionsPage(): React.JSX.Element {
           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border py-16 text-center">
             <p className="text-sm text-muted-foreground">No sessions yet.</p>
             <Link
-              href={'/session/new' as never}
+              href={'/session/new'}
               className="text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               Start your first session

@@ -190,7 +190,7 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
       <Card
         className="cursor-pointer"
         onClick={() => {
-          router.push('/knowledge' as never); // route pending Phase 04
+          router.push('/knowledge');
         }}
       >
         <CardContent className="pt-6">
@@ -208,7 +208,7 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
     <Card
       className="cursor-pointer transition-colors hover:border-synapse-400/50"
       onClick={() => {
-        router.push('/knowledge' as never); // route pending Phase 04
+        router.push('/knowledge');
       }}
     >
       <CardHeader className="pb-1">

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 'use client';
 /**
  * @noema/web — Reviews / TodaysPlan
@@ -28,7 +28,7 @@ export function TodaysPlan({ userId }: ITodaysPlanProps): React.JSX.Element {
   const totalCalibration: number = (plan?.totalCalibration as number | undefined) ?? 0;
   const total = totalRetention + totalCalibration;
 
-  if (isLoading === true) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-8 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -71,7 +71,7 @@ export function TodaysPlan({ userId }: ITodaysPlanProps): React.JSX.Element {
           </p>
         </div>
         <Button asChild size="sm" className="gap-1.5">
-          <Link href={'/session/new' as never}>
+          <Link href="/session/new">
             <PlayCircle className="h-4 w-4" aria-hidden="true" />
             Start Today's Review
           </Link>

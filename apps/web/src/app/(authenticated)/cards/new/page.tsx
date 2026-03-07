@@ -1017,7 +1017,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
           <button
             type="button"
             onClick={() => {
-              router.push(('/cards/' + card.id) as never);
+              router.push('/cards/' + card.id);
             }}
             className={primaryBtnClass}
           >
@@ -1026,7 +1026,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
           <button
             type="button"
             onClick={() => {
-              router.push('/cards' as never);
+              router.push('/cards');
             }}
             className={secondaryBtnClass}
           >
@@ -1069,7 +1069,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
                 <button
                   type="button"
                   onClick={() => {
-                    router.push(('/cards/' + card.id) as never);
+                    router.push('/cards/' + card.id);
                   }}
                   className="ml-2 text-xs text-primary underline-offset-2 hover:underline"
                 >
@@ -1085,7 +1085,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
         <button
           type="button"
           onClick={() => {
-            router.push('/cards' as never);
+            router.push('/cards');
           }}
           className={primaryBtnClass}
         >

@@ -24,7 +24,7 @@ export function SessionExpiryModal(): React.JSX.Element | null {
   const handleSignInAgain = (): void => {
     // Navigate first so AuthGuard's onUnauthenticated doesn't race with our redirect.
     const encoded = encodeURIComponent(pathname);
-    router.push(`/login?redirect=${encoded}` as never);
+    router.push(`/login?redirect=${encoded}`);
     reset();
   };
 

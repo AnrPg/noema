@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 'use client';
 /**
@@ -238,39 +238,51 @@ export default function MisconceptionsPage(): React.JSX.Element {
                     {/* Mini subgraph */}
                     <MisconceptionSubgraph nodeId={String(mc.nodeId)} />
 
-                    {/* Action buttons — only shown for 'detected' misconceptions needing review */}
-                    {status === 'detected' && (
+                    {/*
+                     * Action buttons state machine:
+                     *   detected  → can Confirm, Mark Resolved, or Dismiss
+                     *   confirmed → can Mark Resolved or Dismiss (already confirmed, no re-confirm)
+                     *   resolved  → no further actions
+                     *   dismissed → no further actions
+                     */}
+                    {(status === 'detected' || status === 'confirmed') && (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          disabled={updateStatus.isPending}
-                          onClick={() => {
-                            void updateStatus.mutateAsync({ id, data: { status: 'confirmed' } });
-                          }}
-                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          type="button"
-                          disabled={updateStatus.isPending}
-                          onClick={() => {
-                            void updateStatus.mutateAsync({ id, data: { status: 'resolved' } });
-                          }}
-                          className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Mark Resolved
-                        </button>
-                        <button
-                          type="button"
-                          disabled={updateStatus.isPending}
-                          onClick={() => {
-                            void updateStatus.mutateAsync({ id, data: { status: 'dismissed' } });
-                          }}
-                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Dismiss
-                        </button>
+                        {status === 'detected' && (
+                          <button
+                            type="button"
+                            disabled={updateStatus.isPending}
+                            onClick={() => {
+                              void updateStatus.mutateAsync({ id, data: { status: 'confirmed' } });
+                            }}
+                            className="rounded border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Confirm
+                          </button>
+                        )}
+                        {status !== 'resolved' && (
+                          <button
+                            type="button"
+                            disabled={updateStatus.isPending}
+                            onClick={() => {
+                              void updateStatus.mutateAsync({ id, data: { status: 'resolved' } });
+                            }}
+                            className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Mark Resolved
+                          </button>
+                        )}
+                        {status !== 'dismissed' && (
+                          <button
+                            type="button"
+                            disabled={updateStatus.isPending}
+                            onClick={() => {
+                              void updateStatus.mutateAsync({ id, data: { status: 'dismissed' } });
+                            }}
+                            className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Dismiss
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

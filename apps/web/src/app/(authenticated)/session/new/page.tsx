@@ -85,7 +85,7 @@ export default function SessionNewPage(): React.JSX.Element {
     });
 
     const sessionId = String(response.data.id);
-    router.push(`/session/${sessionId}` as never);
+    router.push(`/session/${sessionId}`);
   }
 
   // ── Render ───────────────────────────────────────────────────────────────

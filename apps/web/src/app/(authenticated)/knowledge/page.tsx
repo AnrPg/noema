@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 
 'use client';
@@ -260,7 +260,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 type="button"
                 className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 onClick={() => {
-                  router.push(`/cards?conceptId=${String((contextMenu.node as any).id)}` as never);
+                  router.push(`/cards?conceptId=${String((contextMenu.node as any).id)}`);
                   setContextMenu(null);
                 }}
               >
@@ -322,7 +322,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 onClick={() => {
                   router.push(
-                    `/knowledge/misconceptions?nodeId=${String((contextMenu.node as any).id)}` as never
+                    `/knowledge/misconceptions?nodeId=${String((contextMenu.node as any).id)}`
                   );
                   setContextMenu(null);
                 }}
@@ -335,7 +335,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 type="button"
                 className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 onClick={() => {
-                  router.push('/knowledge/comparison' as never);
+                  router.push('/knowledge/comparison');
                   setContextMenu(null);
                 }}
               >

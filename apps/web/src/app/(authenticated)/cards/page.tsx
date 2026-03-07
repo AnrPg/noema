@@ -131,15 +131,15 @@ export default function CardLibraryPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   function handleCardClick(cardId: string): void {
-    router.push(('/cards/' + cardId) as never);
+    router.push('/cards/' + cardId);
   }
 
   function handleNewCard(): void {
-    router.push('/cards/new' as never);
+    router.push('/cards/new');
   }
 
   function handleBatchOperations(): void {
-    router.push('/cards/batch' as never);
+    router.push('/cards/batch');
   }
 
   // --------------------------------------------------------------------------
