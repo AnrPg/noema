@@ -161,11 +161,12 @@ function CardRow({
             size="sm"
             variant="ghost"
             className="text-destructive hover:text-destructive"
+            aria-label={`Delete card ${card.id}`}
             onClick={() => {
               setConfirming(true);
             }}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </Button>
         )}
       </div>

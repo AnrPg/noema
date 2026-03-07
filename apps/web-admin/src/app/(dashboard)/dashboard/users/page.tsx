@@ -282,7 +282,19 @@ export default function UsersPage(): React.JSX.Element {
           ) : (
             <CheckCircle className="h-4 w-4" />
           )}
-          <AlertDescription>{message.text}</AlertDescription>
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{message.text}</span>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              className="shrink-0 text-xs underline underline-offset-2 hover:no-underline"
+              onClick={() => {
+                setMessage(null);
+              }}
+            >
+              Dismiss
+            </button>
+          </AlertDescription>
         </Alert>
       )}
 

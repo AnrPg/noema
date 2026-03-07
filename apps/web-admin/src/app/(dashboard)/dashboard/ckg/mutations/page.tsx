@@ -69,9 +69,9 @@ export default function CKGMutationsPage(): React.JSX.Element {
       ? mutations.filter((m) => {
           const p = m.payload;
           return (
-            p['nodeId'] === nodeIdFilter ||
-            p['sourceId'] === nodeIdFilter ||
-            p['targetId'] === nodeIdFilter
+            (typeof p['nodeId'] === 'string' && p['nodeId'] === nodeIdFilter) ||
+            (typeof p['sourceId'] === 'string' && p['sourceId'] === nodeIdFilter) ||
+            (typeof p['targetId'] === 'string' && p['targetId'] === nodeIdFilter)
           );
         })
       : mutations;

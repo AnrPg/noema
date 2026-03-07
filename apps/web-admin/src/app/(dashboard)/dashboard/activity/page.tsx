@@ -160,7 +160,7 @@ export default function ActivityPage(): JSX.Element {
           ) : (
             <ol className="relative border-l border-border ml-3">
               {events.map((event) => (
-                <li key={event.id} className="mb-6 ml-6">
+                <li key={`${event.kind}:${event.id}`} className="mb-6 ml-6">
                   <span className="absolute -left-3 flex h-6 w-6 items-center justify-center rounded-full bg-muted ring-4 ring-background">
                     {event.kind === 'session' ? (
                       <BookOpen className="h-3 w-3 text-muted-foreground" />

@@ -34,6 +34,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
   const cancel = useCancelMutation();
 
   const id = mutation.id;
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   if (!ACTIONABLE_STATUSES.includes(mutation.status)) {
     return (
@@ -53,10 +54,16 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
         <CardTitle className="text-base">Admin Actions</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {errorMsg !== null && (
+          <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {errorMsg}
+          </p>
+        )}
         {mode === 'idle' && (
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => {
+                setErrorMsg(null);
                 approve.mutate(
                   { id },
                   {
@@ -64,6 +71,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                       setMode('idle');
                       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
                       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+                    },
+                    onError: (err) => {
+                      setErrorMsg(err.message);
                     },
                   }
                 );
@@ -119,6 +129,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 variant="destructive"
                 disabled={rejectNote.trim() === '' || reject.isPending}
                 onClick={() => {
+                  setErrorMsg(null);
                   reject.mutate(
                     { id, note: rejectNote },
                     {
@@ -128,6 +139,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                       },
+                      onError: (err) => {
+                        setErrorMsg(err.message);
+                      },
                     }
                   );
                 }}
@@ -135,6 +149,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 Confirm Reject
               </Button>
               <Button
+                type="button"
                 variant="ghost"
                 onClick={() => {
                   setMode('idle');
@@ -162,6 +177,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
               <Button
                 disabled={revisionFeedback.trim() === '' || requestRevision.isPending}
                 onClick={() => {
+                  setErrorMsg(null);
                   requestRevision.mutate(
                     { id, feedback: revisionFeedback },
                     {
@@ -171,6 +187,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                       },
+                      onError: (err) => {
+                        setErrorMsg(err.message);
+                      },
                     }
                   );
                 }}
@@ -178,6 +197,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 Send Feedback
               </Button>
               <Button
+                type="button"
                 variant="ghost"
                 onClick={() => {
                   setMode('idle');
@@ -200,11 +220,15 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 variant="destructive"
                 disabled={cancel.isPending}
                 onClick={() => {
+                  setErrorMsg(null);
                   cancel.mutate(id, {
                     onSuccess: () => {
                       setMode('idle');
                       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
                       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+                    },
+                    onError: (err) => {
+                      setErrorMsg(err.message);
                     },
                   });
                 }}
@@ -212,6 +236,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 Confirm Cancel
               </Button>
               <Button
+                type="button"
                 variant="ghost"
                 onClick={() => {
                   setMode('idle');

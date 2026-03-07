@@ -18,8 +18,8 @@ export function MutationGraphDiff({
   mutation,
   className,
 }: IMutationGraphDiffProps): React.JSX.Element {
-  const { data: allNodes = [] } = useCKGNodes();
-  const { data: allEdges = [] } = useCKGEdges();
+  const { data: allNodes = [], isLoading: nodesLoading } = useCKGNodes();
+  const { data: allEdges = [], isLoading: edgesLoading } = useCKGEdges();
 
   // Extract affected node IDs from payload
   const affectedNodeIds = React.useMemo(() => {
@@ -49,9 +49,18 @@ export function MutationGraphDiff({
   }, [subgraphNodes, allEdges]);
 
   const highlightedNodeIds = React.useMemo(
-    () => new Set<string>(Array.from(affectedNodeIds)),
+    () => new Set<string>(affectedNodeIds),
     [affectedNodeIds]
   );
+
+  if (nodesLoading || edgesLoading) {
+    return (
+      <div
+        className={`animate-pulse rounded-lg bg-muted/20 ${className ?? 'h-80'}`}
+        aria-label="Loading graph data"
+      />
+    );
+  }
 
   if (subgraphNodes.length === 0) {
     return (
