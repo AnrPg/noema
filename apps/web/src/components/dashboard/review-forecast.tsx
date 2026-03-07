@@ -95,13 +95,13 @@ export function ReviewForecast({ userId }: { userId: UserId }): React.JSX.Elemen
           >
             {days.map((day) => {
               const total = day.retention + day.calibration;
-              const scale = BAR_CHART_HEIGHT / MAX_DISPLAY_VALUE;
+              const innerHeight = BAR_CHART_HEIGHT - 20; // 20px reserved for the day label
+              const scale = innerHeight / MAX_DISPLAY_VALUE;
               const cappedTotal = Math.min(total, MAX_DISPLAY_VALUE);
               const retH =
                 total > 0 ? Math.round((day.retention / total) * cappedTotal * scale) : 0;
               const calH =
                 total > 0 ? Math.round((day.calibration / total) * cappedTotal * scale) : 0;
-              const innerHeight = BAR_CHART_HEIGHT - 20;
 
               return (
                 <div

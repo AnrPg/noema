@@ -61,14 +61,14 @@ export function RiskAlerts(): React.JSX.Element {
         </h3>
       </div>
       <div className="flex flex-col gap-2 px-4 pb-4">
-        {visibleRisks.map((risk, i) => {
+        {visibleRisks.map((risk) => {
           const sev = risk.severity as 'critical' | 'high' | 'medium';
           const Icon = SEVERITY_ICON[sev];
           const style = SEVERITY_STYLE[sev];
 
           return (
             <div
-              key={`${risk.type}-${String(i)}`}
+              key={`${risk.type}:${risk.description}`}
               className={['rounded-lg border p-3', style].join(' ')}
             >
               <div className="flex items-start gap-2">

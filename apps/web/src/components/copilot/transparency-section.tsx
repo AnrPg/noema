@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-
 'use client';
 /**
  * @noema/web — Copilot / TransparencySection
@@ -79,9 +76,9 @@ export function TransparencySection(): React.JSX.Element {
 
       {reasonings.length > 0 && (
         <CollapsibleSection title="Reasoning">
-          {reasonings.map((r, i) => (
+          {reasonings.map((r) => (
             <blockquote
-              key={i}
+              key={r}
               className="border-l-2 border-synapse-400/40 pl-3 text-xs italic leading-relaxed text-foreground/80"
             >
               {r}
@@ -93,8 +90,8 @@ export function TransparencySection(): React.JSX.Element {
       {assumptions.length > 0 && (
         <CollapsibleSection title="Assumptions">
           <ul className="flex flex-col gap-1.5">
-            {assumptions.map((a, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-foreground/80">
+            {assumptions.map((a) => (
+              <li key={a} className="flex items-start gap-2 text-xs text-foreground/80">
                 <span className="mt-0.5 text-muted-foreground">•</span>
                 <span>{a}</span>
               </li>
@@ -106,8 +103,8 @@ export function TransparencySection(): React.JSX.Element {
       {contextNeeded.length > 0 && (
         <CollapsibleSection title="Context Needed">
           <ul className="flex flex-col gap-1.5">
-            {contextNeeded.map((c, i) => (
-              <li key={i} className="text-xs text-amber-600 dark:text-amber-400">
+            {contextNeeded.map((c) => (
+              <li key={c} className="text-xs text-amber-600 dark:text-amber-400">
                 {c}
               </li>
             ))}
@@ -118,8 +115,8 @@ export function TransparencySection(): React.JSX.Element {
       {constraints.length > 0 && (
         <CollapsibleSection title="Constraints" defaultOpen={false}>
           <ul className="flex flex-col gap-1.5">
-            {constraints.map((c, i) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+            {constraints.map((c) => (
+              <li key={c} className="flex items-start gap-2 text-xs text-muted-foreground">
                 <span className="mt-0.5">—</span>
                 <span>{c}</span>
               </li>
