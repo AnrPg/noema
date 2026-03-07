@@ -58,13 +58,24 @@ export const useCopilotStore = create<ICopilotState & ICopilotActions>()(
       pushHints: (pageKey, hints) =>
         set((s) => {
           const existing = s.hintsByPage[pageKey] ?? [];
-          const existingActionIds = new Set(
-            existing.flatMap((h) => h.suggestedNextActions.map((a: ISuggestedAction) => a.action))
+          // Build a map from action ID → action for O(1) lookup of both existence and current values
+          const existingActionsMap = new Map<string, ISuggestedAction>(
+            existing.flatMap((h) =>
+              h.suggestedNextActions.map((a: ISuggestedAction) => [a.action, a] as const)
+            )
           );
           const hasNew = hints.suggestedNextActions.some(
-            (a: ISuggestedAction) => !existingActionIds.has(a.action)
+            (a: ISuggestedAction) => !existingActionsMap.has(a.action)
           );
-          if (!hasNew) return s;
+          // Also trigger update if an existing action's confidence or priority changed
+          const hasUpdated = hints.suggestedNextActions.some((a: ISuggestedAction) => {
+            const prev = existingActionsMap.get(a.action);
+            return (
+              prev !== undefined &&
+              (prev.confidence !== a.confidence || prev.priority !== a.priority)
+            );
+          });
+          if (!hasNew && !hasUpdated) return s;
 
           // Count new critical/high actions for the unread badge
           const newHighCount = !s.isOpen

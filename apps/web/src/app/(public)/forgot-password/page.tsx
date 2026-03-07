@@ -37,7 +37,8 @@ type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage(): React.JSX.Element {
   const [success, setSuccess] = useState(false);
-  const [submittedEmail, setSubmittedEmail] = useState('');
+  const [submittedEmail, _setSubmittedEmail] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const {
     register,
@@ -48,13 +49,12 @@ export default function ForgotPasswordPage(): React.JSX.Element {
     resolver: zodResolver(forgotPasswordSchema),
   });
 
-  const onSubmit = async (data: ForgotPasswordFormData): Promise<void> => {
-    // TODO: replace with authApi.requestPasswordReset(data.email) when endpoint exists
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 800);
-    });
-    setSubmittedEmail(data.email);
-    setSuccess(true);
+  const onSubmit = (_data: ForgotPasswordFormData): void => {
+    setSubmitError(null);
+    // TODO: replace with authApi.requestPasswordReset(_data.email) when endpoint exists.
+    // The backend endpoint is not yet implemented — show an honest error rather than
+    // faking a success that would leave the user waiting for an email that never arrives.
+    setSubmitError('Password reset is not yet available. Please contact support.');
   };
 
   if (success) {
@@ -124,6 +124,11 @@ export default function ForgotPasswordPage(): React.JSX.Element {
                   {...register('email')}
                 />
               </FormField>
+              {submitError !== null && (
+                <p role="alert" className="text-sm text-destructive">
+                  {submitError}
+                </p>
+              )}
             </CardContent>
             <CardFooter className="flex-col gap-4">
               <Button type="submit" className="w-full" disabled={isSubmitting}>

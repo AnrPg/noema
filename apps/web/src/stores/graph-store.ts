@@ -29,6 +29,7 @@ interface IGraphState {
   hoveredNodeId: string | null;
   activeOverlays: Set<OverlayType>;
   layoutMode: LayoutMode;
+  neighborhoodHighlight: Set<string>;
 }
 
 // ============================================================================
@@ -42,6 +43,7 @@ interface IGraphActions {
   setLayoutMode: (mode: LayoutMode) => void;
   resetViewport: () => void;
   setHoveredNode: (nodeId: string | null) => void;
+  setNeighborhoodHighlight: (ids: Set<string>) => void;
 }
 
 // ============================================================================
@@ -55,6 +57,7 @@ const initialState: IGraphState = {
   hoveredNodeId: null,
   activeOverlays: EMPTY_OVERLAYS, // NOTE: Set is not JSON-serializable; do not add persist() without a custom storage adapter
   layoutMode: 'force',
+  neighborhoodHighlight: new Set<string>(),
 };
 
 export const useGraphStore = create<IGraphState & IGraphActions>()((set) => ({
@@ -90,10 +93,15 @@ export const useGraphStore = create<IGraphState & IGraphActions>()((set) => ({
       selectedNodeId: null,
       hoveredNodeId: null,
       activeOverlays: EMPTY_OVERLAYS,
+      neighborhoodHighlight: new Set<string>(),
     });
   },
 
   setHoveredNode: (nodeId) => {
     set({ hoveredNodeId: nodeId });
+  },
+
+  setNeighborhoodHighlight: (ids) => {
+    set({ neighborhoodHighlight: ids });
   },
 }));

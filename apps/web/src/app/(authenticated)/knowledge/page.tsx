@@ -12,7 +12,7 @@
  * left control panel and node detail panel.
  */
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@noema/auth';
 import { usePKGNodes, usePKGEdges, useKnowledgeFrontier, useBridgeNodes } from '@noema/api-client';
 import type { IGraphNodeDto, IGraphEdgeDto } from '@noema/api-client';
@@ -25,6 +25,7 @@ import { NodeDetailPanel } from '@/components/graph/node-detail-panel';
 
 export default function KnowledgePage(): React.JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
 
@@ -36,21 +37,20 @@ export default function KnowledgePage(): React.JSX.Element {
   const nodes: IGraphNodeDto[] = (nodesData as any) ?? [];
   const edges: IGraphEdgeDto[] = (edgesData as any) ?? [];
 
-  const {
-    selectedNodeId,
-    hoveredNodeId,
-    activeOverlays,
-    layoutMode,
-    selectNode,
-    deselectNode,
-    toggleOverlay,
-    setLayoutMode,
-    setHoveredNode,
-  } = useGraphStore();
+  const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const hoveredNodeId = useGraphStore((s) => s.hoveredNodeId);
+  const activeOverlays = useGraphStore((s) => s.activeOverlays);
+  const layoutMode = useGraphStore((s) => s.layoutMode);
+  const neighborhoodHighlight = useGraphStore((s) => s.neighborhoodHighlight);
+  const selectNode = useGraphStore((s) => s.selectNode);
+  const deselectNode = useGraphStore((s) => s.deselectNode);
+  const toggleOverlay = useGraphStore((s) => s.toggleOverlay);
+  const setLayoutMode = useGraphStore((s) => s.setLayoutMode);
+  const setHoveredNode = useGraphStore((s) => s.setHoveredNode);
+  const setNeighborhoodHighlight = useGraphStore((s) => s.setNeighborhoodHighlight);
 
   const [searchQuery, setSearchQuery] = React.useState('');
   const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
-  const [neighborhoodHighlight, setNeighborhoodHighlight] = React.useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = React.useState<{
     node: IGraphNodeDto;
     x: number;
@@ -58,6 +58,14 @@ export default function KnowledgePage(): React.JSX.Element {
   } | null>(null);
 
   const isLoading = nodesLoading || edgesLoading;
+
+  // Select node from ?nodeId= query param once nodes are loaded
+  const nodeIdParam = searchParams.get('nodeId');
+  React.useEffect(() => {
+    if (nodeIdParam !== null && nodes.length > 0 && selectedNodeId !== nodeIdParam) {
+      selectNode(nodeIdParam);
+    }
+  }, [nodeIdParam, nodes.length, selectedNodeId, selectNode]);
 
   const handleToggleType = React.useCallback((type: string) => {
     setHiddenTypes((prev) => {
@@ -155,9 +163,12 @@ export default function KnowledgePage(): React.JSX.Element {
   const handleViewPrerequisites = React.useCallback(
     (nodeId: string) => {
       selectNode(nodeId);
-      toggleOverlay('prerequisites');
+      // Enable prerequisites overlay idempotently — do not toggle off if already active
+      if (!activeOverlays.has('prerequisites')) {
+        toggleOverlay('prerequisites');
+      }
     },
-    [selectNode, toggleOverlay]
+    [selectNode, toggleOverlay, activeOverlays]
   );
 
   const activeOverlaysArray = React.useMemo(() => [...activeOverlays], [activeOverlays]);
@@ -252,7 +263,7 @@ export default function KnowledgePage(): React.JSX.Element {
               }}
             />
             <div
-              className="absolute z-50 min-w-[180px] rounded-lg border border-border bg-card py-1 shadow-lg"
+              className="fixed z-50 min-w-[180px] rounded-lg border border-border bg-card py-1 shadow-lg"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               {/* View card linked to this concept */}

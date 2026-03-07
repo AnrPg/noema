@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-
 'use client';
 /**
  * @noema/web — Copilot / AlternativesWarnings
@@ -60,7 +56,7 @@ export function AlternativesWarnings(): React.JSX.Element {
               const expanded = expandedAlts.has(i);
               const ChevronIcon = expanded ? ChevronDown : ChevronRight;
               return (
-                <div key={i} className="rounded-lg border border-border bg-muted/20">
+                <div key={alt.approach} className="rounded-lg border border-border bg-muted/20">
                   <button
                     type="button"
                     onClick={() => {
@@ -82,8 +78,8 @@ export function AlternativesWarnings(): React.JSX.Element {
                         <div className="mb-1">
                           <span className="font-medium text-synapse-400">Pros:</span>
                           <ul className="mt-0.5 space-y-0.5">
-                            {alt.pros.map((p: string, j: number) => (
-                              <li key={j} className="text-foreground/80">
+                            {alt.pros.map((p: string) => (
+                              <li key={p} className="text-foreground/80">
                                 + {p}
                               </li>
                             ))}
@@ -94,8 +90,8 @@ export function AlternativesWarnings(): React.JSX.Element {
                         <div>
                           <span className="font-medium text-cortex-400">Cons:</span>
                           <ul className="mt-0.5 space-y-0.5">
-                            {alt.cons.map((c: string, j: number) => (
-                              <li key={j} className="text-foreground/80">
+                            {alt.cons.map((c: string) => (
+                              <li key={c} className="text-foreground/80">
                                 − {c}
                               </li>
                             ))}
@@ -119,9 +115,9 @@ export function AlternativesWarnings(): React.JSX.Element {
             </h3>
           </div>
           <div className="flex flex-col gap-2 px-4 pb-4">
-            {warnings.map((w, i) => (
+            {warnings.map((w) => (
               <div
-                key={i}
+                key={`${w.type}:${w.message}`}
                 className={['rounded-lg border p-3', WARNING_STYLE[w.severity]].join(' ')}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -133,10 +129,14 @@ export function AlternativesWarnings(): React.JSX.Element {
                     )}
                   </div>
                   {w.autoFixable === true && (
+                    // Fix action: IWarning contract does not yet carry a fixAction payload.
+                    // Button is rendered disabled until the API provides an actionable fix endpoint.
                     <button
                       type="button"
-                      aria-label="Auto-fix this warning"
-                      className="flex flex-shrink-0 items-center gap-1 rounded-sm bg-background/60 px-2 py-1 text-[10px] font-semibold transition-colors hover:bg-background/80 focus:outline-none focus:ring-1 focus:ring-ring"
+                      disabled
+                      aria-label="Auto-fix this warning (not yet available)"
+                      title={w.suggestedFix ?? 'Auto-fix coming soon'}
+                      className="flex flex-shrink-0 cursor-not-allowed items-center gap-1 rounded-sm bg-background/60 px-2 py-1 text-[10px] font-semibold opacity-50 focus:outline-none"
                     >
                       <Wrench className="h-3 w-3" aria-hidden="true" />
                       Fix
