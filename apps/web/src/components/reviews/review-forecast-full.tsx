@@ -1,9 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 'use client';
 /**
  * @noema/web — Reviews / ReviewForecastFull
@@ -55,12 +49,7 @@ function buildDays(
     const d = new Date();
     d.setDate(d.getDate() + i);
     const dateStr = localDateStr(d);
-    const dayWindows = windowData.filter((w) => localDateStr(new Date(w.startAt)) === dateStr) as {
-      startAt: string;
-      endAt: string;
-      lane: 'retention' | 'calibration';
-      cardsDue: number;
-    }[];
+    const dayWindows = windowData.filter((w) => localDateStr(new Date(w.startAt)) === dateStr);
     return {
       label: DAY_LABELS[d.getDay()] ?? 'Day',
       date: dateStr,
@@ -93,12 +82,12 @@ export function ReviewForecastFull({ userId }: IReviewForecastFullProps): React.
 
   const [expandedDate, setExpandedDate] = React.useState<string | null>(null);
 
-  const days = React.useMemo(() => buildDays((windowsData as any)?.data ?? []), [windowsData]);
+  const days = React.useMemo(() => buildDays(windowsData?.data ?? []), [windowsData]);
   const maxTotal = Math.max(...days.map((d) => d.retention + d.calibration), 1);
   const expandedDay =
     expandedDate !== null ? (days.find((d) => d.date === expandedDate) ?? null) : null;
 
-  if (isLoading === true) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-8 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />

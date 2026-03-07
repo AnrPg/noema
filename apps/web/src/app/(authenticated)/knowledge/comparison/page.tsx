@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 'use client';
 /**
  * @noema/web — /knowledge/comparison
@@ -11,10 +7,6 @@
  *   Right panel = Canonical Knowledge Graph (CKG)
  *   Synchronised: clicking a node in either panel selects it globally.
  *   Bottom action panel for resolving selected discrepancies.
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because the @noema/api-client package has not been built yet (no dist/).
- * Once packages are built these suppressions should be removed.
  */
 
 import * as React from 'react';
@@ -43,6 +35,7 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
   const userId = (user?.id ?? '') as UserId;
 
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
+  const [createError, setCreateError] = React.useState<string | null>(null);
 
   // ── Data hooks ─────────────────────────────────────────────────────────────
   const { data: pkgNodesData, isLoading: pkgNodesLoading } = usePKGNodes(userId);
@@ -56,16 +49,15 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
     pkgNodesLoading || pkgEdgesLoading || ckgNodesLoading || ckgEdgesLoading || compLoading;
 
   // ── Data extraction ────────────────────────────────────────────────────────
-  const pkgNodes: IGraphNodeDto[] = (pkgNodesData as any) ?? [];
-  const pkgEdges: IGraphEdgeDto[] = (pkgEdgesData as any) ?? [];
-  const ckgNodes: IGraphNodeDto[] = (ckgNodesData as any) ?? [];
-  const ckgEdges: IGraphEdgeDto[] = (ckgEdgesData as any) ?? [];
+  const pkgNodes: IGraphNodeDto[] = pkgNodesData ?? [];
+  const pkgEdges: IGraphEdgeDto[] = pkgEdgesData ?? [];
+  const ckgNodes: IGraphNodeDto[] = ckgNodesData ?? [];
+  const ckgEdges: IGraphEdgeDto[] = ckgEdgesData ?? [];
 
-  const comparison: any = comparisonData ?? null;
-  const missingFromPkg: IGraphNodeDto[] =
-    (comparison?.missingFromPkg as IGraphNodeDto[] | undefined) ?? [];
-  const extraInPkg: IGraphNodeDto[] = (comparison?.extraInPkg as IGraphNodeDto[] | undefined) ?? [];
-  const alignmentScore: number = (comparison?.alignmentScore as number | undefined) ?? 0;
+  const comparison = comparisonData ?? null;
+  const missingFromPkg: IGraphNodeDto[] = comparison?.missingFromPkg ?? [];
+  const extraInPkg: IGraphNodeDto[] = comparison?.extraInPkg ?? [];
+  const alignmentScore: number = comparison?.alignmentScore ?? 0;
 
   // ── Derived sets ───────────────────────────────────────────────────────────
   // Ghost nodes: in CKG but not PKG — shown as highlights in the PKG panel
@@ -178,6 +170,14 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
       </div>
 
       {/* ── Action panel (discrepancy selected) ────────────────────────────── */}
+      {createError !== null && (
+        <div
+          role="alert"
+          className="flex-shrink-0 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive"
+        >
+          {createError}
+        </div>
+      )}
       {(isGhost || isPersonalOnly) && selectedNode !== undefined && (
         <div className="flex flex-shrink-0 items-center gap-4 rounded-xl border border-border bg-card px-4 py-3">
           <div className="flex-1 min-w-0">
@@ -192,14 +192,22 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
           {isGhost && (
             <Button
               onClick={() => {
-                void createNode.mutateAsync({
-                  type: selectedNode.type,
-                  label: selectedNode.label,
-                  ...(selectedNode.description !== null
-                    ? { description: selectedNode.description }
-                    : {}),
-                  tags: selectedNode.tags,
-                });
+                setCreateError(null);
+                createNode.mutate(
+                  {
+                    type: selectedNode.type,
+                    label: selectedNode.label,
+                    ...(selectedNode.description !== null
+                      ? { description: selectedNode.description }
+                      : {}),
+                    tags: selectedNode.tags,
+                  },
+                  {
+                    onError: (err) => {
+                      setCreateError(err.message);
+                    },
+                  }
+                );
               }}
               disabled={createNode.isPending}
               size="sm"

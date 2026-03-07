@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 'use client';
 /**
  * @noema/web — Reviews / TodaysPlan
@@ -23,9 +19,9 @@ export interface ITodaysPlanProps {
 export function TodaysPlan({ userId }: ITodaysPlanProps): React.JSX.Element {
   const { data: planData, isLoading } = useDualLanePlan({ userId }, { enabled: userId !== '' });
 
-  const plan: any = (planData as any)?.data ?? null;
-  const totalRetention: number = (plan?.totalRetention as number | undefined) ?? 0;
-  const totalCalibration: number = (plan?.totalCalibration as number | undefined) ?? 0;
+  const plan = planData?.data ?? null;
+  const totalRetention = plan?.totalRetention ?? 0;
+  const totalCalibration = plan?.totalCalibration ?? 0;
   const total = totalRetention + totalCalibration;
 
   if (isLoading) {

@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 'use client';
 /**
  * @noema/web — Reviews / ReviewWindows
@@ -42,16 +37,12 @@ export function ReviewWindows({ userId }: IReviewWindowsProps): React.JSX.Elemen
 
   // Only show today's windows
   const todayWindows = React.useMemo(() => {
-    const allWindows: any[] = (windowsData as any)?.data ?? [];
-    const today = new Date();
-    const todayStr = localDateStr(today);
-    return allWindows.filter((w) => {
-      const ds = localDateStr(new Date(String(w.startAt)));
-      return ds === todayStr;
-    });
+    const allWindows = windowsData?.data ?? [];
+    const todayStr = localDateStr(new Date());
+    return allWindows.filter((w) => localDateStr(new Date(w.startAt)) === todayStr);
   }, [windowsData]);
 
-  if (isLoading === true) {
+  if (isLoading) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-8 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -79,13 +70,11 @@ export function ReviewWindows({ userId }: IReviewWindowsProps): React.JSX.Elemen
 
       <div className="flex flex-col gap-2">
         {todayWindows.map((w, i) => {
-          const lane = String(w.lane) as 'retention' | 'calibration';
-          const loadScore: number = (w.loadScore as number | undefined) ?? 0;
-          const cardsDue: number = (w.cardsDue as number | undefined) ?? 0;
+          const { lane, loadScore, cardsDue } = w;
 
           return (
             <div
-              key={`${String(w.startAt)}-${String(i)}`}
+              key={`${w.startAt}-${String(i)}`}
               className={[
                 'flex items-center gap-4 rounded-lg border border-dashed px-4 py-3',
                 lane === 'retention'
@@ -96,10 +85,10 @@ export function ReviewWindows({ userId }: IReviewWindowsProps): React.JSX.Elemen
               {/* Time range */}
               <div className="min-w-[90px]">
                 <p className="text-sm font-medium text-foreground tabular-nums">
-                  {formatTime(String(w.startAt))}
+                  {formatTime(w.startAt)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {formatDuration(String(w.startAt), String(w.endAt))}
+                  {formatDuration(w.startAt, w.endAt)}
                 </p>
               </div>
 

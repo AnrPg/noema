@@ -1,16 +1,9 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /**
  * Dashboard Page — Cognitive Vitals
  *
  * Codename: Thalamus
  * Composes all 5 dashboard sections with staggered entrance animation.
  * Each section is independently isolated via SectionErrorBoundary.
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because @noema/auth has not been built yet (no dist/ directory).
- * Once packages are built these suppressions should be removed.
  */
 
 'use client';

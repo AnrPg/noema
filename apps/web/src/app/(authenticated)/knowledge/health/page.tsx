@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client';
 /**
  * @noema/web — /knowledge/health
@@ -66,8 +62,8 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
 
   const isLoading = healthLoading || historyLoading;
 
-  const health: any = (healthResponse as any)?.data ?? null;
-  const historyEntries: any[] = (historyResponse as any)?.data?.entries ?? [];
+  const health = healthResponse?.data ?? null;
+  const historyEntries = historyResponse?.data.entries ?? [];
 
   // Build 11-metric array for RadarChart from health report
   const radarMetrics: IRadarMetric[] = React.useMemo(() => {
@@ -75,7 +71,9 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
       return METRIC_DEFS.map((d) => ({ ...d, value: 0 }));
     }
     return METRIC_DEFS.map((d) => {
-      const raw = health[d.key];
+      // Dynamic metric keys (abstractionDrift etc.) are not in the DTO type but present
+      // at runtime. Access via Record<string, unknown> cast to preserve type safety elsewhere.
+      const raw = (health as Record<string, unknown>)[d.key];
       // If individual metric is not present, use 0 — fabricating a balanced polygon
       // from the overall score would misrepresent "no data" as meaningful structure.
       const rawScore: number = typeof raw === 'number' ? raw : 0;
@@ -86,7 +84,7 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
 
   // History scores (overall score across time) for sparkline
   const historyScores: number[] = React.useMemo(
-    () => historyEntries.map((e) => (typeof e.score === 'number' ? (e.score as number) : 0)),
+    () => historyEntries.map((e) => e.score),
     [historyEntries]
   );
 
@@ -132,12 +130,7 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
     );
   }
 
-  const score: number = typeof health?.score === 'number' ? (health.score as number) : 0;
-  const grade: string = typeof health?.grade === 'string' ? (health.grade as string) : 'fair';
-  const issues: string[] = Array.isArray(health?.issues) ? (health.issues as string[]) : [];
-  const recommendations: string[] = Array.isArray(health?.recommendations)
-    ? (health.recommendations as string[])
-    : [];
+  const { score, grade, issues, recommendations } = health;
 
   return (
     <div className="flex flex-col gap-8">
