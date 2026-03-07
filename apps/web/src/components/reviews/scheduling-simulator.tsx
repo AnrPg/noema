@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client';
 /**
  * @noema/web — Reviews / SchedulingSimulator
@@ -12,6 +8,7 @@
  */
 import * as React from 'react';
 import { useSimulateSession } from '@noema/api-client';
+import type { ISimulationResult, ISessionCandidateDto } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Button } from '@noema/ui';
 import { Loader2, FlaskConical } from 'lucide-react';
@@ -31,7 +28,7 @@ const DURATION_OPTIONS = [15, 30, 45, 60, 90] as const;
 export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): React.JSX.Element {
   const [durationMinutes, setDurationMinutes] = React.useState<number>(30);
   const [lane, setLane] = React.useState<LaneFilter>('all');
-  const [result, setResult] = React.useState<any>(null);
+  const [result, setResult] = React.useState<ISimulationResult | null>(null);
 
   const simulate = useSimulateSession();
   const { mutateAsync: simulateMutate } = simulate;
@@ -40,23 +37,23 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
   const handleRun = React.useCallback(async (): Promise<void> => {
     setSimError(null);
     try {
-      const response: any = await simulateMutate({
+      const response = await simulateMutate({
         userId,
         sessionDurationMinutes: durationMinutes,
         ...(lane !== 'all' ? { lane } : {}),
       });
-      setResult(response?.data ?? null);
+      setResult(response.data);
     } catch (err) {
       setSimError(err instanceof Error ? err.message : 'Simulation failed. Please try again.');
     }
   }, [simulateMutate, userId, durationMinutes, lane]);
 
-  const simulatedCards: any[] = (result?.simulatedCards as any[] | undefined) ?? [];
-  const retentionGain: number = (result?.projectedRetentionGain as number | undefined) ?? 0;
-  const estimatedMinutes: number = (result?.estimatedDurationMinutes as number | undefined) ?? 0;
+  const simulatedCards: ISessionCandidateDto[] = result?.simulatedCards ?? [];
+  const retentionGain: number = result?.projectedRetentionGain ?? 0;
+  const estimatedMinutes: number = result?.estimatedDurationMinutes ?? 0;
 
-  const retentionCards = simulatedCards.filter((c) => String(c.lane) === 'retention');
-  const calibrationCards = simulatedCards.filter((c) => String(c.lane) === 'calibration');
+  const retentionCards = simulatedCards.filter((c) => c.lane === 'retention');
+  const calibrationCards = simulatedCards.filter((c) => c.lane === 'calibration');
 
   return (
     <div className="flex flex-col gap-6 rounded-xl border border-border bg-card px-6 py-6">
@@ -131,10 +128,10 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
           onClick={() => {
             void handleRun();
           }}
-          disabled={simulate.isPending === true || userId === ''}
+          disabled={simulate.isPending || userId === ''}
           className="gap-1.5"
         >
-          {simulate.isPending === true ? (
+          {simulate.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <FlaskConical className="h-4 w-4" aria-hidden="true" />

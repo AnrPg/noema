@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-
 'use client';
 /**
  * @noema/web — Reviews / CardScheduleInspector
@@ -66,19 +61,19 @@ export function CardScheduleInspector({
     { enabled: userId !== '' && cardId !== '' }
   );
 
-  const card: any = (cardData as any)?.card ?? null;
-  const hlr: any = hlrData ?? null;
+  const card = cardData?.card ?? null;
+  const hlr = hlrData ?? null;
 
-  const algorithm = String(card?.schedulingAlgorithm ?? '—');
-  const state: string = String(card?.state ?? '').toLowerCase();
-  const stability: number | null = (card?.stability as number | null) ?? null;
-  const difficulty: number | null = (card?.difficulty as number | null) ?? null;
-  const nextReviewDate: string | null = (card?.nextReviewDate as string | null) ?? null;
-  const reviewCount: number = (card?.reviewCount as number | undefined) ?? 0;
-  const lapseCount: number = (card?.lapseCount as number | undefined) ?? 0;
+  const algorithm = card?.schedulingAlgorithm ?? '—';
+  const state: string = (card?.state ?? '').toLowerCase();
+  const stability: number | null = card?.stability ?? null;
+  const difficulty: number | null = card?.difficulty ?? null;
+  const nextReviewDate: string | null = card?.nextReviewDate ?? null;
+  const reviewCount: number = card?.reviewCount ?? 0;
+  const lapseCount: number = card?.lapseCount ?? 0;
 
-  const hlrRecall: number = (hlr?.recallProbability as number | undefined) ?? 0;
-  const hlrHalfLife: number = (hlr?.halfLifeDays as number | undefined) ?? 0;
+  const hlrRecall: number = hlr?.recallProbability ?? 0;
+  const hlrHalfLife: number = hlr?.halfLifeDays ?? 0;
 
   // Review history — real data would come from a per-card attempts API
   const reviewEvents: IReviewEvent[] = [];
@@ -143,7 +138,7 @@ export function CardScheduleInspector({
         </div>
 
         {/* Loading */}
-        {cardLoading === true && (
+        {cardLoading && (
           <div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
             Loading schedule data…
@@ -151,7 +146,7 @@ export function CardScheduleInspector({
         )}
 
         {/* Content */}
-        {cardLoading !== true && (
+        {!cardLoading && (
           <div className="flex flex-col gap-6 p-4">
             {/* Algorithm + State chips */}
             <div className="flex flex-wrap gap-2">
@@ -219,7 +214,7 @@ export function CardScheduleInspector({
               <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 HLR Prediction
               </h3>
-              {hlrLoading === true ? (
+              {hlrLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                   Loading HLR…

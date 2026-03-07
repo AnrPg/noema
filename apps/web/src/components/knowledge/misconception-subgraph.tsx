@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client';
 /**
  * @noema/web — Knowledge / MisconceptionSubgraph
@@ -32,13 +28,13 @@ export function MisconceptionSubgraph({ nodeId }: IMisconceptionSubgraphProps): 
     { enabled: userId !== '' && nodeId !== '' }
   );
 
-  const subgraphData: any = (subgraphResponse as any)?.data ?? null;
+  const subgraphData = subgraphResponse?.data ?? null;
   const nodes: IGraphNodeDto[] = subgraphData?.nodes ?? [];
   const edges: IGraphEdgeDto[] = subgraphData?.edges ?? [];
 
   const highlighted = React.useMemo(() => new Set([nodeId]), [nodeId]);
 
-  if (isLoading === true) {
+  if (isLoading) {
     return (
       <div className="flex h-44 items-center justify-center rounded-lg border border-border bg-muted/30">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />

@@ -3,9 +3,6 @@
  *
  * Lists the 5 most recent study sessions with state chips, mode badges,
  * card progress, and a NeuralGauge showing completion percentage.
- *
- * Note: eslint-disable directive above suppresses no-unsafe-assignment that fires
- * because @noema/ui has not been built yet. Remove once packages are built.
  */
 
 'use client';

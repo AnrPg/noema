@@ -1,20 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-
 /**
  * Authenticated Routes Layout
  *
  * Routes that require authentication.
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because @noema/auth and @noema/ui packages have not been built yet
- * (no dist/ directory). Once packages are built these suppressions should
- * be removed.
  */
 
 'use client';
 
+import type { JSX, ReactNode } from 'react';
 import { AuthGuard, useAuth } from '@noema/auth';
 import {
   Avatar,
@@ -86,7 +78,7 @@ const navItems = [
   },
 ];
 
-function UserMenu(): React.JSX.Element {
+function UserMenu(): JSX.Element {
   const { user, logout } = useAuth();
   const router = useRouter();
 
@@ -154,11 +146,7 @@ function UserMenu(): React.JSX.Element {
   );
 }
 
-export default function AuthenticatedLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}): React.JSX.Element {
+export default function AuthenticatedLayout({ children }: { children: ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
 

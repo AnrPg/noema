@@ -1,12 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client';
 
 /**
  * @noema/web - Card Renderers
  * ClozeRenderer — fill-in-the-blank card with {{blank}} template placeholders.
- * Note: eslint-disable directives above suppress no-unsafe-* rules that fire
- * because @noema/ui has not been built yet. Remove once packages are built.
  */
 
 import * as React from 'react';

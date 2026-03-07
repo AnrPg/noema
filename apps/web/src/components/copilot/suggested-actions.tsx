@@ -137,9 +137,7 @@ export function SuggestedActions(): React.JSX.Element {
   return (
     <div className="flex flex-col">
       {CATEGORY_ORDER.filter((cat) => grouped.has(cat)).map((cat) => {
-        // grouped.has(cat) is guaranteed by the .filter above
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const actions = grouped.get(cat)!;
+        const actions = grouped.get(cat) ?? [];
         const Icon = CATEGORY_ICON[cat] as React.FC<React.SVGProps<SVGSVGElement>>;
         const isCollapsed = collapsedGroups.has(cat);
         const ChevronIcon = isCollapsed ? ChevronRight : ChevronDown;

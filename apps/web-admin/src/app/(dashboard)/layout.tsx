@@ -88,16 +88,8 @@ const navGroups: INavGroup[] = [
   },
 ];
 
-interface IAuthContext {
-  user: { displayName: string; email: string; avatarUrl: string | null } | null;
-  logout: () => Promise<void>;
-}
-
 function AdminMenu(): JSX.Element {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-  const auth = useAuth() as IAuthContext;
-  const user: IAuthContext['user'] = auth.user;
-  const logout: () => Promise<void> = auth.logout;
+  const { user, logout } = useAuth();
   const router = useRouter();
 
   const handleLogout = async (): Promise<void> => {

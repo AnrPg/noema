@@ -82,6 +82,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const [selfReportedGuess, setSelfReportedGuess] = useState(false);
   const [checkpoint, setCheckpoint] = useState<ICheckpointDirectiveDto | null>(null);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
+  const [mutationError, setMutationError] = useState<string | null>(null);
 
   // Track card start time for dwell time calculation
   const cardStartRef = useRef<number>(Date.now());
@@ -153,12 +154,24 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Pause / Resume ────────────────────────────────────────────────────────
   const handlePause = useCallback((): void => {
     setIsPaused(true);
-    pauseSession.mutate(sessionId);
+    setMutationError(null);
+    pauseSession.mutate(sessionId, {
+      onError: () => {
+        setIsPaused(false);
+        setMutationError('Failed to pause session. Please try again.');
+      },
+    });
   }, [setIsPaused, pauseSession, sessionId]);
 
   const handleResume = useCallback((): void => {
     setIsPaused(false);
-    resumeSession.mutate(sessionId);
+    setMutationError(null);
+    resumeSession.mutate(sessionId, {
+      onError: () => {
+        setIsPaused(true);
+        setMutationError('Failed to resume session. Please try again.');
+      },
+    });
   }, [setIsPaused, resumeSession, sessionId]);
 
   // ── Reveal ────────────────────────────────────────────────────────────────
@@ -170,10 +183,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Hint ──────────────────────────────────────────────────────────────────
   const handleHint = useCallback((): void => {
+    setMutationError(null);
     requestHint.mutate(undefined, {
       onSuccess: (res) => {
         setHintText(res.data.hint);
         setHintDepth(res.data.depth);
+      },
+      onError: (err) => {
+        setMutationError(err.message);
       },
     });
   }, [requestHint]);
@@ -190,6 +207,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
           ? confidenceAfter - confidenceBefore
           : undefined;
 
+      setMutationError(null);
       recordAttempt.mutate(
         {
           cardId: card.id,
@@ -212,6 +230,9 @@ export default function ActiveSessionPage(): React.JSX.Element {
                 onSuccess: () => {
                   router.push(`/session/${sessionId}/summary`);
                 },
+                onError: (err) => {
+                  setMutationError(err.message);
+                },
               });
             } else {
               advanceCard();
@@ -224,9 +245,15 @@ export default function ActiveSessionPage(): React.JSX.Element {
                       setCheckpoint(directive);
                     }
                   },
+                  onError: () => {
+                    // Checkpoint evaluation failure is non-critical — session continues
+                  },
                 });
               }
             }
+          },
+          onError: (err) => {
+            setMutationError(err.message);
           },
         }
       );
@@ -249,10 +276,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Abandon ───────────────────────────────────────────────────────────────
   const handleAbandon = useCallback((): void => {
+    setMutationError(null);
     abandonSession.mutate(sessionId, {
       onSuccess: () => {
         clear();
         router.push('/sessions');
+      },
+      onError: (err) => {
+        setMutationError(err.message);
       },
     });
   }, [abandonSession, sessionId, clear, router]);
@@ -383,6 +414,26 @@ export default function ActiveSessionPage(): React.JSX.Element {
               setCheckpoint(null);
             }}
           />
+        </div>
+      )}
+
+      {/* ── Mutation error banner ───────────────────────────────────────────── */}
+      {mutationError !== null && (
+        <div
+          role="alert"
+          className="mx-4 mt-3 flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+          <span>{mutationError}</span>
+          <button
+            type="button"
+            aria-label="Dismiss error"
+            onClick={() => {
+              setMutationError(null);
+            }}
+            className="ml-3 shrink-0 text-destructive/70 hover:text-destructive"
+          >
+            ✕
+          </button>
         </div>
       )}
 
