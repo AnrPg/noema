@@ -4,6 +4,7 @@
 
 'use client';
 
+import type { JSX, ReactNode } from 'react';
 import { configureApiClient } from '@noema/api-client';
 import { AuthProvider, useAuthStore } from '@noema/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,11 +12,11 @@ import { useState } from 'react';
 
 // Configure API client — routes through the API gateway (Traefik on :8080)
 configureApiClient({
-  baseUrl: process.env['NEXT_PUBLIC_API_URL'] || 'http://localhost:8080/api',
+  baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
   getAccessToken: () => useAuthStore.getState().accessToken,
 });
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children }: { children: ReactNode }): JSX.Element {
   const [queryClient] = useState(
     () =>
       new QueryClient({
