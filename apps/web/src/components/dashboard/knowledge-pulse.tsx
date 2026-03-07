@@ -130,7 +130,7 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
   const enabled = userId !== '';
   const nodes = usePKGNodes(userId, { enabled });
   const edges = usePKGEdges(userId, { enabled });
-  const misc = useMisconceptions(userId, { enabled });
+  const { data: miscData, isError: miscError } = useMisconceptions(userId, { enabled });
 
   const isLoading = nodes.isLoading || edges.isLoading;
 
@@ -157,11 +157,11 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
   );
 
   const misconceptionNodeIds = useMemo(() => {
-    const active = (misc.data?.data ?? []).filter(
+    const active = (miscData?.data ?? []).filter(
       (m) => m.status !== 'resolved' && m.status !== 'dismissed'
     );
     return new Set(active.map((m) => m.nodeId));
-  }, [misc.data]);
+  }, [miscData]);
 
   const recentNodeIds = useMemo(() => {
     const now = Date.now();
@@ -215,6 +215,11 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
         <CardTitle className="text-sm">Knowledge Map</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
+        {miscError && (
+          <p className="px-3 pb-1 text-xs text-muted-foreground">
+            Misconception overlay unavailable.
+          </p>
+        )}
         <svg
           width={W}
           height={H}

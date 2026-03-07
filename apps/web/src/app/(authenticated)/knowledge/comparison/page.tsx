@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
+
 'use client';
 /**
  * @noema/web — /knowledge/comparison
@@ -54,11 +54,7 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
   const createNode = useCreatePKGNode(userId);
 
   const isLoading =
-    pkgNodesLoading === true ||
-    pkgEdgesLoading === true ||
-    ckgNodesLoading === true ||
-    ckgEdgesLoading === true ||
-    compLoading === true;
+    pkgNodesLoading || pkgEdgesLoading || ckgNodesLoading || ckgEdgesLoading || compLoading;
 
   // ── Data extraction ────────────────────────────────────────────────────────
   const pkgNodes: IGraphNodeDto[] = (pkgNodesData as any) ?? [];
@@ -74,13 +70,17 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
 
   // ── Derived sets ───────────────────────────────────────────────────────────
   // Ghost nodes: in CKG but not PKG — shown as highlights in the PKG panel
+  // Stored as plain strings so they can be compared against selectedNodeId (string | null).
   const ghostNodeIds = React.useMemo(
-    () => new Set(missingFromPkg.map((n) => n.id)),
+    () => new Set(missingFromPkg.map((n) => String(n.id))),
     [missingFromPkg]
   );
 
   // Personal-only nodes: in PKG but not CKG — shown as highlights in the CKG panel
-  const personalNodeIds = React.useMemo(() => new Set(extraInPkg.map((n) => n.id)), [extraInPkg]);
+  const personalNodeIds = React.useMemo(
+    () => new Set(extraInPkg.map((n) => String(n.id))),
+    [extraInPkg]
+  );
 
   // PKG panel shows its own nodes + ghost nodes from the CKG
   const pkgNodesWithGhosts: IGraphNodeDto[] = React.useMemo(
@@ -90,7 +90,8 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
 
   // ── Stable callbacks ───────────────────────────────────────────────────────
   const handleNodeClick = React.useCallback((n: IGraphNodeDto) => {
-    setSelectedNodeId((prev) => (prev === n.id ? null : n.id));
+    const id = String(n.id);
+    setSelectedNodeId((prev) => (prev === id ? null : id));
   }, []);
 
   const handleBackgroundClick = React.useCallback(() => {
@@ -98,10 +99,9 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
   }, []);
 
   // ── Selected node lookup ───────────────────────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   const selectedNode: IGraphNodeDto | undefined =
-    pkgNodesWithGhosts.find((n) => n.id === selectedNodeId) ??
-    ckgNodes.find((n) => n.id === selectedNodeId);
+    pkgNodesWithGhosts.find((n) => String(n.id) === selectedNodeId) ??
+    ckgNodes.find((n) => String(n.id) === selectedNodeId);
 
   const isGhost = selectedNodeId !== null && ghostNodeIds.has(selectedNodeId);
   const isPersonalOnly = selectedNodeId !== null && personalNodeIds.has(selectedNodeId);
@@ -202,10 +202,10 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
                   tags: selectedNode.tags,
                 });
               }}
-              disabled={createNode.isPending === true}
+              disabled={createNode.isPending}
               size="sm"
             >
-              {createNode.isPending === true ? (
+              {createNode.isPending ? (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden="true" />
               ) : null}
               Add to My Graph
