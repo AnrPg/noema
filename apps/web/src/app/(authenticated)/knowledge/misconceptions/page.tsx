@@ -17,7 +17,7 @@ import {
   useUpdateMisconceptionStatus,
 } from '@noema/api-client';
 import type { UserId } from '@noema/types';
-import { Button } from '@noema/ui';
+import { Button, ConfidenceMeter } from '@noema/ui';
 import { Loader2, ScanSearch } from 'lucide-react';
 import { MisconceptionPipeline } from '@/components/knowledge/misconception-pipeline';
 import { MisconceptionSubgraph } from '@/components/knowledge/misconception-subgraph';
@@ -234,7 +234,10 @@ export default function MisconceptionsPage(): React.JSX.Element {
                   {/* Pattern */}
                   <span className="flex-1 truncate text-sm text-foreground">{m.pattern}</span>
 
-                  {/* TODO: render ConfidenceMeter when API exposes confidence field on IMisconceptionDto */}
+                  {/* Confidence — only shown when the API provides it */}
+                  {m.confidence !== undefined && (
+                    <ConfidenceMeter value={m.confidence} segments={3} size="xs" />
+                  )}
 
                   {/* Date */}
                   <span className="flex-shrink-0 text-xs text-muted-foreground">

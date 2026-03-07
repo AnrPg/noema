@@ -182,6 +182,8 @@ export interface IMisconceptionDto {
   nodeId: NodeId;
   pattern: string;
   status: MisconceptionStatus;
+  /** Detection confidence in [0, 1]. Optional — older records may omit it. */
+  confidence?: number;
   detectedAt: string;
   resolvedAt: string | null;
 }

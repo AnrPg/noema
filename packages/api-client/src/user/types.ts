@@ -115,6 +115,10 @@ export interface IChangePasswordInput {
   newPassword: string;
 }
 
+export interface IRequestPasswordResetInput {
+  email: string;
+}
+
 // ============================================================================
 // List Types
 // ============================================================================
@@ -138,6 +142,7 @@ export interface IUpdateUserRolesInput {
 export type UpdateUserStatusResponse = IApiResponse<IUserDto>;
 export type UpdateUserRolesResponse = IApiResponse<IUserDto>;
 export type TriggerPasswordResetResponse = IApiResponse<{ message: string }>;
+export type RequestPasswordResetResponse = IApiResponse<{ message: string }>;
 
 export interface IPaginatedUsersResult {
   items: IUserDto[];
@@ -170,5 +175,6 @@ export type UserSettingsDto = IUserSettingsDto;
 export type UpdateProfileInput = IUpdateProfileInput;
 export type UpdateSettingsInput = IUpdateSettingsInput;
 export type ChangePasswordInput = IChangePasswordInput;
+export type RequestPasswordResetInput = IRequestPasswordResetInput;
 export type UserFilters = IUserFilters;
 export type PaginatedUsersResult = IPaginatedUsersResult;

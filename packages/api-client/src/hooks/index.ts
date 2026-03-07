@@ -19,6 +19,8 @@ import type {
   LoginInput,
   PublicUserResponse,
   RegisterInput,
+  RequestPasswordResetInput,
+  RequestPasswordResetResponse,
   TokenRefreshResponse,
   TriggerPasswordResetResponse,
   UpdateProfileInput,
@@ -288,6 +290,15 @@ export function useTriggerPasswordReset(
 ) {
   return useMutation({
     mutationFn: (id) => usersApi.triggerPasswordReset(id),
+    ...options,
+  });
+}
+
+export function useRequestPasswordReset(
+  options?: UseMutationOptions<RequestPasswordResetResponse, Error, RequestPasswordResetInput>
+) {
+  return useMutation({
+    mutationFn: authApi.requestPasswordReset,
     ...options,
   });
 }

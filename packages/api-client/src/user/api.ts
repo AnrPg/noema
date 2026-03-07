@@ -8,11 +8,13 @@ import { http } from '../client.js';
 import type {
   AuthResponse,
   ChangePasswordInput,
+  IRequestPasswordResetInput,
   IUpdateUserRolesInput,
   IUpdateUserStatusInput,
   LoginInput,
   PublicUserResponse,
   RegisterInput,
+  RequestPasswordResetResponse,
   TokenRefreshResponse,
   TriggerPasswordResetResponse,
   UpdateProfileInput,
@@ -50,6 +52,14 @@ export const authApi = {
    * Logout and invalidate tokens.
    */
   logout: (): Promise<void> => http.post('/auth/logout'),
+
+  /**
+   * Request a password reset email (public — no auth required).
+   * Anti-enumeration: the server responds with the same message whether
+   * the email exists or not.
+   */
+  requestPasswordReset: (data: IRequestPasswordResetInput): Promise<RequestPasswordResetResponse> =>
+    http.post('/auth/forgot-password', data),
 };
 
 // ============================================================================

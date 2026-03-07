@@ -1,18 +1,16 @@
 /**
  * Forgot Password Page
  *
- * Sends a password reset request via authApi (when endpoint is available).
+ * Sends a password reset request via authApi.requestPasswordReset().
  * Shows a success confirmation state after submission with the submitted
  * email address displayed. Implements anti-enumeration UX: the message is
  * identical whether or not the account exists.
- *
- * TODO: replace the setTimeout placeholder with authApi.requestPasswordReset()
- * once the backend endpoint is implemented.
  */
 
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useRequestPasswordReset } from '@noema/api-client';
 import {
   AuthHeader,
   AuthLayout,
@@ -37,8 +35,9 @@ type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage(): React.JSX.Element {
   const [success, setSuccess] = useState(false);
-  const [submittedEmail, _setSubmittedEmail] = useState('');
+  const [submittedEmail, setSubmittedEmail] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const requestPasswordReset = useRequestPasswordReset();
 
   const {
     register,
@@ -49,12 +48,21 @@ export default function ForgotPasswordPage(): React.JSX.Element {
     resolver: zodResolver(forgotPasswordSchema),
   });
 
-  const onSubmit = (_data: ForgotPasswordFormData): void => {
+  const onSubmit = (data: ForgotPasswordFormData): void => {
     setSubmitError(null);
-    // TODO: replace with authApi.requestPasswordReset(_data.email) when endpoint exists.
-    // The backend endpoint is not yet implemented — show an honest error rather than
-    // faking a success that would leave the user waiting for an email that never arrives.
-    setSubmitError('Password reset is not yet available. Please contact support.');
+    requestPasswordReset.mutate(
+      { email: data.email },
+      {
+        onSuccess: () => {
+          setSubmittedEmail(data.email);
+          setSuccess(true);
+          reset();
+        },
+        onError: (err) => {
+          setSubmitError(err.message);
+        },
+      }
+    );
   };
 
   if (success) {
@@ -131,9 +139,13 @@ export default function ForgotPasswordPage(): React.JSX.Element {
               )}
             </CardContent>
             <CardFooter className="flex-col gap-4">
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isSubmitting || requestPasswordReset.isPending}
+              >
                 <Mail className="mr-2 h-4 w-4" />
-                {isSubmitting ? 'Sending...' : 'Send reset link'}
+                {requestPasswordReset.isPending ? 'Sending...' : 'Send reset link'}
               </Button>
               <Link
                 href="/login"
