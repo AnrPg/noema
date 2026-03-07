@@ -47,6 +47,7 @@ export default function SessionNewPage(): React.JSX.Element {
   // ── Section 3: Settings ──────────────────────────────────────────────────
   const [retentionPct, setRetentionPct] = React.useState(80);
   const [sessionSize, setSessionSize] = React.useState(20);
+  const [startError, setStartError] = React.useState<string | null>(null);
 
   // ── API hooks ────────────────────────────────────────────────────────────
   const dualLanePlan = useDualLanePlan(
@@ -71,6 +72,7 @@ export default function SessionNewPage(): React.JSX.Element {
 
   // ── Start handler ────────────────────────────────────────────────────────
   async function handleStart(): Promise<void> {
+    setStartError(null);
     let cardIds: CardId[] | undefined;
 
     if (useQuickStart && plan !== undefined) {
@@ -79,13 +81,19 @@ export default function SessionNewPage(): React.JSX.Element {
         .map((slot: any) => slot.cardId as unknown as CardId);
     }
 
-    const response: any = await startSession.mutateAsync({
-      mode: MODE_TO_API[mode],
-      ...(cardIds !== undefined ? { cardIds } : {}),
-    });
+    try {
+      const response: any = await startSession.mutateAsync({
+        mode: MODE_TO_API[mode],
+        ...(cardIds !== undefined ? { cardIds } : {}),
+      });
 
-    const sessionId = String(response.data.id);
-    router.push(`/session/${sessionId}`);
+      const sessionId = String(response.data.id);
+      router.push(`/session/${sessionId}`);
+    } catch (err) {
+      setStartError(
+        err instanceof Error ? err.message : 'Failed to start session. Please try again.'
+      );
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -284,6 +292,14 @@ export default function SessionNewPage(): React.JSX.Element {
       {/* ------------------------------------------------------------------ */}
       {/* Start Button                                                         */}
       {/* ------------------------------------------------------------------ */}
+      {startError !== null && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {startError}
+        </div>
+      )}
       <Button
         className="w-full"
         size="lg"

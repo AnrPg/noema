@@ -1,7 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/restrict-plus-operands */
 'use client';
 /**
  * @noema/web — Copilot / CopilotSidebar
@@ -32,7 +28,7 @@ const SOURCE_QUALITY_ORDER: Record<SourceQuality, number> = {
 function bestSourceQuality(hints: IAgentHints[]): SourceQuality {
   if (hints.length === 0) return 'unknown';
   return hints.reduce<SourceQuality>((best, h) => {
-    return (SOURCE_QUALITY_ORDER[h.sourceQuality] ?? 99) < (SOURCE_QUALITY_ORDER[best] ?? 99)
+    return SOURCE_QUALITY_ORDER[h.sourceQuality] < SOURCE_QUALITY_ORDER[best]
       ? h.sourceQuality
       : best;
   }, 'unknown');
@@ -74,15 +70,15 @@ export function CopilotSidebar(): React.JSX.Element {
   const sourceQuality = bestSourceQuality(hints);
 
   // "Last updated X ago" — updates every 10s
+  const receivedAtMs = lastReceivedAt[activePageKey];
   const [lastUpdatedLabel, setLastUpdatedLabel] = React.useState<string>('');
   React.useEffect(() => {
-    const receivedAt = lastReceivedAt[activePageKey];
-    if (receivedAt === undefined) {
+    if (receivedAtMs === undefined) {
       setLastUpdatedLabel('');
       return;
     }
     const update = (): void => {
-      const diffSec = Math.floor((Date.now() - receivedAt) / 1000);
+      const diffSec = Math.floor((Date.now() - receivedAtMs) / 1000);
       if (diffSec < 60) setLastUpdatedLabel(`${String(diffSec)}s ago`);
       else if (diffSec < 3600) setLastUpdatedLabel(`${String(Math.floor(diffSec / 60))}m ago`);
       else setLastUpdatedLabel(`${String(Math.floor(diffSec / 3600))}h ago`);
@@ -92,7 +88,7 @@ export function CopilotSidebar(): React.JSX.Element {
     return () => {
       clearInterval(id);
     };
-  }, [activePageKey, lastReceivedAt]);
+  }, [activePageKey, receivedAtMs]);
 
   // Cmd+. / Ctrl+. keyboard shortcut
   React.useEffect(() => {
