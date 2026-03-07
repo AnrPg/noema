@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 'use client';
 /**
  * @noema/web — /knowledge/misconceptions
@@ -67,19 +62,20 @@ export default function MisconceptionsPage(): React.JSX.Element {
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<FilterValue>('');
+  const [detectError, setDetectError] = React.useState<string | null>(null);
+  const [updateError, setUpdateError] = React.useState<string | null>(null);
 
   const { data: misconceptionsResponse, isLoading } = useMisconceptions(userId);
   const detectMutation = useDetectMisconceptions(userId);
   const updateStatus = useUpdateMisconceptionStatus(userId);
 
-  const allMisconceptions: any[] = (misconceptionsResponse as any)?.data ?? [];
+  const allMisconceptions = misconceptionsResponse?.data ?? [];
 
   // Count per status
   const statusCounts = React.useMemo(() => {
     const counts: Record<string, number> = {};
     for (const m of allMisconceptions) {
-      const s = String(m.status);
-      counts[s] = (counts[s] ?? 0) + 1;
+      counts[m.status] = (counts[m.status] ?? 0) + 1;
     }
     return counts;
   }, [allMisconceptions]);
@@ -88,7 +84,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
   const filtered = React.useMemo(
     () =>
       statusFilter !== ''
-        ? allMisconceptions.filter((m) => String(m.status) === statusFilter)
+        ? allMisconceptions.filter((m) => m.status === statusFilter)
         : allMisconceptions,
     [allMisconceptions, statusFilter]
   );
@@ -107,7 +103,12 @@ export default function MisconceptionsPage(): React.JSX.Element {
         </div>
         <Button
           onClick={() => {
-            void detectMutation.mutateAsync();
+            setDetectError(null);
+            detectMutation.mutate(undefined, {
+              onError: (err) => {
+                setDetectError(err.message);
+              },
+            });
           }}
           disabled={detectMutation.isPending}
           variant="outline"
@@ -167,6 +168,24 @@ export default function MisconceptionsPage(): React.JSX.Element {
         ))}
       </div>
 
+      {/* Mutation error banners */}
+      {detectError !== null && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive"
+        >
+          Scan failed: {detectError}
+        </div>
+      )}
+      {updateError !== null && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive"
+        >
+          Update failed: {updateError}
+        </div>
+      )}
+
       {/* Loading state */}
       {isLoading && (
         <div className="flex items-center gap-2 text-muted-foreground">
@@ -188,9 +207,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
       {!isLoading && filtered.length > 0 && (
         <div className="flex flex-col gap-2">
           {filtered.map((m) => {
-            const mc = m;
-            const id = String(mc.id);
-            const status = String(mc.status) as MisconceptionStatus;
+            const { id, status } = m;
             const isExpanded = expandedId === id;
 
             return (
@@ -215,15 +232,13 @@ export default function MisconceptionsPage(): React.JSX.Element {
                   </span>
 
                   {/* Pattern */}
-                  <span className="flex-1 truncate text-sm text-foreground">
-                    {String(mc.pattern)}
-                  </span>
+                  <span className="flex-1 truncate text-sm text-foreground">{m.pattern}</span>
 
                   {/* TODO: render ConfidenceMeter when API exposes confidence field on IMisconceptionDto */}
 
                   {/* Date */}
                   <span className="flex-shrink-0 text-xs text-muted-foreground">
-                    {formatDate(String(mc.detectedAt))}
+                    {formatDate(m.detectedAt)}
                   </span>
 
                   {/* Pipeline */}
@@ -236,7 +251,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
                 {isExpanded && (
                   <div className="border-t border-border p-4">
                     {/* Mini subgraph */}
-                    <MisconceptionSubgraph nodeId={String(mc.nodeId)} />
+                    <MisconceptionSubgraph nodeId={m.nodeId as string} />
 
                     {/*
                      * Action buttons state machine:
@@ -252,7 +267,15 @@ export default function MisconceptionsPage(): React.JSX.Element {
                             type="button"
                             disabled={updateStatus.isPending}
                             onClick={() => {
-                              void updateStatus.mutateAsync({ id, data: { status: 'confirmed' } });
+                              setUpdateError(null);
+                              updateStatus.mutate(
+                                { id, data: { status: 'confirmed' } },
+                                {
+                                  onError: (err) => {
+                                    setUpdateError(err.message);
+                                  },
+                                }
+                              );
                             }}
                             className="rounded border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -264,7 +287,15 @@ export default function MisconceptionsPage(): React.JSX.Element {
                             type="button"
                             disabled={updateStatus.isPending}
                             onClick={() => {
-                              void updateStatus.mutateAsync({ id, data: { status: 'resolved' } });
+                              setUpdateError(null);
+                              updateStatus.mutate(
+                                { id, data: { status: 'resolved' } },
+                                {
+                                  onError: (err) => {
+                                    setUpdateError(err.message);
+                                  },
+                                }
+                              );
                             }}
                             className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                           >
@@ -276,7 +307,15 @@ export default function MisconceptionsPage(): React.JSX.Element {
                             type="button"
                             disabled={updateStatus.isPending}
                             onClick={() => {
-                              void updateStatus.mutateAsync({ id, data: { status: 'dismissed' } });
+                              setUpdateError(null);
+                              updateStatus.mutate(
+                                { id, data: { status: 'dismissed' } },
+                                {
+                                  onError: (err) => {
+                                    setUpdateError(err.message);
+                                  },
+                                }
+                              );
                             }}
                             className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                           >
