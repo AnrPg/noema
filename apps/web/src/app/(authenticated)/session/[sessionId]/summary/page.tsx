@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 'use client';
 
 /**
@@ -17,10 +12,6 @@
  *   4. Card Results — scrollable CardResultsTable
  *   5. Post-Session Reflection — conditional (when attempts > 0 and accuracy < 100%)
  *   6. Next Actions — 3 CTA buttons (new session / dashboard / knowledge graph)
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because the @noema/api-client package has not been built yet (no dist/).
- * Once packages are built these suppressions should be removed.
  */
 
 import * as React from 'react';
@@ -112,16 +103,8 @@ export default function SessionSummaryPage(): React.JSX.Element {
 
   // ── Data extraction ────────────────────────────────────────────────────────
 
-  const session = (sessionData as any)?.data ?? null;
-  const attempts: {
-    id: string;
-    cardId: string;
-    grade: number;
-    confidenceBefore: number | null;
-    confidenceAfter: number | null;
-    hintDepthUsed: number;
-    dwellTimeMs: number;
-  }[] = (attemptsData as any)?.data ?? [];
+  const session = sessionData?.data ?? null;
+  const attempts = attemptsData?.data ?? [];
 
   // ── Derived accuracy ───────────────────────────────────────────────────────
 
@@ -131,9 +114,9 @@ export default function SessionSummaryPage(): React.JSX.Element {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const startedAt: string = (session?.startedAt as string | undefined) ?? '';
-  const completedAt: string | null = (session?.completedAt as string | null | undefined) ?? null;
-  const mode: string = (session?.mode as string | undefined) ?? 'standard';
+  const startedAt = session?.startedAt ?? '';
+  const completedAt = session?.completedAt ?? null;
+  const mode = session?.mode ?? 'standard';
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">

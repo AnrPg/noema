@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 /**
@@ -7,11 +5,6 @@
  *
  * /session/new — configure and launch a new study session.
  * Three sections: mode selection, card source, and session settings.
- *
- * Note: The eslint-disable directives above suppress no-unsafe-* rules that
- * fire because the @noema/api-client, @noema/auth, and @noema/ui packages
- * have not been built yet (no dist/ directory). Once packages are built these
- * suppressions should be removed.
  */
 
 import * as React from 'react';
@@ -63,12 +56,9 @@ export default function SessionNewPage(): React.JSX.Element {
   const startSession = useStartSession();
 
   // ── Derived values ───────────────────────────────────────────────────────
-  // plan is IDualLanePlanResult | undefined — typed any at runtime until packages are built
-  const plan: any = dualLanePlan.data?.data;
-  const retentionCount: number | undefined =
-    plan !== undefined ? (plan.totalRetention as number) : undefined;
-  const calibrationCount: number | undefined =
-    plan !== undefined ? (plan.totalCalibration as number) : undefined;
+  const plan = dualLanePlan.data?.data;
+  const retentionCount = plan?.totalRetention;
+  const calibrationCount = plan?.totalCalibration;
 
   // ── Start handler ────────────────────────────────────────────────────────
   async function handleStart(): Promise<void> {
@@ -76,18 +66,16 @@ export default function SessionNewPage(): React.JSX.Element {
     let cardIds: CardId[] | undefined;
 
     if (useQuickStart && plan !== undefined) {
-      cardIds = (plan.slots as any[])
-        .slice(0, sessionSize)
-        .map((slot: any) => slot.cardId as unknown as CardId);
+      cardIds = plan.slots.slice(0, sessionSize).map((slot) => slot.cardId);
     }
 
     try {
-      const response: any = await startSession.mutateAsync({
+      const response = await startSession.mutateAsync({
         mode: MODE_TO_API[mode],
         ...(cardIds !== undefined ? { cardIds } : {}),
       });
 
-      const sessionId = String(response.data.id);
+      const sessionId = response.data.id as string;
       router.push(`/session/${sessionId}`);
     } catch (err) {
       setStartError(
@@ -209,29 +197,29 @@ export default function SessionNewPage(): React.JSX.Element {
                     </div>
                   )}
                   {sessionCandidates.isSuccess &&
-                    ((sessionCandidates.data.data as any[]).length === 0 ? (
+                    (sessionCandidates.data.data.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         No candidates match the current filters.
                       </p>
                     ) : (
                       <ul className="flex flex-col gap-1.5">
-                        {(sessionCandidates.data.data as any[]).map((candidate: any) => (
+                        {sessionCandidates.data.data.map((candidate) => (
                           <li
-                            key={String(candidate.cardId)}
+                            key={candidate.cardId as string}
                             className="flex items-center justify-between text-sm"
                           >
                             <span className="font-mono text-xs text-muted-foreground">
-                              {String(candidate.cardId)}
+                              {candidate.cardId as string}
                             </span>
                             <span
                               className={[
                                 'text-xs font-medium',
-                                (candidate.lane as string) === 'retention'
+                                candidate.lane === 'retention'
                                   ? 'text-blue-600 dark:text-blue-400'
                                   : 'text-amber-600 dark:text-amber-400',
                               ].join(' ')}
                             >
-                              {String(candidate.lane)}
+                              {candidate.lane}
                             </span>
                           </li>
                         ))}
