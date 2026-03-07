@@ -2,9 +2,10 @@
  * Admin Settings Page - Placeholder
  */
 
+import type { JSX } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 
-export default function SettingsPage() {
+export default function SettingsPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <div>

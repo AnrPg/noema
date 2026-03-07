@@ -7,21 +7,21 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@noema/auth';
 import {
-    Alert,
-    AlertDescription,
-    AuthHeader,
-    AuthLayout,
-    Button,
-    Card,
-    CardContent,
-    CardFooter,
-    FormField,
-    Input,
-    PasswordInput,
+  Alert,
+  AlertDescription,
+  AuthHeader,
+  AuthLayout,
+  Button,
+  Card,
+  CardContent,
+  CardFooter,
+  FormField,
+  Input,
+  PasswordInput,
 } from '@noema/ui';
 import { AlertCircle, Shield } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, type JSX } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -32,7 +32,7 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-export default function AdminLoginPage() {
+export default function AdminLoginPage(): JSX.Element {
   const router = useRouter();
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +45,7 @@ export default function AdminLoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: LoginFormData): Promise<void> => {
     try {
       setError(null);
       await login({ identifier: data.email, password: data.password });
@@ -65,9 +65,13 @@ export default function AdminLoginPage() {
       />
 
       <Card>
-        <form onSubmit={handleSubmit(onSubmit)}>
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(onSubmit)(e);
+          }}
+        >
           <CardContent className="space-y-4 pt-6">
-            {error && (
+            {error !== null && (
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>{error}</AlertDescription>

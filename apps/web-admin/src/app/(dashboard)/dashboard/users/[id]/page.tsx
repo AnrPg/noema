@@ -45,6 +45,7 @@ export default function UserDetailPage(): React.JSX.Element {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = React.useState('');
+  const [actionError, setActionError] = React.useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -95,16 +96,40 @@ export default function UserDetailPage(): React.JSX.Element {
     const newRoles: UserRole[] = isAdmin
       ? user.roles.filter((r) => r !== ('admin' as UserRole))
       : [...user.roles, 'admin' as UserRole];
-    updateRoles.mutate({ id: user.id, roles: newRoles });
+    setActionError(null);
+    updateRoles.mutate(
+      { id: user.id, roles: newRoles },
+      {
+        onError: (err) => {
+          setActionError(err.message);
+        },
+      }
+    );
   };
 
   const handleToggleSuspend = (): void => {
     const newStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    updateStatus.mutate({ id: user.id, status: newStatus });
+    setActionError(null);
+    updateStatus.mutate(
+      { id: user.id, status: newStatus },
+      {
+        onError: (err) => {
+          setActionError(err.message);
+        },
+      }
+    );
   };
 
   const handleConfirmDelete = (): void => {
-    deleteUser.mutate({ id: user.id, soft: true });
+    setActionError(null);
+    deleteUser.mutate(
+      { id: user.id, soft: true },
+      {
+        onError: (err) => {
+          setActionError(err.message);
+        },
+      }
+    );
   };
 
   return (
@@ -241,6 +266,14 @@ export default function UserDetailPage(): React.JSX.Element {
           <CardDescription>Manage this user&apos;s access and account state.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {actionError !== null && (
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {actionError}
+            </div>
+          )}
           {/* Toggle Admin Role */}
           <div className="flex items-center justify-between">
             <div>
@@ -292,7 +325,12 @@ export default function UserDetailPage(): React.JSX.Element {
             <Button
               variant="outline"
               onClick={() => {
-                triggerReset.mutate(user.id);
+                setActionError(null);
+                triggerReset.mutate(user.id, {
+                  onError: (err) => {
+                    setActionError(err.message);
+                  },
+                });
               }}
               disabled={triggerReset.isPending || triggerReset.isSuccess}
             >
