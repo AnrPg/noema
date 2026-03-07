@@ -56,12 +56,9 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const params = useParams();
   const router = useRouter();
 
-  // ── Route param validation ─────────────────────────────────────────────────
+  // ── Route param — extracted before any hooks so the value is stable ───────
   const raw = params['sessionId'];
-  if (raw === undefined || typeof raw !== 'string') {
-    return <div>Invalid session ID.</div>;
-  }
-  const sessionId = raw as SessionId;
+  const sessionId = (typeof raw === 'string' ? raw : '') as SessionId;
 
   // ── Store ─────────────────────────────────────────────────────────────────
   const {
@@ -325,6 +322,11 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   const maxHints = 3; // configurable; 3 is a reasonable default
 
+  // ── Route param validation (after all hooks) ──────────────────────────────
+  if (typeof raw !== 'string' || raw === '') {
+    return <div>Invalid session ID.</div>;
+  }
+
   // ── Error state ───────────────────────────────────────────────────────────
   if (sessionError || queueError) {
     return (
@@ -332,6 +334,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
         <p className="text-sm text-destructive">
           Failed to load session.{' '}
           <button
+            type="button"
             onClick={() => {
               void refetchSession();
               void refetchQueue();
