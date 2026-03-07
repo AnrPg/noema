@@ -16,14 +16,11 @@ import {
 } from '@noema/ui';
 import { useToastList, type ToastVariant } from '@/hooks/use-toast';
 
-// Variant → Radix variant mapping.
-// @noema/ui Toast only supports 'default' | 'destructive' | 'success'.
-// 'warning' maps to 'default' until a dedicated variant is added to @noema/ui.
-const VARIANT_MAP: Record<ToastVariant, 'default' | 'destructive' | 'success'> = {
+const VARIANT_MAP: Record<ToastVariant, 'default' | 'destructive' | 'success' | 'warning'> = {
   success: 'success',
   error: 'destructive',
   info: 'default',
-  warning: 'default', // TODO: add 'warning' variant to @noema/ui Toast
+  warning: 'warning',
 };
 
 function ToastList(): React.JSX.Element {

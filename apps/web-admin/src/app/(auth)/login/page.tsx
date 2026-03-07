@@ -5,7 +5,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useAuth } from '@noema/auth';
+import { useAuth, useAuthStore } from '@noema/auth';
 import {
   Alert,
   AlertDescription,
@@ -34,7 +34,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function AdminLoginPage(): JSX.Element {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -49,7 +49,12 @@ export default function AdminLoginPage(): JSX.Element {
     try {
       setError(null);
       await login({ identifier: data.email, password: data.password });
-      // TODO: Check if user has admin role
+      // Read post-login state directly from the store (not the render-time hook value).
+      if (!useAuthStore.getState().hasRole('admin')) {
+        await logout();
+        setError('Access denied. This portal requires an admin account.');
+        return;
+      }
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
