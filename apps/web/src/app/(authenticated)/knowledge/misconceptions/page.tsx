@@ -22,7 +22,7 @@ import {
   useUpdateMisconceptionStatus,
 } from '@noema/api-client';
 import type { UserId } from '@noema/types';
-import { ConfidenceMeter, Button } from '@noema/ui';
+import { Button } from '@noema/ui';
 import { Loader2, ScanSearch } from 'lucide-react';
 import { MisconceptionPipeline } from '@/components/knowledge/misconception-pipeline';
 import { MisconceptionSubgraph } from '@/components/knowledge/misconception-subgraph';
@@ -100,7 +100,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
         <div>
           <h1 className="text-3xl font-bold">Misconception Center</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isLoading === true
+            {isLoading
               ? 'Loading\u2026'
               : `${String(allMisconceptions.length)} misconception${allMisconceptions.length !== 1 ? 's' : ''} detected`}
           </p>
@@ -109,11 +109,11 @@ export default function MisconceptionsPage(): React.JSX.Element {
           onClick={() => {
             void detectMutation.mutateAsync();
           }}
-          disabled={detectMutation.isPending === true}
+          disabled={detectMutation.isPending}
           variant="outline"
           className="gap-2"
         >
-          {detectMutation.isPending === true ? (
+          {detectMutation.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <ScanSearch className="h-4 w-4" aria-hidden="true" />
@@ -168,7 +168,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
       </div>
 
       {/* Loading state */}
-      {isLoading === true && (
+      {isLoading && (
         <div className="flex items-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
           Loading misconceptions\u2026
@@ -176,7 +176,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
       )}
 
       {/* Empty state */}
-      {isLoading !== true && filtered.length === 0 && (
+      {!isLoading && filtered.length === 0 && (
         <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-12 text-sm text-muted-foreground">
           {statusFilter !== ''
             ? `No ${STATUS_LABELS[statusFilter] ?? statusFilter.toLowerCase()} misconceptions.`
@@ -185,7 +185,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
       )}
 
       {/* Misconception list */}
-      {isLoading !== true && filtered.length > 0 && (
+      {!isLoading && filtered.length > 0 && (
         <div className="flex flex-col gap-2">
           {filtered.map((m) => {
             const mc = m;
@@ -219,10 +219,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
                     {String(mc.pattern)}
                   </span>
 
-                  {/* Confidence meter (approximated — API doesn't expose confidence directly) */}
-                  <div className="flex-shrink-0">
-                    <ConfidenceMeter value={0.75} className="w-16" />
-                  </div>
+                  {/* TODO: render ConfidenceMeter when API exposes confidence field on IMisconceptionDto */}
 
                   {/* Date */}
                   <span className="flex-shrink-0 text-xs text-muted-foreground">
@@ -241,44 +238,41 @@ export default function MisconceptionsPage(): React.JSX.Element {
                     {/* Mini subgraph */}
                     <MisconceptionSubgraph nodeId={String(mc.nodeId)} />
 
-                    {/* Action buttons */}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {status !== 'confirmed' &&
-                        status !== 'resolved' &&
-                        status !== 'dismissed' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void updateStatus.mutateAsync({ id, data: { status: 'confirmed' } });
-                            }}
-                            className="rounded border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                          >
-                            Confirm
-                          </button>
-                        )}
-                      {status !== 'resolved' && (
+                    {/* Action buttons — only shown for 'detected' misconceptions needing review */}
+                    {status === 'detected' && (
+                      <div className="mt-3 flex flex-wrap gap-2">
                         <button
                           type="button"
+                          disabled={updateStatus.isPending}
+                          onClick={() => {
+                            void updateStatus.mutateAsync({ id, data: { status: 'confirmed' } });
+                          }}
+                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          disabled={updateStatus.isPending}
                           onClick={() => {
                             void updateStatus.mutateAsync({ id, data: { status: 'resolved' } });
                           }}
-                          className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                          className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Mark Resolved
                         </button>
-                      )}
-                      {status !== 'dismissed' && (
                         <button
                           type="button"
+                          disabled={updateStatus.isPending}
                           onClick={() => {
                             void updateStatus.mutateAsync({ id, data: { status: 'dismissed' } });
                           }}
-                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Dismiss
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
