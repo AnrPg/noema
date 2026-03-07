@@ -1,9 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-
 'use client';
 /**
  * @noema/web — /knowledge
@@ -34,13 +28,14 @@ export default function KnowledgePage(): React.JSX.Element {
   const { data: frontierData } = useKnowledgeFrontier(userId);
   const { data: bridgesData } = useBridgeNodes(userId);
 
-  const nodes: IGraphNodeDto[] = (nodesData as any) ?? [];
-  const edges: IGraphEdgeDto[] = (edgesData as any) ?? [];
+  const nodes: IGraphNodeDto[] = nodesData ?? [];
+  const edges: IGraphEdgeDto[] = edgesData ?? [];
 
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
   const hoveredNodeId = useGraphStore((s) => s.hoveredNodeId);
   const activeOverlays = useGraphStore((s) => s.activeOverlays);
-  const layoutMode = useGraphStore((s) => s.layoutMode);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
+  const layoutMode = useGraphStore((s) => s.layoutMode); // LayoutMode from unbuilt @noema/graph → any
   const neighborhoodHighlight = useGraphStore((s) => s.neighborhoodHighlight);
   const selectNode = useGraphStore((s) => s.selectNode);
   const deselectNode = useGraphStore((s) => s.deselectNode);
@@ -81,7 +76,7 @@ export default function KnowledgePage(): React.JSX.Element {
 
   // Nodes visible after legend type filter
   const visibleNodes = React.useMemo(
-    () => nodes.filter((n) => !hiddenTypes.has(String((n as any).type))),
+    () => nodes.filter((n) => !hiddenTypes.has(n.type)),
     [nodes, hiddenTypes]
   );
 
@@ -89,26 +84,22 @@ export default function KnowledgePage(): React.JSX.Element {
   const highlightedNodeIds = React.useMemo(() => {
     const set = new Set<string>();
     if (activeOverlays.has('frontier') && frontierData !== undefined) {
-      const frontierNodes: any[] = (frontierData as any)?.data?.nodes ?? [];
+      const frontierNodes = frontierData.data.nodes;
       for (const n of frontierNodes) {
-        set.add(String(n.id));
+        set.add(n.id as string);
       }
     }
     if (activeOverlays.has('bridges') && bridgesData !== undefined) {
-      const bridgeNodes: any[] = (bridgesData as any)?.data?.nodes ?? [];
+      const bridgeNodes = bridgesData.data.nodes;
       for (const n of bridgeNodes) {
-        set.add(String(n.id));
+        set.add(n.id as string);
       }
     }
     if (searchQuery !== '') {
       const q = searchQuery.toLowerCase();
       for (const n of nodes) {
-        if (
-          String((n as any).label)
-            .toLowerCase()
-            .includes(q)
-        ) {
-          set.add(String((n as any).id));
+        if (n.label.toLowerCase().includes(q)) {
+          set.add(n.id as string);
         }
       }
     }
@@ -119,13 +110,13 @@ export default function KnowledgePage(): React.JSX.Element {
   }, [activeOverlays, frontierData, bridgesData, searchQuery, nodes, neighborhoodHighlight]);
 
   const selectedNode = React.useMemo(
-    () => nodes.find((n) => String((n as any).id) === selectedNodeId) ?? null,
+    () => nodes.find((n) => (n.id as string) === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
 
   const handleNodeClick = React.useCallback(
     (node: IGraphNodeDto) => {
-      const id = String((node as any).id);
+      const id = node.id as string;
       if (selectedNodeId === id) {
         deselectNode();
       } else {
@@ -138,7 +129,7 @@ export default function KnowledgePage(): React.JSX.Element {
 
   const handleNodeHover = React.useCallback(
     (node: IGraphNodeDto | null) => {
-      setHoveredNode(node !== null ? String((node as any).id) : null);
+      setHoveredNode(node !== null ? (node.id as string) : null);
     },
     [setHoveredNode]
   );
@@ -155,7 +146,7 @@ export default function KnowledgePage(): React.JSX.Element {
 
   const handleNodeSelect = React.useCallback(
     (node: IGraphNodeDto) => {
-      selectNode(String((node as any).id));
+      selectNode(node.id as string);
     },
     [selectNode]
   );
@@ -171,6 +162,7 @@ export default function KnowledgePage(): React.JSX.Element {
     [selectNode, toggleOverlay, activeOverlays]
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   const activeOverlaysArray = React.useMemo(() => [...activeOverlays], [activeOverlays]);
 
   React.useEffect(() => {
@@ -210,6 +202,7 @@ export default function KnowledgePage(): React.JSX.Element {
       {/* Left control panel */}
       <GraphControls
         nodes={visibleNodes}
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         layoutMode={layoutMode}
         activeOverlays={activeOverlays}
         searchQuery={searchQuery}
@@ -230,6 +223,7 @@ export default function KnowledgePage(): React.JSX.Element {
           selectedNodeId={selectedNodeId}
           hoveredNodeId={hoveredNodeId}
           activeOverlays={activeOverlaysArray}
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           layoutMode={layoutMode}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
@@ -271,7 +265,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 type="button"
                 className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 onClick={() => {
-                  router.push(`/cards?conceptId=${String((contextMenu.node as any).id)}`);
+                  router.push(`/cards?conceptId=${contextMenu.node.id as string}`);
                   setContextMenu(null);
                 }}
               >
@@ -287,7 +281,7 @@ export default function KnowledgePage(): React.JSX.Element {
                   if (!activeOverlays.has('prerequisites')) {
                     toggleOverlay('prerequisites');
                   }
-                  selectNode(String((contextMenu.node as any).id));
+                  selectNode(contextMenu.node.id as string);
                   setContextMenu(null);
                 }}
               >
@@ -299,25 +293,23 @@ export default function KnowledgePage(): React.JSX.Element {
                 type="button"
                 className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 onClick={() => {
-                  const nodeId = String((contextMenu.node as any).id);
+                  const nodeId = contextMenu.node.id as string;
                   const hop1 = new Set(
                     edges
                       .filter(
                         (e) =>
-                          String((e as any).sourceId) === nodeId ||
-                          String((e as any).targetId) === nodeId
+                          (e.sourceId as string) === nodeId || (e.targetId as string) === nodeId
                       )
-                      .flatMap((e) => [String((e as any).sourceId), String((e as any).targetId)])
+                      .flatMap((e) => [e.sourceId as string, e.targetId as string])
                   );
                   const hop2 = new Set([
                     ...hop1,
                     ...[...hop1].flatMap((id) =>
                       edges
                         .filter(
-                          (e) =>
-                            String((e as any).sourceId) === id || String((e as any).targetId) === id
+                          (e) => (e.sourceId as string) === id || (e.targetId as string) === id
                         )
-                        .flatMap((e) => [String((e as any).sourceId), String((e as any).targetId)])
+                        .flatMap((e) => [e.sourceId as string, e.targetId as string])
                     ),
                   ]);
                   setNeighborhoodHighlight(hop2);
@@ -332,9 +324,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 type="button"
                 className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                 onClick={() => {
-                  router.push(
-                    `/knowledge/misconceptions?nodeId=${String((contextMenu.node as any).id)}`
-                  );
+                  router.push(`/knowledge/misconceptions?nodeId=${contextMenu.node.id as string}`);
                   setContextMenu(null);
                 }}
               >

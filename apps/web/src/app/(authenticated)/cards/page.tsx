@@ -48,6 +48,7 @@ export default function CardLibraryPage(): React.JSX.Element {
 
   const [query, setQuery] = React.useState<IDeckQueryInput>(DEFAULT_QUERY);
   const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
+  const [bulkError, setBulkError] = React.useState<string | null>(null);
 
   // --------------------------------------------------------------------------
   // Data fetching
@@ -70,28 +71,41 @@ export default function CardLibraryPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   async function handleBulkDelete(ids: Set<string>): Promise<void> {
+    setBulkError(null);
     const idArray = Array.from(ids);
-    await Promise.all(idArray.map((id) => deleteCard.mutateAsync(id as CardId)));
-    void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
+    try {
+      await Promise.all(idArray.map((id) => deleteCard.mutateAsync(id as CardId)));
+      void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : 'Failed to delete one or more cards.');
+    }
   }
 
   function handleSuspendSelected(ids: Set<string>): void {
+    setBulkError(null);
     batchStateTransition.mutate(
       { cardIds: Array.from(ids), state: 'SUSPENDED' },
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
         },
+        onError: (err) => {
+          setBulkError(err.message);
+        },
       }
     );
   }
 
   function handleActivateSelected(ids: Set<string>): void {
+    setBulkError(null);
     batchStateTransition.mutate(
       { cardIds: Array.from(ids), state: 'ACTIVE' },
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
+        },
+        onError: (err) => {
+          setBulkError(err.message);
         },
       }
     );
@@ -241,13 +255,23 @@ export default function CardLibraryPage(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Error banner */}
+      {/* Error banner — load failure */}
       {isError && (
         <div
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
           {error instanceof Error ? error.message : 'An error occurred while loading cards.'}
+        </div>
+      )}
+
+      {/* Error banner — bulk action failure */}
+      {bulkError !== null && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {bulkError}
         </div>
       )}
 
