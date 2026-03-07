@@ -91,20 +91,20 @@ export default function UserDetailPage(): React.JSX.Element {
 
   const isAdmin = user.roles.includes('admin' as UserRole);
 
-  const handleToggleAdmin = async (): Promise<void> => {
+  const handleToggleAdmin = (): void => {
     const newRoles: UserRole[] = isAdmin
       ? user.roles.filter((r) => r !== ('admin' as UserRole))
       : [...user.roles, 'admin' as UserRole];
-    await updateRoles.mutateAsync({ id: user.id, roles: newRoles });
+    updateRoles.mutate({ id: user.id, roles: newRoles });
   };
 
-  const handleToggleSuspend = async (): Promise<void> => {
+  const handleToggleSuspend = (): void => {
     const newStatus = user.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    await updateStatus.mutateAsync({ id: user.id, status: newStatus });
+    updateStatus.mutate({ id: user.id, status: newStatus });
   };
 
-  const handleConfirmDelete = async (): Promise<void> => {
-    await deleteUser.mutateAsync({ id: user.id, soft: true });
+  const handleConfirmDelete = (): void => {
+    deleteUser.mutate({ id: user.id, soft: true });
   };
 
   return (
@@ -253,9 +253,7 @@ export default function UserDetailPage(): React.JSX.Element {
             </div>
             <Button
               variant={isAdmin ? 'destructive' : 'default'}
-              onClick={() => {
-                void handleToggleAdmin();
-              }}
+              onClick={handleToggleAdmin}
               disabled={updateRoles.isPending}
             >
               {isAdmin ? 'Remove Admin' : 'Grant Admin'}
@@ -274,9 +272,7 @@ export default function UserDetailPage(): React.JSX.Element {
             </div>
             <Button
               variant={user.status === 'ACTIVE' ? 'destructive' : 'default'}
-              onClick={() => {
-                void handleToggleSuspend();
-              }}
+              onClick={handleToggleSuspend}
               disabled={updateStatus.isPending}
             >
               {user.status === 'ACTIVE' ? 'Suspend Account' : 'Unsuspend Account'}
@@ -296,7 +292,7 @@ export default function UserDetailPage(): React.JSX.Element {
             <Button
               variant="outline"
               onClick={() => {
-                void triggerReset.mutateAsync(user.id);
+                triggerReset.mutate(user.id);
               }}
               disabled={triggerReset.isPending || triggerReset.isSuccess}
             >
@@ -345,9 +341,7 @@ export default function UserDetailPage(): React.JSX.Element {
                   <Button
                     variant="destructive"
                     disabled={deleteConfirmInput !== user.username || deleteUser.isPending}
-                    onClick={() => {
-                      void handleConfirmDelete();
-                    }}
+                    onClick={handleConfirmDelete}
                   >
                     Confirm Delete
                   </Button>
