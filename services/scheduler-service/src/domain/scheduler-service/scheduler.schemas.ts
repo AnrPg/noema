@@ -121,6 +121,12 @@ export const ReviewQueueInputSchema = z.object({
   asOf: z.string().datetime().optional(),
 });
 
+export const GetCardProjectionInputSchema = z.object({
+  userId: UserIdSchema,
+  cardId: CardIdSchema,
+  asOf: z.string().datetime().optional(),
+});
+
 export const RetentionPredictionRequestSchema = z.object({
   cardId: CardIdSchema,
   algorithm: SchedulerAlgorithmSchema,

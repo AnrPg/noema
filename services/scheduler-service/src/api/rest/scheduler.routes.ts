@@ -609,4 +609,47 @@ export function registerSchedulerRoutes(
     authPreHandler,
     predictRetentionHandler
   );
+
+  // H7 — GET /v1/scheduler/cards/:cardId/projection
+  const getCardProjectionHandler = async (
+    request: FastifyRequest<{ Params: { cardId: string }; Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:plan'],
+      match: 'all',
+    });
+    if (!authorized) return;
+
+    try {
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const { cardId } = request.params;
+      const { asOf } = request.query;
+
+      const input = {
+        userId,
+        cardId,
+        ...(asOf !== undefined && { asOf }),
+      };
+
+      const ctx = buildExecutionContext(userId, request.id as CorrelationId);
+      const result = await schedulerService.getCardProjection(input, ctx);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected error';
+      void sendErrorEnvelope(reply, request, {
+        statusCode: 400,
+        code: message.includes('not found') ? 'CARD_NOT_FOUND' : 'SCHEDULER_ERROR',
+        message,
+        category: 'validation',
+        retryable: false,
+      });
+    }
+  };
+
+  fastify.get<{ Params: { cardId: string }; Querystring: Record<string, string> }>(
+    '/v1/scheduler/cards/:cardId/projection',
+    authPreHandler,
+    getCardProjectionHandler
+  );
 }

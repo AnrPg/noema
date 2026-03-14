@@ -9,9 +9,9 @@ import type {
   ISchedulerEventReliabilityRepository,
 } from '../../../src/domain/scheduler-service/scheduler.repository.js';
 import type { IEventPublisher } from '../../../src/domain/shared/event-publisher.js';
-import type { BaseEventConsumer } from '../../../src/infrastructure/events/consumers/base-consumer.js';
-import { ReviewRecordedConsumer } from '../../../src/infrastructure/events/consumers/review-recorded.consumer.js';
-import { SessionCohortConsumer } from '../../../src/infrastructure/events/consumers/session-cohort.consumer.js';
+import type { ISchedulerConsumerDependencies, SchedulerBaseConsumer } from '../../../src/events/consumers/scheduler-base-consumer.js';
+import { ReviewRecordedConsumer } from '../../../src/events/consumers/review-recorded.consumer.js';
+import { SessionCohortConsumer } from '../../../src/events/consumers/session-cohort.consumer.js';
 
 function createRedisStub() {
   return {
@@ -23,8 +23,8 @@ function createRedisStub() {
   };
 }
 
-function createConsumerDeps<T extends BaseEventConsumer>(
-  ConsumerClass: new (...args: ConstructorParameters<typeof ReviewRecordedConsumer>) => T,
+function createConsumerDeps<T extends SchedulerBaseConsumer>(
+  ConsumerClass: new (redis: Redis, logger: ReturnType<typeof pino>, consumerName: string, sourceStreamKey?: string) => T,
   overrides?: {
     reliability?: Partial<ISchedulerEventReliabilityRepository>;
     redis?: ReturnType<typeof createRedisStub>;
@@ -63,28 +63,19 @@ function createConsumerDeps<T extends BaseEventConsumer>(
 
   const consumer = new ConsumerClass(
     redisStub as unknown as Redis,
-    {
-      sourceStreamKey: 'noema:events:session-service',
-      consumerGroup: 'scheduler-service-group',
-      consumerName: 'scheduler-service-1',
-      blockMs: 5,
-      batchSize: 5,
-      retryBaseDelayMs: 1,
-      maxProcessAttempts: 3,
-      pendingIdleMs: 1,
-      pendingBatchSize: 5,
-      drainTimeoutMs: 100,
-      deadLetterStreamKey: 'noema:events:scheduler-service:dlq',
-    },
-    {
-      schedulerCardRepository,
-      reviewRepository,
-      calibrationDataRepository,
-      reliabilityRepository,
-      eventPublisher,
-    },
     pino({ enabled: false }),
+    'scheduler-service-1',
+    'noema:events:session-service',
   );
+
+  const deps: ISchedulerConsumerDependencies = {
+    schedulerCardRepository,
+    reviewRepository,
+    calibrationDataRepository,
+    reliabilityRepository,
+    eventPublisher,
+  };
+  consumer.setDependencies(deps);
 
   return {
     consumer,

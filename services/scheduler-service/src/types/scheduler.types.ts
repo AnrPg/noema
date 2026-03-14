@@ -272,6 +272,38 @@ export interface IRetentionPredictionResult {
 }
 
 /**
+ * Full projection for a single card — combines scheduling state, retention
+ * prediction, and forgetting risk.
+ * Output of get-card-projection tool (Phase 4E).
+ */
+export interface ICardProjection {
+  cardId: CardId;
+  userId: UserId;
+  lane: SchedulerLane;
+  algorithm: 'fsrs' | 'hlr' | 'sm2';
+  state: SchedulerCardState;
+  /** Predicted probability of recall at asOf time [0-1]. */
+  retentionProbability: number;
+  /** 1 - retentionProbability: how likely the card has been forgotten. */
+  forgettingRisk: number;
+  /** Recommended lane based on current retention probability. */
+  recommendedLane: SchedulerLane;
+  /** Days until the next scheduled review date (negative = overdue). */
+  daysUntilDue: number;
+  /** Next scheduled review date (ISO string). */
+  nextReviewDate: string;
+  /** FSRS stability or HLR half-life in days. */
+  stability: number | null;
+  /** HLR-specific half-life in days. */
+  halfLife: number | null;
+  /** Total number of reviews for this card. */
+  reviewCount: number;
+  /** Point-in-time for which the projection was computed. */
+  asOf: string;
+  policyVersion: IPolicyVersion;
+}
+
+/**
  * Session card adjustment action.
  */
 export interface ISessionCardAdjustment {

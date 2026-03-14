@@ -128,6 +128,20 @@ export function createPredictRetentionHandler(service: SchedulerService): ToolHa
   };
 }
 
+export function createGetCardProjectionHandler(service: SchedulerService): ToolHandler {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    return executeObserved(`domain.scheduler.getCardProjection`, correlationId, async () => {
+      try {
+        const ctx = toContext(userId, correlationId);
+        const result = await service.getCardProjection(input, ctx);
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
+  };
+}
+
 export function createProposeReviewWindowsHandler(service: SchedulerService): ToolHandler {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
     return executeObserved(
@@ -351,6 +365,34 @@ const SCHEDULER_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
             },
           },
         },
+      },
+    },
+  },
+  {
+    name: 'get-card-projection',
+    description:
+      'Compute a full projection for a single card: retention probability, forgetting risk, ' +
+      'days until due, and recommended lane. Uses current scheduling parameters stored in the ' +
+      'SchedulerCard record. Stateless but requires the card to be registered in the scheduler.',
+    service: 'scheduler-service',
+    priority: 'P2',
+    scopeRequirement: {
+      match: 'all',
+      requiredScopes: ['scheduler:plan', 'scheduler:tools:execute'],
+    },
+    capabilities: {
+      idempotent: true,
+      sideEffects: false,
+      timeoutMs: 2000,
+      costClass: 'low',
+    },
+    inputSchema: {
+      type: 'object',
+      required: ['userId', 'cardId'],
+      properties: {
+        userId: { type: 'string' },
+        cardId: { type: 'string' },
+        asOf: { type: 'string', format: 'date-time' },
       },
     },
   },

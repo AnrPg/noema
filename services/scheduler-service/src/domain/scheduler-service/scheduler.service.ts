@@ -8,6 +8,7 @@ import type {
   IBatchScheduleCommitResult,
   ICandidateScore,
   ICardDetail,
+  ICardProjection,
   ICardScheduleCommitInput,
   ICardScheduleCommitResult,
   ICardScheduleDecision,
@@ -53,6 +54,7 @@ import {
   BatchScheduleCommitInputSchema,
   CardScheduleCommitInputSchema,
   DualLanePlanInputSchema,
+  GetCardProjectionInputSchema,
   RetentionPredictionInputSchema,
   ReviewQueueInputSchema,
   ReviewWindowProposalInputSchema,
@@ -828,6 +830,101 @@ export class SchedulerService {
       agentHints: this.defaultHints(
         'retention_predictions_ready',
         `Generated retention predictions for ${String(predictions.length)} cards`
+      ),
+    };
+  }
+
+  /**
+   * Compute a full projection for a single card.
+   * Combines current scheduling state with a retention probability prediction
+   * to derive forgetting risk and recommended lane.
+   * Implements get-card-projection tool (Phase 4E).
+   */
+  async getCardProjection(
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ICardProjection>> {
+    if (!this.repositories) {
+      throw new Error('Scheduler repositories not initialized');
+    }
+
+    // Accept { userId, cardId, asOf? }
+    const parsed = GetCardProjectionInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new Error('Invalid card projection input');
+    }
+
+    const { userId, cardId, asOf } = parsed.data;
+    if (userId !== ctx.userId) {
+      throw new Error('userId in payload must match authenticated user');
+    }
+
+    const card = await this.repositories.schedulerCardRepository.findByCard(
+      userId as UserId,
+      cardId as CardId
+    );
+    if (!card) {
+      throw new Error(`Card not found: ${cardId}`);
+    }
+
+    const asOfDate = asOf !== undefined ? new Date(asOf) : new Date();
+    const asOfISO = asOfDate.toISOString();
+
+    // Determine time since last review in days
+    const lastReviewMs = card.lastReviewedAt !== null ? new Date(card.lastReviewedAt).getTime() : 0;
+    const deltaDays = lastReviewMs > 0 ? (asOfDate.getTime() - lastReviewMs) / (1000 * 60 * 60 * 24) : 0;
+
+    const algorithm = (card.schedulingAlgorithm ?? 'fsrs') as 'fsrs' | 'hlr' | 'sm2';
+    const stability = card.stability ?? 1.0;
+
+    let retentionProbability: number;
+    if (algorithm === 'fsrs') {
+      const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
+      retentionProbability = deltaDays > 0
+        ? fsrs.forgettingCurve(deltaDays, stability)
+        : 1.0;
+    } else if (algorithm === 'hlr') {
+      retentionProbability = deltaDays > 0
+        ? Math.pow(2, -deltaDays / stability)
+        : 1.0;
+    } else {
+      retentionProbability = deltaDays > 0
+        ? Math.exp(-deltaDays / (stability * 3))
+        : 1.0;
+    }
+    retentionProbability = this.clamp01(retentionProbability);
+    const forgettingRisk = this.clamp01(1 - retentionProbability);
+
+    // Recommend lane: below 0.6 retention → calibration; otherwise retention
+    const recommendedLane: SchedulerLane = retentionProbability < 0.6 ? 'calibration' : 'retention';
+
+    const nextReviewDate = new Date(card.nextReviewDate);
+    const daysUntilDue =
+      (nextReviewDate.getTime() - asOfDate.getTime()) / (1000 * 60 * 60 * 24);
+
+    const projection: ICardProjection = {
+      cardId: card.cardId,
+      userId: card.userId,
+      lane: card.lane,
+      algorithm,
+      state: card.state,
+      retentionProbability,
+      forgettingRisk,
+      recommendedLane,
+      daysUntilDue: Math.round(daysUntilDue * 10) / 10,
+      nextReviewDate: card.nextReviewDate,
+      stability: card.stability,
+      halfLife: card.halfLife,
+      reviewCount: card.reviewCount,
+      asOf: asOfISO,
+      policyVersion: SchedulerService.POLICY_VERSION,
+    };
+
+    return {
+      data: projection,
+      agentHints: this.defaultHints(
+        'card_projection_ready',
+        `Card ${cardId}: retention=${String(Math.round(retentionProbability * 100))}%, risk=${String(Math.round(forgettingRisk * 100))}%, dueIn=${String(Math.round(daysUntilDue))}d, recommended=${recommendedLane}`
       ),
     };
   }

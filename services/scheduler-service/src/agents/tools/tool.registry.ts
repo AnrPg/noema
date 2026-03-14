@@ -3,6 +3,7 @@ import { schedulerObservability } from '../../infrastructure/observability/sched
 import {
   createApplySessionAdjustmentsHandler,
   createBatchUpdateCardSchedulingHandler,
+  createGetCardProjectionHandler,
   createGetSRSScheduleHandler,
   createPlanDualLaneHandler,
   createPredictRetentionHandler,
@@ -398,9 +399,9 @@ export class ToolRegistry {
 export function createToolRegistry(service: SchedulerService): ToolRegistry {
   const registry = new ToolRegistry();
 
-  if (SCHEDULER_TOOL_DEFINITIONS.length !== 9) {
+  if (SCHEDULER_TOOL_DEFINITIONS.length !== 10) {
     throw new Error(
-      `Expected 9 scheduler tool definitions, found ${String(SCHEDULER_TOOL_DEFINITIONS.length)}`
+      `Expected 10 scheduler tool definitions, found ${String(SCHEDULER_TOOL_DEFINITIONS.length)}`
     );
   }
 
@@ -418,6 +419,10 @@ export function createToolRegistry(service: SchedulerService): ToolRegistry {
   registry.register(requireDefinition('plan-dual-lane'), createPlanDualLaneHandler(service));
   registry.register(requireDefinition('get-srs-schedule'), createGetSRSScheduleHandler(service));
   registry.register(requireDefinition('predict-retention'), createPredictRetentionHandler(service));
+  registry.register(
+    requireDefinition('get-card-projection'),
+    createGetCardProjectionHandler(service)
+  );
   registry.register(
     requireDefinition('propose-review-windows'),
     createProposeReviewWindowsHandler(service)

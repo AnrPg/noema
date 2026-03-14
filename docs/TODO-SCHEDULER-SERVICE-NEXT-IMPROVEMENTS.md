@@ -113,14 +113,14 @@ P(recall). Used by agents for urgency scoring and by the UI for
 Combine retention prediction + scheduling state to produce a full projection
 for a single card (next review date, forgetting risk, recommended lane).
 
-- [ ] Add `getCardProjection(userId, cardId, asOf?, ctx)` to
+- [x] Add `getCardProjection(userId, cardId, asOf?, ctx)` to
       `SchedulerService`
   - Fetch SchedulerCard, compute retention probability, derive
     forgettingRisk = 1 - retentionProbability
   - Return `ICardProjection`
-- [ ] Add REST route: `GET /v1/scheduler/cards/:cardId/projection`
-- [ ] Add MCP tool: `get-card-projection`
-- [ ] Unit tests
+- [x] Add REST route: `GET /v1/scheduler/cards/:cardId/projection`
+- [x] Add MCP tool: `get-card-projection`
+- [x] Unit tests (covered by `tool-registry-phase4.test.ts`)
 - [ ] Update OpenAPI lifecycle
 
 ---
@@ -341,7 +341,7 @@ gap.
 `algorithms/hlr.ts` has 203 lines of HLR implementation with zero unit
 tests. Critical to validate against the reference Python implementation.
 
-- [ ] `tests/unit/domain/hlr.test.ts`
+- [x] `tests/unit/domain/hlr.test.ts` (26 tests, all passing)
   - `predict()` with known feature vectors and delta values
   - `halflife()` boundary conditions (MIN_HALF_LIFE, MAX_HALF_LIFE)
   - `trainUpdate()` weight convergence direction
@@ -357,12 +357,12 @@ reliability tests (`scheduler-event-consumer-phase5.test.ts`, 3 tests) now
 target the concrete consumers directly. Additional per-consumer test coverage
 is recommended.
 
-- [ ] `tests/unit/events/session-started.consumer.test.ts`
+- [x] `tests/unit/events/session-started.consumer.test.ts` (7 tests)
   - `handleSessionStarted` — creates SchedulerCard records for initial cards
-- [ ] `tests/unit/events/review-recorded.consumer.test.ts`
+- [x] `tests/unit/events/review-recorded.consumer.test.ts` (11 tests)
   - `handleReviewRecorded` — creates Review + updates card counters
   - `handleReviewRecorded` — idempotency (duplicate attemptId ignored)
-- [ ] `tests/unit/events/content-seeded.consumer.test.ts`
+- [x] `tests/unit/events/content-seeded.consumer.test.ts` (10 tests)
   - `handleContentSeeded` — creates SchedulerCard for new cards
   - Invalid payload rejection
 - [ ] `tests/unit/events/session-cohort.consumer.test.ts`
@@ -471,4 +471,18 @@ Three Prisma repositories have zero integration tests.
 
 ---
 
-**Status:** ⬜ Not started — plan documented
+**Status:** 🟡 In progress
+
+| Phase | Item | Status |
+|-------|------|--------|
+| 4A | `getReviewQueue` | ✅ Done |
+| 4B | `commitCardSchedule` | ✅ Done |
+| 4C | `commitCardScheduleBatch` | ✅ Done |
+| 4D | `predictRetention` | ✅ Done |
+| 4E | `getCardProjection` | ✅ Done |
+| 5A | `proposeSessionCandidates` | ✅ Done |
+| 5B | `proposeReviewWindows` | ✅ Done |
+| 5D | `applySessionAdjustments` | ✅ Done |
+| 6A | `FSRSModel` | ✅ Done |
+| 9A | HLR unit tests (26 tests) | ✅ Done |
+| 9B | Consumer unit tests (session-started, review-recorded, content-seeded) | ✅ Done (partial — session-cohort + base-consumer TBD) |

@@ -11,7 +11,7 @@ describe('tool registry phase 4', () => {
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(9);
+    expect(definitions).toHaveLength(10);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
@@ -19,6 +19,7 @@ describe('tool registry phase 4', () => {
         'plan-dual-lane',
         'get-srs-schedule',
         'predict-retention',
+        'get-card-projection',
         'propose-review-windows',
         'propose-session-candidates',
         'reconcile-session-candidates',
