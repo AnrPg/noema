@@ -96,12 +96,19 @@ function buildUrl(
 ): string {
   const config = getApiConfig();
 
-  // Support path-prefixed base URLs (e.g., 'http://localhost:8080/api').
-  // new URL(absolutePath, baseWithPath) discards the base URL's path component,
-  // so we concatenate base + path manually to preserve the prefix.
-  const base = (overrideBaseUrl ?? config.baseUrl).replace(/\/+$/, '');
+  const base = new URL(overrideBaseUrl ?? config.baseUrl);
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  const url = new URL(`${base}${normalizedPath}`);
+  const trimmedBasePath = base.pathname.replace(/\/+$/, '');
+  const basePath = trimmedBasePath === '' ? '/' : trimmedBasePath;
+
+  const hasBasePrefix =
+    basePath !== '/' && (normalizedPath === basePath || normalizedPath.startsWith(`${basePath}/`));
+
+  const mergedPath = hasBasePrefix
+    ? normalizedPath
+    : `${basePath === '/' ? '' : basePath}${normalizedPath}`;
+
+  const url = new URL(mergedPath, `${base.protocol}//${base.host}`);
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

@@ -211,7 +211,7 @@ export const metricsApi = {
 
 export const healthApi = {
   get: (userId: UserId): Promise<HealthResponse> =>
-    http.get(`/api/v1/users/${userId}/structural-health`),
+    http.get(`/api/v1/users/${userId}/health`),
 };
 
 // ============================================================================
@@ -228,7 +228,8 @@ export const misconceptionsApi = {
     userId: UserId,
     misconceptionId: string,
     data: IUpdateMisconceptionStatusInput
-  ): Promise<MisconceptionResponse> => http.patch(`${miscBase(userId)}/${misconceptionId}`, data),
+  ): Promise<MisconceptionResponse> =>
+    http.patch(`${miscBase(userId)}/${misconceptionId}/status`, data),
 };
 
 // ============================================================================

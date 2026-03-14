@@ -101,8 +101,6 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
   // Initialize auth on mount
   useEffect(() => {
     const initAuth = async (): Promise<void> => {
-      if (isInitialized) return;
-
       try {
         // Try to get current user
         const response = await meApi.get();
@@ -129,7 +127,7 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
     };
 
     void initAuth();
-  }, [isInitialized, setUser, setSettings, reset, setInitialized]);
+  }, [setUser, setSettings, reset, setInitialized]);
 
   const login = useCallback(
     async (input: LoginInput) => {
