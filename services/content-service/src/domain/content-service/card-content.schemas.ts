@@ -14,12 +14,12 @@
 
 import { CardType, RemediationCardType } from '@noema/types';
 import { z } from 'zod';
-import { MediaAttachmentSchema } from './content.schemas.js';
 import {
   CardBackSchema,
   CardFrontSchema,
   ExplanationSchema,
   HintSchema,
+  MediaAttachmentSchema,
 } from './value-objects/content.value-objects.js';
 
 // ============================================================================

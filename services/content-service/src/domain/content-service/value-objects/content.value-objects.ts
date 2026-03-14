@@ -8,6 +8,23 @@
 import { z } from 'zod';
 
 // ============================================================================
+// Media Attachment Schema
+// ============================================================================
+
+/**
+ * Schema for a media attachment (image, audio, video) on a card.
+ * Lives here — not in content.schemas.ts — to avoid the circular dependency
+ * between content.schemas.ts (imports CardContentSchemaRegistry) and
+ * card-content.schemas.ts (imports MediaAttachmentSchema).
+ */
+export const MediaAttachmentSchema = z.object({
+  url: z.string().url('Invalid media URL'),
+  mimeType: z.string().min(1, 'MIME type required'),
+  alt: z.string().max(500).optional(),
+  position: z.enum(['front', 'back', 'shared']).default('shared'),
+});
+
+// ============================================================================
 // Tag Value Object
 // ============================================================================
 

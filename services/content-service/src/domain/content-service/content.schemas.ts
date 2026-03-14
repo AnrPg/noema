@@ -13,11 +13,13 @@ import {
 } from '@noema/types';
 import { z } from 'zod';
 import { CardContentSchemaRegistry } from './card-content.schemas.js';
+export { MediaAttachmentSchema } from './value-objects/content.value-objects.js';
 import {
   CardBackSchema,
   CardFrontSchema,
   ExplanationSchema,
   HintSchema,
+  MediaAttachmentSchema,
   TagSchema,
 } from './value-objects/content.value-objects.js';
 
@@ -54,17 +56,6 @@ export const EventSourceSchema = z.enum([
   EventSource.SYSTEM,
   EventSource.IMPORT,
 ]);
-
-// ============================================================================
-// Media Attachment Schema
-// ============================================================================
-
-export const MediaAttachmentSchema = z.object({
-  url: z.string().url('Invalid media URL'),
-  mimeType: z.string().min(1, 'MIME type required'),
-  alt: z.string().max(500).optional(),
-  position: z.enum(['front', 'back', 'shared']).default('shared'),
-});
 
 // ============================================================================
 // Card Content Schema (Base)
