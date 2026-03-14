@@ -27,11 +27,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infrastructure/scripts/postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-noema} -d ${POSTGRES_DB:-noema}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-noema} -d ${POSTGRES_DB:-noema}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -75,7 +71,7 @@ services:
       QDRANT__SERVICE__HTTP_PORT: 6333
       QDRANT__SERVICE__GRPC_PORT: 6334
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/readiness"]
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/6333"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -114,7 +110,7 @@ services:
   # MinIO Client - Bucket Initialization
   # ===========================================================================
   minio-init:
-    image: minio/mc:RELEASE.2024-12-18T15-16-56Z
+    image: minio/mc:latest
     container_name: noema-minio-init
     depends_on:
       minio:

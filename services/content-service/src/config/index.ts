@@ -81,6 +81,7 @@ export interface IServiceConfig {
     };
   };
   cors: {
+    enabled: boolean;
     origin: string[];
     credentials: boolean;
   };
@@ -206,6 +207,7 @@ export function loadConfig(): IServiceConfig {
       },
     },
     cors: {
+      enabled: optionalEnvBool('CORS_ENABLED', false),
       origin: parseCorsOrigin(
         optionalEnv(
           'CORS_ORIGIN',

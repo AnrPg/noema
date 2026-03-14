@@ -72,10 +72,16 @@ async function bootstrap(): Promise<void> {
     'Starting service'
   );
 
+  const prismaLogQueries = process.env['PRISMA_LOG_QUERIES'] === 'true';
+
   // Initialize Prisma
   const prisma = new PrismaClient({
     log:
-      config.service.environment === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+      config.service.environment === 'development'
+        ? prismaLogQueries
+          ? ['query', 'info', 'warn', 'error']
+          : ['info', 'warn', 'error']
+        : ['error'],
   });
 
   await prisma.$connect();
@@ -150,17 +156,25 @@ async function bootstrap(): Promise<void> {
     bodyLimit: config.server.bodyLimit,
   });
 
-  // Register CORS
-  const corsOrigin =
-    config.cors.origin.length === 1 && config.cors.origin[0] === '*'
-      ? true // Fastify CORS: true = reflect request origin (wildcard)
-      : config.cors.origin;
-  await fastify.register(cors, {
-    origin: corsOrigin,
-    credentials: config.cors.origin[0] !== '*' && config.cors.credentials,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
-  });
+  // Register CORS (disabled by default — the API gateway handles CORS.
+  // Set CORS_ENABLED=true only when running without the gateway.)
+  if (config.cors.enabled) {
+    const corsOrigin =
+      config.cors.origin.length === 1 && config.cors.origin[0] === '*'
+        ? true // Fastify CORS: true = reflect request origin (wildcard)
+        : config.cors.origin;
+    await fastify.register(cors, {
+      origin: corsOrigin,
+      credentials: config.cors.origin[0] !== '*' && config.cors.credentials,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
+    });
+  } else {
+    logger.info('CORS disabled at service level — handled by API gateway');
+    fastify.options('/*', async (_request, reply) => {
+      await reply.status(204).send();
+    });
+  }
 
   // Register rate limiting
   await fastify.register(rateLimit, {

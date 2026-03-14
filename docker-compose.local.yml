@@ -102,7 +102,7 @@ services:
     container_name: noema-pgadmin
     restart: unless-stopped
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@noema.local}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@noema.dev}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
@@ -178,7 +178,7 @@ services:
   # Observability: Jaeger (Distributed Tracing)
   # ===========================================================================
   jaeger:
-    image: jaegertracing/all-in-one:1.64
+    image: jaegertracing/all-in-one:latest
     container_name: noema-jaeger
     restart: unless-stopped
     environment:

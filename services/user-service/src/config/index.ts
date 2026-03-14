@@ -40,6 +40,7 @@ export interface IServiceConfig {
     lockoutDurationMinutes: number;
   };
   cors: {
+    enabled: boolean;
     origin: string[];
     credentials: boolean;
   };
@@ -144,6 +145,7 @@ export function loadConfig(): IServiceConfig {
       lockoutDurationMinutes: optionalEnvInt('LOCKOUT_DURATION_MINUTES', 15),
     },
     cors: {
+      enabled: optionalEnvBool('CORS_ENABLED', false),
       origin: optionalEnv(
         'CORS_ORIGIN',
         'http://localhost:3000,http://localhost:3004,http://localhost:3003'

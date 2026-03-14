@@ -112,13 +112,26 @@ async function bootstrap(): Promise<void> {
     genReqId: () => `cor_${Date.now().toString(36)}`,
   });
 
-  // Register CORS
-  await fastify.register(cors, {
-    origin: config.cors.origin,
-    credentials: config.cors.credentials,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
-  });
+  // Register CORS (disabled by default — the API gateway handles CORS.
+  // Set CORS_ENABLED=true only when running without the gateway.)
+  if (config.cors.enabled) {
+    await fastify.register(cors, {
+      origin: config.cors.origin,
+      credentials: config.cors.credentials,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id'],
+    });
+  } else {
+    logger.info('CORS disabled at service level — handled by API gateway');
+    // Traefik adds CORS response headers, but it still forwards the preflight
+    // to the service. Without @fastify/cors, Fastify returns 404 for OPTIONS.
+    // Return 204 so the browser sees a valid preflight; Traefik injects headers.
+    fastify.addHook('onRequest', async (request, reply) => {
+      if (request.method === 'OPTIONS') {
+        await reply.status(204).send();
+      }
+    });
+  }
 
   // Register rate limiting (per-route only; global: false)
   await fastify.register(rateLimit, {

@@ -64,10 +64,16 @@ async function bootstrap(): Promise<void> {
     throw new Error('JWT_SECRET or ACCESS_TOKEN_SECRET is required when authentication is enabled');
   }
 
+  const prismaLogQueries = process.env['PRISMA_LOG_QUERIES'] === 'true';
+
   // Initialize Prisma
   const prisma = new PrismaClient({
     log:
-      config.service.environment === 'development' ? ['query', 'info', 'warn', 'error'] : ['error'],
+      config.service.environment === 'development'
+        ? prismaLogQueries
+          ? ['query', 'info', 'warn', 'error']
+          : ['info', 'warn', 'error']
+        : ['error'],
   });
 
   await prisma.$connect();
@@ -167,13 +173,21 @@ async function bootstrap(): Promise<void> {
     genReqId: () => `cor_${Date.now().toString(36)}`,
   });
 
-  // Register CORS
-  await fastify.register(cors, {
-    origin: config.cors.origin,
-    credentials: config.cors.credentials,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-User-Id'],
-  });
+  // Register CORS (disabled by default — the API gateway handles CORS.
+  // Set CORS_ENABLED=true only when running without the gateway.)
+  if (config.cors.enabled) {
+    await fastify.register(cors, {
+      origin: config.cors.origin,
+      credentials: config.cors.credentials,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-User-Id'],
+    });
+  } else {
+    logger.info('CORS disabled at service level — handled by API gateway');
+    fastify.options('/*', async (_request, reply) => {
+      await reply.status(204).send();
+    });
+  }
 
   // Create auth middleware
   const authMiddleware = createAuthMiddleware({
@@ -184,7 +198,12 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  registerSessionRoutes(fastify as unknown as FastifyInstance, sessionService, authMiddleware, streakService);
+  registerSessionRoutes(
+    fastify as unknown as FastifyInstance,
+    sessionService,
+    authMiddleware,
+    streakService
+  );
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown

@@ -213,6 +213,7 @@ http:
       entryPoints:
         - web
       service: knowledge-graph-service
+      priority: 100
       middlewares:
         - cors-headers
       # No strip-api — service expects /api/v1/users/:userId/*
@@ -268,46 +269,26 @@ http:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:3002"
-        healthCheck:
-          path: /health/ready
-          interval: 15s
-          timeout: 5s
 
     content-service:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:3005"
-        healthCheck:
-          path: /health/ready
-          interval: 15s
-          timeout: 5s
 
     session-service:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:3003"
-        healthCheck:
-          path: /health/ready
-          interval: 15s
-          timeout: 5s
 
     knowledge-graph-service:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:3006"
-        healthCheck:
-          path: /health/ready
-          interval: 15s
-          timeout: 5s
 
     scheduler-service:
       loadBalancer:
         servers:
           - url: "http://host.docker.internal:3009"
-        healthCheck:
-          path: /health/ready
-          interval: 15s
-          timeout: 5s
 
     hlr-sidecar:
       loadBalancer:

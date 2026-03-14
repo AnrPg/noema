@@ -25,6 +25,7 @@ import type {
 } from './events/consumers/scheduler-base-consumer.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
+  ensureSchedulerReliabilitySchema,
   PrismaCalibrationDataRepository,
   PrismaEventReliabilityRepository,
   PrismaProvenanceRepository,
@@ -65,13 +66,22 @@ async function bootstrap(): Promise<void> {
   await redis.connect();
   logger.info('Connected to Redis');
 
+  const prismaLogQueries = process.env['PRISMA_LOG_QUERIES'] === 'true';
+
   // Connect to PostgreSQL via Prisma
   const prisma = new PrismaClient({
     datasources: { db: { url: config.database.url } },
-    log: config.logging.level === 'debug' ? ['query', 'error', 'warn'] : ['error'],
+    log:
+      config.logging.level === 'debug'
+        ? prismaLogQueries
+          ? ['query', 'error', 'warn']
+          : ['error', 'warn']
+        : ['error'],
   });
   await prisma.$connect();
   logger.info('Connected to PostgreSQL');
+
+  await ensureSchedulerReliabilitySchema(prisma, logger);
 
   const schedulerCardRepo = new PrismaSchedulerCardRepository(prisma);
   const reviewRepo = new PrismaReviewRepository(prisma);
@@ -218,12 +228,21 @@ async function bootstrap(): Promise<void> {
     done();
   });
 
-  await fastify.register(cors, {
-    origin: config.cors.origin,
-    credentials: config.cors.credentials,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-User-Id'],
-  });
+  // Register CORS (disabled by default — the API gateway handles CORS.
+  // Set CORS_ENABLED=true only when running without the gateway.)
+  if (config.cors.enabled) {
+    await fastify.register(cors, {
+      origin: config.cors.origin,
+      credentials: config.cors.credentials,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-Id', 'X-User-Id'],
+    });
+  } else {
+    logger.info('CORS disabled at service level — handled by API gateway');
+    fastify.options('/*', async (_request, reply) => {
+      await reply.status(204).send();
+    });
+  }
 
   const authMiddleware = createAuthMiddleware({
     authDisabled: config.security.authDisabled,

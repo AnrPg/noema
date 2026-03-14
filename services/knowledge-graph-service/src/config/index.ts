@@ -84,6 +84,7 @@ export interface IServiceConfig {
     proofStageEnabled: boolean;
   };
   cors: {
+    enabled: boolean;
     origin: string[];
     credentials: boolean;
   };
@@ -207,6 +208,7 @@ export function loadConfig(): IServiceConfig {
       proofStageEnabled: optionalEnvBool('MUTATION_PROOF_STAGE_ENABLED', false),
     },
     cors: {
+      enabled: optionalEnvBool('CORS_ENABLED', false),
       origin: parseCorsOrigin(
         optionalEnv(
           'CORS_ORIGIN',
