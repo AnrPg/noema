@@ -33,7 +33,7 @@ function getGreeting(): string {
 
 export default function DashboardPage(): React.JSX.Element | null {
   const { user } = useAuth();
-  const firstName = user?.displayName.split(' ')[0] ?? 'there';
+  const firstName = user?.displayName?.split(' ')[0] ?? 'there';
 
   // user is null during the brief window between mount and the auth store hydrating.
   // The authenticated layout handles the full loading skeleton; returning null here

@@ -1,11 +1,13 @@
 /**
- * Home Page - Redirect based on auth state
+ * Home Page - Redirect to dashboard
+ *
+ * Authenticated users land on the dashboard directly.
+ * Unauthenticated users are redirected to /login by the AuthGuard
+ * in the (authenticated) layout.
  */
 
 import { redirect } from 'next/navigation';
 
 export default function HomePage() {
-  // For now, redirect to login
-  // In the future, this could be a landing page
-  redirect('/login');
+  redirect('/dashboard');
 }

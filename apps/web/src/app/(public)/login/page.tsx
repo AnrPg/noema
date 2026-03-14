@@ -114,12 +114,9 @@ export default function LoginPage(): React.JSX.Element {
                 {isSubmitting ? 'Signing in...' : 'Sign in'}
               </Button>
 
-              <p className="text-sm text-muted-foreground">
-                {"Don't have an account? "}
-                <Link href="/register" className="text-primary hover:underline">
-                  Sign up
-                </Link>
-              </p>
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/register">Don&apos;t have an account? Sign up</Link>
+              </Button>
             </CardFooter>
           </form>
         </Card>

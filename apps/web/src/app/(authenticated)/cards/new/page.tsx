@@ -13,13 +13,20 @@
 
 'use client';
 
-import * as React from 'react';
-import { useRouter } from 'next/navigation';
-import { useCreateCard, useBatchCreateCards, contentKeys } from '@noema/api-client';
-import type { ICreateCardInput, IBatchCreateInput, ICardDto } from '@noema/api-client';
+import type {
+  IBatchCreateInput,
+  ICardDto,
+  ICreateCardInput,
+  IGraphNodeDto,
+} from '@noema/api-client';
+import { contentKeys, useBatchCreateCards, useCreateCard, usePKGNodes } from '@noema/api-client';
+import { useAuth } from '@noema/auth';
+import type { UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import * as React from 'react';
 
 // ============================================================================
 // Types
@@ -461,6 +468,37 @@ function parseCommaSeparated(raw: string): string[] {
     .filter((s) => s !== '');
 }
 
+const KNOWLEDGE_NODE_ID_PATTERN = /^node_[a-zA-Z0-9]{21}$/;
+
+function normalizeKnowledgeNodeIds(raw: string): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const id of parseCommaSeparated(raw)) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function validateKnowledgeNodeIds(ids: string[]): string | null {
+  if (ids.length > 50) {
+    return 'You can link up to 50 knowledge nodes per card.';
+  }
+
+  const invalid = ids.find((id) => !KNOWLEDGE_NODE_ID_PATTERN.test(id));
+  if (invalid !== undefined) {
+    return [
+      'Invalid knowledge node ID: ',
+      invalid,
+      '. Expected format is node_ followed by 21 alphanumeric characters.',
+    ].join('');
+  }
+
+  return null;
+}
+
 function parseDifficulty(raw: string): number | undefined {
   if (raw.trim() === '') return undefined;
   const n = parseFloat(raw);
@@ -820,6 +858,8 @@ function ComplexJsonForm({
 interface IStep3Props {
   cardType: string;
   settings: ISettingsFormData;
+  kgNodes: IGraphNodeDto[];
+  kgNodesLoading: boolean;
   onChange: (patch: Partial<ISettingsFormData>) => void;
   isSubmitting: boolean;
   submitError: string | null;
@@ -830,12 +870,61 @@ interface IStep3Props {
 function Step3Settings({
   cardType,
   settings,
+  kgNodes,
+  kgNodesLoading,
   onChange,
   isSubmitting,
   submitError,
   onBack,
   onSubmit,
 }: IStep3Props): React.JSX.Element {
+  const [nodeSearch, setNodeSearch] = React.useState('');
+  const [manualEntryOpen, setManualEntryOpen] = React.useState(false);
+
+  const selectedNodeIds = React.useMemo(
+    () => normalizeKnowledgeNodeIds(settings.knowledgeNodeIds),
+    [settings.knowledgeNodeIds]
+  );
+
+  const selectedNodeMap = React.useMemo(() => {
+    const map = new Map<string, IGraphNodeDto>();
+    for (const node of kgNodes) {
+      map.set(node.id, node);
+    }
+    return map;
+  }, [kgNodes]);
+
+  const searchLower = nodeSearch.trim().toLowerCase();
+  const filteredNodes = React.useMemo(() => {
+    if (searchLower === '') return kgNodes.slice(0, 12);
+    return kgNodes
+      .filter(
+        (node) =>
+          node.label.toLowerCase().includes(searchLower) ||
+          node.type.toLowerCase().includes(searchLower) ||
+          node.id.toLowerCase().includes(searchLower)
+      )
+      .slice(0, 12);
+  }, [kgNodes, searchLower]);
+
+  function setSelectedNodeIds(nextIds: string[]): void {
+    onChange({ knowledgeNodeIds: nextIds.join(', ') });
+  }
+
+  function handleAddNode(nodeId: string): void {
+    if (selectedNodeIds.includes(nodeId)) return;
+    setSelectedNodeIds([...selectedNodeIds, nodeId]);
+  }
+
+  function handleRemoveNode(nodeId: string): void {
+    setSelectedNodeIds(selectedNodeIds.filter((id) => id !== nodeId));
+  }
+
+  const selectedNodeValidationError = React.useMemo(
+    () => validateKnowledgeNodeIds(selectedNodeIds),
+    [selectedNodeIds]
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-md border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
@@ -855,20 +944,117 @@ function Step3Settings({
         />
       </FieldGroup>
 
-      {/* Knowledge Node IDs */}
+      {/* Knowledge Nodes */}
       <FieldGroup
-        label="Knowledge Node IDs (comma-separated, optional)"
-        hint="Link this card to graph nodes for contextual review"
+        label="Knowledge graph nodes (optional)"
+        hint="Search and select nodes by name. IDs are handled automatically."
       >
-        <input
-          type="text"
-          value={settings.knowledgeNodeIds}
-          onChange={(e) => {
-            onChange({ knowledgeNodeIds: e.target.value });
-          }}
-          placeholder="node-uuid-1, node-uuid-2"
-          className={inputClass}
-        />
+        <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/20 p-3">
+          <input
+            type="text"
+            value={nodeSearch}
+            onChange={(e) => {
+              setNodeSearch(e.target.value);
+            }}
+            placeholder="Search node label, type, or ID"
+            className={inputClass}
+          />
+
+          {selectedNodeIds.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selectedNodeIds.map((id) => {
+                const node = selectedNodeMap.get(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      handleRemoveNode(id);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs hover:bg-muted"
+                    title="Click to remove"
+                  >
+                    <span>{node?.label ?? id}</span>
+                    <span className="text-muted-foreground">×</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-background">
+            {kgNodesLoading ? (
+              <p className="px-3 py-2 text-xs text-muted-foreground">Loading knowledge nodes…</p>
+            ) : filteredNodes.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-muted-foreground">No matching nodes found.</p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {filteredNodes.map((node) => {
+                  const selected = selectedNodeIds.includes(node.id);
+                  return (
+                    <li key={node.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAddNode(node.id);
+                        }}
+                        disabled={selected}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm">{node.label}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {node.type} · {node.id}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {selected ? 'Selected' : 'Add'}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            Selected {String(selectedNodeIds.length)} / 50 knowledge nodes.
+          </div>
+
+          {selectedNodeValidationError !== null && (
+            <p className="text-xs text-destructive">{selectedNodeValidationError}</p>
+          )}
+
+          <div className="border-t border-border pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                setManualEntryOpen((prev) => !prev);
+              }}
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              {manualEntryOpen ? 'Hide advanced manual ID entry' : 'Show advanced manual ID entry'}
+            </button>
+
+            {manualEntryOpen && (
+              <div className="mt-2 flex flex-col gap-1.5">
+                <input
+                  type="text"
+                  value={settings.knowledgeNodeIds}
+                  onChange={(e) => {
+                    onChange({ knowledgeNodeIds: e.target.value });
+                  }}
+                  placeholder="node_abcdefghijklmnopqrstu, node_bcdefghijklmnopqrstuv"
+                  className={inputClass}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Advanced mode: comma-separated IDs. Format: node_ + 21 alphanumeric chars.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </FieldGroup>
 
       {/* Difficulty */}
@@ -1326,6 +1512,9 @@ function validateStep2(cardType: string, form: IContentFormData): string | null 
 
 export default function NewCardPage(): React.JSX.Element {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const userId = (user?.id ?? '') as UserId;
+  const { data: pkgNodes = [], isLoading: kgNodesLoading } = usePKGNodes(userId);
 
   // --------------------------------------------------------------------------
   // Wizard state
@@ -1396,7 +1585,12 @@ export default function NewCardPage(): React.JSX.Element {
     setSubmitError(null);
 
     const tags = parseCommaSeparated(settings.tags);
-    const knowledgeNodeIds = parseCommaSeparated(settings.knowledgeNodeIds);
+    const knowledgeNodeIds = normalizeKnowledgeNodeIds(settings.knowledgeNodeIds);
+    const nodeIdsError = validateKnowledgeNodeIds(knowledgeNodeIds);
+    if (nodeIdsError !== null) {
+      setSubmitError(nodeIdsError);
+      return;
+    }
     const difficulty = parseDifficulty(settings.difficulty);
 
     // Map state label to API value
@@ -1534,6 +1728,8 @@ export default function NewCardPage(): React.JSX.Element {
           <Step3Settings
             cardType={selectedType}
             settings={settings}
+            kgNodes={pkgNodes}
+            kgNodesLoading={kgNodesLoading}
             onChange={handleSettingsChange}
             isSubmitting={isSubmitting}
             submitError={submitError}

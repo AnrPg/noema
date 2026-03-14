@@ -1,17 +1,29 @@
 'use client';
 
-import { configureApiClient, configureHlrClient } from '@noema/api-client';
+import { ToastProvider } from '@/components/toast-provider';
+import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
+import { ApiRequestError, configureApiClient, configureHlrClient } from '@noema/api-client';
 import { AuthProvider, useAuthStore } from '@noema/auth';
 import { ThemeProvider } from '@noema/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
-import { ToastProvider } from '@/components/toast-provider';
 
 // Inner component so it has access to QueryClientProvider context
 function QueryCacheWatcher(): null {
   useAgentHintsInterceptor();
   return null;
+}
+
+function shouldRetryRequest(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 2) return false;
+
+  if (error instanceof ApiRequestError) {
+    if (error.status === 0) return false;
+    if ([400, 401, 403, 404, 409, 422].includes(error.status)) return false;
+    if (error.status >= 500) return true;
+  }
+
+  return failureCount < 1;
 }
 
 export function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -33,7 +45,14 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { staleTime: 60 * 1000, refetchOnWindowFocus: false },
+          queries: {
+            staleTime: 60 * 1000,
+            refetchOnWindowFocus: false,
+            retry: shouldRetryRequest,
+          },
+          mutations: {
+            retry: false,
+          },
         },
       })
   );
