@@ -8,6 +8,7 @@
  * "Do it" button navigates to mapped route.
  */
 import * as React from 'react';
+import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import type { ISuggestedAction, ActionCategory, ActionPriority } from '@noema/contracts';
 import { ConfidenceMeter } from '@noema/ui';
@@ -65,7 +66,7 @@ const CATEGORY_ORDER: ActionCategory[] = ['correction', 'exploration', 'optimiza
  * Maps action identifiers to Next.js routes.
  * Unknown actions: button shown but no navigation.
  */
-const ACTION_ROUTES: Record<string, string> = {
+const ACTION_ROUTES: Record<string, Route> = {
   'review-cards': '/reviews',
   'start-review': '/session/new',
   'view-knowledge-map': '/knowledge',
@@ -73,7 +74,6 @@ const ACTION_ROUTES: Record<string, string> = {
   'view-misconceptions': '/knowledge/misconceptions',
   'view-comparison': '/knowledge/comparison',
   'browse-card-library': '/cards',
-  'go-to-goals': '/goals',
   'start-session': '/session/new',
   'view-dashboard': '/dashboard',
 };
@@ -205,7 +205,11 @@ export function SuggestedActions(): React.JSX.Element {
                             </span>
                           )}
                           {action.confidence !== undefined && (
-                            <ConfidenceMeter value={action.confidence} segments={3} size="xs" />
+                            <ConfidenceMeter
+                              value={action.confidence}
+                              segments={3}
+                              className="w-12"
+                            />
                           )}
                         </div>
                         <button

@@ -11,7 +11,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Play } from 'lucide-react';
 import { useAuth } from '@noema/auth';
-import { useDualLanePlan, useSessionCandidates, useStartSession } from '@noema/api-client';
+import { useCards, useReviewQueue, useStartSession } from '@noema/api-client';
 import type { IDeckQueryInput } from '@noema/api-client';
 import type { CardId } from '@noema/types';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
@@ -43,30 +43,31 @@ export default function SessionNewPage(): React.JSX.Element {
   const [startError, setStartError] = React.useState<string | null>(null);
 
   // ── API hooks ────────────────────────────────────────────────────────────
-  const dualLanePlan = useDualLanePlan(
-    { userId: user?.id ?? '' },
+  const reviewQueue = useReviewQueue(
+    { limit: sessionSize },
     { enabled: useQuickStart && user?.id !== undefined }
   );
-
-  const sessionCandidates = useSessionCandidates(
-    { userId: user?.id ?? '' },
+  const sessionCandidates = useCards(
+    { ...customQuery, limit: sessionSize },
     { enabled: !useQuickStart && showCandidates && user?.id !== undefined }
   );
 
   const startSession = useStartSession();
 
   // ── Derived values ───────────────────────────────────────────────────────
-  const plan = dualLanePlan.data?.data;
-  const retentionCount = plan?.totalRetention;
-  const calibrationCount = plan?.totalCalibration;
+  const queue = reviewQueue.data?.data;
+  const retentionCount = queue?.retentionDue;
+  const calibrationCount = queue?.calibrationDue;
 
   // ── Start handler ────────────────────────────────────────────────────────
   async function handleStart(): Promise<void> {
     setStartError(null);
     let cardIds: CardId[] | undefined;
 
-    if (useQuickStart && plan !== undefined) {
-      cardIds = plan.slots.slice(0, sessionSize).map((slot) => slot.cardId);
+    if (useQuickStart && queue !== undefined) {
+      cardIds = queue.cards.slice(0, sessionSize).map((card) => card.cardId as CardId);
+    } else if (!useQuickStart && sessionCandidates.data !== undefined) {
+      cardIds = sessionCandidates.data.data.items.slice(0, sessionSize).map((card) => card.id);
     }
 
     try {
@@ -152,22 +153,22 @@ export default function SessionNewPage(): React.JSX.Element {
               <p className="text-sm text-muted-foreground">
                 Uses your dual-lane plan — optimally chosen cards based on your schedule.
               </p>
-              {dualLanePlan.isLoading && (
+              {reviewQueue.isLoading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Loading your plan…
+                  Loading your queue…
                 </div>
               )}
-              {dualLanePlan.isSuccess && plan !== undefined && (
+              {reviewQueue.isSuccess && queue !== undefined && (
                 <p className="text-sm text-foreground">
                   <span className="font-medium text-blue-600 dark:text-blue-400">
-                    {String(plan.totalRetention)} retention
+                    {String(queue.retentionDue)} retention
                   </span>{' '}
                   +{' '}
                   <span className="font-medium text-amber-600 dark:text-amber-400">
-                    {String(plan.totalCalibration)} calibration
+                    {String(queue.calibrationDue)} calibration
                   </span>{' '}
-                  cards available.
+                  cards due now.
                 </p>
               )}
             </div>
@@ -197,29 +198,22 @@ export default function SessionNewPage(): React.JSX.Element {
                     </div>
                   )}
                   {sessionCandidates.isSuccess &&
-                    (sessionCandidates.data.data.length === 0 ? (
+                    (sessionCandidates.data.data.items.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         No candidates match the current filters.
                       </p>
                     ) : (
                       <ul className="flex flex-col gap-1.5">
-                        {sessionCandidates.data.data.map((candidate) => (
+                        {sessionCandidates.data.data.items.map((candidate) => (
                           <li
-                            key={candidate.cardId as string}
+                            key={candidate.id as string}
                             className="flex items-center justify-between text-sm"
                           >
                             <span className="font-mono text-xs text-muted-foreground">
-                              {candidate.cardId as string}
+                              {candidate.id as string}
                             </span>
-                            <span
-                              className={[
-                                'text-xs font-medium',
-                                candidate.lane === 'retention'
-                                  ? 'text-blue-600 dark:text-blue-400'
-                                  : 'text-amber-600 dark:text-amber-400',
-                              ].join(' ')}
-                            >
-                              {candidate.lane}
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {candidate.cardType}
                             </span>
                           </li>
                         ))}

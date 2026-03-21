@@ -7,8 +7,8 @@
 
 import * as React from 'react';
 import type { IImageOcclusionContent, IOcclusionRegion } from '@noema/api-client';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 export default function ImageOcclusionRenderer(props: ICardRendererProps): React.JSX.Element {
   const { card, mode, isRevealed } = props;

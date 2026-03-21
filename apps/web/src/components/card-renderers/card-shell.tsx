@@ -7,7 +7,7 @@
 
 import * as React from 'react';
 import { Card, CardContent, Button } from '@noema/ui';
-import type { ICardRendererProps } from './types.js';
+import type { ICardRendererProps } from './types';
 
 interface ICardShellProps extends ICardRendererProps {
   children?: React.ReactNode;

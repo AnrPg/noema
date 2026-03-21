@@ -21,6 +21,7 @@ import {
 } from '@noema/ui';
 import { AlertCircle, Brain } from 'lucide-react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -56,7 +57,7 @@ export default function LoginPage(): React.JSX.Element {
         redirect !== null && redirect.startsWith('/') && !redirect.startsWith('//')
           ? redirect
           : '/dashboard';
-      router.push(target);
+      router.push(target as Route);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     }

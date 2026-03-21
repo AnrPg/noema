@@ -16,6 +16,7 @@ import {
   useDetectMisconceptions,
   useUpdateMisconceptionStatus,
 } from '@noema/api-client';
+import type { IMisconceptionDto } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Button, ConfidenceMeter } from '@noema/ui';
 import { Loader2, ScanSearch } from 'lucide-react';
@@ -56,6 +57,10 @@ const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
   { label: 'Dismissed', value: 'dismissed' },
 ];
 
+function ensureMisconceptions(value: unknown): IMisconceptionDto[] {
+  return Array.isArray(value) ? (value as IMisconceptionDto[]) : [];
+}
+
 export default function MisconceptionsPage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
@@ -69,7 +74,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
   const detectMutation = useDetectMisconceptions(userId);
   const updateStatus = useUpdateMisconceptionStatus(userId);
 
-  const allMisconceptions = misconceptionsResponse?.data ?? [];
+  const allMisconceptions = ensureMisconceptions(misconceptionsResponse?.data);
 
   // Count per status
   const statusCounts = React.useMemo(() => {
@@ -236,7 +241,7 @@ export default function MisconceptionsPage(): React.JSX.Element {
 
                   {/* Confidence — only shown when the API provides it */}
                   {m.confidence !== undefined && (
-                    <ConfidenceMeter value={m.confidence} segments={3} size="xs" />
+                    <ConfidenceMeter value={m.confidence} segments={3} className="w-16" />
                   )}
 
                   {/* Date */}
@@ -285,46 +290,42 @@ export default function MisconceptionsPage(): React.JSX.Element {
                             Confirm
                           </button>
                         )}
-                        {status !== 'resolved' && (
-                          <button
-                            type="button"
-                            disabled={updateStatus.isPending}
-                            onClick={() => {
-                              setUpdateError(null);
-                              updateStatus.mutate(
-                                { id, data: { status: 'resolved' } },
-                                {
-                                  onError: (err) => {
-                                    setUpdateError(err.message);
-                                  },
-                                }
-                              );
-                            }}
-                            className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Mark Resolved
-                          </button>
-                        )}
-                        {status !== 'dismissed' && (
-                          <button
-                            type="button"
-                            disabled={updateStatus.isPending}
-                            onClick={() => {
-                              setUpdateError(null);
-                              updateStatus.mutate(
-                                { id, data: { status: 'dismissed' } },
-                                {
-                                  onError: (err) => {
-                                    setUpdateError(err.message);
-                                  },
-                                }
-                              );
-                            }}
-                            className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Dismiss
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          disabled={updateStatus.isPending}
+                          onClick={() => {
+                            setUpdateError(null);
+                            updateStatus.mutate(
+                              { id, data: { status: 'resolved' } },
+                              {
+                                onError: (err) => {
+                                  setUpdateError(err.message);
+                                },
+                              }
+                            );
+                          }}
+                          className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Mark Resolved
+                        </button>
+                        <button
+                          type="button"
+                          disabled={updateStatus.isPending}
+                          onClick={() => {
+                            setUpdateError(null);
+                            updateStatus.mutate(
+                              { id, data: { status: 'dismissed' } },
+                              {
+                                onError: (err) => {
+                                  setUpdateError(err.message);
+                                },
+                              }
+                            );
+                          }}
+                          className="rounded border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Dismiss
+                        </button>
                       </div>
                     )}
                   </div>

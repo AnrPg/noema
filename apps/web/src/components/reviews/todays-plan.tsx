@@ -7,7 +7,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
-import { useDualLanePlan } from '@noema/api-client';
+import { useReviewQueue } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Button } from '@noema/ui';
 import { Loader2, PlayCircle } from 'lucide-react';
@@ -17,11 +17,11 @@ export interface ITodaysPlanProps {
 }
 
 export function TodaysPlan({ userId }: ITodaysPlanProps): React.JSX.Element {
-  const { data: planData, isLoading } = useDualLanePlan({ userId }, { enabled: userId !== '' });
+  const { data: queueData, isLoading } = useReviewQueue({ limit: 500 }, { enabled: userId !== '' });
 
-  const plan = planData?.data ?? null;
-  const totalRetention = plan?.totalRetention ?? 0;
-  const totalCalibration = plan?.totalCalibration ?? 0;
+  const queue = queueData?.data;
+  const totalRetention = queue?.retentionDue ?? 0;
+  const totalCalibration = queue?.calibrationDue ?? 0;
   const total = totalRetention + totalCalibration;
 
   if (isLoading) {

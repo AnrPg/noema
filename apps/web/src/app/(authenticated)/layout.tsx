@@ -8,6 +8,7 @@
 
 import type { JSX, ReactNode } from 'react';
 import { AuthGuard, useAuth } from '@noema/auth';
+import { getUserDisplayName, getUserInitials } from '@noema/auth/user-display';
 import {
   Avatar,
   AvatarFallback,
@@ -43,6 +44,7 @@ import {
   Target,
   User,
 } from 'lucide-react';
+import type { Route } from 'next';
 import { usePathname, useRouter } from 'next/navigation';
 import { CommandPalette } from '@/components/command-palette';
 import { SessionExpiryModal } from '@/components/session-expiry-modal';
@@ -87,14 +89,8 @@ function UserMenu(): JSX.Element {
     router.push('/login');
   };
 
-  const initials =
-    user?.displayName !== undefined
-      ? user.displayName
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .toUpperCase()
-      : 'U';
+  const displayName = getUserDisplayName(user);
+  const initials = getUserInitials(user);
 
   return (
     <DropdownMenu>
@@ -104,14 +100,14 @@ function UserMenu(): JSX.Element {
             <AvatarImage src={user?.avatarUrl ?? undefined} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
-          <span className="hidden md:inline-block">{user?.displayName}</span>
+          <span className="hidden md:inline-block">{displayName}</span>
           <ChevronDown className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
           <div className="flex flex-col">
-            <span>{user?.displayName}</span>
+            <span>{displayName}</span>
             <span className="text-xs font-normal text-muted-foreground">{user?.email}</span>
           </div>
         </DropdownMenuLabel>
@@ -155,7 +151,7 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
   return (
     <AuthGuard
       onUnauthenticated={() => {
-        router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+        router.push((`/login?redirect=${encodeURIComponent(pathname)}` as Route));
       }}
     >
       <CommandPalette />

@@ -8,8 +8,8 @@
 import * as React from 'react';
 import type { IComparisonContent } from '@noema/api-client';
 import { cn } from '@noema/ui';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 export default function ComparisonRenderer(props: ICardRendererProps): React.JSX.Element {
   const { card, mode } = props;

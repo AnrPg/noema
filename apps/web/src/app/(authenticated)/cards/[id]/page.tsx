@@ -25,8 +25,8 @@ import {
   useCardStateTransition,
   contentKeys,
 } from '@noema/api-client';
-import type { IUpdateCardInput, CardState } from '@noema/api-client';
-import type { CardId } from '@noema/types';
+import type { IUpdateCardInput } from '@noema/api-client';
+import type { CardId, CardState } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -59,10 +59,10 @@ function formatDate(iso: string): string {
 }
 
 const STATE_COLORS: Record<CardState, string> = {
-  DRAFT: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-  SUSPENDED: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-  ARCHIVED: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
+  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  active: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+  suspended: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
+  archived: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
 };
 
 // ============================================================================
@@ -459,37 +459,37 @@ export default function CardDetailPage(): React.JSX.Element {
         {/* Action buttons */}
         <div className="flex flex-wrap items-center gap-2">
           {/* State transitions */}
-          {card.state !== 'ACTIVE' && (
+          {card.state !== 'active' && (
             <Button
               variant="outline"
               size="sm"
               disabled={isMutating}
               onClick={() => {
-                handleStateTransition('ACTIVE');
+                handleStateTransition('active');
               }}
             >
               Activate
             </Button>
           )}
-          {card.state !== 'SUSPENDED' && (
+          {card.state !== 'suspended' && (
             <Button
               variant="outline"
               size="sm"
               disabled={isMutating}
               onClick={() => {
-                handleStateTransition('SUSPENDED');
+                handleStateTransition('suspended');
               }}
             >
               Suspend
             </Button>
           )}
-          {card.state !== 'ARCHIVED' && (
+          {card.state !== 'archived' && (
             <Button
               variant="outline"
               size="sm"
               disabled={isMutating}
               onClick={() => {
-                handleStateTransition('ARCHIVED');
+                handleStateTransition('archived');
               }}
             >
               Archive

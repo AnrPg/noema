@@ -6,6 +6,7 @@
 
 import type { UserDto, UserRole, UserStatus } from '@noema/api-client';
 import { useDeleteUser, useUpdateUserStatus, useUsers } from '@noema/api-client';
+import { getUserDisplayName, getUserInitials } from '@noema/auth/user-display';
 import {
   Alert,
   AlertDescription,
@@ -38,6 +39,12 @@ import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 
 const PAGE_SIZE = 20;
+const HIDDEN_UI_ROLES: ReadonlySet<UserRole> = new Set(['user']);
+const ROLE_OPTIONS: UserRole[] = ['learner', 'premium', 'creator', 'admin', 'super_admin'];
+
+function visibleRoles(roles: readonly UserRole[]): UserRole[] {
+  return roles.filter((role) => !HIDDEN_UI_ROLES.has(role));
+}
 
 function statusColor(status: UserStatus): string {
   switch (status) {
@@ -65,12 +72,8 @@ function UserRow({
   deletingUserId: string | null;
   setDeletingUserId: (id: string | null) => void;
 }): React.JSX.Element {
-  const rawInitials = user.displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
-  const initials = rawInitials !== '' ? rawInitials : 'U';
+  const displayName = getUserDisplayName(user);
+  const initials = getUserInitials(user);
 
   const lastLogin =
     user.lastLoginAt !== null ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never';
@@ -83,14 +86,14 @@ function UserRow({
           <AvatarFallback>{initials}</AvatarFallback>
         </Avatar>
         <div>
-          <p className="font-medium">{user.displayName}</p>
+          <p className="font-medium">{displayName}</p>
           <p className="text-sm text-muted-foreground">{user.email}</p>
           <p className="text-xs text-muted-foreground">Last login: {lastLogin}</p>
         </div>
       </div>
       <div className="flex items-center gap-4">
         <div className="flex gap-1">
-          {user.roles.map((role: UserRole) => (
+          {visibleRoles(user.roles).map((role: UserRole) => (
             <span
               key={role}
               className="px-1.5 py-0.5 rounded text-xs font-mono bg-primary/10 text-primary border border-primary/20"
@@ -189,7 +192,7 @@ export default function UsersPage(): React.JSX.Element {
   const filters = {
     ...(search !== '' ? { search } : {}),
     ...(statusFilter !== '' ? { status: statusFilter } : {}),
-    ...(roleFilter !== '' ? { role: roleFilter } : {}),
+    ...(roleFilter !== '' ? { roles: [roleFilter] } : {}),
   };
 
   const hasFilters = search !== '' || statusFilter !== '' || roleFilter !== '';
@@ -204,17 +207,21 @@ export default function UsersPage(): React.JSX.Element {
   const deleteUser = useDeleteUser();
   const updateStatus = useUpdateUserStatus();
 
-  // Accumulate pages of users into allUsers
   React.useEffect(() => {
-    if (usersData) {
-      const incoming = usersData.data.items;
-      if (page === 1) {
-        setAllUsers(incoming);
-      } else {
-        setAllUsers((prev) => [...prev, ...incoming]);
-      }
+    if (usersData === undefined) return;
+
+    const incoming = usersData.data.items;
+    if (page === 1) {
+      setAllUsers(incoming);
+      return;
     }
-  }, [usersData, page]);
+
+    setAllUsers((prev) => {
+      const seen = new Set(prev.map((user) => user.id));
+      const next = incoming.filter((user) => !seen.has(user.id));
+      return [...prev, ...next];
+    });
+  }, [page, usersData]);
 
   // Reset pagination when filters change
   React.useEffect(() => {
@@ -231,7 +238,7 @@ export default function UsersPage(): React.JSX.Element {
     } else if (action === 'suspend') {
       try {
         await updateStatus.mutateAsync({ id: user.id, status: 'SUSPENDED' });
-        setMessage({ type: 'success', text: `${user.displayName} suspended.` });
+        setMessage({ type: 'success', text: `${getUserDisplayName(user)} suspended.` });
         void refetch();
       } catch (err) {
         setMessage({
@@ -242,7 +249,7 @@ export default function UsersPage(): React.JSX.Element {
     } else if (action === 'unsuspend') {
       try {
         await updateStatus.mutateAsync({ id: user.id, status: 'ACTIVE' });
-        setMessage({ type: 'success', text: `${user.displayName} unsuspended.` });
+        setMessage({ type: 'success', text: `${getUserDisplayName(user)} unsuspended.` });
         void refetch();
       } catch (err) {
         setMessage({
@@ -340,9 +347,11 @@ export default function UsersPage(): React.JSX.Element {
               className="h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
             >
               <option value="">All Roles</option>
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-              <option value="moderator">moderator</option>
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
             </select>
           </div>
 

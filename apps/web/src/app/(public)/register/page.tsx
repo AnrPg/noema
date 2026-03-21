@@ -35,6 +35,7 @@ import {
   User,
 } from 'lucide-react';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -209,7 +210,7 @@ export default function RegisterPage(): React.JSX.Element {
         redirect !== null && redirect.startsWith('/') && !redirect.startsWith('//')
           ? redirect
           : '/dashboard';
-      router.push(target);
+      router.push(target as Route);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
       // Go back to account step where most server errors occur

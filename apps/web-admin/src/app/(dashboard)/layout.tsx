@@ -6,6 +6,7 @@
 
 import type { ElementType, JSX, ReactNode } from 'react';
 import { AdminGuard, useAuth } from '@noema/auth';
+import { getUserDisplayName, getUserInitials } from '@noema/auth/user-display';
 import {
   Avatar,
   AvatarFallback,
@@ -70,7 +71,7 @@ const navGroups: INavGroup[] = [
   {
     title: 'Content',
     items: [
-      { href: '/dashboard/content', label: 'Content Oversight', icon: BookOpen },
+      { href: '/dashboard/content', label: 'Content Oversight', icon: BookOpen, exact: true },
       { href: '/dashboard/content/templates', label: 'Card Templates', icon: FileText },
       { href: '/dashboard/content/sessions', label: 'Sessions', icon: Calendar },
     ],
@@ -101,15 +102,8 @@ function AdminMenu(): JSX.Element {
     router.push('/login');
   };
 
-  const displayName = user?.displayName ?? '';
-  const initials =
-    displayName !== ''
-      ? displayName
-          .split(' ')
-          .map((n: string) => n[0] ?? '')
-          .join('')
-          .toUpperCase()
-      : 'A';
+  const displayName = getUserDisplayName(user, 'Admin');
+  const initials = getUserInitials(user, 'A');
 
   return (
     <DropdownMenu>
@@ -119,14 +113,14 @@ function AdminMenu(): JSX.Element {
             <AvatarImage src={user?.avatarUrl ?? undefined} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
-          <span className="hidden md:inline-block">{user?.displayName}</span>
+          <span className="hidden md:inline-block">{displayName}</span>
           <ChevronDown className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
           <div className="flex flex-col">
-            <span>{user?.displayName}</span>
+            <span>{displayName}</span>
             <span className="text-xs font-normal text-muted-foreground">{user?.email}</span>
           </div>
         </DropdownMenuLabel>

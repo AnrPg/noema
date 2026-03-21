@@ -7,8 +7,9 @@
 
 'use client';
 
-import { CardType } from '@noema/types';
-import type { IDeckQueryInput, CardState } from '@noema/api-client';
+import { CardState, CardType } from '@noema/types';
+import type { CardState as TypeCardState } from '@noema/types';
+import type { IDeckQueryInput } from '@noema/api-client';
 import { RotateCcw } from 'lucide-react';
 
 // ============================================================================
@@ -17,7 +18,12 @@ import { RotateCcw } from 'lucide-react';
 
 const CARD_TYPE_VALUES = Object.values(CardType) as string[];
 
-const CARD_STATES: CardState[] = ['DRAFT', 'ACTIVE', 'SUSPENDED', 'ARCHIVED'];
+const CARD_STATES: TypeCardState[] = [
+  CardState.DRAFT,
+  CardState.ACTIVE,
+  CardState.SUSPENDED,
+  CardState.ARCHIVED,
+];
 
 const SORT_BY_OPTIONS: { value: NonNullable<IDeckQueryInput['sortBy']>; label: string }[] = [
   { value: 'createdAt', label: 'Created' },
@@ -26,7 +32,7 @@ const SORT_BY_OPTIONS: { value: NonNullable<IDeckQueryInput['sortBy']>; label: s
   { value: 'nextReviewAt', label: 'Next Review' },
 ];
 
-const SORT_DIR_OPTIONS: { value: NonNullable<IDeckQueryInput['sortDir']>; label: string }[] = [
+const SORT_DIR_OPTIONS: { value: NonNullable<IDeckQueryInput['sortOrder']>; label: string }[] = [
   { value: 'asc', label: 'Ascending' },
   { value: 'desc', label: 'Descending' },
 ];
@@ -116,7 +122,7 @@ export function DeckQueryFilter({
   // States toggle
   // --------------------------------------------------------------------------
 
-  function toggleState(state: CardState): void {
+  function toggleState(state: TypeCardState): void {
     const current = query.states ?? [];
     const next = current.includes(state) ? current.filter((s) => s !== state) : [...current, state];
     onChange(mergeQuery(query, { states: next.length > 0 ? next : undefined }));
@@ -189,9 +195,14 @@ export function DeckQueryFilter({
 
   function handleSortDirChange(raw: string): void {
     if (raw === '') {
-      onChange(mergeQuery(query, { sortDir: undefined }));
+      onChange(mergeQuery(query, { sortOrder: undefined, sortDir: undefined }));
     } else {
-      onChange(mergeQuery(query, { sortDir: raw as NonNullable<IDeckQueryInput['sortDir']> }));
+      onChange(
+        mergeQuery(query, {
+          sortOrder: raw as NonNullable<IDeckQueryInput['sortOrder']>,
+          sortDir: raw as NonNullable<IDeckQueryInput['sortDir']>,
+        })
+      );
     }
   }
 
@@ -372,7 +383,7 @@ export function DeckQueryFilter({
           </select>
 
           <select
-            value={query.sortDir ?? ''}
+            value={query.sortOrder ?? query.sortDir ?? ''}
             onChange={(e) => {
               handleSortDirChange(e.target.value);
             }}

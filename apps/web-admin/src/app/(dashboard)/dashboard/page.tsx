@@ -12,9 +12,9 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { type JSX } from 'react';
+import { useAuth } from '@noema/auth';
 import { useCKGMutations, useCardStats, useUsers } from '@noema/api-client';
 import {
-  Button,
   Card,
   CardContent,
   CardDescription,
@@ -43,14 +43,17 @@ function relativeTime(dateStr: string): string {
 // ---------------------------------------------------------------------------
 
 export default function AdminDashboardPage(): JSX.Element {
-  const { data: usersData } = useUsers();
-  const { data: cardStats } = useCardStats();
-  const { data: pendingMutations } = useCKGMutations({ status: 'pending' });
+  const { isAuthenticated, isAdmin, isInitialized } = useAuth();
+  const enabled = isInitialized && isAuthenticated && isAdmin;
+
+  const { data: usersData } = useUsers(undefined, undefined, { enabled });
+  const { data: cardStats } = useCardStats({ enabled });
+  const { data: pendingMutations } = useCKGMutations({ status: 'pending' }, { enabled });
 
   const totalUsers = usersData?.data.total ?? 0;
   const totalCards = cardStats?.total ?? 0;
   const pendingMutationCount = pendingMutations?.length ?? 0;
-  const draftCards = cardStats?.byState.DRAFT ?? 0;
+  const draftCards = cardStats?.byState.draft ?? 0;
 
   // Recent activity: last 5 users sorted by createdAt desc
   const recentUsers = React.useMemo(() => {
@@ -72,30 +75,54 @@ export default function AdminDashboardPage(): JSX.Element {
       {/* Section 1 — System Health Row                                       */}
       {/* ------------------------------------------------------------------ */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricTile
-          label="Total Users"
-          value={totalUsers}
-          icon={<Users className="h-4 w-4" />}
-          colorFamily="synapse"
-        />
-        <MetricTile
-          label="Total Cards"
-          value={totalCards}
-          icon={<GitMerge className="h-4 w-4" />}
-          colorFamily="dendrite"
-        />
-        <MetricTile
-          label="Pending Mutations"
-          value={pendingMutationCount}
-          icon={<AlertTriangle className="h-4 w-4" />}
-          colorFamily={pendingMutationCount > 0 ? 'cortex' : 'axon'}
-        />
-        <MetricTile
-          label="Active Sessions"
-          value="—"
-          icon={<Activity className="h-4 w-4" />}
-          colorFamily="axon"
-        />
+        <Link
+          href="/dashboard/users"
+          className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <MetricTile
+            label="Total Users"
+            value={totalUsers}
+            icon={<Users className="h-4 w-4" />}
+            colorFamily="synapse"
+            className="transition-colors hover:border-primary/50"
+          />
+        </Link>
+        <Link
+          href="/dashboard/content"
+          className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <MetricTile
+            label="Total Cards"
+            value={totalCards}
+            icon={<GitMerge className="h-4 w-4" />}
+            colorFamily="dendrite"
+            className="transition-colors hover:border-primary/50"
+          />
+        </Link>
+        <Link
+          href="/dashboard/ckg/mutations"
+          className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <MetricTile
+            label="Pending Mutations"
+            value={pendingMutationCount}
+            icon={<AlertTriangle className="h-4 w-4" />}
+            colorFamily={pendingMutationCount > 0 ? 'cortex' : 'axon'}
+            className="transition-colors hover:border-primary/50"
+          />
+        </Link>
+        <Link
+          href="/dashboard/content/sessions"
+          className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <MetricTile
+            label="Active Sessions"
+            value="—"
+            icon={<Activity className="h-4 w-4" />}
+            colorFamily="axon"
+            className="transition-colors hover:border-primary/50"
+          />
+        </Link>
       </div>
 
       {/* ------------------------------------------------------------------ */}
@@ -113,7 +140,10 @@ export default function AdminDashboardPage(): JSX.Element {
             <div className="divide-y">
               {/* Mutations awaiting review */}
               {pendingMutationCount > 0 && (
-                <div className="flex items-center justify-between border-l-4 border-yellow-400 py-3 pl-4">
+                <Link
+                  href="/dashboard/ckg/mutations"
+                  className="flex items-center justify-between border-l-4 border-yellow-400 py-3 pl-4 pr-2 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
                   <div>
                     <p className="text-sm font-medium">
                       {String(pendingMutationCount)} mutation
@@ -121,29 +151,28 @@ export default function AdminDashboardPage(): JSX.Element {
                     </p>
                     <p className="text-xs text-muted-foreground">CKG mutation pipeline</p>
                   </div>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href="/dashboard/ckg/mutations">
-                      Review <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
+                  <span className="inline-flex items-center text-sm font-medium text-muted-foreground">
+                    Review <ArrowRight className="ml-1 h-3 w-3" />
+                  </span>
+                </Link>
               )}
 
               {/* Draft cards */}
               {draftCards > 0 && (
-                <div className="flex items-center justify-between border-l-4 border-orange-400 py-3 pl-4">
+                <Link
+                  href="/dashboard/content"
+                  className="flex items-center justify-between border-l-4 border-orange-400 py-3 pl-4 pr-2 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
                   <div>
                     <p className="text-sm font-medium">
                       {String(draftCards)} draft card{draftCards !== 1 ? 's' : ''} unpublished
                     </p>
                     <p className="text-xs text-muted-foreground">Content oversight</p>
                   </div>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link href="/dashboard/content">
-                      View <ArrowRight className="ml-1 h-3 w-3" />
-                    </Link>
-                  </Button>
-                </div>
+                  <span className="inline-flex items-center text-sm font-medium text-muted-foreground">
+                    View <ArrowRight className="ml-1 h-3 w-3" />
+                  </span>
+                </Link>
               )}
             </div>
           )}
@@ -164,7 +193,11 @@ export default function AdminDashboardPage(): JSX.Element {
           ) : (
             <div className="space-y-3">
               {recentUsers.map((user) => (
-                <div key={user.id} className="flex items-center justify-between gap-4">
+                <Link
+                  key={user.id}
+                  href={`/dashboard/users/${user.id}`}
+                  className="flex items-center justify-between gap-4 rounded-md px-2 py-2 transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
                   <div className="flex items-center gap-2 min-w-0">
                     <Clock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground shrink-0">
@@ -175,10 +208,8 @@ export default function AdminDashboardPage(): JSX.Element {
                     </span>
                     <span className="text-xs text-muted-foreground shrink-0">registered</span>
                   </div>
-                  <Button variant="ghost" size="sm" asChild className="shrink-0">
-                    <Link href={`/dashboard/users/${user.id}`}>View</Link>
-                  </Button>
-                </div>
+                  <span className="shrink-0 text-sm font-medium">View</span>
+                </Link>
               ))}
             </div>
           )}

@@ -8,9 +8,9 @@
 'use client';
 
 import {
-  useDualLanePlan,
+  useForecast,
   useMisconceptions,
-  useReviewWindows,
+  useReviewQueue,
   useSessions,
   useStructuralHealth,
   type UserDto,
@@ -20,6 +20,10 @@ import { Flame } from 'lucide-react';
 import { SectionErrorBoundary } from '@/components/section-error-boundary';
 
 type UserId = UserDto['id'];
+
+function ensureArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
 
 // Returns YYYY-MM-DD in local timezone (not UTC) for consistent day bucketing
 function localDateStr(d: Date): string {
@@ -37,28 +41,18 @@ const STREAK_LOOKBACK_DAYS = 30;
 // ============================================================================
 
 function CardsDueTile({ userId }: { userId: UserId }): React.JSX.Element {
-  const plan = useDualLanePlan({ userId }, { enabled: userId !== '' });
-  const windows = useReviewWindows({ userId }, { enabled: userId !== '' });
+  const queue = useReviewQueue({ limit: 500 }, { enabled: userId !== '' });
+  const forecast = useForecast({ userId, days: 7, includeOverdue: true }, { enabled: userId !== '' });
 
-  if (plan.isLoading || windows.isLoading) {
+  if (queue.isLoading || forecast.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const planData = plan.data?.data;
-  const total = (planData?.totalRetention ?? 0) + (planData?.totalCalibration ?? 0);
+  const queueData = queue.data?.data;
+  const total = queueData?.totalDue ?? 0;
 
-  // Build 7-day sparkline from review windows (forward-looking approximation)
-  const windowData = windows.data?.data ?? [];
-  const byDay = new Map<string, number>();
-  for (const w of windowData) {
-    const day = localDateStr(new Date(w.startAt));
-    byDay.set(day, (byDay.get(day) ?? 0) + w.cardsDue);
-  }
-  const sparklineData = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return byDay.get(localDateStr(d)) ?? 0;
-  });
+  const forecastDays = ensureArray<{ combined: { total: number } }>(forecast.data?.data.days);
+  const sparklineData = forecastDays.map((day) => day.combined.total);
 
   return (
     <MetricTile
@@ -106,7 +100,7 @@ function MisconceptionsTile({ userId }: { userId: UserId }): React.JSX.Element {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const all = misc.data?.data ?? [];
+  const all = ensureArray<{ status: string }>(misc.data?.data);
   // Exclude both 'resolved' and 'dismissed' — dismissed = user-acknowledged, not an active concern
   const active = all.filter((m) => m.status !== 'resolved' && m.status !== 'dismissed');
   const detected = active.filter((m) => m.status === 'detected').length;
@@ -150,7 +144,7 @@ function StudyStreakTile({ userId }: { userId: UserId }): React.JSX.Element {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const list = sessions.data?.data ?? [];
+  const list = ensureArray<{ startedAt: string }>(sessions.data?.data);
 
   // Compute consecutive days with at least one completed session.
   // If the user has not yet studied today, begin the check from yesterday so

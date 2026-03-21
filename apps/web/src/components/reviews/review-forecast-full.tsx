@@ -6,7 +6,7 @@
  * Extends the compact ReviewForecast from the Dashboard.
  */
 import * as React from 'react';
-import { useReviewWindows } from '@noema/api-client';
+import { useForecast } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Loader2 } from 'lucide-react';
 
@@ -41,26 +41,58 @@ interface IDayData {
   }[];
 }
 
-function buildDays(
-  windowData: { startAt: string; endAt: string; cardsDue: number; lane: string }[]
-): IDayData[] {
+interface IForecastDayLike {
+  date: string;
+  retention: { total: number };
+  calibration: { total: number };
+  estimatedMinutes: number;
+}
+
+function buildWindows(
+  date: string,
+  retention: number,
+  calibration: number,
+  estimatedMinutes: number
+): IDayData['windows'] {
+  const blocks = [
+    { lane: 'retention' as const, cardsDue: retention, startHour: 9 },
+    { lane: 'calibration' as const, cardsDue: calibration, startHour: 13 },
+  ].filter((block) => block.cardsDue > 0);
+
+  return blocks.map((block) => {
+    const durationMinutes = Math.max(
+      20,
+      Math.round((estimatedMinutes * block.cardsDue) / Math.max(retention + calibration, 1))
+    );
+    const startAt = new Date(`${date}T${String(block.startHour).padStart(2, '0')}:00:00`);
+    const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
+    return {
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      lane: block.lane,
+      cardsDue: block.cardsDue,
+    };
+  });
+}
+
+function buildDays(forecastDays: IForecastDayLike[]): IDayData[] {
   const today = localDateStr(new Date());
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
+    const source = forecastDays[i];
+    const d = source !== undefined ? new Date(`${source.date}T00:00:00`) : new Date();
+    if (source === undefined) {
+      d.setDate(d.getDate() + i);
+    }
     const dateStr = localDateStr(d);
-    const dayWindows = windowData.filter((w) => localDateStr(new Date(w.startAt)) === dateStr);
+    const retention = source?.retention.total ?? 0;
+    const calibration = source?.calibration.total ?? 0;
     return {
       label: DAY_LABELS[d.getDay()] ?? 'Day',
       date: dateStr,
       isToday: dateStr === today,
-      retention: dayWindows
-        .filter((w) => w.lane === 'retention')
-        .reduce((s, w) => s + w.cardsDue, 0),
-      calibration: dayWindows
-        .filter((w) => w.lane === 'calibration')
-        .reduce((s, w) => s + w.cardsDue, 0),
-      windows: dayWindows,
+      retention,
+      calibration,
+      windows: buildWindows(dateStr, retention, calibration, source?.estimatedMinutes ?? 0),
     };
   });
 }
@@ -78,11 +110,14 @@ export interface IReviewForecastFullProps {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function ReviewForecastFull({ userId }: IReviewForecastFullProps): React.JSX.Element {
-  const { data: windowsData, isLoading } = useReviewWindows({ userId }, { enabled: userId !== '' });
+  const { data: forecastData, isLoading } = useForecast(
+    { userId, days: 7, includeOverdue: true },
+    { enabled: userId !== '' }
+  );
 
   const [expandedDate, setExpandedDate] = React.useState<string | null>(null);
 
-  const days = React.useMemo(() => buildDays(windowsData?.data ?? []), [windowsData]);
+  const days = React.useMemo(() => buildDays(forecastData?.data.days ?? []), [forecastData]);
   const maxTotal = Math.max(...days.map((d) => d.retention + d.calibration), 1);
   const expandedDay =
     expandedDate !== null ? (days.find((d) => d.date === expandedDate) ?? null) : null;

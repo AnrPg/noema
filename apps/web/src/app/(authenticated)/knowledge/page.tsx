@@ -22,11 +22,12 @@ export default function KnowledgePage(): React.JSX.Element {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
+  const selectedDomain = searchParams.get('domain') ?? undefined;
 
   const { data: nodesData, isLoading: nodesLoading } = usePKGNodes(userId);
   const { data: edgesData, isLoading: edgesLoading } = usePKGEdges(userId);
-  const { data: frontierData } = useKnowledgeFrontier(userId);
-  const { data: bridgesData } = useBridgeNodes(userId);
+  const { data: frontierData } = useKnowledgeFrontier(userId, selectedDomain);
+  const { data: bridgesData } = useBridgeNodes(userId, selectedDomain);
 
   const nodes: IGraphNodeDto[] = nodesData ?? [];
   const edges: IGraphEdgeDto[] = edgesData ?? [];
@@ -34,7 +35,6 @@ export default function KnowledgePage(): React.JSX.Element {
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
   const hoveredNodeId = useGraphStore((s) => s.hoveredNodeId);
   const activeOverlays = useGraphStore((s) => s.activeOverlays);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return
   const layoutMode = useGraphStore((s) => s.layoutMode); // LayoutMode from unbuilt @noema/graph → any
   const neighborhoodHighlight = useGraphStore((s) => s.neighborhoodHighlight);
   const selectNode = useGraphStore((s) => s.selectNode);
@@ -162,7 +162,6 @@ export default function KnowledgePage(): React.JSX.Element {
     [selectNode, toggleOverlay, activeOverlays]
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   const activeOverlaysArray = React.useMemo(() => [...activeOverlays], [activeOverlays]);
 
   React.useEffect(() => {
@@ -200,10 +199,9 @@ export default function KnowledgePage(): React.JSX.Element {
   return (
     <div className="relative flex h-full w-full overflow-hidden">
       {/* Left control panel */}
-      <GraphControls
-        nodes={visibleNodes}
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        layoutMode={layoutMode}
+        <GraphControls
+          nodes={visibleNodes}
+          layoutMode={layoutMode}
         activeOverlays={activeOverlays}
         searchQuery={searchQuery}
         hiddenTypes={hiddenTypes}
@@ -223,7 +221,6 @@ export default function KnowledgePage(): React.JSX.Element {
           selectedNodeId={selectedNodeId}
           hoveredNodeId={hoveredNodeId}
           activeOverlays={activeOverlaysArray}
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           layoutMode={layoutMode}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}

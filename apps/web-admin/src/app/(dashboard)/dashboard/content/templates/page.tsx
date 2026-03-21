@@ -13,7 +13,7 @@ import type { ITemplateDto } from '@noema/api-client';
 import { useDeleteTemplate, useTemplates } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import { Trash2 } from 'lucide-react';
-import { formatDate, truncateId } from '@/lib/format.js';
+import { formatDate, truncateId } from '@/lib/format';
 
 type TemplateId = ITemplateDto['id'];
 

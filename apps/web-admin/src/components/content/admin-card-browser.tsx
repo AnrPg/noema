@@ -12,7 +12,7 @@ import { useCards, useDeleteCard } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import { Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { formatDate, truncateId } from '@/lib/format.js';
+import { formatDate, truncateId } from '@/lib/format';
 
 type CardId = ICardSummaryDto['id'];
 
@@ -187,7 +187,7 @@ export function AdminCardBrowser(): React.JSX.Element {
   const deleteCard = useDeleteCard();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
-  const cards = data?.data.cards ?? [];
+  const cards = data?.data.items ?? [];
   const total = data?.data.total ?? 0;
 
   const handleDelete = (
@@ -240,7 +240,7 @@ export function AdminCardBrowser(): React.JSX.Element {
               <span className="shrink-0">Actions</span>
             </div>
             <div className="divide-y">
-              {cards.map((card) => (
+              {cards.map((card: ICardSummaryDto) => (
                 <CardRow
                   key={card.id}
                   card={card}

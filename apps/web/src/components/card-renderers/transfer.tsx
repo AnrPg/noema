@@ -8,8 +8,8 @@
 import * as React from 'react';
 import type { ITransferContent } from '@noema/api-client';
 import { Button } from '@noema/ui';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 export default function TransferRenderer(props: ICardRendererProps<string>): React.JSX.Element {
   const { card, mode, isRevealed, onAnswer } = props;

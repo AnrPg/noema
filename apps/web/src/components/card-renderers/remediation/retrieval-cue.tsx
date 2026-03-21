@@ -8,8 +8,8 @@
 import * as React from 'react';
 import type { IRetrievalCueContent } from '@noema/api-client';
 import { Button } from '@noema/ui';
-import { CardShell } from '../card-shell.js';
-import type { ICardRendererProps } from '../types.js';
+import { CardShell } from '../card-shell';
+import type { ICardRendererProps } from '../types';
 
 const EFFECTIVENESS_COLOR: Record<string, string> = {
   strong: 'text-green-400',

@@ -8,8 +8,8 @@
 
 import * as React from 'react';
 import type { IAudioContent } from '@noema/api-client';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 export default function AudioCardRenderer(props: ICardRendererProps): React.JSX.Element {
   const { card, mode } = props;

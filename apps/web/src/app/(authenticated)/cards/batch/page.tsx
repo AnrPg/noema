@@ -38,11 +38,11 @@ function truncateBatchId(id: string): string {
 // ============================================================================
 
 interface IBatchDetailsPanelProps {
-  batchId: string;
+  batchId: JobId;
 }
 
 function BatchDetailsPanel({ batchId }: IBatchDetailsPanelProps): React.JSX.Element {
-  const { data, isLoading, isError } = useBatch(batchId as JobId);
+  const { data, isLoading, isError } = useBatch(batchId);
   const result: IBatchCreateResult | undefined = data?.data;
 
   if (isLoading) {
@@ -81,11 +81,11 @@ function BatchDetailsPanel({ batchId }: IBatchDetailsPanelProps): React.JSX.Elem
           <span
             className={[
               'rounded-full px-2 py-0.5 text-xs font-medium',
-              card.state === 'ACTIVE'
+              card.state === 'active'
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                : card.state === 'DRAFT'
+                : card.state === 'draft'
                   ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                  : card.state === 'SUSPENDED'
+                  : card.state === 'suspended'
                     ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
                     : 'bg-muted text-muted-foreground',
             ].join(' ')}
@@ -226,7 +226,7 @@ function BatchRow({
       {/* Expanded batch cards */}
       {isExpanded && (
         <div className="border-t border-border/50">
-          <BatchDetailsPanel batchId={batch.batchId} />
+          <BatchDetailsPanel batchId={batch.batchId as JobId} />
         </div>
       )}
     </div>
@@ -245,8 +245,8 @@ export default function BatchOperationsPage(): React.JSX.Element {
   // State
   // --------------------------------------------------------------------------
 
-  const [expandedBatchId, setExpandedBatchId] = React.useState<string | null>(null);
-  const [rollingBackId, setRollingBackId] = React.useState<string | null>(null);
+  const [expandedBatchId, setExpandedBatchId] = React.useState<JobId | null>(null);
+  const [rollingBackId, setRollingBackId] = React.useState<JobId | null>(null);
   const [rollbackError, setRollbackError] = React.useState<string | null>(null);
 
   // --------------------------------------------------------------------------
@@ -277,11 +277,11 @@ export default function BatchOperationsPage(): React.JSX.Element {
   // Handlers
   // --------------------------------------------------------------------------
 
-  function handleToggleExpand(batchId: string): void {
+  function handleToggleExpand(batchId: JobId): void {
     setExpandedBatchId((prev) => (prev === batchId ? null : batchId));
   }
 
-  function handleRollback(batchId: string): void {
+  function handleRollback(batchId: JobId): void {
     setRollingBackId(batchId);
     setRollbackError(null);
     rollbackMutation.mutate({ batchId });
@@ -401,17 +401,17 @@ export default function BatchOperationsPage(): React.JSX.Element {
             {String(batches.length)} {batches.length === 1 ? 'batch' : 'batches'}
           </p>
           {batches.map((batch) => (
-            <BatchRow
-              key={batch.batchId}
-              batch={batch}
-              isExpanded={expandedBatchId === batch.batchId}
-              onToggleExpand={() => {
-                handleToggleExpand(batch.batchId);
+          <BatchRow
+            key={batch.batchId}
+            batch={batch}
+            isExpanded={expandedBatchId === (batch.batchId as JobId)}
+            onToggleExpand={() => {
+                handleToggleExpand(batch.batchId as JobId);
               }}
               onRollback={() => {
-                handleRollback(batch.batchId);
+                handleRollback(batch.batchId as JobId);
               }}
-              isRollingBack={rollingBackId === batch.batchId}
+              isRollingBack={rollingBackId === (batch.batchId as JobId)}
             />
           ))}
         </div>

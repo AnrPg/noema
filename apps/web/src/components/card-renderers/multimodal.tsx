@@ -7,8 +7,8 @@
 
 import * as React from 'react';
 import type { IMultimodalContent, IMultimodalItem } from '@noema/api-client';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 /** Render a single multimodal item element. */
 function MultimodalItemView({

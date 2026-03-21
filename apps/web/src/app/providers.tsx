@@ -6,7 +6,20 @@ import { ApiRequestError, configureApiClient, configureHlrClient } from '@noema/
 import { AuthProvider, useAuthStore } from '@noema/auth';
 import { ThemeProvider } from '@noema/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+
+configureApiClient({
+  baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
+  getAccessToken: () => useAuthStore.getState().accessToken,
+  onUnauthorized: () => {
+    const state = useAuthStore.getState();
+    if (state.isInitialized && state.isAuthenticated) {
+      state.setSessionExpired(true);
+    }
+  },
+});
+
+configureHlrClient(process.env['NEXT_PUBLIC_HLR_URL'] ?? 'http://localhost:8020');
 
 // Inner component so it has access to QueryClientProvider context
 function QueryCacheWatcher(): null {
@@ -27,20 +40,6 @@ function shouldRetryRequest(failureCount: number, error: unknown): boolean {
 }
 
 export function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
-  useEffect(() => {
-    configureApiClient({
-      baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
-      getAccessToken: () => useAuthStore.getState().accessToken,
-      onUnauthorized: () => {
-        const state = useAuthStore.getState();
-        if (state.isInitialized && state.isAuthenticated) {
-          state.setSessionExpired(true);
-        }
-      },
-    });
-    configureHlrClient(process.env['NEXT_PUBLIC_HLR_URL'] ?? 'http://localhost:3005');
-  }, []);
-
   const [queryClient] = useState(
     () =>
       new QueryClient({

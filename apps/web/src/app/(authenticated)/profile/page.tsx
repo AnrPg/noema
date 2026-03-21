@@ -11,6 +11,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMe, useUpdateProfile } from '@noema/api-client';
 import { useAuth } from '@noema/auth';
+import { getUserInitials } from '@noema/auth/user-display';
 import {
   Avatar,
   AvatarFallback,
@@ -71,20 +72,6 @@ const LANGUAGES = [
   { value: 'zh', label: '中文' },
   { value: 'pt', label: 'Português' },
 ] as const;
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function getInitials(displayName: string | undefined | null): string {
-  if (displayName === undefined || displayName === null || displayName === '') return 'U';
-  return displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
 
 // ============================================================================
 // Module-level constants (computed once, not per render)
@@ -214,9 +201,7 @@ export default function ProfilePage(): React.JSX.Element {
             ) : (
               <Avatar className="h-24 w-24">
                 <AvatarImage src={displayUser?.avatarUrl ?? undefined} />
-                <AvatarFallback className="text-2xl">
-                  {getInitials(displayUser?.displayName)}
-                </AvatarFallback>
+                <AvatarFallback className="text-2xl">{getUserInitials(displayUser)}</AvatarFallback>
               </Avatar>
             )}
             <Button variant="outline" disabled>

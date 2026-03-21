@@ -6,7 +6,7 @@
  * Each block shows time range, card count, and lane.
  */
 import * as React from 'react';
-import { useReviewWindows } from '@noema/api-client';
+import { useReviewQueue } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Loader2 } from 'lucide-react';
 
@@ -32,15 +32,53 @@ function formatDuration(startAt: string, endAt: string): string {
   return `${String(Math.floor(mins / 60))}h ${String(mins % 60)}m`;
 }
 
-export function ReviewWindows({ userId }: IReviewWindowsProps): React.JSX.Element {
-  const { data: windowsData, isLoading } = useReviewWindows({ userId }, { enabled: userId !== '' });
+interface IReviewWindowBlock {
+  startAt: string;
+  endAt: string;
+  cardsDue: number;
+  lane: 'retention' | 'calibration';
+  loadScore: number;
+}
 
-  // Only show today's windows
+function buildReviewWindows(
+  retentionDue: number,
+  calibrationDue: number,
+  totalDue: number
+): IReviewWindowBlock[] {
+  const today = localDateStr(new Date());
+  const blocks: IReviewWindowBlock[] = [];
+  const definitions = [
+    { lane: 'retention' as const, cardsDue: retentionDue, startHour: 9 },
+    { lane: 'calibration' as const, cardsDue: calibrationDue, startHour: 13 },
+  ].filter((block) => block.cardsDue > 0);
+
+  for (const block of definitions) {
+    const durationMinutes = Math.max(20, block.cardsDue * 2);
+    const startAt = new Date(`${today}T${String(block.startHour).padStart(2, '0')}:00:00`);
+    const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
+    blocks.push({
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      cardsDue: block.cardsDue,
+      lane: block.lane,
+      loadScore: totalDue > 0 ? block.cardsDue / totalDue : 0,
+    });
+  }
+
+  return blocks;
+}
+
+export function ReviewWindows({ userId }: IReviewWindowsProps): React.JSX.Element {
+  const { data: queueData, isLoading } = useReviewQueue({ limit: 500 }, { enabled: userId !== '' });
+
   const todayWindows = React.useMemo(() => {
-    const allWindows = windowsData?.data ?? [];
-    const todayStr = localDateStr(new Date());
-    return allWindows.filter((w) => localDateStr(new Date(w.startAt)) === todayStr);
-  }, [windowsData]);
+    const queue = queueData?.data;
+    return buildReviewWindows(
+      queue?.retentionDue ?? 0,
+      queue?.calibrationDue ?? 0,
+      queue?.totalDue ?? 0
+    );
+  }, [queueData]);
 
   if (isLoading) {
     return (

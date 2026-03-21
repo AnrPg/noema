@@ -9,6 +9,7 @@
 'use client';
 
 import { useAuth } from '@noema/auth';
+import { getUserFirstName } from '@noema/auth/user-display';
 import { SectionErrorBoundary } from '@/components/section-error-boundary';
 import { CognitiveVitals } from '@/components/dashboard/cognitive-vitals';
 import { CopilotSuggestions } from '@/components/dashboard/copilot-suggestions';
@@ -33,12 +34,13 @@ function getGreeting(): string {
 
 export default function DashboardPage(): React.JSX.Element | null {
   const { user } = useAuth();
-  const firstName = user?.displayName?.split(' ')[0] ?? 'there';
 
   // user is null during the brief window between mount and the auth store hydrating.
   // The authenticated layout handles the full loading skeleton; returning null here
   // avoids rendering dashboard content with an undefined userId.
   if (user === null) return null;
+
+  const firstName = getUserFirstName(user);
   const userId = user.id;
 
   return (

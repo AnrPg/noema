@@ -25,6 +25,7 @@ import type { UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react';
+import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
 
@@ -480,6 +481,10 @@ function normalizeKnowledgeNodeIds(raw: string): string[] {
     }
   }
   return ids;
+}
+
+function ensureNodeList(value: unknown): IGraphNodeDto[] {
+  return Array.isArray(value) ? (value as IGraphNodeDto[]) : [];
 }
 
 function validateKnowledgeNodeIds(ids: string[]): string | null {
@@ -1203,7 +1208,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
           <button
             type="button"
             onClick={() => {
-              router.push('/cards/' + card.id);
+              router.push((`/cards/${card.id}` as Route));
             }}
             className={primaryBtnClass}
           >
@@ -1255,7 +1260,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
                 <button
                   type="button"
                   onClick={() => {
-                    router.push('/cards/' + card.id);
+                    router.push((`/cards/${card.id}` as Route));
                   }}
                   className="ml-2 text-xs text-primary underline-offset-2 hover:underline"
                 >
@@ -1514,7 +1519,8 @@ export default function NewCardPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
-  const { data: pkgNodes = [], isLoading: kgNodesLoading } = usePKGNodes(userId);
+  const { data: pkgNodesData, isLoading: kgNodesLoading } = usePKGNodes(userId);
+  const pkgNodes = ensureNodeList(pkgNodesData);
 
   // --------------------------------------------------------------------------
   // Wizard state

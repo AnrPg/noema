@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { formatDate, truncateId } from '@/lib/format.js';
+import { formatDate, truncateId } from '@/lib/format';
 
 // ---------------------------------------------------------------------------
 // Badge helpers

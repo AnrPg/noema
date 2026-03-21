@@ -8,8 +8,8 @@
 import * as React from 'react';
 import type { IMatchingContent } from '@noema/api-client';
 import { Button, cn } from '@noema/ui';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 /** Deterministic shuffle seeded by card.id — Fisher-Yates with a simple hash. */
 function seededShuffle<T>(arr: T[], seed: string): T[] {

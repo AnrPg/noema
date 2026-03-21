@@ -25,7 +25,7 @@ export default function ContentOversightPage(): JSX.Element {
   const { data: templates } = useTemplates();
 
   const totalCards = cardStats?.total ?? 0;
-  const draftCards = cardStats?.byState.DRAFT ?? 0;
+  const draftCards = cardStats?.byState.draft ?? 0;
   const totalTemplates = templates?.length ?? 0;
   // Uses the single-record fetch; not a true total — replace with meta.total
   // once the session-service pagination envelope exposes it.

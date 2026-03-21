@@ -8,50 +8,50 @@
 
 import * as React from 'react';
 import { CardType, RemediationCardType } from '@noema/types';
-import { FallbackRenderer } from './fallback-renderer.js';
-import type { ICardRendererProps } from './types.js';
-import AtomicRenderer from './atomic.js';
-import DefinitionRenderer from './definition.js';
-import TrueFalseRenderer from './true-false.js';
-import MultipleChoiceRenderer from './multiple-choice.js';
-import ConfidenceRatedRenderer from './confidence-rated.js';
-import ClozeRenderer from './cloze.js';
-import MatchingRenderer from './matching.js';
-import OrderingRenderer from './ordering.js';
-import ProcessRenderer from './process.js';
-import TimelineRenderer from './timeline.js';
-import CauseEffectRenderer from './cause-effect.js';
-import ImageOcclusionRenderer from './image-occlusion.js';
-import AudioCardRenderer from './audio-card.js';
-import DiagramRenderer from './diagram.js';
-import MultimodalRenderer from './multimodal.js';
-import ComparisonRenderer from './comparison.js';
-import ExceptionRenderer from './exception.js';
-import ErrorSpottingRenderer from './error-spotting.js';
-import ConceptGraphRenderer from './concept-graph.js';
-import CaseBasedRenderer from './case-based.js';
-import TransferRenderer from './transfer.js';
-import ProgressiveDisclosureRenderer from './progressive-disclosure.js';
-import ContrastivePairRenderer from './remediation/contrastive-pair.js';
-import MinimalPairRenderer from './remediation/minimal-pair.js';
-import FalseFriendRenderer from './remediation/false-friend.js';
-import OldVsNewDefinitionRenderer from './remediation/old-vs-new-definition.js';
-import BoundaryCaseRenderer from './remediation/boundary-case.js';
-import RuleScopeRenderer from './remediation/rule-scope.js';
-import DiscriminantFeatureRenderer from './remediation/discriminant-feature.js';
-import AssumptionCheckRenderer from './remediation/assumption-check.js';
-import CounterexampleRenderer from './remediation/counterexample.js';
-import RepresentationSwitchRenderer from './remediation/representation-switch.js';
-import RetrievalCueRenderer from './remediation/retrieval-cue.js';
-import EncodingRepairRenderer from './remediation/encoding-repair.js';
-import OverwriteDrillRenderer from './remediation/overwrite-drill.js';
-import AvailabilityBiasDisconfirmationRenderer from './remediation/availability-bias-disconfirmation.js';
-import SelfCheckRitualRenderer from './remediation/self-check-ritual.js';
-import CalibrationTrainingRenderer from './remediation/calibration-training.js';
-import AttributionReframingRenderer from './remediation/attribution-reframing.js';
-import StrategyReminderRenderer from './remediation/strategy-reminder.js';
-import ConfusableSetDrillRenderer from './remediation/confusable-set-drill.js';
-import PartialKnowledgeDecompositionRenderer from './remediation/partial-knowledge-decomposition.js';
+import { FallbackRenderer } from './fallback-renderer';
+import type { ICardRendererProps } from './types';
+import AtomicRenderer from './atomic';
+import DefinitionRenderer from './definition';
+import TrueFalseRenderer from './true-false';
+import MultipleChoiceRenderer from './multiple-choice';
+import ConfidenceRatedRenderer from './confidence-rated';
+import ClozeRenderer from './cloze';
+import MatchingRenderer from './matching';
+import OrderingRenderer from './ordering';
+import ProcessRenderer from './process';
+import TimelineRenderer from './timeline';
+import CauseEffectRenderer from './cause-effect';
+import ImageOcclusionRenderer from './image-occlusion';
+import AudioCardRenderer from './audio-card';
+import DiagramRenderer from './diagram';
+import MultimodalRenderer from './multimodal';
+import ComparisonRenderer from './comparison';
+import ExceptionRenderer from './exception';
+import ErrorSpottingRenderer from './error-spotting';
+import ConceptGraphRenderer from './concept-graph';
+import CaseBasedRenderer from './case-based';
+import TransferRenderer from './transfer';
+import ProgressiveDisclosureRenderer from './progressive-disclosure';
+import ContrastivePairRenderer from './remediation/contrastive-pair';
+import MinimalPairRenderer from './remediation/minimal-pair';
+import FalseFriendRenderer from './remediation/false-friend';
+import OldVsNewDefinitionRenderer from './remediation/old-vs-new-definition';
+import BoundaryCaseRenderer from './remediation/boundary-case';
+import RuleScopeRenderer from './remediation/rule-scope';
+import DiscriminantFeatureRenderer from './remediation/discriminant-feature';
+import AssumptionCheckRenderer from './remediation/assumption-check';
+import CounterexampleRenderer from './remediation/counterexample';
+import RepresentationSwitchRenderer from './remediation/representation-switch';
+import RetrievalCueRenderer from './remediation/retrieval-cue';
+import EncodingRepairRenderer from './remediation/encoding-repair';
+import OverwriteDrillRenderer from './remediation/overwrite-drill';
+import AvailabilityBiasDisconfirmationRenderer from './remediation/availability-bias-disconfirmation';
+import SelfCheckRitualRenderer from './remediation/self-check-ritual';
+import CalibrationTrainingRenderer from './remediation/calibration-training';
+import AttributionReframingRenderer from './remediation/attribution-reframing';
+import StrategyReminderRenderer from './remediation/strategy-reminder';
+import ConfusableSetDrillRenderer from './remediation/confusable-set-drill';
+import PartialKnowledgeDecompositionRenderer from './remediation/partial-knowledge-decomposition';
 
 export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps>> = {
   // ── Standard Card Types (22) ────────────────────────────────────────────────
@@ -120,11 +120,69 @@ export const RENDERER_MAP: Record<string, React.ComponentType<ICardRendererProps
     PartialKnowledgeDecompositionRenderer as React.ComponentType<ICardRendererProps>,
 };
 
-export function CardRenderer(props: ICardRendererProps): React.JSX.Element {
-  const Renderer = RENDERER_MAP[props.card.cardType] ?? FallbackRenderer;
-  return <Renderer {...props} />;
+interface IRendererBoundaryProps {
+  rendererKey: string;
+  rendererProps: ICardRendererProps;
+  children: React.ReactNode;
 }
 
-export type { ICardRendererProps, CardRendererMode } from './types.js';
-export { CardShell } from './card-shell.js';
-export { FallbackRenderer } from './fallback-renderer.js';
+interface IRendererBoundaryState {
+  hasError: boolean;
+}
+
+class RendererErrorBoundary extends React.Component<
+  IRendererBoundaryProps,
+  IRendererBoundaryState
+> {
+  override state: IRendererBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError(): IRendererBoundaryState {
+    return { hasError: true };
+  }
+
+  override componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error('[CardRenderer]', {
+      cardId: this.props.rendererProps.card.id,
+      cardType: this.props.rendererProps.card.cardType,
+      message: error.message,
+      stack: error.stack,
+      componentStack: info.componentStack,
+    });
+  }
+
+  override componentDidUpdate(prevProps: IRendererBoundaryProps): void {
+    const previousCard = prevProps.rendererProps.card;
+    const nextCard = this.props.rendererProps.card;
+
+    if (
+      this.state.hasError &&
+      (prevProps.rendererKey !== this.props.rendererKey ||
+        previousCard.id !== nextCard.id ||
+        previousCard.version !== nextCard.version)
+    ) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  override render(): React.ReactNode {
+    if (this.state.hasError) {
+      return <FallbackRenderer {...this.props.rendererProps} />;
+    }
+
+    return this.props.children;
+  }
+}
+
+export function CardRenderer(props: ICardRendererProps): React.JSX.Element {
+  const Renderer = RENDERER_MAP[props.card.cardType] ?? FallbackRenderer;
+
+  return (
+    <RendererErrorBoundary rendererKey={props.card.cardType} rendererProps={props}>
+      <Renderer {...props} />
+    </RendererErrorBoundary>
+  );
+}
+
+export type { ICardRendererProps, CardRendererMode } from './types';
+export { CardShell } from './card-shell';
+export { FallbackRenderer } from './fallback-renderer';

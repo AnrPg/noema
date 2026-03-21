@@ -4,6 +4,7 @@
 
 'use client';
 
+import { getUserDisplayName, getUserInitials } from '@noema/auth/user-display';
 import type { UserRole } from '@noema/api-client';
 import {
   useDeleteUser,
@@ -28,6 +29,10 @@ import {
 import { ArrowLeft, Calendar, Clock, Globe, Mail, Shield, type LucideIcon } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import React from 'react';
+
+function visibleRoles(roles: readonly UserRole[]): UserRole[] {
+  return roles.filter((role) => role !== 'user');
+}
 
 export default function UserDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
@@ -74,12 +79,8 @@ export default function UserDetailPage(): React.JSX.Element {
     );
   }
 
-  const rawInitials = user.displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
-  const initials = rawInitials !== '' ? rawInitials : 'U';
+  const displayName = getUserDisplayName(user);
+  const initials = getUserInitials(user);
 
   const statusColorClass =
     user.status === 'ACTIVE'
@@ -148,12 +149,12 @@ export default function UserDetailPage(): React.JSX.Element {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-6">
-            <Avatar className="h-20 w-20">
+              <Avatar className="h-20 w-20">
               <AvatarImage src={user.avatarUrl ?? undefined} />
               <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
             </Avatar>
             <div className="space-y-1">
-              <CardTitle className="text-2xl">{user.displayName}</CardTitle>
+              <CardTitle className="text-2xl">{displayName}</CardTitle>
               <CardDescription className="text-base">@{user.username}</CardDescription>
               <div className="flex items-center gap-2 pt-1">
                 <span
@@ -161,7 +162,7 @@ export default function UserDetailPage(): React.JSX.Element {
                 >
                   {user.status}
                 </span>
-                {user.roles.map((role) => (
+                {visibleRoles(user.roles).map((role) => (
                   <span key={role} className="rounded-full border px-2 py-0.5 text-xs font-medium">
                     {role}
                   </span>

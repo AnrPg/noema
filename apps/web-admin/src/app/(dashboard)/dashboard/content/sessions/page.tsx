@@ -13,7 +13,7 @@ import type { ISessionDto } from '@noema/api-client';
 import { useSessions } from '@noema/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import Link from 'next/link';
-import { formatDate, truncateId } from '@/lib/format.js';
+import { formatDate, truncateId } from '@/lib/format';
 
 // ---------------------------------------------------------------------------
 // Helpers

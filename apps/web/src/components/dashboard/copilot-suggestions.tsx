@@ -47,9 +47,15 @@ export function CopilotSuggestions(): React.JSX.Element {
   const open = useCopilotStore((s) => s.open);
 
   // Flatten all actions across all pages, deduplicate, sort by priority, take top 3
-  const allActions = Object.values(hintsByPage).flatMap((hints) =>
-    hints.flatMap((h) => h.suggestedNextActions)
-  );
+  const allActions = Object.values(hintsByPage).flatMap((hints) => {
+    if (!Array.isArray(hints)) {
+      return [];
+    }
+
+    return hints.flatMap((h) =>
+      Array.isArray(h.suggestedNextActions) ? h.suggestedNextActions : []
+    );
+  });
   const seen = new Set<string>();
   const deduplicated = allActions.filter((a) => {
     if (seen.has(a.action)) return false;

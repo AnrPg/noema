@@ -8,8 +8,8 @@
 import * as React from 'react';
 import type { IClozeContent } from '@noema/api-client';
 import { Button, cn } from '@noema/ui';
-import { CardShell } from './card-shell.js';
-import type { ICardRendererProps } from './types.js';
+import { CardShell } from './card-shell';
+import type { ICardRendererProps } from './types';
 
 const BLANK_PATTERN = /\{\{blank\}\}/g;
 

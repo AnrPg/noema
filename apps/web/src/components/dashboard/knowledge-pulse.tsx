@@ -9,13 +9,17 @@
 'use client';
 
 import { useMisconceptions, usePKGEdges, usePKGNodes } from '@noema/api-client';
-import type { IGraphEdgeDto, IGraphNodeDto, UserDto } from '@noema/api-client';
+import type { IGraphEdgeDto, IGraphNodeDto, IMisconceptionDto, UserDto } from '@noema/api-client';
 import { Card, CardContent, CardHeader, CardTitle, EmptyState, Skeleton } from '@noema/ui';
 import { Network } from 'lucide-react';
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 type UserId = UserDto['id'];
+
+function ensureArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
 
 // ============================================================================
 // Constants
@@ -133,22 +137,23 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
   const { data: miscData, isError: miscError } = useMisconceptions(userId, { enabled });
 
   const isLoading = nodes.isLoading || edges.isLoading;
+  const nodeList = useMemo(() => ensureArray<IGraphNodeDto>(nodes.data), [nodes.data]);
+  const edgeList = useMemo(() => ensureArray<IGraphEdgeDto>(edges.data), [edges.data]);
 
   const visibleNodes = useMemo(() => {
-    const all = nodes.data ?? [];
-    return [...all]
+    return [...nodeList]
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, MAX_NODES);
-  }, [nodes.data]);
+  }, [nodeList]);
 
   const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
 
   const visibleEdges = useMemo(
     () =>
-      (edges.data ?? []).filter(
+      edgeList.filter(
         (e) => visibleNodeIds.has(e.sourceId) && visibleNodeIds.has(e.targetId)
       ),
-    [edges.data, visibleNodeIds]
+    [edgeList, visibleNodeIds]
   );
 
   const layout = useMemo(
@@ -157,7 +162,7 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
   );
 
   const misconceptionNodeIds = useMemo(() => {
-    const active = (miscData?.data ?? []).filter(
+    const active = ensureArray<IMisconceptionDto>(miscData?.data).filter(
       (m) => m.status !== 'resolved' && m.status !== 'dismissed'
     );
     return new Set(active.map((m) => m.nodeId));

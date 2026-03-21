@@ -73,7 +73,7 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
     return METRIC_DEFS.map((d) => {
       // Dynamic metric keys (abstractionDrift etc.) are not in the DTO type but present
       // at runtime. Access via Record<string, unknown> cast to preserve type safety elsewhere.
-      const raw = (health as Record<string, unknown>)[d.key];
+      const raw = ((health as unknown) as Record<string, unknown>)[d.key];
       // If individual metric is not present, use 0 — fabricating a balanced polygon
       // from the overall score would misrepresent "no data" as meaningful structure.
       const rawScore: number = typeof raw === 'number' ? raw : 0;

@@ -11,7 +11,7 @@
  */
 import * as React from 'react';
 import { useAuth } from '@noema/auth';
-import { useSchedulerCard, useHLRPredict } from '@noema/api-client';
+import { useSchedulerCard, useHLRPredict, type ReviewQueueCard } from '@noema/api-client';
 import type { UserId, CardId } from '@noema/types';
 import { NeuralGauge, StateChip, CARD_LEARNING_STATE_MAP } from '@noema/ui';
 import { Loader2, X } from 'lucide-react';
@@ -61,7 +61,11 @@ export function CardScheduleInspector({
     { enabled: userId !== '' && cardId !== '' }
   );
 
-  const card = cardData?.card ?? null;
+  const schedulerCardResponse = cardData as
+    | { data?: { card?: ReviewQueueCard } | undefined; card?: ReviewQueueCard }
+    | undefined;
+  const card: ReviewQueueCard | null =
+    schedulerCardResponse?.data?.card ?? schedulerCardResponse?.card ?? null;
   const hlr = hlrData ?? null;
 
   const algorithm = card?.schedulingAlgorithm ?? '—';

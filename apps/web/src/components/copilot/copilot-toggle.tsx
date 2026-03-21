@@ -36,7 +36,7 @@ export function CopilotToggle(): React.JSX.Element | null {
       {/* PulseIndicator ring when unread and closed */}
       {hasUnread && !isOpen && (
         <span className="absolute inset-0 z-0 flex items-center justify-center">
-          <PulseIndicator active size="sm" />
+          <PulseIndicator status="active" size="sm" />
         </span>
       )}
 

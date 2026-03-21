@@ -18,6 +18,7 @@ import {
 import type { IDeckQueryInput } from '@noema/api-client';
 import type { CardId } from '@noema/types';
 import { LayoutGrid, List, Plus, Layers } from 'lucide-react';
+import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 
 import { DeckQueryFilter } from '@/components/deck-query-filter';
@@ -30,7 +31,7 @@ import type { IBulkAction } from '@/components/card-collection';
 
 const DEFAULT_QUERY: IDeckQueryInput = {
   sortBy: 'updatedAt',
-  sortDir: 'desc',
+  sortOrder: 'desc',
   limit: 50,
 };
 
@@ -55,7 +56,12 @@ export default function CardLibraryPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   const { data, isLoading, isError, error } = useCards(query);
-  const cards = data?.data.cards ?? [];
+  const cards = data?.data.items ?? [];
+  const totalCards = data?.data.total ?? cards.length;
+  const versionsById = React.useMemo(
+    () => new Map(cards.map((card) => [card.id, card.version])),
+    [cards]
+  );
 
   // --------------------------------------------------------------------------
   // Mutations
@@ -84,7 +90,15 @@ export default function CardLibraryPage(): React.JSX.Element {
   function handleSuspendSelected(ids: Set<string>): void {
     setBulkError(null);
     batchStateTransition.mutate(
-      { cardIds: Array.from(ids), state: 'SUSPENDED' },
+      {
+        items: Array.from(ids)
+          .map((id) => {
+            const version = versionsById.get(id as CardId);
+            return version !== undefined ? { id, version } : null;
+          })
+          .filter((item): item is { id: string; version: number } => item !== null),
+        state: 'suspended',
+      },
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
@@ -99,7 +113,15 @@ export default function CardLibraryPage(): React.JSX.Element {
   function handleActivateSelected(ids: Set<string>): void {
     setBulkError(null);
     batchStateTransition.mutate(
-      { cardIds: Array.from(ids), state: 'ACTIVE' },
+      {
+        items: Array.from(ids)
+          .map((id) => {
+            const version = versionsById.get(id as CardId);
+            return version !== undefined ? { id, version } : null;
+          })
+          .filter((item): item is { id: string; version: number } => item !== null),
+        state: 'active',
+      },
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
@@ -145,7 +167,7 @@ export default function CardLibraryPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   function handleCardClick(cardId: string): void {
-    router.push('/cards/' + cardId);
+    router.push((`/cards/${cardId}` as Route));
   }
 
   function handleNewCard(): void {
@@ -171,7 +193,7 @@ export default function CardLibraryPage(): React.JSX.Element {
               ? 'Loading cards…'
               : isError
                 ? 'Failed to load cards.'
-                : [String(data?.data.total ?? 0), data?.data.total === 1 ? 'card' : 'cards'].join(
+                : [String(totalCards), totalCards === 1 ? 'card' : 'cards'].join(
                     ' '
                   )}
           </p>

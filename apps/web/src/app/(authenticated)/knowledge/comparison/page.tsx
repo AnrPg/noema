@@ -11,6 +11,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@noema/auth';
 import {
   usePKGNodes,
@@ -31,8 +32,10 @@ import { GraphCanvas } from '@/components/graph/graph-canvas';
 // ============================================================================
 
 export default function KnowledgeComparisonPage(): React.JSX.Element {
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
+  const selectedDomain = searchParams.get('domain');
 
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [createError, setCreateError] = React.useState<string | null>(null);
@@ -106,6 +109,17 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           Loading graphs\u2026
         </div>
+      </div>
+    );
+  }
+
+  if (selectedDomain === null || selectedDomain === '') {
+    return (
+      <div className="flex flex-col gap-4">
+        <h1 className="text-3xl font-bold">PKG / CKG Comparison</h1>
+        <p className="text-sm text-muted-foreground">
+          Choose a domain from the knowledge explorer before running a comparison.
+        </p>
       </div>
     );
   }

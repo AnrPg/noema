@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useReviewWindows } from '@noema/api-client';
+import { useForecast } from '@noema/api-client';
 import type { UserDto } from '@noema/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@noema/ui';
 import { useState } from 'react';
@@ -34,33 +34,51 @@ function localDateStr(d: Date): string {
 }
 
 function buildDayData(
-  windowData: { startAt: string; lane: string; cardsDue: number }[]
+  forecastDays: {
+    date: string;
+    retention: { total: number };
+    calibration: { total: number };
+  }[]
 ): IDayData[] {
   const today = localDateStr(new Date());
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
+    const source = forecastDays[i];
+    const d = source !== undefined ? new Date(`${source.date}T00:00:00`) : new Date();
+    if (source === undefined) {
+      d.setDate(d.getDate() + i);
+    }
     const dateStr = localDateStr(d);
-    const dayWindows = windowData.filter((w) => localDateStr(new Date(w.startAt)) === dateStr);
     return {
       label: DAY_LABELS[d.getDay()] ?? 'Day',
       date: dateStr,
-      retention: dayWindows
-        .filter((w) => w.lane === 'retention')
-        .reduce((s, w) => s + w.cardsDue, 0),
-      calibration: dayWindows
-        .filter((w) => w.lane === 'calibration')
-        .reduce((s, w) => s + w.cardsDue, 0),
+      retention: source?.retention.total ?? 0,
+      calibration: source?.calibration.total ?? 0,
       isToday: dateStr === today,
     };
   });
 }
 
+function ensureForecastDays(
+  value: unknown
+): {
+  date: string;
+  retention: { total: number };
+  calibration: { total: number };
+}[] {
+  return Array.isArray(value)
+    ? (value as {
+        date: string;
+        retention: { total: number };
+        calibration: { total: number };
+      }[])
+    : [];
+}
+
 export function ReviewForecast({ userId }: { userId: UserId }): React.JSX.Element {
-  const windows = useReviewWindows({ userId }, { enabled: userId !== '' });
+  const forecast = useForecast({ userId, days: 7, includeOverdue: true }, { enabled: userId !== '' });
   const [hoveredDay, setHoveredDay] = useState<IDayData | null>(null);
 
-  if (windows.isLoading) {
+  if (forecast.isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -74,8 +92,7 @@ export function ReviewForecast({ userId }: { userId: UserId }): React.JSX.Elemen
     );
   }
 
-  const windowData = windows.data?.data ?? [];
-  const days = buildDayData(windowData);
+  const days = buildDayData(ensureForecastDays(forecast.data?.data.days));
   const totalWeek = days.reduce((s, d) => s + d.retention + d.calibration, 0);
   const todayData = days[0];
   const todayTotal = (todayData?.retention ?? 0) + (todayData?.calibration ?? 0);

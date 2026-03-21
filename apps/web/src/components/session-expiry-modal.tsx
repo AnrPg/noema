@@ -11,6 +11,7 @@
 import { useAuthStore } from '@noema/auth';
 import { Button } from '@noema/ui';
 import { LogIn } from 'lucide-react';
+import type { Route } from 'next';
 import { usePathname, useRouter } from 'next/navigation';
 
 export function SessionExpiryModal(): React.JSX.Element | null {
@@ -24,7 +25,7 @@ export function SessionExpiryModal(): React.JSX.Element | null {
   const handleSignInAgain = (): void => {
     // Navigate first so AuthGuard's onUnauthenticated doesn't race with our redirect.
     const encoded = encodeURIComponent(pathname);
-    router.push(`/login?redirect=${encoded}`);
+    router.push((`/login?redirect=${encoded}` as Route));
     reset();
   };
 
