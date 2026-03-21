@@ -156,17 +156,24 @@ export const ckgEdgesApi = {
 export const ckgMutationsApi = {
   list: (filters?: ICkgMutationFilters): Promise<CkgMutationsResponse> =>
     http.get(`${ckgBase}/mutations`, {
-      params: filters as Record<string, string | number | boolean | undefined>,
+      params: {
+        state: filters?.state,
+        proposedBy: filters?.proposedBy,
+      },
     }),
 
   get: (mutationId: MutationId): Promise<CkgMutationResponse> =>
     http.get(`${ckgBase}/mutations/${mutationId}`),
 
   approve: (mutationId: MutationId, note?: string): Promise<CkgMutationResponse> =>
-    http.post(`${ckgBase}/mutations/${mutationId}/approve`, { note }),
+    http.post(`${ckgBase}/mutations/${mutationId}/approve`, {
+      reason: note ?? 'Approved from admin console',
+    }),
 
   reject: (mutationId: MutationId, note?: string): Promise<CkgMutationResponse> =>
-    http.post(`${ckgBase}/mutations/${mutationId}/reject`, { note }),
+    http.post(`${ckgBase}/mutations/${mutationId}/reject`, {
+      reason: note ?? 'Rejected from admin console',
+    }),
 
   cancel: (mutationId: MutationId): Promise<CkgMutationResponse> =>
     http.post(`${ckgBase}/mutations/${mutationId}/cancel`, {}),

@@ -87,6 +87,10 @@ function extractListData<T>(value: unknown): T[] {
   return [];
 }
 
+function stringValue(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
 function normalizeMisconceptionStatus(status: string): string {
   if (status === 'addressed') return 'dismissed';
   if (status === 'recurring') return 'detected';
@@ -117,18 +121,138 @@ function normalizeMisconceptionEntry(
     : [];
 
   return normalizeMisconceptionRecord({
-    id: String(entry['id'] ?? ''),
-    userId: String(entry['userId'] ?? ''),
-    nodeId: String(entry['nodeId'] ?? affectedNodeIds[0] ?? ''),
-    pattern: String(entry['pattern'] ?? entry['description'] ?? entry['misconceptionType'] ?? ''),
-    status: String(entry['status'] ?? 'detected'),
+    id: stringValue(entry['id']),
+    userId: stringValue(entry['userId']),
+    nodeId: stringValue(entry['nodeId'], affectedNodeIds[0] ?? ''),
+    pattern:
+      stringValue(entry['pattern']) !== ''
+        ? stringValue(entry['pattern'])
+        : stringValue(entry['description']) !== ''
+          ? stringValue(entry['description'])
+          : stringValue(entry['misconceptionType']),
+    status: stringValue(entry['status'], 'detected'),
     ...(typeof entry['confidence'] === 'number' ? { confidence: entry['confidence'] } : {}),
-    detectedAt: String(entry['detectedAt'] ?? new Date(0).toISOString()),
+    detectedAt: stringValue(entry['detectedAt'], new Date(0).toISOString()),
     resolvedAt:
       entry['resolvedAt'] === null || typeof entry['resolvedAt'] === 'string'
-        ? (entry['resolvedAt'] as string | null)
+        ? entry['resolvedAt']
         : null,
   });
+}
+
+function inferMutationType(operation: Record<string, unknown> | undefined): ICkgMutationDto['type'] {
+  const opType = stringValue(operation?.['type']).toLowerCase();
+
+  if (opType.includes('edge')) {
+    return opType.includes('remove') || opType.includes('delete') ? 'delete_edge' : 'create_edge';
+  }
+
+  if (opType.includes('update')) return 'update_node';
+  if (opType.includes('remove') || opType.includes('delete')) return 'delete_node';
+  return 'create_node';
+}
+
+function normalizeMutationStatus(state: string): ICkgMutationDto['status'] {
+  switch (state) {
+    case 'committed':
+      return 'approved';
+    case 'rejected':
+      return 'rejected';
+    case 'revision_requested':
+      return 'retrying';
+    default:
+      return 'pending';
+  }
+}
+
+function normalizeMutationEntry(entry: Record<string, unknown>): ICkgMutationDto {
+  const operations = Array.isArray(entry['operations'])
+    ? (entry['operations'] as Record<string, unknown>[])
+    : [];
+  const firstOperation = operations[0];
+  const state = stringValue(entry['state'], 'proposed');
+  const updatedAt = stringValue(entry['updatedAt'], stringValue(entry['createdAt']));
+  const terminalState = state === 'committed' || state === 'rejected';
+
+  return {
+    id: stringValue(entry['mutationId'], stringValue(entry['id'])) as MutationId,
+    type: inferMutationType(firstOperation),
+    status: normalizeMutationStatus(state),
+    ...(state !== '' ? { state: state as NonNullable<ICkgMutationDto['state']> } : {}),
+    proposedBy: stringValue(entry['proposedBy']) as ICkgMutationDto['proposedBy'],
+    payload: firstOperation ?? {},
+    ...(operations.length > 0 ? { operations } : {}),
+    ...(typeof entry['rationale'] === 'string' ? { rationale: entry['rationale'] } : {}),
+    reviewedBy: null,
+    reviewNote:
+      typeof entry['revisionFeedback'] === 'string' ? entry['revisionFeedback'] : null,
+    proposedAt: stringValue(entry['createdAt'], new Date(0).toISOString()),
+    reviewedAt: terminalState ? updatedAt : null,
+  };
+}
+
+function normalizeMutationResponse(response: CkgMutationResponse): CkgMutationResponse {
+  return {
+    ...response,
+    data: normalizeMutationEntry(response.data as unknown as Record<string, unknown>),
+  };
+}
+
+function normalizeMutationsResponse(response: CkgMutationsResponse): CkgMutationsResponse {
+  return {
+    ...response,
+    data: extractListData<Record<string, unknown>>(response).map(normalizeMutationEntry),
+  };
+}
+
+function matchesMutationFilters(mutation: ICkgMutationDto, filters?: ICkgMutationFilters): boolean {
+  if (filters?.status !== undefined && mutation.status !== filters.status) {
+    return false;
+  }
+
+  if (filters?.state !== undefined && mutation.state !== filters.state) {
+    return false;
+  }
+
+  if (filters?.proposedBy !== undefined && mutation.proposedBy !== filters.proposedBy) {
+    return false;
+  }
+
+  return true;
+}
+
+function normalizeMutationAuditLogResponse(
+  response: CkgMutationAuditLogResponse
+): CkgMutationAuditLogResponse {
+  const data = response.data as unknown as Record<string, unknown>;
+  const entries = Array.isArray(data['entries']) ? data['entries'] : [];
+  const mutationId = stringValue(data['mutationId']) as MutationId;
+
+  return {
+    ...response,
+    data: {
+      mutationId,
+      entries: entries.map((entry, index) => {
+        const audit = entry as Record<string, unknown>;
+        const toState = stringValue(audit['toState']);
+        return {
+          id: `${mutationId}-${String(index)}-${toState}`,
+          mutationId,
+          fromStatus: typeof audit['fromState'] === 'string' ? audit['fromState'] : null,
+          toStatus: toState,
+          actorId: stringValue(audit['performedBy'], 'system'),
+          actorType: stringValue(audit['performedBy']).startsWith('system') ? 'system' : 'admin',
+          reason:
+            typeof audit['context'] === 'object' &&
+            audit['context'] !== null &&
+            typeof (audit['context'] as Record<string, unknown>)['reason'] === 'string'
+              ? ((audit['context'] as Record<string, unknown>)['reason'] as string)
+              : null,
+          transitionedAt: stringValue(audit['timestamp'], new Date(0).toISOString()),
+        };
+      }),
+    },
+  };
 }
 
 // ============================================================================
@@ -418,7 +542,10 @@ export function useCKGMutations(
   return useQuery({
     queryKey: kgKeys.ckgMutations(filters),
     queryFn: () => ckgMutationsApi.list(filters),
-    select: (r) => r.data,
+    select: (response) =>
+      normalizeMutationsResponse(response).data.filter((mutation) =>
+        matchesMutationFilters(mutation, filters)
+      ),
     ...options,
   });
 }
@@ -433,7 +560,7 @@ export function useCKGMutation(
   return useQuery({
     queryKey: kgKeys.ckgMutation(id),
     queryFn: () => ckgMutationsApi.get(id),
-    select: (r) => r.data,
+    select: (response) => normalizeMutationResponse(response).data,
     enabled: id !== '',
     ...options,
   });
@@ -446,7 +573,7 @@ export function useApproveMutation(
   return useMutation({
     mutationFn: ({ id, note }) => ckgMutationsApi.approve(id, note),
     onSuccess: (response, { id }) => {
-      queryClient.setQueryData(kgKeys.ckgMutation(id), response);
+      queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
     ...options,
@@ -460,7 +587,7 @@ export function useRejectMutation(
   return useMutation({
     mutationFn: ({ id, note }) => ckgMutationsApi.reject(id, note),
     onSuccess: (response, { id }) => {
-      queryClient.setQueryData(kgKeys.ckgMutation(id), response);
+      queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
     ...options,
@@ -477,7 +604,7 @@ export function useCKGMutationAuditLog(
   return useQuery({
     queryKey: [...kgKeys.ckgMutation(id), 'audit-log'] as const,
     queryFn: () => ckgMutationsApi.getAuditLog(id),
-    select: (r) => r.data,
+    select: (response) => normalizeMutationAuditLogResponse(response).data,
     enabled: id !== '',
     ...options,
   });
@@ -490,7 +617,7 @@ export function useRequestRevision(
   return useMutation({
     mutationFn: ({ id, feedback }) => ckgMutationsApi.requestRevision(id, feedback),
     onSuccess: (response, { id }) => {
-      queryClient.setQueryData(kgKeys.ckgMutation(id), response);
+      queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
     ...options,
@@ -504,7 +631,7 @@ export function useCancelMutation(
   return useMutation({
     mutationFn: (id) => ckgMutationsApi.cancel(id),
     onSuccess: (response, id) => {
-      queryClient.setQueryData(kgKeys.ckgMutation(id), response);
+      queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
     ...options,

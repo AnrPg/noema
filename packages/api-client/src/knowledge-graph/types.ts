@@ -18,6 +18,17 @@ export type NodeType = 'concept' | 'skill' | 'fact' | 'procedure' | 'principle' 
 export type EdgeType = 'prerequisite' | 'related' | 'part_of' | 'example_of' | 'contradicts';
 
 export type MutationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'retrying';
+export type MutationWorkflowState =
+  | 'proposed'
+  | 'validating'
+  | 'validated'
+  | 'pending_review'
+  | 'revision_requested'
+  | 'proving'
+  | 'proven'
+  | 'committing'
+  | 'committed'
+  | 'rejected';
 
 export type MisconceptionStatus = 'detected' | 'confirmed' | 'resolved' | 'dismissed';
 
@@ -205,8 +216,11 @@ export interface ICkgMutationDto {
   id: MutationId;
   type: 'create_node' | 'update_node' | 'delete_node' | 'create_edge' | 'delete_edge';
   status: MutationStatus;
+  state?: MutationWorkflowState;
   proposedBy: ProposerId;
   payload: Record<string, unknown>;
+  operations?: Record<string, unknown>[];
+  rationale?: string;
   reviewedBy: UserId | null;
   reviewNote: string | null;
   proposedAt: string;
@@ -216,8 +230,8 @@ export interface ICkgMutationDto {
 export interface ICkgMutationAuditEntry {
   id: string;
   mutationId: MutationId;
-  fromStatus: MutationStatus | null;
-  toStatus: MutationStatus;
+  fromStatus: string | null;
+  toStatus: string;
   actorId: string;
   actorType: 'admin' | 'system';
   reason: string | null;
@@ -233,6 +247,7 @@ export type CkgMutationAuditLogResponse = IApiResponse<ICkgMutationAuditLogDto>;
 
 export interface ICkgMutationFilters {
   status?: MutationStatus;
+  state?: MutationWorkflowState;
   proposedBy?: ProposerId;
   limit?: number;
   offset?: number;
