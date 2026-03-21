@@ -6,8 +6,11 @@
 
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import bcrypt from 'bcrypt';
+import { ID_PREFIXES, type UserId } from '@noema/types';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
+import { nanoid } from 'nanoid';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
@@ -29,6 +32,124 @@ import { JwtTokenService } from './infrastructure/external-apis/token.service.js
 import { PrismaSessionRepository } from './infrastructure/repositories/prisma-session.repository.js';
 import { PrismaUserStatusChangeRepository } from './infrastructure/repositories/prisma-user-status-change.repository.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
+import { AuthProvider, Language, Theme, UserRole, UserStatus } from './types/user.types.js';
+
+async function ensureBootstrapAdmin(
+  prisma: PrismaClient,
+  config: ReturnType<typeof loadConfig>,
+  logger: pino.Logger
+): Promise<void> {
+  if (!config.bootstrapAdmin.enabled) {
+    return;
+  }
+
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: config.bootstrapAdmin.email.toLowerCase() },
+        { username: config.bootstrapAdmin.username.toLowerCase() },
+      ],
+      deletedAt: null,
+    },
+  });
+
+  if (existing) {
+    logger.info(
+      {
+        email: existing.email,
+        username: existing.username,
+        roles: existing.roles,
+      },
+      'Bootstrap admin already exists'
+    );
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(config.bootstrapAdmin.password, config.auth.bcryptRounds);
+  const userId = `${ID_PREFIXES.UserId}${nanoid(21)}` as UserId;
+  const now = new Date();
+
+  await prisma.user.create({
+    data: {
+      id: userId,
+      username: config.bootstrapAdmin.username.toLowerCase(),
+      email: config.bootstrapAdmin.email.toLowerCase(),
+      passwordHash,
+      status: UserStatus.ACTIVE,
+      emailVerified: true,
+      roles: [UserRole.USER, UserRole.LEARNER, UserRole.ADMIN, UserRole.SUPER_ADMIN],
+      authProviders: [AuthProvider.LOCAL],
+      profile: {
+        displayName: config.bootstrapAdmin.displayName,
+        bio: null,
+        avatarUrl: null,
+        timezone: 'UTC',
+        language: Language.EN,
+        country: config.bootstrapAdmin.country,
+      },
+      settings: {
+        theme: Theme.SYSTEM,
+        dailyReminderEnabled: true,
+        dailyReminderTime: '09:00',
+        defaultNewCardsPerDay: 20,
+        defaultReviewCardsPerDay: 100,
+        soundEnabled: true,
+        hapticEnabled: true,
+        autoAdvanceEnabled: false,
+        showTimerEnabled: true,
+        emailStreakReminders: true,
+        emailAchievements: true,
+        pushNotificationsEnabled: true,
+        analyticsEnabled: true,
+        cognitivePolicy: {
+          pacingPolicy: {
+            targetSecondsPerCard: 45,
+            hardCapSecondsPerCard: 120,
+            slowdownOnError: true,
+          },
+          hintPolicy: {
+            maxHintsPerCard: 2,
+            progressiveHintsOnly: true,
+            allowAnswerReveal: false,
+          },
+          commitPolicy: {
+            requireConfidenceBeforeCommit: true,
+            requireVerificationGate: false,
+          },
+          reflectionPolicy: {
+            postAttemptReflection: false,
+            postSessionReflection: true,
+          },
+        },
+      },
+      loginCount: 0,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      loginHistory: [],
+      failedLoginHistory: [],
+      passwordChangeHistory: [
+        {
+          timestamp: now.toISOString(),
+          changedBy: userId,
+          method: 'bootstrap',
+        },
+      ],
+      mfaEnabled: false,
+      passwordChangedAt: now,
+      createdBy: 'bootstrap',
+      updatedBy: 'bootstrap',
+      version: 1,
+    },
+  });
+
+  logger.warn(
+    {
+      email: config.bootstrapAdmin.email,
+      username: config.bootstrapAdmin.username,
+    },
+    'Created development bootstrap admin account'
+  );
+}
 
 // ============================================================================
 // Bootstrap
@@ -71,6 +192,8 @@ async function bootstrap(): Promise<void> {
   await redis.connect();
   logger.info('Connected to Redis');
 
+  await ensureBootstrapAdmin(prisma, config, logger);
+
   // Create infrastructure instances
   const userRepository = new PrismaUserRepository(prisma);
   const tokenService = new JwtTokenService(getTokenConfig(config), {
@@ -89,7 +212,12 @@ async function bootstrap(): Promise<void> {
     eventPublisher,
     tokenService,
     sessionOrchestration,
-    logger
+    logger,
+    {
+      bcryptRounds: config.auth.bcryptRounds,
+      maxLoginAttempts: config.auth.maxLoginAttempts,
+      lockDurationMinutes: config.auth.lockoutDurationMinutes,
+    }
   );
 
   // Create admin infrastructure + service (Phase 4)

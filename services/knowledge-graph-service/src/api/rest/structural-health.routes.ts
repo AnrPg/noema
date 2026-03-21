@@ -62,7 +62,6 @@ export function registerStructuralHealthRoutes(
         },
         querystring: {
           type: 'object',
-          required: ['domain'],
           properties: {
             domain: { type: 'string' },
           },
@@ -106,7 +105,6 @@ export function registerStructuralHealthRoutes(
         },
         querystring: {
           type: 'object',
-          required: ['domain'],
           properties: {
             domain: { type: 'string' },
           },

@@ -21,11 +21,11 @@ export const HealthUserIdParamsSchema = z.object({
 // ============================================================================
 
 export const HealthQueryParamsSchema = z.object({
-  domain: z.string().min(1, 'Domain is required').max(200),
+  domain: z.string().min(1).max(200).default('general'),
 });
 
 export const StageQueryParamsSchema = z.object({
-  domain: z.string().min(1, 'Domain is required').max(200),
+  domain: z.string().min(1).max(200).default('general'),
 });
 
 // ============================================================================

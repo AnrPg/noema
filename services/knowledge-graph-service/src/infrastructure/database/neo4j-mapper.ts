@@ -25,6 +25,7 @@ import type {
   MasteryLevel,
   Metadata,
   NodeId,
+  UserId,
 } from '@noema/types';
 import type { Node, Relationship } from 'neo4j-driver';
 import neo4j from 'neo4j-driver';
@@ -204,7 +205,7 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     label: typeof label === 'string' ? label : '',
     ...(description !== null ? { description: description as string } : {}),
     domain: typeof domain === 'string' ? domain : '',
-    ...(userId !== null ? { userId: userId as string } : {}),
+    ...(userId !== null ? { userId: userId as UserId } : {}),
     properties: extraProps as Metadata,
     ...(masteryLevel !== null ? { masteryLevel: masteryLevel as number as MasteryLevel } : {}),
     createdAt: toIsoString(createdAt),
@@ -253,7 +254,7 @@ export function mapRelationshipToGraphEdge(
     edgeType: resolvedEdgeType,
     sourceNodeId,
     targetNodeId,
-    ...(userId !== null ? { userId: userId as string } : {}),
+    ...(userId !== null ? { userId: userId as UserId } : {}),
     weight: (typeof weight === 'number' ? weight : 1.0) as EdgeWeight,
     properties: extraProps as Metadata,
     createdAt: toIsoString(createdAt),

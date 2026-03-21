@@ -156,11 +156,19 @@ export function buildStructuralHealthReport(
   const breakdown = buildMetricBreakdown(metrics, previousSnapshots);
   const overallScore = computeOverallScore(metrics);
   const trend = computeOverallTrend(previousSnapshots);
+  const grade = classifyOverallGrade(overallScore);
+  const issues = summarizeIssues(breakdown, activeMisconceptionCount);
+  const recommendations = buildRecommendations(breakdown, trend, activeMisconceptionCount);
 
   // Detect cross-metric interaction patterns (I-2 improvement)
   const crossPatterns = detectCrossMetricPatterns(metrics);
 
-  return {
+  const report = {
+    ...metrics,
+    score: overallScore,
+    grade,
+    issues,
+    recommendations,
     overallScore,
     metricBreakdown: breakdown,
     trend,
@@ -170,6 +178,8 @@ export function buildStructuralHealthReport(
     generatedAt: new Date().toISOString(),
     crossMetricPatterns: crossPatterns,
   };
+
+  return report as IStructuralHealthReport;
 }
 
 // ============================================================================
@@ -245,6 +255,71 @@ function computeOverallScore(metrics: IStructuralMetrics): number {
   }
 
   return Math.max(0, Math.min(1, score));
+}
+
+function classifyOverallGrade(
+  overallScore: number
+): 'excellent' | 'good' | 'fair' | 'poor' {
+  if (overallScore >= 0.85) return 'excellent';
+  if (overallScore >= 0.7) return 'good';
+  if (overallScore >= 0.4) return 'fair';
+  return 'poor';
+}
+
+function summarizeIssues(breakdown: IMetricStatusEntry[], activeMisconceptionCount: number): string[] {
+  const issues = breakdown
+    .filter((entry) => entry.status !== HealthStatus.HEALTHY)
+    .slice(0, 4)
+    .map((entry) => entry.hint);
+
+  if (activeMisconceptionCount > 0) {
+    issues.unshift(
+      `${String(activeMisconceptionCount)} active misconception${
+        activeMisconceptionCount === 1 ? '' : 's'
+      } require attention.`
+    );
+  }
+
+  return issues;
+}
+
+function buildRecommendations(
+  breakdown: IMetricStatusEntry[],
+  trend: TrendDirection,
+  activeMisconceptionCount: number
+): string[] {
+  const recommendations: string[] = [];
+  const criticalMetrics = breakdown.filter((entry) => entry.status === HealthStatus.CRITICAL);
+  const warningMetrics = breakdown.filter((entry) => entry.status === HealthStatus.WARNING);
+
+  if (criticalMetrics.length > 0) {
+    recommendations.push(
+      `Prioritize remediation for ${criticalMetrics
+        .slice(0, 2)
+        .map((entry) => entry.metricType)
+        .join(', ')}.`
+    );
+  }
+
+  if (warningMetrics.length > 0) {
+    recommendations.push('Schedule a focused review session on the weakest structural areas.');
+  }
+
+  if (activeMisconceptionCount > 0) {
+    recommendations.push('Review detected misconceptions before adding more advanced material.');
+  }
+
+  if (trend === Trend.DECLINING) {
+    recommendations.push('Your recent trend is declining; reduce scope and reinforce fundamentals.');
+  } else if (trend === Trend.IMPROVING) {
+    recommendations.push('Trend is improving; keep the current study cadence and strategy.');
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push('No urgent issues detected. Maintain regular retrieval practice.');
+  }
+
+  return recommendations;
 }
 
 function computeMetricTrend(

@@ -88,8 +88,9 @@ export class PrismaOutboxRepository implements IOutboxRepository {
   ): Promise<IOutboxEventRecord[]> {
     const claimUntil = new Date(now.getTime() + leaseMs);
 
-    const rows = await this.prisma.$transaction(async (tx) => {
-      return tx.$queryRaw<
+    const rows = await this.prisma.$transaction(
+      async (tx) => {
+        return tx.$queryRaw<
         Array<{
           id: string;
           eventType: string;
@@ -141,7 +142,12 @@ export class PrismaOutboxRepository implements IOutboxRepository {
           eo.created_at AS "createdAt",
           eo.updated_at AS "updatedAt"
       `;
-    });
+      },
+      {
+        maxWait: 5_000,
+        timeout: 15_000,
+      }
+    );
 
     return rows.map(toOutboxDomain);
   }

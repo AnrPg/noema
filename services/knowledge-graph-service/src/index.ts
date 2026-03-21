@@ -121,6 +121,10 @@ async function bootstrap(): Promise<void> {
   await redis.connect();
   logger.info('Connected to Redis');
 
+  // Dedicated Redis clients for blocking stream consumers.
+  // XREADGROUP with BLOCK must not share the HTTP/cache/rate-limit connection.
+  const consumerRedisClients: Redis[] = [];
+
   // Create Fastify instance
   const fastify = Fastify({
     loggerInstance: logger,
@@ -128,6 +132,9 @@ async function bootstrap(): Promise<void> {
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
     bodyLimit: config.server.bodyLimit,
+    // Detached Windows dev launches redirect stdout/stderr to log files.
+    // Per-request logging can flood those files and stall responses.
+    disableRequestLogging: true,
   });
 
   // Register CORS (disabled by default — the API gateway handles CORS.
@@ -151,46 +158,50 @@ async function bootstrap(): Promise<void> {
   }
 
   // Register rate limiting
-  await fastify.register(rateLimit, {
-    max: config.rateLimit.max,
-    timeWindow: config.rateLimit.timeWindow,
-    redis,
-    keyGenerator: (request) => {
-      // Try to extract userId from JWT (fast base64 decode — no crypto)
-      // for user-scoped rate limiting. Falls back to IP for unauthenticated requests.
-      const authHeader = request.headers.authorization;
-      if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-        try {
-          const token = authHeader.slice(7);
-          const parts = token.split('.');
-          if (parts[1] !== undefined && parts[1] !== '') {
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as {
-              sub?: string;
-            };
-            if (typeof payload.sub === 'string') return `user:${payload.sub}`;
+  if (process.env['DISABLE_RATE_LIMIT'] === 'true') {
+    logger.warn('Rate limiting disabled via DISABLE_RATE_LIMIT=true');
+  } else {
+    await fastify.register(rateLimit, {
+      max: config.rateLimit.max,
+      timeWindow: config.rateLimit.timeWindow,
+      redis,
+      keyGenerator: (request) => {
+        // Try to extract userId from JWT (fast base64 decode — no crypto)
+        // for user-scoped rate limiting. Falls back to IP for unauthenticated requests.
+        const authHeader = request.headers.authorization;
+        if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+          try {
+            const token = authHeader.slice(7);
+            const parts = token.split('.');
+            if (parts[1] !== undefined && parts[1] !== '') {
+              const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString()) as {
+                sub?: string;
+              };
+              if (typeof payload.sub === 'string') return `user:${payload.sub}`;
+            }
+          } catch (err) {
+            logger.debug({ err }, 'JWT parse failed for rate-limit key — falling back to IP');
           }
-        } catch (err) {
-          logger.debug({ err }, 'JWT parse failed for rate-limit key — falling back to IP');
         }
-      }
-      return `ip:${request.ip}`;
-    },
-    errorResponseBuilder: (_request, context) => ({
-      error: {
-        code: 'RATE_LIMIT_EXCEEDED',
-        message: `Rate limit exceeded. Retry after ${String(Math.ceil(context.ttl / 1000))} seconds.`,
-        details: {
-          limit: context.max,
-          remaining: 0,
-          retryAfterMs: context.ttl,
-        },
+        return `ip:${request.ip}`;
       },
-    }),
-  });
-  logger.info(
-    { max: config.rateLimit.max, timeWindow: config.rateLimit.timeWindow },
-    'Rate limiting registered'
-  );
+      errorResponseBuilder: (_request, context) => ({
+        error: {
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: `Rate limit exceeded. Retry after ${String(Math.ceil(context.ttl / 1000))} seconds.`,
+          details: {
+            limit: context.max,
+            remaining: 0,
+            retryAfterMs: context.ttl,
+          },
+        },
+      }),
+    });
+    logger.info(
+      { max: config.rateLimit.max, timeWindow: config.rateLimit.timeWindow },
+      'Rate limiting registered'
+    );
+  }
 
   // Register OpenAPI / Swagger
   await fastify.register(fastifySwagger, {
@@ -387,9 +398,15 @@ async function bootstrap(): Promise<void> {
 
   if (config.consumers.enabled) {
     const { consumerName, streams } = config.consumers;
+    const userDeletedConsumerRedis = new Redis(config.redis.url, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+    await userDeletedConsumerRedis.connect();
+    consumerRedisClients.push(userDeletedConsumerRedis);
 
     const userDeletedConsumer = new UserDeletedConsumer(
-      redis,
+      userDeletedConsumerRedis,
       prisma,
       neo4jClient,
       logger,
@@ -437,6 +454,7 @@ async function bootstrap(): Promise<void> {
       await Promise.all(consumers.map((c) => c.drain()));
 
       await fastify.close();
+      await Promise.all(consumerRedisClients.map(async (client) => client.quit()));
       await redis.quit();
       await neo4jClient.close();
       await prisma.$disconnect();

@@ -74,6 +74,20 @@ function generateDetectionId(): string {
 export class PrismaMisconceptionRepository implements IMisconceptionRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
+  private isMissingDetectionsTable(error: unknown): boolean {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2021'
+    ) {
+      const meta = (error as { meta?: { table?: string } }).meta;
+      return meta?.table === 'public.misconception_detections';
+    }
+
+    return false;
+  }
+
   // ── Pattern operations ────────────────────────────────────────────────
 
   async getActivePatterns(): Promise<IMisconceptionPattern[]> {
@@ -275,22 +289,30 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
   }
 
   async getActiveMisconceptions(userId: UserId, domain?: string): Promise<IMisconceptionRecord[]> {
-    const records = await this.prisma.misconceptionDetection.findMany({
-      where: {
-        userId: userId as string,
-        status: { not: 'resolved' },
-        ...(domain !== undefined
-          ? {
-              misconceptionPattern: {
-                misconceptionType: { startsWith: domain },
-              },
-            }
-          : {}),
-      },
-      orderBy: { detectedAt: 'desc' },
-    });
+    try {
+      const records = await this.prisma.misconceptionDetection.findMany({
+        where: {
+          userId: userId as string,
+          status: { not: 'resolved' },
+          ...(domain !== undefined
+            ? {
+                pattern: {
+                  misconceptionType: { startsWith: domain },
+                },
+              }
+            : {}),
+        },
+        orderBy: { detectedAt: 'desc' },
+      });
 
-    return records.map((r) => this.detectionToDomain(r));
+      return records.map((r) => this.detectionToDomain(r));
+    } catch (error) {
+      if (this.isMissingDetectionsTable(error)) {
+        return [];
+      }
+
+      throw error;
+    }
   }
 
   async updateMisconceptionStatus(

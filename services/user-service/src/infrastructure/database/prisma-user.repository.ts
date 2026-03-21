@@ -588,8 +588,14 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   private toDomain(user: PrismaUser): IUser {
-    const profile = user.profile as unknown as IUserProfile;
-    const settings = user.settings as unknown as IUserSettings;
+    const profile = {
+      ...DEFAULT_PROFILE,
+      ...((user.profile as unknown as Partial<IUserProfile> | null) ?? {}),
+    } satisfies IUserProfile;
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      ...((user.settings as unknown as Partial<IUserSettings> | null) ?? {}),
+    } satisfies IUserSettings;
     const loginHistory = (user.loginHistory as unknown as ILoginHistoryEntry[]) || [];
     const failedLoginHistory =
       (user.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];

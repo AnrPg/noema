@@ -135,12 +135,26 @@ async function bootstrap(): Promise<void> {
   // ==========================================================================
 
   const consumers: BaseEventConsumer[] = [];
+  const consumerRedisClients: Redis[] = [];
 
   if (config.consumers.enabled) {
     const { consumerName, streams } = config.consumers;
+    const createConsumerRedisClient = async (): Promise<Redis> => {
+      // Stream consumers use BLOCKing XREADGROUP calls and must not share the
+      // request-path Redis connection used by health probes and publishers.
+      const consumerRedis = redis.duplicate({
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+      });
+      await consumerRedis.connect();
+      consumerRedisClients.push(consumerRedis);
+      return consumerRedis;
+    };
+
+    const userDeletedRedis = await createConsumerRedisClient();
 
     const userDeletedConsumer = new UserDeletedConsumer(
-      redis,
+      userDeletedRedis,
       prisma,
       logger,
       consumerName,
@@ -171,6 +185,9 @@ async function bootstrap(): Promise<void> {
     requestIdHeader: 'x-correlation-id',
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
+    // Background health and metrics polling can flood detached dev logs and
+    // starve request handling when pretty printing is enabled.
+    disableRequestLogging: true,
   });
 
   // Register CORS (disabled by default — the API gateway handles CORS.
@@ -215,6 +232,7 @@ async function bootstrap(): Promise<void> {
       consumer.stop();
     }
     await Promise.all(consumers.map((c) => c.drain()));
+    await Promise.all(consumerRedisClients.map((client) => client.quit()));
 
     await fastify.close();
     await outboxWorker.stop();

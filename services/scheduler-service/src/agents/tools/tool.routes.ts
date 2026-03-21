@@ -36,8 +36,9 @@ export function registerToolRoutes(
     },
   };
 
-  fastify.addHook('onRequest', (request) => {
+  fastify.addHook('onRequest', (request, _reply, done) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
+    done();
   });
 
   function buildMetadata(request: FastifyRequest): Record<string, unknown> {

@@ -212,17 +212,14 @@ export function loadConfig(): IServiceConfig {
       origin: parseCorsOrigin(
         optionalEnv(
           'CORS_ORIGIN',
-          // Default: all Noema service ports + frontends
-          // 3000=web, 3001=user-service, 3002=session, 3003=web-admin,
-          // 3004=mobile, 3005=content, 3006=knowledge-graph, 3007=analytics,
-          // 3008=notification, 3009=gamification, 3010=collaboration,
-          // 3011=media, 3012=sync, 3013=vector, 3014=scheduler, 3015=ingestion
+          // Default: local frontends plus the root .env service port contract.
           [
             'http://localhost:3000',
             'http://localhost:3001',
             'http://localhost:3002',
             'http://localhost:3003',
             'http://localhost:3004',
+            'http://localhost:3100',
             'http://localhost:3005',
             'http://localhost:3006',
             'http://localhost:3007',

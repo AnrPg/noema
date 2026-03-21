@@ -184,7 +184,16 @@ export function registerMetricsRoutes(
           historyOptions,
           context
         );
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+        reply.send(
+          wrapResponse(
+            {
+              userId,
+              entries: result.data,
+            },
+            result.agentHints,
+            request
+          )
+        );
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

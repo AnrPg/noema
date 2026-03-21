@@ -52,6 +52,14 @@ export interface IServiceConfig {
     level: string;
     pretty: boolean;
   };
+  bootstrapAdmin: {
+    enabled: boolean;
+    email: string;
+    username: string;
+    password: string;
+    displayName: string;
+    country: string;
+  };
 }
 
 export interface ITokenConfig {
@@ -148,19 +156,27 @@ export function loadConfig(): IServiceConfig {
       enabled: optionalEnvBool('CORS_ENABLED', false),
       origin: optionalEnv(
         'CORS_ORIGIN',
-        'http://localhost:3000,http://localhost:3004,http://localhost:3003'
+        'http://localhost:3000,http://localhost:3100,http://localhost:3004'
       )
         .split(',')
         .map((s) => s.trim()),
       credentials: optionalEnvBool('CORS_CREDENTIALS', true),
     },
     integrations: {
-      sessionServiceUrl: optionalEnv('SESSION_SERVICE_URL', 'http://localhost:3003'),
+      sessionServiceUrl: optionalEnv('SESSION_SERVICE_URL', 'http://localhost:3004'),
       requestTimeoutMs: optionalEnvInt('INTEGRATION_REQUEST_TIMEOUT_MS', 5000),
     },
     logging: {
       level: optionalEnv('LOG_LEVEL', environment === 'production' ? 'info' : 'debug'),
       pretty: optionalEnvBool('LOG_PRETTY', environment === 'development'),
+    },
+    bootstrapAdmin: {
+      enabled: optionalEnvBool('DEV_BOOTSTRAP_ADMIN_ENABLED', environment === 'development'),
+      email: optionalEnv('DEV_BOOTSTRAP_ADMIN_EMAIL', 'admin@noema.local'),
+      username: optionalEnv('DEV_BOOTSTRAP_ADMIN_USERNAME', 'noema_admin'),
+      password: optionalEnv('DEV_BOOTSTRAP_ADMIN_PASSWORD', 'superSecret123!'),
+      displayName: optionalEnv('DEV_BOOTSTRAP_ADMIN_DISPLAY_NAME', 'Noema Admin'),
+      country: optionalEnv('DEV_BOOTSTRAP_ADMIN_COUNTRY', 'US'),
     },
   };
 }

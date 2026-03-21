@@ -98,7 +98,7 @@ export function loadConfig(): IServiceConfig {
     },
     server: {
       host: optionalEnv('HOST', '0.0.0.0'),
-      port: optionalEnvInt('PORT', 3009),
+      port: optionalEnvInt('PORT', 3003),
       bodyLimitBytes: optionalEnvInt('SERVER_BODY_LIMIT_BYTES', 1_048_576),
     },
     database: {
@@ -128,7 +128,7 @@ export function loadConfig(): IServiceConfig {
       enabled: optionalEnvBool('CORS_ENABLED', false),
       origin: optionalEnv(
         'CORS_ORIGIN',
-        'http://localhost:3000,http://localhost:3001,http://localhost:3003,http://localhost:3004'
+        'http://localhost:3000,http://localhost:3100,http://localhost:3004'
       )
         .split(',')
         .map((s) => s.trim()),

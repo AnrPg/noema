@@ -46,8 +46,9 @@ export function registerToolRoutes(
   authMiddleware: ReturnType<typeof createAuthMiddleware>
 ): void {
   // Attach startTime
-  fastify.addHook('onRequest', (request) => {
+  fastify.addHook('onRequest', (request, _reply, done) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
+    done();
   });
 
   function buildMetadata(request: FastifyRequest): Record<string, unknown> {

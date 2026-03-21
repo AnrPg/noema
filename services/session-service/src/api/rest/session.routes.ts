@@ -59,8 +59,9 @@ export function registerSessionRoutes(
   // Timing Hook
   // ==========================================================================
 
-  fastify.addHook('onRequest', (request) => {
+  fastify.addHook('onRequest', (request, _reply, done) => {
     (request as FastifyRequest & { startTime: number }).startTime = Date.now();
+    done();
   });
 
   // ==========================================================================

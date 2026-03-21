@@ -324,7 +324,8 @@ export function handleError(
  * {@link buildErrorMetadata} for `executionTime` computation).
  */
 export function attachStartTimeHook(fastify: FastifyInstance): void {
-  fastify.addHook('onRequest', (request) => {
+  fastify.addHook('onRequest', (request, _reply, done) => {
     (request as ITimedRequest).startTime = Date.now();
+    done();
   });
 }

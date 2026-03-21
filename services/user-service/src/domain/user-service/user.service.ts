@@ -119,15 +119,26 @@ const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
  */
 export class UserService {
   private readonly logger: Logger;
+  private readonly bcryptRounds: number;
+  private readonly maxLoginAttempts: number;
+  private readonly lockDurationMinutes: number;
 
   constructor(
     private readonly repository: IUserRepository,
     private readonly eventPublisher: IEventPublisher,
     private readonly tokenService: ITokenService,
     private readonly sessionOrchestration: ISessionOrchestrationService,
-    logger: Logger
+    logger: Logger,
+    securityConfig?: {
+      bcryptRounds?: number;
+      maxLoginAttempts?: number;
+      lockDurationMinutes?: number;
+    }
   ) {
     this.logger = logger.child({ service: 'UserService' });
+    this.bcryptRounds = securityConfig?.bcryptRounds ?? SALT_ROUNDS;
+    this.maxLoginAttempts = securityConfig?.maxLoginAttempts ?? MAX_LOGIN_ATTEMPTS;
+    this.lockDurationMinutes = securityConfig?.lockDurationMinutes ?? LOCK_DURATION_MINUTES;
   }
 
   // ============================================================================
@@ -150,7 +161,7 @@ export class UserService {
     await this.checkCreateRules(validatedInput);
 
     // Hash password
-    const passwordHash = await bcrypt.hash(validatedInput.password, SALT_ROUNDS);
+    const passwordHash = await bcrypt.hash(validatedInput.password, this.bcryptRounds);
 
     // Generate ID
     const id = `${ID_PREFIXES.UserId}${nanoid(21)}` as UserId;
@@ -1392,15 +1403,15 @@ export class UserService {
 
     const attempts = await this.repository.incrementFailedLoginAttempts(user.id, failedEntry);
 
-    if (attempts >= MAX_LOGIN_ATTEMPTS) {
+    if (attempts >= this.maxLoginAttempts) {
       const lockUntil = new Date();
-      lockUntil.setMinutes(lockUntil.getMinutes() + LOCK_DURATION_MINUTES);
+      lockUntil.setMinutes(lockUntil.getMinutes() + this.lockDurationMinutes);
       await this.repository.lockAccount(user.id, lockUntil.toISOString());
 
       throw new TooManyLoginAttemptsError(0);
     }
 
-    throw new TooManyLoginAttemptsError(MAX_LOGIN_ATTEMPTS - attempts);
+    throw new TooManyLoginAttemptsError(this.maxLoginAttempts - attempts);
   }
 
   private sanitizeUser(user: IUser): Omit<IUser, 'passwordHash' | 'mfaSecret'> {

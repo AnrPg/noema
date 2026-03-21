@@ -118,48 +118,68 @@ async function bootstrap(): Promise<void> {
   };
 
   const consumers: SchedulerBaseConsumer[] = [];
+  const consumerRedisClients: Redis[] = [];
 
   if (config.consumers.enabled) {
     const { consumerName, streams } = config.consumers;
+    const createConsumerRedisClient = async (): Promise<Redis> => {
+      // Stream consumers use BLOCKing XREADGROUP calls and must not share the
+      // request-path Redis connection used by health probes and API traffic.
+      const consumerRedis = redis.duplicate({
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+      });
+      await consumerRedis.connect();
+      consumerRedisClients.push(consumerRedis);
+      return consumerRedis;
+    };
+
+    const sessionStartedRedis = await createConsumerRedisClient();
+    const reviewRecordedRedis = await createConsumerRedisClient();
+    const contentSeededRedis = await createConsumerRedisClient();
+    const sessionCohortRedis = await createConsumerRedisClient();
+    const cardLifecycleRedis = await createConsumerRedisClient();
+    const sessionLifecycleRedis = await createConsumerRedisClient();
+    const userDeletedRedis = await createConsumerRedisClient();
 
     const sessionStartedConsumer = new SessionStartedConsumer(
-      redis,
+      sessionStartedRedis,
       logger,
       consumerName,
       streams.sessionService
     );
     const reviewRecordedConsumer = new ReviewRecordedConsumer(
-      redis,
+      reviewRecordedRedis,
       logger,
       consumerName,
       streams.sessionService
     );
     const contentSeededConsumer = new ContentSeededConsumer(
-      redis,
+      contentSeededRedis,
       logger,
       consumerName,
       streams.contentService
     );
     const sessionCohortConsumer = new SessionCohortConsumer(
-      redis,
+      sessionCohortRedis,
       logger,
       consumerName,
       streams.sessionService
     );
     const cardLifecycleConsumer = new CardLifecycleConsumer(
-      redis,
+      cardLifecycleRedis,
       logger,
       consumerName,
       streams.contentService
     );
     const sessionLifecycleConsumer = new SessionLifecycleConsumer(
-      redis,
+      sessionLifecycleRedis,
       logger,
       consumerName,
       streams.sessionService
     );
     const userDeletedConsumer = new UserDeletedConsumer(
-      redis,
+      userDeletedRedis,
       logger,
       consumerName,
       streams.userService
@@ -201,6 +221,9 @@ async function bootstrap(): Promise<void> {
     requestIdHeader: 'x-correlation-id',
     requestIdLogLabel: 'correlationId',
     genReqId: () => `cor_${Date.now().toString(36)}`,
+    // Background health and metrics polling can flood detached dev logs and
+    // starve request handling when pretty printing is enabled.
+    disableRequestLogging: true,
   });
 
   fastify.addHook('onRequest', (request, _reply, done) => {
@@ -277,6 +300,7 @@ async function bootstrap(): Promise<void> {
       consumer.stop();
     }
     await Promise.all(consumers.map((c) => c.drain()));
+    await Promise.all(consumerRedisClients.map((client) => client.quit()));
 
     await fastify.close();
     await prisma.$disconnect();

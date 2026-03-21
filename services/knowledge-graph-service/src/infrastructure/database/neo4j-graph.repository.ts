@@ -103,6 +103,12 @@ function generateEdgeId(): EdgeId {
   return `${ID_PREFIXES.EdgeId}${nanoid()}` as EdgeId;
 }
 
+function buildPaginationClause(limit: number, offset: number): string {
+  const safeLimit = Math.max(0, Math.trunc(limit));
+  const safeOffset = Math.max(0, Math.trunc(offset));
+  return ` SKIP ${String(safeOffset)} LIMIT ${String(safeLimit)}`;
+}
+
 // ============================================================================
 // Neo4jGraphRepository
 // ============================================================================
@@ -257,6 +263,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
   async findNodes(filter: INodeFilter, limit: number, offset: number): Promise<IGraphNode[]> {
     const { whereClauses, params } = this.buildNodeFilterClauses(filter);
     const labelFilter = this.buildLabelFilter(filter);
+    const paginationClause = buildPaginationClause(limit, offset);
 
     const session = this.neo4j.getSession();
     try {
@@ -266,8 +273,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
            ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
            RETURN n
            ORDER BY n.createdAt DESC
-           SKIP $offset LIMIT $limit`,
-          { ...params, offset: neo4jInt(offset), limit: neo4jInt(limit) }
+           ${paginationClause}`,
+          params
         );
       });
 
@@ -493,15 +500,13 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    // Build pagination clause (parameterized for query plan caching)
+    // Neo4j on this setup does not accept parameterized SKIP/LIMIT.
     let paginationClause = '';
     if (offset !== undefined && offset > 0) {
-      paginationClause += ' SKIP $paginationOffset';
-      params['paginationOffset'] = neo4j.int(offset);
+      paginationClause += ` SKIP ${String(Math.trunc(offset))}`;
     }
     if (limit !== undefined) {
-      paginationClause += ' LIMIT $paginationLimit';
-      params['paginationLimit'] = neo4j.int(limit);
+      paginationClause += ` LIMIT ${String(Math.trunc(limit))}`;
     }
 
     const session = this.neo4j.getSession();
@@ -2041,10 +2046,6 @@ export class Neo4jGraphRepository implements IGraphRepository {
 // ============================================================================
 // Utility
 // ============================================================================
-
-function neo4jInt(value: number): Integer {
-  return neo4j.int(value);
-}
 
 function toJsNumber(value: unknown): number {
   if (typeof value === 'number') return value;
