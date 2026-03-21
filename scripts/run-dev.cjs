@@ -134,6 +134,9 @@ function windowsArgsFor(selectedMode) {
       ];
     case 'dev:web+api':
       return ['pnpm', ['exec', 'turbo', ...turboArgsFor(selectedMode)]];
+    case 'dev:web':
+    case 'dev:web-admin':
+      return ['pnpm', ['exec', 'turbo', ...turboArgsFor(selectedMode)]];
     case 'dev:admin-stack':
       return [
         'powershell.exe',
@@ -161,22 +164,6 @@ function windowsArgsFor(selectedMode) {
             '-LogName',
             'dev-apps-no-watch',
           ],
-        ],
-      ];
-    case 'dev:web':
-    case 'dev:web-admin':
-      return [
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          '.\\scripts\\start-background-script.ps1',
-          '-ScriptPath',
-          '.\\scripts\\dev-apps-no-watch.ps1',
-          '-LogName',
-          'dev-apps-no-watch',
         ],
       ];
     default:
