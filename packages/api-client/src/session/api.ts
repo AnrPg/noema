@@ -303,11 +303,98 @@ export const attemptsApi = {
     http.post(`/v1/sessions/${sessionId}/attempts`, data),
 
   listAttempts: (sessionId: SessionId): Promise<AttemptsListResponse> =>
-    http.get(`/v1/sessions/${sessionId}/attempts`),
+    http
+      .get<AttemptsListResponse | AttemptsEnvelopeResponse>(`/v1/sessions/${sessionId}/attempts`)
+      .then(normalizeAttemptsListResponse),
 
   requestHint: (sessionId: SessionId): Promise<HintResponse> =>
     http.post(`/v1/sessions/${sessionId}/attempts/hint`, {}),
 };
+
+type AttemptsEnvelopeResponse = Omit<AttemptsListResponse, 'data'> & {
+  data: unknown;
+};
+
+function normalizeAttemptsListResponse(
+  response: AttemptsListResponse | AttemptsEnvelopeResponse
+): AttemptsListResponse {
+  const rawData = response.data;
+
+  if (Array.isArray(rawData)) {
+    return response as AttemptsListResponse;
+  }
+
+  const attempts = extractAttempts(rawData).map(normalizeAttemptDto);
+
+  return {
+    ...response,
+    data: attempts,
+  };
+}
+
+function extractAttempts(value: unknown): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  if (Array.isArray(candidate['attempts'])) {
+    return candidate['attempts'];
+  }
+
+  if (Array.isArray(candidate['items'])) {
+    return candidate['items'];
+  }
+
+  return [];
+}
+
+function normalizeAttemptDto(value: unknown): AttemptsListResponse['data'][number] {
+  if (typeof value !== 'object' || value === null) {
+    return {
+      id: '' as AttemptResponse['data']['id'],
+      sessionId: '' as SessionId,
+      cardId: '' as CardId,
+      grade: 0,
+      confidenceBefore: null,
+      confidenceAfter: null,
+      calibrationDelta: null,
+      hintDepthUsed: 0,
+      dwellTimeMs: 0,
+      selfReportedGuess: false,
+      reviewedAt: new Date(0).toISOString(),
+      createdAt: new Date(0).toISOString(),
+    };
+  }
+
+  const attempt = value as Record<string, unknown>;
+
+  return {
+    id: stringValue(attempt['id']) as AttemptResponse['data']['id'],
+    sessionId: stringValue(attempt['sessionId']) as SessionId,
+    cardId: stringValue(attempt['cardId']) as CardId,
+    grade: typeof attempt['grade'] === 'number' ? attempt['grade'] : 0,
+    confidenceBefore:
+      typeof attempt['confidenceBefore'] === 'number' ? attempt['confidenceBefore'] : null,
+    confidenceAfter:
+      typeof attempt['confidenceAfter'] === 'number' ? attempt['confidenceAfter'] : null,
+    calibrationDelta:
+      typeof attempt['calibrationDelta'] === 'number' ? attempt['calibrationDelta'] : null,
+    hintDepthUsed: typeof attempt['hintDepthUsed'] === 'number' ? attempt['hintDepthUsed'] : 0,
+    dwellTimeMs: typeof attempt['dwellTimeMs'] === 'number' ? attempt['dwellTimeMs'] : 0,
+    selfReportedGuess: attempt['selfReportedGuess'] === true,
+    reviewedAt: stringValue(attempt['reviewedAt'], new Date(0).toISOString()),
+    createdAt: stringValue(
+      attempt['createdAt'],
+      stringValue(attempt['reviewedAt'], new Date(0).toISOString())
+    ),
+  };
+}
 
 // ============================================================================
 // Queue API
@@ -315,7 +402,9 @@ export const attemptsApi = {
 
 export const queueApi = {
   getQueue: (sessionId: SessionId): Promise<SessionQueueResponse> =>
-    http.get(`/v1/sessions/${sessionId}/queue`),
+    http
+      .get<SessionQueueResponse | SessionQueueEnvelopeResponse>(`/v1/sessions/${sessionId}/queue`)
+      .then(normalizeSessionQueueResponse),
 
   injectCard: (sessionId: SessionId, cardId: CardId): Promise<SessionQueueResponse> =>
     http.post(`/v1/sessions/${sessionId}/queue/inject`, { cardId }),
@@ -323,6 +412,63 @@ export const queueApi = {
   removeCard: (sessionId: SessionId, cardId: CardId): Promise<SessionQueueResponse> =>
     http.post(`/v1/sessions/${sessionId}/queue/remove`, { cardId }),
 };
+
+type SessionQueueEnvelopeResponse = Omit<SessionQueueResponse, 'data'> & {
+  data: unknown;
+};
+
+function normalizeSessionQueueResponse(
+  response: SessionQueueResponse | SessionQueueEnvelopeResponse
+): SessionQueueResponse {
+  const rawData = response.data;
+
+  if (
+    typeof rawData === 'object' &&
+    rawData !== null &&
+    'items' in rawData &&
+    Array.isArray((rawData as { items?: unknown }).items)
+  ) {
+    return response as SessionQueueResponse;
+  }
+
+  const normalizedItems = Array.isArray(rawData)
+    ? rawData.map((item, index) => normalizeSessionQueueItem(item, index))
+    : [];
+  const items = normalizedItems.map(({ sessionId: _sessionId, ...item }) => item);
+
+  return {
+    ...response,
+    data: {
+      sessionId: normalizedItems[0]?.sessionId ?? ('' as SessionId),
+      items,
+      remaining: items.filter((item) => !item.injected).length,
+    },
+  };
+}
+
+function normalizeSessionQueueItem(
+  value: unknown,
+  fallbackIndex: number
+): SessionQueueResponse['data']['items'][number] & { sessionId: SessionId } {
+  if (typeof value !== 'object' || value === null) {
+    return {
+      sessionId: '' as SessionId,
+      cardId: '' as CardId,
+      position: fallbackIndex,
+      injected: false,
+    };
+  }
+
+  const item = value as Record<string, unknown>;
+  const status = stringValue(item['status']).toLowerCase();
+
+  return {
+    sessionId: stringValue(item['sessionId']) as SessionId,
+    cardId: stringValue(item['cardId']) as CardId,
+    position: typeof item['position'] === 'number' ? item['position'] : fallbackIndex,
+    injected: status === 'injected' || item['injectedBy'] !== null,
+  };
+}
 
 // ============================================================================
 // Checkpoint API

@@ -105,7 +105,7 @@ export default function SessionDetailPage(): JSX.Element {
   }
 
   const session = sessionResponse.data;
-  const attempts = attemptsResponse?.data ?? [];
+  const attempts = Array.isArray(attemptsResponse?.data) ? attemptsResponse.data : [];
 
   return (
     <div className="space-y-6">

@@ -104,7 +104,7 @@ export default function SessionSummaryPage(): React.JSX.Element {
   // ── Data extraction ────────────────────────────────────────────────────────
 
   const session = sessionData?.data ?? null;
-  const attempts = attemptsData?.data ?? [];
+  const attempts = Array.isArray(attemptsData?.data) ? attemptsData.data : [];
 
   // ── Derived accuracy ───────────────────────────────────────────────────────
 

@@ -103,7 +103,8 @@ export default function ActiveSessionPage(): React.JSX.Element {
   } = useSessionQueue(sessionId);
 
   // ── Current card ──────────────────────────────────────────────────────────
-  const currentItem = queueData?.data.items[completedCardCount];
+  const queueItems = queueData?.data.items ?? [];
+  const currentItem = queueItems[completedCardCount];
   const currentCardId = currentItem?.cardId ?? ('' as SessionId);
 
   // useCard uses select: (r) => r.data — so cardData is already ICardDto | undefined
