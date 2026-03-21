@@ -19,7 +19,8 @@ RUN apk add --no-cache \
 COPY health-check.sh /usr/local/bin/health-check.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN chmod +x /usr/local/bin/health-check.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/health-check.sh /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/health-check.sh /usr/local/bin/entrypoint.sh
 
 EXPOSE 8090
 

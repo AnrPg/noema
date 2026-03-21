@@ -101,6 +101,18 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
   // Initialize auth on mount
   useEffect(() => {
     const initAuth = async (): Promise<void> => {
+      const authState = useAuthStore.getState();
+
+      if (
+        authState.accessToken === null &&
+        authState.refreshToken === null &&
+        !authState.isAuthenticated &&
+        authState.user === null
+      ) {
+        setInitialized();
+        return;
+      }
+
       try {
         // Try to get current user
         const response = await meApi.get();

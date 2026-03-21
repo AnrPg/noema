@@ -1,0 +1,24 @@
+SHELL := powershell.exe
+.SHELLFLAGS := -NoProfile -ExecutionPolicy Bypass -Command
+
+.PHONY: dev-services-no-watch dev-services-no-watch-stop dev-apps-no-watch dev-apps-no-watch-stop dev-all-no-watch dev-all-no-watch-stop
+
+dev-services-no-watch:
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-background-script.ps1 -ScriptPath '.\scripts\dev-services-no-watch.ps1' -LogName 'dev-services-no-watch'
+
+dev-services-no-watch-stop:
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-services-no-watch-stop.ps1
+
+dev-apps-no-watch:
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-background-script.ps1 -ScriptPath '.\scripts\dev-apps-no-watch.ps1' -LogName 'dev-apps-no-watch'
+
+dev-apps-no-watch-stop:
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-apps-no-watch-stop.ps1
+
+dev-all-no-watch:
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-background-script.ps1 -ScriptPath '.\scripts\dev-services-no-watch.ps1' -LogName 'dev-services-no-watch'
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-background-script.ps1 -ScriptPath '.\scripts\dev-apps-no-watch.ps1' -LogName 'dev-apps-no-watch'
+
+dev-all-no-watch-stop:
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-apps-no-watch-stop.ps1
+	@& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev-services-no-watch-stop.ps1

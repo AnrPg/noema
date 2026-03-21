@@ -53,11 +53,11 @@ services:
     restart: unless-stopped
     environment:
       PORT: "8090"
-      USER_SERVICE_URL: "http://host.docker.internal:3002"
-      SESSION_SERVICE_URL: "http://host.docker.internal:3003"
-      CONTENT_SERVICE_URL: "http://host.docker.internal:3005"
+      USER_SERVICE_URL: "http://host.docker.internal:3001"
+      SESSION_SERVICE_URL: "http://host.docker.internal:3004"
+      CONTENT_SERVICE_URL: "http://host.docker.internal:3002"
       KNOWLEDGE_GRAPH_SERVICE_URL: "http://host.docker.internal:3006"
-      SCHEDULER_SERVICE_URL: "http://host.docker.internal:3009"
+      SCHEDULER_SERVICE_URL: "http://host.docker.internal:3003"
       HLR_SIDECAR_URL: "http://hlr-sidecar:8020"
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -15,12 +15,12 @@
 #     so its routes pass through without stripping
 #   - hlr-sidecar expects root-level paths, so /api/hlr is fully stripped
 #
-# Service ports (actual, from .env.example files):
-#   user-service:            3002
-#   session-service:         3003
-#   content-service:         3005
+# Service ports (aligned with the root .env contract):
+#   user-service:            3001
+#   content-service:         3002
+#   scheduler-service:       3003
+#   session-service:         3004
 #   knowledge-graph-service: 3006
-#   scheduler-service:       3009
 #   hlr-sidecar:             8020 (Docker network: hlr-sidecar:8020)
 #   health-aggregator:       8090 (Docker network: health-aggregator:8090)
 #
@@ -41,7 +41,7 @@ http:
       headers:
         accessControlAllowOriginList:
           - "http://localhost:3000"
-          - "http://localhost:3004"
+          - "http://localhost:3100"
         accessControlAllowMethods:
           - GET
           - POST
@@ -90,7 +90,7 @@ http:
   # ===========================================================================
   routers:
     # -------------------------------------------------------------------------
-    # User Service (port 3002)
+    # User Service (port 3001)
     # Internal routes: /auth/*, /users/*, /me/*
     # -------------------------------------------------------------------------
     user-auth:
@@ -121,7 +121,7 @@ http:
         - strip-api
 
     # -------------------------------------------------------------------------
-    # Content Service (port 3005)
+    # Content Service (port 3002)
     # Internal routes: /v1/cards/*, /v1/templates/*, /v1/media/*
     # -------------------------------------------------------------------------
     content-cards:
@@ -152,7 +152,7 @@ http:
         - strip-api
 
     # -------------------------------------------------------------------------
-    # Session Service (port 3003)
+    # Session Service (port 3004)
     # Internal routes: /v1/sessions/*, /v1/offline-intents/*
     # -------------------------------------------------------------------------
     session-sessions:
@@ -174,7 +174,7 @@ http:
         - strip-api
 
     # -------------------------------------------------------------------------
-    # Scheduler Service (port 3009)
+    # Scheduler Service (port 3003)
     # Internal routes: /v1/scheduler/*, /v1/schedule/*
     # -------------------------------------------------------------------------
     scheduler:
@@ -219,7 +219,7 @@ http:
       # No strip-api — service expects /api/v1/users/:userId/*
 
     # -------------------------------------------------------------------------
-    # User Service — Admin v1 routes (port 3002)
+    # User Service — Admin v1 routes (port 3001)
     # Internal routes: /v1/users/:id/status, /roles, /sessions,
     #   /audit-log, /reset-password
     # Added in Phase 4 (Admin User Management).
@@ -268,17 +268,17 @@ http:
     user-service:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:3002"
+          - url: "http://host.docker.internal:3001"
 
     content-service:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:3005"
+          - url: "http://host.docker.internal:3002"
 
     session-service:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:3003"
+          - url: "http://host.docker.internal:3004"
 
     knowledge-graph-service:
       loadBalancer:
@@ -288,7 +288,7 @@ http:
     scheduler-service:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:3009"
+          - url: "http://host.docker.internal:3003"
 
     hlr-sidecar:
       loadBalancer:
