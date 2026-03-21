@@ -60,6 +60,48 @@ export function registerTemplateRoutes(
   // Template CRUD Routes
   // ============================================================================
 
+  /** GET /v1/templates - List templates for the current user/admin scope */
+  fastify.get<{ Querystring: ITemplateQuery }>(
+    '/v1/templates',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Templates'],
+        summary: 'List templates',
+        querystring: {
+          type: 'object',
+          properties: {
+            cardTypes: { type: 'array', items: { type: 'string' } },
+            visibility: { type: 'string', enum: ['private', 'public', 'shared'] },
+            tags: { type: 'array', items: { type: 'string' } },
+            search: { type: 'string' },
+            sortBy: { type: 'string', enum: ['createdAt', 'updatedAt', 'usageCount', 'name'] },
+            sortOrder: { type: 'string', enum: ['asc', 'desc'] },
+            offset: { type: 'number', minimum: 0 },
+            limit: { type: 'number', minimum: 1, maximum: 100 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await templateService.query(request.query, context);
+        const response = wrapResponse(result.data.items, result.agentHints, request);
+        (response.metadata as { count?: number }).count = result.data.items.length;
+        response.pagination = {
+          offset: request.query.offset ?? 0,
+          limit: request.query.limit ?? 20,
+          total: result.data.total ?? 0,
+          hasMore: result.data.hasMore,
+        };
+        reply.send(response);
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
   /** POST /v1/templates - Create a template */
   fastify.post<{ Body: ICreateTemplateInput }>(
     '/v1/templates',
