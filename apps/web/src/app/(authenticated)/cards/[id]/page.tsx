@@ -559,7 +559,7 @@ export default function CardDetailPage(): React.JSX.Element {
             {/* Difficulty */}
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Difficulty</span>
-              <span className="font-medium">{card.difficulty.toFixed(2)}</span>
+              <span className="font-medium">{formatCardDifficulty(card.difficulty)}</span>
             </div>
 
             {/* Version */}
@@ -635,4 +635,16 @@ export default function CardDetailPage(): React.JSX.Element {
       )}
     </div>
   );
+}
+
+function formatCardDifficulty(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toFixed(2);
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value.replace(/_/g, ' ');
+  }
+
+  return '—';
 }

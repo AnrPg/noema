@@ -34,15 +34,15 @@ import type {
 export const sessionsApi = {
   startSession: (data: IStartSessionInput): Promise<SessionResponse> =>
     http
-      .post<SessionResponse | SessionEnvelopeResponse>('/v1/sessions', data)
+      .post<
+        SessionResponse | SessionEnvelopeResponse
+      >('/v1/sessions', normalizeStartSessionInput(data))
       .then(normalizeSessionResponse),
 
   listSessions: (filters?: ISessionFilters): Promise<SessionsListResponse> => {
     if (!filters) {
       return http
-        .get<
-          SessionListEnvelopeResponse | SessionsListResponse
-        >('/v1/sessions')
+        .get<SessionListEnvelopeResponse | SessionsListResponse>('/v1/sessions')
         .then(normalizeSessionsListResponse);
     }
 
@@ -98,6 +98,68 @@ type SessionEnvelopeResponse = Omit<SessionResponse, 'data'> & {
   data: Record<string, unknown>;
 };
 
+const LEGACY_MODE_TO_LEARNING_MODE = {
+  standard: 'exploration',
+  cram: 'goal_driven',
+  test: 'exam_oriented',
+  preview: 'synthesis',
+} as const;
+
+function normalizeStartSessionInput(data: IStartSessionInput): Record<string, unknown> {
+  const initialCardIds = data.initialCardIds ?? data.cardIds;
+  const learningMode =
+    data.learningMode ??
+    (data.mode !== undefined ? LEGACY_MODE_TO_LEARNING_MODE[data.mode] : 'exploration');
+
+  return {
+    deckQueryId: data.deckQueryId ?? createPrefixedId('deck_'),
+    learningMode,
+    ...(data.teachingApproach !== undefined ? { teachingApproach: data.teachingApproach } : {}),
+    ...(data.schedulingAlgorithm !== undefined
+      ? { schedulingAlgorithm: data.schedulingAlgorithm }
+      : {}),
+    ...(data.loadoutId !== undefined ? { loadoutId: data.loadoutId } : {}),
+    ...(data.loadoutArchetype !== undefined ? { loadoutArchetype: data.loadoutArchetype } : {}),
+    config: {
+      sessionTimeoutHours: data.config?.sessionTimeoutHours ?? 24,
+      ...(data.config?.maxCards !== undefined
+        ? { maxCards: data.config.maxCards }
+        : initialCardIds !== undefined
+          ? { maxCards: initialCardIds.length }
+          : {}),
+      ...(data.config?.maxDurationMinutes !== undefined
+        ? { maxDurationMinutes: data.config.maxDurationMinutes }
+        : {}),
+      ...(data.config?.categoryIds !== undefined ? { categoryIds: data.config.categoryIds } : {}),
+      ...(data.config?.cardTypes !== undefined ? { cardTypes: data.config.cardTypes } : {}),
+    },
+    initialCardIds,
+    ...(data.blueprint !== undefined ? { blueprint: data.blueprint } : {}),
+    ...(data.offlineIntentToken !== undefined
+      ? { offlineIntentToken: data.offlineIntentToken }
+      : {}),
+  };
+}
+
+function createPrefixedId(prefix: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+  const values = new Uint8Array(21);
+
+  if (
+    typeof globalThis.crypto !== 'undefined' &&
+    typeof globalThis.crypto.getRandomValues === 'function'
+  ) {
+    globalThis.crypto.getRandomValues(values);
+  } else {
+    for (let index = 0; index < values.length; index += 1) {
+      values[index] = Math.floor(Math.random() * alphabet.length);
+    }
+  }
+
+  const suffix = Array.from(values, (value) => alphabet[value % alphabet.length]).join('');
+  return `${prefix}${suffix}`;
+}
+
 function normalizeSessionsListResponse(
   response: SessionListEnvelopeResponse | SessionsListResponse
 ): SessionsListResponse {
@@ -122,7 +184,9 @@ function normalizeSessionsListResponse(
   };
 }
 
-function normalizeSessionResponse(response: SessionResponse | SessionEnvelopeResponse): SessionResponse {
+function normalizeSessionResponse(
+  response: SessionResponse | SessionEnvelopeResponse
+): SessionResponse {
   if (isNormalizedSessionDto(response.data)) {
     return response as SessionResponse;
   }
@@ -166,43 +230,45 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       ? (session['stats'] as Record<string, unknown>)
       : {};
   const queueSize =
-    typeof session['initialQueueSize'] === 'number'
-      ? Math.max(0, session['initialQueueSize'])
-      : 0;
+    typeof session['initialQueueSize'] === 'number' ? Math.max(0, session['initialQueueSize']) : 0;
   const reviewedCount =
     typeof stats['uniqueCardsReviewed'] === 'number'
       ? Math.max(0, stats['uniqueCardsReviewed'])
       : 0;
 
   return {
-    id: String(session['id'] ?? '') as SessionId,
-    userId: String(session['userId'] ?? '') as UserId,
-    state: normalizeSessionState(String(session['state'] ?? 'active')),
-    mode: normalizeSessionMode(String(session['mode'] ?? session['learningMode'] ?? 'standard')),
+    id: stringValue(session['id']) as SessionId,
+    userId: stringValue(session['userId']) as UserId,
+    state: normalizeSessionState(stringValue(session['state'], 'active')),
+    mode: normalizeSessionMode(stringValue(session['mode'] ?? session['learningMode'], 'standard')),
     cardIds: Array.from({ length: queueSize }, () => '' as CardId),
     currentCardIndex: Math.min(reviewedCount, queueSize),
-    startedAt: String(session['startedAt'] ?? session['createdAt'] ?? new Date(0).toISOString()),
+    startedAt: stringValue(session['startedAt'] ?? session['createdAt'], new Date(0).toISOString()),
     pausedAt:
       typeof session['pausedAt'] === 'string'
         ? session['pausedAt']
         : typeof session['lastPausedAt'] === 'string'
           ? session['lastPausedAt']
           : null,
-    completedAt:
-      typeof session['completedAt'] === 'string' ? session['completedAt'] : null,
+    completedAt: typeof session['completedAt'] === 'string' ? session['completedAt'] : null,
     abandonedAt:
       session['terminationReason'] === 'abandoned'
-        ? String(session['updatedAt'] ?? session['completedAt'] ?? new Date().toISOString())
+        ? stringValue(session['updatedAt'] ?? session['completedAt'], new Date().toISOString())
         : null,
-    expiresAt: String(
-      session['expiresAt'] ??
-        session['lastActivityAt'] ??
-        session['updatedAt'] ??
-        new Date(0).toISOString()
+    expiresAt: stringValue(
+      session['expiresAt'] ?? session['lastActivityAt'] ?? session['updatedAt'],
+      new Date(0).toISOString()
     ),
-    createdAt: String(session['createdAt'] ?? session['startedAt'] ?? new Date(0).toISOString()),
-    updatedAt: String(session['updatedAt'] ?? session['lastActivityAt'] ?? new Date(0).toISOString()),
+    createdAt: stringValue(session['createdAt'] ?? session['startedAt'], new Date(0).toISOString()),
+    updatedAt: stringValue(
+      session['updatedAt'] ?? session['lastActivityAt'],
+      new Date(0).toISOString()
+    ),
   };
+}
+
+function stringValue(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
 }
 
 function normalizeSessionState(value: string): SessionResponse['data']['state'] {

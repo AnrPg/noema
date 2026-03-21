@@ -32,6 +32,14 @@ export interface IAuthConfig {
   authDisabled: boolean;
 }
 
+const DEV_USER_ID_FALLBACK = 'usr_devuser00000000000000';
+
+function normalizeDevUserId(value: unknown): string {
+  return typeof value === 'string' && /^usr_[A-Za-z0-9_-]{21}$/.test(value)
+    ? value
+    : DEV_USER_ID_FALLBACK;
+}
+
 function getStartTime(request: FastifyRequest): number {
   return (request as FastifyRequest & { startTime?: number }).startTime ?? Date.now();
 }
@@ -186,7 +194,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
       const headerUserId = typeof userHeader === 'string' ? userHeader : undefined;
       request.user = {
         principalType: 'user',
-        principalId: headerUserId ?? 'dev-user',
+        principalId: normalizeDevUserId(headerUserId),
         scopes: [
           'scheduler:plan',
           'scheduler:write',
@@ -194,7 +202,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
           'scheduler:tools:execute',
         ],
         audienceClass: 'user-client',
-        sub: headerUserId ?? 'dev-user',
+        sub: normalizeDevUserId(headerUserId),
         roles: ['user'],
       };
       return;

@@ -21,6 +21,14 @@ export interface IAuthConfig {
   audience?: string;
 }
 
+const DEV_USER_ID_FALLBACK = 'usr_devuser00000000000000';
+
+function normalizeDevUserId(value: unknown): string {
+  return typeof value === 'string' && /^usr_[A-Za-z0-9_-]{21}$/.test(value)
+    ? value
+    : DEV_USER_ID_FALLBACK;
+}
+
 /**
  * Create auth middleware that verifies JWT tokens.
  *
@@ -51,8 +59,9 @@ export function createAuthMiddleware(config: IAuthConfig) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // Skip auth if disabled (development only)
     if (authDisabled) {
+      const headerUserId = request.headers['x-user-id'];
       request.user = {
-        sub: (request.headers['x-user-id'] as string) || 'dev-user',
+        sub: normalizeDevUserId(typeof headerUserId === 'string' ? headerUserId : undefined),
         roles: ['user'],
         scopes: ['session:tools:execute'],
       };

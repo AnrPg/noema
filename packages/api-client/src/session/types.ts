@@ -14,6 +14,7 @@ import type { AttemptId, CardId, SessionId, UserId } from '@noema/types';
 export type SessionState = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ABANDONED' | 'EXPIRED';
 
 export type SessionMode = 'standard' | 'cram' | 'preview' | 'test';
+export type LearningMode = 'exploration' | 'goal_driven' | 'exam_oriented' | 'synthesis';
 
 // ============================================================================
 // Session DTO
@@ -165,6 +166,22 @@ export interface IStartSessionInput {
   cardIds?: CardId[];
   mode?: SessionMode;
   blueprintId?: string;
+  deckQueryId?: string;
+  learningMode?: LearningMode;
+  teachingApproach?: string;
+  schedulingAlgorithm?: 'fsrs' | 'hlr' | 'sm2';
+  loadoutId?: string;
+  loadoutArchetype?: string;
+  config?: {
+    maxCards?: number;
+    maxDurationMinutes?: number;
+    sessionTimeoutHours?: number;
+    categoryIds?: string[];
+    cardTypes?: string[];
+  };
+  initialCardIds?: CardId[];
+  blueprint?: unknown;
+  offlineIntentToken?: string;
 }
 
 export interface ISessionFilters {
