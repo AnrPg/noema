@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from '@noema/ui';
 import { AlertCircle, BookOpen, GitPullRequest } from 'lucide-react';
+import { getMutationWorkflowMeta } from '@/lib/mutation-workflow';
 
 // ---- unified event shape ------------------------------------------------
 
@@ -75,38 +76,20 @@ function sessionToEvent(s: ISessionDto): IActivityEvent {
 }
 
 function mutationToEvent(m: ICkgMutationDto): IActivityEvent {
-  const badgeMap: Record<ICkgMutationDto['status'], { label: string; cls: string }> = {
-    pending: {
-      label: 'PENDING',
-      cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
-    },
-    approved: {
-      label: 'APPROVED',
-      cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
-    },
-    rejected: {
-      label: 'REJECTED',
-      cls: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
-    },
-    cancelled: {
-      label: 'CANCELLED',
-      cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
-    },
-    retrying: {
-      label: 'RETRYING',
-      cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
-    },
-  };
-  const { label, cls } = badgeMap[m.status];
+  const workflow = getMutationWorkflowMeta(m);
   const typeLabel = m.type.replace(/_/g, ' ');
   return {
     id: String(m.id),
     kind: 'mutation',
     timestamp: m.reviewedAt ?? m.proposedAt,
     title: `CKG ${typeLabel}`,
-    detail: `proposed by ${String(m.proposedBy)}${m.reviewNote !== null ? ` · ${m.reviewNote}` : ''}`,
-    badge: label,
-    badgeClass: cls,
+    detail:
+      workflow.description +
+      ' · proposed by ' +
+      String(m.proposedBy) +
+      (m.reviewNote !== null ? ` · ${m.reviewNote}` : ''),
+    badge: workflow.label.toUpperCase(),
+    badgeClass: workflow.badgeClass,
   };
 }
 

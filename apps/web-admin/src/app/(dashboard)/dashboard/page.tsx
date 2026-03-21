@@ -48,7 +48,7 @@ export default function AdminDashboardPage(): JSX.Element {
 
   const { data: usersData } = useUsers(undefined, undefined, { enabled });
   const { data: cardStats } = useCardStats({ enabled });
-  const { data: pendingMutations } = useCKGMutations({ status: 'pending' }, { enabled });
+  const { data: pendingMutations } = useCKGMutations({ state: 'pending_review' }, { enabled });
 
   const totalUsers = usersData?.data.total ?? 0;
   const totalCards = cardStats?.total ?? 0;
@@ -104,7 +104,7 @@ export default function AdminDashboardPage(): JSX.Element {
           className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <MetricTile
-            label="Pending Mutations"
+            label="Awaiting Review"
             value={pendingMutationCount}
             icon={<AlertTriangle className="h-4 w-4" />}
             colorFamily={pendingMutationCount > 0 ? 'cortex' : 'axon'}
@@ -147,9 +147,11 @@ export default function AdminDashboardPage(): JSX.Element {
                   <div>
                     <p className="text-sm font-medium">
                       {String(pendingMutationCount)} mutation
-                      {pendingMutationCount !== 1 ? 's' : ''} awaiting review
+                      {pendingMutationCount !== 1 ? 's' : ''} waiting for human review
                     </p>
-                    <p className="text-xs text-muted-foreground">CKG mutation pipeline</p>
+                    <p className="text-xs text-muted-foreground">
+                      Escalated CKG mutations in `pending_review`
+                    </p>
                   </div>
                   <span className="inline-flex items-center text-sm font-medium text-muted-foreground">
                     Review <ArrowRight className="ml-1 h-3 w-3" />

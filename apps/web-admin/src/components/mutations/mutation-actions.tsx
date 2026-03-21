@@ -16,8 +16,12 @@ import type { ICkgMutationDto } from '@noema/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 import { Check, MessageSquare, RotateCcw, X } from 'lucide-react';
-
-const ACTIONABLE_STATUSES: string[] = ['pending', 'retrying'];
+import {
+  getMutationWorkflowMeta,
+  isMutationCancellable,
+  isMutationReadyForReview,
+  isMutationTerminal,
+} from '@/lib/mutation-workflow';
 
 type ActionMode = 'idle' | 'reject' | 'revision' | 'cancel';
 
@@ -35,13 +39,17 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
 
   const id = mutation.id;
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const workflow = getMutationWorkflowMeta(mutation);
+  const readyForReview = isMutationReadyForReview(mutation);
+  const cancellable = isMutationCancellable(mutation);
 
-  if (!ACTIONABLE_STATUSES.includes(mutation.status)) {
+  if (isMutationTerminal(mutation) || (!readyForReview && !cancellable)) {
     return (
       <Card>
         <CardContent className="pt-6">
           <p className="text-sm text-muted-foreground text-center">
-            No actions available — mutation is in <strong>{mutation.status}</strong> state.
+            No admin actions are available while this mutation is in{' '}
+            <strong>{workflow.label}</strong>.
           </p>
         </CardContent>
       </Card>
@@ -61,55 +69,61 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
         )}
         {mode === 'idle' && (
           <div className="flex flex-wrap gap-2">
-            <Button
-              onClick={() => {
-                setErrorMsg(null);
-                approve.mutate(
-                  { id },
-                  {
-                    onSuccess: () => {
-                      setMode('idle');
-                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
-                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
-                    },
-                    onError: (err) => {
-                      setErrorMsg(err.message);
-                    },
-                  }
-                );
-              }}
-              disabled={approve.isPending}
-              className="gap-2"
-            >
-              <Check className="h-4 w-4" /> Approve
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                setMode('reject');
-              }}
-              className="gap-2"
-            >
-              <X className="h-4 w-4" /> Reject
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMode('revision');
-              }}
-              className="gap-2"
-            >
-              <MessageSquare className="h-4 w-4" /> Request Revision
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMode('cancel');
-              }}
-              className="gap-2"
-            >
-              <RotateCcw className="h-4 w-4" /> Cancel
-            </Button>
+            {readyForReview && (
+              <>
+                <Button
+                  onClick={() => {
+                    setErrorMsg(null);
+                    approve.mutate(
+                      { id },
+                      {
+                        onSuccess: () => {
+                          setMode('idle');
+                          void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                          void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+                        },
+                        onError: (err) => {
+                          setErrorMsg(err.message);
+                        },
+                      }
+                    );
+                  }}
+                  disabled={approve.isPending}
+                  className="gap-2"
+                >
+                  <Check className="h-4 w-4" /> Approve
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setMode('reject');
+                  }}
+                  className="gap-2"
+                >
+                  <X className="h-4 w-4" /> Reject
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMode('revision');
+                  }}
+                  className="gap-2"
+                >
+                  <MessageSquare className="h-4 w-4" /> Request Revision
+                </Button>
+              </>
+            )}
+            {cancellable && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMode('cancel');
+                }}
+                className="gap-2"
+              >
+                <RotateCcw className="h-4 w-4" /> Cancel
+              </Button>
+            )}
           </div>
         )}
 

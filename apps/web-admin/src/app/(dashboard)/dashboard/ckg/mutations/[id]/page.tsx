@@ -12,6 +12,7 @@ import { ArrowLeft } from 'lucide-react';
 import { MutationGraphDiff } from '@/components/mutations/mutation-graph-diff';
 import { MutationAuditTrail } from '@/components/mutations/mutation-audit-trail';
 import { MutationActions } from '@/components/mutations/mutation-actions';
+import { getMutationWorkflowMeta, getMutationWorkflowState } from '@/lib/mutation-workflow';
 
 type MutationId = ICkgMutationDto['id'];
 
@@ -42,6 +43,9 @@ export default function MutationDetailPage(): React.JSX.Element {
     );
   }
 
+  const workflow = getMutationWorkflowMeta(mutation);
+  const workflowState = getMutationWorkflowState(mutation);
+
   return (
     <div className="space-y-6">
       <Link href="/dashboard/ckg/mutations">
@@ -61,22 +65,19 @@ export default function MutationDetailPage(): React.JSX.Element {
                 {mutation.type} — submitted by {String(mutation.proposedBy)}
               </CardDescription>
             </div>
-            <span
-              className={`text-sm font-mono px-2 py-1 rounded ${
-                mutation.status === 'approved'
-                  ? 'bg-green-500/20 text-green-400'
-                  : mutation.status === 'rejected'
-                    ? 'bg-red-500/20 text-red-400'
-                    : mutation.status === 'pending'
-                      ? 'bg-yellow-500/20 text-yellow-400'
-                      : 'bg-muted text-muted-foreground'
-              }`}
-            >
-              {mutation.status.toUpperCase()}
-            </span>
+            <div className="text-right">
+              <span className={`text-sm font-mono px-2 py-1 rounded ${workflow.badgeClass}`}>
+                {workflow.label.toUpperCase()}
+              </span>
+              <p className="mt-2 text-xs text-muted-foreground">{workflow.description}</p>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Workflow state</span>
+            <span className="font-mono">{workflowState}</span>
+          </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Proposed</span>
             <span>{new Date(mutation.proposedAt).toLocaleString()}</span>

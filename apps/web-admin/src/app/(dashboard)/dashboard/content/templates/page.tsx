@@ -11,8 +11,19 @@ import * as React from 'react';
 import { type JSX } from 'react';
 import type { ITemplateDto } from '@noema/api-client';
 import { useDeleteTemplate, useTemplates } from '@noema/api-client';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
-import { Trash2 } from 'lucide-react';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@noema/ui';
+import { AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { getRequestErrorDetails } from '@/lib/api-error';
 import { formatDate, truncateId } from '@/lib/format';
 
 type TemplateId = ITemplateDto['id'];
@@ -110,11 +121,16 @@ function TemplateRow({
 // ---------------------------------------------------------------------------
 
 export default function TemplatesPage(): JSX.Element {
-  const { data: templates, isLoading, isError } = useTemplates();
+  const { data: templates, isLoading, isError, error, refetch, isFetching } = useTemplates({
+    retry: false,
+  });
   const deleteTemplate = useDeleteTemplate();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const items = templates ?? [];
+  const errorDetails = isError
+    ? getRequestErrorDetails(error, 'card templates', 'the content service')
+    : null;
 
   const handleDelete = (
     id: TemplateId,
@@ -156,9 +172,30 @@ export default function TemplatesPage(): JSX.Element {
           {isLoading ? (
             <div className="py-8 text-center text-muted-foreground">Loading templates…</div>
           ) : isError ? (
-            <div className="py-8 text-center text-sm text-destructive">
-              Failed to load templates. Please try again.
-            </div>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>{errorDetails?.title}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>{errorDetails?.description}</p>
+                {errorDetails?.hint !== undefined && (
+                  <p className="text-xs text-muted-foreground">{errorDetails.hint}</p>
+                )}
+                <div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void refetch();
+                    }}
+                    disabled={isFetching}
+                    className="gap-2"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    {isFetching ? 'Retrying…' : 'Retry'}
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           ) : items.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">No templates found.</div>
           ) : (

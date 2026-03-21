@@ -65,7 +65,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   // --- pending_mutations overlay ---
   const pendingMutationsActive = activeOverlays.has('pending_mutations');
   const { data: pendingMutations = [], isLoading: pendingMutationsLoading } = useCKGMutations(
-    { status: 'pending' },
+    { state: 'pending_review' },
     { enabled: pendingMutationsActive }
   );
 

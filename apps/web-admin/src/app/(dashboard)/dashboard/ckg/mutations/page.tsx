@@ -6,11 +6,25 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCKGMutations } from '@noema/api-client';
-import type { ICkgMutationDto, MutationStatus } from '@noema/api-client';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
-import { ArrowRight, GitMerge } from 'lucide-react';
-
-const ALL_STATUSES: MutationStatus[] = ['pending', 'approved', 'rejected', 'cancelled', 'retrying'];
+import type { ICkgMutationDto, MutationWorkflowState } from '@noema/api-client';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@noema/ui';
+import { AlertCircle, ArrowRight, GitMerge, RefreshCw } from 'lucide-react';
+import { getRequestErrorDetails } from '@/lib/api-error';
+import {
+  getMutationWorkflowMeta,
+  getMutationWorkflowState,
+  MUTATION_WORKFLOW_FILTERS,
+} from '@/lib/mutation-workflow';
 
 function mutationTypeBadgeClass(type: string): string {
   if (type.includes('delete')) return 'bg-red-500/20 text-red-400 border-red-500/30';
@@ -18,15 +32,10 @@ function mutationTypeBadgeClass(type: string): string {
   return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
 }
 
-function mutationStatusClass(status: string): string {
-  if (status === 'approved') return 'bg-green-500/20 text-green-400';
-  if (status === 'rejected') return 'bg-red-500/20 text-red-400';
-  if (status === 'pending') return 'bg-yellow-500/20 text-yellow-400';
-  if (status === 'retrying') return 'bg-orange-500/20 text-orange-400';
-  return 'bg-gray-500/20 text-gray-400';
-}
-
 function MutationRow({ mutation }: { mutation: ICkgMutationDto }): React.JSX.Element {
+  const workflow = getMutationWorkflowMeta(mutation);
+  const workflowState = getMutationWorkflowState(mutation);
+
   return (
     <div className="flex items-center gap-4 py-3 border-b last:border-0">
       <code className="text-xs font-mono text-muted-foreground w-24 truncate flex-shrink-0">
@@ -38,10 +47,12 @@ function MutationRow({ mutation }: { mutation: ICkgMutationDto }): React.JSX.Ele
         {mutation.type}
       </span>
       <span
-        className={`text-xs font-mono px-1.5 py-0.5 rounded ${mutationStatusClass(mutation.status)}`}
+        className={`text-xs font-mono px-1.5 py-0.5 rounded ${workflow.badgeClass}`}
+        title={workflow.description}
       >
-        {mutation.status.toUpperCase()}
+        {workflow.label.toUpperCase()}
       </span>
+      <span className="hidden text-xs text-muted-foreground lg:block">{workflowState}</span>
       <span className="text-xs text-muted-foreground flex-1 truncate">
         {String(mutation.proposedBy)}
       </span>
@@ -58,11 +69,26 @@ function MutationRow({ mutation }: { mutation: ICkgMutationDto }): React.JSX.Ele
 }
 
 export default function CKGMutationsPage(): React.JSX.Element {
-  const [statusFilter, setStatusFilter] = React.useState<MutationStatus>('pending');
-  const { data: mutations = [], isLoading } = useCKGMutations({ status: statusFilter });
+  const [stateFilter, setStateFilter] = React.useState<MutationWorkflowState>('pending_review');
+  const {
+    data: mutations = [],
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useCKGMutations(
+    { state: stateFilter },
+    {
+      retry: false,
+    }
+  );
 
   const searchParams = useSearchParams();
   const nodeIdFilter = searchParams.get('nodeId');
+  const errorDetails = isError
+    ? getRequestErrorDetails(error, 'the mutation queue', 'the knowledge graph service')
+    : null;
 
   const displayedMutations =
     nodeIdFilter !== null
@@ -84,7 +110,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
           CKG Mutation Queue
         </h1>
         <p className="text-muted-foreground mt-1">
-          Review and govern canonical knowledge graph changes.
+          Review canonical graph changes by their real workflow stage, not a flattened legacy status.
         </p>
       </div>
 
@@ -109,19 +135,19 @@ export default function CKGMutationsPage(): React.JSX.Element {
               <CardTitle>Mutations</CardTitle>
               <CardDescription>
                 {displayedMutations.length} mutation{displayedMutations.length !== 1 ? 's' : ''}{' '}
-                found
+                in {getMutationWorkflowMeta(stateFilter).label.toLowerCase()}
               </CardDescription>
             </div>
             <select
-              value={statusFilter}
+              value={stateFilter}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                setStatusFilter(e.target.value as MutationStatus);
+                setStateFilter(e.target.value as MutationWorkflowState);
               }}
               className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              {ALL_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s.charAt(0).toUpperCase() + s.slice(1)}
+              {MUTATION_WORKFLOW_FILTERS.map((state) => (
+                <option key={state} value={state}>
+                  {getMutationWorkflowMeta(state).label}
                 </option>
               ))}
             </select>
@@ -130,9 +156,35 @@ export default function CKGMutationsPage(): React.JSX.Element {
         <CardContent>
           {isLoading ? (
             <div className="py-8 text-center text-muted-foreground">Loading mutations...</div>
+          ) : isError ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>{errorDetails?.title}</AlertTitle>
+              <AlertDescription className="space-y-3">
+                <p>{errorDetails?.description}</p>
+                {errorDetails?.hint !== undefined && (
+                  <p className="text-xs text-muted-foreground">{errorDetails.hint}</p>
+                )}
+                <div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      void refetch();
+                    }}
+                    disabled={isFetching}
+                    className="gap-2"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    {isFetching ? 'Retrying…' : 'Retry'}
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
           ) : displayedMutations.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
-              No mutations found with status &quot;{statusFilter}&quot;
+              No mutations found in the &quot;{getMutationWorkflowMeta(stateFilter).label}&quot;
+              {' '}workflow stage
               {nodeIdFilter !== null ? ` for node ${nodeIdFilter}` : ''}.
             </div>
           ) : (

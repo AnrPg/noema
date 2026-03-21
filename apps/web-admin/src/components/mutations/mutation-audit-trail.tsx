@@ -8,14 +8,12 @@ import * as React from 'react';
 import { useCKGMutationAuditLog } from '@noema/api-client';
 import type { ICkgMutationDto } from '@noema/api-client';
 import { ArrowRight, Bot, User } from 'lucide-react';
+import { getMutationWorkflowMeta } from '@/lib/mutation-workflow';
 
 type MutationId = ICkgMutationDto['id'];
 
 function statusDotColor(status: string): string {
-  if (status === 'approved') return 'bg-green-500';
-  if (status === 'rejected') return 'bg-red-500';
-  if (status === 'cancelled') return 'bg-gray-500';
-  return 'bg-blue-500';
+  return getMutationWorkflowMeta(status as Parameters<typeof getMutationWorkflowMeta>[0]).dotClass;
 }
 
 export function MutationAuditTrail({ mutationId }: { mutationId: MutationId }): React.JSX.Element {
@@ -44,21 +42,23 @@ export function MutationAuditTrail({ mutationId }: { mutationId: MutationId }): 
               {entry.fromStatus !== null && (
                 <>
                   <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-muted">
-                    {entry.fromStatus.toUpperCase()}
+                    {getMutationWorkflowMeta(
+                      entry.fromStatus as Parameters<typeof getMutationWorkflowMeta>[0]
+                    ).label.toUpperCase()}
                   </span>
                   <ArrowRight className="h-3 w-3 text-muted-foreground" />
                 </>
               )}
               <span
                 className={`text-xs font-mono px-1.5 py-0.5 rounded ${
-                  entry.toStatus === 'approved'
-                    ? 'bg-green-500/20 text-green-400'
-                    : entry.toStatus === 'rejected'
-                      ? 'bg-red-500/20 text-red-400'
-                      : 'bg-muted text-muted-foreground'
+                  getMutationWorkflowMeta(
+                    entry.toStatus as Parameters<typeof getMutationWorkflowMeta>[0]
+                  ).badgeClass
                 }`}
               >
-                {entry.toStatus.toUpperCase()}
+                {getMutationWorkflowMeta(
+                  entry.toStatus as Parameters<typeof getMutationWorkflowMeta>[0]
+                ).label.toUpperCase()}
               </span>
               <div className="flex items-center gap-1 ml-auto text-xs text-muted-foreground">
                 {entry.actorType === 'system' ? (
