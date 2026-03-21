@@ -44,6 +44,7 @@ const pkgBase = (userId: UserId) => `/api/v1/users/${userId}/pkg`;
 const ckgBase = '/api/v1/ckg';
 const metricsBase = (userId: UserId) => `/api/v1/users/${userId}/metrics`;
 const miscBase = (userId: UserId) => `/api/v1/users/${userId}/misconceptions`;
+const DEFAULT_DOMAIN = 'general';
 
 // ============================================================================
 // PKG Nodes API
@@ -101,11 +102,15 @@ export const pkgTraversalApi = {
   getTopology: (userId: UserId): Promise<TopologyResponse> =>
     http.get(`${pkgBase(userId)}/traversal/topology`),
 
-  getFrontier: (userId: UserId): Promise<FrontierResponse> =>
-    http.get(`${pkgBase(userId)}/traversal/frontier`),
+  getFrontier: (userId: UserId, domain: string): Promise<FrontierResponse> =>
+    http.get(`${pkgBase(userId)}/traversal/frontier`, {
+      params: { domain },
+    }),
 
-  getBridges: (userId: UserId): Promise<BridgeNodesResponse> =>
-    http.get(`${pkgBase(userId)}/traversal/bridges`),
+  getBridges: (userId: UserId, domain: string): Promise<BridgeNodesResponse> =>
+    http.get(`${pkgBase(userId)}/traversal/bridges`, {
+      params: { domain },
+    }),
 
   getCentrality: (userId: UserId): Promise<CentralityResponse> =>
     http.get(`${pkgBase(userId)}/traversal/centrality`),
@@ -196,13 +201,14 @@ export const ckgTraversalApi = {
 // ============================================================================
 
 export const metricsApi = {
-  get: (userId: UserId): Promise<MetricsResponse> => http.get(metricsBase(userId)),
+  get: (userId: UserId): Promise<MetricsResponse> =>
+    http.get(metricsBase(userId), { params: { domain: DEFAULT_DOMAIN } }),
 
   compute: (userId: UserId): Promise<MetricsResponse> =>
-    http.post(`${metricsBase(userId)}/compute`, {}),
+    http.post(`${metricsBase(userId)}/compute`, { domain: DEFAULT_DOMAIN }),
 
   getHistory: (userId: UserId): Promise<MetricHistoryResponse> =>
-    http.get(`${metricsBase(userId)}/history`),
+    http.get(`${metricsBase(userId)}/history`, { params: { domain: DEFAULT_DOMAIN } }),
 };
 
 // ============================================================================
@@ -211,7 +217,7 @@ export const metricsApi = {
 
 export const healthApi = {
   get: (userId: UserId): Promise<HealthResponse> =>
-    http.get(`/api/v1/users/${userId}/health`),
+    http.get(`/api/v1/users/${userId}/health`, { params: { domain: DEFAULT_DOMAIN } }),
 };
 
 // ============================================================================
@@ -222,14 +228,17 @@ export const misconceptionsApi = {
   list: (userId: UserId): Promise<MisconceptionsResponse> => http.get(miscBase(userId)),
 
   detect: (userId: UserId): Promise<MisconceptionDetectionResponse> =>
-    http.post(`${miscBase(userId)}/detect`, {}),
+    http.post(`${miscBase(userId)}/detect`, { domain: DEFAULT_DOMAIN }),
 
   updateStatus: (
     userId: UserId,
     misconceptionId: string,
     data: IUpdateMisconceptionStatusInput
   ): Promise<MisconceptionResponse> =>
-    http.patch(`${miscBase(userId)}/${misconceptionId}/status`, data),
+    http.patch(`${miscBase(userId)}/${misconceptionId}/status`, {
+      ...data,
+      status: data.status === 'dismissed' ? 'addressed' : data.status,
+    }),
 };
 
 // ============================================================================
@@ -238,5 +247,5 @@ export const misconceptionsApi = {
 
 export const comparisonApi = {
   compare: (userId: UserId): Promise<ComparisonResponse> =>
-    http.get(`/api/v1/users/${userId}/comparison`),
+    http.get(`/api/v1/users/${userId}/comparison`, { params: { domain: DEFAULT_DOMAIN } }),
 };

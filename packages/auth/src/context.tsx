@@ -66,6 +66,28 @@ export interface IAuthContextValue {
 
 const AuthContext = createContext<IAuthContextValue | null>(null);
 
+function getTokenExpiryTimestamp(token: string): number | null {
+  try {
+    const [, payload = ''] = token.split('.');
+    if (payload === '') return null;
+
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '=');
+    const decodedPayload = JSON.parse(globalThis.atob(paddedPayload)) as { exp?: unknown };
+
+    return typeof decodedPayload.exp === 'number' ? decodedPayload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function shouldResetPersistedSession(accessToken: string | null): boolean {
+  if (accessToken === null) return true;
+
+  const expiryTimestamp = getTokenExpiryTimestamp(accessToken);
+  return expiryTimestamp !== null && expiryTimestamp <= Date.now();
+}
+
 // ============================================================================
 // Provider
 // ============================================================================
@@ -83,6 +105,7 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
   // preventing the entire component from re-rendering on every store update.
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const settings = useAuthStore((s) => s.settings);
   const isLoading = useAuthStore((s) => s.isLoading);
@@ -98,10 +121,24 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
   const reset = useAuthStore((s) => s.reset);
   const setTokens = useAuthStore((s) => s.setTokens);
 
+  const shouldPreserveNewerAuthState = useCallback(
+    (initialAccessToken: string | null, initialRefreshToken: string | null): boolean => {
+      const currentState = useAuthStore.getState();
+
+      return (
+        currentState.accessToken !== initialAccessToken ||
+        currentState.refreshToken !== initialRefreshToken
+      );
+    },
+    []
+  );
+
   // Initialize auth on mount
   useEffect(() => {
     const initAuth = async (): Promise<void> => {
       const authState = useAuthStore.getState();
+      const initialAccessToken = authState.accessToken;
+      const initialRefreshToken = authState.refreshToken;
 
       if (
         authState.accessToken === null &&
@@ -109,6 +146,14 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
         !authState.isAuthenticated &&
         authState.user === null
       ) {
+        setInitialized();
+        return;
+      }
+
+      if (shouldResetPersistedSession(initialAccessToken)) {
+        if (!shouldPreserveNewerAuthState(initialAccessToken, initialRefreshToken)) {
+          reset();
+        }
         setInitialized();
         return;
       }
@@ -132,14 +177,16 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
         } else {
           console.error('Auth init error:', err);
         }
-        reset();
+        if (!shouldPreserveNewerAuthState(initialAccessToken, initialRefreshToken)) {
+          reset();
+        }
       } finally {
         setInitialized();
       }
     };
 
     void initAuth();
-  }, [setUser, setSettings, reset, setInitialized]);
+  }, [setUser, setSettings, reset, setInitialized, shouldPreserveNewerAuthState]);
 
   const login = useCallback(
     async (input: LoginInput) => {
@@ -148,8 +195,8 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
 
       try {
         const response = await authApi.login(input);
-        setUser(response.data.user);
         setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
+        setUser(response.data.user);
 
         // Fetch settings after login
         try {
@@ -178,8 +225,8 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
 
       try {
         const response = await authApi.register(input);
-        setUser(response.data.user);
         setTokens(response.data.tokens.accessToken, response.data.tokens.refreshToken);
+        setUser(response.data.user);
         onLogin?.(response.data.user);
       } catch (err) {
         const message = err instanceof ApiRequestError ? err.message : 'Registration failed';
@@ -222,10 +269,12 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
     [user]
   );
 
+  const hasValidSession = isAuthenticated && accessToken !== null && user !== null;
+
   const value: IAuthContextValue = {
     user,
     settings,
-    isAuthenticated,
+    isAuthenticated: hasValidSession,
     isLoading,
     isInitialized,
     error,
@@ -234,7 +283,7 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
     logout,
     refreshUser,
     hasRole,
-    isAdmin: user?.roles.includes('admin') ?? false,
+    isAdmin: hasValidSession && (user?.roles.includes('admin') ?? false),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

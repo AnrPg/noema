@@ -36,6 +36,46 @@ import type {
   UploadUrlResponse,
 } from './types.js';
 
+function normalizeCardState(state: string): string {
+  return state.toLowerCase();
+}
+
+function normalizeDeckQuery(query: IDeckQueryInput): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+
+  if (query['search'] !== undefined && query['search'] !== '') normalized['search'] = query['search'];
+  if (query['cardTypes'] !== undefined && query['cardTypes'].length > 0) {
+    normalized['cardTypes'] = query['cardTypes'];
+  }
+  if (query['states'] !== undefined && query['states'].length > 0) {
+    normalized['states'] = query['states'].map(normalizeCardState);
+  }
+  if (query['tags'] !== undefined && query['tags'].length > 0) normalized['tags'] = query['tags'];
+  if (query['knowledgeNodeIds'] !== undefined && query['knowledgeNodeIds'].length > 0) {
+    normalized['knowledgeNodeIds'] = query['knowledgeNodeIds'];
+  }
+
+  const sources =
+    query['sources'] !== undefined && query['sources'].length > 0
+      ? query['sources']
+      : query['source'] !== undefined && query['source'] !== ''
+        ? [query['source']]
+        : undefined;
+  if (sources !== undefined) normalized['sources'] = sources;
+
+  if (query['sortBy'] !== undefined && query['sortBy'] !== 'nextReviewAt') {
+    normalized['sortBy'] = query['sortBy'];
+  }
+
+  const sortOrder = query['sortOrder'] ?? query['sortDir'];
+  if (sortOrder !== undefined) normalized['sortOrder'] = sortOrder;
+
+  if (query['limit'] !== undefined) normalized['limit'] = query['limit'];
+  if (query['offset'] !== undefined) normalized['offset'] = query['offset'];
+
+  return normalized;
+}
+
 // ============================================================================
 // Cards API
 // ============================================================================
@@ -59,15 +99,17 @@ export const cardsApi = {
 
   /** Query cards by DeckQuery filters (returns flat list). */
   queryCards: (query: IDeckQueryInput): Promise<CardsListResponse> =>
-    http.post('/v1/cards/query', query),
+    http.post('/v1/cards/query', normalizeDeckQuery(query)),
 
   /** Cursor-paginated card list. */
   getCardsCursor: (query: IDeckQueryInput): Promise<CardsCursorResponse> =>
-    http.post('/v1/cards/cursor', query),
+    http.get('/v1/cards/cursor', {
+      params: normalizeDeckQuery(query) as Record<string, string | number | boolean | undefined>,
+    }),
 
   /** Count cards matching a DeckQuery. */
   countCards: (query: IDeckQueryInput): Promise<CardCountResponse> =>
-    http.post('/v1/cards/count', query),
+    http.post('/v1/cards/count', normalizeDeckQuery(query)),
 
   /** Aggregate card statistics for current user. */
   getCardStats: (): Promise<CardStatsResponse> => http.get('/v1/cards/stats'),

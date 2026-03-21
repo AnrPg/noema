@@ -21,6 +21,10 @@
     "./guards": {
       "types": "./dist/guards.d.ts",
       "import": "./dist/guards.js"
+    },
+    "./user-display": {
+      "types": "./dist/user-display.d.ts",
+      "import": "./dist/user-display.js"
     }
   },
   "files": [

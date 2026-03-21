@@ -12,6 +12,8 @@ import type {
   BatchScheduleCommitResponse,
   DualLanePlanInput,
   DualLanePlanResponse,
+  ForecastInput,
+  ForecastResponse,
   PredictRetentionInput,
   RetentionPredictionResponse,
   ReviewQueueParams,
@@ -103,6 +105,12 @@ export const simulationsApi = {
   /** Run a "what-if" scheduling simulation. */
   simulateSession: (input: SimulationInput): Promise<SimulationResponse> =>
     http.post('/v1/scheduler/simulations/session-candidates', input),
+};
+
+export const forecastApi = {
+  /** Generate a multi-day review forecast. */
+  getForecast: (input: ForecastInput): Promise<ForecastResponse> =>
+    http.post('/v1/scheduler/forecast', input),
 };
 
 // ============================================================================

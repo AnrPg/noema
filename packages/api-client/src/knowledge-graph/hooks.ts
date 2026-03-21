@@ -63,6 +63,74 @@ import type {
   SubgraphResponse,
 } from './types.js';
 
+function extractListData<T>(value: unknown): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+
+  const data = (value as { data?: unknown }).data;
+  if (Array.isArray(data)) {
+    return data as T[];
+  }
+
+  if (typeof data === 'object' && data !== null) {
+    const items = (data as { items?: unknown }).items;
+    if (Array.isArray(items)) {
+      return items as T[];
+    }
+  }
+
+  return [];
+}
+
+function normalizeMisconceptionStatus(status: string): string {
+  if (status === 'addressed') return 'dismissed';
+  if (status === 'recurring') return 'detected';
+  return status;
+}
+
+function normalizeMisconceptionRecord<T extends { status: string }>(entry: T): T {
+  return {
+    ...entry,
+    status: normalizeMisconceptionStatus(entry.status),
+  };
+}
+
+function normalizeMisconceptionEntry(
+  entry: Record<string, unknown>
+): {
+  id: string;
+  userId: string;
+  nodeId: string;
+  pattern: string;
+  status: string;
+  confidence?: number;
+  detectedAt: string;
+  resolvedAt: string | null;
+} {
+  const affectedNodeIds = Array.isArray(entry['affectedNodeIds'])
+    ? (entry['affectedNodeIds'] as string[])
+    : [];
+
+  return normalizeMisconceptionRecord({
+    id: String(entry['id'] ?? ''),
+    userId: String(entry['userId'] ?? ''),
+    nodeId: String(entry['nodeId'] ?? affectedNodeIds[0] ?? ''),
+    pattern: String(entry['pattern'] ?? entry['description'] ?? entry['misconceptionType'] ?? ''),
+    status: String(entry['status'] ?? 'detected'),
+    ...(typeof entry['confidence'] === 'number' ? { confidence: entry['confidence'] } : {}),
+    detectedAt: String(entry['detectedAt'] ?? new Date(0).toISOString()),
+    resolvedAt:
+      entry['resolvedAt'] === null || typeof entry['resolvedAt'] === 'string'
+        ? (entry['resolvedAt'] as string | null)
+        : null,
+  });
+}
+
 // ============================================================================
 // Query Key Factory
 // ============================================================================
@@ -106,7 +174,7 @@ export function usePKGNodes(
   return useQuery({
     queryKey: kgKeys.pkgNodes(userId),
     queryFn: () => pkgNodesApi.list(userId),
-    select: (r) => r.data,
+    select: (r) => extractListData<IGraphNodeDto>(r),
     enabled: userId !== '',
     ...options,
   });
@@ -185,7 +253,7 @@ export function usePKGEdges(
   return useQuery({
     queryKey: kgKeys.pkgEdges(userId),
     queryFn: () => pkgEdgesApi.list(userId),
-    select: (r) => r.data,
+    select: (r) => extractListData<IGraphEdgeDto>(r),
     enabled: userId !== '',
     ...options,
   });
@@ -252,12 +320,13 @@ export function usePKGPrerequisites(
 
 export function useKnowledgeFrontier(
   userId: UserId,
+  domain?: string,
   options?: Omit<UseQueryOptions<FrontierResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
-    queryKey: kgKeys.pkgFrontier(userId),
-    queryFn: () => pkgTraversalApi.getFrontier(userId),
-    enabled: userId !== '',
+    queryKey: [...kgKeys.pkgFrontier(userId), domain] as const,
+    queryFn: () => pkgTraversalApi.getFrontier(userId, domain ?? ''),
+    enabled: userId !== '' && domain !== undefined && domain !== '',
     staleTime: 2 * 60 * 1000,
     ...options,
   });
@@ -265,12 +334,13 @@ export function useKnowledgeFrontier(
 
 export function useBridgeNodes(
   userId: UserId,
+  domain?: string,
   options?: Omit<UseQueryOptions<BridgeNodesResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
-    queryKey: kgKeys.pkgBridges(userId),
-    queryFn: () => pkgTraversalApi.getBridges(userId),
-    enabled: userId !== '',
+    queryKey: [...kgKeys.pkgBridges(userId), domain] as const,
+    queryFn: () => pkgTraversalApi.getBridges(userId, domain ?? ''),
+    enabled: userId !== '' && domain !== undefined && domain !== '',
     ...options,
   });
 }
@@ -320,7 +390,7 @@ export function useCKGNodes(
   return useQuery({
     queryKey: kgKeys.ckgNodes(),
     queryFn: ckgNodesApi.list,
-    select: (r) => r.data,
+    select: (r) => extractListData<IGraphNodeDto>(r),
     staleTime: 10 * 60 * 1000,
     ...options,
   });
@@ -332,7 +402,7 @@ export function useCKGEdges(
   return useQuery({
     queryKey: kgKeys.ckgEdges(),
     queryFn: ckgEdgesApi.list,
-    select: (r) => r.data,
+    select: (r) => extractListData<IGraphEdgeDto>(r),
     staleTime: 10 * 60 * 1000,
     ...options,
   });
@@ -494,6 +564,10 @@ export function useMisconceptions(
   return useQuery({
     queryKey: kgKeys.misconceptions(userId),
     queryFn: () => misconceptionsApi.list(userId),
+    select: (response) => ({
+      ...response,
+      data: extractListData<Record<string, unknown>>(response).map(normalizeMisconceptionEntry),
+    }),
     enabled: userId !== '',
     ...options,
   });

@@ -10,7 +10,7 @@
 
 export interface IRequestConfig extends Omit<RequestInit, 'body'> {
   body?: unknown;
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: Record<string, string | number | boolean | readonly string[] | undefined>;
   timeout?: number;
   baseUrl?: string; // Override global base URL (e.g. for HLR sidecar)
 }
@@ -91,7 +91,7 @@ export function getApiConfig(): IApiClientConfig {
 
 function buildUrl(
   path: string,
-  params?: Record<string, string | number | boolean | undefined>,
+  params?: Record<string, string | number | boolean | readonly string[] | undefined>,
   overrideBaseUrl?: string
 ): string {
   const config = getApiConfig();
@@ -112,9 +112,18 @@ function buildUrl(
 
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        url.searchParams.append(key, String(value));
+      if (value === undefined) {
+        return;
       }
+
+      if (Array.isArray(value)) {
+        value.forEach((entry) => {
+          url.searchParams.append(key, entry);
+        });
+        return;
+      }
+
+      url.searchParams.append(key, String(value));
     });
   }
 

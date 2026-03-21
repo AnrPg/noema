@@ -15,6 +15,7 @@ import type { CardId } from '@noema/types';
 import {
   commitsApi,
   dualLanePlanApi,
+  forecastApi,
   proposalsApi,
   retentionApi,
   reviewQueueApi,
@@ -26,6 +27,8 @@ import type {
   BatchScheduleCommitResponse,
   DualLanePlanInput,
   DualLanePlanResponse,
+  ForecastInput,
+  ForecastResponse,
   PredictRetentionInput,
   RetentionPredictionResponse,
   ReviewQueueParams,
@@ -61,6 +64,7 @@ export const schedulerKeys = {
     [...schedulerKeys.all, 'review-windows', input] as const,
   candidates: (input?: SessionCandidatesInput) =>
     [...schedulerKeys.all, 'session-candidates', input] as const,
+  forecast: (input?: ForecastInput) => [...schedulerKeys.all, 'forecast', input] as const,
 };
 
 // ============================================================================
@@ -149,6 +153,18 @@ export function useSessionCandidates(
     queryKey: schedulerKeys.candidates(input),
     queryFn: () => proposalsApi.getSessionCandidates(input),
     staleTime: 30 * 1000,
+    ...options,
+  });
+}
+
+export function useForecast(
+  input: ForecastInput,
+  options?: Omit<UseQueryOptions<ForecastResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: schedulerKeys.forecast(input),
+    queryFn: () => forecastApi.getForecast(input),
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }

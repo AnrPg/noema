@@ -9,6 +9,15 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from './context.js';
 
+interface ILocationLike {
+  replace: (url: string) => void;
+}
+
+function redirectInBrowser(url: string): void {
+  const globalObject = globalThis as typeof globalThis & { location?: ILocationLike };
+  globalObject.location?.replace(url);
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -48,6 +57,7 @@ export interface GuestGuardProps {
 export function AuthGuard({
   children,
   fallback = null,
+  redirectTo,
   onUnauthenticated,
   roles,
   onUnauthorized,
@@ -58,7 +68,11 @@ export function AuthGuard({
     if (!isInitialized || isLoading) return;
 
     if (!isAuthenticated) {
-      onUnauthenticated?.();
+      if (onUnauthenticated) {
+        onUnauthenticated();
+      } else if (redirectTo !== undefined) {
+        redirectInBrowser(redirectTo);
+      }
       return;
     }
 
@@ -108,15 +122,28 @@ export function AuthGuard({
  * Used for login/register pages.
  */
 export function GuestGuard({ children, fallback = null, onAuthenticated }: GuestGuardProps) {
+  return <GuestGuardWithRedirect fallback={fallback} onAuthenticated={onAuthenticated}>{children}</GuestGuardWithRedirect>;
+}
+
+function GuestGuardWithRedirect({
+  children,
+  fallback = null,
+  redirectTo,
+  onAuthenticated,
+}: GuestGuardProps) {
   const { isAuthenticated, isLoading, isInitialized } = useAuth();
 
   useEffect(() => {
     if (!isInitialized || isLoading) return;
 
     if (isAuthenticated) {
-      onAuthenticated?.();
+      if (onAuthenticated) {
+        onAuthenticated();
+      } else if (redirectTo !== undefined) {
+        redirectInBrowser(redirectTo);
+      }
     }
-  }, [isAuthenticated, isLoading, isInitialized, onAuthenticated]);
+  }, [isAuthenticated, isLoading, isInitialized, onAuthenticated, redirectTo]);
 
   // Show loading fallback
   if (!isInitialized || isLoading) {

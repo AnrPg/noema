@@ -16,7 +16,8 @@ import { z } from 'zod';
  * Create a Zod schema for a branded ID with a specific prefix.
  */
 function createIdSchema(prefix: string, description: string) {
-  const pattern = new RegExp(`^${prefix}[a-zA-Z0-9]{21}$`);
+  // Nano ID defaults to a URL-safe alphabet that includes "_" and "-".
+  const pattern = new RegExp(`^${prefix}[a-zA-Z0-9_-]{21}$`);
   return z
     .string()
     .regex(pattern, `Invalid ${description} format. Expected ${prefix}<21-char-nanoid>`)

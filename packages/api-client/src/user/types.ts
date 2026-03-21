@@ -43,7 +43,7 @@ export interface IAuthResult {
 // ============================================================================
 
 export type UserStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DEACTIVATED';
-export type UserRole = 'user' | 'admin' | 'moderator';
+export type UserRole = 'user' | 'learner' | 'premium' | 'creator' | 'admin' | 'super_admin';
 
 export interface IUserDto {
   id: UserId;
@@ -125,7 +125,7 @@ export interface IRequestPasswordResetInput {
 
 export interface IUserFilters {
   status?: UserStatus;
-  role?: UserRole;
+  roles?: UserRole[];
   emailVerified?: boolean;
   search?: string;
 }

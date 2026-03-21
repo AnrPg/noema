@@ -44,7 +44,8 @@ import type {
 export const userKeys = {
   all: ['users'] as const,
   lists: () => [...userKeys.all, 'list'] as const,
-  list: (filters?: UserFilters) => [...userKeys.lists(), filters] as const,
+  list: (filters?: UserFilters, pagination?: { offset?: number; limit?: number }) =>
+    [...userKeys.lists(), filters, pagination] as const,
   details: () => [...userKeys.all, 'detail'] as const,
   detail: (id: string) => [...userKeys.details(), id] as const,
   publicProfile: (username: string) => [...userKeys.all, 'public', username] as const,
@@ -206,7 +207,7 @@ export function useUsers(
   options?: Omit<UseQueryOptions<UsersListResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
-    queryKey: userKeys.list(filters),
+    queryKey: userKeys.list(filters, pagination),
     queryFn: () => usersApi.list(filters, pagination),
     ...options,
   });
@@ -305,6 +306,7 @@ export function useRequestPasswordReset(
 
 // Scheduler Service Hooks
 export {
+  useForecast,
   schedulerKeys,
   usePredictRetention,
   useReviewQueue,

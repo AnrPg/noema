@@ -11,6 +11,7 @@
  */
 
 export {
+  useForecast,
   schedulerKeys,
   usePredictRetention,
   useReviewQueue,

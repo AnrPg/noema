@@ -40,6 +40,9 @@ export {
   type AdminGuardProps,
 } from './guards.js';
 
+// User display helpers
+export { getUserDisplayName, getUserFirstName, getUserInitials } from './user-display.js';
+
 // Types
 export type {
   IAuthState,

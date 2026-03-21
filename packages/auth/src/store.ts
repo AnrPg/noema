@@ -25,6 +25,13 @@ const initialState: IAuthState = {
   error: null,
 };
 
+const AUTH_PERSIST_VERSION = 2;
+
+interface IPersistedAuthState {
+  accessToken?: unknown;
+  refreshToken?: unknown;
+}
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -87,14 +94,24 @@ export const useAuthStore = create<IAuthStore>()(
     }),
     {
       name: 'noema-auth',
+      version: AUTH_PERSIST_VERSION,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        user: state.user,
-        settings: state.settings,
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
       }),
+      migrate: (persistedState) => {
+        if (typeof persistedState !== 'object' || persistedState === null) {
+          return {};
+        }
+
+        const state = persistedState as IPersistedAuthState;
+
+        return {
+          accessToken: typeof state.accessToken === 'string' ? state.accessToken : null,
+          refreshToken: typeof state.refreshToken === 'string' ? state.refreshToken : null,
+        };
+      },
     }
   )
 );

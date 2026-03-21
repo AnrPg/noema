@@ -78,6 +78,33 @@ export interface IRetentionPredictionResponse {
   policyVersion: ISchedulerPolicyVersion;
 }
 
+export interface IForecastInput {
+  userId: string;
+  days?: number;
+  includeOverdue?: boolean;
+}
+
+export interface IForecastLaneCounts {
+  newDue: number;
+  overdue: number;
+  total: number;
+}
+
+export interface IForecastDay {
+  date: string;
+  retention: IForecastLaneCounts;
+  calibration: IForecastLaneCounts;
+  combined: IForecastLaneCounts;
+  estimatedMinutes: number;
+}
+
+export interface IForecastResponse {
+  days: IForecastDay[];
+  generatedAt: string;
+  model: 'consumed';
+  averageSecondsPerCard: number;
+}
+
 // ============================================================================
 // Scheduler Card
 // ============================================================================
@@ -116,14 +143,18 @@ export interface ISchedulerCardListResponse {
 export type SchedulerPolicyVersion = ISchedulerPolicyVersion;
 export type ReviewQueueParams = IReviewQueueParams;
 export type ReviewQueueCard = IReviewQueueCard;
-export type ReviewQueueResponse = IReviewQueueResponse;
+export type ReviewQueueResponse = IApiResponse<IReviewQueueResponse>;
 export type RetentionPredictionRequest = IRetentionPredictionRequest;
 export type PredictRetentionInput = IPredictRetentionInput;
 export type RetentionPrediction = IRetentionPrediction;
-export type RetentionPredictionResponse = IRetentionPredictionResponse;
-export type SchedulerCardResponse = ISchedulerCardResponse;
+export type RetentionPredictionResponse = IApiResponse<IRetentionPredictionResponse>;
+export type SchedulerCardResponse = IApiResponse<ISchedulerCardResponse>;
 export type SchedulerCardListParams = ISchedulerCardListParams;
-export type SchedulerCardListResponse = ISchedulerCardListResponse;
+export type SchedulerCardListResponse = IApiResponse<ISchedulerCardListResponse>;
+export type ForecastInput = IForecastInput;
+export type ForecastLaneCounts = IForecastLaneCounts;
+export type ForecastDay = IForecastDay;
+export type ForecastResponseDto = IForecastResponse;
 
 // ============================================================================
 // Phase 02 — Dual-Lane Plan
@@ -262,3 +293,4 @@ export type SessionCandidatesResponse = IApiResponse<ISessionCandidateDto[]>;
 export type SimulationResponse = IApiResponse<ISimulationResult>;
 export type ScheduleCommitResponse = IApiResponse<ISchedulerCardDto>;
 export type BatchScheduleCommitResponse = IApiResponse<IBatchScheduleCommitResult>;
+export type ForecastResponse = IApiResponse<IForecastResponse>;

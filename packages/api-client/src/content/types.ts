@@ -6,15 +6,12 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, MediaId, TemplateId } from '@noema/types';
+import type { CardId, CardState, MediaId, TemplateId } from '@noema/types';
 import type { CardType, RemediationCardType } from '@noema/types';
 
 // ============================================================================
 // Card State
 // ============================================================================
-
-/** Lifecycle states for a card (matches backend CardState enum). */
-export type CardState = 'DRAFT' | 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
 
 // ============================================================================
 // Media Attachment (shared across content interfaces)
@@ -614,6 +611,7 @@ export interface ICardSummaryDto {
   difficulty: number;
   createdAt: string;
   updatedAt: string;
+  version: number;
 }
 
 /** Batch summary returned after a batch creation job completes. */
@@ -633,11 +631,15 @@ export interface IDeckQueryInput {
   states?: CardState[];
   tags?: string[];
   knowledgeNodeIds?: string[];
+  sources?: string[];
   source?: string;
   difficulty?: { min?: number; max?: number };
+  difficulties?: string[];
   sortBy?: 'createdAt' | 'updatedAt' | 'difficulty' | 'nextReviewAt';
   sortDir?: 'asc' | 'desc';
+  sortOrder?: 'asc' | 'desc';
   limit?: number;
+  offset?: number;
   cursor?: string;
 }
 
@@ -668,8 +670,9 @@ export interface IUpdateCardStateInput {
 }
 
 export interface IBatchStateUpdateInput {
-  cardIds: string[];
+  items: { id: string; version: number }[];
   state: CardState;
+  reason?: string;
 }
 
 export interface IUpdateCardTagsInput {
@@ -805,10 +808,16 @@ export interface IUploadUrlResult {
 // ============================================================================
 
 export type CardResponse = IApiResponse<ICardDto>;
-export type CardsListResponse = IApiResponse<{ cards: ICardSummaryDto[]; total: number }>;
+export type CardsListResponse = IApiResponse<{
+  items: ICardSummaryDto[];
+  total?: number;
+  hasMore?: boolean;
+}>;
 export type CardsCursorResponse = IApiResponse<{
-  cards: ICardSummaryDto[];
+  items: ICardSummaryDto[];
   nextCursor: string | null;
+  prevCursor?: string | null;
+  hasMore?: boolean;
 }>;
 export type CardCountResponse = IApiResponse<{ count: number }>;
 export type CardStatsResponse = IApiResponse<ICardStatsDto>;

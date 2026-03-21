@@ -111,19 +111,19 @@ export const usersApi = {
    * Update user status (admin only).
    */
   patchStatus: (id: string, data: IUpdateUserStatusInput): Promise<UpdateUserStatusResponse> =>
-    http.patch(`/users/${id}/status`, data),
+    http.patch(`/v1/users/${id}/status`, data),
 
   /**
    * Update user roles (admin only).
    */
   patchRoles: (id: string, data: IUpdateUserRolesInput): Promise<UpdateUserRolesResponse> =>
-    http.patch(`/users/${id}/roles`, data),
+    http.put(`/v1/users/${id}/roles`, data),
 
   /**
    * Trigger a password reset email for a user (admin only).
    */
   triggerPasswordReset: (id: string): Promise<TriggerPasswordResetResponse> =>
-    http.post(`/users/${id}/password-reset`, {}),
+    http.post(`/v1/users/${id}/reset-password`, {}),
 };
 
 // ============================================================================
