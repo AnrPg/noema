@@ -121,8 +121,21 @@ export function AuthGuard({
  * Protects routes that should only be visible to guests (non-authenticated users).
  * Used for login/register pages.
  */
-export function GuestGuard({ children, fallback = null, onAuthenticated }: GuestGuardProps) {
-  return <GuestGuardWithRedirect fallback={fallback} onAuthenticated={onAuthenticated}>{children}</GuestGuardWithRedirect>;
+export function GuestGuard({
+  children,
+  fallback = null,
+  redirectTo,
+  onAuthenticated,
+}: GuestGuardProps) {
+  return (
+    <GuestGuardWithRedirect
+      fallback={fallback}
+      onAuthenticated={onAuthenticated}
+      {...(redirectTo !== undefined ? { redirectTo } : {})}
+    >
+      {children}
+    </GuestGuardWithRedirect>
+  );
 }
 
 function GuestGuardWithRedirect({
