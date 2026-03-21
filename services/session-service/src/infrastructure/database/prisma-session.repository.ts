@@ -48,7 +48,7 @@ import type {
   ISessionQueueItem,
   ISessionStats,
   SessionCohortHandshakeStatus,
-  SessionState
+  SessionState,
 } from '../../types/index.js';
 
 // ============================================================================
@@ -282,7 +282,8 @@ export class PrismaSessionRepository implements ISessionRepository {
     // we use app-level sort. For createdAt/completedAt, we use DB sort.
     const sortBy = filters?.sortBy ?? 'createdAt';
     const sortOrder = filters?.sortOrder ?? 'desc';
-    const isAppLevelSort = sortBy === 'retentionRate' || sortBy === 'totalAttempts' || sortBy === 'durationMs';
+    const isAppLevelSort =
+      sortBy === 'retentionRate' || sortBy === 'totalAttempts' || sortBy === 'durationMs';
 
     // DB-level orderBy
     let orderBy: Record<string, string> = { startedAt: 'desc' };
@@ -321,10 +322,14 @@ export class PrismaSessionRepository implements ISessionRepository {
         } else {
           // durationMs: compute from timestamps
           const aStart = new Date(a.startedAt).getTime();
-          const aEnd = a.completedAt ? new Date(a.completedAt).getTime() : new Date(a.lastActivityAt).getTime();
+          const aEnd = a.completedAt
+            ? new Date(a.completedAt).getTime()
+            : new Date(a.lastActivityAt).getTime();
           aVal = aEnd - aStart - a.totalPausedDurationMs;
           const bStart = new Date(b.startedAt).getTime();
-          const bEnd = b.completedAt ? new Date(b.completedAt).getTime() : new Date(b.lastActivityAt).getTime();
+          const bEnd = b.completedAt
+            ? new Date(b.completedAt).getTime()
+            : new Date(b.lastActivityAt).getTime();
           bVal = bEnd - bStart - b.totalPausedDurationMs;
         }
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
@@ -341,9 +346,7 @@ export class PrismaSessionRepository implements ISessionRepository {
     // minAttempts: for DB-level sort, we still need to filter post-fetch
     // because totalAttempts is in JSONB. For now, fetch extra and filter.
     if (filters?.minAttempts !== undefined) {
-      const [allRows] = await Promise.all([
-        this.prisma.session.findMany({ where, orderBy }),
-      ]);
+      const [allRows] = await Promise.all([this.prisma.session.findMany({ where, orderBy })]);
 
       let sessions = allRows.map(toSessionDomain);
       sessions = sessions.filter((s) => s.stats.totalAttempts >= filters.minAttempts!);

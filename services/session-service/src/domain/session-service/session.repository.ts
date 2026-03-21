@@ -58,10 +58,7 @@ export interface ISessionRepository {
    * prevent concurrent startSession calls from both seeing zero and
    * creating duplicate sessions.
    */
-  countActiveSessionsForUpdate(
-    userId: UserId,
-    tx: Prisma.TransactionClient
-  ): Promise<number>;
+  countActiveSessionsForUpdate(userId: UserId, tx: Prisma.TransactionClient): Promise<number>;
 
   // ---------- Session write ----------
 
