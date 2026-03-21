@@ -20,7 +20,7 @@
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, Eye } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@noema/ui';
 import type { SessionId } from '@noema/types';
 import type { ICheckpointDirectiveDto } from '@noema/api-client';
@@ -108,12 +108,15 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const currentCardId = currentItem?.cardId ?? ('' as SessionId);
 
   // useCard uses select: (r) => r.data — so cardData is already ICardDto | undefined
-  const { data: card, isLoading: cardLoading } = useCard(
-    currentCardId as Parameters<typeof useCard>[0],
-    {
-      enabled: currentCardId !== '',
-    }
-  );
+  const {
+    data: card,
+    isLoading: cardLoading,
+    isError: cardError,
+    error: cardErrorDetails,
+    refetch: refetchCard,
+  } = useCard(currentCardId as Parameters<typeof useCard>[0], {
+    enabled: currentCardId !== '',
+  });
 
   // ── API — mutations ───────────────────────────────────────────────────────
   const recordAttempt = useRecordAttempt(sessionId);
@@ -351,6 +354,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   const isLoading = sessionLoading || queueLoading;
   const isCardLoading = cardLoading && currentCardId !== '';
+  const queueHasRecoverableGap = queueItems.length > completedCardCount && currentCardId === '';
 
   const maxHints = 3; // configurable; 3 is a reasonable default
 
@@ -475,8 +479,55 @@ export default function ActiveSessionPage(): React.JSX.Element {
               onHintRequest={handleHint}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center gap-3 py-16">
-              <p className="text-sm text-muted-foreground">No card loaded.</p>
+            <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-6 py-10 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-300">
+                <AlertTriangle className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <div className="space-y-2">
+                <p className="text-base font-semibold text-foreground">
+                  We couldn't open the first card for this session.
+                </p>
+                <p className="max-w-lg text-sm leading-6 text-muted-foreground">
+                  {cardError
+                    ? 'The session queue points to a card, but the card details did not load successfully. This is usually temporary, so try reloading the card first.'
+                    : queueHasRecoverableGap
+                      ? 'This session was created, but the queue returned an entry without a usable card id. Refreshing the queue usually restores the missing card.'
+                      : 'This session does not currently have a usable card payload, even though it was started from a candidate list. Refreshing the session should resync the queue and card data.'}
+                </p>
+                {currentCardId !== '' && (
+                  <p className="text-xs text-muted-foreground">
+                    Card ID: <span className="font-mono">{currentCardId}</span>
+                  </p>
+                )}
+                {cardErrorDetails instanceof Error && (
+                  <p className="text-xs text-destructive">{cardErrorDetails.message}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                <Button
+                  variant="default"
+                  className="gap-2"
+                  onClick={() => {
+                    if (currentCardId !== '') {
+                      void refetchCard();
+                    } else {
+                      void refetchQueue();
+                      void refetchSession();
+                    }
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                  {currentCardId !== '' ? 'Retry Card Load' : 'Refresh Session Queue'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    router.push('/session/new');
+                  }}
+                >
+                  Start a New Session
+                </Button>
+              </div>
             </div>
           )}
 

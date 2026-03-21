@@ -9,6 +9,7 @@
 
 import * as React from 'react';
 import type { JSX } from 'react';
+import type { IAttemptDto } from '@noema/api-client';
 import { useSession, useSessionAttempts } from '@noema/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 import { ArrowLeft } from 'lucide-react';
@@ -54,6 +55,39 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
       <span className="font-medium text-right">{children}</span>
     </div>
   );
+}
+
+function isAttemptDto(value: unknown): value is IAttemptDto {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate['id'] === 'string' &&
+    typeof candidate['cardId'] === 'string' &&
+    typeof candidate['reviewedAt'] === 'string'
+  );
+}
+
+function getAttemptsFromResponse(value: unknown): IAttemptDto[] {
+  if (Array.isArray(value)) {
+    return value.filter(isAttemptDto);
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return [];
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const nestedAttempts = candidate['attempts'] ?? candidate['items'] ?? candidate['data'];
+
+  if (nestedAttempts === value) {
+    return [];
+  }
+
+  return getAttemptsFromResponse(nestedAttempts);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +139,7 @@ export default function SessionDetailPage(): JSX.Element {
   }
 
   const session = sessionResponse.data;
-  const attempts = Array.isArray(attemptsResponse?.data) ? attemptsResponse.data : [];
+  const attempts = getAttemptsFromResponse(attemptsResponse?.data);
 
   return (
     <div className="space-y-6">
