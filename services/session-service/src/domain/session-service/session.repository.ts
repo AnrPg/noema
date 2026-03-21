@@ -54,7 +54,7 @@ export interface ISessionRepository {
   ): Promise<number>;
 
   /**
-   * Count active sessions for a user using SELECT ... FOR UPDATE to
+   * Count active sessions for a user inside a transaction-scoped lock to
    * prevent concurrent startSession calls from both seeing zero and
    * creating duplicate sessions.
    */

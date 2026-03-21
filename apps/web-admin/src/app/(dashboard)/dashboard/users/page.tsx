@@ -187,6 +187,7 @@ export default function UsersPage(): React.JSX.Element {
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [allUsers, setAllUsers] = React.useState<UserDto[]>([]);
+  const [appliedFilterKey, setAppliedFilterKey] = React.useState('');
   const router = useRouter();
 
   const filters = {
@@ -194,6 +195,11 @@ export default function UsersPage(): React.JSX.Element {
     ...(statusFilter !== '' ? { status: statusFilter } : {}),
     ...(roleFilter !== '' ? { roles: [roleFilter] } : {}),
   };
+  const filterKey = JSON.stringify({
+    search,
+    statusFilter,
+    roleFilter,
+  });
 
   const hasFilters = search !== '' || statusFilter !== '' || roleFilter !== '';
   const {
@@ -213,6 +219,7 @@ export default function UsersPage(): React.JSX.Element {
     const incoming = usersData.data.items;
     if (page === 1) {
       setAllUsers(incoming);
+      setAppliedFilterKey(filterKey);
       return;
     }
 
@@ -221,13 +228,16 @@ export default function UsersPage(): React.JSX.Element {
       const next = incoming.filter((user) => !seen.has(user.id));
       return [...prev, ...next];
     });
-  }, [page, usersData]);
+    setAppliedFilterKey(filterKey);
+  }, [filterKey, page, usersData]);
 
   // Reset pagination when filters change
   React.useEffect(() => {
     setPage(1);
-    setAllUsers([]);
   }, [statusFilter, roleFilter, search]);
+
+  const isRefreshingFirstPage = isLoading && page === 1 && appliedFilterKey !== filterKey;
+  const visibleUsers = isRefreshingFirstPage ? [] : allUsers;
 
   const handleAction = async (
     action: 'view' | 'suspend' | 'unsuspend' | 'delete',
@@ -355,13 +365,13 @@ export default function UsersPage(): React.JSX.Element {
             </select>
           </div>
 
-          {isLoading && allUsers.length === 0 ? (
+          {isLoading && visibleUsers.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">Loading users...</div>
-          ) : allUsers.length === 0 ? (
+          ) : visibleUsers.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">No users found</div>
           ) : (
             <div className="divide-y">
-              {allUsers.map((user) => (
+              {visibleUsers.map((user) => (
                 <UserRow
                   key={user.id}
                   user={user}
@@ -375,7 +385,7 @@ export default function UsersPage(): React.JSX.Element {
             </div>
           )}
 
-          {(total === undefined || allUsers.length < total) && (
+          {(total === undefined || visibleUsers.length < total) && (
             <div className="mt-4 flex justify-center">
               <Button
                 variant="outline"

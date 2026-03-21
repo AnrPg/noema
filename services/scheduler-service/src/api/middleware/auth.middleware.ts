@@ -32,12 +32,23 @@ export interface IAuthConfig {
   authDisabled: boolean;
 }
 
-const DEV_USER_ID_FALLBACK = 'usr_devuser00000000000000';
+const DEV_USER_ID_FALLBACK = 'user_devuser00000000000000';
 
 function normalizeDevUserId(value: unknown): string {
-  return typeof value === 'string' && /^usr_[A-Za-z0-9_-]{21}$/.test(value)
-    ? value
-    : DEV_USER_ID_FALLBACK;
+  if (typeof value !== 'string') {
+    return DEV_USER_ID_FALLBACK;
+  }
+
+  if (/^user_[A-Za-z0-9_-]{21}$/.test(value)) {
+    return value;
+  }
+
+  // Support older dev headers that still use the legacy `usr_` prefix.
+  if (/^usr_[A-Za-z0-9_-]{21}$/.test(value)) {
+    return `user_${value.slice(4)}`;
+  }
+
+  return DEV_USER_ID_FALLBACK;
 }
 
 function getStartTime(request: FastifyRequest): number {

@@ -388,14 +388,17 @@ export class PrismaSessionRepository implements ISessionRepository {
     userId: UserId,
     tx: Prisma.TransactionClient
   ): Promise<number> {
+    // Serialize concurrent session starts per user, even when they currently
+    // have zero active rows to lock.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+
     const result = await tx.$queryRaw<[{ count: bigint }]>`
       SELECT count(*) AS count
       FROM sessions
       WHERE user_id = ${userId}
         AND state = 'ACTIVE'
-      FOR UPDATE
     `;
-    return Number(result[0].count);
+    return Number(result[0]?.count ?? 0n);
   }
 
   // ---------- Session write ----------
