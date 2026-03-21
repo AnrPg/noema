@@ -64,6 +64,12 @@ interface IUpdateBody<T> {
   version: number;
 }
 
+interface IListUsersQuery extends Omit<IUserFilters, 'roles'> {
+  offset?: number;
+  limit?: number;
+  roles?: UserRole[] | UserRole | string[] | string;
+}
+
 // ============================================================================
 // Route Plugin
 // ============================================================================
@@ -243,6 +249,26 @@ export function registerUserRoutes(
         },
       });
     }
+  }
+
+  function normalizeListUsersQuery(query: IListUsersQuery): IUserFilters & {
+    offset: number;
+    limit: number;
+  } {
+    const { offset = 0, limit = 20, roles, ...filters } = query;
+    const normalizedRoles =
+      roles === undefined
+        ? undefined
+        : Array.isArray(roles)
+          ? (roles as UserRole[])
+          : [roles as UserRole];
+
+    return {
+      ...filters,
+      ...(normalizedRoles !== undefined ? { roles: normalizedRoles } : {}),
+      offset,
+      limit,
+    };
   }
 
   // ============================================================================
@@ -606,7 +632,7 @@ export function registerUserRoutes(
   /**
    * GET /users - List users (admin only)
    */
-  fastify.get<{ Querystring: IUserFilters & { offset?: number; limit?: number } }>(
+  fastify.get<{ Querystring: IListUsersQuery }>(
     '/users',
     {
       preHandler: [authMiddleware],
@@ -628,7 +654,7 @@ export function registerUserRoutes(
     async (request, reply) => {
       try {
         const context = buildContext(request);
-        const { offset = 0, limit = 20, ...filters } = request.query;
+        const { offset, limit, ...filters } = normalizeListUsersQuery(request.query);
         const result = await userService.find(filters, { offset, limit }, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
