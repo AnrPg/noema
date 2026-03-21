@@ -118,7 +118,6 @@ function windowsArgsFor(selectedMode) {
         ],
       ];
     case 'dev:services':
-    case 'dev:web+api':
       return [
         'powershell.exe',
         [
@@ -133,6 +132,8 @@ function windowsArgsFor(selectedMode) {
           'dev-services-no-watch',
         ],
       ];
+    case 'dev:web+api':
+      return ['pnpm', turboArgsFor(selectedMode)];
     case 'dev:admin-stack':
       return [
         'powershell.exe',
