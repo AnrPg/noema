@@ -133,7 +133,7 @@ function windowsArgsFor(selectedMode) {
         ],
       ];
     case 'dev:web+api':
-      return ['pnpm', turboArgsFor(selectedMode)];
+      return ['pnpm', ['exec', 'turbo', ...turboArgsFor(selectedMode)]];
     case 'dev:admin-stack':
       return [
         'powershell.exe',
