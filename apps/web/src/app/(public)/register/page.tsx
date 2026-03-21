@@ -3,7 +3,7 @@
  *
  * Three-step form covering all ICreateUserInput fields:
  *   Step 1: Account  — email, username, password, confirmPassword
- *   Step 2: Profile  — displayName, language
+ *   Step 2: Profile  — displayName, languages
  *   Step 3: Location — timezone (interactive map + dropdown), country
  */
 
@@ -89,7 +89,7 @@ const registerSchema = z
 
     // Step 2: Profile
     displayName: z.string().max(100).optional().or(z.literal('')),
-    language: z.string().optional(),
+    languages: z.array(z.string()).min(1, 'Select at least one language'),
 
     // Step 3: Location
     timezone: z.string().optional(),
@@ -116,7 +116,12 @@ const STEPS = [
     icon: User,
     fields: ['email', 'username', 'password', 'confirmPassword'] as const,
   },
-  { id: 'profile', label: 'Profile', icon: Globe, fields: ['displayName', 'language'] as const },
+  {
+    id: 'profile',
+    label: 'Profile',
+    icon: Globe,
+    fields: ['displayName', 'languages'] as const,
+  },
   { id: 'location', label: 'Location', icon: MapPin, fields: ['timezone', 'country'] as const },
 ] as const;
 
@@ -147,7 +152,7 @@ export default function RegisterPage(): React.JSX.Element {
       password: '',
       confirmPassword: '',
       displayName: '',
-      language: 'en',
+      languages: ['en'],
       timezone:
         typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC',
       country: '',
@@ -201,7 +206,7 @@ export default function RegisterPage(): React.JSX.Element {
         password: data.password,
         ...(data.displayName !== undefined &&
           data.displayName !== '' && { displayName: data.displayName }),
-        ...(data.language !== undefined && data.language !== '' && { language: data.language }),
+        languages: data.languages,
         ...(data.timezone !== undefined && data.timezone !== '' && { timezone: data.timezone }),
         country: data.country,
       });
@@ -287,7 +292,7 @@ export default function RegisterPage(): React.JSX.Element {
           ? 'All fields required'
           : currentStep === 2
             ? 'Country required'
-            : 'All fields optional'}
+            : 'Display name optional, languages required'}
       </p>
 
       <div className="animate-auth-card">
@@ -365,20 +370,46 @@ export default function RegisterPage(): React.JSX.Element {
                   </FormField>
 
                   <FormField
-                    label="Preferred language"
-                    error={errors.language?.message}
-                    description="Language for the user interface"
+                    label="Languages"
+                    error={errors.languages?.message}
+                    description="Select one or more languages for the user interface"
                   >
-                    <select
-                      {...register('language')}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      {LANGUAGES.map((lang) => (
-                        <option key={lang.value} value={lang.value}>
-                          {lang.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Controller
+                      name="languages"
+                      control={control}
+                      render={({ field }) => {
+                        const selectedLanguages = field.value ?? [];
+                        return (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {LANGUAGES.map((lang) => {
+                              const isChecked = selectedLanguages.includes(lang.value);
+                              return (
+                                <label
+                                  key={lang.value}
+                                  className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(event) => {
+                                      if (event.target.checked) {
+                                        field.onChange([...selectedLanguages, lang.value]);
+                                        return;
+                                      }
+
+                                      field.onChange(
+                                        selectedLanguages.filter((value) => value !== lang.value)
+                                      );
+                                    }}
+                                  />
+                                  <span>{lang.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        );
+                      }}
+                    />
                   </FormField>
                 </div>
               )}
@@ -461,19 +492,6 @@ export default function RegisterPage(): React.JSX.Element {
                   </Button>
                 )}
               </div>
-
-              {/* Skip optional steps link — only for fully optional steps */}
-              {currentStep === 1 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCurrentStep((s) => s + 1);
-                  }}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Skip this step
-                </button>
-              )}
 
               <p className="text-sm text-muted-foreground">
                 Already have an account?{' '}

@@ -34,6 +34,14 @@ function visibleRoles(roles: readonly UserRole[]): UserRole[] {
   return roles.filter((role) => role !== 'user');
 }
 
+function getUserLanguages(user: { languages?: string[]; language?: string }): string[] {
+  if (user.languages !== undefined && user.languages.length > 0) {
+    return user.languages;
+  }
+
+  return user.language !== undefined && user.language !== '' ? [user.language] : [];
+}
+
 export default function UserDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -81,6 +89,8 @@ export default function UserDetailPage(): React.JSX.Element {
 
   const displayName = getUserDisplayName(user);
   const initials = getUserInitials(user);
+  const languagesList = getUserLanguages(user);
+  const languages = languagesList.length > 0 ? languagesList.join(', ').toUpperCase() : '—';
 
   const statusColorClass =
     user.status === 'ACTIVE'
@@ -186,7 +196,7 @@ export default function UserDetailPage(): React.JSX.Element {
               label="Email Verified"
               value={user.emailVerified ? 'Yes' : 'No'}
             />
-            <InfoRow icon={Globe} label="Language" value={user.language.toUpperCase()} />
+            <InfoRow icon={Globe} label="Languages" value={languages} />
             <InfoRow
               icon={Clock}
               label="Timezone"

@@ -46,7 +46,7 @@ const profileSchema = z.object({
     .max(100, 'Display name must be at most 100 characters'),
   bio: z.string().max(500, 'Bio must be at most 500 characters').optional().or(z.literal('')),
   timezone: z.string().optional(),
-  language: z.string().optional(),
+  languages: z.array(z.string()).min(1, 'Select at least one language'),
   country: z
     .string()
     .length(2, 'Country code must be 2 letters')
@@ -79,6 +79,14 @@ const LANGUAGES = [
 
 const SORTED_TIMEZONES = getSortedTimezones();
 
+function getUserLanguages(user: { languages?: string[]; language?: string } | undefined): string[] {
+  if (user?.languages !== undefined && user.languages.length > 0) {
+    return user.languages;
+  }
+
+  return user?.language !== undefined && user.language !== '' ? [user.language] : ['en'];
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -101,7 +109,7 @@ export default function ProfilePage(): React.JSX.Element {
       displayName: '',
       bio: '',
       timezone: '',
-      language: 'en',
+      languages: ['en'],
       country: '',
     },
   });
@@ -114,7 +122,7 @@ export default function ProfilePage(): React.JSX.Element {
         displayName: user.displayName,
         bio: user.bio ?? '',
         timezone: user.timezone,
-        language: user.language,
+        languages: getUserLanguages(user),
         country: user.country ?? '',
       });
     }
@@ -126,7 +134,7 @@ export default function ProfilePage(): React.JSX.Element {
         displayName: user.displayName,
         bio: user.bio ?? '',
         timezone: user.timezone,
-        language: user.language,
+        languages: getUserLanguages(user),
         country: user.country ?? '',
       });
     }
@@ -145,9 +153,7 @@ export default function ProfilePage(): React.JSX.Element {
           ...(data.timezone !== '' && data.timezone !== undefined
             ? { timezone: data.timezone }
             : {}),
-          ...(data.language !== '' && data.language !== undefined
-            ? { language: data.language }
-            : {}),
+          languages: data.languages,
           country: data.country !== '' ? (data.country ?? null) : null,
         },
         version,
@@ -240,17 +246,43 @@ export default function ProfilePage(): React.JSX.Element {
                   />
                 </FormField>
 
-                <FormField label="Language" error={errors.language?.message}>
-                  <select
-                    {...register('language')}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  >
-                    {LANGUAGES.map((lang) => (
-                      <option key={lang.value} value={lang.value}>
-                        {lang.label}
-                      </option>
-                    ))}
-                  </select>
+                <FormField label="Languages" error={errors.languages?.message}>
+                  <Controller
+                    name="languages"
+                    control={control}
+                    render={({ field }) => {
+                      const selectedLanguages = field.value ?? [];
+                      return (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {LANGUAGES.map((lang) => {
+                            const isChecked = selectedLanguages.includes(lang.value);
+                            return (
+                              <label
+                                key={lang.value}
+                                className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={(event) => {
+                                    if (event.target.checked) {
+                                      field.onChange([...selectedLanguages, lang.value]);
+                                      return;
+                                    }
+
+                                    field.onChange(
+                                      selectedLanguages.filter((value) => value !== lang.value)
+                                    );
+                                  }}
+                                />
+                                <span>{lang.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      );
+                    }}
+                  />
                 </FormField>
 
                 <FormField label="Timezone" error={errors.timezone?.message}>
@@ -331,7 +363,9 @@ export default function ProfilePage(): React.JSX.Element {
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <dt className="font-medium text-muted-foreground">Language</dt>
-                      <dd className="col-span-2">{user?.language ?? '—'}</dd>
+                      <dd className="col-span-2">
+                        {user !== undefined ? getUserLanguages(user).join(', ') : '—'}
+                      </dd>
                     </div>
                     <div className="grid grid-cols-3 gap-2">
                       <dt className="font-medium text-muted-foreground">Timezone</dt>

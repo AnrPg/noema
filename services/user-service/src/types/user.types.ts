@@ -180,8 +180,8 @@ export interface IUserProfile {
   /** Time zone (IANA format, e.g., "America/New_York") */
   timezone: string;
 
-  /** Preferred UI language */
-  language: Language;
+  /** Preferred UI languages, ordered by user preference */
+  languages: Language[];
 
   /** Country code (ISO 3166-1 alpha-2) */
   country: string | null;
@@ -348,7 +348,7 @@ export interface ICreateUserInput {
   password: string;
   country?: string;
   displayName?: string;
-  language?: Language;
+  languages: Language[];
   timezone?: string;
   authProvider?: AuthProvider;
 }
@@ -361,7 +361,7 @@ export interface IUpdateProfileInput {
   bio?: string | null;
   avatarUrl?: string | null;
   timezone?: string;
-  language?: Language;
+  languages?: Language[];
   country?: string | null;
 }
 
@@ -501,6 +501,7 @@ export interface IUserFilters {
   displayName?: string; // partial match
   country?: string; // ISO 3166-1 alpha-2
   language?: Language;
+  languages?: Language[];
   timezone?: string;
 
   // Date range filters

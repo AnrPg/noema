@@ -22,7 +22,7 @@ export interface IRegisterInput {
   email: string;
   password: string;
   displayName?: string;
-  language?: string;
+  languages: string[];
   timezone?: string;
   country: string;
 }
@@ -56,6 +56,7 @@ export interface IUserDto {
   status: UserStatus;
   roles: UserRole[];
   language: string;
+  languages: string[];
   timezone: string;
   country: string | null;
   lastLoginAt: string | null;
@@ -95,7 +96,7 @@ export interface IUpdateProfileInput {
   bio?: string | null;
   avatarUrl?: string | null;
   timezone?: string;
-  language?: string;
+  languages?: string[];
   country?: string | null;
 }
 

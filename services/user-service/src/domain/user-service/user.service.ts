@@ -888,7 +888,7 @@ export class UserService {
         password: parsed.password,
         country: parsed.country,
         ...(parsed.displayName !== undefined ? { displayName: parsed.displayName } : {}),
-        ...(parsed.language !== undefined ? { language: parsed.language } : {}),
+        languages: parsed.languages,
         ...(parsed.timezone !== undefined ? { timezone: parsed.timezone } : {}),
         ...(parsed.authProvider !== undefined ? { authProvider: parsed.authProvider } : {}),
       };
@@ -1428,7 +1428,7 @@ export class UserService {
         bio: user.profile.bio,
         avatarUrl: user.profile.avatarUrl,
         timezone: user.profile.timezone,
-        language: user.profile.language,
+        languages: user.profile.languages,
         country: user.profile.country,
       },
     };

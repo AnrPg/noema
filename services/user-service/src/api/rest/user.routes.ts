@@ -260,13 +260,17 @@ export function registerUserRoutes(
         summary: 'Register a new user',
         body: {
           type: 'object',
-          required: ['username', 'email', 'password', 'country'],
+          required: ['username', 'email', 'password', 'country', 'languages'],
           properties: {
             username: { type: 'string', minLength: 3, maxLength: 30 },
             email: { type: 'string', format: 'email' },
             password: { type: 'string', minLength: 8 },
             displayName: { type: 'string' },
-            language: { type: 'string' },
+            languages: {
+              type: 'array',
+              minItems: 1,
+              items: { type: 'string' },
+            },
             timezone: { type: 'string' },
             country: { type: 'string', minLength: 2, maxLength: 2 },
           },
@@ -661,7 +665,11 @@ export function registerUserRoutes(
                 bio: { type: 'string', nullable: true },
                 avatarUrl: { type: 'string', nullable: true },
                 timezone: { type: 'string' },
-                language: { type: 'string' },
+                languages: {
+                  type: 'array',
+                  minItems: 1,
+                  items: { type: 'string' },
+                },
                 country: { type: 'string', nullable: true },
               },
             },

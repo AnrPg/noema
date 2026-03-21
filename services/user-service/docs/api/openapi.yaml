@@ -649,7 +649,7 @@ components:
     # --------------------------------------------------------------------------
     CreateUserInput:
       type: object
-      required: [email, username, password, country]
+      required: [email, username, password, country, languages]
       properties:
         email:
           type: string
@@ -676,9 +676,11 @@ components:
         timezone:
           type: string
           default: UTC
-        language:
-          $ref: "#/components/schemas/Language"
-          default: en
+        languages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Language"
 
     LoginInput:
       type: object
@@ -704,6 +706,11 @@ components:
           format: uri
         timezone:
           type: string
+        languages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Language"
 
     UpdateSettingsInput:
       type: object
@@ -752,8 +759,10 @@ components:
         country:
           type: string
           description: ISO 3166-1 alpha-2 country code
-        language:
-          $ref: "#/components/schemas/Language"
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Language"
 
     UserSettings:
       type: object

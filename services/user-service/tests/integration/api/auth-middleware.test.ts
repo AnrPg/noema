@@ -96,13 +96,13 @@ const PROTECTED_ROUTES: IProtectedRoute[] = [
   {
     method: 'PATCH',
     url: `/users/${TEST_USER_ID}/settings`,
-    payload: { data: { language: 'en' }, version: 1 },
+    payload: { data: { theme: 'system' }, version: 1 },
     description: 'update user settings',
   },
   {
     method: 'POST',
     url: `/users/${TEST_USER_ID}/password`,
-    payload: { currentPassword: 'old', newPassword: 'new', version: 1 },
+    payload: { currentPassword: 'OldPass123!', newPassword: 'NewPass123!', version: 1 },
     description: 'change password',
   },
   {
@@ -141,7 +141,7 @@ const PROTECTED_ROUTES: IProtectedRoute[] = [
   {
     method: 'PATCH',
     url: '/me/settings',
-    payload: { data: { language: 'en' }, version: 1 },
+    payload: { data: { theme: 'system' }, version: 1 },
     description: 'update my settings',
   },
 ];
@@ -186,7 +186,13 @@ describe('Public routes — should be accessible without auth', () => {
     {
       method: 'POST',
       url: '/auth/register',
-      payload: { email: 'test@example.com', password: 'Pass1234!', username: 'testuser' },
+      payload: {
+        email: 'test@example.com',
+        password: 'Pass1234!',
+        username: 'testuser',
+        country: 'US',
+        languages: ['en'],
+      },
       description: 'register',
     },
     {

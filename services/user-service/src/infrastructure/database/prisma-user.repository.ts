@@ -38,7 +38,7 @@ const DEFAULT_PROFILE: IUserProfile = {
   bio: null,
   avatarUrl: null,
   timezone: 'UTC',
-  language: Language.EN,
+  languages: [Language.EN],
   country: null,
 };
 
@@ -171,9 +171,13 @@ export class PrismaUserRepository implements IUserRepository {
     const profile: IUserProfile = {
       ...DEFAULT_PROFILE,
       displayName: input.displayName || input.username,
-      language: input.language || Language.EN,
+      languages: input.languages.length > 0 ? input.languages : [Language.EN],
       timezone: input.timezone || 'UTC',
       country: input.country || null,
+    };
+    const persistedProfile = {
+      ...profile,
+      language: profile.languages[0] ?? Language.EN,
     };
 
     const user = await this.prisma.user.create({
@@ -186,7 +190,7 @@ export class PrismaUserRepository implements IUserRepository {
         emailVerified: false,
         roles: [UserRole.LEARNER],
         authProviders: input.authProvider ? [input.authProvider] : [AuthProvider.LOCAL],
-        profile: profile as unknown as Prisma.JsonObject,
+        profile: persistedProfile as unknown as Prisma.JsonObject,
         settings: DEFAULT_SETTINGS as unknown as Prisma.JsonObject,
         mfaEnabled: false,
         version: 1,
@@ -209,8 +213,12 @@ export class PrismaUserRepository implements IUserRepository {
       throw new VersionConflictError(version, existing.version);
     }
 
-    const currentProfile = existing.profile as unknown as IUserProfile;
-    const newProfile = { ...currentProfile, ...input };
+    const currentProfile = existing.profile as unknown as IUserProfile & { language?: Language };
+    const normalizedInput = {
+      ...input,
+      ...(input.languages !== undefined ? { language: input.languages[0] ?? Language.EN } : {}),
+    };
+    const newProfile = { ...currentProfile, ...normalizedInput };
 
     const user = await this.prisma.user.update({
       where: { id },
@@ -530,8 +538,8 @@ export class PrismaUserRepository implements IUserRepository {
     if (filters.language) {
       where.profile = {
         ...(where.profile as object),
-        path: ['language'],
-        equals: filters.language,
+        path: ['languages'],
+        array_contains: filters.language,
       };
     }
 
@@ -588,9 +596,19 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   private toDomain(user: PrismaUser): IUser {
+    const rawProfile = ((user.profile as unknown as Partial<IUserProfile> | null) ?? {}) as Partial<
+      IUserProfile
+    > & { language?: Language; languages?: Language[] };
+    const normalizedLanguages =
+      rawProfile.languages !== undefined && rawProfile.languages.length > 0
+        ? rawProfile.languages
+        : rawProfile.language !== undefined
+          ? [rawProfile.language]
+          : DEFAULT_PROFILE.languages;
     const profile = {
       ...DEFAULT_PROFILE,
-      ...((user.profile as unknown as Partial<IUserProfile> | null) ?? {}),
+      ...rawProfile,
+      languages: normalizedLanguages,
     } satisfies IUserProfile;
     const settings = {
       ...DEFAULT_SETTINGS,

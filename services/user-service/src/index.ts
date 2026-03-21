@@ -85,6 +85,7 @@ async function ensureBootstrapAdmin(
         avatarUrl: null,
         timezone: 'UTC',
         language: Language.EN,
+        languages: [Language.EN],
         country: config.bootstrapAdmin.country,
       },
       settings: {

@@ -69,7 +69,7 @@ export const UserProfileSchema = z.object({
   bio: z.string().max(500).nullable().optional(),
   avatarUrl: z.string().url().nullable().optional(),
   timezone: TimezoneSchema.default('UTC'),
-  language: LanguageSchema.default('en'),
+  languages: z.array(LanguageSchema).min(1, 'At least one language is required').default(['en']),
   country: z.string().length(2, 'Country code must be ISO 3166-1 alpha-2').nullable().optional(),
 });
 
@@ -152,7 +152,7 @@ export const CreateUserInputSchema = z.object({
   email: EmailSchema,
   password: PasswordSchema,
   displayName: DisplayNameSchema.optional(),
-  language: LanguageSchema.optional(),
+  languages: z.array(LanguageSchema).min(1, 'At least one language is required'),
   timezone: TimezoneSchema.optional(),
   country: z
     .string()
@@ -170,7 +170,7 @@ export const UpdateProfileInputSchema = z
     bio: z.string().max(500).nullable().optional(),
     avatarUrl: z.string().url().nullable().optional(),
     timezone: TimezoneSchema.optional(),
-    language: LanguageSchema.optional(),
+    languages: z.array(LanguageSchema).min(1, 'At least one language is required').optional(),
     country: z.string().length(2).nullable().optional(),
   })
   .strict();
