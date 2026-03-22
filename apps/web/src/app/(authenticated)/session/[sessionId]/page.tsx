@@ -20,22 +20,26 @@
 import * as React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Loader2, Eye, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@noema/ui';
-import type { SessionId } from '@noema/types';
-import type { ICheckpointDirectiveDto } from '@noema/api-client';
+import { AttemptOutcome, HintDepth, Rating, type SessionId } from '@noema/types';
+import type {
+  IAdaptiveCheckpointDirectiveDto,
+  IEvaluateCheckpointInput,
+  IRecordAttemptInput,
+  ISessionDto,
+} from '@noema/api-client/session';
 
 import {
-  useSession,
-  useSessionQueue,
-  useRecordAttempt,
-  useRequestHint,
+  useAbandonSession,
+  useCompleteSession,
   useEvaluateCheckpoint,
   usePauseSession,
+  useRecordAttempt,
   useResumeSession,
-  useCompleteSession,
-  useAbandonSession,
-} from '@noema/api-client';
+  useSession,
+  useSessionQueue,
+} from '@noema/api-client/session';
 import { useCard } from '@noema/api-client';
 
 import { useSessionStore } from '@/stores/session-store';
@@ -77,15 +81,13 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Local state ───────────────────────────────────────────────────────────
   const [isRevealed, setIsRevealed] = useState(false);
-  const [hintDepth, setHintDepth] = useState(0);
-  const [hintText, setHintText] = useState<string | null>(null);
-  const [selfReportedGuess, setSelfReportedGuess] = useState(false);
-  const [checkpoint, setCheckpoint] = useState<ICheckpointDirectiveDto | null>(null);
+  const [checkpoint, setCheckpoint] = useState<IAdaptiveCheckpointDirectiveDto | null>(null);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
-  // Track card start time for dwell time calculation
+  // Track card timings for attempt payloads
   const cardStartRef = useRef<number>(Date.now());
+  const revealTimeRef = useRef<number | null>(null);
 
   // ── API — session data ────────────────────────────────────────────────────
   const {
@@ -101,6 +103,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
     isError: queueError,
     refetch: refetchQueue,
   } = useSessionQueue(sessionId);
+  const sessionDto: ISessionDto | null = sessionData?.data ?? null;
 
   // ── Current card ──────────────────────────────────────────────────────────
   const queueItems = queueData?.data.items ?? [];
@@ -120,7 +123,6 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── API — mutations ───────────────────────────────────────────────────────
   const recordAttempt = useRecordAttempt(sessionId);
-  const requestHint = useRequestHint(sessionId);
   const evaluateCheckpoint = useEvaluateCheckpoint(sessionId);
   const pauseSession = usePauseSession();
   const resumeSession = useResumeSession();
@@ -141,10 +143,8 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Reset local state when the current card changes ───────────────────────
   useEffect(() => {
     setIsRevealed(false);
-    setHintDepth(0);
-    setHintText(null);
-    setSelfReportedGuess(false);
     cardStartRef.current = Date.now();
+    revealTimeRef.current = null;
     resetAttempt();
   }, [currentCardId, resetAttempt]);
 
@@ -181,92 +181,92 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Reveal ────────────────────────────────────────────────────────────────
   const handleReveal = useCallback((): void => {
     if (!isRevealed) {
+      revealTimeRef.current = Date.now() - cardStartRef.current;
       setIsRevealed(true);
     }
   }, [isRevealed]);
 
-  // ── Hint ──────────────────────────────────────────────────────────────────
-  const handleHint = useCallback((): void => {
-    setMutationError(null);
-    requestHint.mutate(undefined, {
-      onSuccess: (res) => {
-        setHintText(res.data.hint);
-        setHintDepth(res.data.depth);
-      },
-      onError: (err) => {
-        setMutationError(err.message);
-      },
-    });
-  }, [requestHint]);
-
   // ── Grade / record attempt ────────────────────────────────────────────────
   const handleGrade = useCallback(
     (grade: Grade): void => {
-      if (card === undefined) return;
+      if (card === undefined || sessionDto === null) return;
 
       const confidenceBefore = pendingAttempt?.confidenceBefore ?? null;
       const confidenceAfter = pendingAttempt?.confidenceAfter ?? null;
-      const calibrationDelta =
-        confidenceBefore !== null && confidenceAfter !== null
-          ? confidenceAfter - confidenceBefore
-          : undefined;
+      const dwellTimeMs = Math.max(
+        0,
+        Math.round(pendingAttempt?.dwellTimeMs ?? Date.now() - cardStartRef.current)
+      );
+      const responseTimeMs = Math.max(0, Math.round(revealTimeRef.current ?? dwellTimeMs));
+      const attemptInput: IRecordAttemptInput = {
+        cardId: card.id,
+        outcome: grade === 1 ? AttemptOutcome.INCORRECT : AttemptOutcome.CORRECT,
+        rating: gradeToRating(grade),
+        ratingValue: grade,
+        responseTimeMs,
+        dwellTimeMs,
+        ...(confidenceBefore !== null ? { confidenceBefore } : {}),
+        ...(confidenceAfter !== null ? { confidenceAfter } : {}),
+        wasRevisedBeforeCommit: false,
+        revisionCount: 0,
+        hintRequestCount: 0,
+        hintDepthReached: HintDepth.NONE,
+        contextSnapshot: {
+          learningMode: sessionDto.learningMode,
+          teachingApproach: sessionDto.teachingApproach,
+          activeInterventionIds: [],
+        },
+      };
+      const checkpointInput = buildCheckpointInput({
+        averageResponseTimeMs: sessionDto.stats.averageResponseTimeMs,
+        confidenceAfter,
+        confidenceBefore,
+        responseTimeMs,
+      });
 
       setMutationError(null);
-      recordAttempt.mutate(
-        {
-          cardId: card.id,
-          grade,
-          ...(confidenceBefore !== null ? { confidenceBefore } : {}),
-          ...(confidenceAfter !== null ? { confidenceAfter } : {}),
-          ...(calibrationDelta !== undefined ? { calibrationDelta } : {}),
-          hintDepthUsed: hintDepth,
-          dwellTimeMs: pendingAttempt?.dwellTimeMs ?? Date.now() - cardStartRef.current,
-          selfReportedGuess,
-        },
-        {
-          onSuccess: () => {
-            // `remaining` is the count of cards still left in the queue *after*
-            // the current attempt has been recorded (i.e. the current card is
-            // no longer counted). When it reaches 0 the queue is exhausted.
-            const remaining = queueData?.data.remaining ?? 0;
-            if (remaining <= 0) {
-              completeSession.mutate(sessionId, {
-                onSuccess: () => {
-                  router.push(`/session/${sessionId}/summary`);
+      recordAttempt.mutate(attemptInput, {
+        onSuccess: () => {
+          // `remaining` is the count of cards still left in the queue *after*
+          // the current attempt has been recorded (i.e. the current card is
+          // no longer counted). When it reaches 0 the queue is exhausted.
+          const remaining = queueData?.data.remaining ?? 0;
+          if (remaining <= 0) {
+            completeSession.mutate(sessionId, {
+              onSuccess: () => {
+                router.push(`/session/${sessionId}/summary`);
+              },
+              onError: (err) => {
+                setMutationError(err.message);
+              },
+            });
+          } else {
+            advanceCard();
+            // Check checkpoint every 5 cards
+            if ((completedCardCount + 1) % 5 === 0) {
+              evaluateCheckpoint.mutate(checkpointInput, {
+                onSuccess: (res) => {
+                  const directive = selectCheckpointDirective(res.data.directives);
+                  if (directive !== null) {
+                    setCheckpoint(directive);
+                  }
                 },
-                onError: (err) => {
-                  setMutationError(err.message);
+                onError: () => {
+                  // Checkpoint evaluation failure is non-critical — session continues
                 },
               });
-            } else {
-              advanceCard();
-              // Check checkpoint every 5 cards
-              if ((completedCardCount + 1) % 5 === 0) {
-                evaluateCheckpoint.mutate(undefined, {
-                  onSuccess: (res) => {
-                    const directive = res.data;
-                    if (directive.action !== 'continue') {
-                      setCheckpoint(directive);
-                    }
-                  },
-                  onError: () => {
-                    // Checkpoint evaluation failure is non-critical — session continues
-                  },
-                });
-              }
             }
-          },
-          onError: (err) => {
-            setMutationError(err.message);
-          },
-        }
-      );
+          }
+        },
+        onError: (err) => {
+          setMutationError(err.message);
+        },
+      });
     },
     [
       card,
       pendingAttempt,
-      hintDepth,
-      selfReportedGuess,
+      sessionDto,
       recordAttempt,
       queueData,
       completedCardCount,
@@ -328,12 +328,6 @@ export default function ActiveSessionPage(): React.JSX.Element {
       },
     },
     {
-      key: 'h',
-      label: 'Request hint',
-      handler: handleHint,
-      when: () => !isRevealed,
-    },
-    {
       key: 'p',
       label: 'Pause / Resume',
       handler: isPaused ? handleResume : handlePause,
@@ -348,15 +342,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
   ]);
 
   // ── Derived values ────────────────────────────────────────────────────────
-  const sessionDto = sessionData?.data ?? null;
   const totalCards = sessionDto?.cardIds.length ?? 0;
   const lane = sessionDto?.mode === 'standard' ? 'retention' : null;
 
   const isLoading = sessionLoading || queueLoading;
   const isCardLoading = cardLoading && currentCardId !== '';
   const queueHasRecoverableGap = queueItems.length > completedCardCount && currentCardId === '';
-
-  const maxHints = 3; // configurable; 3 is a reasonable default
 
   // ── Route param validation (after all hooks) ──────────────────────────────
   if (typeof raw !== 'string' || raw === '') {
@@ -445,18 +436,6 @@ export default function ActiveSessionPage(): React.JSX.Element {
       {/* ── Card Area (flex-1, scrollable) ─────────────────────────────────── */}
       <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 pb-4 pt-6">
         <div className="flex w-full max-w-2xl flex-col gap-4">
-          {/* Hint text (if any) */}
-          {hintText !== null && (
-            <div
-              className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
-              role="note"
-              aria-label="Hint"
-            >
-              <span className="mr-2 font-semibold">Hint:</span>
-              {hintText}
-            </div>
-          )}
-
           {/* PreAnswerConfidence (before reveal) */}
           {!isRevealed && (
             <PreAnswerConfidence
@@ -476,7 +455,6 @@ export default function ActiveSessionPage(): React.JSX.Element {
               mode="interactive"
               isRevealed={isRevealed}
               onReveal={handleReveal}
-              onHintRequest={handleHint}
             />
           ) : (
             <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-6 py-10 text-center">
@@ -531,22 +509,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
             </div>
           )}
 
-          {/* Reveal button (before reveal) */}
           {!isRevealed && card !== undefined && (
-            <div className="flex justify-center pt-2">
-              <Button
-                size="lg"
-                onClick={handleReveal}
-                aria-label="Reveal answer (Space)"
-                className="gap-2"
-              >
-                <Eye className="h-4 w-4" aria-hidden="true" />
-                Show Answer
-                <kbd className="ml-1 rounded bg-primary-foreground/20 px-1.5 py-0.5 font-mono text-xs">
-                  Space
-                </kbd>
-              </Button>
-            </div>
+            <p className="pt-1 text-center text-xs text-muted-foreground">
+              Press{' '}
+              <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono">
+                Space
+              </kbd>{' '}
+              to reveal when you're ready.
+            </p>
           )}
         </div>
       </div>
@@ -558,11 +528,6 @@ export default function ActiveSessionPage(): React.JSX.Element {
             <ResponseControls
               confidenceAfter={pendingAttempt?.confidenceAfter ?? null}
               onConfidenceAfter={setConfidenceAfter}
-              hintDepth={hintDepth}
-              maxHints={maxHints}
-              onHint={handleHint}
-              selfReportedGuess={selfReportedGuess}
-              onSelfReportedGuess={setSelfReportedGuess}
               onGrade={handleGrade}
               isSubmitting={recordAttempt.isPending || completeSession.isPending}
             />
@@ -622,4 +587,54 @@ export default function ActiveSessionPage(): React.JSX.Element {
       )}
     </div>
   );
+}
+
+function gradeToRating(grade: Grade): Rating {
+  switch (grade) {
+    case 1:
+      return Rating.AGAIN;
+    case 2:
+      return Rating.HARD;
+    case 3:
+      return Rating.GOOD;
+    case 4:
+      return Rating.EASY;
+  }
+}
+
+function buildCheckpointInput(input: {
+  averageResponseTimeMs: number;
+  confidenceAfter: number | null;
+  confidenceBefore: number | null;
+  responseTimeMs: number;
+}): IEvaluateCheckpointInput {
+  const confidenceDrift =
+    input.confidenceBefore !== null && input.confidenceAfter !== null
+      ? input.confidenceAfter - input.confidenceBefore
+      : null;
+
+  if (confidenceDrift !== null && Math.abs(confidenceDrift) >= 0.25) {
+    return {
+      trigger: 'confidence_drift',
+      confidenceDrift,
+    };
+  }
+
+  if (input.averageResponseTimeMs > 0 && input.responseTimeMs > input.averageResponseTimeMs * 1.6) {
+    return {
+      trigger: 'latency_spike',
+      lastAttemptResponseTimeMs: input.responseTimeMs,
+      rollingAverageResponseTimeMs: input.averageResponseTimeMs,
+    };
+  }
+
+  return {
+    trigger: 'manual',
+  };
+}
+
+function selectCheckpointDirective(
+  directives: IAdaptiveCheckpointDirectiveDto[]
+): IAdaptiveCheckpointDirectiveDto | null {
+  return directives.find((directive) => directive.action !== 'continue') ?? null;
 }

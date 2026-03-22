@@ -5,18 +5,24 @@
  * Not persisted — cleared when the user navigates away.
  */
 
-import type { IAttemptInput, ISessionDto, ISessionQueueDto } from '@noema/api-client/session';
+import type { ISessionDto, ISessionQueueDto } from '@noema/api-client/session';
 import { create } from 'zustand';
 
 // ============================================================================
 // State Shape
 // ============================================================================
 
+interface ISessionPendingAttempt {
+  confidenceBefore?: number;
+  confidenceAfter?: number;
+  dwellTimeMs?: number;
+}
+
 interface ISessionState {
   activeSession: ISessionDto | null;
   completedCardCount: number;
   queue: ISessionQueueDto | null;
-  pendingAttempt: Partial<IAttemptInput> | null;
+  pendingAttempt: ISessionPendingAttempt | null;
   elapsedTime: number;
   isPaused: boolean;
 }

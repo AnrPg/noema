@@ -3,11 +3,8 @@
 /**
  * @noema/web - Session / ResponseControls
  *
- * Post-reveal controls: post-answer confidence capture, 4-point grade buttons,
- * hint request button, and self-reported-guess checkbox.
+ * Post-reveal controls: post-answer confidence capture and 4-point grade buttons.
  */
-
-import { HelpCircle } from 'lucide-react';
 import { ConfidenceMeter } from '@noema/ui';
 
 // ============================================================================
@@ -19,11 +16,6 @@ export type Grade = 1 | 2 | 3 | 4;
 interface IResponseControlsProps {
   confidenceAfter: number | null;
   onConfidenceAfter: (c: number) => void;
-  hintDepth: number;
-  maxHints: number;
-  onHint: () => void;
-  selfReportedGuess: boolean;
-  onSelfReportedGuess: (v: boolean) => void;
   onGrade: (grade: Grade) => void;
   isSubmitting: boolean;
 }
@@ -125,16 +117,9 @@ function GradeButton({ grade, onClick, disabled }: IGradeButtonProps): React.JSX
 export function ResponseControls({
   confidenceAfter,
   onConfidenceAfter,
-  hintDepth,
-  maxHints,
-  onHint,
-  selfReportedGuess,
-  onSelfReportedGuess,
   onGrade,
   isSubmitting,
 }: IResponseControlsProps): React.JSX.Element {
-  const hintExhausted = hintDepth >= maxHints;
-
   return (
     <div className="flex flex-col gap-4">
       {/* Post-answer confidence */}
@@ -161,41 +146,6 @@ export function ResponseControls({
             disabled={isSubmitting}
           />
         ))}
-      </div>
-
-      {/* Hint + self-report row */}
-      <div className="flex items-center justify-between gap-2">
-        {/* Hint button */}
-        <button
-          type="button"
-          onClick={onHint}
-          disabled={hintExhausted}
-          aria-label={`Request hint (${String(hintDepth)} of ${String(maxHints)} used)`}
-          className={[
-            'flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-            'border-border hover:bg-muted/50',
-          ].join(' ')}
-        >
-          <HelpCircle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <span>
-            Hint {String(hintDepth)}/{String(maxHints)}
-          </span>
-        </button>
-
-        {/* Self-report toggle */}
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={selfReportedGuess}
-            onChange={(e) => {
-              onSelfReportedGuess(e.target.checked);
-            }}
-            className="h-4 w-4 rounded border-border accent-axon-500 focus-visible:ring-2 focus-visible:ring-offset-2"
-          />
-          I guessed
-        </label>
       </div>
     </div>
   );

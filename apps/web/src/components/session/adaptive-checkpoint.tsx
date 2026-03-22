@@ -11,24 +11,11 @@
 
 import * as React from 'react';
 import { Info } from 'lucide-react';
+import type { IAdaptiveCheckpointDirectiveDto } from '@noema/api-client/session';
 import { Button } from '@noema/ui';
 
-// ============================================================================
-// Types — mirrors ICheckpointDirectiveDto from @noema/api-client/session
-// ============================================================================
-
-type CheckpointAction = 'continue' | 'pause' | 'complete' | 'switch_mode';
-
-type SessionMode = 'standard' | 'cram' | 'preview' | 'test';
-
-interface ICheckpointDirective {
-  action: CheckpointAction;
-  reason: string;
-  suggestedMode?: SessionMode;
-}
-
 export interface IAdaptiveCheckpointProps {
-  directive: ICheckpointDirective;
+  directive: IAdaptiveCheckpointDirectiveDto;
   onDismiss: () => void;
 }
 
@@ -36,11 +23,13 @@ export interface IAdaptiveCheckpointProps {
 // Constants
 // ============================================================================
 
-const ACTION_LABELS: Record<CheckpointAction, string> = {
+const ACTION_LABELS: Record<IAdaptiveCheckpointDirectiveDto['action'], string> = {
   continue: 'Continuing',
-  pause: 'Suggested Pause',
-  complete: 'Session Complete',
-  switch_mode: 'Mode Switch Suggested',
+  rebalance_queue: 'Queue Rebalanced',
+  slowdown: 'Slow Down',
+  increase_support: 'More Support Recommended',
+  reduce_calibration_lane: 'Reduce Calibration',
+  switch_teaching_approach: 'Teaching Approach Shift',
 };
 
 // ============================================================================
@@ -70,12 +59,9 @@ export function AdaptiveCheckpoint({
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="text-sm font-semibold leading-snug">{actionLabel}</p>
         <p className="text-sm leading-snug opacity-80">{directive.reason}</p>
-        {directive.suggestedMode !== undefined && (
-          <p className="text-xs font-medium opacity-70">
-            {'Suggested mode: '}
-            <span className="capitalize">{directive.suggestedMode}</span>
-          </p>
-        )}
+        <p className="text-xs font-medium uppercase tracking-wide opacity-70">
+          Priority: {directive.priority}
+        </p>
       </div>
 
       {/* Dismiss */}
