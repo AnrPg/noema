@@ -5,7 +5,18 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { AttemptId, CardId, SessionId, UserId } from '@noema/types';
+import type {
+  AttemptId,
+  AttemptOutcome,
+  CardId,
+  HintDepth,
+  Rating,
+  SchedulingAlgorithm,
+  SessionId,
+  SessionTerminationReason,
+  TeachingApproach,
+  UserId,
+} from '@noema/types';
 
 // ============================================================================
 // Enums
@@ -25,12 +36,38 @@ export interface ISessionDto {
   userId: UserId;
   state: SessionState;
   mode: SessionMode;
+  learningMode: LearningMode;
+  teachingApproach: TeachingApproach;
+  schedulingAlgorithm: SchedulingAlgorithm;
   cardIds: CardId[];
   currentCardIndex: number;
+  stats: {
+    totalAttempts: number;
+    correctCount: number;
+    incorrectCount: number;
+    skippedCount: number;
+    averageResponseTimeMs: number;
+    averageConfidence: number | null;
+    averageCalibrationDelta: number | null;
+    retentionRate: number;
+    streakCurrent: number;
+    streakBest: number;
+    totalHintsUsed: number;
+    uniqueCardsReviewed: number;
+    newCardsIntroduced: number;
+    lapsedCards: number;
+    ratingDistribution: Record<string, number>;
+  };
+  initialQueueSize: number;
+  pauseCount: number;
+  totalPausedDurationMs: number;
   startedAt: string;
+  lastActivityAt: string;
   pausedAt: string | null;
   completedAt: string | null;
   abandonedAt: string | null;
+  terminationReason: SessionTerminationReason | null;
+  version: number;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -55,21 +92,57 @@ export interface IAttemptDto {
   createdAt: string;
 }
 
-export interface IAttemptInput {
+export interface IRecordAttemptInput {
   cardId: CardId;
-  grade: number;
-  /** Confidence before seeing the answer (0–1) */
+  outcome: AttemptOutcome;
+  rating: Rating;
+  ratingValue: number;
+  responseTimeMs: number;
+  dwellTimeMs: number;
+  timeToFirstInteractionMs?: number;
   confidenceBefore?: number;
-  /** Confidence after seeing the answer (0–1) */
   confidenceAfter?: number;
-  /** Signed delta: confidenceAfter − confidenceBefore */
-  calibrationDelta?: number;
-  /** How many hint tiers were consumed (0 = none) */
-  hintDepthUsed?: number;
-  /** Time the card was displayed, in milliseconds */
-  dwellTimeMs?: number;
-  /** User explicitly flagged this as a guess */
-  selfReportedGuess?: boolean;
+  wasRevisedBeforeCommit: boolean;
+  revisionCount?: number;
+  hintRequestCount?: number;
+  hintDepthReached: HintDepth;
+  contextSnapshot: {
+    learningMode: LearningMode;
+    teachingApproach: string;
+    loadoutArchetype?: string;
+    forceLevel?: string;
+    cognitiveLoad?: string;
+    fatigueLevel?: string;
+    motivationSignal?: string;
+    activeInterventionIds: string[];
+  };
+  priorSchedulingState?: {
+    algorithm: SchedulingAlgorithm;
+    stability?: number;
+    difficulty?: number;
+    elapsedDays: number;
+    retrievability?: number;
+    intervalDays?: number;
+    lapseCount?: number;
+    reviewCount?: number;
+    leitnerBox?: number;
+    sm2EaseFactor?: number;
+  };
+}
+
+export interface IRequestHintInput {
+  cardId?: CardId;
+  hintDepth: HintDepth;
+  hintRequestNumber: number;
+  responseTimeMsAtRequest: number;
+}
+
+export interface IEvaluateCheckpointInput {
+  trigger: 'confidence_drift' | 'latency_spike' | 'error_cascade' | 'streak_break' | 'manual';
+  lastAttemptResponseTimeMs?: number;
+  rollingAverageResponseTimeMs?: number;
+  recentIncorrectStreak?: number;
+  confidenceDrift?: number;
 }
 
 // ============================================================================
@@ -93,19 +166,29 @@ export interface ISessionQueueDto {
 // ============================================================================
 
 export interface IHintResponseDto {
-  hint: string;
-  depth: number;
-  remainingHints: number;
+  acknowledged: boolean;
 }
 
 // ============================================================================
 // Checkpoints
 // ============================================================================
 
-export interface ICheckpointDirectiveDto {
-  action: 'continue' | 'pause' | 'complete' | 'switch_mode';
+export interface IAdaptiveCheckpointDirectiveDto {
+  action:
+    | 'rebalance_queue'
+    | 'slowdown'
+    | 'increase_support'
+    | 'reduce_calibration_lane'
+    | 'switch_teaching_approach'
+    | 'continue';
   reason: string;
-  suggestedMode?: SessionMode;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+}
+
+export interface IEvaluateCheckpointResultDto {
+  shouldAdapt: boolean;
+  directives: IAdaptiveCheckpointDirectiveDto[];
+  reason: string;
 }
 
 // ============================================================================
@@ -155,7 +238,7 @@ export interface IOfflineIntentTokenDto {
 
 export interface IOfflineIntentVerifyInput {
   token: string;
-  attempts: IAttemptInput[];
+  attempts: IRecordAttemptInput[];
 }
 
 // ============================================================================
@@ -197,11 +280,16 @@ export interface ISessionFilters {
 
 export type SessionDto = ISessionDto;
 export type AttemptDto = IAttemptDto;
-export type AttemptInput = IAttemptInput;
+export type AttemptInput = IRecordAttemptInput;
+export type RecordAttemptInput = IRecordAttemptInput;
+export type RequestHintInput = IRequestHintInput;
+export type EvaluateCheckpointInput = IEvaluateCheckpointInput;
 export type SessionQueueItem = ISessionQueueItem;
 export type SessionQueueDto = ISessionQueueDto;
 export type HintResponseDto = IHintResponseDto;
-export type CheckpointDirectiveDto = ICheckpointDirectiveDto;
+export type AdaptiveCheckpointDirectiveDto = IAdaptiveCheckpointDirectiveDto;
+export type CheckpointDirectiveDto = IAdaptiveCheckpointDirectiveDto;
+export type EvaluateCheckpointResultDto = IEvaluateCheckpointResultDto;
 export type CohortHandshakeDto = ICohortHandshakeDto;
 export type UpdateStrategyInput = IUpdateStrategyInput;
 export type UpdateTeachingInput = IUpdateTeachingInput;
@@ -221,7 +309,7 @@ export type AttemptResponse = IApiResponse<IAttemptDto>;
 export type AttemptsListResponse = IApiResponse<IAttemptDto[]>;
 export type SessionQueueResponse = IApiResponse<ISessionQueueDto>;
 export type HintResponse = IApiResponse<IHintResponseDto>;
-export type CheckpointResponse = IApiResponse<ICheckpointDirectiveDto>;
+export type CheckpointResponse = IApiResponse<IEvaluateCheckpointResultDto>;
 export type CohortResponse = IApiResponse<ICohortHandshakeDto>;
 export type BlueprintValidationResponse = IApiResponse<IBlueprintValidationResult>;
 export type OfflineTokenResponse = IApiResponse<IOfflineIntentTokenDto>;

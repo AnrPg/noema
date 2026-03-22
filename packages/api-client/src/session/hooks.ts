@@ -11,7 +11,7 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from '@tanstack/react-query';
-import type { CardId, SessionId } from '@noema/types';
+import type { AttemptId, CardId, SessionId } from '@noema/types';
 
 import {
   attemptsApi,
@@ -29,10 +29,12 @@ import type {
   BlueprintValidationResponse,
   CheckpointResponse,
   CohortResponse,
+  IEvaluateCheckpointInput,
   HintResponse,
-  IAttemptInput,
+  IRecordAttemptInput,
   ICohortHandshakeDto,
   IOfflineIntentVerifyInput,
+  IRequestHintInput,
   ISessionFilters,
   IStartSessionInput,
   IUpdateStrategyInput,
@@ -185,7 +187,7 @@ export function useAbandonSession(options?: UseMutationOptions<SessionResponse, 
 
 export function useRecordAttempt(
   sessionId: SessionId,
-  options?: UseMutationOptions<AttemptResponse, Error, IAttemptInput>
+  options?: UseMutationOptions<AttemptResponse, Error, IRecordAttemptInput>
 ) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -198,9 +200,13 @@ export function useRecordAttempt(
   });
 }
 
-export function useRequestHint(sessionId: SessionId, options?: UseMutationOptions<HintResponse>) {
+export function useRequestHint(
+  sessionId: SessionId,
+  attemptId: AttemptId,
+  options?: UseMutationOptions<HintResponse, Error, IRequestHintInput>
+) {
   return useMutation({
-    mutationFn: () => attemptsApi.requestHint(sessionId),
+    mutationFn: (data) => attemptsApi.requestHint(sessionId, attemptId, data),
     ...options,
   });
 }
@@ -211,10 +217,10 @@ export function useRequestHint(sessionId: SessionId, options?: UseMutationOption
 
 export function useEvaluateCheckpoint(
   sessionId: SessionId,
-  options?: UseMutationOptions<CheckpointResponse>
+  options?: UseMutationOptions<CheckpointResponse, Error, IEvaluateCheckpointInput>
 ) {
   return useMutation({
-    mutationFn: () => checkpointApi.evaluateCheckpoint(sessionId),
+    mutationFn: (data) => checkpointApi.evaluateCheckpoint(sessionId, data),
     ...options,
   });
 }

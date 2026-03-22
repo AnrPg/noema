@@ -4,7 +4,13 @@
  * API methods for Session Service endpoints.
  */
 
-import type { CardId, SessionId, UserId } from '@noema/types';
+import {
+  HintDepth,
+  type CardId,
+  type HintDepth as HintDepthValue,
+  type SessionId,
+  type UserId,
+} from '@noema/types';
 
 import { http } from '../client.js';
 import type {
@@ -13,10 +19,12 @@ import type {
   BlueprintValidationResponse,
   CheckpointResponse,
   CohortResponse,
+  IEvaluateCheckpointInput,
   HintResponse,
-  IAttemptInput,
+  IRecordAttemptInput,
   ICohortHandshakeDto,
   IOfflineIntentVerifyInput,
+  IRequestHintInput,
   ISessionFilters,
   IStartSessionInput,
   IUpdateStrategyInput,
@@ -212,12 +220,38 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       userId: '' as UserId,
       state: 'ACTIVE',
       mode: 'standard',
+      learningMode: 'exploration',
+      teachingApproach: 'standard',
+      schedulingAlgorithm: 'fsrs',
       cardIds: [],
       currentCardIndex: 0,
+      stats: {
+        totalAttempts: 0,
+        correctCount: 0,
+        incorrectCount: 0,
+        skippedCount: 0,
+        averageResponseTimeMs: 0,
+        averageConfidence: null,
+        averageCalibrationDelta: null,
+        retentionRate: 0,
+        streakCurrent: 0,
+        streakBest: 0,
+        totalHintsUsed: 0,
+        uniqueCardsReviewed: 0,
+        newCardsIntroduced: 0,
+        lapsedCards: 0,
+        ratingDistribution: {},
+      },
+      initialQueueSize: 0,
+      pauseCount: 0,
+      totalPausedDurationMs: 0,
       startedAt: new Date(0).toISOString(),
+      lastActivityAt: new Date(0).toISOString(),
       pausedAt: null,
       completedAt: null,
       abandonedAt: null,
+      terminationReason: null,
+      version: 0,
       expiresAt: new Date(0).toISOString(),
       createdAt: new Date(0).toISOString(),
       updatedAt: new Date(0).toISOString(),
@@ -235,15 +269,57 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
     typeof stats['uniqueCardsReviewed'] === 'number'
       ? Math.max(0, stats['uniqueCardsReviewed'])
       : 0;
+  const learningMode = stringValue(session['learningMode'], 'exploration');
 
   return {
     id: stringValue(session['id']) as SessionId,
     userId: stringValue(session['userId']) as UserId,
     state: normalizeSessionState(stringValue(session['state'], 'active')),
     mode: normalizeSessionMode(stringValue(session['mode'] ?? session['learningMode'], 'standard')),
+    learningMode:
+      learningMode === 'goal_driven' ||
+      learningMode === 'exam_oriented' ||
+      learningMode === 'synthesis'
+        ? learningMode
+        : 'exploration',
+    teachingApproach: stringValue(
+      session['teachingApproach'],
+      'standard'
+    ) as SessionResponse['data']['teachingApproach'],
+    schedulingAlgorithm: stringValue(session['schedulingAlgorithm'], 'fsrs') as
+      | 'fsrs'
+      | 'hlr'
+      | 'sm2',
     cardIds: Array.from({ length: queueSize }, () => '' as CardId),
     currentCardIndex: Math.min(reviewedCount, queueSize),
+    stats: {
+      totalAttempts: numberValue(stats['totalAttempts']),
+      correctCount: numberValue(stats['correctCount']),
+      incorrectCount: numberValue(stats['incorrectCount']),
+      skippedCount: numberValue(stats['skippedCount']),
+      averageResponseTimeMs: numberValue(stats['averageResponseTimeMs']),
+      averageConfidence: nullableNumberValue(stats['averageConfidence']),
+      averageCalibrationDelta: nullableNumberValue(stats['averageCalibrationDelta']),
+      retentionRate: numberValue(stats['retentionRate']),
+      streakCurrent: numberValue(stats['streakCurrent']),
+      streakBest: numberValue(stats['streakBest']),
+      totalHintsUsed: numberValue(stats['totalHintsUsed']),
+      uniqueCardsReviewed: numberValue(stats['uniqueCardsReviewed']),
+      newCardsIntroduced: numberValue(stats['newCardsIntroduced']),
+      lapsedCards: numberValue(stats['lapsedCards']),
+      ratingDistribution:
+        typeof stats['ratingDistribution'] === 'object' && stats['ratingDistribution'] !== null
+          ? (stats['ratingDistribution'] as Record<string, number>)
+          : {},
+    },
+    initialQueueSize: queueSize,
+    pauseCount: numberValue(session['pauseCount']),
+    totalPausedDurationMs: numberValue(session['totalPausedDurationMs']),
     startedAt: stringValue(session['startedAt'] ?? session['createdAt'], new Date(0).toISOString()),
+    lastActivityAt: stringValue(
+      session['lastActivityAt'] ?? session['updatedAt'],
+      new Date(0).toISOString()
+    ),
     pausedAt:
       typeof session['pausedAt'] === 'string'
         ? session['pausedAt']
@@ -255,6 +331,11 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       session['terminationReason'] === 'abandoned'
         ? stringValue(session['updatedAt'] ?? session['completedAt'], new Date().toISOString())
         : null,
+    terminationReason:
+      typeof session['terminationReason'] === 'string'
+        ? (session['terminationReason'] as SessionResponse['data']['terminationReason'])
+        : null,
+    version: numberValue(session['version']),
     expiresAt: stringValue(
       session['expiresAt'] ?? session['lastActivityAt'] ?? session['updatedAt'],
       new Date(0).toISOString()
@@ -269,6 +350,14 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
 
 function stringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function nullableNumberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function normalizeSessionState(value: string): SessionResponse['data']['state'] {
@@ -299,7 +388,7 @@ function normalizeSessionMode(value: string): SessionResponse['data']['mode'] {
 // ============================================================================
 
 export const attemptsApi = {
-  recordAttempt: (sessionId: SessionId, data: IAttemptInput): Promise<AttemptResponse> =>
+  recordAttempt: (sessionId: SessionId, data: IRecordAttemptInput): Promise<AttemptResponse> =>
     http.post(`/v1/sessions/${sessionId}/attempts`, data),
 
   listAttempts: (sessionId: SessionId): Promise<AttemptsListResponse> =>
@@ -307,8 +396,12 @@ export const attemptsApi = {
       .get<AttemptsListResponse | AttemptsEnvelopeResponse>(`/v1/sessions/${sessionId}/attempts`)
       .then(normalizeAttemptsListResponse),
 
-  requestHint: (sessionId: SessionId): Promise<HintResponse> =>
-    http.post(`/v1/sessions/${sessionId}/attempts/hint`, {}),
+  requestHint: (
+    sessionId: SessionId,
+    attemptId: string,
+    data: IRequestHintInput
+  ): Promise<HintResponse> =>
+    http.post(`/v1/sessions/${sessionId}/attempts/${attemptId}/hint`, data),
 };
 
 type AttemptsEnvelopeResponse = Omit<AttemptsListResponse, 'data'> & {
@@ -378,22 +471,72 @@ function normalizeAttemptDto(value: unknown): AttemptsListResponse['data'][numbe
     id: stringValue(attempt['id']) as AttemptResponse['data']['id'],
     sessionId: stringValue(attempt['sessionId']) as SessionId,
     cardId: stringValue(attempt['cardId']) as CardId,
-    grade: typeof attempt['grade'] === 'number' ? attempt['grade'] : 0,
+    grade: normalizeGrade(attempt['ratingValue'], attempt['rating']),
     confidenceBefore:
       typeof attempt['confidenceBefore'] === 'number' ? attempt['confidenceBefore'] : null,
     confidenceAfter:
       typeof attempt['confidenceAfter'] === 'number' ? attempt['confidenceAfter'] : null,
-    calibrationDelta:
-      typeof attempt['calibrationDelta'] === 'number' ? attempt['calibrationDelta'] : null,
-    hintDepthUsed: typeof attempt['hintDepthUsed'] === 'number' ? attempt['hintDepthUsed'] : 0,
+    calibrationDelta: normalizeCalibrationDelta(attempt),
+    hintDepthUsed: normalizeHintDepthValue(attempt['hintDepthReached']),
     dwellTimeMs: typeof attempt['dwellTimeMs'] === 'number' ? attempt['dwellTimeMs'] : 0,
-    selfReportedGuess: attempt['selfReportedGuess'] === true,
-    reviewedAt: stringValue(attempt['reviewedAt'], new Date(0).toISOString()),
+    selfReportedGuess: false,
+    reviewedAt: stringValue(
+      attempt['reviewedAt'],
+      stringValue(attempt['createdAt'], new Date(0).toISOString())
+    ),
     createdAt: stringValue(
       attempt['createdAt'],
       stringValue(attempt['reviewedAt'], new Date(0).toISOString())
     ),
   };
+}
+
+function normalizeGrade(ratingValue: unknown, rating: unknown): number {
+  if (typeof ratingValue === 'number' && Number.isInteger(ratingValue)) {
+    return Math.min(4, Math.max(1, ratingValue));
+  }
+
+  switch (rating) {
+    case 'again':
+      return 1;
+    case 'hard':
+      return 2;
+    case 'good':
+      return 3;
+    case 'easy':
+      return 4;
+    default:
+      return 0;
+  }
+}
+
+function normalizeCalibrationDelta(attempt: Record<string, unknown>): number | null {
+  if (typeof attempt['calibrationDelta'] === 'number') {
+    return attempt['calibrationDelta'];
+  }
+
+  const confidenceBefore = attempt['confidenceBefore'];
+  const confidenceAfter = attempt['confidenceAfter'];
+
+  if (typeof confidenceBefore === 'number' && typeof confidenceAfter === 'number') {
+    return confidenceAfter - confidenceBefore;
+  }
+
+  return null;
+}
+
+function normalizeHintDepthValue(value: unknown): number {
+  switch (value as HintDepthValue | undefined) {
+    case HintDepth.CUE:
+      return 1;
+    case HintDepth.PARTIAL:
+      return 2;
+    case HintDepth.FULL_EXPLANATION:
+      return 3;
+    case HintDepth.NONE:
+    default:
+      return 0;
+  }
 }
 
 // ============================================================================
@@ -475,8 +618,11 @@ function normalizeSessionQueueItem(
 // ============================================================================
 
 export const checkpointApi = {
-  evaluateCheckpoint: (sessionId: SessionId): Promise<CheckpointResponse> =>
-    http.post(`/v1/sessions/${sessionId}/checkpoint`, {}),
+  evaluateCheckpoint: (
+    sessionId: SessionId,
+    data: IEvaluateCheckpointInput
+  ): Promise<CheckpointResponse> =>
+    http.post(`/v1/sessions/${sessionId}/checkpoints/evaluate`, data),
 };
 
 // ============================================================================
