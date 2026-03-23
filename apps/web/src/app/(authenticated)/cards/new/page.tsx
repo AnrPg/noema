@@ -17,9 +17,17 @@ import type {
   IBatchCreateInput,
   ICardDto,
   ICreateCardInput,
+  ICreateNodeInput,
   IGraphNodeDto,
+  NodeType,
 } from '@noema/api-client';
-import { contentKeys, useBatchCreateCards, useCreateCard, usePKGNodes } from '@noema/api-client';
+import {
+  contentKeys,
+  useBatchCreateCards,
+  useCreateCard,
+  useCreatePKGNode,
+  usePKGNodes,
+} from '@noema/api-client';
 import { useAuth } from '@noema/auth';
 import type { UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
@@ -78,6 +86,12 @@ interface ISettingsFormData {
 type CreatedResult =
   | { mode: 'single'; card: ICardDto }
   | { mode: 'batch'; batchId: string; created: ICardDto[]; total: number; failed: number };
+
+interface INodeTypeOption {
+  value: NodeType;
+  label: string;
+  description: string;
+}
 
 // ============================================================================
 // Card Type Registry
@@ -323,6 +337,15 @@ const CARD_TYPE_INFO: ICardTypeInfo[] = [
     description: 'Break down partial knowledge',
     group: 'Remediation',
   },
+];
+
+const NODE_TYPE_OPTIONS: INodeTypeOption[] = [
+  { value: 'concept', label: 'Concept', description: 'General topic or idea' },
+  { value: 'skill', label: 'Skill', description: 'Something the learner can do' },
+  { value: 'fact', label: 'Fact', description: 'Specific information to recall' },
+  { value: 'procedure', label: 'Procedure', description: 'Step-by-step method' },
+  { value: 'principle', label: 'Principle', description: 'Rule or governing idea' },
+  { value: 'example', label: 'Example', description: 'Concrete instance or case' },
 ];
 
 // ============================================================================
@@ -865,7 +888,10 @@ interface IStep3Props {
   settings: ISettingsFormData;
   kgNodes: IGraphNodeDto[];
   kgNodesLoading: boolean;
+  isCreatingNode: boolean;
+  nodeCreateError: string | null;
   onChange: (patch: Partial<ISettingsFormData>) => void;
+  onCreateNode: (input: ICreateNodeInput) => Promise<IGraphNodeDto>;
   isSubmitting: boolean;
   submitError: string | null;
   onBack: () => void;
@@ -877,7 +903,10 @@ function Step3Settings({
   settings,
   kgNodes,
   kgNodesLoading,
+  isCreatingNode,
+  nodeCreateError,
   onChange,
+  onCreateNode,
   isSubmitting,
   submitError,
   onBack,
@@ -885,6 +914,8 @@ function Step3Settings({
 }: IStep3Props): React.JSX.Element {
   const [nodeSearch, setNodeSearch] = React.useState('');
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false);
+  const [newNodeType, setNewNodeType] = React.useState<NodeType>('concept');
+  const [newNodeDescription, setNewNodeDescription] = React.useState('');
 
   const selectedNodeIds = React.useMemo(
     () => normalizeKnowledgeNodeIds(settings.knowledgeNodeIds),
@@ -899,7 +930,8 @@ function Step3Settings({
     return map;
   }, [kgNodes]);
 
-  const searchLower = nodeSearch.trim().toLowerCase();
+  const trimmedNodeSearch = nodeSearch.trim();
+  const searchLower = trimmedNodeSearch.toLowerCase();
   const filteredNodes = React.useMemo(() => {
     if (searchLower === '') return kgNodes.slice(0, 12);
     return kgNodes
@@ -911,6 +943,10 @@ function Step3Settings({
       )
       .slice(0, 12);
   }, [kgNodes, searchLower]);
+  const exactLabelMatch = React.useMemo(
+    () => kgNodes.find((node) => node.label.trim().toLowerCase() === searchLower),
+    [kgNodes, searchLower]
+  );
 
   function setSelectedNodeIds(nextIds: string[]): void {
     onChange({ knowledgeNodeIds: nextIds.join(', ') });
@@ -929,6 +965,26 @@ function Step3Settings({
     () => validateKnowledgeNodeIds(selectedNodeIds),
     [selectedNodeIds]
   );
+  const exactMatchAlreadySelected =
+    exactLabelMatch !== undefined && selectedNodeIds.includes(exactLabelMatch.id);
+
+  async function handleCreateNode(): Promise<void> {
+    if (trimmedNodeSearch === '') return;
+    try {
+      const createdNode = await onCreateNode({
+        label: trimmedNodeSearch,
+        type: newNodeType,
+        ...(newNodeDescription.trim() !== '' ? { description: newNodeDescription.trim() } : {}),
+      });
+
+      handleAddNode(createdNode.id);
+      setNodeSearch('');
+      setNewNodeDescription('');
+      setNewNodeType('concept');
+    } catch {
+      // Parent state already captures and renders the error.
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -964,6 +1020,107 @@ function Step3Settings({
             placeholder="Search node label, type, or ID"
             className={inputClass}
           />
+
+          {trimmedNodeSearch !== '' && (
+            <div className="rounded-md border border-dashed border-border bg-background/60 p-3">
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {exactLabelMatch !== undefined
+                      ? 'A matching node already exists'
+                      : 'Create a new PKG node from this label'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {exactLabelMatch !== undefined
+                      ? 'Use the existing node or create a more specific label.'
+                      : 'This creates the node in your personal knowledge graph and attaches this card to it.'}
+                  </p>
+                </div>
+
+                {exactLabelMatch !== undefined ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleAddNode(exactLabelMatch.id);
+                      }}
+                      disabled={exactMatchAlreadySelected}
+                      className={secondaryBtnClass}
+                    >
+                      {exactMatchAlreadySelected ? 'Already selected' : 'Attach existing node'}
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      {exactLabelMatch.label} · {exactLabelMatch.type}
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
+                      <FieldGroup label="New node label" required>
+                        <input
+                          type="text"
+                          value={trimmedNodeSearch}
+                          readOnly
+                          className={inputClass}
+                        />
+                      </FieldGroup>
+                      <FieldGroup label="Node type">
+                        <select
+                          value={newNodeType}
+                          onChange={(e) => {
+                            setNewNodeType(e.target.value as NodeType);
+                          }}
+                          className={selectClass}
+                        >
+                          {NODE_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label} — {option.description}
+                            </option>
+                          ))}
+                        </select>
+                      </FieldGroup>
+                    </div>
+
+                    <FieldGroup
+                      label="Description (optional)"
+                      hint="Useful when the label is short or ambiguous."
+                    >
+                      <textarea
+                        value={newNodeDescription}
+                        onChange={(e) => {
+                          setNewNodeDescription(e.target.value);
+                        }}
+                        rows={2}
+                        placeholder="Optional description for the new knowledge node"
+                        className={textareaClass}
+                      />
+                    </FieldGroup>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleCreateNode();
+                        }}
+                        disabled={isCreatingNode}
+                        className={primaryBtnClass}
+                      >
+                        {isCreatingNode ? 'Creating node…' : 'Create and attach node'}
+                      </button>
+                      <span className="text-xs text-muted-foreground">
+                        The card will still save through the Content service after the node is
+                        created.
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {nodeCreateError !== null && (
+                  <p className="text-xs text-destructive">{nodeCreateError}</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {selectedNodeIds.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -1208,7 +1365,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
           <button
             type="button"
             onClick={() => {
-              router.push((`/cards/${card.id}` as Route));
+              router.push(`/cards/${card.id}` as Route);
             }}
             className={primaryBtnClass}
           >
@@ -1260,7 +1417,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
                 <button
                   type="button"
                   onClick={() => {
-                    router.push((`/cards/${card.id}` as Route));
+                    router.push(`/cards/${card.id}` as Route);
                   }}
                   className="ml-2 text-xs text-primary underline-offset-2 hover:underline"
                 >
@@ -1536,6 +1693,7 @@ export default function NewCardPage(): React.JSX.Element {
   const [step2Error, setStep2Error] = React.useState<string | null>(null);
   // Mutation error shown on Step 3
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [nodeCreateError, setNodeCreateError] = React.useState<string | null>(null);
 
   // --------------------------------------------------------------------------
   // Mutations
@@ -1543,8 +1701,9 @@ export default function NewCardPage(): React.JSX.Element {
 
   const createCard = useCreateCard();
   const batchCreate = useBatchCreateCards();
+  const createNode = useCreatePKGNode(userId);
 
-  const isSubmitting = createCard.isPending || batchCreate.isPending;
+  const isSubmitting = createCard.isPending || batchCreate.isPending || createNode.isPending;
 
   // --------------------------------------------------------------------------
   // Step 1 handlers
@@ -1585,6 +1744,20 @@ export default function NewCardPage(): React.JSX.Element {
   function handleSettingsChange(patch: Partial<ISettingsFormData>): void {
     setSettings((prev) => ({ ...prev, ...patch }));
     setSubmitError(null);
+    setNodeCreateError(null);
+  }
+
+  async function handleCreateNode(input: ICreateNodeInput): Promise<IGraphNodeDto> {
+    setNodeCreateError(null);
+
+    try {
+      const response = await createNode.mutateAsync(input);
+      return response.data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Knowledge node creation failed.';
+      setNodeCreateError(message);
+      throw err;
+    }
   }
 
   async function handleSubmit(): Promise<void> {
@@ -1692,8 +1865,10 @@ export default function NewCardPage(): React.JSX.Element {
     setResult(null);
     setStep2Error(null);
     setSubmitError(null);
+    setNodeCreateError(null);
     createCard.reset();
     batchCreate.reset();
+    createNode.reset();
   }
 
   // --------------------------------------------------------------------------
@@ -1736,7 +1911,10 @@ export default function NewCardPage(): React.JSX.Element {
             settings={settings}
             kgNodes={pkgNodes}
             kgNodesLoading={kgNodesLoading}
+            isCreatingNode={createNode.isPending}
+            nodeCreateError={nodeCreateError}
             onChange={handleSettingsChange}
+            onCreateNode={handleCreateNode}
             isSubmitting={isSubmitting}
             submitError={submitError}
             onBack={() => {

@@ -60,6 +60,7 @@ import type {
   NodesListResponse,
   OperationsResponse,
   PrerequisiteChainResponse,
+  StageResponse,
   SubgraphResponse,
 } from './types.js';
 
@@ -91,10 +92,16 @@ function stringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+function titleCaseWords(input: string): string {
+  return input
+    .split(/[-_]/)
+    .filter((part) => part !== '')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
 function normalizeMisconceptionStatus(status: string): string {
-  if (status === 'addressed') return 'dismissed';
-  if (status === 'recurring') return 'detected';
-  return status;
+  return status === 'addressed' || status === 'recurring' ? status : status;
 }
 
 function normalizeMisconceptionRecord<T extends { status: string }>(entry: T): T {
@@ -104,35 +111,73 @@ function normalizeMisconceptionRecord<T extends { status: string }>(entry: T): T
   };
 }
 
-function normalizeMisconceptionEntry(
-  entry: Record<string, unknown>
-): {
+function normalizeMisconceptionEntry(entry: Record<string, unknown>): {
   id: string;
   userId: string;
   nodeId: string;
+  affectedNodeIds: string[];
+  misconceptionType?: string;
   pattern: string;
+  family?: string;
+  familyLabel?: string;
+  description?: string | null;
   status: string;
   confidence?: number;
+  severity?: 'low' | 'moderate' | 'high' | 'critical';
+  severityScore?: number;
+  detectionCount?: number;
   detectedAt: string;
+  lastDetectedAt?: string;
   resolvedAt: string | null;
 } {
   const affectedNodeIds = Array.isArray(entry['affectedNodeIds'])
     ? (entry['affectedNodeIds'] as string[])
     : [];
+  const family = stringValue(entry['family']);
+  const familyLabel =
+    stringValue(entry['familyLabel']) !== ''
+      ? stringValue(entry['familyLabel'])
+      : family !== ''
+        ? titleCaseWords(family)
+        : '';
+  const rawStatus = stringValue(entry['status'], 'detected');
 
   return normalizeMisconceptionRecord({
     id: stringValue(entry['id']),
     userId: stringValue(entry['userId']),
     nodeId: stringValue(entry['nodeId'], affectedNodeIds[0] ?? ''),
+    affectedNodeIds,
+    ...(stringValue(entry['misconceptionType']) !== ''
+      ? { misconceptionType: stringValue(entry['misconceptionType']) }
+      : {}),
     pattern:
       stringValue(entry['pattern']) !== ''
         ? stringValue(entry['pattern'])
         : stringValue(entry['description']) !== ''
           ? stringValue(entry['description'])
           : stringValue(entry['misconceptionType']),
-    status: stringValue(entry['status'], 'detected'),
+    ...(family !== '' ? { family } : {}),
+    ...(familyLabel !== '' ? { familyLabel } : {}),
+    ...(typeof entry['description'] === 'string' || entry['description'] === null
+      ? { description: entry['description'] }
+      : {}),
+    status: rawStatus,
     ...(typeof entry['confidence'] === 'number' ? { confidence: entry['confidence'] } : {}),
+    ...(typeof entry['severity'] === 'string'
+      ? {
+          severity: entry['severity'].toLowerCase() as 'low' | 'moderate' | 'high' | 'critical',
+        }
+      : {}),
+    ...(typeof entry['severityScore'] === 'number'
+      ? { severityScore: entry['severityScore'] }
+      : {}),
+    ...(typeof entry['detectionCount'] === 'number'
+      ? { detectionCount: entry['detectionCount'] }
+      : {}),
     detectedAt: stringValue(entry['detectedAt'], new Date(0).toISOString()),
+    ...(typeof entry['lastDetectedAt'] === 'string'
+      ? { lastDetectedAt: entry['lastDetectedAt'] }
+      : {}),
     resolvedAt:
       entry['resolvedAt'] === null || typeof entry['resolvedAt'] === 'string'
         ? entry['resolvedAt']
@@ -140,7 +185,9 @@ function normalizeMisconceptionEntry(
   });
 }
 
-function inferMutationType(operation: Record<string, unknown> | undefined): ICkgMutationDto['type'] {
+function inferMutationType(
+  operation: Record<string, unknown> | undefined
+): ICkgMutationDto['type'] {
   const opType = stringValue(operation?.['type']).toLowerCase();
 
   if (opType.includes('edge')) {
@@ -184,8 +231,7 @@ function normalizeMutationEntry(entry: Record<string, unknown>): ICkgMutationDto
     ...(operations.length > 0 ? { operations } : {}),
     ...(typeof entry['rationale'] === 'string' ? { rationale: entry['rationale'] } : {}),
     reviewedBy: null,
-    reviewNote:
-      typeof entry['revisionFeedback'] === 'string' ? entry['revisionFeedback'] : null,
+    reviewNote: typeof entry['revisionFeedback'] === 'string' ? entry['revisionFeedback'] : null,
     proposedAt: stringValue(entry['createdAt'], new Date(0).toISOString()),
     reviewedAt: terminalState ? updatedAt : null,
   };
@@ -283,6 +329,7 @@ export const kgKeys = {
   metrics: (userId: UserId) => [...kgKeys.all, 'metrics', userId] as const,
   metricHistory: (userId: UserId) => [...kgKeys.metrics(userId), 'history'] as const,
   health: (userId: UserId) => [...kgKeys.all, 'health', userId] as const,
+  healthStage: (userId: UserId) => [...kgKeys.health(userId), 'stage'] as const,
   misconceptions: (userId: UserId) => [...kgKeys.all, 'misconceptions', userId] as const,
   comparison: (userId: UserId) => [...kgKeys.all, 'comparison', userId] as const,
 };
@@ -674,6 +721,19 @@ export function useStructuralHealth(
   return useQuery({
     queryKey: kgKeys.health(userId),
     queryFn: () => healthApi.get(userId),
+    enabled: userId !== '',
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
+export function useMetacognitiveStage(
+  userId: UserId,
+  options?: Omit<UseQueryOptions<StageResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: kgKeys.healthStage(userId),
+    queryFn: () => healthApi.getStage(userId),
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,
     ...options,

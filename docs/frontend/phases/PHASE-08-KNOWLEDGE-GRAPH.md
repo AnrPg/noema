@@ -99,22 +99,21 @@ The full knowledge graph experience at `/knowledge`.
 **Layout:**
 
 ```
-┌──────────────────┬────────────────────────────┐
-│  Control Panel   │                            │
-│  (left, 280px)   │    GraphCanvas             │
-│                  │    (full remaining space)   │
-│  - Search bar    │                            │
-│  - Layout toggle │                            │
-│  - Overlays      │                            │
-│  - Legend         │                            │
-│  - Node list     │                            │
-│                  │                            │
-│                  │                            │
-├──────────────────┤                            │
-│  Node Detail     │                            │
-│  (bottom-left)   │                            │
-│  (when selected) │                            │
-└──────────────────┴────────────────────────────┘
+┌──────────────────┬────────────────────────────┬──────────────────┐
+│  Control Panel   │                            │  PKG Studio      │
+│  (left, 280px)   │    GraphCanvas             │  (right sidebar) │
+│                  │    (full remaining space)  │                  │
+│  - Search bar    │                            │  - System-guided │
+│  - Layout toggle │                            │    suggestions   │
+│  - Overlays      │                            │  - Create node   │
+│  - Legend        │                            │  - Edit node     │
+│  - Node list     │                            │  - Manage edges  │
+│                  │                            │                  │
+├──────────────────┤                            │                  │
+│  Node Detail     │                            │                  │
+│  (bottom-left)   │                            │                  │
+│  (when selected) │                            │                  │
+└──────────────────┴────────────────────────────┴──────────────────┘
 ```
 
 **Control Panel (left sidebar):**
@@ -134,6 +133,11 @@ The full knowledge graph experience at `/knowledge`.
 - **Legend**: filterable by node type — toggling a type hides/shows those nodes
 - **Node list**: scrollable list of all nodes, sorted by label. Clicking scrolls
   the graph to that node.
+- **System-guided review**: canonical comparison signals (`missingFromPkg`,
+  alignment score, personal-only nodes) plus actions to apply the next suggested
+  concepts into the PKG.
+- **PKG Studio**: manual node creation, selected-node editing, node deletion,
+  edge creation, and connected-edge removal.
 
 **Node Detail Panel** (appears when a node is selected):
 
@@ -202,7 +206,15 @@ PKG health analytics at `/knowledge/health`.
   cards:
   - Each pattern: title, description, affected metrics (as linked pills),
     suggested action
-  - Styled as alert cards with dendrite accent
+- Styled as alert cards with dendrite accent
+
+**Implemented note**
+
+- The frontend now consumes the full health report and separate stage assessment
+  through the Knowledge Graph API client.
+- `/knowledge/health` renders the hero score, metacognitive stage progression,
+  stage evidence/gaps, the metric radar, typed drill-down status/hints, and
+  cross-metric pattern insight cards.
 
 ### T8.4 — Misconception Center
 
@@ -243,6 +255,14 @@ Misconception management at `/knowledge/misconceptions`.
 
 - "Scan for new misconceptions" button → `useDetectMisconceptions(userId)` →
   loading spinner → results shown in the list
+
+**Implemented note**
+
+- The frontend now consumes richer misconception records from the API client,
+  including family, severity, affected node IDs, and full lifecycle status.
+- `/knowledge/misconceptions` renders status summary tiles, family breakdown,
+  sort controls, a five-stage misconception pipeline, subgraph review, and
+  lifecycle actions for confirm, address, resolve, and recurring escalation.
 
 ### T8.5 — PKG/CKG Comparison View
 

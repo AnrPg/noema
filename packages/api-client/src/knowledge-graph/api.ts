@@ -33,6 +33,7 @@ import type {
   NodesListResponse,
   OperationsResponse,
   PrerequisiteChainResponse,
+  StageResponse,
   ISubgraphParams,
   SubgraphResponse,
   TopologyResponse,
@@ -225,6 +226,9 @@ export const metricsApi = {
 export const healthApi = {
   get: (userId: UserId): Promise<HealthResponse> =>
     http.get(`/api/v1/users/${userId}/health`, { params: { domain: DEFAULT_DOMAIN } }),
+
+  getStage: (userId: UserId): Promise<StageResponse> =>
+    http.get(`/api/v1/users/${userId}/health/stage`, { params: { domain: DEFAULT_DOMAIN } }),
 };
 
 // ============================================================================

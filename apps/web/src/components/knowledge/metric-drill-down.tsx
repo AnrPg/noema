@@ -88,22 +88,36 @@ export interface IMetricDrillDownProps {
   metric: IRadarMetric;
   /** Ordered history entries — each entry's `score` field is used for the sparkline */
   historyScores?: number[];
+  status?: 'healthy' | 'warning' | 'critical';
+  trend?: 'improving' | 'stable' | 'declining';
+  hint?: string;
+  historyLabel?: string;
   onClose: () => void;
 }
 
 export function MetricDrillDown({
   metric,
   historyScores = [],
+  status,
+  trend,
+  hint,
+  historyLabel = 'Health trend',
   onClose,
 }: IMetricDrillDownProps): React.JSX.Element {
   const description = METRIC_DESCRIPTIONS[metric.key] ?? 'No description available.';
 
   const statusColor =
-    metric.value >= 0.7
+    status === 'healthy'
       ? 'text-green-400'
-      : metric.value >= 0.4
+      : status === 'warning'
         ? 'text-amber-400'
-        : 'text-red-400';
+        : status === 'critical'
+          ? 'text-red-400'
+          : metric.value >= 0.7
+            ? 'text-green-400'
+            : metric.value >= 0.4
+              ? 'text-amber-400'
+              : 'text-red-400';
 
   return (
     <div
@@ -128,16 +142,32 @@ export function MetricDrillDown({
 
       <div className="flex items-center gap-4">
         <NeuralGauge value={metric.value} size="sm" />
-        <span className={['text-2xl font-bold tabular-nums', statusColor].join(' ')}>
-          {String(Math.round(metric.value * 100))}
-          <span className="ml-0.5 text-sm font-normal text-muted-foreground">%</span>
-        </span>
+        <div className="space-y-1">
+          <span className={['text-2xl font-bold tabular-nums', statusColor].join(' ')}>
+            {String(Math.round(metric.value * 100))}
+            <span className="ml-0.5 text-sm font-normal text-muted-foreground">%</span>
+          </span>
+          {(status !== undefined || trend !== undefined) && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide">
+              {status !== undefined && (
+                <span className={['font-medium capitalize', statusColor].join(' ')}>{status}</span>
+              )}
+              {trend !== undefined && (
+                <span className="text-muted-foreground">{trend.replace('_', ' ')}</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {hint !== undefined && hint !== '' && (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">{hint}</p>
+      )}
 
       {historyScores.length > 0 && (
         <div className="mt-3">
           <p className="mb-1 text-xs text-muted-foreground">
-            Health trend ({String(historyScores.length)} snapshots)
+            {historyLabel} ({String(historyScores.length)} snapshots)
           </p>
           <Sparkline values={historyScores} />
         </div>

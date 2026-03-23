@@ -3,19 +3,33 @@
  * @noema/web — Knowledge / MisconceptionPipeline
  *
  * Horizontal pipeline showing the lifecycle of a misconception:
- * detected → confirmed → resolved / dismissed
+ * detected → confirmed → addressed → resolved → recurring
  * Current step is highlighted.
  */
 import * as React from 'react';
 
-type MisconceptionStatus = 'detected' | 'confirmed' | 'resolved' | 'dismissed';
+type MisconceptionStatus =
+  | 'detected'
+  | 'confirmed'
+  | 'addressed'
+  | 'resolved'
+  | 'recurring'
+  | 'dismissed';
 
-const PIPELINE_STEPS: MisconceptionStatus[] = ['detected', 'confirmed', 'resolved'];
+const PIPELINE_STEPS: Exclude<MisconceptionStatus, 'dismissed'>[] = [
+  'detected',
+  'confirmed',
+  'addressed',
+  'resolved',
+  'recurring',
+];
 
 const STEP_LABELS: Record<MisconceptionStatus, string> = {
   detected: 'Detected',
   confirmed: 'Confirmed',
+  addressed: 'Addressed',
   resolved: 'Resolved',
+  recurring: 'Recurring',
   dismissed: 'Dismissed',
 };
 

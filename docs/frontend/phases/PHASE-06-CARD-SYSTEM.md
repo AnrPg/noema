@@ -156,8 +156,8 @@ A multi-step card creation form at `/cards/new`.
    - `IMAGE_OCCLUSION`: image upload + SVG region editor
    - etc. (specific fields per type)
 3. **Metadata & Links**: tags input, difficulty level selector, knowledge graph
-   node linker (search + select nodes → `PATCH /cards/:id/node-links` after
-   creation)
+   node linker (search + select existing nodes, or create a new PKG node inline
+   and attach it before save)
 4. **Preview**: live preview using the `CardRenderer` in `preview` mode
 5. **Submit**: creates the card via `useCreateCard()`, shows success toast,
    offers "Create another" or "View card" options
