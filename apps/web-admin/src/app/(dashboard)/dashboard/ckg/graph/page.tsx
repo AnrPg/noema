@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useCKGNodes, useCKGEdges, useCKGMutations } from '@noema/api-client';
 import type { IGraphNodeDto, IGraphEdgeDto, ICkgMutationDto } from '@noema/api-client';
 import { Network, Loader2 } from 'lucide-react';
+import { Button } from '@noema/ui';
 import {
   GraphCanvas,
   GraphControls,
@@ -174,6 +175,19 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center gap-3 text-center">
         <Network className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
         <p className="text-muted-foreground">The Canonical Knowledge Graph is empty.</p>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          The graph is filled by approved canonical mutations and, soon, ontology import workflows.
+          Until those pipelines are fully wired, use the workspace and mutation queue to manage the
+          next steps instead of landing on a blank screen.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button asChild>
+            <Link href="/dashboard/ckg">Open CKG workspace</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/ckg/mutations">Review mutation queue</Link>
+          </Button>
+        </div>
       </div>
     );
   }

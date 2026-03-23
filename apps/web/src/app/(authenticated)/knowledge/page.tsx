@@ -6,12 +6,14 @@
  * left control panel and node detail panel.
  */
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@noema/auth';
 import { usePKGNodes, usePKGEdges, useKnowledgeFrontier, useBridgeNodes } from '@noema/api-client';
 import type { IGraphNodeDto, IGraphEdgeDto } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@noema/ui';
 import { useGraphStore } from '@/stores/graph-store';
 import { GraphCanvas } from '@/components/graph/graph-canvas';
 import { GraphControls } from '@/components/graph/graph-controls';
@@ -192,6 +194,17 @@ export default function KnowledgePage(): React.JSX.Element {
         <p className="text-sm text-muted-foreground">
           Complete study sessions to automatically build your PKG.
         </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button asChild>
+            <Link href="/session/new">Start Session</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/sessions">View Sessions</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/knowledge/comparison">Compare with CKG</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -199,9 +212,9 @@ export default function KnowledgePage(): React.JSX.Element {
   return (
     <div className="relative flex h-full w-full overflow-hidden">
       {/* Left control panel */}
-        <GraphControls
-          nodes={visibleNodes}
-          layoutMode={layoutMode}
+      <GraphControls
+        nodes={visibleNodes}
+        layoutMode={layoutMode}
         activeOverlays={activeOverlays}
         searchQuery={searchQuery}
         hiddenTypes={hiddenTypes}

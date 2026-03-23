@@ -8,8 +8,9 @@
  */
 
 import * as React from 'react';
-import { useCard } from '@noema/api-client/content';
+import { contentKeys } from '@noema/api-client/content';
 import type { CardId } from '@noema/types';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import type { ICardDto } from '@noema/api-client/content';
@@ -26,6 +27,7 @@ interface IAttemptRow {
   confidenceAfter: number | null;
   hintDepthUsed: number;
   dwellTimeMs: number;
+  reviewedAt: string;
 }
 
 interface ICardResultsTableProps {
@@ -38,17 +40,17 @@ function truncateText(text: string, maxLength: number): string {
 }
 
 function guessCardLabel(card: ICardDto): string {
-  const metadata = (card.metadata) ?? {};
-  const content = (card.content) ?? {};
+  const metadata = card.metadata;
+  const content = card.content;
   const candidates: (string | undefined)[] = [
-    content.front as string | undefined,
-    content.question as string | undefined,
-    content.scenario as string | undefined,
-    content.prompt as string | undefined,
-    content.title as string | undefined,
-    content.description as string | undefined,
-    metadata.title as string | undefined,
-    metadata.description as string | undefined,
+    content['front'] as string | undefined,
+    content['question'] as string | undefined,
+    content['scenario'] as string | undefined,
+    content['prompt'] as string | undefined,
+    content['title'] as string | undefined,
+    content['description'] as string | undefined,
+    metadata['title'] as string | undefined,
+    metadata['description'] as string | undefined,
   ];
 
   for (const candidate of candidates) {
@@ -60,19 +62,27 @@ function guessCardLabel(card: ICardDto): string {
   return card.id;
 }
 
-function CardQuestionLink({ cardId }: { cardId: CardId }): React.JSX.Element {
-  const { data: card, isLoading } = useCard(cardId);
-  const label = React.useMemo(() => (card ? guessCardLabel(card) : undefined), [card]);
-  const displayText = isLoading ? 'Loading card…' : label ?? truncateId(cardId);
-  const title = label ?? cardId;
+function CardQuestionLink({
+  cardId,
+  fallbackLabel,
+}: {
+  cardId: CardId;
+  fallbackLabel: string;
+}): React.JSX.Element {
+  const queryClient = useQueryClient();
+  const cachedCard = queryClient.getQueryData<ICardDto>(contentKeys.detail(cardId));
+  const label = React.useMemo(
+    () => (cachedCard !== undefined ? guessCardLabel(cachedCard) : fallbackLabel),
+    [cachedCard, fallbackLabel]
+  );
 
   return (
     <Link
       href={`/cards/${cardId}`}
       className="text-synapse-400 underline-offset-2 hover:underline"
-      title={title}
+      title={label}
     >
-      {truncateText(displayText, 64)}
+      {truncateText(label, 64)}
     </Link>
   );
 }
@@ -119,6 +129,27 @@ function formatConfidence(value: number | null): string {
   return `${String(Math.round(value * 100))}%`;
 }
 
+function describeConfidenceChange(
+  confidenceBefore: number | null,
+  confidenceAfter: number | null
+): string {
+  if (confidenceBefore === null && confidenceAfter === null) {
+    return 'Not rated';
+  }
+
+  if (confidenceBefore !== null && confidenceAfter !== null) {
+    const before = formatConfidence(confidenceBefore);
+    const after = formatConfidence(confidenceAfter);
+    return before === after ? `Stayed at ${before}` : `${before} -> ${after}`;
+  }
+
+  if (confidenceBefore !== null) {
+    return `Started at ${formatConfidence(confidenceBefore)}`;
+  }
+
+  return `Ended at ${formatConfidence(confidenceAfter)}`;
+}
+
 /**
  * Formats dwell time in milliseconds as a human-readable string.
  * e.g. 75_000 → "1m 15s", 45_000 → "45s"
@@ -132,11 +163,18 @@ function formatDwell(ms: number): string {
   return `${String(minutes)}m ${String(seconds)}s`;
 }
 
-/**
- * Truncates a card ID to the first 8 characters and appends "…".
- */
-function truncateId(id: string): string {
-  return id.length > 8 ? id.slice(0, 8) + '…' : id;
+function formatReviewedAt(isoString: string): string {
+  const parsed = new Date(isoString);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Unknown time';
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 // ============================================================================
@@ -144,6 +182,18 @@ function truncateId(id: string): string {
 // ============================================================================
 
 export function CardResultsTable({ attempts }: ICardResultsTableProps): React.JSX.Element {
+  const cardOrderById = React.useMemo(() => {
+    const order = new Map<string, number>();
+
+    for (const attempt of attempts) {
+      if (!order.has(attempt.cardId)) {
+        order.set(attempt.cardId, order.size + 1);
+      }
+    }
+
+    return order;
+  }, [attempts]);
+
   if (attempts.length === 0) {
     return (
       <div className="flex min-h-[120px] items-center justify-center rounded-lg border border-border bg-muted/30 text-sm text-muted-foreground">
@@ -162,21 +212,24 @@ export function CardResultsTable({ attempts }: ICardResultsTableProps): React.JS
             <th className="px-4 py-2">Confidence</th>
             <th className="px-4 py-2">Hints</th>
             <th className="px-4 py-2">Dwell</th>
+            <th className="px-4 py-2">Reviewed</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {attempts.map((attempt) => {
-            const confidenceBefore = formatConfidence(attempt.confidenceBefore);
-            const confidenceAfter = formatConfidence(attempt.confidenceAfter);
-            const confidenceDisplay =
-              attempt.confidenceBefore !== null || attempt.confidenceAfter !== null
-                ? `${confidenceBefore} → ${confidenceAfter}`
-                : '—';
+            const confidenceDisplay = describeConfidenceChange(
+              attempt.confidenceBefore,
+              attempt.confidenceAfter
+            );
+            const fallbackLabel = `Card ${String(cardOrderById.get(attempt.cardId) ?? 1)}`;
 
             return (
               <tr key={attempt.id} className="bg-background transition-colors hover:bg-muted/30">
                 <td className="px-4 py-2 font-medium text-sm">
-                  <CardQuestionLink cardId={attempt.cardId as CardId} />
+                  <CardQuestionLink
+                    cardId={attempt.cardId as CardId}
+                    fallbackLabel={fallbackLabel}
+                  />
                 </td>
                 <td className="px-4 py-2">
                   <GradeLabel grade={attempt.grade} />
@@ -189,6 +242,9 @@ export function CardResultsTable({ attempts }: ICardResultsTableProps): React.JS
                 </td>
                 <td className="px-4 py-2 tabular-nums text-muted-foreground">
                   {formatDwell(attempt.dwellTimeMs)}
+                </td>
+                <td className="px-4 py-2 tabular-nums text-muted-foreground">
+                  {formatReviewedAt(attempt.reviewedAt)}
                 </td>
               </tr>
             );
