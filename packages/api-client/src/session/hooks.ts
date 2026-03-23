@@ -57,6 +57,63 @@ export const sessionKeys = {
   attempts: (id: SessionId) => [...sessionKeys.detail(id), 'attempts'] as const,
 };
 
+function matchesSessionFilters(
+  session: SessionResponse['data'],
+  filters?: ISessionFilters
+): boolean {
+  if (filters?.state !== undefined && session.state !== filters.state) {
+    return false;
+  }
+
+  if (filters?.mode !== undefined && session.mode !== filters.mode) {
+    return false;
+  }
+
+  return true;
+}
+
+function updateCachedSessionLists(
+  queryClient: ReturnType<typeof useQueryClient>,
+  updatedSession: SessionResponse['data']
+): void {
+  const cachedLists = queryClient.getQueriesData<SessionsListResponse>({
+    queryKey: [...sessionKeys.all, 'list'],
+  });
+
+  cachedLists.forEach(([queryKey, cachedResponse]) => {
+    if (cachedResponse === undefined) {
+      return;
+    }
+
+    const filters = Array.isArray(queryKey)
+      ? (queryKey[2] as ISessionFilters | undefined)
+      : undefined;
+    const previousLength = cachedResponse.data.length;
+    const otherSessions = cachedResponse.data.filter((session) => session.id !== updatedSession.id);
+    const nextData = matchesSessionFilters(updatedSession, filters)
+      ? [updatedSession, ...otherSessions]
+      : otherSessions;
+    const lengthDelta = nextData.length - previousLength;
+
+    queryClient.setQueryData<SessionsListResponse>(queryKey, {
+      ...cachedResponse,
+      data: nextData,
+      ...(cachedResponse.pagination !== undefined
+        ? {
+            pagination: {
+              ...cachedResponse.pagination,
+              total: Math.max(0, cachedResponse.pagination.total + lengthDelta),
+              hasMore:
+                cachedResponse.pagination.offset +
+                  cachedResponse.pagination.limit <
+                Math.max(0, cachedResponse.pagination.total + lengthDelta),
+            },
+          }
+        : {}),
+    });
+  });
+}
+
 // ============================================================================
 // Query Hooks
 // ============================================================================
@@ -125,6 +182,7 @@ export function useStartSession(
     onSuccess: (data) => {
       // Pre-populate the session detail cache so the session page doesn't need an extra round-trip
       queryClient.setQueryData(sessionKeys.detail(data.data.id), data);
+      updateCachedSessionLists(queryClient, data.data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,
@@ -137,6 +195,7 @@ export function usePauseSession(options?: UseMutationOptions<SessionResponse, Er
     mutationFn: sessionsApi.pauseSession,
     onSuccess: (data, id) => {
       queryClient.setQueryData(sessionKeys.detail(id), data);
+      updateCachedSessionLists(queryClient, data.data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,
@@ -149,6 +208,7 @@ export function useResumeSession(options?: UseMutationOptions<SessionResponse, E
     mutationFn: sessionsApi.resumeSession,
     onSuccess: (data, id) => {
       queryClient.setQueryData(sessionKeys.detail(id), data);
+      updateCachedSessionLists(queryClient, data.data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,
@@ -163,6 +223,7 @@ export function useCompleteSession(
     mutationFn: sessionsApi.completeSession,
     onSuccess: (data, id) => {
       queryClient.setQueryData(sessionKeys.detail(id), data);
+      updateCachedSessionLists(queryClient, data.data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,
@@ -175,6 +236,7 @@ export function useAbandonSession(options?: UseMutationOptions<SessionResponse, 
     mutationFn: sessionsApi.abandonSession,
     onSuccess: (data, id) => {
       queryClient.setQueryData(sessionKeys.detail(id), data);
+      updateCachedSessionLists(queryClient, data.data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
     },
     ...options,

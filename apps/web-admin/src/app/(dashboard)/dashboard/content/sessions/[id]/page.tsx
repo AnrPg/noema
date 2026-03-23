@@ -9,8 +9,10 @@
 
 import * as React from 'react';
 import type { JSX } from 'react';
-import type { IAttemptDto } from '@noema/api-client';
-import { useSession, useSessionAttempts } from '@noema/api-client';
+import type { IAttemptDto, UserDto } from '@noema/api-client';
+import { useSession, useSessionAttempts, usersApi } from '@noema/api-client';
+import { getUserDisplayName } from '@noema/auth/user-display';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -141,6 +143,41 @@ export default function SessionDetailPage(): JSX.Element {
   const session = sessionResponse.data;
   const attempts = getAttemptsFromResponse(attemptsResponse?.data);
 
+  const sessionUserId = session.userId ?? '';
+  const sessionUserQuery = useQuery<UserDto | null>(
+    ['session-user', sessionUserId],
+    async () => {
+      if (sessionUserId === '') return null;
+      try {
+        const response = await usersApi.getById(sessionUserId);
+        return response.data;
+      } catch {
+        const searchCandidates = new Set<string>();
+        searchCandidates.add(sessionUserId);
+        if (sessionUserId.startsWith('user_')) {
+          searchCandidates.add(sessionUserId.slice('user_'.length));
+        }
+
+        for (const candidate of searchCandidates) {
+          const term = candidate.trim();
+          if (term === '') continue;
+          const list = await usersApi.list({ search: term }, { limit: 1 });
+          if (list.data.items.length > 0) {
+            return list.data.items[0];
+          }
+        }
+        return null;
+      }
+    },
+    {
+      enabled: sessionUserId !== '',
+      retry: false,
+      staleTime: 5 * 60 * 1000,
+    }
+  );
+  const sessionUser = sessionUserQuery.data ?? null;
+  const sessionUserDisplayName = sessionUser ? getUserDisplayName(sessionUser) : '';
+
   return (
     <div className="space-y-6">
       {/* Back link */}
@@ -172,12 +209,20 @@ export default function SessionDetailPage(): JSX.Element {
           </div>
           <p className="text-sm text-muted-foreground pt-1">
             User:{' '}
-            <Link
-              href={`/dashboard/users/${session.userId}`}
-              className="font-mono text-xs text-primary hover:underline"
-            >
-              {session.userId}
-            </Link>
+            {sessionUser ? (
+              <Link
+                href={`/dashboard/users/${sessionUser.id}`}
+                className="font-medium text-sm text-primary hover:underline"
+              >
+                {sessionUserDisplayName} (@{sessionUser.username})
+              </Link>
+            ) : sessionUserQuery.isLoading ? (
+              <span className="font-mono text-xs text-muted-foreground">Loading user…</span>
+            ) : (
+              <span className="font-mono text-xs text-muted-foreground">
+                {truncateId(session.userId)}
+              </span>
+            )}
           </p>
         </CardHeader>
       </Card>

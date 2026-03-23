@@ -8,7 +8,11 @@
  */
 
 import * as React from 'react';
+import { useCard } from '@noema/api-client/content';
+import type { CardId } from '@noema/types';
 import Link from 'next/link';
+
+import type { ICardDto } from '@noema/api-client/content';
 
 // ============================================================================
 // Types
@@ -26,6 +30,51 @@ interface IAttemptRow {
 
 interface ICardResultsTableProps {
   attempts: IAttemptRow[];
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength - 1) + '…';
+}
+
+function guessCardLabel(card: ICardDto): string {
+  const metadata = (card.metadata as Record<string, unknown>) ?? {};
+  const content = (card.content as Record<string, unknown>) ?? {};
+  const candidates: Array<string | undefined> = [
+    content.front as string | undefined,
+    content.question as string | undefined,
+    content.scenario as string | undefined,
+    content.prompt as string | undefined,
+    content.title as string | undefined,
+    content.description as string | undefined,
+    metadata.title as string | undefined,
+    metadata.description as string | undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate.trim();
+    }
+  }
+
+  return card.id;
+}
+
+function CardQuestionLink({ cardId }: { cardId: CardId }): React.JSX.Element {
+  const { data: card, isLoading } = useCard(cardId);
+  const label = React.useMemo(() => (card ? guessCardLabel(card) : undefined), [card]);
+  const displayText = isLoading ? 'Loading card…' : label ?? truncateId(cardId);
+  const title = label ?? cardId;
+
+  return (
+    <Link
+      href={`/cards/${cardId}`}
+      className="text-synapse-400 underline-offset-2 hover:underline"
+      title={title}
+    >
+      {truncateText(displayText, 64)}
+    </Link>
+  );
 }
 
 // ============================================================================
@@ -126,13 +175,8 @@ export function CardResultsTable({ attempts }: ICardResultsTableProps): React.JS
 
             return (
               <tr key={attempt.id} className="bg-background transition-colors hover:bg-muted/30">
-                <td className="px-4 py-2 font-mono">
-                  <Link
-                    href={`/cards/${attempt.cardId}`}
-                    className="text-synapse-400 underline-offset-2 hover:underline"
-                  >
-                    {truncateId(attempt.cardId)}
-                  </Link>
+                <td className="px-4 py-2 font-medium text-sm">
+                  <CardQuestionLink cardId={attempt.cardId as CardId} />
                 </td>
                 <td className="px-4 py-2">
                   <GradeLabel grade={attempt.grade} />

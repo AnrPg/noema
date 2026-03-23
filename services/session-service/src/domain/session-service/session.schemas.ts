@@ -33,6 +33,9 @@ const AdaptiveCheckpointSignalSchema = z.enum([
   'streak_break',
   'manual',
 ]);
+const TeachingApproachInputSchema = z
+  .union([TeachingApproachSchema, z.literal('socratic_questioning')])
+  .transform((value) => (value === 'socratic_questioning' ? 'standard' : value));
 
 const CohortLinkageSchema = z.object({
   proposalId: z.string().min(1),
@@ -99,7 +102,7 @@ export type SessionConfigInput = z.input<typeof SessionConfigSchema>;
 export const StartSessionInputSchema = z.object({
   deckQueryId: DeckQueryLogIdSchema.describe('Deck query log that produced the card set'),
   learningMode: LearningModeSchema.describe('Active learning mode'),
-  teachingApproach: TeachingApproachSchema.optional().describe('Initial teaching approach'),
+  teachingApproach: TeachingApproachInputSchema.optional().describe('Initial teaching approach'),
   schedulingAlgorithm: SchedulingAlgorithmSchema.optional().describe('Scheduling algorithm to use'),
   loadoutId: LoadoutIdSchema.optional().describe('Active loadout ID'),
   loadoutArchetype: LoadoutArchetypeSchema.optional().describe('Loadout archetype'),
@@ -173,7 +176,7 @@ export type ValidateSessionBlueprintInput = z.input<typeof ValidateSessionBluepr
 
 export const AttemptContextSchema = z.object({
   learningMode: LearningModeSchema,
-  teachingApproach: TeachingApproachSchema,
+  teachingApproach: TeachingApproachInputSchema,
   loadoutArchetype: LoadoutArchetypeSchema.optional(),
   forceLevel: ForceLevelSchema.optional(),
   cognitiveLoad: CognitiveLoadLevelSchema.optional(),
@@ -319,7 +322,7 @@ export type UpdateStrategyInput = z.input<typeof UpdateStrategyInputSchema>;
 // ============================================================================
 
 export const ChangeTeachingInputSchema = z.object({
-  newApproach: TeachingApproachSchema.describe('New teaching approach'),
+  newApproach: TeachingApproachInputSchema.describe('New teaching approach'),
   trigger: z.string().min(1).max(500).describe('What triggered the teaching change'),
 });
 

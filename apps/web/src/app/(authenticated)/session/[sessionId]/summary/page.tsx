@@ -151,7 +151,8 @@ export default function SessionSummaryPage(): React.JSX.Element {
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Per-lane breakdown requires server-side lane attribution on attempts.
+            This percentage reflects how many cards you marked as Good or Easy this session. Lane-specific
+            breakdowns will appear once each attempt is tagged with a lane on the server.
           </p>
         </div>
       </section>

@@ -124,16 +124,18 @@ function AppearanceSection(): React.JSX.Element {
 // Study Preferences Section
 // ============================================================================
 
+const DEFAULT_DAILY_GOAL = 20;
+
 function StudyPreferencesSection(): React.JSX.Element {
   const { data: settings, isLoading } = useMySettings();
   const updateSettings = useUpdateSettings();
   // Controlled local state so the slider label stays in sync after re-fetches
-  const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoal ?? 20);
+  const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoal ?? DEFAULT_DAILY_GOAL);
 
   // Sync controlled value when server data arrives or cache updates
   useEffect(() => {
     if (settings !== undefined) {
-      setDailyGoal(settings.dailyGoal);
+      setDailyGoal(settings.dailyGoal ?? DEFAULT_DAILY_GOAL);
     }
   }, [settings]);
 

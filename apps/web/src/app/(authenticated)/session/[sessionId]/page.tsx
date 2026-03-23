@@ -104,6 +104,8 @@ export default function ActiveSessionPage(): React.JSX.Element {
     refetch: refetchQueue,
   } = useSessionQueue(sessionId);
   const sessionDto: ISessionDto | null = sessionData?.data ?? null;
+  const totalCards = sessionDto?.cardIds.length ?? 0;
+  const lane = sessionDto?.mode === 'standard' ? 'retention' : null;
 
   // ── Current card ──────────────────────────────────────────────────────────
   const queueItems = queueData?.data.items ?? [];
@@ -213,7 +215,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
         hintDepthReached: HintDepth.NONE,
         contextSnapshot: {
           learningMode: sessionDto.learningMode,
-          teachingApproach: sessionDto.teachingApproach,
+          teachingApproach: normalizeTeachingApproach(sessionDto.teachingApproach),
           activeInterventionIds: [],
         },
       };
@@ -227,11 +229,11 @@ export default function ActiveSessionPage(): React.JSX.Element {
       setMutationError(null);
       recordAttempt.mutate(attemptInput, {
         onSuccess: () => {
-          // `remaining` is the count of cards still left in the queue *after*
-          // the current attempt has been recorded (i.e. the current card is
-          // no longer counted). When it reaches 0 the queue is exhausted.
-          const remaining = queueData?.data.remaining ?? 0;
-          if (remaining <= 0) {
+          const reviewedCards = completedCardCount + 1;
+          const isQueueExhausted =
+            reviewedCards >= queueItems.length || reviewedCards >= totalCards;
+
+          if (isQueueExhausted) {
             completeSession.mutate(sessionId, {
               onSuccess: () => {
                 router.push(`/session/${sessionId}/summary`);
@@ -259,7 +261,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
           }
         },
         onError: (err) => {
-          setMutationError(err.message);
+          setMutationError(formatMutationError(err));
         },
       });
     },
@@ -268,8 +270,9 @@ export default function ActiveSessionPage(): React.JSX.Element {
       pendingAttempt,
       sessionDto,
       recordAttempt,
-      queueData,
+      queueItems.length,
       completedCardCount,
+      totalCards,
       completeSession,
       advanceCard,
       evaluateCheckpoint,
@@ -287,7 +290,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
         router.push('/sessions');
       },
       onError: (err) => {
-        setMutationError(err.message);
+        setMutationError(formatMutationError(err));
       },
     });
   }, [abandonSession, sessionId, clear, router]);
@@ -342,9 +345,6 @@ export default function ActiveSessionPage(): React.JSX.Element {
   ]);
 
   // ── Derived values ────────────────────────────────────────────────────────
-  const totalCards = sessionDto?.cardIds.length ?? 0;
-  const lane = sessionDto?.mode === 'standard' ? 'retention' : null;
-
   const isLoading = sessionLoading || queueLoading;
   const isCardLoading = cardLoading && currentCardId !== '';
   const queueHasRecoverableGap = queueItems.length > completedCardCount && currentCardId === '';
@@ -637,4 +637,19 @@ function selectCheckpointDirective(
   directives: IAdaptiveCheckpointDirectiveDto[]
 ): IAdaptiveCheckpointDirectiveDto | null {
   return directives.find((directive) => directive.action !== 'continue') ?? null;
+}
+
+function normalizeTeachingApproach(value: string): string {
+  return value === 'socratic_questioning' ? 'standard' : value;
+}
+
+function formatMutationError(error: Error): string {
+  const candidate = error as Error & { fieldErrors?: Record<string, string[] | undefined> };
+  const fieldError = candidate.fieldErrors
+    ? Object.values(candidate.fieldErrors).find(
+        (messages): messages is string[] => Array.isArray(messages) && messages.length > 0
+      )
+    : undefined;
+
+  return fieldError?.[0] ?? error.message;
 }

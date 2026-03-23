@@ -10,16 +10,8 @@
  */
 
 import * as React from 'react';
-import { Pause, Play, MoreHorizontal, LogOut } from 'lucide-react';
-import {
-  Button,
-  PulseIndicator,
-  StateChip,
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from '@noema/ui';
+import { Pause, Play, LogOut } from 'lucide-react';
+import { Button, PulseIndicator, StateChip } from '@noema/ui';
 import type { IStateConfig } from '@noema/ui';
 import type { SessionId } from '@noema/types';
 
@@ -180,8 +172,8 @@ export function SessionBar({
         )}
       </div>
 
-      {/* ── Right: pause/resume + abandon dropdown ──────────────────────── */}
-      <div className="flex items-center gap-1">
+      {/* ── Right: pause/resume + stop control ───────────────────────── */}
+      <div className="flex items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
@@ -192,27 +184,16 @@ export function SessionBar({
           {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
         </Button>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="More session options"
-              className="h-8 w-8"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onSelect={onAbandon}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Abandon session
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2 text-destructive border-destructive/40 hover:border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={onAbandon}
+        >
+          <LogOut className="h-4 w-4" />
+          Stop session
+        </Button>
       </div>
     </div>
   );

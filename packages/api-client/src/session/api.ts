@@ -6,6 +6,7 @@
 
 import {
   HintDepth,
+  TeachingApproach as TeachingApproachValues,
   type CardId,
   type HintDepth as HintDepthValue,
   type SessionId,
@@ -112,6 +113,7 @@ const LEGACY_MODE_TO_LEARNING_MODE = {
   test: 'exam_oriented',
   preview: 'synthesis',
 } as const;
+const VALID_TEACHING_APPROACHES = new Set<string>(Object.values(TeachingApproachValues));
 
 function normalizeStartSessionInput(data: IStartSessionInput): Record<string, unknown> {
   const initialCardIds = data.initialCardIds ?? data.cardIds;
@@ -282,10 +284,7 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       learningMode === 'synthesis'
         ? learningMode
         : 'exploration',
-    teachingApproach: stringValue(
-      session['teachingApproach'],
-      'standard'
-    ) as SessionResponse['data']['teachingApproach'],
+    teachingApproach: normalizeTeachingApproach(session['teachingApproach']),
     schedulingAlgorithm: stringValue(session['schedulingAlgorithm'], 'fsrs') as
       | 'fsrs'
       | 'hlr'
@@ -352,6 +351,17 @@ function stringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
 
+function normalizeConfidence(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function normalizeTeachingApproach(value: unknown): SessionResponse['data']['teachingApproach'] {
+  const candidate = stringValue(value, 'standard');
+  return VALID_TEACHING_APPROACHES.has(candidate)
+    ? (candidate as SessionResponse['data']['teachingApproach'])
+    : 'standard';
+}
+
 function numberValue(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -389,7 +399,7 @@ function normalizeSessionMode(value: string): SessionResponse['data']['mode'] {
 
 export const attemptsApi = {
   recordAttempt: (sessionId: SessionId, data: IRecordAttemptInput): Promise<AttemptResponse> =>
-    http.post(`/v1/sessions/${sessionId}/attempts`, data),
+    http.post(`/v1/sessions/${sessionId}/attempts`, normalizeRecordAttemptInput(data)),
 
   listAttempts: (sessionId: SessionId): Promise<AttemptsListResponse> =>
     http
@@ -403,6 +413,22 @@ export const attemptsApi = {
   ): Promise<HintResponse> =>
     http.post(`/v1/sessions/${sessionId}/attempts/${attemptId}/hint`, data),
 };
+
+function normalizeRecordAttemptInput(data: IRecordAttemptInput): IRecordAttemptInput {
+  return {
+    ...data,
+    ...(data.confidenceBefore !== undefined
+      ? { confidenceBefore: normalizeConfidence(data.confidenceBefore) }
+      : {}),
+    ...(data.confidenceAfter !== undefined
+      ? { confidenceAfter: normalizeConfidence(data.confidenceAfter) }
+      : {}),
+    contextSnapshot: {
+      ...data.contextSnapshot,
+      teachingApproach: normalizeTeachingApproach(data.contextSnapshot.teachingApproach),
+    },
+  };
+}
 
 type AttemptsEnvelopeResponse = Omit<AttemptsListResponse, 'data'> & {
   data: unknown;
@@ -577,14 +603,14 @@ function normalizeSessionQueueResponse(
   const normalizedItems = Array.isArray(rawData)
     ? rawData.map((item, index) => normalizeSessionQueueItem(item, index))
     : [];
-  const items = normalizedItems.map(({ sessionId: _sessionId, ...item }) => item);
+  const items = normalizedItems.map(({ isPending: _isPending, sessionId: _sessionId, ...item }) => item);
 
   return {
     ...response,
     data: {
       sessionId: normalizedItems[0]?.sessionId ?? ('' as SessionId),
       items,
-      remaining: items.filter((item) => !item.injected).length,
+      remaining: normalizedItems.filter((item) => item.isPending).length,
     },
   };
 }
@@ -592,9 +618,10 @@ function normalizeSessionQueueResponse(
 function normalizeSessionQueueItem(
   value: unknown,
   fallbackIndex: number
-): SessionQueueResponse['data']['items'][number] & { sessionId: SessionId } {
+): SessionQueueResponse['data']['items'][number] & { isPending: boolean; sessionId: SessionId } {
   if (typeof value !== 'object' || value === null) {
     return {
+      isPending: false,
       sessionId: '' as SessionId,
       cardId: '' as CardId,
       position: fallbackIndex,
@@ -606,6 +633,7 @@ function normalizeSessionQueueItem(
   const status = stringValue(item['status']).toLowerCase();
 
   return {
+    isPending: status === 'pending',
     sessionId: stringValue(item['sessionId']) as SessionId,
     cardId: stringValue(item['cardId']) as CardId,
     position: typeof item['position'] === 'number' ? item['position'] : fallbackIndex,

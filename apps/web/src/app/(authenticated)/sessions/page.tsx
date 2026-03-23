@@ -9,14 +9,18 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { ArrowRight, Plus } from 'lucide-react';
+import { Button } from '@noema/ui';
+import type { SessionId } from '@noema/types';
 import { useSessions } from '@noema/api-client';
+import { useAbandonSession } from '@noema/api-client/session';
+import { toast } from '@/hooks/use-toast';
 import type { ISessionDto, SessionState } from '@noema/api-client';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-const STATE_LABELS: Record<string, string> = {
+const STATE_LABELS: Record<SessionState, string> = {
   ACTIVE: 'Active',
   PAUSED: 'Paused',
   COMPLETED: 'Completed',
@@ -24,7 +28,7 @@ const STATE_LABELS: Record<string, string> = {
   EXPIRED: 'Expired',
 };
 
-const STATE_CLASSES: Record<string, string> = {
+const STATE_CLASSES: Record<SessionState, string> = {
   ACTIVE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
   PAUSED: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
   COMPLETED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
@@ -89,58 +93,88 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 // Session row
 // ============================================================================
 
-function SessionRow({ session }: { session: ISessionDto }): React.JSX.Element {
+interface SessionRowProps {
+  session: ISessionDto;
+  onStop?: (sessionId: SessionId) => void;
+  isStopping?: boolean;
+}
+
+function SessionRow({ session, onStop, isStopping }: SessionRowProps): React.JSX.Element {
   const sessionId = session.id;
   const state = session.state;
   const mode = session.mode;
   const startedAt = session.startedAt;
   const completedAt = session.completedAt;
   const cardIds = session.cardIds;
+  const isTerminable = state === 'ACTIVE' || state === 'PAUSED';
+  const shouldShowStopButton = isTerminable && typeof onStop === 'function';
 
   return (
-    <Link
-      href={`/session/${sessionId}/summary`}
+    <div
       className={[
-        'group flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3',
-        'transition-colors hover:border-foreground/20 hover:bg-muted/40',
-        'focus:outline-none focus:ring-2 focus:ring-ring',
+        'group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors',
+        'hover:border-foreground/20 hover:bg-muted/40 focus-within:border-foreground/40',
+        'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
       ].join(' ')}
     >
-      {/* State badge */}
-      <span
-        className={[
-          'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-          STATE_CLASSES[state] ?? 'bg-zinc-100 text-zinc-600',
-        ].join(' ')}
+      <Link
+        href={`/session/${sessionId}/summary`}
+        className="flex flex-1 items-center gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
-        {STATE_LABELS[state] ?? state}
-      </span>
+        {/* State badge */}
+        <span
+          className={[
+            'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+            STATE_CLASSES[state] ?? 'bg-zinc-100 text-zinc-600',
+          ].join(' ')}
+        >
+          {STATE_LABELS[state] ?? state}
+        </span>
 
-      {/* Mode */}
-      <span className="text-sm font-medium text-foreground">{capitalize(mode)}</span>
+        {/* Mode */}
+        <span className="text-sm font-medium text-foreground">{capitalize(mode)}</span>
 
-      {/* Date */}
-      <span className="text-sm text-muted-foreground">{formatDate(startedAt)}</span>
+        {/* Date */}
+        <span className="text-sm text-muted-foreground">{formatDate(startedAt)}</span>
 
-      {/* Spacer */}
-      <span className="flex-1" />
+        {/* Spacer */}
+        <span className="flex-1" />
 
-      {/* Card count */}
-      <span className="text-sm text-muted-foreground">
-        {String(cardIds.length)} {cardIds.length === 1 ? 'card' : 'cards'}
-      </span>
+        {/* Card count */}
+        <span className="text-sm text-muted-foreground">
+          {String(cardIds.length)} {cardIds.length === 1 ? 'card' : 'cards'}
+        </span>
 
-      {/* Duration */}
-      <span className="w-16 text-right text-sm text-muted-foreground">
-        {formatDuration(startedAt, completedAt)}
-      </span>
+        {/* Duration */}
+        <span className="w-16 text-right text-sm text-muted-foreground">
+          {formatDuration(startedAt, completedAt)}
+        </span>
 
-      {/* Arrow */}
-      <ArrowRight
-        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-        aria-hidden="true"
-      />
-    </Link>
+        {/* Arrow */}
+        <ArrowRight
+          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+          aria-hidden="true"
+        />
+      </Link>
+
+      {shouldShowStopButton && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="shrink-0 whitespace-nowrap text-destructive border-destructive/40 hover:border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          disabled={Boolean(isStopping)}
+          aria-label="Stop session"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onStop?.(sessionId);
+          }}
+        >
+          {isStopping ? 'Stopping…' : 'Stop session'}
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -156,6 +190,31 @@ export default function SessionsPage(): React.JSX.Element {
   );
 
   const sessions: ISessionDto[] = data?.data ?? [];
+  const [stoppingSessionId, setStoppingSessionId] = React.useState<string | null>(null);
+  const abandonSession = useAbandonSession();
+
+  const handleStopSession = (sessionId: SessionId): void => {
+    if (
+      !confirm(
+        'Stop this session? Progress so far will be saved, but the session will be marked as abandoned.'
+      )
+    ) {
+      return;
+    }
+
+    setStoppingSessionId(sessionId);
+    abandonSession.mutate(sessionId, {
+      onSuccess: () => {
+        toast.success('Session stopped.');
+      },
+      onError: (err) => {
+        toast.error(err instanceof Error ? err.message : 'Failed to stop the session.');
+      },
+      onSettled: () => {
+        setStoppingSessionId(null);
+      },
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -241,7 +300,14 @@ export default function SessionsPage(): React.JSX.Element {
             </Link>
           </div>
         ) : (
-          sessions.map((session) => <SessionRow key={session.id} session={session} />)
+          sessions.map((session) => (
+            <SessionRow
+              key={session.id}
+              session={session}
+              onStop={handleStopSession}
+              isStopping={stoppingSessionId === session.id && abandonSession.isPending}
+            />
+          ))
         )}
       </div>
     </div>

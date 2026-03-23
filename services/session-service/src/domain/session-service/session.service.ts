@@ -305,7 +305,7 @@ export class SessionService {
       deckQueryId: data.deckQueryId as DeckQueryLogId,
       state: States.ACTIVE,
       learningMode: data.learningMode as LearningMode,
-      teachingApproach: (data.teachingApproach ?? 'socratic_questioning') as TeachingApproach,
+        teachingApproach: (data.teachingApproach ?? 'standard') as TeachingApproach,
       schedulingAlgorithm: (data.schedulingAlgorithm ?? 'fsrs') as SchedulingAlgorithm,
       loadoutId: (data.loadoutId as LoadoutId) ?? null,
       loadoutArchetype: (data.loadoutArchetype as LoadoutArchetype) ?? null,
