@@ -38,9 +38,9 @@ function truncateText(text: string, maxLength: number): string {
 }
 
 function guessCardLabel(card: ICardDto): string {
-  const metadata = (card.metadata as Record<string, unknown>) ?? {};
-  const content = (card.content as Record<string, unknown>) ?? {};
-  const candidates: Array<string | undefined> = [
+  const metadata = (card.metadata) ?? {};
+  const content = (card.content) ?? {};
+  const candidates: (string | undefined)[] = [
     content.front as string | undefined,
     content.question as string | undefined,
     content.scenario as string | undefined,
