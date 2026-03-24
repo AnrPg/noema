@@ -10,8 +10,12 @@ interface IBulkReviewToolbarProps {
   importRunId: string | null;
   isPending: boolean;
   onSelectAllVisible: () => void;
+  onSelectReadyOnly: () => void;
+  onSelectConflictedOnly: () => void;
   onClearSelection: () => void;
   onSubmit: (action: CkgBulkReviewAction, note: string) => void;
+  onApproveReadyOnly: (note: string) => void;
+  onRejectConflictedOnly: (note: string) => void;
 }
 
 export function BulkReviewToolbar({
@@ -20,8 +24,12 @@ export function BulkReviewToolbar({
   importRunId,
   isPending,
   onSelectAllVisible,
+  onSelectReadyOnly,
+  onSelectConflictedOnly,
   onClearSelection,
   onSubmit,
+  onApproveReadyOnly,
+  onRejectConflictedOnly,
 }: IBulkReviewToolbarProps): React.JSX.Element {
   const [note, setNote] = React.useState(
     importRunId !== null
@@ -55,6 +63,12 @@ export function BulkReviewToolbar({
             <Button type="button" variant="outline" size="sm" onClick={onSelectAllVisible}>
               Select visible
             </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onSelectReadyOnly}>
+              Select ready only
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onSelectConflictedOnly}>
+              Select conflicted only
+            </Button>
             <Button type="button" variant="ghost" size="sm" onClick={onClearSelection}>
               Clear
             </Button>
@@ -71,6 +85,26 @@ export function BulkReviewToolbar({
         />
 
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={note.trim() === '' || isPending}
+            onClick={() => {
+              onApproveReadyOnly(note);
+            }}
+          >
+            {isPending ? 'Applying…' : 'Approve ready only'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={note.trim() === '' || isPending}
+            onClick={() => {
+              onRejectConflictedOnly(note);
+            }}
+          >
+            {isPending ? 'Applying…' : 'Reject conflicted only'}
+          </Button>
           <Button
             type="button"
             disabled={selectedCount === 0 || note.trim() === '' || isPending}

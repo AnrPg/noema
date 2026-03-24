@@ -186,6 +186,10 @@ function groupOntologyImportMutations(mutations: ICkgMutationDto[]): {
 
 export default function CKGMutationsPage(): React.JSX.Element {
   const [stateFilter, setStateFilter] = React.useState<MutationWorkflowState>('pending_review');
+  const [confidenceFilter, setConfidenceFilter] = React.useState<'all' | 'high' | 'medium' | 'low'>(
+    'all'
+  );
+  const [conflictFilter, setConflictFilter] = React.useState<'all' | 'conflicted' | 'clean'>('all');
   const [selectedMutationIds, setSelectedMutationIds] = React.useState<string[]>([]);
   const searchParams = useSearchParams();
   const nodeIdFilter = searchParams.get('nodeId');
@@ -225,6 +229,17 @@ export default function CKGMutationsPage(): React.JSX.Element {
       }
     }
 
+    const reviewHints = getMutationReviewHints(mutation);
+    if (confidenceFilter !== 'all' && reviewHints.confidenceBand !== confidenceFilter) {
+      return false;
+    }
+    if (conflictFilter === 'conflicted' && reviewHints.conflicts.length === 0) {
+      return false;
+    }
+    if (conflictFilter === 'clean' && reviewHints.conflicts.length > 0) {
+      return false;
+    }
+
     return true;
   });
   const { groupedImports, directReviewMutations } =
@@ -255,6 +270,25 @@ export default function CKGMutationsPage(): React.JSX.Element {
     setSelectedMutationIds([]);
   }
 
+  function selectReadyOnly(): void {
+    setSelectedMutationIds(
+      ontologyImportMutations
+        .filter((mutation) => {
+          const reviewHints = getMutationReviewHints(mutation);
+          return reviewHints.conflicts.length === 0 && reviewHints.confidenceBand !== 'low';
+        })
+        .map((mutation) => String(mutation.id))
+    );
+  }
+
+  function selectConflictedOnly(): void {
+    setSelectedMutationIds(
+      ontologyImportMutations
+        .filter((mutation) => getMutationReviewHints(mutation).conflicts.length > 0)
+        .map((mutation) => String(mutation.id))
+    );
+  }
+
   function toggleGroupSelection(group: IOntologyImportGroup): void {
     const groupIds = group.mutations.map((mutation) => String(mutation.id));
     setSelectedMutationIds((current) => {
@@ -270,6 +304,32 @@ export default function CKGMutationsPage(): React.JSX.Element {
       {
         action,
         mutationIds: selectedMutationIds as ICkgMutationDto['id'][],
+        ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
+        note,
+      },
+      {
+        onSuccess: () => {
+          clearSelection();
+          void refetch();
+        },
+      }
+    );
+  }
+
+  function submitScopedReview(
+    action: 'approve' | 'reject',
+    selector: (mutation: ICkgMutationDto) => boolean,
+    note: string
+  ): void {
+    const mutationIds = ontologyImportMutations.filter(selector).map((mutation) => mutation.id);
+    if (mutationIds.length === 0) {
+      return;
+    }
+
+    bulkReview.mutate(
+      {
+        action,
+        mutationIds,
         ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
         note,
       },
@@ -330,14 +390,33 @@ export default function CKGMutationsPage(): React.JSX.Element {
           importRunId={importRunIdFilter}
           isPending={bulkReview.isPending}
           onSelectAllVisible={selectAllVisible}
+          onSelectReadyOnly={selectReadyOnly}
+          onSelectConflictedOnly={selectConflictedOnly}
           onClearSelection={clearSelection}
           onSubmit={submitBulkReview}
+          onApproveReadyOnly={(note) => {
+            submitScopedReview(
+              'approve',
+              (mutation) => {
+                const hints = getMutationReviewHints(mutation);
+                return hints.conflicts.length === 0 && hints.confidenceBand !== 'low';
+              },
+              note
+            );
+          }}
+          onRejectConflictedOnly={(note) => {
+            submitScopedReview(
+              'reject',
+              (mutation) => getMutationReviewHints(mutation).conflicts.length > 0,
+              note
+            );
+          }}
         />
       )}
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <CardTitle>Mutations</CardTitle>
               <CardDescription>
@@ -345,19 +424,44 @@ export default function CKGMutationsPage(): React.JSX.Element {
                 {getMutationWorkflowMeta(stateFilter).label.toLowerCase()}
               </CardDescription>
             </div>
-            <select
-              value={stateFilter}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                setStateFilter(e.target.value as MutationWorkflowState);
-              }}
-              className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {MUTATION_WORKFLOW_FILTERS.map((state) => (
-                <option key={state} value={state}>
-                  {getMutationWorkflowMeta(state).label}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-wrap gap-2">
+              <select
+                value={stateFilter}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                  setStateFilter(e.target.value as MutationWorkflowState);
+                }}
+                className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {MUTATION_WORKFLOW_FILTERS.map((state) => (
+                  <option key={state} value={state}>
+                    {getMutationWorkflowMeta(state).label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={confidenceFilter}
+                onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
+                  setConfidenceFilter(event.target.value as 'all' | 'high' | 'medium' | 'low');
+                }}
+                className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="all">All confidence</option>
+                <option value="high">High confidence</option>
+                <option value="medium">Medium confidence</option>
+                <option value="low">Low confidence</option>
+              </select>
+              <select
+                value={conflictFilter}
+                onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
+                  setConflictFilter(event.target.value as 'all' | 'conflicted' | 'clean');
+                }}
+                className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="all">All conflict states</option>
+                <option value="conflicted">Conflicted only</option>
+                <option value="clean">Conflict-free only</option>
+              </select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -397,6 +501,35 @@ export default function CKGMutationsPage(): React.JSX.Element {
             </div>
           ) : shouldGroupOntologyImports ? (
             <div className="space-y-6">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-md border border-border bg-background/20 p-3 text-sm">
+                  <p className="text-muted-foreground">Ready proposals</p>
+                  <p className="mt-1 text-xl font-semibold text-foreground">
+                    {
+                      ontologyImportMutations.filter((mutation) => {
+                        const hints = getMutationReviewHints(mutation);
+                        return hints.conflicts.length === 0 && hints.confidenceBand !== 'low';
+                      }).length
+                    }
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-background/20 p-3 text-sm">
+                  <p className="text-muted-foreground">Conflicted proposals</p>
+                  <p className="mt-1 text-xl font-semibold text-foreground">
+                    {
+                      ontologyImportMutations.filter(
+                        (mutation) => getMutationReviewHints(mutation).conflicts.length > 0
+                      ).length
+                    }
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-background/20 p-3 text-sm">
+                  <p className="text-muted-foreground">Import-run groups</p>
+                  <p className="mt-1 text-xl font-semibold text-foreground">
+                    {groupedImports.length}
+                  </p>
+                </div>
+              </div>
               <div className="rounded-md border border-violet-500/20 bg-violet-500/5 p-4">
                 <p className="text-sm font-medium text-foreground">Ontology import proposals</p>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -413,6 +546,17 @@ export default function CKGMutationsPage(): React.JSX.Element {
                       selectedCount={
                         group.mutations.filter((mutation) =>
                           selectedMutationIds.includes(String(mutation.id))
+                        ).length
+                      }
+                      readyCount={
+                        group.mutations.filter((mutation) => {
+                          const hints = getMutationReviewHints(mutation);
+                          return hints.conflicts.length === 0 && hints.confidenceBand !== 'low';
+                        }).length
+                      }
+                      conflictCount={
+                        group.mutations.filter(
+                          (mutation) => getMutationReviewHints(mutation).conflicts.length > 0
                         ).length
                       }
                       onToggleAll={() => {

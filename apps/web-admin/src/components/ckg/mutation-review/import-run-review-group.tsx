@@ -9,6 +9,8 @@ interface IImportRunReviewGroupProps {
   sourceId: string | null;
   mutationCount: number;
   selectedCount: number;
+  readyCount: number;
+  conflictCount: number;
   onToggleAll: () => void;
   children: React.ReactNode;
 }
@@ -18,6 +20,8 @@ export function ImportRunReviewGroup({
   sourceId,
   mutationCount,
   selectedCount,
+  readyCount,
+  conflictCount,
   onToggleAll,
   children,
 }: IImportRunReviewGroupProps): React.JSX.Element {
@@ -30,7 +34,8 @@ export function ImportRunReviewGroup({
           </p>
           <p className="text-xs text-muted-foreground">
             <code className="font-mono">{runId}</code> · {mutationCount} proposal
-            {mutationCount === 1 ? '' : 's'} · {selectedCount} selected
+            {mutationCount === 1 ? '' : 's'} · {selectedCount} selected · {readyCount} ready ·{' '}
+            {conflictCount} conflicted
           </p>
         </div>
         <div className="flex gap-2">

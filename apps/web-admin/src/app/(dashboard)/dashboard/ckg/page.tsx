@@ -38,7 +38,7 @@ export default function CKGWorkspacePage(): React.JSX.Element {
             <Link href="/dashboard/ckg/mutations">Review Mutations</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/dashboard/ckg/imports">Ontology Imports</Link>
+            <Link href="/dashboard/ckg/imports/runs">Ontology Imports</Link>
           </Button>
         </div>
       </div>
@@ -104,7 +104,7 @@ export default function CKGWorkspacePage(): React.JSX.Element {
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>Pilot pages are now available for source catalog and run inspection.</p>
             <Button asChild variant="outline" className="w-full">
-              <Link href="/dashboard/ckg/imports">
+              <Link href="/dashboard/ckg/imports/runs">
                 <Upload className="mr-2 h-4 w-4" />
                 Open import workspace
               </Link>

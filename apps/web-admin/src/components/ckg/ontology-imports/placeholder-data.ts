@@ -56,7 +56,7 @@ const conceptNetSource: IOntologyImportSourceDto = {
   description:
     'Commonsense relation graph for everyday conceptual links, helpful for prerequisite hints and gap debugging.',
   homepageUrl: 'https://conceptnet.io/',
-  documentationUrl: 'https://conceptnet.io/',
+  documentationUrl: 'https://github.com/commonsense/conceptnet5/wiki',
   supportedLanguages: ['en', 'multilingual'],
   supportsIncremental: true,
   enabled: true,
@@ -220,6 +220,11 @@ export const ontologyImportRunDetailsPlaceholder: Record<string, IOntologyImport
           summary: 'Create a canonical concept node from ESCO.',
           rationale:
             'Import "Bioinformatics" from ESCO as a canonical node with preserved source provenance.',
+          review: {
+            confidenceScore: 0.82,
+            confidenceBand: 'high',
+            conflictFlags: [],
+          },
           blockedReason: null,
           dependencyExternalIds: [],
           proposal: {
@@ -252,6 +257,11 @@ export const ontologyImportRunDetailsPlaceholder: Record<string, IOntologyImport
           summary: 'skill:bioinformatics related_to skill:data-analysis',
           rationale:
             'Wait for imported concepts to resolve against canonical CKG nodes before emitting add_edge mutations.',
+          review: {
+            confidenceScore: 0.48,
+            confidenceBand: 'low',
+            conflictFlags: ['weak_mapping_only'],
+          },
           blockedReason:
             'CKG edge mutations need canonical node ids. This import batch only has source external ids, so relation proposals stay deferred until node resolution is available.',
           dependencyExternalIds: ['skill:bioinformatics', 'skill:data-analysis'],

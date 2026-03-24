@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   useCancelOntologyImportRun,
+  useOntologyImportsSystemStatus,
   useOntologyImportRun,
   useRetryOntologyImportRun,
   useStartOntologyImportRun,
@@ -31,6 +32,8 @@ interface IRunDetailPageProps {
 
 type MessageState = { type: 'success'; text: string } | { type: 'error'; text: string } | null;
 
+const ACTIVE_RUN_STATUSES = new Set(['queued', 'fetching', 'fetched', 'parsing', 'parsed']);
+
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message !== '') {
     return error.message;
@@ -42,12 +45,18 @@ export default function OntologyImportRunDetailPage({
   params,
 }: IRunDetailPageProps): React.JSX.Element {
   const [message, setMessage] = useState<MessageState>(null);
+  const { data: systemStatus } = useOntologyImportsSystemStatus({ retry: false });
+  const canReadRegistry = systemStatus?.canReadRegistry === true;
   const {
     data: liveDetail,
     isLoading,
     isError,
+    isFetching,
     refetch,
   } = useOntologyImportRun(params.id, {
+    enabled: canReadRegistry,
+    refetchInterval: (query) =>
+      ACTIVE_RUN_STATUSES.has(query.state.data?.data.run.status ?? '') ? 5000 : false,
     retry: false,
   });
 
@@ -57,6 +66,8 @@ export default function OntologyImportRunDetailPage({
   );
   const detail = liveDetail ?? fallbackDetail;
   const usingFallback = liveDetail === undefined && fallbackDetail !== null;
+  const isActivelyRunning =
+    liveDetail !== undefined ? ACTIVE_RUN_STATUSES.has(liveDetail.run.status) : false;
 
   const startRun = useStartOntologyImportRun({
     onSuccess: async () => {
@@ -134,7 +145,7 @@ export default function OntologyImportRunDetailPage({
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href="/dashboard/ckg/imports">Back to ontology imports</Link>
+              <Link href="/dashboard/ckg/imports/runs">Back to ontology imports</Link>
             </Button>
           </CardContent>
         </Card>
@@ -142,10 +153,15 @@ export default function OntologyImportRunDetailPage({
     );
   }
 
-  const canStart = detail.run.status === 'queued' || detail.run.status === 'failed';
-  const canCancel = detail.run.status === 'queued' || detail.run.status === 'fetching';
-  const canRetry = detail.run.status === 'failed' || detail.run.status === 'cancelled';
+  const liveActionsEnabled = systemStatus?.canManageRuns === true && !usingFallback;
+  const canStart =
+    liveActionsEnabled && (detail.run.status === 'queued' || detail.run.status === 'failed');
+  const canCancel =
+    liveActionsEnabled && (detail.run.status === 'queued' || detail.run.status === 'fetching');
+  const canRetry =
+    liveActionsEnabled && (detail.run.status === 'failed' || detail.run.status === 'cancelled');
   const canSubmitPreview =
+    liveActionsEnabled &&
     detail.run.status === 'ready_for_normalization' &&
     (detail.mutationPreview?.readyProposalCount ?? 0) > 0;
   const canReviewSubmittedMutations = detail.run.submittedMutationIds.length > 0;
@@ -234,17 +250,18 @@ export default function OntologyImportRunDetailPage({
             {startRun.isPending ? 'Starting…' : 'Start run'}
           </Button>
           <Button asChild variant="ghost">
-            <Link href="/dashboard/ckg/imports">Back to imports</Link>
+            <Link href="/dashboard/ckg/imports/runs">Back to imports</Link>
           </Button>
         </div>
       </div>
 
       {usingFallback && (
-        <Alert variant="destructive">
+        <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Live run detail is not available yet, so this screen is showing the seeded fallback
-            payload instead of a blank page.
+            Live run detail is not available right now, so this screen is showing demo-only seeded
+            data. Run actions stay disabled until the ontology-import backend reports healthy
+            capabilities again.
           </AlertDescription>
         </Alert>
       )}
@@ -257,6 +274,17 @@ export default function OntologyImportRunDetailPage({
             <CheckCircle2 className="h-4 w-4" />
           )}
           <AlertDescription>{message.text}</AlertDescription>
+        </Alert>
+      )}
+
+      {isActivelyRunning && !usingFallback && (
+        <Alert>
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertDescription>
+            Live monitoring is active for this run. The detail view refreshes every 5 seconds while
+            the run is still in flight.
+            {isFetching ? ' Refreshing now…' : ''}
+          </AlertDescription>
         </Alert>
       )}
 

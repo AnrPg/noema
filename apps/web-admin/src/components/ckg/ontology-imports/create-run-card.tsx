@@ -43,9 +43,13 @@ function defaultModeForSource(sourceId: string): string {
 export function OntologyImportCreateRunCard({
   sources,
   initialSourceId,
+  disabled = false,
+  disabledReason,
 }: {
   sources: IOntologyImportSourceDto[];
   initialSourceId?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }): React.JSX.Element {
   const router = useRouter();
   const [message, setMessage] = useState<MessageState>(null);
@@ -106,7 +110,7 @@ export function OntologyImportCreateRunCard({
     },
   });
 
-  const canSubmit = selectedSource !== null && !createRun.isPending;
+  const canSubmit = selectedSource !== null && !createRun.isPending && !disabled;
 
   return (
     <Card>
@@ -129,12 +133,20 @@ export function OntologyImportCreateRunCard({
           </Alert>
         )}
 
+        {disabled && disabledReason !== undefined && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{disabledReason}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Source</span>
             <select
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               value={selectedSourceId}
+              disabled={disabled}
               onChange={(event) => {
                 setSelectedSourceId(event.target.value);
                 setMessage(null);
@@ -154,6 +166,7 @@ export function OntologyImportCreateRunCard({
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               placeholder={selectedSource?.latestRelease?.version ?? 'latest available'}
               value={sourceVersion}
+              disabled={disabled}
               onChange={(event) => {
                 setSourceVersion(event.target.value);
                 setMessage(null);
@@ -166,6 +179,7 @@ export function OntologyImportCreateRunCard({
             <select
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               value={mode}
+              disabled={disabled}
               onChange={(event) => {
                 setMode(event.target.value);
                 setMessage(null);
@@ -185,6 +199,7 @@ export function OntologyImportCreateRunCard({
               <select
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 value={language}
+                disabled={disabled}
                 onChange={(event) => {
                   setLanguage(event.target.value);
                   setMessage(null);
@@ -208,6 +223,7 @@ export function OntologyImportCreateRunCard({
               className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               placeholder="/c/en/learning&#10;/c/en/algebra"
               value={seedNodes}
+              disabled={disabled}
               onChange={(event) => {
                 setSeedNodes(event.target.value);
                 setMessage(null);
