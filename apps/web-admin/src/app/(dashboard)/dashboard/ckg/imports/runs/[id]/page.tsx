@@ -19,7 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@noema/ui';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 import { OntologyImportRunStatusPanel } from '@/components/ckg/ontology-imports/run-status-panel';
 import { getOntologyImportPlaceholderRunDetail } from '@/components/ckg/ontology-imports/placeholder-data';
 
@@ -149,6 +149,8 @@ export default function OntologyImportRunDetailPage({
     detail.run.status === 'ready_for_normalization' &&
     (detail.mutationPreview?.readyProposalCount ?? 0) > 0;
   const canReviewSubmittedMutations = detail.run.submittedMutationIds.length > 0;
+  const sourceHomepageUrl = detail.source?.homepageUrl ?? null;
+  const sourceDocumentationUrl = detail.source?.documentationUrl ?? null;
 
   return (
     <div className="space-y-6">
@@ -161,6 +163,30 @@ export default function OntologyImportRunDetailPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {sourceHomepageUrl !== null && (
+            <Button asChild variant="outline">
+              <a href={sourceHomepageUrl} target="_blank" rel="noreferrer">
+                Source site
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
+          )}
+          {sourceDocumentationUrl !== null && (
+            <Button asChild variant="outline">
+              <a href={sourceDocumentationUrl} target="_blank" rel="noreferrer">
+                Documentation
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={() => {
+              void refetch();
+            }}
+          >
+            Refresh run
+          </Button>
           <Button
             variant="outline"
             disabled={!canSubmitPreview || submitPreview.isPending}

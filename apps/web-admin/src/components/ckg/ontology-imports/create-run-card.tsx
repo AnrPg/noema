@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type {
   IOntologyImportRunConfigurationDto,
@@ -17,7 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@noema/ui';
-import { AlertCircle, CheckCircle2, PlusCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ExternalLink, PlusCircle } from 'lucide-react';
 
 type MessageState = { type: 'success'; text: string } | { type: 'error'; text: string } | null;
 
@@ -41,12 +42,16 @@ function defaultModeForSource(sourceId: string): string {
 
 export function OntologyImportCreateRunCard({
   sources,
+  initialSourceId,
 }: {
   sources: IOntologyImportSourceDto[];
+  initialSourceId?: string;
 }): React.JSX.Element {
   const router = useRouter();
   const [message, setMessage] = useState<MessageState>(null);
-  const [selectedSourceId, setSelectedSourceId] = useState<string>(sources[0]?.id ?? 'yago');
+  const [selectedSourceId, setSelectedSourceId] = useState<string>(
+    initialSourceId ?? sources[0]?.id ?? 'yago'
+  );
   const [sourceVersion, setSourceVersion] = useState('');
   const [mode, setMode] = useState<string>(defaultModeForSource(sources[0]?.id ?? 'yago'));
   const [language, setLanguage] = useState<string>('');
@@ -57,6 +62,18 @@ export function OntologyImportCreateRunCard({
     [selectedSourceId, sources]
   );
   const modeOptions = selectedSource === null ? [] : (SOURCE_MODES[selectedSource.id] ?? []);
+  const selectedSourceHomepageUrl = selectedSource?.homepageUrl ?? null;
+  const selectedSourceDocumentationUrl = selectedSource?.documentationUrl ?? null;
+
+  useEffect(() => {
+    if (initialSourceId === undefined) {
+      return;
+    }
+
+    if (sources.some((source) => source.id === initialSourceId)) {
+      setSelectedSourceId(initialSourceId);
+    }
+  }, [initialSourceId, sources]);
 
   useEffect(() => {
     if (selectedSource === null) {
@@ -208,36 +225,59 @@ export function OntologyImportCreateRunCard({
             Runs are created as queued records first. You can inspect them, then start fetching from
             the run detail page.
           </p>
-          <Button
-            disabled={!canSubmit}
-            onClick={() => {
-              if (selectedSource === null) {
-                return;
-              }
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedSourceHomepageUrl !== null && (
+              <Button asChild size="sm" variant="outline">
+                <a href={selectedSourceHomepageUrl} target="_blank" rel="noreferrer">
+                  Source site
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            )}
+            {selectedSourceDocumentationUrl !== null && (
+              <Button asChild size="sm" variant="ghost">
+                <a href={selectedSourceDocumentationUrl} target="_blank" rel="noreferrer">
+                  Documentation
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            )}
+            <Button
+              disabled={!canSubmit}
+              onClick={() => {
+                if (selectedSource === null) {
+                  return;
+                }
 
-              const configuration: Partial<IOntologyImportRunConfigurationDto> = {
-                mode,
-              };
-              if (language !== '') {
-                configuration.language = language;
-              }
-              if (selectedSource.id === 'conceptnet' && mode === 'targeted') {
-                configuration.seedNodes = seedNodes
-                  .split(/\r?\n/)
-                  .map((entry) => entry.trim())
-                  .filter((entry) => entry !== '');
-              }
+                const configuration: Partial<IOntologyImportRunConfigurationDto> = {
+                  mode,
+                };
+                if (language !== '') {
+                  configuration.language = language;
+                }
+                if (selectedSource.id === 'conceptnet' && mode === 'targeted') {
+                  configuration.seedNodes = seedNodes
+                    .split(/\r?\n/)
+                    .map((entry) => entry.trim())
+                    .filter((entry) => entry !== '');
+                }
 
-              createRun.mutate({
-                sourceId: selectedSource.id,
-                ...(sourceVersion.trim() !== '' ? { sourceVersion: sourceVersion.trim() } : {}),
-                configuration,
-              });
-            }}
-          >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            {createRun.isPending ? 'Creating…' : 'Create queued run'}
-          </Button>
+                createRun.mutate({
+                  sourceId: selectedSource.id,
+                  ...(sourceVersion.trim() !== '' ? { sourceVersion: sourceVersion.trim() } : {}),
+                  configuration,
+                });
+              }}
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              {createRun.isPending ? 'Creating…' : 'Create queued run'}
+            </Button>
+          </div>
+        </div>
+
+        <div className="text-xs text-muted-foreground">
+          Need a different source first?{' '}
+          <Link href="/dashboard/ckg/imports/sources">Open source registry</Link>
         </div>
       </CardContent>
     </Card>

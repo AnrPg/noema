@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useOntologyImportRuns, useOntologyImportSources } from '@noema/api-client';
 import {
   Alert,
@@ -22,15 +23,18 @@ import {
 } from '@/components/ckg/ontology-imports/placeholder-data';
 
 export default function OntologyImportsPage(): React.JSX.Element {
+  const searchParams = useSearchParams();
   const {
     data: liveSources = [],
     isLoading: sourcesLoading,
     isError: sourcesError,
+    refetch: refetchSources,
   } = useOntologyImportSources();
   const {
     data: liveRuns = [],
     isLoading: runsLoading,
     isError: runsError,
+    refetch: refetchRuns,
   } = useOntologyImportRuns();
 
   const sources = liveSources.length > 0 ? liveSources : ontologyImportSourcesPlaceholder;
@@ -40,6 +44,7 @@ export default function OntologyImportsPage(): React.JSX.Element {
   ).length;
   const isLoading = sourcesLoading || runsLoading;
   const isFallback = liveSources.length === 0 && liveRuns.length === 0;
+  const initialSourceId = searchParams.get('sourceId') ?? undefined;
 
   return (
     <div className="space-y-6">
@@ -53,6 +58,23 @@ export default function OntologyImportsPage(): React.JSX.Element {
         </div>
         <Button asChild variant="outline">
           <Link href="/dashboard/ckg">Back to CKG workspace</Link>
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button asChild variant="outline">
+          <Link href="/dashboard/ckg/imports/sources">Open source registry</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/ckg/mutations">Open mutation queue</Link>
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            void Promise.all([refetchSources(), refetchRuns()]);
+          }}
+        >
+          Refresh live data
         </Button>
       </div>
 
@@ -88,7 +110,10 @@ export default function OntologyImportsPage(): React.JSX.Element {
       </div>
 
       <OntologyImportsHero />
-      <OntologyImportCreateRunCard sources={sources} />
+      <OntologyImportCreateRunCard
+        sources={sources}
+        {...(initialSourceId !== undefined ? { initialSourceId } : {})}
+      />
 
       <Card>
         <CardHeader>

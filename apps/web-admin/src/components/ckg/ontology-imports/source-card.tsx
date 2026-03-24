@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { IOntologyImportSourceDto } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
+import { ExternalLink } from 'lucide-react';
 
 function pillClassName(
   value: 'backbone' | 'enhancement' | 'snapshot' | 'api' | 'linked_data' | 'hybrid'
@@ -49,7 +50,9 @@ export function OntologySourceCard({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm">
-            <Link href="/dashboard/ckg/imports">Create run</Link>
+            <Link href={`/dashboard/ckg/imports?sourceId=${encodeURIComponent(source.id)}`}>
+              Create run
+            </Link>
           </Button>
           {runId !== undefined && (
             <Button asChild size="sm" variant="outline">
@@ -57,9 +60,18 @@ export function OntologySourceCard({
             </Button>
           )}
           {source.homepageUrl !== null && (
-            <Button asChild size="sm" variant="ghost">
+            <Button asChild size="sm" variant="outline">
               <a href={source.homepageUrl} target="_blank" rel="noreferrer">
                 Source site
+                <ExternalLink className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
+          )}
+          {source.documentationUrl !== null && (
+            <Button asChild size="sm" variant="ghost">
+              <a href={source.documentationUrl} target="_blank" rel="noreferrer">
+                Documentation
+                <ExternalLink className="ml-2 h-4 w-4" />
               </a>
             </Button>
           )}
