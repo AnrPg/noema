@@ -350,9 +350,9 @@ describe('PaginationSchema', () => {
 // ============================================================================
 
 describe('MutationId', () => {
-  it('creates with valid prefix + 6+ chars', () => {
-    const id = MutationId.create('mut_abcdefghijkl');
-    expect(id).toBe('mut_abcdefghijkl');
+  it('creates with valid prefix + 21-char nanoid suffix', () => {
+    const id = MutationId.create('mut_abcdefghijklmnopqrstu');
+    expect(id).toBe('mut_abcdefghijklmnopqrstu');
   });
 
   it('throws for missing prefix', () => {
@@ -364,7 +364,7 @@ describe('MutationId', () => {
   });
 
   it('isValid accepts valid IDs', () => {
-    expect(MutationId.isValid('mut_abcdefghijkl')).toBe(true);
+    expect(MutationId.isValid('mut_abcdefghijklmnopqrstu')).toBe(true);
   });
 
   it('isValid rejects wrong prefix', () => {
@@ -382,9 +382,9 @@ describe('MutationId', () => {
 });
 
 describe('MisconceptionPatternId', () => {
-  it('creates with valid prefix + 6+ chars', () => {
-    const id = MisconceptionPatternId.create('mpat_abcdefghijkl');
-    expect(id).toBe('mpat_abcdefghijkl');
+  it('creates with valid prefix + 21-char nanoid suffix', () => {
+    const id = MisconceptionPatternId.create('mpat_abcdefghijklmnopqrstu');
+    expect(id).toBe('mpat_abcdefghijklmnopqrstu');
   });
 
   it('throws for invalid format', () => {
@@ -394,8 +394,8 @@ describe('MisconceptionPatternId', () => {
   });
 
   it('isValid works correctly', () => {
-    expect(MisconceptionPatternId.isValid('mpat_abcdefghijkl')).toBe(true);
-    expect(MisconceptionPatternId.isValid('mut_abcdefghijkl')).toBe(false);
+    expect(MisconceptionPatternId.isValid('mpat_abcdefghijklmnopqrstu')).toBe(true);
+    expect(MisconceptionPatternId.isValid('mut_abcdefghijklmnopqrstu')).toBe(false);
   });
 
   it('has correct prefix', () => {
@@ -404,9 +404,9 @@ describe('MisconceptionPatternId', () => {
 });
 
 describe('InterventionId', () => {
-  it('creates with valid prefix + 6+ chars', () => {
-    const id = InterventionId.create('intv_abcdefghijkl');
-    expect(id).toBe('intv_abcdefghijkl');
+  it('creates with valid prefix + 21-char nanoid suffix', () => {
+    const id = InterventionId.create('intv_abcdefghijklmnopqrstu');
+    expect(id).toBe('intv_abcdefghijklmnopqrstu');
   });
 
   it('throws for invalid format', () => {
@@ -414,8 +414,8 @@ describe('InterventionId', () => {
   });
 
   it('isValid works correctly', () => {
-    expect(InterventionId.isValid('intv_abcdefghijkl')).toBe(true);
-    expect(InterventionId.isValid('node_abcdefghijkl')).toBe(false);
+    expect(InterventionId.isValid('intv_abcdefghijklmnopqrstu')).toBe(true);
+    expect(InterventionId.isValid('node_abcdefghijklmnopqrstu')).toBe(false);
   });
 
   it('has correct prefix', () => {

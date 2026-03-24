@@ -143,10 +143,10 @@ export default function SessionDetailPage(): JSX.Element {
   const session = sessionResponse.data;
   const attempts = getAttemptsFromResponse(attemptsResponse?.data);
 
-  const sessionUserId = session.userId ?? '';
-  const sessionUserQuery = useQuery<UserDto | null>(
-    ['session-user', sessionUserId],
-    async () => {
+  const sessionUserId = session.userId;
+  const sessionUserQuery = useQuery({
+    queryKey: ['session-user', sessionUserId],
+    queryFn: async (): Promise<UserDto | null> => {
       if (sessionUserId === '') return null;
       try {
         const response = await usersApi.getById(sessionUserId);
@@ -163,18 +163,16 @@ export default function SessionDetailPage(): JSX.Element {
           if (term === '') continue;
           const list = await usersApi.list({ search: term }, { limit: 1 });
           if (list.data.items.length > 0) {
-            return list.data.items[0];
+            return list.data.items[0] ?? null;
           }
         }
         return null;
       }
     },
-    {
-      enabled: sessionUserId !== '',
-      retry: false,
-      staleTime: 5 * 60 * 1000,
-    }
-  );
+    enabled: sessionUserId !== '',
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
   const sessionUser = sessionUserQuery.data ?? null;
   const sessionUserDisplayName = sessionUser ? getUserDisplayName(sessionUser) : '';
 

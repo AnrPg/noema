@@ -21,9 +21,9 @@ import {
 // ============================================================================
 
 describe('KnowledgeGraphEventType registry', () => {
-  it('defines exactly 16 event types', () => {
+  it('defines exactly 17 event types', () => {
     const types = Object.values(KnowledgeGraphEventType);
-    expect(types).toHaveLength(16);
+    expect(types).toHaveLength(17);
   });
 
   it('all event type values are unique', () => {
@@ -84,6 +84,7 @@ describe('CKG event types', () => {
     CKG_MUTATION_COMMITTED: 'ckg.mutation.committed',
     CKG_MUTATION_REJECTED: 'ckg.mutation.rejected',
     CKG_MUTATION_ESCALATED: 'ckg.mutation.escalated',
+    CKG_MUTATION_REVISION_REQUESTED: 'ckg.mutation.revision_requested',
     CKG_NODE_PROMOTED: 'ckg.node.promoted',
   } as const;
 
@@ -91,9 +92,9 @@ describe('CKG event types', () => {
     expect(KnowledgeGraphEventType[key as keyof typeof KnowledgeGraphEventType]).toBe(value);
   });
 
-  it('has 6 CKG events', () => {
+  it('has 7 CKG events', () => {
     const ckgValues = Object.values(KnowledgeGraphEventType).filter((v) => v.startsWith('ckg.'));
-    expect(ckgValues).toHaveLength(6);
+    expect(ckgValues).toHaveLength(7);
   });
 });
 

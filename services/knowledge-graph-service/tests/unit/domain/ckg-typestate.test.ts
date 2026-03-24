@@ -40,6 +40,7 @@ const ALL_STATES: readonly MutationState[] = [
   'committed',
   'rejected',
   'pending_review',
+  'revision_requested',
 ] as const;
 
 // ============================================================================
@@ -47,8 +48,8 @@ const ALL_STATES: readonly MutationState[] = [
 // ============================================================================
 
 describe('STATE_TRANSITIONS', () => {
-  it('defines transitions for all 9 states', () => {
-    expect(Object.keys(STATE_TRANSITIONS)).toHaveLength(9);
+  it('defines transitions for all 10 states', () => {
+    expect(Object.keys(STATE_TRANSITIONS)).toHaveLength(10);
     for (const state of ALL_STATES) {
       expect(STATE_TRANSITIONS[state]).toBeDefined();
     }
@@ -117,6 +118,14 @@ describe('Valid transitions — escalation', () => {
 
   it('pending_review → rejected is valid', () => {
     expect(isValidTransition('pending_review', 'rejected')).toBe(true);
+  });
+
+  it('pending_review → revision_requested is valid', () => {
+    expect(isValidTransition('pending_review', 'revision_requested')).toBe(true);
+  });
+
+  it('revision_requested → proposed is valid', () => {
+    expect(isValidTransition('revision_requested', 'proposed')).toBe(true);
   });
 });
 
@@ -187,8 +196,12 @@ describe('getAllowedTransitions()', () => {
     expect(getAllowedTransitions('rejected')).toEqual([]);
   });
 
-  it('pending_review: [validated, rejected]', () => {
-    expect(getAllowedTransitions('pending_review')).toEqual(['validated', 'rejected']);
+  it('pending_review: [validated, revision_requested, rejected]', () => {
+    expect(getAllowedTransitions('pending_review')).toEqual([
+      'validated',
+      'revision_requested',
+      'rejected',
+    ]);
   });
 });
 
@@ -235,20 +248,22 @@ describe('Terminal states', () => {
 // ============================================================================
 
 describe('Cancellable states', () => {
-  it('CANCELLABLE_STATES contains proposed, validating, pending_review', () => {
+  it('CANCELLABLE_STATES contains proposed, validating, pending_review, revision_requested', () => {
     expect(CANCELLABLE_STATES.has('proposed')).toBe(true);
     expect(CANCELLABLE_STATES.has('validating')).toBe(true);
     expect(CANCELLABLE_STATES.has('pending_review')).toBe(true);
+    expect(CANCELLABLE_STATES.has('revision_requested')).toBe(true);
   });
 
-  it('CANCELLABLE_STATES has exactly 3 entries', () => {
-    expect(CANCELLABLE_STATES.size).toBe(3);
+  it('CANCELLABLE_STATES has exactly 4 entries', () => {
+    expect(CANCELLABLE_STATES.size).toBe(4);
   });
 
   it('isCancellableState() returns true for early-stage states', () => {
     expect(isCancellableState('proposed')).toBe(true);
     expect(isCancellableState('validating')).toBe(true);
     expect(isCancellableState('pending_review')).toBe(true);
+    expect(isCancellableState('revision_requested')).toBe(true);
   });
 
   it('isCancellableState() returns false for late-stage states', () => {
