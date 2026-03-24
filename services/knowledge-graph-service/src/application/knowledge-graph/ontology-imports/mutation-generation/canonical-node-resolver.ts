@@ -21,8 +21,9 @@ export class GraphCanonicalNodeResolver implements ICanonicalNodeResolver {
     const identifiers = collectIdentifiers(concept, batch.mappings);
     const sourceDomain = inferDomain(batch, concept);
     const candidates = await this.findCandidateNodes(batch, concept, identifiers.labels);
+    const preferredCandidates = prioritizeSourceAwareCandidates(candidates, batch, identifiers);
 
-    const externalIdMatches = candidates.filter((candidate) =>
+    const externalIdMatches = preferredCandidates.filter((candidate) =>
       identifiers.externalIds.some((identifier) => matchesExternalId(candidate, identifier))
     );
     if (externalIdMatches.length > 0) {
@@ -33,7 +34,7 @@ export class GraphCanonicalNodeResolver implements ICanonicalNodeResolver {
       });
     }
 
-    const iriMatches = candidates.filter((candidate) =>
+    const iriMatches = preferredCandidates.filter((candidate) =>
       identifiers.iris.some((identifier) => matchesIri(candidate, identifier))
     );
     if (iriMatches.length > 0) {
@@ -44,7 +45,7 @@ export class GraphCanonicalNodeResolver implements ICanonicalNodeResolver {
       });
     }
 
-    const aliasMatches = candidates.filter((candidate) =>
+    const aliasMatches = preferredCandidates.filter((candidate) =>
       identifiers.labels.some((identifier) => matchesAlias(candidate, identifier))
     );
     if (aliasMatches.length > 0) {
@@ -55,7 +56,7 @@ export class GraphCanonicalNodeResolver implements ICanonicalNodeResolver {
       });
     }
 
-    const exactLabelMatches = candidates.filter((candidate) =>
+    const exactLabelMatches = preferredCandidates.filter((candidate) =>
       identifiers.labels.some(
         (identifier) => normalizeText(identifier) === normalizeText(candidate.label)
       )
@@ -68,7 +69,7 @@ export class GraphCanonicalNodeResolver implements ICanonicalNodeResolver {
       });
     }
 
-    const normalizedLabelMatches = candidates.filter((candidate) =>
+    const normalizedLabelMatches = preferredCandidates.filter((candidate) =>
       identifiers.labels.some(
         (identifier) => normalizeSearchText(identifier) === normalizeSearchText(candidate.label)
       )
@@ -263,6 +264,37 @@ function matchesExternalId(node: IGraphNode, externalId: string): boolean {
   return externalIds.includes(externalId);
 }
 
+function prioritizeSourceAwareCandidates(
+  candidates: IGraphNode[],
+  batch: INormalizedOntologyGraphBatch,
+  identifiers: { externalIds: string[]; iris: string[]; labels: string[] }
+): IGraphNode[] {
+  const preferredNamespaces = new Set(
+    [...identifiers.externalIds, ...identifiers.iris]
+      .map(extractNamespace)
+      .filter((value): value is string => value !== null)
+  );
+
+  const stronglyMatched = candidates.filter((candidate) => {
+    const ontologyImport = readRecord(candidate.properties['ontologyImport']);
+    const ontologyImportSourceId = ontologyImport?.['sourceId'];
+    if (ontologyImportSourceId === batch.sourceId) {
+      return true;
+    }
+
+    const candidateNamespaces = [
+      ...readOntologyIdentifiers(candidate, 'externalId'),
+      ...readOntologyIdentifiers(candidate, 'iri'),
+    ]
+      .map(extractNamespace)
+      .filter((value): value is string => value !== null);
+
+    return candidateNamespaces.some((namespace) => preferredNamespaces.has(namespace));
+  });
+
+  return stronglyMatched.length > 0 ? stronglyMatched : candidates;
+}
+
 function matchesIri(node: IGraphNode, iri: string): boolean {
   const iris = readOntologyIdentifiers(node, 'iri');
   return iris.includes(iri);
@@ -322,6 +354,26 @@ function decodeGraphIdentifier(value: string): string {
     return decodeURIComponent(lastSegment.replaceAll('_', ' '));
   } catch {
     return lastSegment.replaceAll('_', ' ');
+  }
+}
+
+function extractNamespace(value: string): string | null {
+  const trimmed = value.replace(/^<|>$/g, '').trim();
+  if (trimmed === '') {
+    return null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const segments = url.pathname.split('/').filter((entry) => entry !== '');
+    const namespacePath = segments.slice(0, Math.max(segments.length - 1, 0)).join('/');
+    return `${url.origin}/${namespacePath}`;
+  } catch {
+    const parts = trimmed.split(/[/#:]/u).filter((entry) => entry !== '');
+    if (parts.length <= 1) {
+      return null;
+    }
+    return parts.slice(0, -1).join('/');
   }
 }
 

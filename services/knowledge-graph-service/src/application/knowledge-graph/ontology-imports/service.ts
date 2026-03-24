@@ -1,33 +1,36 @@
+import type { IExecutionContext } from '../../../domain/knowledge-graph-service/execution-context.js';
 import type {
-  ICanonicalNodeResolver,
   ICancelOntologyImportRunInput,
+  ICanonicalNodeResolver,
   ICreateOntologyImportRunInput,
   IImportArtifactRepository,
   IImportCheckpointRepository,
   IImportRunRepository,
-  INormalizedOntologyBatchSummary,
   INormalizationPublisher,
+  INormalizedOntologyBatchSummary,
   IOntologyImportArtifact,
+  IOntologyImportCapabilitySummary,
+  IOntologyImportRun,
+  IOntologyImportsSystemStatus,
   IOntologyMutationPreviewBatch,
   IOntologyMutationPreviewSubmission,
   IOntologyMutationSubmissionPort,
-  IRawArtifactStore,
-  IParsedOntologyBatch,
+  IOntologySource,
   IParsedBatchRepository,
+  IParsedOntologyBatch,
+  IRawArtifactStore,
   IRegisterOntologySourceInput,
   IRetryOntologyImportRunInput,
   ISourceCatalogRepository,
   ISourceFetcher,
   ISourceNormalizer,
   ISourceParser,
-  IOntologyImportRun,
-  IOntologySource,
+  IUpdateOntologySourceInput,
 } from '../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
 import {
   NormalizedOntologyGraphBatchSchema,
   OntologyMutationPreviewBatchSchema,
 } from '../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
-import type { IExecutionContext } from '../../../domain/knowledge-graph-service/execution-context.js';
 import {
   type IListOntologyImportRunsQuery,
   type IListOntologySourcesQuery,
@@ -72,7 +75,7 @@ const DEFAULT_SOURCES: IRegisterOntologySourceInput[] = [
     description:
       'Commonsense relation graph used to enrich concept adjacency and learning-gap debugging.',
     homepageUrl: 'https://conceptnet.io/',
-    documentationUrl: 'https://conceptnet.io/',
+    documentationUrl: 'https://github.com/commonsense/conceptnet5/wiki',
     supportedLanguages: ['en', 'multilingual'],
     supportsIncremental: true,
   },
@@ -129,6 +132,54 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     return this.sourceRepository.register(input);
   }
 
+  async updateSource(
+    sourceId: string,
+    input: IUpdateOntologySourceInput
+  ): Promise<IOntologySource> {
+    return this.sourceRepository.update(sourceId, input);
+  }
+
+  async syncSourceMetadata(sourceId: string): Promise<IOntologySource> {
+    const existing = await this.sourceRepository.getById(sourceId);
+    if (existing === null) {
+      throw new Error(`Ontology source ${sourceId} not found.`);
+    }
+
+    const defaultSource = DEFAULT_SOURCES.find((source) => source.id === sourceId);
+    const capability = this.buildSourceCapabilities().find((entry) => entry.sourceId === sourceId);
+
+    return this.sourceRepository.update(sourceId, {
+      ...(defaultSource !== undefined
+        ? {
+            name: defaultSource.name,
+            role: defaultSource.role,
+            accessMode: defaultSource.accessMode,
+            description: defaultSource.description,
+            homepageUrl: defaultSource.homepageUrl ?? null,
+            documentationUrl: defaultSource.documentationUrl ?? null,
+            supportedLanguages: defaultSource.supportedLanguages ?? [],
+            supportsIncremental: defaultSource.supportsIncremental ?? false,
+          }
+        : {}),
+      ...(capability !== undefined
+        ? {
+            latestRelease: {
+              version: capability.normalize
+                ? 'pipeline-ready'
+                : capability.parse
+                  ? 'parser-ready'
+                  : capability.fetch
+                    ? 'fetch-ready'
+                    : 'registry-only',
+              publishedAt: null,
+              checksum: null,
+            },
+          }
+        : {}),
+      enabled: existing.enabled,
+    });
+  }
+
   async listSources(query?: IListOntologySourcesQuery): Promise<IOntologySource[]> {
     const sources = await this.sourceRepository.list();
     return sources.filter((source) => {
@@ -136,6 +187,44 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       if (query?.accessMode !== undefined && source.accessMode !== query.accessMode) return false;
       return true;
     });
+  }
+
+  async getSystemStatus(): Promise<IOntologyImportsSystemStatus> {
+    const checkedAt = new Date().toISOString();
+    const missingTables = new Set<string>();
+    const issues: string[] = [];
+    let canReadRegistry = true;
+
+    try {
+      await this.sourceRepository.list();
+    } catch (error) {
+      canReadRegistry = false;
+      const table = getMissingOntologyImportTable(error);
+      if (table !== null) {
+        missingTables.add(table);
+        issues.push(
+          'Ontology import tables are not fully migrated yet, so the admin UI should stay in degraded mode.'
+        );
+      } else {
+        issues.push(getErrorMessage(error, 'Ontology import source registry is unavailable.'));
+      }
+    }
+
+    return {
+      status:
+        issues.length === 0
+          ? 'healthy'
+          : missingTables.size > 0 || canReadRegistry
+            ? 'degraded'
+            : 'unavailable',
+      canReadRegistry,
+      canManageRuns: canReadRegistry,
+      canInspectArtifacts: canReadRegistry,
+      missingTables: [...missingTables],
+      issues,
+      sourceCapabilities: this.buildSourceCapabilities(),
+      checkedAt,
+    };
   }
 
   async createImportRun(input: ICreateOntologyImportRunInput): Promise<IOntologyImportRun> {
@@ -339,6 +428,23 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     };
   }
 
+  async getArtifactContent(
+    runId: string,
+    artifactId: string
+  ): Promise<{ artifact: IOntologyImportArtifact; content: string } | null> {
+    const artifacts = await this.artifactRepository.listByRunId(runId);
+    const artifact = artifacts.find((entry) => entry.id === artifactId) ?? null;
+    if (artifact === null) {
+      return null;
+    }
+
+    const buffer = await this.rawArtifactStore.readPayload(artifact.storageKey);
+    return {
+      artifact,
+      content: buffer.toString('utf8'),
+    };
+  }
+
   async publishParsedBatchForNormalization(runId: string): Promise<IParsedOntologyBatch> {
     const parsedBatch = await this.parsedBatchRepository.getByRunId(runId);
     if (parsedBatch === null) {
@@ -496,12 +602,54 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     const raw = await this.rawArtifactStore.readPayload(artifact.storageKey);
     return schema.parse(JSON.parse(raw.toString('utf8')));
   }
+
+  private buildSourceCapabilities(): IOntologyImportCapabilitySummary[] {
+    const sourceIds = new Set<string>([
+      ...DEFAULT_SOURCES.map((source) => source.id),
+      ...this.sourceFetchersById.keys(),
+      ...this.sourceParserIds.values(),
+      ...this.sourceNormalizerIds.values(),
+    ]);
+
+    return [...sourceIds]
+      .sort((left, right) => left.localeCompare(right))
+      .map((sourceId) => ({
+        sourceId,
+        fetch: this.sourceFetchersById.has(sourceId),
+        parse: this.sourceParserIds.has(sourceId),
+        normalize: this.sourceNormalizerIds.has(sourceId),
+      }));
+  }
 }
 
 export class NoopNormalizationPublisher implements INormalizationPublisher {
   async publish(): Promise<void> {
     return Promise.resolve();
   }
+}
+
+function getMissingOntologyImportTable(error: unknown): string | null {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('code' in error) ||
+    ((error as { code?: string }).code !== 'P2021' && (error as { code?: string }).code !== 'P2022')
+  ) {
+    return null;
+  }
+
+  const meta = (error as { meta?: { table?: string; modelName?: string } }).meta;
+  const table = meta?.table ?? meta?.modelName ?? null;
+  if (table === null) {
+    return 'ontology_imports';
+  }
+
+  const normalized = table.toLowerCase();
+  return normalized.includes('ontology') ? table : null;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message !== '' ? error.message : fallback;
 }
 
 function buildBatchStorageKey(run: IOntologyImportRun, fileName: string): string {

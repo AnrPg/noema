@@ -12,6 +12,7 @@ import type {
   INormalizedOntologyConceptCandidate,
   INormalizedOntologyGraphBatch,
   INormalizedOntologyRelationCandidate,
+  IOntologyImportReviewMetadata,
   IOntologyMutationPreviewBatch,
   IOntologyMutationPreviewCandidate,
   OntologyMergeConflictKind,
@@ -112,13 +113,15 @@ function buildConceptCandidate(
   const resolution = resolutionResult.resolution;
 
   if (resolution === null && hasBlockingConflicts(resolutionResult.conflictFlags)) {
+    const review = buildReviewSummary(unresolved(), resolutionResult.conflictFlags);
     return {
       candidateId: `concept:${concept.externalId}`,
       entityKind: 'concept',
       status: 'blocked',
       title: `Review concept: ${concept.preferredLabel}`,
       summary: `Resolve conflicting canonical matches before importing ${sourceLabel} concept data.`,
-      rationale: buildReviewMetadata(unresolved(), resolutionResult.conflictFlags),
+      rationale: buildReviewMetadata(review),
+      review,
       blockedReason: `Canonical resolution is ambiguous for this concept. Conflicts: ${formatConflictFlags(
         resolutionResult.conflictFlags
       )}.`,
@@ -131,6 +134,7 @@ function buildConceptCandidate(
     resolution === null
       ? buildConceptAddProposal(batch, concept, resolutionResult.conflictFlags)
       : buildConceptEnrichmentProposal(batch, concept, resolution);
+  const review = proposal.review;
 
   return {
     candidateId: `concept:${concept.externalId}`,
@@ -145,6 +149,7 @@ function buildConceptCandidate(
         ? `Create a canonical node from ${sourceLabel}.`
         : `Update canonical node "${resolution.label}" with ${sourceLabel} provenance and aliases.`,
     rationale: proposal.rationale,
+    review,
     blockedReason: null,
     dependencyExternalIds: [],
     proposal,
@@ -162,7 +167,8 @@ function buildRelationCandidate(
   if (edgeType === undefined) {
     return buildBlockedRelationCandidate(
       relation,
-      `The normalized predicate "${relation.normalizedPredicate}" does not map to a CKG edge type yet.`
+      `The normalized predicate "${relation.normalizedPredicate}" does not map to a CKG edge type yet.`,
+      buildReviewSummary(unresolved(), [])
     );
   }
 
@@ -185,9 +191,17 @@ function buildRelationCandidate(
     const conflictMessage =
       conflictFlags.length > 0 ? ` Conflicts: ${formatConflictFlags(conflictFlags)}.` : '';
 
+    const review = buildReviewSummary(
+      {
+        resolution: null,
+        conflictFlags,
+      },
+      conflictFlags
+    );
     return buildBlockedRelationCandidate(
       relation,
-      `${RELATION_BLOCK_REASON}${unresolvedMessage}${conflictMessage}`
+      `${RELATION_BLOCK_REASON}${unresolvedMessage}${conflictMessage}`,
+      review
     );
   }
 
@@ -198,6 +212,7 @@ function buildRelationCandidate(
     edgeType
   );
 
+  const review = proposal.review;
   return {
     candidateId: `relation:${relation.externalId}`,
     entityKind: 'relation',
@@ -205,6 +220,7 @@ function buildRelationCandidate(
     title: `Add relation: ${relation.predicateLabel ?? relation.normalizedPredicate}`,
     summary: `${subjectResolution.resolution.label} ${relation.normalizedPredicate} ${objectResolution.resolution.label}`,
     rationale: proposal.rationale,
+    review,
     blockedReason: null,
     dependencyExternalIds: [],
     proposal,
@@ -213,7 +229,8 @@ function buildRelationCandidate(
 
 function buildBlockedRelationCandidate(
   relation: INormalizedOntologyRelationCandidate,
-  blockedReason: string
+  blockedReason: string,
+  review: IOntologyImportReviewMetadata
 ): IOntologyMutationPreviewCandidate {
   const summary = `${relation.subjectExternalId} ${relation.normalizedPredicate} ${relation.objectExternalId}`;
 
@@ -223,8 +240,8 @@ function buildBlockedRelationCandidate(
     status: 'blocked',
     title: `Defer relation: ${relation.normalizedPredicate}`,
     summary,
-    rationale:
-      'Wait until both endpoints resolve against canonical CKG nodes before emitting add_edge mutations.',
+    rationale: buildReviewMetadata(review),
+    review,
     blockedReason,
     dependencyExternalIds: [relation.subjectExternalId, relation.objectExternalId],
     proposal: null,
@@ -235,9 +252,10 @@ function buildConceptAddProposal(
   batch: INormalizedOntologyGraphBatch,
   concept: INormalizedOntologyConceptCandidate,
   conflictFlags: OntologyMergeConflictKind[]
-): IMutationProposal {
+): IMutationProposal & { review: IOntologyImportReviewMetadata } {
   const importMetadata = buildImportMetadata(batch, `concept:${concept.externalId}`);
-  const reviewMetadata = buildReviewMetadata(unresolved(), conflictFlags);
+  const review = buildReviewSummary(unresolved(), conflictFlags);
+  const reviewMetadata = buildReviewMetadata(review);
   const operation: IAddNodeOperation = {
     type: 'add_node',
     nodeType: inferNodeType(concept),
@@ -255,6 +273,7 @@ function buildConceptAddProposal(
     rationale: `${importMetadata} ${reviewMetadata} Import "${concept.preferredLabel}" from ${batch.sourceId.toUpperCase()} as a canonical node with preserved provenance.`,
     evidenceCount: Math.max(concept.provenance.length, 1),
     priority: derivePriority(0.55, conflictFlags),
+    review,
   };
 }
 
@@ -262,9 +281,10 @@ function buildConceptEnrichmentProposal(
   batch: INormalizedOntologyGraphBatch,
   concept: INormalizedOntologyConceptCandidate,
   resolution: ICanonicalNodeResolution
-): IMutationProposal {
+): IMutationProposal & { review: IOntologyImportReviewMetadata } {
   const importMetadata = buildImportMetadata(batch, `concept:${concept.externalId}`);
-  const reviewMetadata = buildReviewMetadata(resolution, resolution.conflictFlags);
+  const review = buildReviewSummary(resolution, resolution.conflictFlags);
+  const reviewMetadata = buildReviewMetadata(review);
   const operation: IUpdateNodeOperation = {
     type: 'update_node',
     nodeId: resolution.nodeId,
@@ -281,6 +301,7 @@ function buildConceptEnrichmentProposal(
     rationale: `${importMetadata} ${reviewMetadata} Attach ${batch.sourceId.toUpperCase()} source metadata and aliases to existing canonical node "${resolution.label}".`,
     evidenceCount: Math.max(concept.provenance.length, 1),
     priority: derivePriority(resolution.confidenceScore, resolution.conflictFlags),
+    review,
   };
 }
 
@@ -289,7 +310,7 @@ function buildRelationProposal(
   subject: ICanonicalNodeResolution,
   object: ICanonicalNodeResolution,
   edgeType: SupportedEdgeType
-): IMutationProposal {
+): IMutationProposal & { review: IOntologyImportReviewMetadata } {
   const importMetadata = buildImportMetadata(
     {
       runId: relation.provenance[0]?.runId ?? 'unknown-run',
@@ -302,7 +323,7 @@ function buildRelationProposal(
     ...subject.conflictFlags,
     ...object.conflictFlags,
   ]);
-  const reviewMetadata = buildReviewMetadata(
+  const review = buildReviewSummary(
     {
       ...subject,
       confidenceScore: combinedConfidence,
@@ -312,6 +333,7 @@ function buildRelationProposal(
     },
     combinedConflicts
   );
+  const reviewMetadata = buildReviewMetadata(review);
   const operation: Extract<IMutationProposal['operations'][number], { type: 'add_edge' }> = {
     type: 'add_edge',
     edgeType,
@@ -326,6 +348,7 @@ function buildRelationProposal(
     rationale: `${importMetadata} ${reviewMetadata} Import ${edgeType} relation between "${subject.label}" and "${object.label}" from normalized ontology evidence.`,
     evidenceCount: Math.max(relation.provenance.length, 1),
     priority: derivePriority(combinedConfidence, combinedConflicts),
+    review,
   };
 }
 
@@ -495,17 +518,21 @@ function buildImportMetadata(
   return `[ontology-import runId=${batch.runId} sourceId=${batch.sourceId} candidateId=${candidateId}]`;
 }
 
-function buildReviewMetadata(
+function buildReviewSummary(
   resolution: ICanonicalNodeResolutionResult | ICanonicalNodeResolution,
   conflictFlags: OntologyMergeConflictKind[] | undefined
-): string {
+): IOntologyImportReviewMetadata {
   const resolvedResolution = 'resolution' in resolution ? resolution.resolution : resolution;
-  const confidenceScore = resolvedResolution?.confidenceScore ?? 0.55;
-  const confidenceBand = resolvedResolution?.confidenceBand ?? 'medium';
-  const resolvedConflicts = conflictFlags ?? [];
-  const conflicts = resolvedConflicts.length > 0 ? resolvedConflicts.join('|') : 'none';
+  return {
+    confidenceScore: resolvedResolution?.confidenceScore ?? 0.55,
+    confidenceBand: resolvedResolution?.confidenceBand ?? 'medium',
+    conflictFlags: conflictFlags ?? [],
+  };
+}
 
-  return `[ontology-review confidence=${confidenceScore.toFixed(2)} band=${confidenceBand} conflicts=${conflicts}]`;
+function buildReviewMetadata(review: IOntologyImportReviewMetadata): string {
+  const conflicts = review.conflictFlags.length > 0 ? review.conflictFlags.join('|') : 'none';
+  return `[ontology-review confidence=${review.confidenceScore.toFixed(2)} band=${review.confidenceBand} conflicts=${conflicts}]`;
 }
 
 function derivePriority(

@@ -298,6 +298,12 @@ export interface INormalizedOntologyBatchSummary {
   mappingCount: number;
 }
 
+export interface IOntologyImportReviewMetadata {
+  confidenceScore: number;
+  confidenceBand: OntologyMergeConfidenceBand;
+  conflictFlags: OntologyMergeConflictKind[];
+}
+
 export interface IOntologyMutationPreviewCandidate {
   candidateId: string;
   entityKind: OntologyMutationPreviewEntityKind;
@@ -305,6 +311,7 @@ export interface IOntologyMutationPreviewCandidate {
   title: string;
   summary: string;
   rationale: string;
+  review: IOntologyImportReviewMetadata;
   blockedReason: string | null;
   dependencyExternalIds: string[];
   proposal: IMutationProposal | null;
@@ -330,6 +337,24 @@ export interface IOntologyMutationPreviewSubmission {
   mutationIds: string[];
 }
 
+export interface IOntologyImportCapabilitySummary {
+  sourceId: OntologySourceId;
+  fetch: boolean;
+  parse: boolean;
+  normalize: boolean;
+}
+
+export interface IOntologyImportsSystemStatus {
+  status: 'healthy' | 'degraded' | 'unavailable';
+  canReadRegistry: boolean;
+  canManageRuns: boolean;
+  canInspectArtifacts: boolean;
+  missingTables: string[];
+  issues: string[];
+  sourceCapabilities: IOntologyImportCapabilitySummary[];
+  checkedAt: string;
+}
+
 export interface IRegisterOntologySourceInput {
   id: OntologySourceId;
   name: string;
@@ -340,6 +365,19 @@ export interface IRegisterOntologySourceInput {
   documentationUrl?: string;
   supportedLanguages?: string[];
   supportsIncremental?: boolean;
+}
+
+export interface IUpdateOntologySourceInput {
+  name?: string;
+  role?: OntologySourceRole;
+  accessMode?: OntologyAccessMode;
+  description?: string;
+  homepageUrl?: string | null;
+  documentationUrl?: string | null;
+  supportedLanguages?: string[];
+  supportsIncremental?: boolean;
+  enabled?: boolean;
+  latestRelease?: IOntologySourceRelease | null;
 }
 
 export interface ICreateOntologyImportRunInput {
@@ -364,6 +402,7 @@ export interface ISourceCatalogRepository {
   list(): Promise<IOntologySource[]>;
   getById(sourceId: OntologySourceId): Promise<IOntologySource | null>;
   register(source: IRegisterOntologySourceInput): Promise<IOntologySource>;
+  update(sourceId: OntologySourceId, input: IUpdateOntologySourceInput): Promise<IOntologySource>;
 }
 
 export interface IImportRunRepository {
@@ -647,6 +686,11 @@ export const OntologyMutationPreviewCandidateSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   summary: z.string().min(1, 'Summary is required'),
   rationale: z.string().min(1, 'Rationale is required'),
+  review: z.object({
+    confidenceScore: z.number().min(0).max(1),
+    confidenceBand: z.enum(ONTOLOGY_MERGE_CONFIDENCE_BANDS),
+    conflictFlags: z.array(z.enum(ONTOLOGY_MERGE_CONFLICT_KINDS)).default([]),
+  }),
   blockedReason: z.string().min(1).nullable(),
   dependencyExternalIds: z.array(z.string().min(1)).default([]),
   proposal: MutationProposalSchema.nullable(),

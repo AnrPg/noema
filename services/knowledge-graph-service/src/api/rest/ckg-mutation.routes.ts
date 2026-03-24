@@ -18,6 +18,7 @@ import type {
 } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import {
+  getOntologyImportReviewHints,
   getOntologyImportMutationContext,
   groupMutationsByOntologyImportRun,
 } from '../../application/knowledge-graph/ontology-imports/mutation-generation/index.js';
@@ -181,11 +182,16 @@ export function registerCkgMutationRoutes(
                 return left.createdAt.localeCompare(right.createdAt);
               })
             : filteredMutations;
+        const responseMutations = sortedMutations.map((mutation) => ({
+          ...mutation,
+          ontologyImportContext: getOntologyImportMutationContext(mutation),
+          reviewHints: getOntologyImportReviewHints(mutation),
+        }));
 
         // Apply pagination at the API layer
         const { page, pageSize } = query;
         const start = (page - 1) * pageSize;
-        const paginatedData = sortedMutations.slice(start, start + pageSize);
+        const paginatedData = responseMutations.slice(start, start + pageSize);
         const additionalMetadata =
           query.includeImportRunAggregation || query.importRunId !== undefined
             ? {
@@ -207,7 +213,7 @@ export function registerCkgMutationRoutes(
             {
               page,
               pageSize,
-              total: sortedMutations.length,
+              total: responseMutations.length,
             },
             additionalMetadata
           )
@@ -324,7 +330,17 @@ export function registerCkgMutationRoutes(
         const context = buildContext(request);
 
         const result = await service.getMutation(mutationId as MutationId, context);
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+        reply.send(
+          wrapResponse(
+            {
+              ...result.data,
+              ontologyImportContext: getOntologyImportMutationContext(result.data),
+              reviewHints: getOntologyImportReviewHints(result.data),
+            },
+            result.agentHints,
+            request
+          )
+        );
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

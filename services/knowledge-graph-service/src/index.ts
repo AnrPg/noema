@@ -433,7 +433,14 @@ async function bootstrap(): Promise<void> {
       },
     }
   );
-  await ontologyImportsService.ensureDefaultSources();
+  try {
+    await ontologyImportsService.ensureDefaultSources();
+  } catch (error) {
+    logger.warn(
+      { error },
+      'Ontology import bootstrap is running in degraded mode because the registry tables are not ready yet'
+    );
+  }
 
   // --------------------------------------------------------------------------
   // Auth middleware & route wiring

@@ -13,7 +13,10 @@ import {
   CreateOntologyImportRunRequestSchema,
   OntologyImportRunIdParamsSchema,
   OntologyImportRunsQuerySchema,
+  OntologyImportSourceIdParamsSchema,
   OntologyImportSourceQuerySchema,
+  RegisterOntologySourceRequestSchema,
+  UpdateOntologySourceRequestSchema,
 } from '../schemas/ontology-import.schemas.js';
 import {
   assertAdminOrAgent,
@@ -76,6 +79,28 @@ export function registerOntologyImportRoutes(
 ): void {
   attachStartTimeHook(fastify);
 
+  fastify.get(
+    '/api/v1/ckg/imports/health',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Ontology Imports'],
+        summary: 'Get ontology import system health and capabilities',
+        description:
+          'Return whether the ontology import registry is healthy, degraded, or unavailable, plus per-source pipeline capabilities for the admin UI.',
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const status = await ontologyImportsService.getSystemStatus();
+        reply.send(wrapResponse(status, [], request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
   fastify.get<{ Querystring: Record<string, unknown> }>(
     '/api/v1/ckg/imports/sources',
     {
@@ -108,6 +133,92 @@ export function registerOntologyImportRoutes(
             request
           )
         );
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Body: Record<string, unknown> }>(
+    '/api/v1/ckg/imports/sources',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Ontology Imports'],
+        summary: 'Register ontology import source',
+        description: 'Register a new ontology source in the admin source registry.',
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const parsed = RegisterOntologySourceRequestSchema.parse(request.body);
+        const source = await ontologyImportsService.registerSource({
+          id: parsed.id,
+          name: parsed.name,
+          role: parsed.role,
+          accessMode: parsed.accessMode,
+          description: parsed.description,
+          ...(parsed.homepageUrl !== undefined ? { homepageUrl: parsed.homepageUrl } : {}),
+          ...(parsed.documentationUrl !== undefined
+            ? { documentationUrl: parsed.documentationUrl }
+            : {}),
+          ...(parsed.supportedLanguages.length > 0
+            ? { supportedLanguages: parsed.supportedLanguages }
+            : {}),
+          ...(parsed.supportsIncremental !== undefined
+            ? { supportsIncremental: parsed.supportsIncremental }
+            : {}),
+        });
+        reply.status(201).send(wrapResponse(source, [], request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.patch<{ Params: { sourceId: string }; Body: Record<string, unknown> }>(
+    '/api/v1/ckg/imports/sources/:sourceId',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Ontology Imports'],
+        summary: 'Update ontology source',
+        description: 'Update ontology source admin state such as enabled/disabled.',
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { sourceId } = OntologyImportSourceIdParamsSchema.parse(request.params);
+        const parsed = UpdateOntologySourceRequestSchema.parse(request.body);
+        const source = await ontologyImportsService.updateSource(sourceId, {
+          ...(parsed.enabled !== undefined ? { enabled: parsed.enabled } : {}),
+        });
+        reply.send(wrapResponse(source, [], request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Params: { sourceId: string } }>(
+    '/api/v1/ckg/imports/sources/:sourceId/sync',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Ontology Imports'],
+        summary: 'Sync ontology source metadata',
+        description:
+          'Refresh source registry metadata from the service defaults and currently wired pipeline capabilities.',
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { sourceId } = OntologyImportSourceIdParamsSchema.parse(request.params);
+        const source = await ontologyImportsService.syncSourceMetadata(sourceId);
+        reply.send(wrapResponse(source, [], request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }
@@ -197,6 +308,45 @@ export function registerOntologyImportRoutes(
             request
           )
         );
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { runId: string; artifactId: string } }>(
+    '/api/v1/ckg/imports/runs/:runId/artifacts/:artifactId',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Ontology Imports'],
+        summary: 'Get ontology import artifact content',
+        description:
+          'Read a stored ontology import artifact payload so the admin UI can inspect manifests, parsed batches, and preview files.',
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { runId } = OntologyImportRunIdParamsSchema.parse({ runId: request.params.runId });
+        const artifactId = request.params.artifactId;
+        const artifactContent = await ontologyImportsService.getArtifactContent(runId, artifactId);
+
+        if (artifactContent === null) {
+          reply.status(404).send({
+            error: {
+              code: 'ONTOLOGY_IMPORT_ARTIFACT_NOT_FOUND',
+              message: `Ontology import artifact ${artifactId} was not found for run ${runId}.`,
+            },
+            metadata: {
+              requestId: request.id,
+              timestamp: new Date().toISOString(),
+            },
+          });
+          return;
+        }
+
+        reply.send(wrapResponse(artifactContent, [], request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }
