@@ -60,6 +60,26 @@ The run-detail page now surfaces the full import progression that exists today:
 - normalized batch summary
 - mutation-preview counts and sample candidates
 
+## Latest admin workflow
+
+The imports workspace now lands on a proper run registry instead of a
+placeholder-heavy shell.
+
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\imports\page.tsx`
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\imports\runs\page.tsx`
+
+Current behavior:
+
+- the main `Ontology Imports` navigation now opens the import-run registry
+- admins can filter runs by source, status, source version, and source mode
+- admins can bulk start, cancel, or retry selected runs from the list
+- run detail now includes dedicated checkpoint and artifact viewers instead of
+  only summary cards
+- degraded backend states are shown explicitly before live run/source requests
+  are attempted
+- seeded fallback data is now presented as demo-only and run-creation actions
+  are disabled in that mode
+
 ## Current admin controls
 
 The imports workspace now supports real operator actions instead of only
@@ -183,3 +203,62 @@ Key frontend files:
 
 - `C:\Users\anr\Apps\noema\apps\web-admin\src\lib\mutation-workflow.ts`
 - `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\mutations\page.tsx`
+
+## Batch 6 operator controls and live previewing
+
+The admin workflow now covers more of the real ontology-import operator loop.
+
+### Source registry actions
+
+The source catalog is no longer read-only when the ontology-import backend is
+healthy.
+
+- admins can register custom source entries from a full admin form
+- preset loaders are available for `OpenAlex` and `GeoNames`
+- admins can enable or disable sources directly from the registry
+- admins can trigger a metadata sync pass for a source from the same page
+- degraded mode still blocks mutating controls so demo data does not imply live
+  writes
+
+### Import-run list improvements
+
+The import-run workspace now supports a richer operator view.
+
+- filter runs by source, status, source version, and mode
+- bulk start, cancel, or retry selected runs
+- compare two selected runs side by side for status, configuration, parsed
+  counts, normalized counts, and ready proposal counts
+- auto-refresh the registry while active runs are still moving through fetch and
+  parse stages
+- highlight active runs so the list reads like a live job board instead of a
+  static table
+
+### Run detail artifact preview
+
+Import runs are now previewable from the admin UI when the backend is healthy.
+
+- pipeline progress card with current checkpoint and completion bar
+- quick-jump controls for manifest, parsed batch, normalized batch, and mutation
+  preview artifacts
+- checkpoint timeline with per-step detail
+- artifact viewer with metadata
+- raw text artifact preview for the selected artifact
+- direct artifact download via a generated text payload link
+- candidate filters for `all`, `ready`, `blocked`, and `conflicted` mutation
+  preview entries
+
+Current limitation:
+
+- the artifact preview route currently assumes text payloads and is not yet a
+  binary-safe downloader
+
+### Review queue quick triage
+
+The mutation queue now includes faster ontology-import triage tools.
+
+- confidence filter: `all`, `high`, `medium`, `low`
+- conflict filter: `all`, `conflicted`, `clean`
+- dashboard summary cards for ready proposals, conflicted proposals, and import
+  batches
+- quick selection for ready-only and conflicted-only proposals
+- one-click bulk actions for `approve ready only` and `reject conflicted only`

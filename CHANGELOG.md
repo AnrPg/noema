@@ -144,3 +144,40 @@
   admin reviewers can see confidence and conflict hints in the queue
 - added future-ready OpenAlex and GeoNames mapping extractors to prepare the
   next source-adapter batch
+
+## 2026-03-24 - Ontology Imports Health and Run Workspace Hardening
+
+- added `GET /api/v1/ckg/imports/health` so the admin UI can detect degraded
+  ontology-import capability before probing live source/run routes
+- hardened ontology-import bootstrap so missing import tables no longer crash
+  service startup during default-source registration
+- turned the admin imports landing route into a proper import-run registry with
+  source/status/version/mode filters and bulk start/cancel/retry actions
+- added checkpoint and artifact viewers to ontology import run detail, alongside
+  structured mutation-preview review metadata
+- switched the admin imports fallback experience to explicit demo mode so seeded
+  data no longer looks like live actionable data
+
+## 2026-03-24 - Ontology Imports Operator Controls and Review Triage
+
+- added live source-registry actions for register, enable/disable, and metadata
+  sync workflows
+- added an artifact-content API route plus admin raw-artifact preview/download
+  support on import-run detail
+- added two-run comparison to the admin import-run workspace for side-by-side
+  status and batch-metric checks
+- added mutation-queue confidence and conflict filters, inline import-run
+  dashboard cards, and ready-only / conflicted-only bulk review shortcuts
+- refined canonical node resolution to prefer namespace-aware and source-aware
+  candidates before broader label heuristics
+
+## 2026-03-24 - Ontology Imports Mature Operator UX
+
+- replaced preset-only source onboarding with a full source registration form,
+  while keeping OpenAlex and GeoNames preset loaders for faster setup
+- added per-source management feedback for enable/disable and metadata-sync
+  actions in the source registry
+- turned the import-run workspace into a live monitor that auto-refreshes while
+  active runs are still progressing
+- expanded run detail with pipeline-progress status, quick artifact jumps, and
+  mutation-preview candidate filters for ready, blocked, and conflicted items
