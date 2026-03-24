@@ -25,6 +25,8 @@ export const MutationIdParamsSchema = z.object({
 export const MutationQueryParamsSchema = z.object({
   state: MutationStateSchema.optional(),
   proposedBy: z.string().min(1).optional(),
+  importRunId: z.string().min(1).optional(),
+  includeImportRunAggregation: z.coerce.boolean().default(false),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

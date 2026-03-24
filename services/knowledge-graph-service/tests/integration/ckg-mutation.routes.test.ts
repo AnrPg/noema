@@ -148,6 +148,42 @@ describe('GET /ckg/mutations', () => {
     expect(res.statusCode).toBe(200);
     expect(service.listMutations).toHaveBeenCalledOnce();
   });
+
+  it('filters ontology import mutations by importRunId and returns aggregation metadata', async () => {
+    service.listMutations.mockResolvedValue(
+      serviceResult([
+        ckgMutation({
+          rationale:
+            '[ontology-import runId=run_yago_001 sourceId=yago candidateId=concept:https://yago-knowledge.org/resource/Graph_theory] Import concept',
+        }),
+        ckgMutation({
+          rationale:
+            '[ontology-import runId=run_yago_001 sourceId=yago candidateId=relation:rel_001] Import relation',
+        }),
+        ckgMutation({
+          rationale:
+            '[ontology-import runId=run_esco_001 sourceId=esco candidateId=concept:http://data.europa.eu/esco/skill/python] Import concept',
+        }),
+      ])
+    );
+
+    const res = await readApp.inject({
+      method: 'GET',
+      url: `${BASE}?importRunId=run_yago_001&includeImportRunAggregation=true`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toHaveLength(2);
+    expect(res.json().metadata.additional).toEqual({
+      importRunGroups: [
+        {
+          runId: 'run_yago_001',
+          sourceId: 'yago',
+          mutationCount: 2,
+        },
+      ],
+    });
+  });
 });
 
 // ============================================================================

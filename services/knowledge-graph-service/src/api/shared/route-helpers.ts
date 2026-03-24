@@ -10,7 +10,7 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CorrelationId, UserId } from '@noema/types';
+import type { CorrelationId, Metadata, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError, z } from 'zod';
 import {
@@ -150,7 +150,8 @@ export function wrapResponse<T>(
   data: T,
   agentHints: unknown,
   request: FastifyRequest,
-  pagination?: { page: number; pageSize: number; total: number }
+  pagination?: { page: number; pageSize: number; total: number },
+  additionalMetadata?: Metadata
 ): IApiResponse<T> {
   const startTime = (request as ITimedRequest).startTime ?? Date.now();
   return {
@@ -162,6 +163,7 @@ export function wrapResponse<T>(
       serviceName: SERVICE_NAME,
       serviceVersion: SERVICE_VERSION,
       executionTime: Date.now() - startTime,
+      ...(additionalMetadata !== undefined ? { additional: additionalMetadata } : {}),
     },
     ...(pagination && {
       pagination: {
@@ -543,7 +545,8 @@ export function handleError(
  * {@link buildErrorMetadata} for `executionTime` computation).
  */
 export function attachStartTimeHook(fastify: FastifyInstance): void {
-  fastify.addHook('onRequest', async (request) => {
+  fastify.addHook('onRequest', (request, _reply, done) => {
     (request as ITimedRequest).startTime = Date.now();
+    done();
   });
 }

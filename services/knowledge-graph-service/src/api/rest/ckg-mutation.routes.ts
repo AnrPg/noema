@@ -12,8 +12,15 @@
 
 import type { MutationId, MutationState } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
-import type { CkgMutationOperation, IMutationFilter } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
+import type {
+  CkgMutationOperation,
+  IMutationFilter,
+} from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
+import {
+  getOntologyImportMutationContext,
+  groupMutationsByOntologyImportRun,
+} from '../../application/knowledge-graph/ontology-imports/mutation-generation/index.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
   ApproveMutationRequestSchema,
@@ -131,6 +138,8 @@ export function registerCkgMutationRoutes(
           properties: {
             state: { type: 'string' },
             proposedBy: { type: 'string' },
+            importRunId: { type: 'string' },
+            includeImportRunAggregation: { type: 'boolean' },
             page: { type: 'number' },
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
           },
@@ -148,18 +157,56 @@ export function registerCkgMutationRoutes(
         };
 
         const result = await service.listMutations(filter, context);
+        const filteredMutations =
+          query.importRunId === undefined
+            ? result.data
+            : result.data.filter((mutation) => {
+                const ontologyImportContext = getOntologyImportMutationContext(mutation);
+                return ontologyImportContext.runId === query.importRunId;
+              });
+        const sortedMutations =
+          query.includeImportRunAggregation || query.importRunId !== undefined
+            ? [...filteredMutations].sort((left, right) => {
+                const leftContext = getOntologyImportMutationContext(left);
+                const rightContext = getOntologyImportMutationContext(right);
+                const leftRunId = leftContext.runId ?? 'zzzz';
+                const rightRunId = rightContext.runId ?? 'zzzz';
+                if (leftRunId !== rightRunId) {
+                  return leftRunId.localeCompare(rightRunId);
+                }
+                return left.createdAt.localeCompare(right.createdAt);
+              })
+            : filteredMutations;
 
         // Apply pagination at the API layer
         const { page, pageSize } = query;
         const start = (page - 1) * pageSize;
-        const paginatedData = result.data.slice(start, start + pageSize);
+        const paginatedData = sortedMutations.slice(start, start + pageSize);
+        const additionalMetadata =
+          query.includeImportRunAggregation || query.importRunId !== undefined
+            ? {
+                importRunGroups: groupMutationsByOntologyImportRun(sortedMutations).map(
+                  (group) => ({
+                    runId: group.runId,
+                    sourceId: group.sourceId,
+                    mutationCount: group.mutationCount,
+                  })
+                ),
+              }
+            : undefined;
 
         reply.send(
-          wrapResponse(paginatedData, result.agentHints, request, {
-            page,
-            pageSize,
-            total: result.data.length,
-          })
+          wrapResponse(
+            paginatedData,
+            result.agentHints,
+            request,
+            {
+              page,
+              pageSize,
+              total: sortedMutations.length,
+            },
+            additionalMetadata
+          )
         );
       } catch (error) {
         handleError(error, request, reply, fastify.log);
