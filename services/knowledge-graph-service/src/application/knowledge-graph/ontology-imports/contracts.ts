@@ -7,10 +7,12 @@ import {
   type ICancelOntologyImportRunInput,
   type ICreateOntologyImportRunInput,
   type INormalizedOntologyBatchSummary,
+  type IOntologyImportsSystemStatus,
   type IOntologyMutationPreviewBatch,
   type IOntologyMutationPreviewSubmission,
   type IParsedOntologyBatch,
   type IRegisterOntologySourceInput,
+  type IUpdateOntologySourceInput,
   type IRetryOntologyImportRunInput,
   type IOntologyImportArtifact,
   type IOntologyImportCheckpoint,
@@ -43,15 +45,27 @@ export interface IOntologyImportRunDetail {
   mutationPreview: IOntologyMutationPreviewBatch | null;
 }
 
+export interface IOntologyImportArtifactContent {
+  artifact: IOntologyImportArtifact;
+  content: string;
+}
+
 export interface IOntologyImportsApplicationService {
   registerSource(input: IRegisterOntologySourceInput): Promise<IOntologySource>;
   listSources(query?: IListOntologySourcesQuery): Promise<IOntologySource[]>;
+  updateSource(sourceId: string, input: IUpdateOntologySourceInput): Promise<IOntologySource>;
+  syncSourceMetadata(sourceId: string): Promise<IOntologySource>;
+  getSystemStatus(): Promise<IOntologyImportsSystemStatus>;
   createImportRun(input: ICreateOntologyImportRunInput): Promise<IOntologyImportRun>;
   startImportRun(input: IStartOntologyImportRunInput): Promise<IOntologyImportRun>;
   cancelImportRun(input: ICancelOntologyImportRunInput): Promise<IOntologyImportRun>;
   retryImportRun(input: IRetryOntologyImportRunInput): Promise<IOntologyImportRun>;
   listImportRuns(query?: IListOntologyImportRunsQuery): Promise<IOntologyImportRun[]>;
   getImportRun(runId: string): Promise<IOntologyImportRunDetail | null>;
+  getArtifactContent(
+    runId: string,
+    artifactId: string
+  ): Promise<IOntologyImportArtifactContent | null>;
   publishParsedBatchForNormalization(runId: string): Promise<IParsedOntologyBatch>;
   submitMutationPreview(input: {
     runId: string;

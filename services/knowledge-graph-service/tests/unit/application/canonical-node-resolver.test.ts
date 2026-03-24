@@ -179,4 +179,48 @@ describe('GraphCanonicalNodeResolver', () => {
       })
     );
   });
+
+  it('prefers namespace-aware candidates when multiple labels collide', async () => {
+    const nodeRepository = new StubNodeRepository([
+      {
+        nodeId: 'node_other_graph_theory',
+        graphType: 'ckg',
+        nodeType: 'concept',
+        label: 'Graph Theory',
+        domain: 'world-knowledge',
+        properties: {
+          ontologyImport: {
+            externalId: 'https://other.example.org/resource/Graph_Theory',
+            aliases: ['graph theory'],
+          },
+        },
+        createdAt: '2026-03-24T12:00:00.000Z',
+        updatedAt: '2026-03-24T12:00:00.000Z',
+      },
+      {
+        nodeId: 'node_preferred_graph_theory',
+        graphType: 'ckg',
+        nodeType: 'concept',
+        label: 'Graph Theory',
+        domain: 'world-knowledge',
+        properties: {
+          ontologyImport: {
+            externalId: 'https://www.wikidata.org/entity/Q6507',
+            aliases: ['graph theory'],
+          },
+        },
+        createdAt: '2026-03-24T12:00:00.000Z',
+        updatedAt: '2026-03-24T12:00:00.000Z',
+      },
+    ]);
+
+    const resolver = new GraphCanonicalNodeResolver(nodeRepository);
+    const resolution = await resolver.resolveConcept(createConcept(), createBatch());
+
+    expect(resolution.resolution).toEqual(
+      expect.objectContaining({
+        nodeId: 'node_preferred_graph_theory',
+      })
+    );
+  });
 });

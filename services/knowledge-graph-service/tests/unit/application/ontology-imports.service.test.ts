@@ -22,6 +22,7 @@ import type {
   IOntologyImportRun,
   IOntologySource,
   IParsedOntologyBatch,
+  IUpdateOntologySourceInput,
 } from '../../../src/domain/knowledge-graph-service/ontology-imports.contracts.js';
 import type { IExecutionContext } from '../../../src/domain/knowledge-graph-service/execution-context.js';
 import {
@@ -54,6 +55,59 @@ class InMemorySourceRepository implements ISourceCatalogRepository {
     };
     this.sources.push(registered);
     return Promise.resolve(registered);
+  }
+
+  update(sourceId: string, input: IUpdateOntologySourceInput): Promise<IOntologySource> {
+    const source = this.sources.find((entry) => entry.id === sourceId);
+    if (source === undefined) {
+      throw new Error(`Source ${sourceId} not found`);
+    }
+
+    const updated: IOntologySource = {
+      ...source,
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.role !== undefined ? { role: input.role } : {}),
+      ...(input.accessMode !== undefined ? { accessMode: input.accessMode } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.homepageUrl !== undefined ? { homepageUrl: input.homepageUrl } : {}),
+      ...(input.documentationUrl !== undefined ? { documentationUrl: input.documentationUrl } : {}),
+      ...(input.supportedLanguages !== undefined
+        ? { supportedLanguages: input.supportedLanguages }
+        : {}),
+      ...(input.supportsIncremental !== undefined
+        ? { supportsIncremental: input.supportsIncremental }
+        : {}),
+      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+      ...(input.latestRelease !== undefined ? { latestRelease: input.latestRelease } : {}),
+      updatedAt: '2026-03-24T12:10:00.000Z',
+    };
+    this.sources.splice(this.sources.indexOf(source), 1, updated);
+    return Promise.resolve(updated);
+  }
+}
+
+class MissingOntologySourceRepository implements ISourceCatalogRepository {
+  list(): Promise<IOntologySource[]> {
+    return Promise.reject(
+      Object.assign(new Error('Missing ontology import sources table'), {
+        code: 'P2021',
+        meta: {
+          table: 'public.ontology_import_sources',
+        },
+      })
+    );
+  }
+
+  getById(): Promise<IOntologySource | null> {
+    return Promise.resolve(null);
+  }
+
+  register(): Promise<IOntologySource> {
+    throw new Error('register should not be called');
+  }
+
+  update(): Promise<IOntologySource> {
+    throw new Error('update should not be called');
   }
 }
 
@@ -634,5 +688,38 @@ describe('OntologyImportsApplicationService.submitMutationPreview', () => {
 
     const detail = await service.getImportRun('run_test_001');
     expect(detail?.run.submittedMutationIds).toEqual(['mutation_1']);
+  });
+});
+
+describe('OntologyImportsApplicationService.getSystemStatus', () => {
+  it('surfaces missing ontology tables as degraded capabilities', async () => {
+    const service = new OntologyImportsApplicationService(
+      new MissingOntologySourceRepository(),
+      new InMemoryRunRepository([createRun('yago')]),
+      new InMemoryArtifactRepository(),
+      new InMemoryCheckpointRepository(),
+      new InMemoryParsedBatchRepository(),
+      new NoopNormalizationPublisher(),
+      new InMemoryRawArtifactStore(),
+      [new StubSourceFetcher()],
+      [new StubSourceParser()],
+      [new StubSourceNormalizer()]
+    );
+
+    const status = await service.getSystemStatus();
+
+    expect(status.status).toBe('degraded');
+    expect(status.canReadRegistry).toBe(false);
+    expect(status.missingTables).toEqual(['public.ontology_import_sources']);
+    expect(status.sourceCapabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceId: 'yago',
+          fetch: true,
+          parse: true,
+          normalize: true,
+        }),
+      ])
+    );
   });
 });

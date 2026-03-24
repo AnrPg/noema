@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import type { IOntologyImportSourceDto } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, RefreshCw } from 'lucide-react';
 
 function pillClassName(
   value: 'backbone' | 'enhancement' | 'snapshot' | 'api' | 'linked_data' | 'hybrid'
@@ -19,9 +19,21 @@ function pillClassName(
 export function OntologySourceCard({
   source,
   runId,
+  canCreateRun = true,
+  canManage = false,
+  isUpdating = false,
+  isSyncing = false,
+  onToggleEnabled,
+  onSyncMetadata,
 }: {
   source: IOntologyImportSourceDto;
   runId?: string;
+  canCreateRun?: boolean;
+  canManage?: boolean;
+  isUpdating?: boolean;
+  isSyncing?: boolean;
+  onToggleEnabled?: (sourceId: string, enabled: boolean) => void;
+  onSyncMetadata?: (sourceId: string) => void;
 }): React.JSX.Element {
   return (
     <Card>
@@ -49,11 +61,17 @@ export function OntologySourceCard({
           <p>Status: {source.enabled ? 'Enabled for pilot' : 'Disabled'}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm">
-            <Link href={`/dashboard/ckg/imports?sourceId=${encodeURIComponent(source.id)}`}>
+          {canCreateRun ? (
+            <Button asChild size="sm">
+              <Link href={`/dashboard/ckg/imports/runs?sourceId=${encodeURIComponent(source.id)}`}>
+                Create run
+              </Link>
+            </Button>
+          ) : (
+            <Button size="sm" disabled>
               Create run
-            </Link>
-          </Button>
+            </Button>
+          )}
           {runId !== undefined && (
             <Button asChild size="sm" variant="outline">
               <Link href={`/dashboard/ckg/imports/runs/${runId}`}>View latest run</Link>
@@ -73,6 +91,31 @@ export function OntologySourceCard({
                 Documentation
                 <ExternalLink className="ml-2 h-4 w-4" />
               </a>
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isUpdating}
+              onClick={() => {
+                onToggleEnabled?.(source.id, !source.enabled);
+              }}
+            >
+              {isUpdating ? 'Updating…' : source.enabled ? 'Disable source' : 'Enable source'}
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isSyncing}
+              onClick={() => {
+                onSyncMetadata?.(source.id);
+              }}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              {isSyncing ? 'Syncing…' : 'Sync metadata'}
             </Button>
           )}
         </div>

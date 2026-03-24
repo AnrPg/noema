@@ -1,4 +1,8 @@
 import type { ICkgMutation } from '../../../../domain/knowledge-graph-service/mutation.repository.js';
+import type {
+  OntologyMergeConfidenceBand,
+  OntologyMergeConflictKind,
+} from '../../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
 
 export interface IOntologyImportMutationContext {
   runId: string | null;
@@ -12,8 +16,16 @@ export interface IOntologyImportMutationGroupSummary {
   mutationCount: number;
 }
 
+export interface IOntologyImportReviewHints {
+  confidenceScore: number | null;
+  confidenceBand: OntologyMergeConfidenceBand | null;
+  conflictFlags: OntologyMergeConflictKind[];
+}
+
 const ONTOLOGY_IMPORT_MARKER_PATTERN =
   /\[ontology-import runId=(?<runId>[^\s\]]+) sourceId=(?<sourceId>[^\s\]]+) candidateId=(?<candidateId>[^\]]+)\]/u;
+const ONTOLOGY_REVIEW_MARKER_PATTERN =
+  /\[ontology-review confidence=(?<confidence>[0-9.]+) band=(?<band>low|medium|high) conflicts=(?<conflicts>[^\]]+)\]/u;
 
 export function getOntologyImportMutationContext(
   mutation: Pick<ICkgMutation, 'rationale' | 'operations'>
@@ -67,6 +79,30 @@ export function groupMutationsByOntologyImportRun(
   return [...groups.values()].sort((left, right) => left.runId.localeCompare(right.runId));
 }
 
+export function getOntologyImportReviewHints(
+  mutation: Pick<ICkgMutation, 'rationale' | 'operations'>
+): IOntologyImportReviewHints {
+  const rationaleHints = parseReviewMarker(mutation.rationale);
+  if (rationaleHints !== null) {
+    return rationaleHints;
+  }
+
+  for (const operation of mutation.operations) {
+    const operationRationale =
+      typeof operation['rationale'] === 'string' ? operation['rationale'] : null;
+    const parsed = parseReviewMarker(operationRationale);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return {
+    confidenceScore: null,
+    confidenceBand: null,
+    conflictFlags: [],
+  };
+}
+
 function parseOntologyImportMarker(
   value: string | null | undefined
 ): IOntologyImportMutationContext | null {
@@ -83,6 +119,29 @@ function parseOntologyImportMarker(
     runId: match.groups['runId'] ?? null,
     sourceId: match.groups['sourceId'] ?? null,
     candidateId: match.groups['candidateId'] ?? null,
+  };
+}
+
+function parseReviewMarker(value: string | null | undefined): IOntologyImportReviewHints | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const match = ONTOLOGY_REVIEW_MARKER_PATTERN.exec(value);
+  if (match?.groups === undefined) {
+    return null;
+  }
+
+  const band = match.groups['band'];
+  const conflicts = match.groups['conflicts'];
+
+  return {
+    confidenceScore: Number(match.groups['confidence']),
+    confidenceBand: band === 'low' || band === 'medium' || band === 'high' ? band : null,
+    conflictFlags:
+      typeof conflicts === 'string' && conflicts !== 'none'
+        ? (conflicts.split('|').filter((entry) => entry !== '') as OntologyMergeConflictKind[])
+        : [],
   };
 }
 

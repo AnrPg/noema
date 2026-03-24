@@ -140,6 +140,10 @@ export function isMutationTerminal(mutation: ICkgMutationDto): boolean {
 export function getOntologyImportMutationContext(
   mutation: ICkgMutationDto
 ): IOntologyImportMutationContext {
+  if (mutation.ontologyImportContext !== undefined) {
+    return mutation.ontologyImportContext;
+  }
+
   const rationaleContext = parseOntologyImportMarker(mutation.rationale);
   if (rationaleContext !== null) {
     return rationaleContext;
@@ -162,6 +166,14 @@ export function getOntologyImportMutationContext(
 }
 
 export function getMutationReviewHints(mutation: ICkgMutationDto): IMutationReviewHints {
+  if (mutation.reviewHints !== undefined) {
+    return {
+      confidenceScore: mutation.reviewHints.confidenceScore,
+      confidenceBand: mutation.reviewHints.confidenceBand,
+      conflicts: mutation.reviewHints.conflictFlags,
+    };
+  }
+
   const rationaleHints = parseReviewMarker(mutation.rationale);
   if (rationaleHints !== null) {
     return rationaleHints;

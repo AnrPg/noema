@@ -70,6 +70,12 @@ export type OntologyImportArtifactKind =
   | 'normalized_batch'
   | 'mutation_preview';
 export type OntologyImportRunTrigger = 'manual' | 'scheduled' | 'retry';
+export type OntologyMergeConfidenceBand = 'low' | 'medium' | 'high';
+export type OntologyMergeConflictKind =
+  | 'ambiguous_match'
+  | 'domain_mismatch'
+  | 'mapping_conflict'
+  | 'weak_mapping_only';
 
 export interface IOntologyImportRunConfigurationDto {
   mode: string | null;
@@ -334,6 +340,16 @@ export interface ICkgMutationDto {
   payload: Record<string, unknown>;
   operations?: Record<string, unknown>[];
   rationale?: string;
+  ontologyImportContext?: {
+    runId: string | null;
+    sourceId: string | null;
+    candidateId: string | null;
+  };
+  reviewHints?: {
+    confidenceScore: number | null;
+    confidenceBand: OntologyMergeConfidenceBand | null;
+    conflictFlags: OntologyMergeConflictKind[];
+  };
   reviewedBy: UserId | null;
   reviewNote: string | null;
   proposedAt: string;
@@ -428,6 +444,11 @@ export interface IOntologyImportArtifactDto {
   createdAt: string;
 }
 
+export interface IOntologyImportArtifactContentDto {
+  artifact: IOntologyImportArtifactDto;
+  content: string;
+}
+
 export interface IOntologyImportCheckpointDto {
   id: string;
   runId: string;
@@ -465,6 +486,11 @@ export interface IOntologyMutationPreviewCandidateDto {
   title: string;
   summary: string;
   rationale: string;
+  review: {
+    confidenceScore: number;
+    confidenceBand: OntologyMergeConfidenceBand;
+    conflictFlags: OntologyMergeConflictKind[];
+  };
   blockedReason: string | null;
   dependencyExternalIds: string[];
   proposal: {
@@ -517,6 +543,8 @@ export interface IOntologyImportRunDetailDto {
 export interface IListOntologyImportRunsParams {
   sourceId?: string;
   status?: OntologyImportStatus;
+  sourceVersion?: string;
+  mode?: string;
 }
 
 export interface ICreateOntologyImportRunInput {
@@ -524,6 +552,22 @@ export interface ICreateOntologyImportRunInput {
   trigger?: OntologyImportRunTrigger;
   sourceVersion?: string;
   configuration?: Partial<IOntologyImportRunConfigurationDto>;
+}
+
+export interface IRegisterOntologyImportSourceInput {
+  id: string;
+  name: string;
+  role: OntologySourceRole;
+  accessMode: OntologyImportAccessMode;
+  description: string;
+  homepageUrl?: string;
+  documentationUrl?: string;
+  supportedLanguages?: string[];
+  supportsIncremental?: boolean;
+}
+
+export interface IUpdateOntologyImportSourceInput {
+  enabled?: boolean;
 }
 
 export interface ICancelOntologyImportRunInput {
@@ -536,6 +580,24 @@ export interface IOntologyMutationPreviewSubmissionDto {
   submittedCount: number;
   skippedCount: number;
   mutationIds: string[];
+}
+
+export interface IOntologyImportCapabilitySummaryDto {
+  sourceId: string;
+  fetch: boolean;
+  parse: boolean;
+  normalize: boolean;
+}
+
+export interface IOntologyImportsSystemStatusDto {
+  status: 'healthy' | 'degraded' | 'unavailable';
+  canReadRegistry: boolean;
+  canManageRuns: boolean;
+  canInspectArtifacts: boolean;
+  missingTables: string[];
+  issues: string[];
+  sourceCapabilities: IOntologyImportCapabilitySummaryDto[];
+  checkedAt: string;
 }
 
 // ============================================================================
@@ -593,12 +655,17 @@ export type OntologyImportRunDto = IOntologyImportRunDto;
 export type OntologyImportRunDetailDto = IOntologyImportRunDetailDto;
 export type OntologyImportRunConfigurationDto = IOntologyImportRunConfigurationDto;
 export type OntologyImportArtifactDto = IOntologyImportArtifactDto;
+export type OntologyImportArtifactContentDto = IOntologyImportArtifactContentDto;
 export type OntologyImportCheckpointDto = IOntologyImportCheckpointDto;
 export type OntologyParsedBatchDto = IOntologyParsedBatchDto;
 export type OntologyNormalizedBatchDto = IOntologyNormalizedBatchDto;
 export type OntologyMutationPreviewBatchDto = IOntologyMutationPreviewBatchDto;
 export type OntologyMutationPreviewSubmissionDto = IOntologyMutationPreviewSubmissionDto;
 export type ListOntologyImportRunsParams = IListOntologyImportRunsParams;
+export type OntologyImportsSystemStatusDto = IOntologyImportsSystemStatusDto;
+export type OntologyImportCapabilitySummaryDto = IOntologyImportCapabilitySummaryDto;
+export type RegisterOntologyImportSourceInput = IRegisterOntologyImportSourceInput;
+export type UpdateOntologyImportSourceInput = IUpdateOntologyImportSourceInput;
 
 // ============================================================================
 // Response aliases
@@ -628,8 +695,11 @@ export type CkgMutationResponse = IApiResponse<ICkgMutationDto>;
 export type CkgBulkReviewResponse = IApiResponse<ICkgBulkReviewResult>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
 export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;
+export type OntologyImportSourceResponse = IApiResponse<IOntologyImportSourceDto>;
 export type OntologyImportRunsResponse = IApiResponse<IOntologyImportRunDto[]>;
 export type OntologyImportRunResponse = IApiResponse<IOntologyImportRunDto>;
 export type OntologyImportRunDetailResponse = IApiResponse<IOntologyImportRunDetailDto>;
+export type OntologyImportArtifactContentResponse = IApiResponse<IOntologyImportArtifactContentDto>;
 export type OntologyMutationPreviewSubmissionResponse =
   IApiResponse<IOntologyMutationPreviewSubmissionDto>;
+export type OntologyImportsSystemStatusResponse = IApiResponse<IOntologyImportsSystemStatusDto>;

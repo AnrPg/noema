@@ -3,6 +3,7 @@ import type {
   IRegisterOntologySourceInput,
   IOntologySource,
   ISourceCatalogRepository,
+  IUpdateOntologySourceInput,
 } from '../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
 
 function toDomain(record: {
@@ -88,6 +89,42 @@ export class PrismaOntologySourceRepository implements ISourceCatalogRepository 
         supportedLanguages: input.supportedLanguages ?? [],
         supportsIncremental: input.supportsIncremental ?? false,
         enabled: true,
+      },
+    });
+
+    return toDomain(record);
+  }
+
+  async update(sourceId: string, input: IUpdateOntologySourceInput): Promise<IOntologySource> {
+    const record = await this.prisma.ontologyImportSource.update({
+      where: { id: sourceId },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.role !== undefined ? { role: input.role } : {}),
+        ...(input.accessMode !== undefined ? { accessMode: input.accessMode } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.homepageUrl !== undefined ? { homepageUrl: input.homepageUrl } : {}),
+        ...(input.documentationUrl !== undefined
+          ? { documentationUrl: input.documentationUrl }
+          : {}),
+        ...(input.supportedLanguages !== undefined
+          ? { supportedLanguages: input.supportedLanguages }
+          : {}),
+        ...(input.supportsIncremental !== undefined
+          ? { supportsIncremental: input.supportsIncremental }
+          : {}),
+        ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+        ...(input.latestRelease !== undefined
+          ? {
+              latestReleaseVersion: input.latestRelease?.version ?? null,
+              latestReleasePublishedAt:
+                input.latestRelease?.publishedAt !== null &&
+                input.latestRelease?.publishedAt !== undefined
+                  ? new Date(input.latestRelease.publishedAt)
+                  : null,
+              latestReleaseChecksum: input.latestRelease?.checksum ?? null,
+            }
+          : {}),
       },
     });
 

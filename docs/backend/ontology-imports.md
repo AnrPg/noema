@@ -522,3 +522,98 @@ Key files:
 
 - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\openalex\openalex-mapping.extractor.ts`
 - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\geonames\geonames-mapping.extractor.ts`
+
+## Capability health and structured import metadata
+
+The ontology-import backend now exposes an explicit system-health contract for
+the admin UI instead of forcing the UI to probe source/run routes and infer
+failure from thrown errors.
+
+### Ontology import capability endpoint
+
+- `GET /api/v1/ckg/imports/health`
+
+This endpoint reports:
+
+- whether ontology imports are `healthy`, `degraded`, or `unavailable`
+- whether the admin UI should read the live registry or stay in demo mode
+- which ontology-import tables appear to be missing
+- per-source fetch/parse/normalize capability flags
+
+The service bootstrap was also hardened so missing ontology-import tables no
+longer crash startup during default-source registration. Instead, the service
+stays available and reports degraded mode through the capability endpoint.
+
+### Structured mutation-review metadata
+
+Ontology mutation-preview candidates now expose first-class review metadata:
+
+- `review.confidenceScore`
+- `review.confidenceBand`
+- `review.conflictFlags`
+
+The CKG mutation API also now returns structured ontology-import context and
+review hints for submitted mutation proposals, so the admin UI can consume typed
+fields before falling back to older rationale markers.
+
+## Batch 6 operator support and safer canonical matching
+
+The ontology-import backend now exposes more of the real operator workflow to
+the admin app without breaking degraded-mode behavior.
+
+### Source registry write actions
+
+The ontology-import application service and REST API now support live registry
+management when the backend is healthy.
+
+- register source
+- update source fields such as `enabled`
+- sync source metadata against built-in defaults and wired pipeline capabilities
+
+Key files:
+
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\domain\knowledge-graph-service\ontology-imports.contracts.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\contracts.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\service.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\api\rest\ontology-import.routes.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\database\repositories\prisma-ontology-source.repository.ts`
+
+Current implementation note:
+
+- metadata sync currently derives release/capability state from wired defaults
+  and available connectors; it is not yet a live upstream metadata fetch
+
+### Artifact content preview route
+
+Run detail now has a dedicated artifact-content read path for admin preview and
+download workflows.
+
+- route: `GET /api/v1/ckg/imports/runs/:runId/artifacts/:artifactId`
+- application method: `getArtifactContent(runId, artifactId)`
+
+Current behavior:
+
+- validates the artifact belongs to the requested run
+- reads the stored payload from the raw artifact store
+- returns UTF-8 content for the admin artifact viewer
+
+Current limitation:
+
+- artifact reads are text-oriented today and do not yet expose binary-safe
+  streaming or content negotiation
+
+### Namespace-aware canonical resolution
+
+Canonical node resolution now prefers narrower, source-aware candidates before
+falling back to broader label-based heuristics.
+
+Current behavior:
+
+- prefers candidate nodes whose ontology-import source matches the current
+  import batch
+- prefers candidates whose external-id or IRI namespace aligns with the staged
+  identifiers being imported
+- only falls back to alias and label matching after those checks
+
+This reduces accidental canonical merges when multiple sources share similar
+labels but represent different namespaces.

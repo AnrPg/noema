@@ -24,6 +24,8 @@ import type {
   ICreateOntologyImportRunInput,
   ICreateNodeInput,
   ICancelOntologyImportRunInput,
+  IRegisterOntologyImportSourceInput,
+  IUpdateOntologyImportSourceInput,
   EdgeResponse,
   EdgesListResponse,
   FrontierResponse,
@@ -38,9 +40,12 @@ import type {
   NodesListResponse,
   OperationsResponse,
   OntologyImportRunDetailResponse,
+  OntologyImportArtifactContentResponse,
   OntologyImportRunResponse,
   OntologyImportRunsResponse,
+  OntologyImportSourceResponse,
   OntologyImportSourcesResponse,
+  OntologyImportsSystemStatusResponse,
   OntologyMutationPreviewSubmissionResponse,
   PrerequisiteChainResponse,
   StageResponse,
@@ -210,19 +215,43 @@ export const ckgMutationsApi = {
 // ============================================================================
 
 export const ontologyImportsApi = {
+  getSystemStatus: (): Promise<OntologyImportsSystemStatusResponse> =>
+    http.get(`${ontologyImportsBase}/health`),
+
   listSources: (): Promise<OntologyImportSourcesResponse> =>
     http.get(`${ontologyImportsBase}/sources`),
+
+  registerSource: (
+    input: IRegisterOntologyImportSourceInput
+  ): Promise<OntologyImportSourceResponse> => http.post(`${ontologyImportsBase}/sources`, input),
+
+  updateSource: (
+    sourceId: string,
+    input: IUpdateOntologyImportSourceInput
+  ): Promise<OntologyImportSourceResponse> =>
+    http.patch(`${ontologyImportsBase}/sources/${sourceId}`, input),
+
+  syncSource: (sourceId: string): Promise<OntologyImportSourceResponse> =>
+    http.post(`${ontologyImportsBase}/sources/${sourceId}/sync`, {}),
 
   listRuns: (filters?: IListOntologyImportRunsParams): Promise<OntologyImportRunsResponse> =>
     http.get(`${ontologyImportsBase}/runs`, {
       params: {
         sourceId: filters?.sourceId,
         status: filters?.status,
+        sourceVersion: filters?.sourceVersion,
+        mode: filters?.mode,
       },
     }),
 
   getRun: (runId: string): Promise<OntologyImportRunDetailResponse> =>
     http.get(`${ontologyImportsBase}/runs/${runId}`),
+
+  getArtifactContent: (
+    runId: string,
+    artifactId: string
+  ): Promise<OntologyImportArtifactContentResponse> =>
+    http.get(`${ontologyImportsBase}/runs/${runId}/artifacts/${artifactId}`),
 
   createRun: (input: ICreateOntologyImportRunInput): Promise<OntologyImportRunResponse> =>
     http.post(`${ontologyImportsBase}/runs`, input),
