@@ -97,7 +97,7 @@ Ontology Imports Pipeline for the Canonical Knowledge Graph
 - Batch 6: reviewer bulk workflows, merge confidence, and next-source mapping
   depth
 
-Batch 6 is now implemented and ready for reviewer sign-off.
+Batch 6 is complete and reviewer-approved.
 
 - reviewer bulk triage is in place:
   - backend bulk review endpoint for ontology-import mutations
@@ -108,6 +108,10 @@ Batch 6 is now implemented and ready for reviewer sign-off.
   - conflict-aware canonical resolution and safer mapping propagation
   - future-ready OpenAlex and GeoNames mapping extractors for the next source
     adapters
+
+### M5 - Source expansion and reviewer decision support
+
+- Batch 7: OpenAlex and GeoNames onboarding plus richer reviewer insights
 
 ## Exit criteria
 
@@ -120,11 +124,12 @@ Batch 6 is now implemented and ready for reviewer sign-off.
 
 ## Next batch
 
-Batch 6 is planned to improve operational review throughput and the quality of
-cross-source canonical merge decisions.
+Batch 7 is planned to expand source coverage and help reviewers make faster,
+better merge decisions.
 
-- reviewer-side bulk actions and import-run scoped approval workflows
-- richer mapping extraction for the next locked sources, starting with OpenAlex
-  and GeoNames parsing targets
-- confidence scoring and conflict policies for merge candidates so the review
-  queue can surface higher-trust proposals first
+- onboard OpenAlex and GeoNames into the import pipeline with real
+  fetch/parse/normalize coverage
+- surface confidence-band and conflict-focused review insights in the admin
+  queue and import-run detail views
+- keep all new source mappings flowing through the same staged review-first CKG
+  workflow

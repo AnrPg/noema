@@ -2,12 +2,12 @@
 
 ## Assigned now
 
-- Batch 6 / `T-ONT-016`
+- Batch 7 / `T-ONT-019`
 
 ## Focus
 
-Build the reviewer-facing bulk triage experience for ontology-import proposals.
+Improve reviewer decision support for ontology-import proposals.
 
-- bulk approve / reject controls in the mutation queue
-- import-run scoped review groups
-- confidence and conflict hints in reviewer-facing queue states
+- confidence-band and conflict-type filters in the mutation queue
+- import-run level review summaries and insight panels
+- clearer ready vs blocked proposal visibility during reviewer triage

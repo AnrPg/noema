@@ -477,3 +477,100 @@
   - `C:\Users\anr\Apps\noema\docs\backend\ontology-imports.md`
   - `C:\Users\anr\Apps\noema\docs\frontend\ontology-imports.md`
   - `C:\Users\anr\Apps\noema\CHANGELOG.md`
+
+## Batch 7 - Source expansion and reviewer decision support
+
+### Task T-ONT-018
+
+- batch: 7
+- owner: backend-implementer
+- status: pending
+- claimed_by: —
+- description: Implement the first additional locked-source ingestion slice for
+  OpenAlex and GeoNames, including fetch, parse, staged mapping extraction, and
+  normalization handoff integration
+- inputs:
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\fetchers\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\openalex\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\geonames\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\normalizers\`
+- outputs:
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\fetchers\openalex\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\fetchers\geonames\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\openalex\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\geonames\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\tests\unit\infrastructure\openalex-source.fetcher.test.ts`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\tests\unit\infrastructure\geonames-source.fetcher.test.ts`
+- validation:
+  `pnpm --filter @noema/knowledge-graph-service typecheck && pnpm --filter @noema/knowledge-graph-service test`
+- acceptance:
+  - OpenAlex and GeoNames can be imported programmatically through the existing
+    hexagonal fetch/parse/normalize pipeline
+  - both sources emit staged mapping records that improve downstream canonical
+    resolution without bypassing review
+  - connectors preserve release/provenance metadata and stay behind source
+    fetcher/parser ports
+- touches:
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\fetchers\openalex\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\fetchers\geonames\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\openalex\`
+  - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\geonames\`
+
+### Task T-ONT-019
+
+- batch: 7
+- owner: frontend-implementer
+- status: pending
+- claimed_by: —
+- description: Add reviewer decision-support UI for ontology-import proposals,
+  including conflict-focused filters, confidence summaries, and import-run
+  review dashboards
+- inputs:
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\mutations\page.tsx`
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\components\ckg\mutation-review\`
+  - `C:\Users\anr\Apps\noema\packages\api-client\src\knowledge-graph\hooks.ts`
+- outputs:
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\components\ckg\mutation-review\review-insights-panel.tsx`
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\components\ckg\mutation-review\conflict-filter-bar.tsx`
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\mutations\page.tsx`
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\imports\runs\[id]\page.tsx`
+- validation: `pnpm --filter @noema/web-admin typecheck`
+- acceptance:
+  - reviewers can filter ontology-import proposals by confidence band and
+    conflict type
+  - reviewers can inspect import-run level review summaries before taking bulk
+    actions
+  - UI surfaces blocked vs ready proposal counts in a way that reduces manual
+    triage effort
+- touches:
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\components\ckg\mutation-review\`
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\mutations\page.tsx`
+  - `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\imports\runs\[id]\page.tsx`
+
+### Task T-ONT-020
+
+- batch: 7
+- owner: docs-agent
+- status: pending
+- claimed_by: —
+- description: Document Batch 7 source expansion and reviewer decision-support
+  workflows, and record the release notes
+- inputs:
+  - `C:\Users\anr\Apps\noema\docs\backend\ontology-imports.md`
+  - `C:\Users\anr\Apps\noema\docs\frontend\ontology-imports.md`
+  - `C:\Users\anr\Apps\noema\roadmap.md`
+- outputs:
+  - `C:\Users\anr\Apps\noema\docs\backend\ontology-imports.md`
+  - `C:\Users\anr\Apps\noema\docs\frontend\ontology-imports.md`
+  - `C:\Users\anr\Apps\noema\CHANGELOG.md`
+- validation:
+  `pnpm exec prettier --check "docs/backend/ontology-imports.md" "docs/frontend/ontology-imports.md" "CHANGELOG.md" "roadmap.md" "tasks.md"`
+- acceptance:
+  - docs explain how OpenAlex and GeoNames fit into the staged import pipeline
+  - docs explain the new reviewer decision-support surfaces and how confidence
+    bands/conflicts should be interpreted
+  - changelog summarizes Batch 7 deliverables
+- touches:
+  - `C:\Users\anr\Apps\noema\docs\backend\ontology-imports.md`
+  - `C:\Users\anr\Apps\noema\docs\frontend\ontology-imports.md`
+  - `C:\Users\anr\Apps\noema\CHANGELOG.md`

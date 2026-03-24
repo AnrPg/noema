@@ -2,14 +2,14 @@
 
 ## Assigned now
 
-- Batch 6 / `T-ONT-014`
-- Batch 6 / `T-ONT-015`
+- Batch 7 / `T-ONT-018`
 
 ## Focus
 
-Increase reviewer throughput and improve cross-source merge quality.
+Expand source coverage with the next locked sources while preserving the
+review-first ontology import architecture.
 
-- add backend bulk-review workflows for ontology-import mutation proposals
-- support import-run scoped approval and rejection flows
-- deepen mapping extraction for the next locked sources
-- introduce confidence scoring and conflict policies for merge candidates
+- implement OpenAlex and GeoNames fetch adapters
+- wire both sources into parser/normalizer handoff
+- preserve provenance/release metadata and staged mapping extraction
+- keep all connector logic behind the existing fetcher/parser ports

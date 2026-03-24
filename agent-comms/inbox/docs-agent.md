@@ -2,13 +2,13 @@
 
 ## Assigned now
 
-- Batch 6 / `T-ONT-017`
+- Batch 7 / `T-ONT-020`
 
 ## Focus
 
-Document the next reviewer workflow and merge-quality pass while Batch 6 is
-implemented.
+Document the next source-expansion and reviewer decision-support pass while
+Batch 7 is implemented.
 
-- reviewer bulk workflows
-- import-run scoped approvals
-- confidence scoring and conflict policies
+- OpenAlex and GeoNames pipeline coverage
+- reviewer insight panels and conflict-focused triage
+- changelog / roadmap updates for Batch 7
