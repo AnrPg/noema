@@ -213,6 +213,10 @@ Parsed and normalized output are persisted as immutable artifacts per run:
 The run status now advances to `ready_for_normalization` once the first
 normalization handoff finishes successfully.
 
+The domain contract now also exposes explicit active-versus-terminal run-status
+helpers so adapters and admin surfaces do not have to infer lifecycle semantics
+from scattered status lists.
+
 ## Batch 5 normalization handoff
 
 The first normalization layer has started. It does not yet generate reviewable

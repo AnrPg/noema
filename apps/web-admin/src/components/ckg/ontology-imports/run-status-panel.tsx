@@ -6,27 +6,16 @@ import type {
   IOntologyImportArtifactDto,
   IOntologyImportCheckpointDto,
   IOntologyImportRunDetailDto,
-  OntologyImportStatus,
 } from '@noema/api-client';
 import { useOntologyImportArtifactContent } from '@noema/api-client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
+import {
+  describeOntologyImportRunVersion,
+  formatOntologyImportStatus,
+  getOntologyImportRunTone,
+} from '@/components/ckg/ontology-imports/run-state';
 
 type CandidateFilter = 'all' | 'ready' | 'blocked' | 'conflicted';
-
-function statusClassName(status: OntologyImportStatus): string {
-  switch (status) {
-    case 'staging_validated':
-      return 'bg-violet-500/15 text-violet-300 border-violet-400/30';
-    case 'ready_for_normalization':
-      return 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30';
-    case 'failed':
-      return 'bg-red-500/15 text-red-300 border-red-400/30';
-    case 'cancelled':
-      return 'bg-zinc-500/15 text-zinc-300 border-zinc-400/30';
-    default:
-      return 'bg-blue-500/15 text-blue-300 border-blue-400/30';
-  }
-}
 
 function checkpointTone(status: IOntologyImportCheckpointDto['status']): string {
   switch (status) {
@@ -180,9 +169,9 @@ export function OntologyImportRunStatusPanel({
             </CardDescription>
           </div>
           <span
-            className={`rounded-full border px-3 py-1 text-xs ${statusClassName(detail.run.status)}`}
+            className={`rounded-full border px-3 py-1 text-xs ${getOntologyImportRunTone(detail.run.status).badgeClassName}`}
           >
-            {detail.run.status.replaceAll('_', ' ')}
+            {formatOntologyImportStatus(detail.run.status)}
           </span>
         </div>
       </CardHeader>
@@ -258,7 +247,7 @@ export function OntologyImportRunStatusPanel({
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>Run id: {detail.run.id}</p>
-            <p>Source version: {detail.run.sourceVersion ?? 'Pending discovery'}</p>
+            <p>Source version: {describeOntologyImportRunVersion(detail.run)}</p>
             <p>Source mode: {detail.run.configuration.mode ?? 'Default'}</p>
             <p>Language: {detail.run.configuration.language ?? 'Default'}</p>
             <p>

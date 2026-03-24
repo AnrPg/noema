@@ -38,12 +38,16 @@ import {
   ontologyImportRunsPlaceholder,
   ontologyImportSourcesPlaceholder,
 } from '@/components/ckg/ontology-imports/placeholder-data';
+import {
+  describeOntologyImportSourceVersion,
+  formatOntologyImportStatus,
+  getOntologyImportRunTone,
+  isOntologyImportRunActive,
+} from '@/components/ckg/ontology-imports/run-state';
 
 type MessageState = { type: 'success'; text: string } | { type: 'error'; text: string } | null;
 
 type BulkAction = 'start' | 'cancel' | 'retry';
-
-const ACTIVE_RUN_STATUSES = new Set(['queued', 'fetching', 'fetched', 'parsing', 'parsed']);
 
 function isBulkActionEligible(action: BulkAction, run: IOntologyImportRunDto): boolean {
   switch (action) {
@@ -54,10 +58,6 @@ function isBulkActionEligible(action: BulkAction, run: IOntologyImportRunDto): b
     case 'retry':
       return run.status === 'failed' || run.status === 'cancelled';
   }
-}
-
-function formatStatus(status: OntologyImportStatus): string {
-  return status.replaceAll('_', ' ');
 }
 
 export function OntologyImportRunsWorkspace(): React.JSX.Element {
@@ -98,7 +98,9 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
         return false;
       }
 
-      return response.data.some((run: IOntologyImportRunDto) => ACTIVE_RUN_STATUSES.has(run.status))
+      return response.data.some((run: IOntologyImportRunDto) =>
+        isOntologyImportRunActive(run.status)
+      )
         ? 10000
         : false;
     },
@@ -205,7 +207,7 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
   const readyForNormalization = runs.filter(
     (run) => run.status === 'ready_for_normalization'
   ).length;
-  const activeRunCount = runs.filter((run) => ACTIVE_RUN_STATUSES.has(run.status)).length;
+  const activeRunCount = runs.filter((run) => isOntologyImportRunActive(run.status)).length;
 
   return (
     <div className="space-y-6">
@@ -301,6 +303,8 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Source</span>
             <select
+              id="ontology-import-filter-source"
+              name="sourceFilter"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               value={sourceFilter}
               disabled={sources.length === 0}
@@ -319,6 +323,8 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Status</span>
             <select
+              id="ontology-import-filter-status"
+              name="statusFilter"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               value={statusFilter}
               onChange={(event) => {
@@ -338,7 +344,7 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
                 'cancelled',
               ].map((status) => (
                 <option key={status} value={status}>
-                  {formatStatus(status as OntologyImportStatus)}
+                  {formatOntologyImportStatus(status as OntologyImportStatus)}
                 </option>
               ))}
             </select>
@@ -346,6 +352,8 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Source version</span>
             <input
+              id="ontology-import-filter-version"
+              name="versionFilter"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               placeholder="Search release or checksum tag"
               value={versionFilter}
@@ -358,6 +366,8 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Mode</span>
             <input
+              id="ontology-import-filter-mode"
+              name="modeFilter"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               placeholder="snapshot, skills, targeted..."
               value={modeFilter}
@@ -390,8 +400,16 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
                   </p>
                   <div className="mt-2 space-y-1 text-muted-foreground">
                     <p>Run id: {run?.id ?? comparedRunIds[index]}</p>
-                    <p>Status: {run?.status ?? 'unknown'}</p>
-                    <p>Version: {run?.sourceVersion ?? 'pending'}</p>
+                    <p>
+                      Status:{' '}
+                      {run !== undefined ? formatOntologyImportStatus(run.status) : 'unknown'}
+                    </p>
+                    <p>
+                      Version:{' '}
+                      {run !== undefined
+                        ? describeOntologyImportSourceVersion(run)
+                        : 'release pending'}
+                    </p>
                     <p>Mode: {run?.configuration.mode ?? 'default'}</p>
                     <p>
                       Parsed records:{' '}
@@ -498,10 +516,11 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
             visibleRuns.map((run) => (
               <div
                 key={run.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/20 p-4"
+                className={`flex flex-wrap items-center justify-between gap-3 rounded-md border p-4 ${getOntologyImportRunTone(run.status).cardClassName}`}
               >
                 <div className="flex items-start gap-3">
                   <input
+                    name={`selectedRunIds.${run.id}`}
                     type="checkbox"
                     className="mt-1 h-4 w-4 rounded border border-input bg-background"
                     checked={selectedRunIds.includes(run.id)}
@@ -515,16 +534,21 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
                   />
                   <div className="space-y-1">
                     <p className="font-medium text-foreground">{run.sourceName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {run.id} · {formatStatus(run.status)} ·{' '}
-                      {run.sourceVersion ?? 'release pending'}
+                    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                      <span>{run.id}</span>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${getOntologyImportRunTone(run.status).badgeClassName}`}
+                      >
+                        {formatOntologyImportStatus(run.status)}
+                      </span>
+                      <span>{describeOntologyImportSourceVersion(run)}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Mode: {run.configuration.mode ?? 'default'} · Language:{' '}
                       {run.configuration.language ?? 'default'} · Submitted mutations:{' '}
                       {run.submittedMutationIds.length}
                     </p>
-                    {ACTIVE_RUN_STATUSES.has(run.status) && (
+                    {isOntologyImportRunActive(run.status) && (
                       <p className="text-xs text-emerald-300">
                         Live monitor: this run is still progressing through the pipeline.
                       </p>

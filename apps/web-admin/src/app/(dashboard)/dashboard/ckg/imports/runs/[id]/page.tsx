@@ -23,6 +23,7 @@ import {
 import { AlertCircle, CheckCircle2, ExternalLink } from 'lucide-react';
 import { OntologyImportRunStatusPanel } from '@/components/ckg/ontology-imports/run-status-panel';
 import { getOntologyImportPlaceholderRunDetail } from '@/components/ckg/ontology-imports/placeholder-data';
+import { isOntologyImportRunActive } from '@/components/ckg/ontology-imports/run-state';
 
 interface IRunDetailPageProps {
   params: {
@@ -31,8 +32,6 @@ interface IRunDetailPageProps {
 }
 
 type MessageState = { type: 'success'; text: string } | { type: 'error'; text: string } | null;
-
-const ACTIVE_RUN_STATUSES = new Set(['queued', 'fetching', 'fetched', 'parsing', 'parsed']);
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message !== '') {
@@ -56,7 +55,9 @@ export default function OntologyImportRunDetailPage({
   } = useOntologyImportRun(params.id, {
     enabled: canReadRegistry,
     refetchInterval: (query) =>
-      ACTIVE_RUN_STATUSES.has(query.state.data?.data.run.status ?? '') ? 5000 : false,
+      query.state.data !== undefined && isOntologyImportRunActive(query.state.data.data.run.status)
+        ? 5000
+        : false,
     retry: false,
   });
 
@@ -67,7 +68,7 @@ export default function OntologyImportRunDetailPage({
   const detail = liveDetail ?? fallbackDetail;
   const usingFallback = liveDetail === undefined && fallbackDetail !== null;
   const isActivelyRunning =
-    liveDetail !== undefined ? ACTIVE_RUN_STATUSES.has(liveDetail.run.status) : false;
+    liveDetail !== undefined ? isOntologyImportRunActive(liveDetail.run.status) : false;
 
   const startRun = useStartOntologyImportRun({
     onSuccess: async () => {

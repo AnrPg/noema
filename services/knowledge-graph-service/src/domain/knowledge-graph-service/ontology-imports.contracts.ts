@@ -24,6 +24,33 @@ export const ONTOLOGY_IMPORT_STATUSES = [
 ] as const;
 export type OntologyImportStatus = (typeof ONTOLOGY_IMPORT_STATUSES)[number];
 
+export const ACTIVE_ONTOLOGY_IMPORT_STATUSES = [
+  'queued',
+  'fetching',
+  'fetched',
+  'parsing',
+  'parsed',
+] as const satisfies readonly OntologyImportStatus[];
+
+export const TERMINAL_ONTOLOGY_IMPORT_STATUSES = [
+  'staging_validated',
+  'ready_for_normalization',
+  'failed',
+  'cancelled',
+] as const satisfies readonly OntologyImportStatus[];
+
+export function isActiveOntologyImportStatus(status: OntologyImportStatus): boolean {
+  return ACTIVE_ONTOLOGY_IMPORT_STATUSES.includes(
+    status as (typeof ACTIVE_ONTOLOGY_IMPORT_STATUSES)[number]
+  );
+}
+
+export function isTerminalOntologyImportStatus(status: OntologyImportStatus): boolean {
+  return TERMINAL_ONTOLOGY_IMPORT_STATUSES.includes(
+    status as (typeof TERMINAL_ONTOLOGY_IMPORT_STATUSES)[number]
+  );
+}
+
 export const ONTOLOGY_IMPORT_STEP_TYPES = [
   'fetch',
   'checksum',

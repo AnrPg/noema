@@ -229,6 +229,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Source id</span>
               <input
+                id="ontology-source-id"
+                name="id"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 placeholder="openalex"
                 value={form.id}
@@ -241,6 +243,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Display name</span>
               <input
+                id="ontology-source-name"
+                name="name"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 placeholder="OpenAlex"
                 value={form.name}
@@ -253,6 +257,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Role</span>
               <select
+                id="ontology-source-role"
+                name="role"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 value={form.role}
                 disabled={!canReadRegistry || registerSource.isPending}
@@ -270,6 +276,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Access mode</span>
               <select
+                id="ontology-source-access-mode"
+                name="accessMode"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 value={form.accessMode}
                 disabled={!canReadRegistry || registerSource.isPending}
@@ -290,6 +298,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm md:col-span-2">
               <span className="font-medium text-foreground">Description</span>
               <textarea
+                id="ontology-source-description"
+                name="description"
                 className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 placeholder="What this source adds to the ontology-import pipeline."
                 value={form.description}
@@ -302,6 +312,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Homepage URL</span>
               <input
+                id="ontology-source-homepage-url"
+                name="homepageUrl"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 placeholder="https://example.org/"
                 value={form.homepageUrl}
@@ -314,6 +326,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Documentation URL</span>
               <input
+                id="ontology-source-documentation-url"
+                name="documentationUrl"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 placeholder="https://docs.example.org/"
                 value={form.documentationUrl}
@@ -326,6 +340,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Supported languages</span>
               <input
+                id="ontology-source-supported-languages"
+                name="supportedLanguages"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 placeholder="en, de, multilingual"
                 value={form.supportedLanguages}
@@ -337,6 +353,8 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
             </label>
             <label className="flex items-center gap-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm text-foreground">
               <input
+                id="ontology-source-supports-incremental"
+                name="supportsIncremental"
                 type="checkbox"
                 className="h-4 w-4 rounded border border-input bg-background"
                 checked={form.supportsIncremental}

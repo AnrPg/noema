@@ -144,6 +144,8 @@ export function OntologyImportCreateRunCard({
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Source</span>
             <select
+              id="ontology-import-run-source"
+              name="sourceId"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               value={selectedSourceId}
               disabled={disabled}
@@ -163,6 +165,8 @@ export function OntologyImportCreateRunCard({
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Source version</span>
             <input
+              id="ontology-import-run-source-version"
+              name="sourceVersion"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               placeholder={selectedSource?.latestRelease?.version ?? 'latest available'}
               value={sourceVersion}
@@ -177,6 +181,8 @@ export function OntologyImportCreateRunCard({
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Source mode</span>
             <select
+              id="ontology-import-run-mode"
+              name="mode"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               value={mode}
               disabled={disabled}
@@ -197,6 +203,8 @@ export function OntologyImportCreateRunCard({
             <label className="space-y-2 text-sm">
               <span className="font-medium text-foreground">Language</span>
               <select
+                id="ontology-import-run-language"
+                name="language"
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                 value={language}
                 disabled={disabled}
@@ -220,6 +228,8 @@ export function OntologyImportCreateRunCard({
           <label className="space-y-2 text-sm">
             <span className="font-medium text-foreground">Seed nodes</span>
             <textarea
+              id="ontology-import-run-seed-nodes"
+              name="seedNodes"
               className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
               placeholder="/c/en/learning&#10;/c/en/algebra"
               value={seedNodes}

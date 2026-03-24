@@ -73,6 +73,11 @@ Current behavior:
 - the main `Ontology Imports` navigation now opens the import-run registry
 - admins can filter runs by source, status, source version, and source mode
 - admins can bulk start, cancel, or retry selected runs from the list
+- run rows now use subtle status tinting so failed jobs read as red-tinted,
+  cancelled as neutral, and ready runs as green/violet without overwhelming the
+  page
+- source-version fallback copy is now status-aware, so failed runs no longer
+  read as if they were still waiting on a release
 - run detail now includes dedicated checkpoint and artifact viewers instead of
   only summary cards
 - degraded backend states are shown explicitly before live run/source requests

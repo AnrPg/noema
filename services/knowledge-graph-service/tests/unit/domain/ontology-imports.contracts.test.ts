@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACTIVE_ONTOLOGY_IMPORT_STATUSES,
   NormalizedOntologyGraphBatchSchema,
   OntologyMutationPreviewBatchSchema,
   OntologyGraphConceptRecordSchema,
   OntologyGraphRecordSchema,
   OntologyGraphRelationRecordSchema,
   ParsedOntologyGraphBatchSchema,
+  TERMINAL_ONTOLOGY_IMPORT_STATUSES,
+  isActiveOntologyImportStatus,
+  isTerminalOntologyImportStatus,
 } from '../../../src/domain/knowledge-graph-service/ontology-imports.contracts.js';
 
 const provenance = {
@@ -19,6 +23,26 @@ const provenance = {
 };
 
 describe('ontology import graph contracts', () => {
+  it('classifies active and terminal import-run statuses explicitly', () => {
+    expect(ACTIVE_ONTOLOGY_IMPORT_STATUSES).toEqual([
+      'queued',
+      'fetching',
+      'fetched',
+      'parsing',
+      'parsed',
+    ]);
+    expect(TERMINAL_ONTOLOGY_IMPORT_STATUSES).toEqual([
+      'staging_validated',
+      'ready_for_normalization',
+      'failed',
+      'cancelled',
+    ]);
+    expect(isActiveOntologyImportStatus('failed')).toBe(false);
+    expect(isActiveOntologyImportStatus('fetching')).toBe(true);
+    expect(isTerminalOntologyImportStatus('ready_for_normalization')).toBe(true);
+    expect(isTerminalOntologyImportStatus('queued')).toBe(false);
+  });
+
   it('accepts concept records that preserve source-native labels and provenance', () => {
     const parsed = OntologyGraphConceptRecordSchema.parse({
       recordKind: 'concept',
@@ -189,6 +213,11 @@ describe('ontology import graph contracts', () => {
           title: 'Add concept: Python',
           summary: 'Create a canonical concept node from ConceptNet.',
           rationale: 'Import Python with source provenance.',
+          review: {
+            confidenceScore: 0.91,
+            confidenceBand: 'high',
+            conflictFlags: [],
+          },
           blockedReason: null,
           dependencyExternalIds: [],
           proposal: {
@@ -214,6 +243,11 @@ describe('ontology import graph contracts', () => {
           title: 'Defer relation: used_for',
           summary: '/c/en/python used_for /c/en/programming',
           rationale: 'Wait for canonical node resolution.',
+          review: {
+            confidenceScore: 0.42,
+            confidenceBand: 'low',
+            conflictFlags: ['ambiguous_match'],
+          },
           blockedReason: 'Needs canonical node ids.',
           dependencyExternalIds: ['/c/en/python', '/c/en/programming'],
           proposal: null,
