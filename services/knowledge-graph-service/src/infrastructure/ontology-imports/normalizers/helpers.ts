@@ -7,6 +7,7 @@ import type {
   IOntologyGraphRecordProvenance,
   IParsedOntologyGraphBatch,
 } from '../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
+import { scoreNormalizedMappings } from './confidence/index.js';
 
 export function createNormalizedBatch(
   batch: IParsedOntologyGraphBatch,
@@ -44,7 +45,9 @@ export function createNormalizedBatch(
     mappingCount: mappingMap.size,
     concepts: [...conceptMap.values()].sort(compareByExternalId),
     relations: [...relationMap.values()].sort(compareByExternalId),
-    mappings: buildNormalizedMappings(mappingMap).sort(compareByExternalId),
+    mappings: scoreNormalizedMappings(buildNormalizedMappings(mappingMap)).sort(
+      compareByExternalId
+    ),
   };
 }
 
@@ -149,6 +152,9 @@ function upsertMappingCandidate(
       sourceExternalId: record.sourceExternalId,
       targetExternalId: record.targetExternalId,
       mappingKind: record.mappingKind,
+      confidenceScore: 0,
+      confidenceBand: 'low',
+      conflictFlags: [],
       provenance: [record.provenance],
     });
     return;
@@ -189,6 +195,9 @@ function addReverseMappings(mappingMap: Map<string, INormalizedOntologyMappingCa
       sourceExternalId: mapping.targetExternalId,
       targetExternalId: mapping.sourceExternalId,
       mappingKind: mapping.mappingKind,
+      confidenceScore: mapping.confidenceScore,
+      confidenceBand: mapping.confidenceBand,
+      conflictFlags: mapping.conflictFlags,
       provenance: mapping.provenance,
     });
   }
@@ -224,6 +233,9 @@ function addExactMatchClosure(mappingMap: Map<string, INormalizedOntologyMapping
           sourceExternalId,
           targetExternalId,
           mappingKind: 'exact_match',
+          confidenceScore: 0,
+          confidenceBand: 'low',
+          conflictFlags: [],
           provenance: collectComponentProvenance(component, mappingMap, 'exact_match'),
         });
       }
@@ -264,6 +276,9 @@ function addCloseMatchPropagation(
           sourceExternalId,
           targetExternalId,
           mappingKind: 'close_match',
+          confidenceScore: 0,
+          confidenceBand: 'low',
+          conflictFlags: [],
           provenance: collectDerivedProvenance(
             mapping.provenance,
             sourceComponent,

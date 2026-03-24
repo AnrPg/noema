@@ -6,4 +6,10 @@ export {
   EscoSourceNormalizer,
   YagoSourceNormalizer,
 } from './normalizers/index.js';
-export { ConceptNetSourceParser, EscoSourceParser, YagoSourceParser } from './parsers/index.js';
+export {
+  ConceptNetSourceParser,
+  EscoSourceParser,
+  extractGeoNamesMappings,
+  extractOpenAlexMappings,
+  YagoSourceParser,
+} from './parsers/index.js';

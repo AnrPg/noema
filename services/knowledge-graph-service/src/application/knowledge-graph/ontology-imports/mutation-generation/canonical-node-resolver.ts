@@ -1,12 +1,13 @@
 import type { IGraphNode } from '@noema/types';
 import type {
-  ICanonicalNodeResolution,
+  ICanonicalNodeResolutionResult,
   ICanonicalNodeResolver,
   INormalizedOntologyConceptCandidate,
   INormalizedOntologyGraphBatch,
   INormalizedOntologyMappingCandidate,
 } from '../../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
 import type { INodeRepository } from '../../../../domain/knowledge-graph-service/graph.repository.js';
+import { resolveCanonicalCandidate } from './conflict-policies.js';
 
 const MAPPING_KINDS_FOR_RESOLUTION = new Set(['exact_match', 'close_match']);
 
@@ -16,49 +17,74 @@ export class GraphCanonicalNodeResolver implements ICanonicalNodeResolver {
   async resolveConcept(
     concept: INormalizedOntologyConceptCandidate,
     batch: INormalizedOntologyGraphBatch
-  ): Promise<ICanonicalNodeResolution | null> {
+  ): Promise<ICanonicalNodeResolutionResult> {
     const identifiers = collectIdentifiers(concept, batch.mappings);
+    const sourceDomain = inferDomain(batch, concept);
     const candidates = await this.findCandidateNodes(batch, concept, identifiers.labels);
 
-    const externalIdMatch = candidates.find((candidate) =>
+    const externalIdMatches = candidates.filter((candidate) =>
       identifiers.externalIds.some((identifier) => matchesExternalId(candidate, identifier))
     );
-    if (externalIdMatch !== undefined) {
-      return toResolution(externalIdMatch, 'external_id');
+    if (externalIdMatches.length > 0) {
+      return resolveCanonicalCandidate({
+        candidates: externalIdMatches,
+        strategy: 'external_id',
+        sourceDomain,
+      });
     }
 
-    const iriMatch = candidates.find((candidate) =>
+    const iriMatches = candidates.filter((candidate) =>
       identifiers.iris.some((identifier) => matchesIri(candidate, identifier))
     );
-    if (iriMatch !== undefined) {
-      return toResolution(iriMatch, 'iri');
+    if (iriMatches.length > 0) {
+      return resolveCanonicalCandidate({
+        candidates: iriMatches,
+        strategy: 'iri',
+        sourceDomain,
+      });
     }
 
-    const aliasMatch = candidates.find((candidate) =>
+    const aliasMatches = candidates.filter((candidate) =>
       identifiers.labels.some((identifier) => matchesAlias(candidate, identifier))
     );
-    if (aliasMatch !== undefined) {
-      return toResolution(aliasMatch, 'alias');
+    if (aliasMatches.length > 0) {
+      return resolveCanonicalCandidate({
+        candidates: aliasMatches,
+        strategy: 'alias',
+        sourceDomain,
+      });
     }
 
-    const exactLabelMatch = candidates.find((candidate) =>
+    const exactLabelMatches = candidates.filter((candidate) =>
       identifiers.labels.some(
         (identifier) => normalizeText(identifier) === normalizeText(candidate.label)
       )
     );
-    if (exactLabelMatch !== undefined) {
-      return toResolution(exactLabelMatch, 'label');
+    if (exactLabelMatches.length > 0) {
+      return resolveCanonicalCandidate({
+        candidates: exactLabelMatches,
+        strategy: 'label',
+        sourceDomain,
+      });
     }
 
-    const normalizedLabelMatch = candidates.find((candidate) =>
+    const normalizedLabelMatches = candidates.filter((candidate) =>
       identifiers.labels.some(
         (identifier) => normalizeSearchText(identifier) === normalizeSearchText(candidate.label)
       )
     );
+    if (normalizedLabelMatches.length > 0) {
+      return resolveCanonicalCandidate({
+        candidates: normalizedLabelMatches,
+        strategy: 'normalized_label',
+        sourceDomain,
+      });
+    }
 
-    return normalizedLabelMatch === undefined
-      ? null
-      : toResolution(normalizedLabelMatch, 'normalized_label');
+    return {
+      resolution: null,
+      conflictFlags: [],
+    };
   }
 
   private async findCandidateNodes(
@@ -123,7 +149,9 @@ function collectIdentifiers(
   iris: string[];
   labels: string[];
 } {
-  const mappedExternalIds = collectMappedExternalIds(concept.externalId, mappings);
+  const mappedExternalIds = collectMappedExternalIds(concept.externalId, mappings).map(
+    (mapping) => mapping.targetExternalId
+  );
 
   const labels = dedupeStrings([
     concept.preferredLabel,
@@ -145,11 +173,15 @@ function collectIdentifiers(
 function collectMappedExternalIds(
   conceptExternalId: string,
   mappings: INormalizedOntologyMappingCandidate[]
-): string[] {
-  const adjacency = new Map<string, Set<string>>();
+): INormalizedOntologyMappingCandidate[] {
+  const adjacency = new Map<string, Set<INormalizedOntologyMappingCandidate>>();
 
   for (const mapping of mappings) {
     if (!MAPPING_KINDS_FOR_RESOLUTION.has(mapping.mappingKind)) {
+      continue;
+    }
+
+    if (mapping.confidenceBand === 'low' || mapping.conflictFlags.includes('mapping_conflict')) {
       continue;
     }
 
@@ -160,13 +192,17 @@ function collectMappedExternalIds(
       adjacency.set(mapping.targetExternalId, new Set());
     }
 
-    adjacency.get(mapping.sourceExternalId)?.add(mapping.targetExternalId);
-    adjacency.get(mapping.targetExternalId)?.add(mapping.sourceExternalId);
+    adjacency.get(mapping.sourceExternalId)?.add(mapping);
+    adjacency.get(mapping.targetExternalId)?.add({
+      ...mapping,
+      sourceExternalId: mapping.targetExternalId,
+      targetExternalId: mapping.sourceExternalId,
+    });
   }
 
   const queue = [conceptExternalId];
   const seen = new Set<string>([conceptExternalId]);
-  const collected: string[] = [];
+  const collected = new Map<string, INormalizedOntologyMappingCandidate>();
 
   while (queue.length > 0) {
     const current = queue.shift();
@@ -175,17 +211,18 @@ function collectMappedExternalIds(
     }
 
     for (const neighbor of adjacency.get(current) ?? []) {
-      if (seen.has(neighbor)) {
+      const nextExternalId = neighbor.targetExternalId;
+      if (seen.has(nextExternalId)) {
         continue;
       }
 
-      seen.add(neighbor);
-      collected.push(neighbor);
-      queue.push(neighbor);
+      seen.add(nextExternalId);
+      collected.set(nextExternalId, neighbor);
+      queue.push(nextExternalId);
     }
   }
 
-  return collected;
+  return [...collected.values()];
 }
 
 function inferNodeType(
@@ -304,17 +341,4 @@ function normalizeSearchText(value: string): string {
   return normalizeText(value)
     .normalize('NFKD')
     .replace(/[^\p{L}\p{N}]+/gu, '');
-}
-
-function toResolution(
-  node: IGraphNode,
-  strategy: ICanonicalNodeResolution['strategy']
-): ICanonicalNodeResolution {
-  return {
-    nodeId: node.nodeId,
-    label: node.label,
-    nodeType: node.nodeType,
-    domain: node.domain,
-    strategy,
-  };
 }

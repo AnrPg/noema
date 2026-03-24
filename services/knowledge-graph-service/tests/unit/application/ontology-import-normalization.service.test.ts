@@ -188,11 +188,70 @@ describe('OntologyImportNormalizationService', () => {
           sourceExternalId: 'https://www.wikidata.org/entity/Q28865',
           targetExternalId: '/c/en/python',
           mappingKind: 'exact_match',
+          confidenceBand: 'high',
         }),
         expect.objectContaining({
           sourceExternalId: '/c/en/python',
           targetExternalId: 'https://dbpedia.org/resource/Python_(programming_language)',
           mappingKind: 'close_match',
+          confidenceBand: 'medium',
+        }),
+      ])
+    );
+  });
+
+  it('flags conflicting exact matches with lower confidence so downstream resolution can stay cautious', async () => {
+    const service = new OntologyImportNormalizationService([new ConceptNetSourceNormalizer()]);
+    const batch: IParsedOntologyGraphBatch = {
+      runId: 'run_cn_003',
+      sourceId: 'conceptnet',
+      sourceVersion: '5.7.0',
+      generatedAt: '2026-03-24T12:00:00.000Z',
+      records: [
+        {
+          recordKind: 'mapping',
+          externalId: 'map_conflict_1',
+          sourceExternalId: '/c/en/python',
+          targetExternalId: 'https://www.wikidata.org/entity/Q28865',
+          mappingKind: 'exact_match',
+          provenance: {
+            sourceId: 'conceptnet',
+            sourceVersion: '5.7.0',
+            runId: 'run_cn_003',
+            artifactId: 'artifact_001',
+            harvestedAt: '2026-03-24T12:00:00.000Z',
+            license: null,
+            requestUrl: null,
+          },
+        },
+        {
+          recordKind: 'mapping',
+          externalId: 'map_conflict_2',
+          sourceExternalId: '/c/en/python',
+          targetExternalId: 'https://www.wikidata.org/entity/Q99999',
+          mappingKind: 'exact_match',
+          provenance: {
+            sourceId: 'conceptnet',
+            sourceVersion: '5.7.0',
+            runId: 'run_cn_003',
+            artifactId: 'artifact_001',
+            harvestedAt: '2026-03-24T12:00:00.000Z',
+            license: null,
+            requestUrl: null,
+          },
+        },
+      ],
+    };
+
+    const normalized = await service.normalizeBatch(batch);
+
+    expect(normalized.mappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceExternalId: '/c/en/python',
+          targetExternalId: 'https://www.wikidata.org/entity/Q28865',
+          confidenceBand: 'medium',
+          conflictFlags: expect.arrayContaining(['mapping_conflict']),
         }),
       ])
     );

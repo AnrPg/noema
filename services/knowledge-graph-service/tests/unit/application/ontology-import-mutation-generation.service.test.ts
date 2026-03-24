@@ -91,6 +91,9 @@ function createBatch(): INormalizedOntologyGraphBatch {
         sourceExternalId: 'https://example.org/entity/Euler',
         targetExternalId: 'https://yago-knowledge.org/resource/Leonhard_Euler',
         mappingKind: 'exact_match',
+        confidenceScore: 0.96,
+        confidenceBand: 'high',
+        conflictFlags: [],
         provenance: [
           {
             sourceId: 'yago',
@@ -121,34 +124,43 @@ function createMappedRelationBatch(): INormalizedOntologyGraphBatch {
 }
 
 class StubCanonicalNodeResolver implements ICanonicalNodeResolver {
-  resolveConcept(concept: { preferredLabel: string }): Promise<{
-    nodeId: string;
-    label: string;
-    nodeType: string;
-    domain: string;
-    strategy: 'external_id' | 'iri' | 'label' | 'alias' | 'normalized_label' | 'mapping';
-  } | null> {
+  resolveConcept(concept: { preferredLabel: string }) {
     if (concept.preferredLabel === 'Leonhard Euler') {
       return Promise.resolve({
-        nodeId: 'node_euler',
-        label: 'Leonhard Euler',
-        nodeType: 'concept',
-        domain: 'world-knowledge',
-        strategy: 'label',
+        resolution: {
+          nodeId: 'node_euler',
+          label: 'Leonhard Euler',
+          nodeType: 'concept',
+          domain: 'world-knowledge',
+          strategy: 'label',
+          confidenceScore: 0.76,
+          confidenceBand: 'medium',
+          conflictFlags: [],
+        },
+        conflictFlags: [],
       });
     }
 
     if (concept.preferredLabel === 'Mathematics') {
       return Promise.resolve({
-        nodeId: 'node_mathematics',
-        label: 'Mathematics',
-        nodeType: 'concept',
-        domain: 'world-knowledge',
-        strategy: 'label',
+        resolution: {
+          nodeId: 'node_mathematics',
+          label: 'Mathematics',
+          nodeType: 'concept',
+          domain: 'world-knowledge',
+          strategy: 'label',
+          confidenceScore: 0.76,
+          confidenceBand: 'medium',
+          conflictFlags: [],
+        },
+        conflictFlags: [],
       });
     }
 
-    return Promise.resolve(null);
+    return Promise.resolve({
+      resolution: null,
+      conflictFlags: [],
+    });
   }
 }
 
@@ -173,7 +185,9 @@ describe('OntologyImportMutationGenerationService', () => {
           entityKind: 'relation',
           status: 'ready',
           proposal: expect.objectContaining({
-            rationale: expect.stringContaining('[ontology-import runId=run_test_001 sourceId=yago'),
+            rationale: expect.stringMatching(
+              /\[ontology-import runId=run_test_001 sourceId=yago.*\[ontology-review confidence=/u
+            ),
             operations: [
               expect.objectContaining({
                 type: 'add_edge',

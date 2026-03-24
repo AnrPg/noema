@@ -50,6 +50,9 @@ function createBatch(): INormalizedOntologyGraphBatch {
         sourceExternalId: 'https://example.org/concept/graph-theory',
         targetExternalId: 'https://www.wikidata.org/entity/Q6507',
         mappingKind: 'exact_match',
+        confidenceScore: 0.96,
+        confidenceBand: 'high',
+        conflictFlags: [],
         provenance: [
           {
             sourceId: 'yago',
@@ -77,6 +80,9 @@ function createTransitiveBatch(): INormalizedOntologyGraphBatch {
         sourceExternalId: 'https://www.wikidata.org/entity/Q6507',
         targetExternalId: 'https://dbpedia.org/resource/Graph_theory',
         mappingKind: 'close_match',
+        confidenceScore: 0.84,
+        confidenceBand: 'medium',
+        conflictFlags: [],
         provenance: batch.mappings[0]!.provenance,
       },
     ],
@@ -135,10 +141,11 @@ describe('GraphCanonicalNodeResolver', () => {
     const resolver = new GraphCanonicalNodeResolver(nodeRepository);
     const resolution = await resolver.resolveConcept(createConcept(), createBatch());
 
-    expect(resolution).toEqual(
+    expect(resolution.resolution).toEqual(
       expect.objectContaining({
         nodeId: 'node_graph_theory',
         strategy: 'external_id',
+        confidenceBand: 'high',
       })
     );
   });
@@ -165,7 +172,7 @@ describe('GraphCanonicalNodeResolver', () => {
     const resolver = new GraphCanonicalNodeResolver(nodeRepository);
     const resolution = await resolver.resolveConcept(createConcept(), createTransitiveBatch());
 
-    expect(resolution).toEqual(
+    expect(resolution.resolution).toEqual(
       expect.objectContaining({
         nodeId: 'node_graph_theory',
         strategy: 'external_id',

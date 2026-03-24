@@ -10,6 +10,8 @@ import type {
 import {
   ConceptNetSourceParser,
   EscoSourceParser,
+  extractGeoNamesMappings,
+  extractOpenAlexMappings,
   YagoSourceParser,
 } from '../../../src/infrastructure/ontology-imports/index.js';
 import { OntologyImportParsingService } from '../../../src/application/knowledge-graph/ontology-imports/parsing/index.js';
@@ -298,6 +300,52 @@ describe('ontology source parsers', () => {
         recordKind: 'concept',
         preferredLabel: 'Research',
       })
+    );
+  });
+
+  it('extracts future-ready OpenAlex mappings from source-native ids payloads', () => {
+    const mappings = extractOpenAlexMappings({
+      ids: {
+        openalex: 'https://openalex.org/C41008148',
+        wikidata: 'https://www.wikidata.org/entity/Q21198',
+        wikipedia: 'https://en.wikipedia.org/wiki/Graph_theory',
+      },
+    });
+
+    expect(mappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          targetExternalId: 'https://www.wikidata.org/entity/Q21198',
+          mappingKind: 'exact_match',
+        }),
+        expect.objectContaining({
+          targetExternalId: 'https://en.wikipedia.org/wiki/Graph_theory',
+          mappingKind: 'close_match',
+        }),
+      ])
+    );
+  });
+
+  it('extracts future-ready GeoNames mappings from wikipedia and linked alternate names', () => {
+    const mappings = extractGeoNamesMappings({
+      wikipediaURL: 'https://en.wikipedia.org/wiki/Bucharest',
+      alternateNames: [
+        { lang: 'wkdt', name: 'https://www.wikidata.org/entity/Q19660' },
+        { lang: 'link', name: 'https://dbpedia.org/resource/Bucharest' },
+      ],
+    });
+
+    expect(mappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          targetExternalId: 'https://www.wikidata.org/entity/Q19660',
+          mappingKind: 'exact_match',
+        }),
+        expect.objectContaining({
+          targetExternalId: 'https://dbpedia.org/resource/Bucharest',
+          mappingKind: 'close_match',
+        }),
+      ])
     );
   });
 });

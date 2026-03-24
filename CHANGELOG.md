@@ -120,3 +120,27 @@
 - taught canonical node resolution to traverse those expanded mapping
   neighborhoods, improving edge proposal readiness for deferred ontology
   relations
+
+## 2026-03-24 - Batch 6 Reviewer Bulk Triage Kickoff
+
+- added a backend bulk-review workflow for ontology-import mutations with
+  explicit `approve`, `reject`, and `request_revision` actions
+- added a bulk review REST endpoint that supports both explicit mutation ids and
+  import-run scoped selection
+- wired `@noema/api-client` with bulk review DTOs, API helpers, and React Query
+  mutation hooks
+- added admin mutation-queue bulk selection controls for ontology-import
+  proposals, including import-run group selection and shared review notes
+- kept direct-review mutations outside the bulk selection path so the ontology
+  import workflow remains distinct from manual review
+
+## 2026-03-24 - Batch 6 Merge Confidence and Conflict Policies
+
+- added confidence scoring for normalized ontology mappings, including
+  confidence bands and conflict flags
+- taught canonical node resolution to block ambiguous matches and propagate only
+  safer mapping-based resolutions
+- stamped ontology-import mutation rationales with structured review metadata so
+  admin reviewers can see confidence and conflict hints in the queue
+- added future-ready OpenAlex and GeoNames mapping extractors to prepare the
+  next source-adapter batch

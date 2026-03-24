@@ -5,7 +5,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useCKGMutations } from '@noema/api-client';
+import { useBulkReviewMutations, useCKGMutations } from '@noema/api-client';
 import type { ICkgMutationDto, MutationWorkflowState } from '@noema/api-client';
 import {
   Alert,
@@ -20,8 +20,11 @@ import {
 } from '@noema/ui';
 import { AlertCircle, ArrowRight, GitMerge, RefreshCw } from 'lucide-react';
 import { getRequestErrorDetails } from '@/lib/api-error';
+import { BulkReviewToolbar } from '@/components/ckg/mutation-review/bulk-review-toolbar';
+import { ImportRunReviewGroup } from '@/components/ckg/mutation-review/import-run-review-group';
 import {
   getOntologyImportMutationContext,
+  getMutationReviewHints,
   getMutationWorkflowMeta,
   getMutationWorkflowState,
   MUTATION_WORKFLOW_FILTERS,
@@ -33,49 +36,106 @@ function mutationTypeBadgeClass(type: string): string {
   return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
 }
 
-function MutationRow({ mutation }: { mutation: ICkgMutationDto }): React.JSX.Element {
+function confidenceBadgeClass(band: 'low' | 'medium' | 'high' | null): string {
+  switch (band) {
+    case 'high':
+      return 'bg-green-500/15 text-green-300 border-green-500/30';
+    case 'medium':
+      return 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+    case 'low':
+      return 'bg-red-500/15 text-red-300 border-red-500/30';
+    default:
+      return 'bg-slate-500/15 text-slate-300 border-slate-500/30';
+  }
+}
+
+function MutationRow({
+  mutation,
+  checked,
+  selectable,
+  onToggle,
+}: {
+  mutation: ICkgMutationDto;
+  checked: boolean;
+  selectable: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
   const workflow = getMutationWorkflowMeta(mutation);
   const workflowState = getMutationWorkflowState(mutation);
   const ontologyImportContext = getOntologyImportMutationContext(mutation);
+  const reviewHints = getMutationReviewHints(mutation);
 
   return (
-    <div className="flex items-center gap-4 py-3 border-b last:border-0">
-      <code className="text-xs font-mono text-muted-foreground w-24 truncate flex-shrink-0">
-        {String(mutation.id).slice(0, 8)}…
-      </code>
-      <span
-        className={`text-xs font-mono px-1.5 py-0.5 rounded border ${mutationTypeBadgeClass(mutation.type)}`}
-      >
-        {mutation.type}
-      </span>
-      <span
-        className={`text-xs font-mono px-1.5 py-0.5 rounded ${workflow.badgeClass}`}
-        title={workflow.description}
-      >
-        {workflow.label.toUpperCase()}
-      </span>
-      <span className="hidden text-xs text-muted-foreground lg:block">{workflowState}</span>
-      {ontologyImportContext.runId !== null && (
-        <Link
-          href={`/dashboard/ckg/mutations?importRunId=${encodeURIComponent(ontologyImportContext.runId)}`}
-          className="hidden text-xs text-primary underline-offset-2 hover:underline lg:block"
+    <div className="border-b py-3 last:border-0">
+      <div className="flex items-center gap-4">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border border-input bg-background"
+          checked={checked}
+          disabled={!selectable}
+          onChange={onToggle}
+          aria-label={`Select mutation ${String(mutation.id)}`}
+        />
+        <code className="text-xs font-mono text-muted-foreground w-24 truncate flex-shrink-0">
+          {String(mutation.id).slice(0, 8)}…
+        </code>
+        <span
+          className={`text-xs font-mono px-1.5 py-0.5 rounded border ${mutationTypeBadgeClass(mutation.type)}`}
         >
-          {ontologyImportContext.sourceId !== null
-            ? `${ontologyImportContext.sourceId.toUpperCase()} import`
-            : 'Ontology import'}
+          {mutation.type}
+        </span>
+        <span
+          className={`text-xs font-mono px-1.5 py-0.5 rounded ${workflow.badgeClass}`}
+          title={workflow.description}
+        >
+          {workflow.label.toUpperCase()}
+        </span>
+        <span className="hidden text-xs text-muted-foreground lg:block">{workflowState}</span>
+        {ontologyImportContext.runId !== null && (
+          <Link
+            href={`/dashboard/ckg/mutations?importRunId=${encodeURIComponent(ontologyImportContext.runId)}`}
+            className="hidden text-xs text-primary underline-offset-2 hover:underline lg:block"
+          >
+            {ontologyImportContext.sourceId !== null
+              ? `${ontologyImportContext.sourceId.toUpperCase()} import`
+              : 'Ontology import'}
+          </Link>
+        )}
+        <span className="text-xs text-muted-foreground flex-1 truncate">
+          {String(mutation.proposedBy)}
+        </span>
+        <span className="text-xs text-muted-foreground flex-shrink-0">
+          {new Date(mutation.proposedAt).toLocaleDateString()}
+        </span>
+        <Link href={`/dashboard/ckg/mutations/${String(mutation.id)}`}>
+          <Button size="sm" variant="ghost" className="gap-1">
+            Review <ArrowRight className="h-3 w-3" />
+          </Button>
         </Link>
+      </div>
+      {(reviewHints.confidenceBand !== null || reviewHints.conflicts.length > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 pl-8">
+          {reviewHints.confidenceBand !== null && (
+            <span
+              className={`rounded border px-2 py-0.5 text-[11px] font-medium ${confidenceBadgeClass(reviewHints.confidenceBand)}`}
+            >
+              Confidence{' '}
+              {reviewHints.confidenceScore !== null
+                ? `${String(Math.round(reviewHints.confidenceScore * 100))}%`
+                : 'set'}{' '}
+              · {reviewHints.confidenceBand}
+            </span>
+          )}
+          {reviewHints.conflicts.map((conflict) => (
+            <span
+              key={conflict}
+              className="rounded border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-300"
+            >
+              Conflict: {conflict.replaceAll('_', ' ')}
+            </span>
+          ))}
+        </div>
       )}
-      <span className="text-xs text-muted-foreground flex-1 truncate">
-        {String(mutation.proposedBy)}
-      </span>
-      <span className="text-xs text-muted-foreground flex-shrink-0">
-        {new Date(mutation.proposedAt).toLocaleDateString()}
-      </span>
-      <Link href={`/dashboard/ckg/mutations/${String(mutation.id)}`}>
-        <Button size="sm" variant="ghost" className="gap-1">
-          Review <ArrowRight className="h-3 w-3" />
-        </Button>
-      </Link>
     </div>
   );
 }
@@ -126,6 +186,7 @@ function groupOntologyImportMutations(mutations: ICkgMutationDto[]): {
 
 export default function CKGMutationsPage(): React.JSX.Element {
   const [stateFilter, setStateFilter] = React.useState<MutationWorkflowState>('pending_review');
+  const [selectedMutationIds, setSelectedMutationIds] = React.useState<string[]>([]);
   const searchParams = useSearchParams();
   const nodeIdFilter = searchParams.get('nodeId');
   const importRunIdFilter = searchParams.get('importRunId');
@@ -149,6 +210,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
   const errorDetails = isError
     ? getRequestErrorDetails(error, 'the mutation queue', 'the knowledge graph service')
     : null;
+  const bulkReview = useBulkReviewMutations();
 
   const displayedMutations = mutations.filter((mutation) => {
     if (nodeIdFilter !== null) {
@@ -168,6 +230,57 @@ export default function CKGMutationsPage(): React.JSX.Element {
   const { groupedImports, directReviewMutations } =
     groupOntologyImportMutations(displayedMutations);
   const shouldGroupOntologyImports = importRunIdFilter === null && groupedImports.length > 0;
+  const ontologyImportMutations = displayedMutations.filter(
+    (mutation) => getOntologyImportMutationContext(mutation).runId !== null
+  );
+
+  React.useEffect(() => {
+    const visibleIds = new Set(ontologyImportMutations.map((mutation) => String(mutation.id)));
+    setSelectedMutationIds((current) => current.filter((mutationId) => visibleIds.has(mutationId)));
+  }, [ontologyImportMutations]);
+
+  function toggleSelection(mutationId: string): void {
+    setSelectedMutationIds((current) =>
+      current.includes(mutationId)
+        ? current.filter((currentId) => currentId !== mutationId)
+        : [...current, mutationId]
+    );
+  }
+
+  function selectAllVisible(): void {
+    setSelectedMutationIds(ontologyImportMutations.map((mutation) => String(mutation.id)));
+  }
+
+  function clearSelection(): void {
+    setSelectedMutationIds([]);
+  }
+
+  function toggleGroupSelection(group: IOntologyImportGroup): void {
+    const groupIds = group.mutations.map((mutation) => String(mutation.id));
+    setSelectedMutationIds((current) => {
+      const hasAllSelected = groupIds.every((groupId) => current.includes(groupId));
+      return hasAllSelected
+        ? current.filter((mutationId) => !groupIds.includes(mutationId))
+        : [...new Set([...current, ...groupIds])];
+    });
+  }
+
+  function submitBulkReview(action: 'approve' | 'reject' | 'request_revision', note: string): void {
+    bulkReview.mutate(
+      {
+        action,
+        mutationIds: selectedMutationIds as ICkgMutationDto['id'][],
+        ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
+        note,
+      },
+      {
+        onSuccess: () => {
+          clearSelection();
+          void refetch();
+        },
+      }
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -208,6 +321,18 @@ export default function CKGMutationsPage(): React.JSX.Element {
             Clear
           </Link>
         </div>
+      )}
+
+      {ontologyImportMutations.length > 0 && (
+        <BulkReviewToolbar
+          selectedCount={selectedMutationIds.length}
+          visibleCount={ontologyImportMutations.length}
+          importRunId={importRunIdFilter}
+          isPending={bulkReview.isPending}
+          onSelectAllVisible={selectAllVisible}
+          onClearSelection={clearSelection}
+          onSubmit={submitBulkReview}
+        />
       )}
 
       <Card>
@@ -280,46 +405,32 @@ export default function CKGMutationsPage(): React.JSX.Element {
                 </p>
                 <div className="mt-3 grid gap-3">
                   {groupedImports.map((group) => (
-                    <div
+                    <ImportRunReviewGroup
                       key={group.key}
-                      className="rounded-md border border-border bg-background/40 p-3"
+                      runId={group.runId}
+                      sourceId={group.sourceId}
+                      mutationCount={group.mutations.length}
+                      selectedCount={
+                        group.mutations.filter((mutation) =>
+                          selectedMutationIds.includes(String(mutation.id))
+                        ).length
+                      }
+                      onToggleAll={() => {
+                        toggleGroupSelection(group);
+                      }}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            {group.sourceId !== null
-                              ? `${group.sourceId.toUpperCase()} import run`
-                              : 'Ontology import run'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            <code className="font-mono">{group.runId}</code> ·{' '}
-                            {group.mutations.length} proposal
-                            {group.mutations.length === 1 ? '' : 's'}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button asChild size="sm" variant="outline">
-                            <Link
-                              href={`/dashboard/ckg/imports/runs/${encodeURIComponent(group.runId)}`}
-                            >
-                              Open run
-                            </Link>
-                          </Button>
-                          <Button asChild size="sm" variant="ghost">
-                            <Link
-                              href={`/dashboard/ckg/mutations?importRunId=${encodeURIComponent(group.runId)}`}
-                            >
-                              Focus group
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="mt-3">
-                        {group.mutations.map((mutation) => (
-                          <MutationRow key={String(mutation.id)} mutation={mutation} />
-                        ))}
-                      </div>
-                    </div>
+                      {group.mutations.map((mutation) => (
+                        <MutationRow
+                          key={String(mutation.id)}
+                          mutation={mutation}
+                          checked={selectedMutationIds.includes(String(mutation.id))}
+                          selectable
+                          onToggle={() => {
+                            toggleSelection(String(mutation.id));
+                          }}
+                        />
+                      ))}
+                    </ImportRunReviewGroup>
                   ))}
                 </div>
               </div>
@@ -331,7 +442,15 @@ export default function CKGMutationsPage(): React.JSX.Element {
                   </p>
                   <div className="mt-3">
                     {directReviewMutations.map((mutation) => (
-                      <MutationRow key={String(mutation.id)} mutation={mutation} />
+                      <MutationRow
+                        key={String(mutation.id)}
+                        mutation={mutation}
+                        checked={false}
+                        selectable={false}
+                        onToggle={() => {
+                          return;
+                        }}
+                      />
                     ))}
                   </div>
                 </div>
@@ -340,7 +459,18 @@ export default function CKGMutationsPage(): React.JSX.Element {
           ) : (
             <div>
               {displayedMutations.map((m) => (
-                <MutationRow key={String(m.id)} mutation={m} />
+                <MutationRow
+                  key={String(m.id)}
+                  mutation={m}
+                  checked={selectedMutationIds.includes(String(m.id))}
+                  selectable={getOntologyImportMutationContext(m).runId !== null}
+                  onToggle={() => {
+                    if (getOntologyImportMutationContext(m).runId === null) {
+                      return;
+                    }
+                    toggleSelection(String(m.id));
+                  }}
+                />
               ))}
             </div>
           )}

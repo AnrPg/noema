@@ -359,8 +359,8 @@
 
 - batch: 6
 - owner: backend-implementer
-- status: pending
-- claimed_by: -
+- status: done
+- claimed_by: codex
 - description: Implement backend support for reviewer-side bulk actions and
   import-run scoped approval workflows for ontology-import mutation proposals
 - inputs:
@@ -389,8 +389,8 @@
 
 - batch: 6
 - owner: backend-implementer
-- status: pending
-- claimed_by: -
+- status: done
+- claimed_by: codex
 - description: Deepen cross-source merge quality with confidence scoring,
   conflict policies, and richer mapping extraction for the next locked sources
 - inputs:
@@ -422,8 +422,8 @@
 
 - batch: 6
 - owner: frontend-implementer
-- status: pending
-- claimed_by: -
+- status: done
+- claimed_by: codex
 - description: Add reviewer-facing bulk triage controls and import-run scoped
   review workflows to the admin mutation queue
 - inputs:
@@ -454,8 +454,8 @@
 
 - batch: 6
 - owner: docs-agent
-- status: pending
-- claimed_by: -
+- status: done
+- claimed_by: codex
 - description: Document Batch 6 reviewer workflows, confidence scoring, and
   cross-source merge policy updates
 - inputs:

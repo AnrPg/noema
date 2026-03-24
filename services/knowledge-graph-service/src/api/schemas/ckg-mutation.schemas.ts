@@ -93,6 +93,26 @@ export const RequestRevisionRequestSchema = z.object({
     .max(4000, 'Revision feedback must not exceed 4000 characters'),
 });
 
+export const BulkReviewMutationRequestSchema = z
+  .object({
+    action: z.enum(['approve', 'reject', 'request_revision']),
+    mutationIds: z.array(MutationIdSchema).min(1).max(200).optional(),
+    importRunId: z.string().min(1).optional(),
+    note: z
+      .string()
+      .min(1, 'A reviewer note is required')
+      .max(4000, 'Reviewer note must not exceed 4000 characters'),
+  })
+  .superRefine((value, ctx) => {
+    if ((value.mutationIds?.length ?? 0) === 0 && value.importRunId === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide either mutationIds or importRunId for bulk review.',
+        path: ['mutationIds'],
+      });
+    }
+  });
+
 /**
  * Request body for resubmitting a mutation after revision.
  * The proposer provides updated operations replacing the old ones.
@@ -115,3 +135,4 @@ export type ApproveMutationRequest = z.infer<typeof ApproveMutationRequestSchema
 export type RejectMutationRequest = z.infer<typeof RejectMutationRequestSchema>;
 export type RequestRevisionRequest = z.infer<typeof RequestRevisionRequestSchema>;
 export type ResubmitMutationRequest = z.infer<typeof ResubmitMutationRequestSchema>;
+export type BulkReviewMutationRequest = z.infer<typeof BulkReviewMutationRequestSchema>;

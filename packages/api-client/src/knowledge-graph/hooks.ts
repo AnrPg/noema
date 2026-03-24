@@ -30,6 +30,7 @@ import {
 } from './api.js';
 import type {
   ICentralityDto,
+  ICkgBulkReviewInput,
   ICkgMutationAuditLogDto,
   ICkgMutationDto,
   ICkgMutationFilters,
@@ -49,6 +50,7 @@ import type {
   IUpdateNodeInput,
   BridgeNodesResponse,
   CentralityResponse,
+  CkgBulkReviewResponse,
   CkgMutationAuditLogResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
@@ -652,6 +654,30 @@ export function useRejectMutation(
     onSuccess: (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useBulkReviewMutations(
+  options?: UseMutationOptions<CkgBulkReviewResponse, Error, ICkgBulkReviewInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => ckgMutationsApi.bulkReview(input),
+    onSuccess: async (response, input) => {
+      const result = response.data;
+      await Promise.all(
+        result.succeededMutationIds.map(async (mutationId) => {
+          await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(mutationId) });
+        })
+      );
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      if (input.importRunId !== undefined) {
+        await queryClient.invalidateQueries({
+          queryKey: kgKeys.ckgMutations({ importRunId: input.importRunId }),
+        });
+      }
     },
     ...options,
   });

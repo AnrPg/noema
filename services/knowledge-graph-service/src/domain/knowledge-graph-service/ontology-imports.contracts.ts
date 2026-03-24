@@ -72,6 +72,17 @@ export const ONTOLOGY_MAPPING_KINDS = [
 ] as const;
 export type OntologyMappingKind = (typeof ONTOLOGY_MAPPING_KINDS)[number];
 
+export const ONTOLOGY_MERGE_CONFIDENCE_BANDS = ['low', 'medium', 'high'] as const;
+export type OntologyMergeConfidenceBand = (typeof ONTOLOGY_MERGE_CONFIDENCE_BANDS)[number];
+
+export const ONTOLOGY_MERGE_CONFLICT_KINDS = [
+  'ambiguous_match',
+  'domain_mismatch',
+  'mapping_conflict',
+  'weak_mapping_only',
+] as const;
+export type OntologyMergeConflictKind = (typeof ONTOLOGY_MERGE_CONFLICT_KINDS)[number];
+
 export const ONTOLOGY_MUTATION_PREVIEW_STATUSES = ['ready', 'blocked'] as const;
 export type OntologyMutationPreviewStatus = (typeof ONTOLOGY_MUTATION_PREVIEW_STATUSES)[number];
 
@@ -255,6 +266,9 @@ export interface INormalizedOntologyMappingCandidate {
   sourceExternalId: string;
   targetExternalId: string;
   mappingKind: OntologyMappingKind;
+  confidenceScore: number;
+  confidenceBand: OntologyMergeConfidenceBand;
+  conflictFlags: OntologyMergeConflictKind[];
   provenance: IOntologyGraphRecordProvenance[];
 }
 
@@ -434,13 +448,21 @@ export interface ICanonicalNodeResolution {
   nodeType: string;
   domain: string;
   strategy: 'external_id' | 'iri' | 'label' | 'alias' | 'normalized_label' | 'mapping';
+  confidenceScore: number;
+  confidenceBand: OntologyMergeConfidenceBand;
+  conflictFlags: OntologyMergeConflictKind[];
+}
+
+export interface ICanonicalNodeResolutionResult {
+  resolution: ICanonicalNodeResolution | null;
+  conflictFlags: OntologyMergeConflictKind[];
 }
 
 export interface ICanonicalNodeResolver {
   resolveConcept(
     concept: INormalizedOntologyConceptCandidate,
     batch: INormalizedOntologyGraphBatch
-  ): Promise<ICanonicalNodeResolution | null>;
+  ): Promise<ICanonicalNodeResolutionResult>;
 }
 
 export interface IImportScheduler {

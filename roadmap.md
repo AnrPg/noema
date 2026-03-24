@@ -97,6 +97,18 @@ Ontology Imports Pipeline for the Canonical Knowledge Graph
 - Batch 6: reviewer bulk workflows, merge confidence, and next-source mapping
   depth
 
+Batch 6 is now implemented and ready for reviewer sign-off.
+
+- reviewer bulk triage is in place:
+  - backend bulk review endpoint for ontology-import mutations
+  - import-run scoped selection and provenance-aware validation
+  - admin queue selection toolbar and import-run group actions
+- merge-confidence and conflict-policy groundwork is in place:
+  - confidence scoring for normalized mapping candidates
+  - conflict-aware canonical resolution and safer mapping propagation
+  - future-ready OpenAlex and GeoNames mapping extractors for the next source
+    adapters
+
 ## Exit criteria
 
 - admin can register and run ontology imports without 404s

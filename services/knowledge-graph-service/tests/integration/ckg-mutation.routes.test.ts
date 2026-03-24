@@ -186,6 +186,37 @@ describe('GET /ckg/mutations', () => {
   });
 });
 
+describe('POST /ckg/mutations/review/bulk', () => {
+  it('bulk-approves ontology import mutations by importRunId', async () => {
+    service.listMutations.mockResolvedValue(
+      serviceResult([
+        ckgMutation({
+          rationale:
+            '[ontology-import runId=run_yago_001 sourceId=yago candidateId=concept:yago:graph_theory] Import concept',
+          state: 'pending_review',
+        }),
+      ])
+    );
+    service.approveEscalatedMutation.mockResolvedValue(
+      serviceResult(ckgMutation({ state: 'validated' as never }))
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `${BASE}/review/bulk`,
+      payload: {
+        action: 'approve',
+        importRunId: 'run_yago_001',
+        note: 'Approve the import batch.',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.processedCount).toBe(1);
+    expect(service.approveEscalatedMutation).toHaveBeenCalledOnce();
+  });
+});
+
 // ============================================================================
 // GET /api/v1/ckg/mutations/health — Pipeline health
 // ============================================================================

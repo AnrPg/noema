@@ -414,3 +414,111 @@ Key files:
 
 - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\normalizers\helpers.ts`
 - `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\mutation-generation\canonical-node-resolver.ts`
+
+## Batch 6 reviewer throughput workflow
+
+Batch 6 has started with the first reviewer-throughput slice: bulk review
+operations for ontology-import mutation proposals.
+
+### Backend bulk review endpoint
+
+- `POST /api/v1/ckg/mutations/review/bulk` now accepts:
+  - `action`: `approve`, `reject`, or `request_revision`
+  - `mutationIds`: explicit mutation selection
+  - `importRunId`: import-run scoped selection
+  - `note`: reviewer rationale applied to every processed mutation
+- the workflow resolves only `pending_review` mutations and rejects ids that do
+  not belong to the requested ontology import run
+- the response reports:
+  - requested count
+  - processed count
+  - skipped count
+  - succeeded mutation ids
+  - per-mutation failures
+
+This keeps the mutation workflow additive: bulk review reuses the existing
+single-mutation domain operations instead of introducing a second approval path.
+
+### Application-layer review service
+
+The bulk route delegates to a dedicated ontology-import review workflow service
+in the application layer. That service:
+
+- validates selection size against the bulk-review cap
+- resolves import-run membership using ontology-import mutation metadata
+- dispatches to the canonical review methods on the knowledge-graph service
+- preserves hexagonal boundaries by depending on the knowledge-graph service
+  contract rather than any route-specific adapter logic
+
+Key files:
+
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\review-workflows\contracts.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\review-workflows\service.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\api\schemas\ckg-mutation.schemas.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\api\rest\ckg-mutation.routes.ts`
+
+### Current Batch 6 scope
+
+The reviewer-throughput slice is in place, and the first merge-quality layer is
+now live behind it.
+
+## Batch 6 merge confidence and conflict policies
+
+Batch 6 now also includes the first cross-source merge quality layer.
+
+### Confidence scoring for normalized mappings
+
+Normalized mapping candidates now carry:
+
+- `confidenceScore`
+- `confidenceBand`
+- `conflictFlags`
+
+The scorer currently factors in:
+
+- mapping kind (`exact_match` vs `close_match` vs broader/related links)
+- whether the mapping is direct or derived during closure/propagation
+- whether the target points to a trusted external knowledge base
+- whether the same source concept fan-outs into conflicting exact matches
+
+This scoring stays in the backend/domain workflow and is used to keep low-trust
+mapping paths from silently driving canonical resolution.
+
+Key files:
+
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\normalizers\confidence\scoring.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\normalizers\helpers.ts`
+
+### Conflict policies for canonical node resolution
+
+Canonical node resolution now applies explicit conflict policies instead of
+blindly picking the first candidate:
+
+- ambiguous label/alias matches block automatic enrichment
+- non-blocking domain mismatches are surfaced as conflict flags
+- mapping-based propagation only uses medium/high-confidence mappings without
+  hard mapping conflicts
+
+This lets the import pipeline prefer safe deferral over risky silent merges.
+
+Key files:
+
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\mutation-generation\conflict-policies.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\mutation-generation\canonical-node-resolver.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\application\knowledge-graph\ontology-imports\mutation-generation\service.ts`
+
+### Next-source mapping extraction groundwork
+
+To prepare the next locked source adapters, the parser layer now includes
+mapping extractors for:
+
+- `OpenAlex` (`ids.wikidata`, `ids.wikipedia`, `ids.mag`)
+- `GeoNames` (`wikipediaURL`, linked alternate-name identifiers)
+
+These are not full import adapters yet; they are source-native mapping
+extractors that make the next connector batch easier to land cleanly.
+
+Key files:
+
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\openalex\openalex-mapping.extractor.ts`
+- `C:\Users\anr\Apps\noema\services\knowledge-graph-service\src\infrastructure\ontology-imports\parsers\geonames\geonames-mapping.extractor.ts`

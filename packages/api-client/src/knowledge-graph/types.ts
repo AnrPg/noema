@@ -368,6 +368,28 @@ export interface ICkgMutationFilters {
   offset?: number;
 }
 
+export type CkgBulkReviewAction = 'approve' | 'reject' | 'request_revision';
+
+export interface ICkgBulkReviewInput {
+  action: CkgBulkReviewAction;
+  mutationIds?: MutationId[];
+  importRunId?: string;
+  note: string;
+}
+
+export interface ICkgBulkReviewResult {
+  action: CkgBulkReviewAction;
+  importRunId: string | null;
+  requestedCount: number;
+  processedCount: number;
+  skippedCount: number;
+  succeededMutationIds: MutationId[];
+  failed: {
+    mutationId: MutationId;
+    reason: string;
+  }[];
+}
+
 // ============================================================================
 // Ontology Imports
 // ============================================================================
@@ -561,6 +583,8 @@ export type MisconceptionDetectionResult = IMisconceptionDetectionResult;
 export type UpdateMisconceptionStatusInput = IUpdateMisconceptionStatusInput;
 export type CkgMutationDto = ICkgMutationDto;
 export type CkgMutationFilters = ICkgMutationFilters;
+export type CkgBulkReviewInput = ICkgBulkReviewInput;
+export type CkgBulkReviewResult = ICkgBulkReviewResult;
 export type PkgCkgComparisonDto = IPkgCkgComparisonDto;
 export type CkgMutationAuditEntry = ICkgMutationAuditEntry;
 export type CkgMutationAuditLogDto = ICkgMutationAuditLogDto;
@@ -601,6 +625,7 @@ export type MisconceptionResponse = IApiResponse<IMisconceptionDto>;
 export type MisconceptionDetectionResponse = IApiResponse<IMisconceptionDetectionResult>;
 export type CkgMutationsResponse = IApiResponse<ICkgMutationDto[]>;
 export type CkgMutationResponse = IApiResponse<ICkgMutationDto>;
+export type CkgBulkReviewResponse = IApiResponse<ICkgBulkReviewResult>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
 export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;
 export type OntologyImportRunsResponse = IApiResponse<IOntologyImportRunDto[]>;

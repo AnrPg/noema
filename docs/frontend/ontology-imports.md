@@ -125,3 +125,61 @@ The admin mutation queue now leans on the backend for ontology-import filtering:
 
 This keeps the review screen responsive as import volumes grow without forcing
 the frontend to fetch the entire queue first.
+
+## Batch 6 reviewer bulk triage
+
+The admin mutation queue now has the first reviewer-throughput tools for
+ontology-import proposals.
+
+### Bulk selection workflow
+
+- ontology-import proposals can be selected from the queue directly
+- direct-review mutations remain non-selectable so the queue does not blur two
+  different review workflows
+- reviewers can:
+  - select visible ontology-import mutations
+  - clear the current selection
+  - select all mutations in an import-run group
+  - submit bulk `approve`, `reject`, or `request revision` actions with one
+    shared review note
+
+### Import-run grouping
+
+When the queue is not already filtered to a single import run, ontology-import
+proposals are grouped into import-run review cards. Each group provides:
+
+- proposal count
+- selected count
+- quick open to the import run
+- quick focus of the queue to that import batch
+- one-click group selection for bulk review
+
+### Key frontend files
+
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\mutations\page.tsx`
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\components\ckg\mutation-review\bulk-review-toolbar.tsx`
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\components\ckg\mutation-review\import-run-review-group.tsx`
+
+### Current Batch 6 scope
+
+The queue now supports reviewer bulk actions for ontology-import proposals and
+shows the first merge-quality hints from the backend.
+
+## Batch 6 confidence and conflict hints
+
+The mutation queue now surfaces merge-quality hints coming from the ontology
+import backend.
+
+- ontology-import mutation rationales now carry structured review metadata
+- the admin queue parses that metadata and shows:
+  - confidence band
+  - confidence percentage
+  - conflict badges for merge-risk signals such as ambiguous matches or mapping
+    conflicts
+- these hints sit alongside the existing import-run grouping so reviewers can
+  triage both by batch and by trust level
+
+Key frontend files:
+
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\lib\mutation-workflow.ts`
+- `C:\Users\anr\Apps\noema\apps\web-admin\src\app\(dashboard)\dashboard\ckg\mutations\page.tsx`

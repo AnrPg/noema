@@ -13,6 +13,12 @@ export interface IOntologyImportMutationContext {
   candidateId: string | null;
 }
 
+export interface IMutationReviewHints {
+  confidenceScore: number | null;
+  confidenceBand: 'low' | 'medium' | 'high' | null;
+  conflicts: string[];
+}
+
 const WORKFLOW_META: Record<MutationWorkflowState, IMutationWorkflowMeta> = {
   proposed: {
     label: 'Proposed',
@@ -155,6 +161,28 @@ export function getOntologyImportMutationContext(
   };
 }
 
+export function getMutationReviewHints(mutation: ICkgMutationDto): IMutationReviewHints {
+  const rationaleHints = parseReviewMarker(mutation.rationale);
+  if (rationaleHints !== null) {
+    return rationaleHints;
+  }
+
+  for (const operation of mutation.operations ?? []) {
+    const operationRationale =
+      typeof operation['rationale'] === 'string' ? operation['rationale'] : null;
+    const parsed = parseReviewMarker(operationRationale);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return {
+    confidenceScore: null,
+    confidenceBand: null,
+    conflicts: [],
+  };
+}
+
 function parseOntologyImportMarker(
   value: string | null | undefined
 ): IOntologyImportMutationContext | null {
@@ -173,6 +201,35 @@ function parseOntologyImportMarker(
     runId: match.groups['runId'] ?? null,
     sourceId: match.groups['sourceId'] ?? null,
     candidateId: match.groups['candidateId'] ?? null,
+  };
+}
+
+function parseReviewMarker(value: string | null | undefined): IMutationReviewHints | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const markerPattern =
+    /\[ontology-review confidence=(?<confidence>[0-9.]+) band=(?<band>low|medium|high) conflicts=(?<conflicts>[^\]]+)\]/u;
+  const match = markerPattern.exec(value);
+  if (match?.groups === undefined) {
+    return null;
+  }
+
+  const conflicts = match.groups['conflicts'];
+
+  return {
+    confidenceScore: Number(match.groups['confidence']),
+    confidenceBand:
+      match.groups['band'] === 'low' ||
+      match.groups['band'] === 'medium' ||
+      match.groups['band'] === 'high'
+        ? match.groups['band']
+        : null,
+    conflicts:
+      typeof conflicts === 'string' && conflicts !== 'none'
+        ? conflicts.split('|').filter((entry) => entry !== '')
+        : [],
   };
 }
 

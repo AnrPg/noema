@@ -21,9 +21,12 @@ import {
   getOntologyImportMutationContext,
   groupMutationsByOntologyImportRun,
 } from '../../application/knowledge-graph/ontology-imports/mutation-generation/index.js';
+import type { IOntologyImportBulkReviewResult } from '../../application/knowledge-graph/ontology-imports/review-workflows/index.js';
+import { OntologyImportReviewWorkflowService as OntologyImportReviewWorkflowServiceImpl } from '../../application/knowledge-graph/ontology-imports/review-workflows/index.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
   ApproveMutationRequestSchema,
+  BulkReviewMutationRequestSchema,
   MutationQueryParamsSchema,
   ProposeMutationRequestSchema,
   RejectMutationRequestSchema,
@@ -55,6 +58,7 @@ export function registerCkgMutationRoutes(
   options?: IRouteOptions
 ): void {
   attachStartTimeHook(fastify);
+  const reviewWorkflowService = new OntologyImportReviewWorkflowServiceImpl(service);
 
   const writeRouteConfig = options?.rateLimit
     ? { rateLimit: { max: options.rateLimit.writeMax, timeWindow: options.rateLimit.timeWindow } }
@@ -208,6 +212,57 @@ export function registerCkgMutationRoutes(
             additionalMetadata
           )
         );
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Body: unknown }>(
+    '/api/v1/ckg/mutations/review/bulk',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Bulk review ontology-import mutation proposals',
+        description:
+          'Approve, reject, or request revision for a selected ontology-import mutation set, ' +
+          'either by explicit mutation ids or by import-run scope.',
+        body: {
+          type: 'object',
+          required: ['action', 'note'],
+          properties: {
+            action: { type: 'string', enum: ['approve', 'reject', 'request_revision'] },
+            mutationIds: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 200,
+              items: { type: 'string' },
+            },
+            importRunId: { type: 'string' },
+            note: { type: 'string', minLength: 1, maxLength: 4000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const parsed = BulkReviewMutationRequestSchema.parse(request.body);
+        const context = buildContext(request);
+        const result = await reviewWorkflowService.executeBulkReview(
+          {
+            action: parsed.action,
+            ...(parsed.mutationIds !== undefined
+              ? { mutationIds: parsed.mutationIds as MutationId[] }
+              : {}),
+            ...(parsed.importRunId !== undefined ? { importRunId: parsed.importRunId } : {}),
+            note: parsed.note,
+          },
+          context
+        );
+        reply.send(wrapResponse<IOntologyImportBulkReviewResult>(result, undefined, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

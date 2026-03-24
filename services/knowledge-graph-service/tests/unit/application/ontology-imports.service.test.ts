@@ -299,23 +299,38 @@ class StubSourceFetcher implements ISourceFetcher {
 
 class StubCanonicalNodeResolver implements ICanonicalNodeResolver {
   resolveConcept(concept: { externalId: string; preferredLabel: string }): Promise<{
-    nodeId: string;
-    label: string;
-    nodeType: string;
-    domain: string;
-    strategy: 'external_id' | 'label';
-  } | null> {
+    resolution: {
+      nodeId: string;
+      label: string;
+      nodeType: string;
+      domain: string;
+      strategy: 'external_id' | 'label';
+      confidenceScore: number;
+      confidenceBand: 'high' | 'medium' | 'low';
+      conflictFlags: [];
+    } | null;
+    conflictFlags: [];
+  }> {
     if (concept.preferredLabel === 'Leonhard Euler') {
       return Promise.resolve({
-        nodeId: 'node_euler',
-        label: 'Leonhard Euler',
-        nodeType: 'concept',
-        domain: 'world-knowledge',
-        strategy: 'label',
+        resolution: {
+          nodeId: 'node_euler',
+          label: 'Leonhard Euler',
+          nodeType: 'concept',
+          domain: 'world-knowledge',
+          strategy: 'label',
+          confidenceScore: 0.92,
+          confidenceBand: 'high',
+          conflictFlags: [],
+        },
+        conflictFlags: [],
       });
     }
 
-    return Promise.resolve(null);
+    return Promise.resolve({
+      resolution: null,
+      conflictFlags: [],
+    });
   }
 }
 
