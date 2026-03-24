@@ -165,6 +165,48 @@ export type {
   IEvidenceSummary,
 } from './aggregation-evidence.repository.js';
 
+export type {
+  ICancelOntologyImportRunInput,
+  IChecksumVerifier,
+  ICreateOntologyImportRunInput,
+  IImportArtifactRepository,
+  IImportRunRepository,
+  IImportCheckpointRepository,
+  IImportScheduler,
+  INormalizationPublisher,
+  IOntologyGraphAliasRecord,
+  IOntologyGraphConceptRecord,
+  IOntologyGraphMappingRecord,
+  IOntologyGraphRecord,
+  IOntologyGraphRecordProvenance,
+  IOntologyGraphRelationRecord,
+  IOntologyImportArtifact,
+  IOntologyImportCheckpoint,
+  IOntologyImportRun,
+  IOntologySource,
+  IParsedBatchRepository,
+  IParsedOntologyBatch,
+  IParsedOntologyGraphBatch,
+  IRawArtifactStore,
+  IRegisterOntologySourceInput,
+  IRetryOntologyImportRunInput,
+  ISourceCatalogRepository,
+  ISourceFetcher,
+  ISourceParser,
+  OntologyAccessMode,
+  OntologyArtifactKind,
+  OntologyGraphEdgeDirection,
+  OntologyGraphNodeKind,
+  OntologyGraphRecordKind,
+  OntologyImportStatus,
+  OntologyImportStepStatus,
+  OntologyImportStepType,
+  OntologyMappingKind,
+  OntologyRunTrigger,
+  OntologySourceId,
+  OntologySourceRole,
+} from './ontology-imports.contracts.js';
+
 // ============================================================================
 // Service Interface
 // ============================================================================
@@ -199,6 +241,28 @@ export {
   UpdateEdgeInputSchema,
   UpdateNodeInputSchema,
 } from './knowledge-graph.schemas.js';
+
+export {
+  OntologyAccessModeSchema,
+  OntologyArtifactKindSchema,
+  OntologyGraphAliasRecordSchema,
+  OntologyGraphConceptRecordSchema,
+  OntologyGraphEdgeDirectionSchema,
+  OntologyGraphMappingRecordSchema,
+  OntologyGraphNodeKindSchema,
+  OntologyGraphRecordKindSchema,
+  OntologyGraphRecordProvenanceSchema,
+  OntologyGraphRecordSchema,
+  OntologyGraphRelationRecordSchema,
+  OntologyImportStatusSchema,
+  OntologyImportStepStatusSchema,
+  OntologyImportStepTypeSchema,
+  OntologyMappingKindSchema,
+  OntologyRunTriggerSchema,
+  OntologySourceIdSchema,
+  OntologySourceRoleSchema,
+  ParsedOntologyGraphBatchSchema,
+} from './ontology-imports.contracts.js';
 
 // ============================================================================
 // Validation Pipeline

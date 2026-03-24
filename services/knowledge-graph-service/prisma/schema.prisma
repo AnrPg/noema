@@ -498,6 +498,131 @@ model MetricsStaleness {
 }
 
 // ============================================================================
+// Ontology Imports — Source registry, run orchestration, and staging metadata
+// ============================================================================
+
+model OntologyImportSource {
+    id String @id @db.VarChar(50)
+
+    name        String @db.VarChar(200)
+    role        String @db.VarChar(50)
+    accessMode  String @map("access_mode") @db.VarChar(50)
+    description String @db.VarChar(2000)
+
+    homepageUrl      String? @map("homepage_url") @db.VarChar(500)
+    documentationUrl String? @map("documentation_url") @db.VarChar(500)
+
+    supportedLanguages String[] @default([]) @map("supported_languages")
+    supportsIncremental Boolean  @default(false) @map("supports_incremental")
+    enabled             Boolean  @default(true)
+
+    latestReleaseVersion     String?   @map("latest_release_version") @db.VarChar(200)
+    latestReleasePublishedAt DateTime? @map("latest_release_published_at")
+    latestReleaseChecksum    String?   @map("latest_release_checksum") @db.VarChar(200)
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    runs OntologyImportRun[]
+
+    @@index([role])
+    @@index([accessMode])
+    @@index([enabled])
+    @@map("ontology_import_sources")
+}
+
+model OntologyImportRun {
+    id String @id @db.VarChar(50)
+
+    sourceId String @map("source_id") @db.VarChar(50)
+
+    sourceVersion String? @map("source_version") @db.VarChar(200)
+    configuration Json    @default("{}")
+    submittedMutationIds Json @default("[]") @map("submitted_mutation_ids")
+    status              String  @db.VarChar(50)
+    trigger             String  @db.VarChar(50)
+    initiatedBy         String? @map("initiated_by") @db.VarChar(100)
+
+    createdAt   DateTime  @default(now()) @map("created_at")
+    updatedAt   DateTime  @updatedAt @map("updated_at")
+    startedAt   DateTime? @map("started_at")
+    completedAt DateTime? @map("completed_at")
+
+    failureReason String? @map("failure_reason") @db.VarChar(2000)
+
+    source      OntologyImportSource       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+    artifacts   OntologyImportArtifact[]
+    checkpoints OntologyImportCheckpoint[]
+    parsedBatch OntologyParsedBatch?
+
+    @@index([sourceId])
+    @@index([status])
+    @@index([trigger])
+    @@index([createdAt])
+    @@index([sourceId, status])
+    @@map("ontology_import_runs")
+}
+
+model OntologyImportArtifact {
+    id String @id @db.VarChar(50)
+
+    runId    String @map("run_id") @db.VarChar(50)
+    sourceId String @map("source_id") @db.VarChar(50)
+
+    kind        String  @db.VarChar(50)
+    storageKey  String  @map("storage_key") @db.VarChar(500)
+    contentType String? @map("content_type") @db.VarChar(200)
+    checksum    String? @db.VarChar(200)
+    sizeBytes   Int?    @map("size_bytes")
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+    @@index([runId])
+    @@index([sourceId])
+    @@index([kind])
+    @@map("ontology_import_artifacts")
+}
+
+model OntologyImportCheckpoint {
+    id String @id @db.VarChar(50)
+
+    runId String @map("run_id") @db.VarChar(50)
+
+    step   String @db.VarChar(50)
+    status String @db.VarChar(50)
+
+    startedAt   DateTime? @map("started_at")
+    completedAt DateTime? @map("completed_at")
+    detail      String?   @db.VarChar(2000)
+
+    run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+    @@index([runId])
+    @@index([step])
+    @@index([status])
+    @@map("ontology_import_checkpoints")
+}
+
+model OntologyParsedBatch {
+    runId String @id @map("run_id") @db.VarChar(50)
+
+    sourceId      String  @map("source_id") @db.VarChar(50)
+    sourceVersion String? @map("source_version") @db.VarChar(200)
+    recordCount   Int     @map("record_count")
+    artifactId    String  @map("artifact_id") @db.VarChar(50)
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+    @@index([sourceId])
+    @@map("ontology_parsed_batches")
+}
+
+// ============================================================================
 // Enums
 // ============================================================================
 

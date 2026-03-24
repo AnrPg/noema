@@ -11,6 +11,7 @@ export * from './ckg-traversal.schemas.js';
 export * from './comparison.schemas.js';
 export * from './metrics.schemas.js';
 export * from './misconception.schemas.js';
+export * from './ontology-import.schemas.js';
 export * from './pkg-edge.schemas.js';
 export * from './pkg-node.schemas.js';
 export * from './pkg-operation-log.schemas.js';

@@ -26,4 +26,5 @@ export { registerPkgOperationLogRoutes } from './pkg-operation-log.routes.js';
 export { registerComparisonRoutes } from './comparison.routes.js';
 export { registerMetricsRoutes } from './metrics.routes.js';
 export { registerMisconceptionRoutes } from './misconception.routes.js';
+export { registerOntologyImportRoutes } from './ontology-import.routes.js';
 export { registerStructuralHealthRoutes } from './structural-health.routes.js';

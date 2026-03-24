@@ -13,6 +13,7 @@ import fastifySwagger from '@fastify/swagger';
 import fastifySwaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
+import path from 'node:path';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
@@ -30,6 +31,7 @@ import {
   registerComparisonRoutes,
   registerMetricsRoutes,
   registerMisconceptionRoutes,
+  registerOntologyImportRoutes,
   registerPkgEdgeRoutes,
   registerPkgNodeRoutes,
   registerPkgOperationLogRoutes,
@@ -40,6 +42,7 @@ import type { IRouteOptions } from './api/shared/route-helpers.js';
 import { getTokenVerifierConfig, loadConfig } from './config/index.js';
 import { AgentHintsFactory } from './domain/knowledge-graph-service/agent-hints.factory.js';
 import { CkgMutationPipeline } from './domain/knowledge-graph-service/ckg-mutation-pipeline.js';
+import type { CkgMutationOperation } from './domain/knowledge-graph-service/ckg-mutation-dsl.js';
 import { CkgValidationPipeline } from './domain/knowledge-graph-service/ckg-validation-pipeline.js';
 import {
   ConflictDetectionStage,
@@ -50,6 +53,11 @@ import {
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
 import { UserDeletedConsumer } from './events/consumers/index.js';
+import {
+  NoopNormalizationPublisher,
+  OntologyImportsApplicationService,
+} from './application/knowledge-graph/ontology-imports/service.js';
+import { GraphCanonicalNodeResolver } from './application/knowledge-graph/ontology-imports/mutation-generation/index.js';
 import { CachedGraphRepository } from './infrastructure/cache/cached-graph.repository.js';
 import { KgRedisCacheProvider } from './infrastructure/cache/kg-redis-cache.provider.js';
 import { Neo4jClient } from './infrastructure/database/neo4j-client.js';
@@ -61,9 +69,26 @@ import {
   PrismaMetricsStalenessRepository,
   PrismaMisconceptionRepository,
   PrismaMutationRepository,
+  PrismaOntologyImportArtifactRepository,
+  PrismaOntologyImportCheckpointRepository,
+  PrismaOntologyImportRunRepository,
+  PrismaOntologyParsedBatchRepository,
+  PrismaOntologySourceRepository,
   PrismaOperationLogRepository,
 } from './infrastructure/database/repositories/index.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
+import {
+  ConceptNetSourceFetcher,
+  ConceptNetSourceNormalizer,
+  ConceptNetSourceParser,
+  EscoSourceFetcher,
+  EscoSourceNormalizer,
+  EscoSourceParser,
+  YagoSourceFetcher,
+  YagoSourceNormalizer,
+  YagoSourceParser,
+} from './infrastructure/ontology-imports/index.js';
+import { LocalRawArtifactStore } from './infrastructure/storage/index.js';
 
 import { SERVICE_VERSION } from './api/shared/route-helpers.js';
 
@@ -236,6 +261,10 @@ async function bootstrap(): Promise<void> {
         { name: 'Structural Health', description: 'Structural health and metacognitive stage' },
         { name: 'PKG Operations', description: 'PKG operation log (audit trail)' },
         { name: 'Comparison', description: 'PKG↔CKG comparison endpoints' },
+        {
+          name: 'Ontology Imports',
+          description: 'Admin ontology source catalog and import-run orchestration',
+        },
       ],
       components: {
         securitySchemes: {
@@ -296,6 +325,21 @@ async function bootstrap(): Promise<void> {
   const operationLogRepository = new PrismaOperationLogRepository(prisma);
   const metricsStalenessRepository = new PrismaMetricsStalenessRepository(prisma);
   const aggregationEvidenceRepository = new PrismaAggregationEvidenceRepository(prisma);
+  const ontologySourceRepository = new PrismaOntologySourceRepository(prisma);
+  const ontologyImportRunRepository = new PrismaOntologyImportRunRepository(prisma);
+  const ontologyImportArtifactRepository = new PrismaOntologyImportArtifactRepository(prisma);
+  const ontologyImportCheckpointRepository = new PrismaOntologyImportCheckpointRepository(prisma);
+  const ontologyParsedBatchRepository = new PrismaOntologyParsedBatchRepository(prisma);
+  const ontologyArtifactRootDirectory = path.join(
+    process.cwd(),
+    '.data',
+    'knowledge-graph-service',
+    'ontology-imports'
+  );
+  const rawArtifactStore = new LocalRawArtifactStore(
+    ontologyArtifactRootDirectory,
+    ontologyImportArtifactRepository
+  );
 
   // 3. Event publisher (Redis Streams)
   const eventPublisher = new RedisEventPublisher(
@@ -341,6 +385,56 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
+  const ontologyImportsService = new OntologyImportsApplicationService(
+    ontologySourceRepository,
+    ontologyImportRunRepository,
+    ontologyImportArtifactRepository,
+    ontologyImportCheckpointRepository,
+    ontologyParsedBatchRepository,
+    new NoopNormalizationPublisher(),
+    rawArtifactStore,
+    [
+      new YagoSourceFetcher(rawArtifactStore, {
+        artifactRootDirectory: ontologyArtifactRootDirectory,
+      }),
+      new EscoSourceFetcher(rawArtifactStore, {
+        artifactRootDirectory: ontologyArtifactRootDirectory,
+      }),
+      new ConceptNetSourceFetcher(rawArtifactStore, {
+        artifactRootDirectory: ontologyArtifactRootDirectory,
+      }),
+    ],
+    [
+      new YagoSourceParser(ontologyArtifactRootDirectory),
+      new EscoSourceParser(ontologyArtifactRootDirectory),
+      new ConceptNetSourceParser(ontologyArtifactRootDirectory),
+    ],
+    [new YagoSourceNormalizer(), new EscoSourceNormalizer(), new ConceptNetSourceNormalizer()],
+    {
+      canonicalNodeResolver: new GraphCanonicalNodeResolver(graphRepository),
+      mutationSubmissionPort: {
+        async submitProposal(proposal, context) {
+          const proposerId = (context.userId ?? 'agent_unknown') as Parameters<
+            typeof mutationPipeline.proposeMutation
+          >[0];
+          const mutation = await mutationPipeline.proposeMutation(
+            proposerId,
+            proposal.operations as CkgMutationOperation[],
+            proposal.rationale,
+            proposal.evidenceCount,
+            proposal.priority,
+            context
+          );
+
+          return {
+            mutationId: mutation.mutationId,
+          };
+        },
+      },
+    }
+  );
+  await ontologyImportsService.ensureDefaultSources();
+
   // --------------------------------------------------------------------------
   // Auth middleware & route wiring
   // --------------------------------------------------------------------------
@@ -379,6 +473,7 @@ async function bootstrap(): Promise<void> {
   registerMisconceptionRoutes(app, service, authMiddleware, routeOptions);
   registerStructuralHealthRoutes(app, service, authMiddleware, routeOptions);
   registerComparisonRoutes(app, service, authMiddleware, routeOptions);
+  registerOntologyImportRoutes(app, ontologyImportsService, authMiddleware, routeOptions);
 
   // MCP Tool Registry (Phase 9)
   const toolRegistry = createToolRegistry(service);
