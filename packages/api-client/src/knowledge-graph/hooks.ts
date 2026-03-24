@@ -36,6 +36,7 @@ import type {
   ICkgMutationFilters,
   ICommonAncestorsInput,
   ICreateOntologyImportRunInput,
+  IRegisterOntologyImportSourceInput,
   ICreateEdgeInput,
   ICreateNodeInput,
   IGraphEdgeDto,
@@ -44,6 +45,9 @@ import type {
   IOntologyImportRunDetailDto,
   IOntologyImportRunDto,
   IOntologyImportSourceDto,
+  IOntologyImportsSystemStatusDto,
+  IOntologyImportArtifactContentDto,
+  IUpdateOntologyImportSourceInput,
   IPkgCkgComparisonDto,
   ISubgraphParams,
   IUpdateMisconceptionStatusInput,
@@ -68,9 +72,12 @@ import type {
   NodesListResponse,
   OperationsResponse,
   OntologyImportRunDetailResponse,
+  OntologyImportArtifactContentResponse,
   OntologyImportRunResponse,
+  OntologyImportSourceResponse,
   OntologyImportRunsResponse,
   OntologyImportSourcesResponse,
+  OntologyImportsSystemStatusResponse,
   OntologyMutationPreviewSubmissionResponse,
   PrerequisiteChainResponse,
   StageResponse,
@@ -243,6 +250,62 @@ function normalizeMutationEntry(entry: Record<string, unknown>): ICkgMutationDto
     payload: firstOperation ?? {},
     ...(operations.length > 0 ? { operations } : {}),
     ...(typeof entry['rationale'] === 'string' ? { rationale: entry['rationale'] } : {}),
+    ...(typeof entry['ontologyImportContext'] === 'object' &&
+    entry['ontologyImportContext'] !== null
+      ? {
+          ontologyImportContext: {
+            runId:
+              typeof (entry['ontologyImportContext'] as Record<string, unknown>)['runId'] ===
+              'string'
+                ? ((entry['ontologyImportContext'] as Record<string, unknown>)['runId'] as string)
+                : null,
+            sourceId:
+              typeof (entry['ontologyImportContext'] as Record<string, unknown>)['sourceId'] ===
+              'string'
+                ? ((entry['ontologyImportContext'] as Record<string, unknown>)[
+                    'sourceId'
+                  ] as string)
+                : null,
+            candidateId:
+              typeof (entry['ontologyImportContext'] as Record<string, unknown>)['candidateId'] ===
+              'string'
+                ? ((entry['ontologyImportContext'] as Record<string, unknown>)[
+                    'candidateId'
+                  ] as string)
+                : null,
+          },
+        }
+      : {}),
+    ...(typeof entry['reviewHints'] === 'object' && entry['reviewHints'] !== null
+      ? {
+          reviewHints: {
+            confidenceScore:
+              typeof (entry['reviewHints'] as Record<string, unknown>)['confidenceScore'] ===
+              'number'
+                ? ((entry['reviewHints'] as Record<string, unknown>)['confidenceScore'] as number)
+                : null,
+            confidenceBand:
+              (entry['reviewHints'] as Record<string, unknown>)['confidenceBand'] === 'low' ||
+              (entry['reviewHints'] as Record<string, unknown>)['confidenceBand'] === 'medium' ||
+              (entry['reviewHints'] as Record<string, unknown>)['confidenceBand'] === 'high'
+                ? ((entry['reviewHints'] as Record<string, unknown>)['confidenceBand'] as
+                    | 'low'
+                    | 'medium'
+                    | 'high')
+                : null,
+            conflictFlags: Array.isArray(
+              (entry['reviewHints'] as Record<string, unknown>)['conflictFlags']
+            )
+              ? ((entry['reviewHints'] as Record<string, unknown>)['conflictFlags'] as (
+                  | 'ambiguous_match'
+                  | 'domain_mismatch'
+                  | 'mapping_conflict'
+                  | 'weak_mapping_only'
+                )[])
+              : [],
+          },
+        }
+      : {}),
     reviewedBy: null,
     reviewNote: typeof entry['revisionFeedback'] === 'string' ? entry['revisionFeedback'] : null,
     proposedAt: stringValue(entry['createdAt'], new Date(0).toISOString()),
@@ -340,6 +403,7 @@ export const kgKeys = {
   ckgMutations: (filters?: ICkgMutationFilters) => [...kgKeys.ckg(), 'mutations', filters] as const,
   ckgMutation: (id: MutationId) => [...kgKeys.ckg(), 'mutations', id] as const,
   ontologyImports: () => [...kgKeys.ckg(), 'ontology-imports'] as const,
+  ontologyImportsSystemStatus: () => [...kgKeys.ontologyImports(), 'system-status'] as const,
   ontologyImportSources: () => [...kgKeys.ontologyImports(), 'sources'] as const,
   ontologyImportRuns: (filters?: IListOntologyImportRunsParams) =>
     [...kgKeys.ontologyImports(), 'runs', filters] as const,
@@ -742,6 +806,69 @@ export function useOntologyImportSources(
   });
 }
 
+export function useRegisterOntologyImportSource(
+  options?: UseMutationOptions<
+    OntologyImportSourceResponse,
+    Error,
+    IRegisterOntologyImportSourceInput
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => ontologyImportsApi.registerSource(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportSources() });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportsSystemStatus() });
+    },
+    ...options,
+  });
+}
+
+export function useUpdateOntologyImportSource(
+  options?: UseMutationOptions<
+    OntologyImportSourceResponse,
+    Error,
+    { sourceId: string; input: IUpdateOntologyImportSourceInput }
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sourceId, input }) => ontologyImportsApi.updateSource(sourceId, input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportSources() });
+    },
+    ...options,
+  });
+}
+
+export function useSyncOntologyImportSource(
+  options?: UseMutationOptions<OntologyImportSourceResponse, Error, string>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sourceId) => ontologyImportsApi.syncSource(sourceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportSources() });
+    },
+    ...options,
+  });
+}
+
+export function useOntologyImportsSystemStatus(
+  options?: Omit<
+    UseQueryOptions<OntologyImportsSystemStatusResponse, Error, IOntologyImportsSystemStatusDto>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: kgKeys.ontologyImportsSystemStatus(),
+    queryFn: ontologyImportsApi.getSystemStatus,
+    select: (response) => response.data,
+    staleTime: 30 * 1000,
+    ...options,
+  });
+}
+
 export function useOntologyImportRuns(
   filters?: IListOntologyImportRunsParams,
   options?: Omit<
@@ -769,6 +896,27 @@ export function useOntologyImportRun(
     queryFn: () => ontologyImportsApi.getRun(runId),
     select: (response) => response.data,
     enabled: runId !== '',
+    ...options,
+  });
+}
+
+export function useOntologyImportArtifactContent(
+  runId: string,
+  artifactId: string,
+  options?: Omit<
+    UseQueryOptions<
+      OntologyImportArtifactContentResponse,
+      Error,
+      IOntologyImportArtifactContentDto
+    >,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: [...kgKeys.ontologyImportRun(runId), 'artifact', artifactId] as const,
+    queryFn: () => ontologyImportsApi.getArtifactContent(runId, artifactId),
+    select: (response) => response.data,
+    enabled: runId !== '' && artifactId !== '',
     ...options,
   });
 }
