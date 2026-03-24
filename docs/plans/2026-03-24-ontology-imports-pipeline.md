@@ -17,6 +17,15 @@ happen after we have a stable ingestion and staging system.
 
 ---
 
+## Locked decisions
+
+- Service placement: keep ontology imports inside `knowledge-graph-service`
+- First pilot connectors: `YAGO + ESCO + ConceptNet`
+- Publication gate: normalized output must become reviewable CKG mutations
+  before canonical publish
+
+---
+
 ## Architectural stance
 
 ### Why imports first
@@ -152,10 +161,12 @@ Adapter families:
 
 - snapshot downloader adapters: YAGO, WordNet, OpenAlex snapshot, GeoNames
   extracts
-- API / linked-data adapters: ConceptNet, ESCO web-service, Getty LOD, LoC
-  Linked Data, UNESCO API
+- API / linked-data adapters: ESCO web-service, Getty LOD, LoC Linked Data,
+  UNESCO API
 - hybrid adapters: sources where we prefer snapshots for full loads and APIs for
   deltas
+- commonsense graph adapters: ConceptNet with explicit full-import and
+  targeted-import modes
 
 Each adapter should only do:
 
@@ -322,7 +333,7 @@ snapshots are still better than live APIs for reproducibility and completeness.
 3. Phase 3 adapters for three pilot sources:
    - YAGO
    - ESCO
-   - GeoNames
+   - ConceptNet
 4. Phase 5 admin imports UI
 5. Phase 6 orchestration
 6. Phase 7 normalization
@@ -333,7 +344,7 @@ Why these pilots:
 
 - YAGO gives broad world-knowledge backbone
 - ESCO gives skills/competencies taxonomy
-- GeoNames gives place grounding
+- ConceptNet gives commonsense relation diversity
 
 Together they force us to handle three very different source shapes early.
 
@@ -354,7 +365,7 @@ Concretely:
 
 - bulk pilot: YAGO
 - API pilot: ESCO
-- optional third pilot once the first two are stable: GeoNames
+- hybrid/commonsense pilot: ConceptNet
 
 ---
 
@@ -388,9 +399,7 @@ architecture and keeps imports auditable and reversible.
 
 4. Initial source pilot set
 
-- Option A: start with YAGO + ESCO
+- Option A: start with YAGO + ESCO + ConceptNet
 - Option B: start with YAGO + ESCO + GeoNames
 
-Recommendation: Option A if we want the fastest stable first increment.
-Recommendation: Option B if you want to harden the design against both taxonomy
-and geospatial data immediately.
+Locked decision: Option A.
