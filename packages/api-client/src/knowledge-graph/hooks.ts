@@ -22,6 +22,7 @@ import {
   healthApi,
   metricsApi,
   misconceptionsApi,
+  ontologyImportsApi,
   pkgEdgesApi,
   pkgNodesApi,
   pkgOperationsApi,
@@ -33,10 +34,15 @@ import type {
   ICkgMutationDto,
   ICkgMutationFilters,
   ICommonAncestorsInput,
+  ICreateOntologyImportRunInput,
   ICreateEdgeInput,
   ICreateNodeInput,
   IGraphEdgeDto,
   IGraphNodeDto,
+  IListOntologyImportRunsParams,
+  IOntologyImportRunDetailDto,
+  IOntologyImportRunDto,
+  IOntologyImportSourceDto,
   IPkgCkgComparisonDto,
   ISubgraphParams,
   IUpdateMisconceptionStatusInput,
@@ -59,6 +65,11 @@ import type {
   NodeResponse,
   NodesListResponse,
   OperationsResponse,
+  OntologyImportRunDetailResponse,
+  OntologyImportRunResponse,
+  OntologyImportRunsResponse,
+  OntologyImportSourcesResponse,
+  OntologyMutationPreviewSubmissionResponse,
   PrerequisiteChainResponse,
   StageResponse,
   SubgraphResponse,
@@ -326,6 +337,11 @@ export const kgKeys = {
   ckgEdges: () => [...kgKeys.ckg(), 'edges'] as const,
   ckgMutations: (filters?: ICkgMutationFilters) => [...kgKeys.ckg(), 'mutations', filters] as const,
   ckgMutation: (id: MutationId) => [...kgKeys.ckg(), 'mutations', id] as const,
+  ontologyImports: () => [...kgKeys.ckg(), 'ontology-imports'] as const,
+  ontologyImportSources: () => [...kgKeys.ontologyImports(), 'sources'] as const,
+  ontologyImportRuns: (filters?: IListOntologyImportRunsParams) =>
+    [...kgKeys.ontologyImports(), 'runs', filters] as const,
+  ontologyImportRun: (runId: string) => [...kgKeys.ontologyImports(), 'runs', runId] as const,
   metrics: (userId: UserId) => [...kgKeys.all, 'metrics', userId] as const,
   metricHistory: (userId: UserId) => [...kgKeys.metrics(userId), 'history'] as const,
   health: (userId: UserId) => [...kgKeys.all, 'health', userId] as const,
@@ -679,6 +695,123 @@ export function useCancelMutation(
     mutationFn: (id) => ckgMutationsApi.cancel(id),
     onSuccess: (response, id) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useOntologyImportSources(
+  options?: Omit<
+    UseQueryOptions<OntologyImportSourcesResponse, Error, IOntologyImportSourceDto[]>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: kgKeys.ontologyImportSources(),
+    queryFn: ontologyImportsApi.listSources,
+    select: (response) => extractListData<IOntologyImportSourceDto>(response),
+    staleTime: 10 * 60 * 1000,
+    ...options,
+  });
+}
+
+export function useOntologyImportRuns(
+  filters?: IListOntologyImportRunsParams,
+  options?: Omit<
+    UseQueryOptions<OntologyImportRunsResponse, Error, IOntologyImportRunDto[]>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: kgKeys.ontologyImportRuns(filters),
+    queryFn: () => ontologyImportsApi.listRuns(filters),
+    select: (response) => extractListData<IOntologyImportRunDto>(response),
+    ...options,
+  });
+}
+
+export function useOntologyImportRun(
+  runId: string,
+  options?: Omit<
+    UseQueryOptions<OntologyImportRunDetailResponse, Error, IOntologyImportRunDetailDto>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: kgKeys.ontologyImportRun(runId),
+    queryFn: () => ontologyImportsApi.getRun(runId),
+    select: (response) => response.data,
+    enabled: runId !== '',
+    ...options,
+  });
+}
+
+export function useCreateOntologyImportRun(
+  options?: UseMutationOptions<OntologyImportRunResponse, Error, ICreateOntologyImportRunInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => ontologyImportsApi.createRun(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
+    },
+    ...options,
+  });
+}
+
+export function useStartOntologyImportRun(
+  options?: UseMutationOptions<OntologyImportRunResponse, Error, string>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId) => ontologyImportsApi.startRun(runId),
+    onSuccess: async (_response, runId) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(runId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
+    },
+    ...options,
+  });
+}
+
+export function useCancelOntologyImportRun(
+  options?: UseMutationOptions<OntologyImportRunResponse, Error, { runId: string; reason?: string }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, reason }) =>
+      ontologyImportsApi.cancelRun(runId, reason !== undefined ? { reason } : undefined),
+    onSuccess: async (_response, { runId }) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(runId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
+    },
+    ...options,
+  });
+}
+
+export function useRetryOntologyImportRun(
+  options?: UseMutationOptions<OntologyImportRunResponse, Error, string>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId) => ontologyImportsApi.retryRun(runId),
+    onSuccess: async (_response, runId) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(runId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
+    },
+    ...options,
+  });
+}
+
+export function useSubmitOntologyImportRunPreview(
+  options?: UseMutationOptions<OntologyMutationPreviewSubmissionResponse, Error, string>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (runId) => ontologyImportsApi.submitRunPreview(runId),
+    onSuccess: async (_response, runId) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(runId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
     ...options,

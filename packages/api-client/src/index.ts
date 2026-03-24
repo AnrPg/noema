@@ -30,6 +30,7 @@ export * from './session/index.js';
 
 // Knowledge Graph Service
 export * from './knowledge-graph/index.js';
+export type * from './knowledge-graph/types.js';
 
 // HLR Sidecar
 export * from './hlr/index.js';

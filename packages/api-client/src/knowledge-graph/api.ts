@@ -19,11 +19,14 @@ import type {
   ICommonAncestorsInput,
   ComparisonResponse,
   ICreateEdgeInput,
+  ICreateOntologyImportRunInput,
   ICreateNodeInput,
+  ICancelOntologyImportRunInput,
   EdgeResponse,
   EdgesListResponse,
   FrontierResponse,
   HealthResponse,
+  IListOntologyImportRunsParams,
   MetricHistoryResponse,
   MetricsResponse,
   MisconceptionDetectionResponse,
@@ -32,6 +35,11 @@ import type {
   NodeResponse,
   NodesListResponse,
   OperationsResponse,
+  OntologyImportRunDetailResponse,
+  OntologyImportRunResponse,
+  OntologyImportRunsResponse,
+  OntologyImportSourcesResponse,
+  OntologyMutationPreviewSubmissionResponse,
   PrerequisiteChainResponse,
   StageResponse,
   ISubgraphParams,
@@ -43,6 +51,7 @@ import type {
 
 const pkgBase = (userId: UserId) => `/api/v1/users/${userId}/pkg`;
 const ckgBase = '/api/v1/ckg';
+const ontologyImportsBase = '/api/v1/ckg/imports';
 const metricsBase = (userId: UserId) => `/api/v1/users/${userId}/metrics`;
 const miscBase = (userId: UserId) => `/api/v1/users/${userId}/misconceptions`;
 const DEFAULT_DOMAIN = 'general';
@@ -160,6 +169,8 @@ export const ckgMutationsApi = {
       params: {
         state: filters?.state,
         proposedBy: filters?.proposedBy,
+        importRunId: filters?.importRunId,
+        includeImportRunAggregation: filters?.includeImportRunAggregation,
       },
     }),
 
@@ -187,6 +198,44 @@ export const ckgMutationsApi = {
 
   requestRevision: (mutationId: MutationId, feedback: string): Promise<CkgMutationResponse> =>
     http.post(`${ckgBase}/mutations/${mutationId}/request-revision`, { feedback }),
+};
+
+// ============================================================================
+// Ontology Imports API
+// ============================================================================
+
+export const ontologyImportsApi = {
+  listSources: (): Promise<OntologyImportSourcesResponse> =>
+    http.get(`${ontologyImportsBase}/sources`),
+
+  listRuns: (filters?: IListOntologyImportRunsParams): Promise<OntologyImportRunsResponse> =>
+    http.get(`${ontologyImportsBase}/runs`, {
+      params: {
+        sourceId: filters?.sourceId,
+        status: filters?.status,
+      },
+    }),
+
+  getRun: (runId: string): Promise<OntologyImportRunDetailResponse> =>
+    http.get(`${ontologyImportsBase}/runs/${runId}`),
+
+  createRun: (input: ICreateOntologyImportRunInput): Promise<OntologyImportRunResponse> =>
+    http.post(`${ontologyImportsBase}/runs`, input),
+
+  startRun: (runId: string): Promise<OntologyImportRunResponse> =>
+    http.post(`${ontologyImportsBase}/runs/${runId}/start`, {}),
+
+  cancelRun: (
+    runId: string,
+    input?: ICancelOntologyImportRunInput
+  ): Promise<OntologyImportRunResponse> =>
+    http.post(`${ontologyImportsBase}/runs/${runId}/cancel`, input ?? {}),
+
+  retryRun: (runId: string): Promise<OntologyImportRunResponse> =>
+    http.post(`${ontologyImportsBase}/runs/${runId}/retry`, {}),
+
+  submitRunPreview: (runId: string): Promise<OntologyMutationPreviewSubmissionResponse> =>
+    http.post(`${ontologyImportsBase}/runs/${runId}/submit`, {}),
 };
 
 // ============================================================================

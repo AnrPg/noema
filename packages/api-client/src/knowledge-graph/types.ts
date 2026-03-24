@@ -49,6 +49,34 @@ export type MisconceptionStatus =
   | 'recurring'
   | 'dismissed';
 
+export type OntologySourceRole = 'backbone' | 'enhancement';
+export type OntologyImportAccessMode = 'snapshot' | 'api' | 'linked_data' | 'hybrid';
+export type OntologyImportStatus =
+  | 'queued'
+  | 'fetching'
+  | 'fetched'
+  | 'parsing'
+  | 'parsed'
+  | 'staging_validated'
+  | 'ready_for_normalization'
+  | 'failed'
+  | 'cancelled';
+export type OntologyImportStepType = 'fetch' | 'checksum' | 'parse' | 'stage' | 'validation';
+export type OntologyImportStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type OntologyImportArtifactKind =
+  | 'raw_payload'
+  | 'manifest'
+  | 'parsed_batch'
+  | 'normalized_batch'
+  | 'mutation_preview';
+export type OntologyImportRunTrigger = 'manual' | 'scheduled' | 'retry';
+
+export interface IOntologyImportRunConfigurationDto {
+  mode: string | null;
+  language: string | null;
+  seedNodes: string[];
+}
+
 // ============================================================================
 // PKG / CKG Node DTO
 // ============================================================================
@@ -334,8 +362,158 @@ export interface ICkgMutationFilters {
   status?: MutationStatus;
   state?: MutationWorkflowState;
   proposedBy?: ProposerId;
+  importRunId?: string;
+  includeImportRunAggregation?: boolean;
   limit?: number;
   offset?: number;
+}
+
+// ============================================================================
+// Ontology Imports
+// ============================================================================
+
+export interface IOntologySourceReleaseDto {
+  version: string;
+  publishedAt: string | null;
+  checksum: string | null;
+}
+
+export interface IOntologyImportSourceDto {
+  id: string;
+  name: string;
+  role: OntologySourceRole;
+  accessMode: OntologyImportAccessMode;
+  description: string;
+  homepageUrl: string | null;
+  documentationUrl: string | null;
+  supportedLanguages: string[];
+  supportsIncremental: boolean;
+  enabled: boolean;
+  latestRelease: IOntologySourceReleaseDto | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IOntologyImportArtifactDto {
+  id: string;
+  runId: string;
+  sourceId: string;
+  kind: OntologyImportArtifactKind;
+  storageKey: string;
+  contentType: string | null;
+  checksum: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+}
+
+export interface IOntologyImportCheckpointDto {
+  id: string;
+  runId: string;
+  step: OntologyImportStepType;
+  status: OntologyImportStepStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  detail: string | null;
+}
+
+export interface IOntologyParsedBatchDto {
+  runId: string;
+  sourceId: string;
+  sourceVersion: string | null;
+  recordCount: number;
+  artifactId: string;
+}
+
+export interface IOntologyNormalizedBatchDto {
+  runId: string;
+  sourceId: string;
+  sourceVersion: string | null;
+  artifactId: string;
+  generatedAt: string;
+  rawRecordCount: number;
+  conceptCount: number;
+  relationCount: number;
+  mappingCount: number;
+}
+
+export interface IOntologyMutationPreviewCandidateDto {
+  candidateId: string;
+  entityKind: 'concept' | 'relation';
+  status: 'ready' | 'blocked';
+  title: string;
+  summary: string;
+  rationale: string;
+  blockedReason: string | null;
+  dependencyExternalIds: string[];
+  proposal: {
+    operations: Record<string, unknown>[];
+    rationale: string;
+    evidenceCount: number;
+    priority: number;
+  } | null;
+}
+
+export interface IOntologyMutationPreviewBatchDto {
+  runId: string;
+  sourceId: string;
+  sourceVersion: string | null;
+  generatedAt: string;
+  artifactId: string | null;
+  proposalCount: number;
+  readyProposalCount: number;
+  blockedCandidateCount: number;
+  candidates: IOntologyMutationPreviewCandidateDto[];
+}
+
+export interface IOntologyImportRunDto {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  sourceVersion: string | null;
+  configuration: IOntologyImportRunConfigurationDto;
+  submittedMutationIds: string[];
+  status: OntologyImportStatus;
+  trigger: OntologyImportRunTrigger;
+  initiatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  failureReason: string | null;
+}
+
+export interface IOntologyImportRunDetailDto {
+  run: IOntologyImportRunDto;
+  source: IOntologyImportSourceDto | null;
+  artifacts: IOntologyImportArtifactDto[];
+  checkpoints: IOntologyImportCheckpointDto[];
+  parsedBatch: IOntologyParsedBatchDto | null;
+  normalizedBatch: IOntologyNormalizedBatchDto | null;
+  mutationPreview: IOntologyMutationPreviewBatchDto | null;
+}
+
+export interface IListOntologyImportRunsParams {
+  sourceId?: string;
+  status?: OntologyImportStatus;
+}
+
+export interface ICreateOntologyImportRunInput {
+  sourceId: string;
+  trigger?: OntologyImportRunTrigger;
+  sourceVersion?: string;
+  configuration?: Partial<IOntologyImportRunConfigurationDto>;
+}
+
+export interface ICancelOntologyImportRunInput {
+  reason?: string;
+}
+
+export interface IOntologyMutationPreviewSubmissionDto {
+  runId: string;
+  submittedAt: string;
+  submittedCount: number;
+  skippedCount: number;
+  mutationIds: string[];
 }
 
 // ============================================================================
@@ -386,6 +564,17 @@ export type CkgMutationFilters = ICkgMutationFilters;
 export type PkgCkgComparisonDto = IPkgCkgComparisonDto;
 export type CkgMutationAuditEntry = ICkgMutationAuditEntry;
 export type CkgMutationAuditLogDto = ICkgMutationAuditLogDto;
+export type OntologyImportSourceDto = IOntologyImportSourceDto;
+export type OntologyImportRunDto = IOntologyImportRunDto;
+export type OntologyImportRunDetailDto = IOntologyImportRunDetailDto;
+export type OntologyImportRunConfigurationDto = IOntologyImportRunConfigurationDto;
+export type OntologyImportArtifactDto = IOntologyImportArtifactDto;
+export type OntologyImportCheckpointDto = IOntologyImportCheckpointDto;
+export type OntologyParsedBatchDto = IOntologyParsedBatchDto;
+export type OntologyNormalizedBatchDto = IOntologyNormalizedBatchDto;
+export type OntologyMutationPreviewBatchDto = IOntologyMutationPreviewBatchDto;
+export type OntologyMutationPreviewSubmissionDto = IOntologyMutationPreviewSubmissionDto;
+export type ListOntologyImportRunsParams = IListOntologyImportRunsParams;
 
 // ============================================================================
 // Response aliases
@@ -413,3 +602,9 @@ export type MisconceptionDetectionResponse = IApiResponse<IMisconceptionDetectio
 export type CkgMutationsResponse = IApiResponse<ICkgMutationDto[]>;
 export type CkgMutationResponse = IApiResponse<ICkgMutationDto>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
+export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;
+export type OntologyImportRunsResponse = IApiResponse<IOntologyImportRunDto[]>;
+export type OntologyImportRunResponse = IApiResponse<IOntologyImportRunDto>;
+export type OntologyImportRunDetailResponse = IApiResponse<IOntologyImportRunDetailDto>;
+export type OntologyMutationPreviewSubmissionResponse =
+  IApiResponse<IOntologyMutationPreviewSubmissionDto>;
