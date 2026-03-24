@@ -37,6 +37,9 @@ export default function CKGWorkspacePage(): React.JSX.Element {
           <Button asChild variant="outline">
             <Link href="/dashboard/ckg/mutations">Review Mutations</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/ckg/imports">Ontology Imports</Link>
+          </Button>
         </div>
       </div>
 
@@ -94,14 +97,17 @@ export default function CKGWorkspacePage(): React.JSX.Element {
           <CardHeader>
             <CardTitle>Ontology imports</CardTitle>
             <CardDescription>
-              Frontend-first placeholder for bulk imports, normalization, and seeding workflows.
+              Frontend-first workspace for bulk imports, provenance tracking, and normalization
+              handoff.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
-            <p>The import dashboard is the next admin surface to wire.</p>
-            <Button variant="outline" className="w-full" disabled>
-              <Upload className="mr-2 h-4 w-4" />
-              Import flow coming soon
+            <p>Pilot pages are now available for source catalog and run inspection.</p>
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/dashboard/ckg/imports">
+                <Upload className="mr-2 h-4 w-4" />
+                Open import workspace
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -116,8 +122,8 @@ export default function CKGWorkspacePage(): React.JSX.Element {
           <p>- The admin graph browser is read-only and visualizes the current canonical graph.</p>
           <p>- Canonical changes flow through the mutation pipeline for human review.</p>
           <p>
-            - Direct import, bulk curation, and ontology seeding UI should live here next instead of
-            behind 404s.
+            - Ontology imports now have a dedicated frontend shell while the backend pipeline is
+            being connected.
           </p>
         </CardContent>
       </Card>

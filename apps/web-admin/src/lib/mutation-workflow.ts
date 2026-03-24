@@ -7,6 +7,12 @@ export interface IMutationWorkflowMeta {
   dotClass: string;
 }
 
+export interface IOntologyImportMutationContext {
+  runId: string | null;
+  sourceId: string | null;
+  candidateId: string | null;
+}
+
 const WORKFLOW_META: Record<MutationWorkflowState, IMutationWorkflowMeta> = {
   proposed: {
     label: 'Proposed',
@@ -123,4 +129,93 @@ export function isMutationCancellable(mutation: ICkgMutationDto): boolean {
 export function isMutationTerminal(mutation: ICkgMutationDto): boolean {
   const state = getMutationWorkflowState(mutation);
   return state === 'committed' || state === 'rejected';
+}
+
+export function getOntologyImportMutationContext(
+  mutation: ICkgMutationDto
+): IOntologyImportMutationContext {
+  const rationaleContext = parseOntologyImportMarker(mutation.rationale);
+  if (rationaleContext !== null) {
+    return rationaleContext;
+  }
+
+  for (const operation of mutation.operations ?? []) {
+    const operationRationale =
+      typeof operation['rationale'] === 'string' ? operation['rationale'] : null;
+    const parsed = parseOntologyImportMarker(operationRationale);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+
+  return {
+    runId: readRunIdFromOperations(mutation),
+    sourceId: readSourceIdFromOperations(mutation),
+    candidateId: null,
+  };
+}
+
+function parseOntologyImportMarker(
+  value: string | null | undefined
+): IOntologyImportMutationContext | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const markerPattern =
+    /\[ontology-import runId=(?<runId>[^\s\]]+) sourceId=(?<sourceId>[^\s\]]+) candidateId=(?<candidateId>[^\]]+)\]/u;
+  const match = markerPattern.exec(value);
+  if (match?.groups === undefined) {
+    return null;
+  }
+
+  return {
+    runId: match.groups['runId'] ?? null,
+    sourceId: match.groups['sourceId'] ?? null,
+    candidateId: match.groups['candidateId'] ?? null,
+  };
+}
+
+function readRunIdFromOperations(mutation: ICkgMutationDto): string | null {
+  for (const operation of mutation.operations ?? []) {
+    const properties =
+      operation['type'] === 'add_node'
+        ? readRecord(operation['properties'])
+        : operation['type'] === 'update_node'
+          ? readRecord(readRecord(operation['updates'])?.['properties'])
+          : null;
+    const ontologyImport =
+      readRecord(properties?.['ontologyImport']) ??
+      readRecord(properties?.['ontologyImportEnrichment']);
+    if (typeof ontologyImport?.['runId'] === 'string' && ontologyImport['runId'] !== '') {
+      return ontologyImport['runId'];
+    }
+  }
+
+  return null;
+}
+
+function readSourceIdFromOperations(mutation: ICkgMutationDto): string | null {
+  for (const operation of mutation.operations ?? []) {
+    const properties =
+      operation['type'] === 'add_node'
+        ? readRecord(operation['properties'])
+        : operation['type'] === 'update_node'
+          ? readRecord(readRecord(operation['updates'])?.['properties'])
+          : null;
+    const ontologyImport =
+      readRecord(properties?.['ontologyImport']) ??
+      readRecord(properties?.['ontologyImportEnrichment']);
+    if (typeof ontologyImport?.['sourceId'] === 'string' && ontologyImport['sourceId'] !== '') {
+      return ontologyImport['sourceId'];
+    }
+  }
+
+  return null;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }

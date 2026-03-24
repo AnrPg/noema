@@ -4,7 +4,8 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import type { Route } from 'next';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useCKGMutation } from '@noema/api-client';
 import type { ICkgMutationDto } from '@noema/api-client';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
@@ -12,14 +13,24 @@ import { ArrowLeft } from 'lucide-react';
 import { MutationGraphDiff } from '@/components/mutations/mutation-graph-diff';
 import { MutationAuditTrail } from '@/components/mutations/mutation-audit-trail';
 import { MutationActions } from '@/components/mutations/mutation-actions';
-import { getMutationWorkflowMeta, getMutationWorkflowState } from '@/lib/mutation-workflow';
+import {
+  getOntologyImportMutationContext,
+  getMutationWorkflowMeta,
+  getMutationWorkflowState,
+} from '@/lib/mutation-workflow';
 
 type MutationId = ICkgMutationDto['id'];
 
 export default function MutationDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const mutationId = params.id as MutationId;
   const { data: mutation, isLoading, error } = useCKGMutation(mutationId);
+  const importRunId = searchParams.get('importRunId');
+  const backHref: Route =
+    importRunId !== null
+      ? (`/dashboard/ckg/mutations?importRunId=${encodeURIComponent(importRunId)}` as Route)
+      : '/dashboard/ckg/mutations';
 
   if (isLoading) {
     return (
@@ -32,7 +43,7 @@ export default function MutationDetailPage(): React.JSX.Element {
   if (error !== null || mutation === undefined) {
     return (
       <div className="space-y-4">
-        <Link href="/dashboard/ckg/mutations">
+        <Link href={backHref}>
           <Button variant="ghost">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to mutations
@@ -45,10 +56,11 @@ export default function MutationDetailPage(): React.JSX.Element {
 
   const workflow = getMutationWorkflowMeta(mutation);
   const workflowState = getMutationWorkflowState(mutation);
+  const ontologyImportContext = getOntologyImportMutationContext(mutation);
 
   return (
     <div className="space-y-6">
-      <Link href="/dashboard/ckg/mutations">
+      <Link href={backHref}>
         <Button variant="ghost">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to mutations
@@ -78,6 +90,23 @@ export default function MutationDetailPage(): React.JSX.Element {
             <span className="text-muted-foreground">Workflow state</span>
             <span className="font-mono">{workflowState}</span>
           </div>
+          {ontologyImportContext.runId !== null && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ontology import run</span>
+              <Link
+                href={`/dashboard/ckg/imports/runs/${encodeURIComponent(ontologyImportContext.runId)}`}
+                className="font-mono text-primary underline-offset-2 hover:underline"
+              >
+                {ontologyImportContext.runId}
+              </Link>
+            </div>
+          )}
+          {ontologyImportContext.sourceId !== null && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ontology source</span>
+              <span className="font-mono">{ontologyImportContext.sourceId}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Proposed</span>
             <span>{new Date(mutation.proposedAt).toLocaleString()}</span>
