@@ -8,7 +8,7 @@ import { cn } from '../lib/utils.js';
 import { Card, CardContent } from '../primitives/card.js';
 import type { ColorFamily } from '../lib/types.js';
 
-// Static color lookups — never construct Tailwind class strings dynamically
+// Static color lookups - never construct Tailwind class strings dynamically
 const TEXT_COLOR: Record<ColorFamily, string> = {
   synapse: 'text-synapse-400',
   dendrite: 'text-dendrite-400',
@@ -79,9 +79,9 @@ function Sparkline({
 }
 
 const TREND_ICON: Record<ITrend['direction'], string> = {
-  up: '↑',
-  down: '↓',
-  flat: '→',
+  up: '^',
+  down: 'v',
+  flat: '>',
 };
 
 const TREND_COLOR: Record<ITrend['direction'], string> = {

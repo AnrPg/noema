@@ -5,8 +5,9 @@
   "compilerOptions": {
     "composite": true,
     "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
+    "declarationMap": false,
+    "sourceMap": false,
+    "removeComments": true,
     "outDir": "./dist",
     "rootDir": "./src"
   }

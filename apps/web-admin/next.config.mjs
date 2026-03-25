@@ -24,6 +24,9 @@ const nextConfig = {
   },
   webpack: (config, { dev }) => {
     if (dev) {
+      // Avoid eval-wrapped dev chunks on Windows; they can break when workspace
+      // package comments include Unicode characters.
+      config.devtool = 'source-map';
       config.watchOptions = {
         ...config.watchOptions,
         poll: config.watchOptions?.poll ?? 1000,

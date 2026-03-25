@@ -35,5 +35,5 @@ export type * from './knowledge-graph/types.js';
 // HLR Sidecar
 export * from './hlr/index.js';
 
-// React Query Hooks (user + scheduler — for backward compat)
+// React Query Hooks (user + scheduler - for backward compat)
 export * from './hooks/index.js';

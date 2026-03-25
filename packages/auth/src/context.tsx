@@ -101,7 +101,7 @@ export interface IAuthProviderProps {
 }
 
 export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps): JSX.Element {
-  // Individual selectors — each subscribes only to its own slice of state,
+  // Individual selectors - each subscribes only to its own slice of state,
   // preventing the entire component from re-rendering on every store update.
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -283,7 +283,7 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
     logout,
     refreshUser,
     hasRole,
-    isAdmin: hasValidSession && (user?.roles.includes('admin') ?? false),
+    isAdmin: hasValidSession && user.roles.includes('admin'),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

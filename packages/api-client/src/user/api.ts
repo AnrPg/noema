@@ -54,7 +54,7 @@ export const authApi = {
   logout: (): Promise<void> => http.post('/auth/logout'),
 
   /**
-   * Request a password reset email (public — no auth required).
+   * Request a password reset email (public - no auth required).
    * Anti-enumeration: the server responds with the same message whether
    * the email exists or not.
    */

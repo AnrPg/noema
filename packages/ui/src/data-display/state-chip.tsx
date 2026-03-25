@@ -7,7 +7,7 @@ import type { JSX, ReactNode } from 'react';
 import { cn } from '../lib/utils.js';
 import type { ColorFamily } from '../lib/types.js';
 
-// BG tint and ring color lookups — static for Tailwind JIT
+// BG tint and ring color lookups - static for Tailwind JIT
 const BG_TINT: Record<ColorFamily, string> = {
   synapse: 'bg-synapse-400/15 text-synapse-400',
   dendrite: 'bg-dendrite-400/15 text-dendrite-400',
@@ -40,7 +40,7 @@ export interface IStateChipProps {
   className?: string;
 }
 
-// ── Default state maps ────────────────────────────────────────────────────────
+// Default state maps
 
 export const SESSION_STATE_MAP: Record<string, IStateConfig> = {
   ACTIVE: { label: 'Active', color: 'synapse' },
@@ -79,7 +79,7 @@ export const MISCONCEPTION_STATUS_MAP: Record<string, IStateConfig> = {
   RESOLVED: { label: 'Resolved', color: 'neuron' },
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Component
 
 export function StateChip({
   state,
