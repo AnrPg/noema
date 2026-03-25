@@ -117,17 +117,15 @@ describe('ontology source parsers', () => {
     const manifestStorageKey = 'ontology-imports/esco/run_esco_001/manifest.json';
     await writeArtifactJson(artifactRootDirectory, payloadStorageKey, {
       _embedded: {
-        results: [
-          {
-            uri: 'http://data.europa.eu/esco/skill/python',
-            preferredLabel: { label: 'Python programming', language: 'en' },
-            altLabels: ['Python'],
-            exactMatch: ['https://www.wikidata.org/entity/Q28865'],
-            externalClassifications: ['https://id.loc.gov/authorities/subjects/sh85108448'],
-            className: 'skill',
-            description: { label: 'Programming with Python.' },
-          },
-        ],
+        'http://data.europa.eu/esco/skill/python': {
+          uri: 'http://data.europa.eu/esco/skill/python',
+          preferredLabel: { label: 'Python programming', language: 'en' },
+          altLabels: ['Python'],
+          exactMatch: ['https://www.wikidata.org/entity/Q28865'],
+          externalClassifications: ['https://id.loc.gov/authorities/subjects/sh85108448'],
+          className: 'skill',
+          description: { label: 'Programming with Python.' },
+        },
       },
     });
     await writeArtifactJson(artifactRootDirectory, manifestStorageKey, {
@@ -271,12 +269,10 @@ describe('ontology source parsers', () => {
     const storageKey = 'ontology-imports/esco/run_esco_002/skills/page-0.json';
     await writeArtifactJson(artifactRootDirectory, storageKey, {
       _embedded: {
-        results: [
-          {
-            uri: 'http://data.europa.eu/esco/skill/research',
-            preferredLabel: { label: 'Research', language: 'en' },
-          },
-        ],
+        'http://data.europa.eu/esco/skill/research': {
+          uri: 'http://data.europa.eu/esco/skill/research',
+          preferredLabel: { label: 'Research', language: 'en' },
+        },
       },
     });
 

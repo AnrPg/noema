@@ -61,7 +61,8 @@ interface IEscoManifest {
 
 const DEFAULT_ESCO_BASE_URL = 'https://ec.europa.eu/esco/api/';
 const DEFAULT_LANGUAGE = 'en';
-const DEFAULT_PAGE_SIZE = 200;
+// The live ESCO API starts returning 500s on larger page sizes.
+const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_SCHEMES: IEscoSchemeConfig[] = [
   {
     id: 'occupations',
@@ -171,7 +172,7 @@ export class EscoSourceFetcher implements ISourceFetcher {
 
       const body = await response.text();
       const payload = JSON.parse(body) as unknown;
-      const recordCount = countEmbeddedItems(payload);
+      const recordCount = countPayloadItems(payload);
       if (recordCount === 0) {
         break;
       }
@@ -226,7 +227,7 @@ export class EscoSourceFetcher implements ISourceFetcher {
     const url = new URL(trimLeadingSlash(scheme.endpointPath), this.baseUrl);
     url.searchParams.set('isInScheme', scheme.conceptSchemeUri);
     url.searchParams.set('language', language);
-    url.searchParams.set('offset', String(page));
+    url.searchParams.set('offset', String(page * this.pageSize));
     url.searchParams.set('limit', String(this.pageSize));
     url.searchParams.set('viewObsolete', String(this.includeObsolete));
 
@@ -261,26 +262,39 @@ export class EscoSourceFetcher implements ISourceFetcher {
   }
 }
 
-function countEmbeddedItems(payload: unknown): number {
-  if (
-    typeof payload !== 'object' ||
-    payload === null ||
-    !('_embedded' in payload) ||
-    typeof payload._embedded !== 'object' ||
-    payload._embedded === null
-  ) {
+function countPayloadItems(payload: unknown): number {
+  if (typeof payload !== 'object' || payload === null) {
     return 0;
   }
 
-  const embeddedEntries = Object.values(payload._embedded as Record<string, unknown>);
+  const record = payload as Record<string, unknown>;
 
-  return embeddedEntries.reduce<number>((count, value) => {
-    if (Array.isArray(value)) {
-      return count + value.length;
-    }
+  if (typeof record['count'] === 'number' && Number.isFinite(record['count'])) {
+    return record['count'];
+  }
 
-    return count;
-  }, 0);
+  if (Array.isArray(record['concepts'])) {
+    return record['concepts'].length;
+  }
+
+  if (typeof record['_embedded'] !== 'object' || record['_embedded'] === null) {
+    return 0;
+  }
+
+  return Object.values(record['_embedded'] as Record<string, unknown>).reduce<number>(
+    (count, value) => {
+      if (Array.isArray(value)) {
+        return count + value.length;
+      }
+
+      if (typeof value === 'object' && value !== null) {
+        return count + 1;
+      }
+
+      return count;
+    },
+    0
+  );
 }
 
 function readRunConfiguration(run: IOntologyImportRun): {

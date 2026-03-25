@@ -44,69 +44,57 @@ export class EscoSourceParser implements ISourceParser {
       };
       const requestUrl = manifestRequestUrls.get(artifact.storageKey) ?? null;
 
-      for (const entry of Object.values(payload._embedded ?? {})) {
-        if (!Array.isArray(entry)) {
+      for (const itemRecord of extractEmbeddedRecords(payload)) {
+        const externalId = readString(itemRecord, ['uri', '@id', 'id']);
+        if (externalId === null) {
           continue;
         }
 
-        for (const item of entry) {
-          if (typeof item !== 'object' || item === null) {
-            continue;
-          }
+        const altLabels = normalizeStringArray(
+          readUnknown(itemRecord, ['altLabels', 'alternativeLabel', 'altLabel'])
+        );
+        const preferredLabel =
+          readLabel(itemRecord, ['preferredLabel', 'title', 'name']) ?? externalId;
+        const description = readLabel(itemRecord, ['description']);
+        const languages = collectLanguages(itemRecord);
+        const conceptRecord = buildConceptRecord({
+          sourceId: this.sourceId,
+          run,
+          artifact,
+          requestUrl,
+          externalId,
+          iri: externalId,
+          preferredLabel,
+          altLabels,
+          description,
+          languages,
+          sourceTypes: collectSourceTypes(itemRecord),
+          properties: itemRecord,
+          nodeKind: 'concept',
+        });
 
-          const itemRecord = item as Record<string, unknown>;
-
-          const externalId = readString(itemRecord, ['uri', '@id', 'id']);
-          if (externalId === null) {
-            continue;
-          }
-
-          const altLabels = normalizeStringArray(
-            readUnknown(itemRecord, ['altLabels', 'alternativeLabel', 'altLabel'])
-          );
-          const preferredLabel =
-            readLabel(itemRecord, ['preferredLabel', 'title', 'name']) ?? externalId;
-          const description = readLabel(itemRecord, ['description']);
-          const languages = collectLanguages(itemRecord);
-          const conceptRecord = buildConceptRecord({
+        records.push(conceptRecord);
+        records.push(
+          ...buildAliasRecords({
             sourceId: this.sourceId,
             run,
             artifact,
             requestUrl,
+            conceptExternalId: externalId,
+            aliases: altLabels,
+            language: languages[0] ?? null,
+            aliasType: 'alt_label',
+          })
+        );
+        records.push(
+          ...buildMappingRecords({
+            run,
+            artifact,
             externalId,
-            iri: externalId,
-            preferredLabel,
-            altLabels,
-            description,
-            languages,
-            sourceTypes: collectSourceTypes(itemRecord),
-            properties: itemRecord,
-            nodeKind: 'concept',
-          });
-
-          records.push(conceptRecord);
-          records.push(
-            ...buildAliasRecords({
-              sourceId: this.sourceId,
-              run,
-              artifact,
-              requestUrl,
-              conceptExternalId: externalId,
-              aliases: altLabels,
-              language: languages[0] ?? null,
-              aliasType: 'alt_label',
-            })
-          );
-          records.push(
-            ...buildMappingRecords({
-              run,
-              artifact,
-              externalId,
-              itemRecord,
-              requestUrl,
-            })
-          );
-        }
+            itemRecord,
+            requestUrl,
+          })
+        );
       }
     }
 
@@ -118,6 +106,26 @@ export class EscoSourceParser implements ISourceParser {
       records,
     };
   }
+}
+
+function extractEmbeddedRecords(payload: {
+  _embedded?: Record<string, unknown>;
+}): Record<string, unknown>[] {
+  const embedded = payload._embedded ?? {};
+
+  return Object.values(embedded).flatMap((entry) => {
+    if (Array.isArray(entry)) {
+      return entry.flatMap((item) =>
+        typeof item === 'object' && item !== null ? [item as Record<string, unknown>] : []
+      );
+    }
+
+    if (typeof entry === 'object' && entry !== null) {
+      return [entry as Record<string, unknown>];
+    }
+
+    return [];
+  });
 }
 
 async function loadManifestRequestUrls(

@@ -372,11 +372,8 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
         completedAt: null,
       });
     } catch (error) {
-      const failureReason =
-        error instanceof Error ? error.message : 'Unknown ontology source fetch failure.';
-
       if ((await this.runRepository.getById(queuedRun.id))?.status !== 'failed') {
-        await this.failRun(queuedRun.id, 'fetch', startedAt, failureReason);
+        await this.failRun(queuedRun.id, 'fetch', startedAt, error);
       }
 
       throw error;
@@ -577,7 +574,11 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
   ): Promise<void> {
     const completedAt = new Date().toISOString();
     const failureReason =
-      error instanceof Error ? error.message : 'Unknown ontology import pipeline failure.';
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string' && error.trim() !== ''
+          ? error
+          : 'Unknown ontology import pipeline failure.';
 
     await this.checkpointRepository.create({
       runId,

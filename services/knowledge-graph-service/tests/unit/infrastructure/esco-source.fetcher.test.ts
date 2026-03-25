@@ -115,10 +115,14 @@ describe('EscoSourceFetcher', () => {
         new Response(
           JSON.stringify({
             _embedded: {
-              results: Array.from({ length: count }, (_, index) => ({
-                uri: `${scheme ?? 'unknown'}#${String(offset)}-${String(index)}`,
-              })),
+              ...Object.fromEntries(
+                Array.from({ length: count }, (_, index) => {
+                  const uri = `${scheme ?? 'unknown'}#${String(offset)}-${String(index)}`;
+                  return [uri, { uri }];
+                })
+              ),
             },
+            count,
           }),
           {
             status: 200,
@@ -141,6 +145,9 @@ describe('EscoSourceFetcher', () => {
 
     expect(calls).toContain(
       'https://ec.europa.eu/esco/api/resource/occupation?isInScheme=http%3A%2F%2Fdata.europa.eu%2Fesco%2Fconcept-scheme%2Foccupations&language=en&offset=0&limit=2&viewObsolete=false&selectedVersion=v1.2.0'
+    );
+    expect(calls).toContain(
+      'https://ec.europa.eu/esco/api/resource/occupation?isInScheme=http%3A%2F%2Fdata.europa.eu%2Fesco%2Fconcept-scheme%2Foccupations&language=en&offset=2&limit=2&viewObsolete=false&selectedVersion=v1.2.0'
     );
     expect(calls).toContain(
       'https://ec.europa.eu/esco/api/resource/skill?isInScheme=http%3A%2F%2Fdata.europa.eu%2Fesco%2Fconcept-scheme%2Fskills&language=en&offset=0&limit=2&viewObsolete=false&selectedVersion=v1.2.0'
@@ -169,9 +176,9 @@ describe('EscoSourceFetcher', () => {
     );
 
     const occupationsPage = JSON.parse(await readFile(occupationsPagePath, 'utf8')) as {
-      _embedded: { results: { uri: string }[] };
+      _embedded: Record<string, { uri: string }>;
     };
-    expect(occupationsPage._embedded.results).toHaveLength(2);
+    expect(Object.keys(occupationsPage._embedded)).toHaveLength(2);
 
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
       sourceId: string;
@@ -198,7 +205,7 @@ describe('EscoSourceFetcher', () => {
 
 function resolveRecordCount(scheme: string | null, offset: number): number {
   if (scheme === 'http://data.europa.eu/esco/concept-scheme/occupations') {
-    return offset === 0 ? 2 : offset === 1 ? 1 : 0;
+    return offset === 0 ? 2 : offset === 2 ? 1 : 0;
   }
 
   if (scheme === 'http://data.europa.eu/esco/concept-scheme/skills') {
