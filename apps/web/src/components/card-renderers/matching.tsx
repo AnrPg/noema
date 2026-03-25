@@ -107,6 +107,7 @@ export default function MatchingRenderer(
               </span>
               <span className="text-muted-foreground">→</span>
               <select
+                name={`matching.${pair.left}`}
                 value={selectedIndex !== undefined ? String(selectedIndex) : ''}
                 disabled={submitted}
                 onChange={(e) => {

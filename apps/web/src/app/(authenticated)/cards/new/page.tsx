@@ -660,6 +660,7 @@ function AtomicForm({ form, onChange }: IFormProps): React.JSX.Element {
     <div className="flex flex-col gap-4">
       <FieldGroup label="Front (question / prompt)" required>
         <textarea
+          name="atomicFront"
           value={form.atomicFront}
           onChange={(e) => {
             onChange({ atomicFront: e.target.value });
@@ -671,6 +672,7 @@ function AtomicForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Back (answer)" required>
         <textarea
+          name="atomicBack"
           value={form.atomicBack}
           onChange={(e) => {
             onChange({ atomicBack: e.target.value });
@@ -682,6 +684,7 @@ function AtomicForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Hint (optional)">
         <input
+          name="atomicHint"
           type="text"
           value={form.atomicHint}
           onChange={(e) => {
@@ -700,6 +703,7 @@ function DefinitionForm({ form, onChange }: IFormProps): React.JSX.Element {
     <div className="flex flex-col gap-4">
       <FieldGroup label="Term" required>
         <input
+          name="defTerm"
           type="text"
           value={form.defTerm}
           onChange={(e) => {
@@ -711,6 +715,7 @@ function DefinitionForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Definition" required>
         <textarea
+          name="defDefinition"
           value={form.defDefinition}
           onChange={(e) => {
             onChange({ defDefinition: e.target.value });
@@ -722,6 +727,7 @@ function DefinitionForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Part of speech (optional)">
         <input
+          name="defPartOfSpeech"
           type="text"
           value={form.defPartOfSpeech}
           onChange={(e) => {
@@ -733,6 +739,7 @@ function DefinitionForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Examples (one per line, optional)">
         <textarea
+          name="defExamples"
           value={form.defExamples}
           onChange={(e) => {
             onChange({ defExamples: e.target.value });
@@ -751,6 +758,7 @@ function TrueFalseForm({ form, onChange }: IFormProps): React.JSX.Element {
     <div className="flex flex-col gap-4">
       <FieldGroup label="Statement" required>
         <textarea
+          name="tfStatement"
           value={form.tfStatement}
           onChange={(e) => {
             onChange({ tfStatement: e.target.value });
@@ -763,6 +771,7 @@ function TrueFalseForm({ form, onChange }: IFormProps): React.JSX.Element {
       <FieldGroup label="Correct answer">
         <label className="flex items-center gap-3 cursor-pointer">
           <input
+            name="tfIsTrue"
             type="checkbox"
             checked={form.tfIsTrue}
             onChange={(e) => {
@@ -777,6 +786,7 @@ function TrueFalseForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Explanation (optional)">
         <textarea
+          name="tfExplanation"
           value={form.tfExplanation}
           onChange={(e) => {
             onChange({ tfExplanation: e.target.value });
@@ -795,6 +805,7 @@ function MultipleChoiceForm({ form, onChange }: IFormProps): React.JSX.Element {
     <div className="flex flex-col gap-4">
       <FieldGroup label="Question" required>
         <textarea
+          name="mcQuestion"
           value={form.mcQuestion}
           onChange={(e) => {
             onChange({ mcQuestion: e.target.value });
@@ -810,6 +821,7 @@ function MultipleChoiceForm({ form, onChange }: IFormProps): React.JSX.Element {
         hint="Example: *Paris (correct), London, Berlin"
       >
         <textarea
+          name="mcChoices"
           value={form.mcChoices}
           onChange={(e) => {
             onChange({ mcChoices: e.target.value });
@@ -821,6 +833,7 @@ function MultipleChoiceForm({ form, onChange }: IFormProps): React.JSX.Element {
       </FieldGroup>
       <FieldGroup label="Explanation (optional)">
         <textarea
+          name="mcExplanation"
           value={form.mcExplanation}
           onChange={(e) => {
             onChange({ mcExplanation: e.target.value });
@@ -857,6 +870,7 @@ function ComplexJsonForm({
         </span>
       </div>
       <textarea
+        name="complexJsonContent"
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
@@ -995,6 +1009,7 @@ function Step3Settings({
       {/* Tags */}
       <FieldGroup label="Tags (comma-separated, optional)">
         <input
+          name="tags"
           type="text"
           value={settings.tags}
           onChange={(e) => {
@@ -1012,6 +1027,7 @@ function Step3Settings({
       >
         <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/20 p-3">
           <input
+            name="knowledgeNodeSearch"
             type="text"
             value={nodeSearch}
             onChange={(e) => {
@@ -1058,6 +1074,7 @@ function Step3Settings({
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
                       <FieldGroup label="New node label" required>
                         <input
+                          name="newNodeLabel"
                           type="text"
                           value={trimmedNodeSearch}
                           readOnly
@@ -1066,6 +1083,7 @@ function Step3Settings({
                       </FieldGroup>
                       <FieldGroup label="Node type">
                         <select
+                          name="newNodeType"
                           value={newNodeType}
                           onChange={(e) => {
                             setNewNodeType(e.target.value as NodeType);
@@ -1086,6 +1104,7 @@ function Step3Settings({
                       hint="Useful when the label is short or ambiguous."
                     >
                       <textarea
+                        name="newNodeDescription"
                         value={newNodeDescription}
                         onChange={(e) => {
                           setNewNodeDescription(e.target.value);
@@ -1202,6 +1221,7 @@ function Step3Settings({
             {manualEntryOpen && (
               <div className="mt-2 flex flex-col gap-1.5">
                 <input
+                  name="knowledgeNodeIds"
                   type="text"
                   value={settings.knowledgeNodeIds}
                   onChange={(e) => {
@@ -1225,6 +1245,7 @@ function Step3Settings({
         hint="Leave blank to let the system determine difficulty"
       >
         <input
+          name="difficulty"
           type="number"
           min={0}
           max={1}
@@ -1241,6 +1262,7 @@ function Step3Settings({
       {/* State */}
       <FieldGroup label="Initial state">
         <select
+          name="state"
           value={settings.state}
           onChange={(e) => {
             onChange({ state: e.target.value as 'ACTIVE' | 'DRAFT' });
@@ -1256,6 +1278,7 @@ function Step3Settings({
       <div className="rounded-lg border border-border p-4">
         <label className="flex items-start gap-3 cursor-pointer">
           <input
+            name="batchMode"
             type="checkbox"
             checked={settings.batchMode}
             onChange={(e) => {
@@ -1277,6 +1300,7 @@ function Step3Settings({
               Batch content (JSON array of content objects)
             </label>
             <textarea
+              name="batchJson"
               value={settings.batchJson}
               onChange={(e) => {
                 onChange({ batchJson: e.target.value });

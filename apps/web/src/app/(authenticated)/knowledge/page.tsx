@@ -592,6 +592,7 @@ export default function KnowledgePage(): React.JSX.Element {
           >
             <Field label="Label">
               <input
+                name="createNodeLabel"
                 type="text"
                 value={createNodeForm.label}
                 onChange={(e) => {
@@ -603,6 +604,7 @@ export default function KnowledgePage(): React.JSX.Element {
             </Field>
             <Field label="Type">
               <select
+                name="createNodeType"
                 value={createNodeForm.type}
                 onChange={(e) => {
                   setCreateNodeForm((prev) => ({ ...prev, type: e.target.value as NodeType }));
@@ -618,6 +620,7 @@ export default function KnowledgePage(): React.JSX.Element {
             </Field>
             <Field label="Description">
               <textarea
+                name="createNodeDescription"
                 value={createNodeForm.description}
                 onChange={(e) => {
                   setCreateNodeForm((prev) => ({ ...prev, description: e.target.value }));
@@ -629,6 +632,7 @@ export default function KnowledgePage(): React.JSX.Element {
             </Field>
             <Field label="Tags" hint="Comma-separated tags such as domain, chapter, or theme">
               <input
+                name="createNodeTags"
                 type="text"
                 value={createNodeForm.tags}
                 onChange={(e) => {
@@ -863,6 +867,7 @@ export default function KnowledgePage(): React.JSX.Element {
         >
           <Field label="Label">
             <input
+              name="guidedCreateNodeLabel"
               type="text"
               value={createNodeForm.label}
               onChange={(e) => {
@@ -874,6 +879,7 @@ export default function KnowledgePage(): React.JSX.Element {
           </Field>
           <Field label="Type">
             <select
+              name="guidedCreateNodeType"
               value={createNodeForm.type}
               onChange={(e) => {
                 setCreateNodeForm((prev) => ({ ...prev, type: e.target.value as NodeType }));
@@ -889,6 +895,7 @@ export default function KnowledgePage(): React.JSX.Element {
           </Field>
           <Field label="Description">
             <textarea
+              name="guidedCreateNodeDescription"
               value={createNodeForm.description}
               onChange={(e) => {
                 setCreateNodeForm((prev) => ({ ...prev, description: e.target.value }));
@@ -900,6 +907,7 @@ export default function KnowledgePage(): React.JSX.Element {
           </Field>
           <Field label="Tags">
             <input
+              name="guidedCreateNodeTags"
               type="text"
               value={createNodeForm.tags}
               onChange={(e) => {
@@ -938,6 +946,7 @@ export default function KnowledgePage(): React.JSX.Element {
             <>
               <Field label="Label">
                 <input
+                  name="editNodeLabel"
                   type="text"
                   value={editNodeForm.label}
                   onChange={(e) => {
@@ -950,10 +959,11 @@ export default function KnowledgePage(): React.JSX.Element {
                 label="Type"
                 hint="Node type is set at creation time and shown here for review."
               >
-                <input type="text" value={selectedNode.type} readOnly className={inputClass} />
+                <input type="text" name="editNodeType" value={selectedNode.type} readOnly className={inputClass} />
               </Field>
               <Field label="Description">
                 <textarea
+                  name="editNodeDescription"
                   value={editNodeForm.description}
                   onChange={(e) => {
                     setEditNodeForm((prev) => ({ ...prev, description: e.target.value }));
@@ -964,6 +974,7 @@ export default function KnowledgePage(): React.JSX.Element {
               </Field>
               <Field label="Tags">
                 <input
+                  name="editNodeTags"
                   type="text"
                   value={editNodeForm.tags}
                   onChange={(e) => {
@@ -1004,6 +1015,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 <div className="flex flex-col gap-3">
                   <Field label="Target node">
                     <select
+                      name="edgeTargetId"
                       value={edgeForm.targetId}
                       onChange={(e) => {
                         setEdgeForm((prev) => ({ ...prev, targetId: e.target.value }));
@@ -1021,6 +1033,7 @@ export default function KnowledgePage(): React.JSX.Element {
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Edge type">
                       <select
+                        name="edgeType"
                         value={edgeForm.type}
                         onChange={(e) => {
                           setEdgeForm((prev) => ({ ...prev, type: e.target.value as EdgeType }));
@@ -1036,6 +1049,7 @@ export default function KnowledgePage(): React.JSX.Element {
                     </Field>
                     <Field label="Weight">
                       <input
+                        name="edgeWeight"
                         type="number"
                         min={0.1}
                         step={0.1}

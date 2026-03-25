@@ -73,6 +73,7 @@ export default function OverwriteDrillRenderer(props: ICardRendererProps): React
           </div>
 
           <textarea
+            name={`overwriteDrillResponse.${String(promptIndex)}`}
             value={recall}
             onChange={(e) => {
               if (!submitted) setRecall(e.target.value);

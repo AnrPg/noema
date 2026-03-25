@@ -329,6 +329,7 @@ export function MediaUploader({
           </div>
 
           <input
+            name="mediaUpload"
             ref={fileInputRef}
             type="file"
             accept={acceptedTypes}

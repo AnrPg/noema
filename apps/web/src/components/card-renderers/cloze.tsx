@@ -90,6 +90,7 @@ export default function ClozeRenderer(props: ICardRendererProps<string[]>): Reac
             {seg}
             {i < segments.length - 1 && (
               <input
+                name={`clozeBlank.${String(i)}`}
                 type="text"
                 value={userAnswers[i] ?? ''}
                 onChange={(e) => {

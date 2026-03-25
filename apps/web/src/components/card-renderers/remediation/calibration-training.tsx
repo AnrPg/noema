@@ -57,6 +57,7 @@ export default function CalibrationTrainingRenderer(props: ICardRendererProps): 
       {!props.isRevealed && (
         <div className="space-y-2">
           <textarea
+            name="confidenceEstimate"
             value={estimate}
             onChange={(e) => {
               if (!submitted) setEstimate(e.target.value);

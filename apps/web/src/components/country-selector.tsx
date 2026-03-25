@@ -181,6 +181,7 @@ export function CountrySelector({
           <div className="flex items-center border-b border-border px-3">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
+              name="countryQuery"
               ref={inputRef}
               type="text"
               value={query}

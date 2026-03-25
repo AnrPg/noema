@@ -228,6 +228,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />
             <input
+              name="commandPaletteQuery"
               ref={inputRef}
               value={query}
               onChange={(e) => {

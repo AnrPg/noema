@@ -131,6 +131,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
           <div className="space-y-3">
             <p className="text-sm font-medium">Rejection reason (required):</p>
             <textarea
+              name="rejectNote"
               className="w-full rounded-md border bg-transparent px-3 py-2 text-sm min-h-20 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               placeholder="Explain why this mutation is being rejected..."
               value={rejectNote}
@@ -180,6 +181,7 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
           <div className="space-y-3">
             <p className="text-sm font-medium">Feedback for submitter:</p>
             <textarea
+              name="revisionFeedback"
               className="w-full rounded-md border bg-transparent px-3 py-2 text-sm min-h-20 focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               placeholder="What needs to be revised?"
               value={revisionFeedback}

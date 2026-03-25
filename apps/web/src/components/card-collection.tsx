@@ -154,6 +154,7 @@ function GridCardTile({
       {/* Checkbox */}
       <label className="absolute right-3 top-3 z-10 flex cursor-pointer items-center">
         <input
+          name={`selectedCards.${card.id}`}
           type="checkbox"
           checked={isSelected}
           onChange={handleCheckboxChange}
@@ -264,6 +265,7 @@ function ListCardRow({
       {/* Checkbox */}
       <label className="flex cursor-pointer items-center shrink-0">
         <input
+          name={`selectedCards.${card.id}`}
           type="checkbox"
           checked={isSelected}
           onChange={handleCheckboxChange}
@@ -574,6 +576,7 @@ export function CardCollection({
       <div className="flex items-center gap-3 px-1">
         <label className="flex cursor-pointer items-center gap-2">
           <input
+            name="selectAllCards"
             ref={headerCheckboxRef}
             type="checkbox"
             checked={allSelected}

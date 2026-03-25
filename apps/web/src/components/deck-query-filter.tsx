@@ -224,6 +224,7 @@ export function DeckQueryFilter({
       {/* ------------------------------------------------------------------ */}
       <FilterSection title="Search">
         <input
+          name="search"
           type="search"
           aria-label="Search cards"
           placeholder="Full-text search…"
@@ -250,6 +251,7 @@ export function DeckQueryFilter({
                 className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-muted/50"
               >
                 <input
+                  name={`cardTypes.${type}`}
                   type="checkbox"
                   checked={checked}
                   onChange={() => {
@@ -277,6 +279,7 @@ export function DeckQueryFilter({
                 className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 hover:bg-muted/50"
               >
                 <input
+                  name={`states.${state}`}
                   type="checkbox"
                   checked={checked}
                   onChange={() => {
@@ -296,6 +299,7 @@ export function DeckQueryFilter({
       {/* ------------------------------------------------------------------ */}
       <FilterSection title="Tags">
         <input
+          name="tags"
           type="text"
           aria-label="Filter by tags (comma-separated)"
           placeholder="tag1, tag2, tag3"
@@ -313,6 +317,7 @@ export function DeckQueryFilter({
       {/* ------------------------------------------------------------------ */}
       <FilterSection title="Source">
         <input
+          name="source"
           type="text"
           aria-label="Filter by source"
           placeholder="e.g. import, manual, ai-generated"
@@ -332,6 +337,7 @@ export function DeckQueryFilter({
       <FilterSection title="Difficulty">
         <div className="flex items-center gap-2">
           <input
+            name="difficultyMin"
             type="number"
             aria-label="Minimum difficulty (0 to 1)"
             min={0}
@@ -346,6 +352,7 @@ export function DeckQueryFilter({
           />
           <span className="shrink-0 text-muted-foreground">–</span>
           <input
+            name="difficultyMax"
             type="number"
             aria-label="Maximum difficulty (0 to 1)"
             min={0}
@@ -368,6 +375,7 @@ export function DeckQueryFilter({
       <FilterSection title="Sort">
         <div className="flex flex-col gap-2">
           <select
+            name="sortBy"
             value={query.sortBy ?? ''}
             onChange={(e) => {
               handleSortByChange(e.target.value);
@@ -383,6 +391,7 @@ export function DeckQueryFilter({
           </select>
 
           <select
+            name="sortOrder"
             value={query.sortOrder ?? query.sortDir ?? ''}
             onChange={(e) => {
               handleSortDirChange(e.target.value);

@@ -69,6 +69,7 @@ function MutationRow({
     <div className="border-b py-3 last:border-0">
       <div className="flex items-center gap-4">
         <input
+          name={`selectedMutationIds.${String(mutation.id)}`}
           type="checkbox"
           className="h-4 w-4 rounded border border-input bg-background"
           checked={checked}
@@ -426,6 +427,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
             </div>
             <div className="flex flex-wrap gap-2">
               <select
+                name="stateFilter"
                 value={stateFilter}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   setStateFilter(e.target.value as MutationWorkflowState);
@@ -439,6 +441,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
                 ))}
               </select>
               <select
+                name="confidenceFilter"
                 value={confidenceFilter}
                 onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
                   setConfidenceFilter(event.target.value as 'all' | 'high' | 'medium' | 'low');
@@ -451,6 +454,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
                 <option value="low">Low confidence</option>
               </select>
               <select
+                name="conflictFilter"
                 value={conflictFilter}
                 onChange={(event: React.ChangeEvent<HTMLSelectElement>) => {
                   setConflictFilter(event.target.value as 'all' | 'conflicted' | 'clean');

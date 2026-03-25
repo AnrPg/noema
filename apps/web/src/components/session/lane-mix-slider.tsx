@@ -77,6 +77,7 @@ export function LaneMixSlider({
 
       {/* Range slider */}
       <input
+        name="retentionMix"
         type="range"
         min={0}
         max={100}

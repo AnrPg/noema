@@ -389,6 +389,7 @@ export default function RegisterPage(): React.JSX.Element {
                                   className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm"
                                 >
                                   <input
+                                    name={`languages.${lang.value}`}
                                     type="checkbox"
                                     checked={isChecked}
                                     onChange={(event) => {
@@ -429,6 +430,7 @@ export default function RegisterPage(): React.JSX.Element {
                         <div className="space-y-3">
                           <TimezoneMap value={field.value ?? ''} onChange={field.onChange} />
                           <select
+                            name="timezone"
                             value={field.value ?? ''}
                             onChange={(e) => {
                               field.onChange(e.target.value);

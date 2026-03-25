@@ -339,6 +339,7 @@ export default function CardDetailPage(): React.JSX.Element {
           </CardHeader>
           <CardContent>
             <textarea
+              name="editContentJson"
               aria-label="Card content JSON"
               value={editContentJson}
               onChange={(e) => {

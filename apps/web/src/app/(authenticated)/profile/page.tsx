@@ -240,6 +240,7 @@ export default function ProfilePage(): React.JSX.Element {
                   description="A short description about yourself (max 500 characters)"
                 >
                   <textarea
+                    id="profile-bio"
                     className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                     placeholder="Tell us about yourself"
                     {...register('bio')}
@@ -262,6 +263,7 @@ export default function ProfilePage(): React.JSX.Element {
                                 className="flex items-center gap-2 rounded-md border border-input px-3 py-2 text-sm"
                               >
                                 <input
+                                  name={`languages.${lang.value}`}
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={(event) => {
@@ -287,6 +289,7 @@ export default function ProfilePage(): React.JSX.Element {
 
                 <FormField label="Timezone" error={errors.timezone?.message}>
                   <select
+                    id="profile-timezone"
                     {...register('timezone')}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >

@@ -92,6 +92,7 @@ export default function RetrievalCueRenderer(props: ICardRendererProps): React.J
             Your Recall
           </p>
           <textarea
+            name="retrievalCueRecall"
             value={recall}
             onChange={(e) => {
               if (!submitted) setRecall(e.target.value);

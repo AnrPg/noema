@@ -188,6 +188,7 @@ function StudyPreferencesSection(): React.JSX.Element {
                 </div>
               </div>
               <input
+                name="dailyGoal"
                 type="range"
                 min={1}
                 max={100}

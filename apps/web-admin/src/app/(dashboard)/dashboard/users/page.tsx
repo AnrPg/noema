@@ -336,6 +336,7 @@ export default function UsersPage(): React.JSX.Element {
               />
             </div>
             <select
+              name="statusFilter"
               value={statusFilter}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                 setStatusFilter(e.target.value as UserStatus | '');
@@ -350,6 +351,7 @@ export default function UsersPage(): React.JSX.Element {
               <option value="DEACTIVATED">DEACTIVATED</option>
             </select>
             <select
+              name="roleFilter"
               value={roleFilter}
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                 setRoleFilter(e.target.value as UserRole | '');
