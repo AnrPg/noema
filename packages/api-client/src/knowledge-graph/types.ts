@@ -144,6 +144,25 @@ export interface ISubgraphDto {
   edges: IGraphEdgeDto[];
 }
 
+export type ComparisonScopeMode = 'domain' | 'engagement_hops';
+
+export interface IComparisonScopeDto {
+  mode: ComparisonScopeMode;
+  hopCount: number;
+  requestedDomain: string | null;
+  bootstrapApplied: boolean;
+  seedNodeCount: number;
+  scopedCkgNodeCount: number;
+  totalCkgNodeCount: number;
+}
+
+export interface IComparisonQueryParams {
+  domain?: string;
+  scopeMode?: ComparisonScopeMode;
+  hopCount?: number;
+  bootstrapWhenUnseeded?: boolean;
+}
+
 export interface ISubgraphParams {
   rootNodeId: NodeId;
   depth?: number;
@@ -630,6 +649,10 @@ export interface IPkgCkgComparisonDto {
   missingFromPkg: IGraphNodeDto[];
   extraInPkg: IGraphNodeDto[];
   alignmentScore: number;
+  edgeAlignmentScore: number;
+  pkgSubgraph: ISubgraphDto;
+  ckgSubgraph: ISubgraphDto;
+  scope: IComparisonScopeDto;
 }
 
 // ============================================================================

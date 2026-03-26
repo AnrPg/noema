@@ -35,6 +35,7 @@ import type {
   ICkgMutationDto,
   ICkgMutationFilters,
   ICommonAncestorsInput,
+  IComparisonQueryParams,
   ICreateOntologyImportRunInput,
   IRegisterOntologyImportSourceInput,
   ICreateEdgeInput,
@@ -126,13 +127,17 @@ function stringIfPresent(value: unknown): string | null {
 }
 
 function stringArrayValue(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 }
 
 function parseJsonRecord(value: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
@@ -217,7 +222,10 @@ function extractLocalizedText(value: unknown): string | null {
       return null;
     }
 
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
       const parsed = parseJsonRecord(trimmed);
       if (parsed !== null) {
         return extractLocalizedText(parsed);
@@ -291,7 +299,10 @@ function normalizeGraphLabel(rawLabel: string, metadata: Record<string, unknown>
     }
   }
 
-  const uriSuffix = rawLabel.split('/').filter((segment) => segment !== '').at(-1);
+  const uriSuffix = rawLabel
+    .split('/')
+    .filter((segment) => segment !== '')
+    .at(-1);
   return uriSuffix ?? rawLabel;
 }
 
@@ -333,10 +344,20 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
     type: inferNormalizedGraphNodeType(entry, metadata),
     label: normalizeGraphLabel(rawLabel, metadata),
     description: normalizeGraphDescription(entry, metadata),
-    tags: stringArrayValue(entry['tags']).length > 0 ? stringArrayValue(entry['tags']) : domain !== '' ? [domain] : [],
+    tags:
+      stringArrayValue(entry['tags']).length > 0
+        ? stringArrayValue(entry['tags'])
+        : domain !== ''
+          ? [domain]
+          : [],
     metadata,
     createdAt: pickIsoDate(entry['createdAt'], metadata['createdAt']),
-    updatedAt: pickIsoDate(entry['updatedAt'], entry['createdAt'], metadata['updatedAt'], metadata['createdAt']),
+    updatedAt: pickIsoDate(
+      entry['updatedAt'],
+      entry['createdAt'],
+      metadata['updatedAt'],
+      metadata['createdAt']
+    ),
   };
 }
 
@@ -345,7 +366,10 @@ function normalizeGraphEdgeEntry(entry: Record<string, unknown>): IGraphEdgeDto 
     id: stringValue(entry['id'], stringValue(entry['edgeId'])) as EdgeId,
     sourceId: stringValue(entry['sourceId'], stringValue(entry['sourceNodeId'])) as NodeId,
     targetId: stringValue(entry['targetId'], stringValue(entry['targetNodeId'])) as NodeId,
-    type: stringValue(entry['type'], stringValue(entry['edgeType'], 'related')) as IGraphEdgeDto['type'],
+    type: stringValue(
+      entry['type'],
+      stringValue(entry['edgeType'], 'related')
+    ) as IGraphEdgeDto['type'],
     weight: numberValue(entry['weight'], 1),
     metadata: recordValue(entry['metadata'] ?? entry['properties']),
     createdAt: pickIsoDate(entry['createdAt']),
@@ -358,7 +382,6 @@ function normalizeNodeResponse(response: NodeResponse): NodeResponse {
     data: normalizeGraphNodeEntry(recordValue(response.data)),
   };
 }
-
 
 function titleCaseWords(input: string): string {
   return input
@@ -707,7 +730,8 @@ export const kgKeys = {
   health: (userId: UserId) => [...kgKeys.all, 'health', userId] as const,
   healthStage: (userId: UserId) => [...kgKeys.health(userId), 'stage'] as const,
   misconceptions: (userId: UserId) => [...kgKeys.all, 'misconceptions', userId] as const,
-  comparison: (userId: UserId) => [...kgKeys.all, 'comparison', userId] as const,
+  comparison: (userId: UserId, params?: IComparisonQueryParams) =>
+    [...kgKeys.all, 'comparison', userId, params] as const,
 };
 
 // ============================================================================
@@ -1155,11 +1179,7 @@ export function useRecoverRejectMutation(
 }
 
 export function useCheckMutationSafeRetry(
-  options?: UseMutationOptions<
-    CkgMutationRecoveryCheckResponse,
-    Error,
-    { id: MutationId }
-  >
+  options?: UseMutationOptions<CkgMutationRecoveryCheckResponse, Error, { id: MutationId }>
 ) {
   return useMutation({
     mutationFn: ({ id }) => ckgMutationsApi.checkSafeRetry(id),
@@ -1168,11 +1188,7 @@ export function useCheckMutationSafeRetry(
 }
 
 export function useCheckMutationReconcile(
-  options?: UseMutationOptions<
-    CkgMutationRecoveryCheckResponse,
-    Error,
-    { id: MutationId }
-  >
+  options?: UseMutationOptions<CkgMutationRecoveryCheckResponse, Error, { id: MutationId }>
 ) {
   return useMutation({
     mutationFn: ({ id }) => ckgMutationsApi.checkReconcile(id),
@@ -1581,14 +1597,15 @@ export function useUpdateMisconceptionStatus(
 
 export function usePKGCKGComparison(
   userId: UserId,
+  params?: IComparisonQueryParams,
   options?: Omit<
     UseQueryOptions<ComparisonResponse, Error, IPkgCkgComparisonDto>,
     'queryKey' | 'queryFn'
   >
 ) {
   return useQuery({
-    queryKey: kgKeys.comparison(userId),
-    queryFn: () => comparisonApi.compare(userId),
+    queryKey: kgKeys.comparison(userId, params),
+    queryFn: () => comparisonApi.compare(userId, params),
     select: (r) => r.data,
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,

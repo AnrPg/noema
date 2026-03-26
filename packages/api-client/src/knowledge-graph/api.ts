@@ -21,6 +21,7 @@ import type {
   CkgMutationsResponse,
   ICommonAncestorsInput,
   ComparisonResponse,
+  IComparisonQueryParams,
   ICreateEdgeInput,
   ICreateOntologyImportRunInput,
   ICreateNodeInput,
@@ -365,6 +366,15 @@ export const misconceptionsApi = {
 // ============================================================================
 
 export const comparisonApi = {
-  compare: (userId: UserId): Promise<ComparisonResponse> =>
-    http.get(`/api/v1/users/${userId}/comparison`, { params: { domain: DEFAULT_DOMAIN } }),
+  compare: (userId: UserId, params?: IComparisonQueryParams): Promise<ComparisonResponse> =>
+    http.get(`/api/v1/users/${userId}/comparison`, {
+      params: {
+        ...(params?.domain !== undefined ? { domain: params.domain } : {}),
+        ...(params?.scopeMode !== undefined ? { scopeMode: params.scopeMode } : {}),
+        ...(params?.hopCount !== undefined ? { hopCount: params.hopCount } : {}),
+        ...(params?.bootstrapWhenUnseeded !== undefined
+          ? { bootstrapWhenUnseeded: params.bootstrapWhenUnseeded }
+          : {}),
+      },
+    }),
 };
