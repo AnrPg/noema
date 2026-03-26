@@ -339,7 +339,10 @@ export class MetricsOrchestrator {
 
         // Compute per-detection severity
         const clampedConfidence = ConfidenceScoreFactory.clamp(result.confidence);
-        const severityScore = computeSeverityScore(clampedConfidence as number, result.affectedNodeIds.length);
+        const severityScore = computeSeverityScore(
+          clampedConfidence as number,
+          result.affectedNodeIds.length
+        );
         const severity = scoreToBand(severityScore);
 
         // Resolve family from misconception type
@@ -354,7 +357,7 @@ export class MetricsOrchestrator {
           severity,
           severityScore,
           family: family.key,
-          description: result.description || null,
+          description: result.description !== '' ? result.description : null,
         });
 
         detections.push({
@@ -490,7 +493,9 @@ export class MetricsOrchestrator {
     const { data: metrics } = await this.getMetrics(userId, domain, context);
 
     // Get recent snapshots for trend
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: MetricsOrchestrator.HEALTH_SNAPSHOT_HISTORY_DEPTH });
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, {
+      limit: MetricsOrchestrator.HEALTH_SNAPSHOT_HISTORY_DEPTH,
+    });
 
     // Get misconception count
     const misconceptions = await this.misconceptionRepository.getActiveMisconceptions(
@@ -529,7 +534,9 @@ export class MetricsOrchestrator {
     const { data: metrics } = await this.getMetrics(userId, domain, context);
 
     // Get previous metrics for regression detection
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, { limit: MetricsOrchestrator.METACOGNITIVE_STAGE_HISTORY_DEPTH });
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, {
+      limit: MetricsOrchestrator.METACOGNITIVE_STAGE_HISTORY_DEPTH,
+    });
     const prevSnapshot = snapshots.length > 1 ? snapshots[1] : undefined;
     const previousMetrics = prevSnapshot?.metrics ?? null;
 
@@ -605,7 +612,7 @@ export class MetricsOrchestrator {
     const nodeIdSet = new Set<string>(nodes.map((n) => n.nodeId as string));
 
     // Batch-fetch all edges for these nodes in a single query (Fix 3.1: N+1 → O(1))
-     
+
     const allEdges = await this.graphRepository.getEdgesForNodes(
       nodes.map((n) => n.nodeId),
       {},
@@ -659,7 +666,10 @@ export class MetricsOrchestrator {
 
     const edges: IGraphEdge[] = [];
     for (const edge of allEdges) {
-      if (nodeIdSet.has(edge.sourceNodeId as string) && nodeIdSet.has(edge.targetNodeId as string)) {
+      if (
+        nodeIdSet.has(edge.sourceNodeId as string) &&
+        nodeIdSet.has(edge.targetNodeId as string)
+      ) {
         edges.push(edge);
       }
     }
