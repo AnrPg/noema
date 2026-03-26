@@ -45,9 +45,11 @@ import type { AgentHintsFactory } from './agent-hints.factory.js';
 import { AgentHintsBuilder } from './agent-hints.factory.js';
 import type {
   CkgMutationOperation,
+  IAddNodeOperation,
   IMutationFilter,
   IMutationProposal,
 } from './ckg-mutation-dsl.js';
+import { CkgOperationType } from './ckg-mutation-dsl.js';
 import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
@@ -62,6 +64,7 @@ import type {
 } from './graph.repository.js';
 import type {
   IKnowledgeGraphService,
+  IMutationRecoveryCheckResult,
   IOperationLogFilter,
   IPipelineHealthResult,
 } from './knowledge-graph.service.js';
@@ -116,7 +119,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   private readonly metricsOrch: MetricsOrchestrator;
 
   constructor(
-    graphRepository: IGraphRepository,
+    private readonly graphRepository: IGraphRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
     metricsStalenessRepository: IMetricsStalenessRepository,
     metricsRepository: IMetricsRepository,
@@ -911,6 +914,92 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     };
   }
 
+  async rejectStuckMutation(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    requireAuth(context);
+
+    const actorId = (context.userId as string | undefined) ?? 'system';
+    const mutation = await this.mutationPipeline.rejectStuckMutation(
+      mutationId,
+      actorId,
+      reason,
+      context
+    );
+
+    this.logger.warn(
+      { mutationId, actorId, state: mutation.state },
+      'Stuck mutation manually rejected by operator'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.hintsFactory.createMutationHints('rejected', mutation),
+    };
+  }
+
+  async reconcileMutationCommit(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>> {
+    requireAuth(context);
+
+    const actorId = (context.userId as string | undefined) ?? 'system';
+    const mutation = await this.mutationPipeline.reconcileMutationCommit(
+      mutationId,
+      actorId,
+      reason,
+      context
+    );
+
+    this.logger.warn(
+      { mutationId, actorId, state: mutation.state },
+      'Stuck mutation manually reconciled by operator'
+    );
+
+    return {
+      data: mutation,
+      agentHints: this.hintsFactory.createMutationHints('approved', mutation),
+    };
+  }
+
+  async checkMutationSafeRetry(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMutationRecoveryCheckResult>> {
+    requireAuth(context);
+
+    const result = await this.inspectMutationRecoveryState(mutationId, 'safe_retry');
+
+    return {
+      data: result,
+      agentHints: AgentHintsBuilder.create()
+        .withValidityPeriod('short')
+        .withReasoning(result.summary)
+        .build(),
+    };
+  }
+
+  async checkMutationReconcileCommit(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMutationRecoveryCheckResult>> {
+    requireAuth(context);
+
+    const result = await this.inspectMutationRecoveryState(mutationId, 'reconcile_commit');
+
+    return {
+      data: result,
+      agentHints: AgentHintsBuilder.create()
+        .withValidityPeriod('short')
+        .withReasoning(result.summary)
+        .build(),
+    };
+  }
+
   // ========================================================================
   // PKG Operation Log — inline delegation
   // ========================================================================
@@ -988,4 +1077,185 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       ),
     };
   }
+
+  private async inspectMutationRecoveryState(
+    mutationId: MutationId,
+    check: IMutationRecoveryCheckResult['check']
+  ): Promise<IMutationRecoveryCheckResult> {
+    const mutation = await this.mutationPipeline.getMutation(mutationId);
+    const evidence = await this.collectGraphWriteEvidence(
+      mutation.operations as unknown as readonly CkgMutationOperation[]
+    );
+    const checkedAt = new Date().toISOString();
+
+    if (check === 'safe_retry') {
+      const eligible = !evidence.writeDetected;
+      return {
+        mutationId,
+        check,
+        eligible,
+        recommendedAction: eligible ? 'recover_reject' : 'none',
+        mutationState: mutation.state,
+        summary: eligible
+          ? 'No canonical graph write was detected for this mutation. Reject As Stuck is the safer recovery action.'
+          : 'Canonical graph evidence was detected for this mutation. Do not use Reject As Stuck unless you verify the evidence is a false positive.',
+        details: buildRecoveryDetails(mutation.state, evidence),
+        checkedAt,
+        graphEvidence: evidence,
+      };
+    }
+
+    const eligible = mutation.state === 'committing' && evidence.writeDetected;
+
+    return {
+      mutationId,
+      check,
+      eligible,
+      recommendedAction:
+        mutation.state !== 'committing'
+          ? 'none'
+          : eligible
+            ? 'reconcile_commit'
+            : 'wait',
+      mutationState: mutation.state,
+      summary:
+        mutation.state !== 'committing'
+          ? `This mutation is in ${mutation.state}, so Reconcile Commit is not the right recovery action.`
+          : eligible
+            ? 'Canonical graph evidence was detected while the mutation is still COMMITTING. Reconcile Commit is appropriate if Postgres state is what got stuck.'
+            : 'No canonical graph write was detected yet. Reconcile Commit would be risky right now.',
+      details: buildRecoveryDetails(mutation.state, evidence),
+      checkedAt,
+      graphEvidence: evidence,
+    };
+  }
+
+  private async collectGraphWriteEvidence(
+    operations: readonly CkgMutationOperation[]
+  ): Promise<IMutationRecoveryCheckResult['graphEvidence']> {
+    const matchedNodeIds = new Set<NodeId>();
+    const matchedEdgeIds = new Set<EdgeId>();
+
+    for (const operation of operations) {
+      if (operation.type === CkgOperationType.ADD_NODE) {
+        const nodes = await this.findMatchingCanonicalNodes(operation);
+        for (const node of nodes) {
+          matchedNodeIds.add(node.nodeId);
+        }
+      }
+
+      if (operation.type === CkgOperationType.ADD_EDGE) {
+        const edges = await this.graphRepository.findEdges(
+          {
+            edgeType: operation.edgeType,
+            sourceNodeId: operation.sourceNodeId as NodeId,
+            targetNodeId: operation.targetNodeId as NodeId,
+          },
+          10,
+          0
+        );
+        for (const edge of edges) {
+          matchedEdgeIds.add(edge.edgeId);
+        }
+      }
+    }
+
+    return {
+      writeDetected: matchedNodeIds.size > 0 || matchedEdgeIds.size > 0,
+      matchedNodeIds: [...matchedNodeIds],
+      matchedEdgeIds: [...matchedEdgeIds],
+    };
+  }
+
+  private async findMatchingCanonicalNodes(operation: IAddNodeOperation): Promise<IGraphNode[]> {
+    const candidates = await this.graphRepository.findNodes(
+      {
+        graphType: 'ckg',
+        includeDeleted: false,
+        labelContains: operation.label,
+        nodeType: operation.nodeType,
+        domain: operation.domain,
+      },
+      25,
+      0
+    );
+
+    return candidates.filter((candidate) => nodeMatchesAddNodeOperation(candidate, operation));
+  }
+}
+
+function buildRecoveryDetails(
+  mutationState: string,
+  evidence: IMutationRecoveryCheckResult['graphEvidence']
+): string[] {
+  const details = [`Current mutation state: ${mutationState}.`];
+
+  if (evidence.matchedNodeIds.length > 0) {
+    details.push(
+      `Matched canonical node ids: ${evidence.matchedNodeIds.map(String).join(', ')}.`
+    );
+  }
+
+  if (evidence.matchedEdgeIds.length > 0) {
+    details.push(
+      `Matched canonical edge ids: ${evidence.matchedEdgeIds.map(String).join(', ')}.`
+    );
+  }
+
+  if (!evidence.writeDetected) {
+    details.push(
+      'No canonical node or edge matches were found for the mutation payload during this check.'
+    );
+  }
+
+  return details;
+}
+
+function nodeMatchesAddNodeOperation(node: IGraphNode, operation: IAddNodeOperation): boolean {
+  if (
+    normalizeText(node.label) !== normalizeText(operation.label) ||
+    node.nodeType !== operation.nodeType ||
+    node.domain !== operation.domain
+  ) {
+    return false;
+  }
+
+  const identityMatches = extractIdentityEntries(operation.properties).filter(([key, value]) =>
+    propertyValueMatches(node.properties[key], value)
+  );
+
+  return identityMatches.length > 0 || extractIdentityEntries(operation.properties).length === 0;
+}
+
+function extractIdentityEntries(properties: Record<string, unknown>): Array<[string, unknown]> {
+  const identityKeys = ['uri', 'externalId', 'iri', 'code', 'ontologyImport'];
+  return identityKeys
+    .filter((key) => key in properties)
+    .map((key) => [key, properties[key]] as [string, unknown]);
+}
+
+function propertyValueMatches(left: unknown, right: unknown): boolean {
+  return normalizePropertyValue(left) === normalizePropertyValue(right);
+}
+
+function normalizePropertyValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof value === 'object'
+  ) {
+    return JSON.stringify(value);
+  }
+
+  return '';
+}
+
+function normalizeText(value: string): string {
+  return value.trim().toLowerCase();
 }

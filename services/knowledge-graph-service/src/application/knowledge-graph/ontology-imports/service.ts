@@ -367,7 +367,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
           `Prepared ${String(mutationPreview.readyProposalCount)} mutation-ready proposals and ${String(mutationPreview.blockedCandidateCount)} deferred candidates in ${mutationPreviewArtifact.storageKey}.`,
       });
 
-      return await this.runRepository.updateStatus(currentRun.id, 'ready_for_normalization', {
+      return await this.runRepository.updateStatus(currentRun.id, 'ready_for_review', {
         startedAt,
         completedAt: null,
       });
@@ -449,7 +449,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     }
 
     await this.normalizationPublisher.publish(parsedBatch);
-    await this.runRepository.updateStatus(runId, 'ready_for_normalization');
+    await this.runRepository.updateStatus(runId, 'ready_for_review');
     return parsedBatch;
   }
 
@@ -465,7 +465,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     if (run === null) {
       throw new Error(`Ontology import run ${input.runId} not found.`);
     }
-    if (run.status === 'staging_validated') {
+    if (run.status === 'review_submitted') {
       throw new Error(`Mutation preview for run ${input.runId} has already been submitted.`);
     }
 
@@ -510,7 +510,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       detail: `Submitted ${String(mutationIds.length)} mutation proposals to the CKG review queue from ${String(readyCandidates.length)} ready candidates.`,
     });
     await this.runRepository.recordSubmittedMutations(input.runId, mutationIds);
-    await this.runRepository.updateStatus(input.runId, 'staging_validated', {
+    await this.runRepository.updateStatus(input.runId, 'review_submitted', {
       startedAt: run.startedAt,
       completedAt: submittedAt,
     });

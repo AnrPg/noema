@@ -387,3 +387,95 @@ describe('POST /ckg/mutations/:mutationId/reject', () => {
     expect(service.rejectEscalatedMutation).toHaveBeenCalledOnce();
   });
 });
+
+describe('POST /ckg/mutations/:mutationId/reconcile', () => {
+  it('reconciles a stuck committing mutation', async () => {
+    const mutation = ckgMutation({ state: 'committed' as never });
+    service.reconcileMutationCommit.mockResolvedValue(serviceResult(mutation));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `${BASE}/mut_test_0001/reconcile`,
+      payload: { reason: 'Verified graph write landed' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.reconcileMutationCommit).toHaveBeenCalledOnce();
+  });
+});
+
+describe('POST /ckg/mutations/:mutationId/recover-reject', () => {
+  it('rejects a stuck mutation for safe retry', async () => {
+    const mutation = ckgMutation({ state: 'rejected' as never });
+    service.rejectStuckMutation.mockResolvedValue(serviceResult(mutation));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `${BASE}/mut_test_0001/recover-reject`,
+      payload: { reason: 'Graph write did not land' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.rejectStuckMutation).toHaveBeenCalledOnce();
+  });
+});
+
+describe('GET /ckg/mutations/:mutationId/check-safe-retry', () => {
+  it('returns a backend diagnosis for safe retry', async () => {
+    service.checkMutationSafeRetry.mockResolvedValue(
+      serviceResult({
+        mutationId: 'mut_test_0001' as MutationId,
+        check: 'safe_retry',
+        eligible: true,
+        recommendedAction: 'recover_reject',
+        mutationState: 'committing',
+        summary: 'No graph write detected.',
+        details: ['No canonical matches found.'],
+        checkedAt: '2026-03-26T10:00:00.000Z',
+        graphEvidence: {
+          writeDetected: false,
+          matchedNodeIds: [],
+          matchedEdgeIds: [],
+        },
+      })
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${BASE}/mut_test_0001/check-safe-retry`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.checkMutationSafeRetry).toHaveBeenCalledOnce();
+  });
+});
+
+describe('GET /ckg/mutations/:mutationId/check-reconcile', () => {
+  it('returns a backend diagnosis for reconciliation', async () => {
+    service.checkMutationReconcileCommit.mockResolvedValue(
+      serviceResult({
+        mutationId: 'mut_test_0001' as MutationId,
+        check: 'reconcile_commit',
+        eligible: true,
+        recommendedAction: 'reconcile_commit',
+        mutationState: 'committing',
+        summary: 'Graph write detected while Postgres state remains stuck.',
+        details: ['Matched canonical node ids: node_1.'],
+        checkedAt: '2026-03-26T10:00:00.000Z',
+        graphEvidence: {
+          writeDetected: true,
+          matchedNodeIds: ['node_1' as never],
+          matchedEdgeIds: [],
+        },
+      })
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${BASE}/mut_test_0001/check-reconcile`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.checkMutationReconcileCommit).toHaveBeenCalledOnce();
+  });
+});

@@ -30,6 +30,7 @@ import {
   BulkReviewMutationRequestSchema,
   MutationQueryParamsSchema,
   ProposeMutationRequestSchema,
+  RecoverMutationRequestSchema,
   RejectMutationRequestSchema,
   RequestRevisionRequestSchema,
   ResubmitMutationRequestSchema,
@@ -460,6 +461,163 @@ export function registerCkgMutationRoutes(
   // ============================================================================
   // POST /api/v1/ckg/mutations/:mutationId/approve — Approve an escalated mutation (Phase 8e)
   // ============================================================================
+
+  fastify.post<{ Params: { mutationId: string }; Body: unknown }>(
+    '/api/v1/ckg/mutations/:mutationId/reconcile',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Manually reconcile a stuck COMMITTING mutation',
+        description:
+          'Force a COMMITTING mutation to COMMITTED when an operator has verified that the graph write already landed.',
+        params: {
+          type: 'object',
+          required: ['mutationId'],
+          properties: {
+            mutationId: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['reason'],
+          properties: {
+            reason: { type: 'string', minLength: 1, maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
+        const parsed = RecoverMutationRequestSchema.parse(request.body);
+        const context = buildContext(request);
+
+        const result = await service.reconcileMutationCommit(
+          mutationId as MutationId,
+          parsed.reason,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { mutationId: string } }>(
+    '/api/v1/ckg/mutations/:mutationId/check-safe-retry',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Check whether a stuck mutation is safe to reject and retry',
+        description:
+          'Inspect canonical graph state and report whether the mutation payload appears not to have landed.',
+        params: {
+          type: 'object',
+          required: ['mutationId'],
+          properties: {
+            mutationId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
+        const context = buildContext(request);
+
+        const result = await service.checkMutationSafeRetry(mutationId as MutationId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { mutationId: string } }>(
+    '/api/v1/ckg/mutations/:mutationId/check-reconcile',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Check whether a stuck COMMITTING mutation is ready to reconcile',
+        description:
+          'Inspect canonical graph state and report whether the graph write appears to have landed while Postgres state remains stuck.',
+        params: {
+          type: 'object',
+          required: ['mutationId'],
+          properties: {
+            mutationId: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
+        const context = buildContext(request);
+
+        const result = await service.checkMutationReconcileCommit(
+          mutationId as MutationId,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Params: { mutationId: string }; Body: unknown }>(
+    '/api/v1/ckg/mutations/:mutationId/recover-reject',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['CKG Mutations'],
+        summary: 'Manually reject a stuck mutation',
+        description:
+          'Force a stuck non-terminal mutation to REJECTED so it can be retried safely.',
+        params: {
+          type: 'object',
+          required: ['mutationId'],
+          properties: {
+            mutationId: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['reason'],
+          properties: {
+            reason: { type: 'string', minLength: 1, maxLength: 2000 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const { mutationId } = MutationIdParamSchema.parse(request.params);
+        const parsed = RecoverMutationRequestSchema.parse(request.body);
+        const context = buildContext(request);
+
+        const result = await service.rejectStuckMutation(
+          mutationId as MutationId,
+          parsed.reason,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
 
   fastify.post<{ Params: { mutationId: string }; Body: unknown }>(
     '/api/v1/ckg/mutations/:mutationId/approve',

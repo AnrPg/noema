@@ -82,6 +82,13 @@ export const RejectMutationRequestSchema = z.object({
     .max(2000, 'Rejection reason must not exceed 2000 characters'),
 });
 
+export const RecoverMutationRequestSchema = z.object({
+  reason: z
+    .string()
+    .min(1, 'Recovery reason is required')
+    .max(2000, 'Recovery reason must not exceed 2000 characters'),
+});
+
 /**
  * Request body for requesting a revision of an escalated (pending_review) mutation.
  * The reviewer provides specific feedback describing what needs to change.
@@ -133,6 +140,7 @@ export type MutationQueryParams = z.infer<typeof MutationQueryParamsSchema>;
 export type ProposeMutationRequest = z.infer<typeof ProposeMutationRequestSchema>;
 export type ApproveMutationRequest = z.infer<typeof ApproveMutationRequestSchema>;
 export type RejectMutationRequest = z.infer<typeof RejectMutationRequestSchema>;
+export type RecoverMutationRequest = z.infer<typeof RecoverMutationRequestSchema>;
 export type RequestRevisionRequest = z.infer<typeof RequestRevisionRequestSchema>;
 export type ResubmitMutationRequest = z.infer<typeof ResubmitMutationRequestSchema>;
 export type BulkReviewMutationRequest = z.infer<typeof BulkReviewMutationRequestSchema>;

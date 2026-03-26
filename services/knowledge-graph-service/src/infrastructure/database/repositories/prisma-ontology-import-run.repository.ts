@@ -32,7 +32,7 @@ function toDomain(record: IOntologyImportRunRecord): IOntologyImportRun {
     sourceVersion: record.sourceVersion,
     configuration: parseRunConfiguration(record.configuration),
     submittedMutationIds: parseSubmittedMutationIds(record.submittedMutationIds),
-    status: record.status as OntologyImportStatus,
+    status: normalizeOntologyImportStatus(record.status),
     trigger: record.trigger as IOntologyImportRun['trigger'],
     initiatedBy: record.initiatedBy,
     createdAt: record.createdAt.toISOString(),
@@ -41,6 +41,17 @@ function toDomain(record: IOntologyImportRunRecord): IOntologyImportRun {
     completedAt: record.completedAt?.toISOString() ?? null,
     failureReason: record.failureReason,
   };
+}
+
+function normalizeOntologyImportStatus(status: string): OntologyImportStatus {
+  switch (status) {
+    case 'ready_for_normalization':
+      return 'ready_for_review';
+    case 'staging_validated':
+      return 'review_submitted';
+    default:
+      return status as OntologyImportStatus;
+  }
 }
 
 function createRunId(): string {

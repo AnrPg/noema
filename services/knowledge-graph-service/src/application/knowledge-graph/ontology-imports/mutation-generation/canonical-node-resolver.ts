@@ -233,6 +233,20 @@ function inferNodeType(
     return 'fact';
   }
 
+  const lexicalSignals = [concept.preferredLabel, ...concept.sourceTypes].join(' ').toLowerCase();
+  const className =
+    typeof concept.properties['className'] === 'string'
+      ? concept.properties['className'].toLowerCase()
+      : '';
+  const hasSkillLinks =
+    typeof concept.properties['_links'] === 'object' &&
+    concept.properties['_links'] !== null &&
+    Object.prototype.hasOwnProperty.call(concept.properties['_links'], 'hasSkillType');
+
+  if (lexicalSignals.includes('skill') || className === 'skill' || hasSkillLinks) {
+    return 'skill';
+  }
+
   return 'concept';
 }
 

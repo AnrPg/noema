@@ -46,6 +46,10 @@ function parseOperations(raw: Metadata[]): CkgMutationOperation[] {
   return z.array(CkgMutationOperationSchema).parse(raw) as CkgMutationOperation[];
 }
 
+function isOntologyImportMutation(mutation: Pick<ICkgMutation, 'rationale'>): boolean {
+  return mutation.rationale.includes('[ontology-import ');
+}
+
 // ============================================================================
 // Stage 1: Schema Validation
 // ============================================================================
@@ -564,7 +568,7 @@ export class ConflictDetectionStage implements IValidationStage {
  * - strong: 25+ PKGs
  * - definitive: 50+ PKGs
  *
- * Agent-initiated mutations (evidenceCount === 0) bypass this stage.
+ * Agent-initiated and ontology-import mutations bypass this stage.
  */
 export class EvidenceSufficiencyStage implements IValidationStage {
   readonly name = 'evidence_sufficiency';
@@ -586,12 +590,15 @@ export class EvidenceSufficiencyStage implements IValidationStage {
     const start = Date.now();
     const violations: IValidationViolation[] = [];
 
-    // Agent-initiated mutations (no evidence) bypass this stage
-    if (mutation.evidenceCount === 0) {
+    // Agent-initiated and ontology-import mutations do not use PKG aggregation evidence.
+    if (mutation.evidenceCount === 0 || isOntologyImportMutation(mutation)) {
       return {
         stageName: this.name,
         passed: true,
-        details: 'Evidence sufficiency skipped: agent-initiated mutation (no aggregation evidence)',
+        details:
+          mutation.evidenceCount === 0
+            ? 'Evidence sufficiency skipped: agent-initiated mutation (no aggregation evidence)'
+            : 'Evidence sufficiency skipped: ontology-import mutation (not sourced from PKG aggregation evidence)',
         violations: [],
         duration: Date.now() - start,
       };

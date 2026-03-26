@@ -26,6 +26,7 @@ import { EdgePolicy, type IEdgePolicy } from '../value-objects/graph.value-objec
 
 const ALL_NODE_TYPES: readonly GraphNodeType[] = [
   GraphNodeType.CONCEPT,
+  GraphNodeType.SKILL,
   GraphNodeType.FACT,
   GraphNodeType.PROCEDURE,
   GraphNodeType.PRINCIPLE,
@@ -37,6 +38,7 @@ const ALL_NODE_TYPES: readonly GraphNodeType[] = [
 /** Concept-bearing node types (excludes examples/counterexamples/misconceptions) */
 const CONCEPT_BEARING_TYPES: readonly GraphNodeType[] = [
   GraphNodeType.CONCEPT,
+  GraphNodeType.SKILL,
   GraphNodeType.FACT,
   GraphNodeType.PROCEDURE,
   GraphNodeType.PRINCIPLE,
@@ -78,8 +80,8 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     category: EdgeOntologicalCategory.TAXONOMIC,
     requiresAcyclicity: true,
     isSymmetric: false,
-    allowedSourceTypes: [GraphNodeType.CONCEPT],
-    allowedTargetTypes: [GraphNodeType.CONCEPT],
+    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
     maxWeight: 1.0,
     defaultWeight: 1.0,
     description:
@@ -195,8 +197,8 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     category: EdgeOntologicalCategory.LOGICAL,
     requiresAcyclicity: false,
     isSymmetric: true,
-    allowedSourceTypes: [GraphNodeType.CONCEPT],
-    allowedTargetTypes: [GraphNodeType.CONCEPT],
+    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
     maxWeight: 1.0,
     defaultWeight: 1.0,
     description:

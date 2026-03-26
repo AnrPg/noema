@@ -180,6 +180,7 @@ const MetadataSchema = z.record(z.unknown()).default({});
 
 const NodeTypeSchema = z.enum([
   'concept',
+  'skill',
   'fact',
   'procedure',
   'principle',

@@ -705,6 +705,40 @@ export interface IKnowledgeGraphService {
     context: IExecutionContext
   ): Promise<IServiceResult<ICkgMutation>>;
 
+  /**
+   * Force-reject a stuck mutation from the operator workflow.
+   */
+  rejectStuckMutation(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Force-reconcile a COMMITTING mutation when the graph write is known to have landed.
+   */
+  reconcileMutationCommit(
+    mutationId: MutationId,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICkgMutation>>;
+
+  /**
+   * Diagnose whether a mutation is safe to reject-and-retry because no graph write landed.
+   */
+  checkMutationSafeRetry(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMutationRecoveryCheckResult>>;
+
+  /**
+   * Diagnose whether a COMMITTING mutation is safe to reconcile because the graph write landed.
+   */
+  checkMutationReconcileCommit(
+    mutationId: MutationId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IMutationRecoveryCheckResult>>;
+
   // ========================================================================
   // PKG Operation Log
   // ========================================================================
@@ -751,4 +785,26 @@ export interface IPipelineHealthResult {
   readonly rejectedCount: number;
   readonly stuckCount: number;
   readonly totalCount: number;
+}
+
+export interface IMutationRecoveryCheckResult {
+  readonly mutationId: MutationId;
+  readonly check:
+    | 'safe_retry'
+    | 'reconcile_commit';
+  readonly eligible: boolean;
+  readonly recommendedAction:
+    | 'recover_reject'
+    | 'reconcile_commit'
+    | 'wait'
+    | 'none';
+  readonly mutationState: string;
+  readonly summary: string;
+  readonly details: readonly string[];
+  readonly checkedAt: string;
+  readonly graphEvidence: {
+    readonly writeDetected: boolean;
+    readonly matchedNodeIds: readonly NodeId[];
+    readonly matchedEdgeIds: readonly EdgeId[];
+  };
 }

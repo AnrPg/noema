@@ -105,6 +105,10 @@ export function mockKnowledgeGraphService(): {
     rejectEscalatedMutation: vi.fn().mockImplementation(notConfigured),
     requestMutationRevision: vi.fn().mockImplementation(notConfigured),
     resubmitMutation: vi.fn().mockImplementation(notConfigured),
+    rejectStuckMutation: vi.fn().mockImplementation(notConfigured),
+    reconcileMutationCommit: vi.fn().mockImplementation(notConfigured),
+    checkMutationSafeRetry: vi.fn().mockImplementation(notConfigured),
+    checkMutationReconcileCommit: vi.fn().mockImplementation(notConfigured),
 
     // Operation Log
     getOperationLog: vi.fn().mockImplementation(notConfigured),

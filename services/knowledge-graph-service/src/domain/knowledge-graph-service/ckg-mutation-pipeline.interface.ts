@@ -137,4 +137,24 @@ export interface ICkgMutationPipeline {
    * Transitions them to COMMITTED after a safety threshold.
    */
   reconcileStuckCommitting(context: IExecutionContext): Promise<number>;
+
+  /**
+   * Force-reject a single stuck mutation from the operator workflow.
+   */
+  rejectStuckMutation(
+    mutationId: MutationId,
+    actorId: string,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation>;
+
+  /**
+   * Force-reconcile a single COMMITTING mutation from the operator workflow.
+   */
+  reconcileMutationCommit(
+    mutationId: MutationId,
+    actorId: string,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation>;
 }

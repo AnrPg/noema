@@ -210,8 +210,8 @@ Parsed and normalized output are persisted as immutable artifacts per run:
 - parsed output: `parsed_batch`
 - normalized output: `normalized_batch`
 
-The run status now advances to `ready_for_normalization` once the first
-normalization handoff finishes successfully.
+The run status now advances to `ready_for_review` once the automated fetch,
+parse, normalization, and mutation-preview path finishes successfully.
 
 The domain contract now also exposes explicit active-versus-terminal run-status
 helpers so adapters and admin surfaces do not have to infer lifecycle semantics
@@ -269,7 +269,7 @@ Current behavior:
 - import runs can now submit their ready mutation-preview candidates into the
   CKG review queue via `POST /api/v1/ckg/imports/runs/:runId/submit`
 - the submission step creates a validation checkpoint and advances the run to
-  `staging_validated`
+  `review_submitted`
 - canonical node resolution now runs during mutation-preview generation
 - concept candidates that match existing canonical nodes become `update_node`
   proposals instead of duplicate `add_node` proposals

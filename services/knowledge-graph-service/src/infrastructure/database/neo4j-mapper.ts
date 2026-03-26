@@ -403,12 +403,32 @@ function flattenProperties(
   const flat: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(properties)) {
     if (value === undefined || value === null) continue;
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      // Serialize complex objects as JSON strings
-      flat[key] = JSON.stringify(value);
-    } else {
-      flat[key] = value;
-    }
+    flat[key] = toNeo4jPropertyValue(value);
   }
   return flat;
+}
+
+function toNeo4jPropertyValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(isNeo4jPrimitive) ? value : JSON.stringify(value);
+  }
+
+  if (typeof value === 'object') {
+    // Neo4j properties do not support nested maps.
+    return JSON.stringify(value);
+  }
+
+  return value;
+}
+
+function isNeo4jPrimitive(value: unknown): boolean {
+  return (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
 }

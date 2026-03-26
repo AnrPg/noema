@@ -17,8 +17,8 @@ export const ONTOLOGY_IMPORT_STATUSES = [
   'fetched',
   'parsing',
   'parsed',
-  'staging_validated',
-  'ready_for_normalization',
+  'review_submitted',
+  'ready_for_review',
   'failed',
   'cancelled',
 ] as const;
@@ -33,8 +33,8 @@ export const ACTIVE_ONTOLOGY_IMPORT_STATUSES = [
 ] as const satisfies readonly OntologyImportStatus[];
 
 export const TERMINAL_ONTOLOGY_IMPORT_STATUSES = [
-  'staging_validated',
-  'ready_for_normalization',
+  'review_submitted',
+  'ready_for_review',
   'failed',
   'cancelled',
 ] as const satisfies readonly OntologyImportStatus[];

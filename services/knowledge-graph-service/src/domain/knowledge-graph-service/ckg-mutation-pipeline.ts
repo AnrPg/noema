@@ -83,6 +83,10 @@ function parseOperations(raw: unknown): CkgMutationOperation[] {
   return CkgMutationOperationsSchema.parse(raw) as CkgMutationOperation[];
 }
 
+function isOntologyImportMutation(mutation: Pick<ICkgMutation, 'rationale'>): boolean {
+  return mutation.rationale.includes('[ontology-import ');
+}
+
 /**
  * Convert operations to a serializable form suitable for event payloads.
  * Explicitly picks only the fields that are safe to serialize (C3/H5 fix).
@@ -512,10 +516,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       ]);
     }
 
-    this.logger.info(
-      { mutationId, reviewerId },
-      'Requesting revision of escalated mutation'
-    );
+    this.logger.info({ mutationId, reviewerId }, 'Requesting revision of escalated mutation');
 
     // PENDING_REVIEW → REVISION_REQUESTED
     const updated = await this.transitionState(
@@ -595,7 +596,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       mutation,
       'proposed',
       submitterId,
-      `Mutation resubmitted after revision (cycle ${mutation.revisionCount})`,
+      `Mutation resubmitted after revision (cycle ${String(mutation.revisionCount)})`,
       context,
       {
         reviewAction: 'resubmitted',
@@ -888,6 +889,47 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
           ontologicalStage !== undefined &&
           !ontologicalStage.passed &&
           ontologicalStage.violations.some((v) => v.code === 'ONTOLOGICAL_CONFLICT');
+        const requiresManualReview = hasOntologicalConflicts || isOntologyImportMutation(mutation);
+        const ontologicalConflictCount = hasOntologicalConflicts
+          ? ontologicalStage.violations.filter((v) => v.code === 'ONTOLOGICAL_CONFLICT').length
+          : 0;
+
+        if (requiresManualReview) {
+          mutation = await this.transitionState(
+            mutation,
+            'pending_review',
+            'system',
+            hasOntologicalConflicts
+              ? `Ontological conflict(s) detected: ${String(ontologicalConflictCount)} conflict(s) require human review. ${String(validationResult.warnings.length)} warning(s).`
+              : 'Ontology-import proposal validated successfully and is queued for manual review before commit.',
+            context,
+            { validationResult: this.serializeValidationResult(validationResult) }
+          );
+
+          kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'pending_review' });
+
+          if (hasOntologicalConflicts) {
+            await this.publishEscalationEvent(
+              mutation,
+              ontologicalStage.violations.filter((v) => v.code === 'ONTOLOGICAL_CONFLICT'),
+              context
+            );
+          } else {
+            await this.publishEvent(
+              KnowledgeGraphEventType.CKG_MUTATION_ESCALATED,
+              'CanonicalKnowledgeGraph',
+              mutation.mutationId,
+              {
+                mutationId: mutation.mutationId,
+                conflicts: [],
+                reason: 'Ontology import proposals require manual review before commit.',
+              },
+              context
+            );
+          }
+
+          return mutation;
+        }
 
         // VALIDATING → VALIDATED
         mutation = await this.transitionState(
@@ -895,8 +937,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
           'validated',
           'system',
           `Validation passed: ${String(validationResult.stageResults.length)} stage(s), ` +
-            `${String(validationResult.totalDuration)}ms` +
-            (hasOntologicalConflicts ? ' (with advisory ontological warnings)' : ''),
+            `${String(validationResult.totalDuration)}ms`,
           context,
           { validationResult: this.serializeValidationResult(validationResult) }
         );
@@ -1464,6 +1505,52 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     }
 
     return reconciledCount;
+  }
+
+  async rejectStuckMutation(
+    mutationId: MutationId,
+    actorId: string,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation> {
+    const mutation = await this.getMutation(mutationId);
+
+    if (isTerminalState(mutation.state)) {
+      throw new MutationAlreadyCommittedError(mutationId, mutation.state);
+    }
+
+    return this.transitionState(
+      mutation,
+      'rejected',
+      actorId,
+      `Manual operator recovery rejected stuck mutation: ${reason}`,
+      context,
+      { recoveredFrom: mutation.state, manualRecovery: true }
+    );
+  }
+
+  async reconcileMutationCommit(
+    mutationId: MutationId,
+    actorId: string,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<ICkgMutation> {
+    const mutation = await this.getMutation(mutationId);
+
+    if (mutation.state !== 'committing') {
+      throw new InvalidStateTransitionError(mutation.state, 'committed', [
+        'Only COMMITTING mutations can be manually reconciled',
+      ]);
+    }
+
+    return this.transitionState(
+      mutation,
+      'committed',
+      actorId,
+      `Manual operator reconciliation from COMMITTING: ${reason}`,
+      context,
+      { reconciledFrom: 'committing', manualRecovery: true }
+    );
   }
 
   /** Async sleep helper for retry backoff. */

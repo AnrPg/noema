@@ -273,6 +273,8 @@ export type SchedulingAlgorithm = (typeof SchedulingAlgorithm)[keyof typeof Sche
 export const GraphNodeType = {
   /** Abstract concept */
   CONCEPT: 'concept',
+  /** Skill or competency */
+  SKILL: 'skill',
   /** Specific fact */
   FACT: 'fact',
   /** Procedural knowledge */
