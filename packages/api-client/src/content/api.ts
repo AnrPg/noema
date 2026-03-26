@@ -9,6 +9,8 @@ import type { CardId, JobId, MediaId, TemplateId } from '@noema/types';
 import { http } from '../client.js';
 import type {
   BatchCreateResponse,
+  CardImportExecuteResponse,
+  CardImportPreviewResponse,
   BatchSummariesResponse,
   CardCountResponse,
   CardHistoryResponse,
@@ -21,6 +23,8 @@ import type {
   CreateTemplateInput,
   IBatchCreateInput,
   IBatchStateUpdateInput,
+  ICardImportExecuteInput,
+  ICardImportPreviewInput,
   ICreateCardInput,
   IDeckQueryInput,
   ISessionSeedQuery,
@@ -43,35 +47,35 @@ function normalizeCardState(state: string): string {
 function normalizeDeckQuery(query: IDeckQueryInput): Record<string, unknown> {
   const normalized: Record<string, unknown> = {};
 
-  if (query['search'] !== undefined && query['search'] !== '') normalized['search'] = query['search'];
-  if (query['cardTypes'] !== undefined && query['cardTypes'].length > 0) {
-    normalized['cardTypes'] = query['cardTypes'];
+  if (query.search !== undefined && query.search !== '') normalized['search'] = query.search;
+  if (query.cardTypes !== undefined && query.cardTypes.length > 0) {
+    normalized['cardTypes'] = query.cardTypes;
   }
-  if (query['states'] !== undefined && query['states'].length > 0) {
-    normalized['states'] = query['states'].map(normalizeCardState);
+  if (query.states !== undefined && query.states.length > 0) {
+    normalized['states'] = query.states.map(normalizeCardState);
   }
-  if (query['tags'] !== undefined && query['tags'].length > 0) normalized['tags'] = query['tags'];
-  if (query['knowledgeNodeIds'] !== undefined && query['knowledgeNodeIds'].length > 0) {
-    normalized['knowledgeNodeIds'] = query['knowledgeNodeIds'];
+  if (query.tags !== undefined && query.tags.length > 0) normalized['tags'] = query.tags;
+  if (query.knowledgeNodeIds !== undefined && query.knowledgeNodeIds.length > 0) {
+    normalized['knowledgeNodeIds'] = query.knowledgeNodeIds;
   }
 
   const sources =
-    query['sources'] !== undefined && query['sources'].length > 0
-      ? query['sources']
-      : query['source'] !== undefined && query['source'] !== ''
-        ? [query['source']]
+    query.sources !== undefined && query.sources.length > 0
+      ? query.sources
+      : query.source !== undefined && query.source !== ''
+        ? [query.source]
         : undefined;
   if (sources !== undefined) normalized['sources'] = sources;
 
-  if (query['sortBy'] !== undefined && query['sortBy'] !== 'nextReviewAt') {
-    normalized['sortBy'] = query['sortBy'];
+  if (query.sortBy !== undefined && query.sortBy !== 'nextReviewAt') {
+    normalized['sortBy'] = query.sortBy;
   }
 
-  const sortOrder = query['sortOrder'] ?? query['sortDir'];
+  const sortOrder = query.sortOrder ?? query.sortDir;
   if (sortOrder !== undefined) normalized['sortOrder'] = sortOrder;
 
-  if (query['limit'] !== undefined) normalized['limit'] = query['limit'];
-  if (query['offset'] !== undefined) normalized['offset'] = query['offset'];
+  if (query.limit !== undefined) normalized['limit'] = query.limit;
+  if (query.offset !== undefined) normalized['offset'] = query.offset;
 
   return normalized;
 }
@@ -144,6 +148,14 @@ export const cardsApi = {
   /** Initiate a batch card creation job. */
   batchCreateCards: (data: IBatchCreateInput): Promise<BatchCreateResponse> =>
     http.post('/v1/cards/batch', data),
+
+  /** Preview a structured file import before execution. */
+  previewImport: (data: ICardImportPreviewInput): Promise<CardImportPreviewResponse> =>
+    http.post('/v1/cards/import/preview', data),
+
+  /** Execute a structured file import into tracked batch cards. */
+  executeImport: (data: ICardImportExecuteInput): Promise<CardImportExecuteResponse> =>
+    http.post('/v1/cards/import/execute', data),
 
   /** Poll a batch creation job by jobId. */
   getBatch: (batchId: JobId): Promise<BatchCreateResponse> =>

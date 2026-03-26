@@ -699,6 +699,88 @@ export interface IBatchCreateResult {
   total: number;
 }
 
+export type CardImportFileType =
+  | 'json'
+  | 'jsonl'
+  | 'csv'
+  | 'tsv'
+  | 'xlsx'
+  | 'txt'
+  | 'markdown'
+  | 'latex'
+  | 'typst';
+
+export type CardImportTargetFieldId =
+  | 'front'
+  | 'back'
+  | 'hint'
+  | 'explanation'
+  | 'tags'
+  | 'knowledgeNodeIds'
+  | 'difficulty'
+  | 'state';
+
+export type CardImportMappingTarget = CardImportTargetFieldId | 'dump';
+
+export interface ICardImportPayload {
+  encoding: 'text' | 'base64';
+  content: string;
+}
+
+export interface ICardImportPreviewInput {
+  fileName: string;
+  fileType: CardImportFileType;
+  formatId: string;
+  payload: ICardImportPayload;
+  sheetName?: string;
+}
+
+export interface ICardImportSourceField {
+  key: string;
+  sample: string;
+}
+
+export interface ICardImportRecord {
+  values: Record<string, string>;
+}
+
+export interface ICardImportFieldMapping {
+  sourceKey: string;
+  targetFieldId: CardImportMappingTarget;
+  dumpKey?: string;
+}
+
+export interface ICardImportPreviewResult {
+  fileName: string;
+  fileType: CardImportFileType;
+  formatId: string;
+  sourceFields: ICardImportSourceField[];
+  records: ICardImportRecord[];
+  warnings: string[];
+  sheetNames?: string[];
+  suggestedMappings: ICardImportFieldMapping[];
+}
+
+export interface ICardImportExecuteInput extends ICardImportPreviewInput {
+  mappings: ICardImportFieldMapping[];
+  sharedTags?: string[];
+  sharedKnowledgeNodeIds?: string[];
+  sharedDifficulty?: 'beginner' | 'elementary' | 'intermediate' | 'advanced' | 'expert';
+  sharedState?: 'draft' | 'active';
+}
+
+export interface ICardImportExecuteResult {
+  batchId: string;
+  created: ICardDto[];
+  failed: {
+    index: number;
+    error: string;
+    input: ICreateCardInput;
+  }[];
+  total: number;
+  importWarnings: string[];
+}
+
 // ============================================================================
 // Stats
 // ============================================================================
@@ -823,6 +905,8 @@ export type CardCountResponse = IApiResponse<{ count: number }>;
 export type CardStatsResponse = IApiResponse<ICardStatsDto>;
 export type BatchCreateResponse = IApiResponse<IBatchCreateResult>;
 export type BatchSummariesResponse = IApiResponse<IBatchSummaryDto[]>;
+export type CardImportPreviewResponse = IApiResponse<ICardImportPreviewResult>;
+export type CardImportExecuteResponse = IApiResponse<ICardImportExecuteResult>;
 export type CardHistoryResponse = IApiResponse<ICardHistoryDto>;
 export type CardVersionResponse = IApiResponse<{
   version: number;

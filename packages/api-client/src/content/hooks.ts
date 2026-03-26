@@ -22,6 +22,8 @@ import type {
   BatchCreateResponse,
   BatchSummariesResponse,
   CardCountResponse,
+  CardImportExecuteResponse,
+  CardImportPreviewResponse,
   ICardDto,
   CardHistoryResponse,
   CardResponse,
@@ -33,6 +35,8 @@ import type {
   CreateTemplateInput,
   IBatchCreateInput,
   IBatchStateUpdateInput,
+  ICardImportExecuteInput,
+  ICardImportPreviewInput,
   ICardHistoryDto,
   ICardStatsDto,
   ICreateCardInput,
@@ -69,6 +73,7 @@ export const contentKeys = {
   batchCards: (batchId?: string) => [...contentKeys.cards(), 'batchCards', batchId] as const,
   counts: (query?: IDeckQueryInput) => [...contentKeys.cards(), 'count', query ?? null] as const,
   recentBatches: () => [...contentKeys.cards(), 'recentBatches'] as const,
+  importPreview: () => [...contentKeys.cards(), 'importPreview'] as const,
   templates: () => [...contentKeys.all, 'templates'] as const,
   template: (id: TemplateId) => [...contentKeys.templates(), id] as const,
   media: (id: MediaId) => [...contentKeys.all, 'media', id] as const,
@@ -240,6 +245,28 @@ export function useBatchCreateCards(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: cardsApi.batchCreateCards,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
+    },
+    ...options,
+  });
+}
+
+export function usePreviewCardImport(
+  options?: UseMutationOptions<CardImportPreviewResponse, Error, ICardImportPreviewInput>
+) {
+  return useMutation({
+    mutationFn: cardsApi.previewImport,
+    ...options,
+  });
+}
+
+export function useExecuteCardImport(
+  options?: UseMutationOptions<CardImportExecuteResponse, Error, ICardImportExecuteInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: cardsApi.executeImport,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
     },
