@@ -59,6 +59,7 @@ function turboArgsFor(selectedMode) {
         'dev',
         '--filter=@noema/web',
         '--filter=@noema/content-service',
+        '--filter=@noema/knowledge-graph-service',
         '--filter=@noema/session-service',
         '--filter=@noema/user-service',
         '--filter=@noema/scheduler-service',
