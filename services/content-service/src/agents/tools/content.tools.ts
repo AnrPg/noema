@@ -18,10 +18,7 @@ import { DomainError } from '../../domain/content-service/errors/index.js';
 import type { IBatchChangeStateItem } from '../../types/content.types.js';
 import type { IToolDefinition, IToolResult } from './tool.types.js';
 
-type IBaseToolDefinition = Omit<
-  IToolDefinition,
-  'version' | 'scopeRequirement' | 'capabilities'
->;
+type IBaseToolDefinition = Omit<IToolDefinition, 'version' | 'scopeRequirement' | 'capabilities'>;
 
 function inferSideEffects(name: string): boolean {
   return (
@@ -162,6 +159,42 @@ export function createBatchCreateCardsHandler(contentService: ContentService) {
       const body = input as { cards: unknown[] };
       const result = await contentService.createBatch(
         body.cards as Parameters<typeof contentService.createBatch>[0],
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * preview-card-import — Parse an import payload and infer field mappings.
+ */
+export function createPreviewCardImportHandler(contentService: ContentService) {
+  return (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = contentService.previewImport(
+        input as Parameters<typeof contentService.previewImport>[0],
+        context
+      );
+      return Promise.resolve({ success: true, data: result.data, agentHints: result.agentHints });
+    } catch (error) {
+      return Promise.resolve(errorResult(error));
+    }
+  };
+}
+
+/**
+ * execute-card-import — Parse, map, and create cards from an import payload.
+ */
+export function createExecuteCardImportHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = await contentService.executeImport(
+        input as Parameters<typeof contentService.executeImport>[0],
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
@@ -409,7 +442,7 @@ export function createCursorQueryCardsHandler(contentService: ContentService) {
         context,
         body.cursor,
         body.limit,
-        body.direction,
+        body.direction
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -521,6 +554,94 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'array',
           items: { type: 'object' },
           description: 'Array of card creation inputs',
+        },
+      },
+    },
+  },
+  {
+    name: 'preview-card-import',
+    description:
+      'Parse a candidate import file, infer field mappings, and return a preview of the records that would become cards.',
+    service: 'content-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['fileName', 'fileType', 'formatId', 'payload'],
+      properties: {
+        fileName: { type: 'string' },
+        fileType: {
+          type: 'string',
+          enum: ['json', 'jsonl', 'csv', 'tsv', 'xlsx', 'txt', 'markdown', 'latex', 'typst'],
+        },
+        formatId: { type: 'string' },
+        sheetName: { type: 'string' },
+        payload: {
+          type: 'object',
+          required: ['encoding', 'content'],
+          properties: {
+            encoding: { type: 'string', enum: ['text', 'base64'] },
+            content: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: 'execute-card-import',
+    description:
+      'Run the import pipeline end-to-end from a source payload plus explicit field mappings, then create tracked batch cards.',
+    service: 'content-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['fileName', 'fileType', 'formatId', 'payload', 'mappings'],
+      properties: {
+        fileName: { type: 'string' },
+        fileType: {
+          type: 'string',
+          enum: ['json', 'jsonl', 'csv', 'tsv', 'xlsx', 'txt', 'markdown', 'latex', 'typst'],
+        },
+        formatId: { type: 'string' },
+        sheetName: { type: 'string' },
+        sharedTags: { type: 'array', items: { type: 'string' } },
+        sharedKnowledgeNodeIds: { type: 'array', items: { type: 'string' } },
+        sharedDifficulty: {
+          type: 'string',
+          enum: ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'],
+        },
+        sharedState: { type: 'string', enum: ['draft', 'active'] },
+        mappings: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['sourceKey', 'targetFieldId'],
+            properties: {
+              sourceKey: { type: 'string' },
+              targetFieldId: {
+                type: 'string',
+                enum: [
+                  'front',
+                  'back',
+                  'hint',
+                  'explanation',
+                  'tags',
+                  'knowledgeNodeIds',
+                  'difficulty',
+                  'state',
+                  'dump',
+                ],
+              },
+              dumpKey: { type: 'string' },
+            },
+          },
+        },
+        payload: {
+          type: 'object',
+          required: ['encoding', 'content'],
+          properties: {
+            encoding: { type: 'string', enum: ['text', 'base64'] },
+            content: { type: 'string' },
+          },
         },
       },
     },
@@ -745,7 +866,10 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       type: 'object',
       required: ['batchId'],
       properties: {
-        batchId: { type: 'string', description: 'Batch correlation ID from batch-create-cards result' },
+        batchId: {
+          type: 'string',
+          description: 'Batch correlation ID from batch-create-cards result',
+        },
       },
     },
   },
@@ -774,10 +898,16 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       properties: {
         query: {
           type: 'object',
-          description: 'DeckQuery filter object (cardTypes, states, difficulties, tags, sortBy, sortOrder)',
+          description:
+            'DeckQuery filter object (cardTypes, states, difficulties, tags, sortBy, sortOrder)',
         },
         cursor: { type: 'string', description: 'Opaque cursor from previous response' },
-        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Items per page (default: 20)' },
+        limit: {
+          type: 'number',
+          minimum: 1,
+          maximum: 100,
+          description: 'Items per page (default: 20)',
+        },
         direction: {
           type: 'string',
           enum: ['forward', 'backward'],
@@ -788,8 +918,7 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   },
   {
     name: 'restore-card',
-    description:
-      'Restore a soft-deleted card back to DRAFT state. Reverses a previous deletion.',
+    description: 'Restore a soft-deleted card back to DRAFT state. Reverses a previous deletion.',
     service: 'content-service',
     priority: 'P1',
     inputSchema: {
@@ -811,15 +940,24 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       required: ['cardId'],
       properties: {
         cardId: { type: 'string', description: 'ID of the card to get history for' },
-        limit: { type: 'number', minimum: 1, maximum: 100, description: 'Max entries to return (default: 20)' },
-        offset: { type: 'number', minimum: 0, description: 'Number of entries to skip (default: 0)' },
+        limit: {
+          type: 'number',
+          minimum: 1,
+          maximum: 100,
+          description: 'Max entries to return (default: 20)',
+        },
+        offset: {
+          type: 'number',
+          minimum: 0,
+          description: 'Number of entries to skip (default: 0)',
+        },
       },
     },
   },
   {
     name: 'get-card-stats',
     description:
-      'Get aggregate statistics for the user\'s card collection. Returns counts by state, difficulty, card type, source, plus date ranges.',
+      "Get aggregate statistics for the user's card collection. Returns counts by state, difficulty, card type, source, plus date ranges.",
     service: 'content-service',
     priority: 'P1',
     inputSchema: {
@@ -829,6 +967,5 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
   },
 ];
 
-export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] = CONTENT_TOOL_DEFINITIONS_BASE.map(
-  withContractDefaults
-);
+export const CONTENT_TOOL_DEFINITIONS: IToolDefinition[] =
+  CONTENT_TOOL_DEFINITIONS_BASE.map(withContractDefaults);

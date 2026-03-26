@@ -137,6 +137,59 @@ export const BatchCreateCardInputSchema = z.object({
     .max(100, 'Batch cannot exceed 100 cards'),
 });
 
+const CardImportFileTypeSchema = z.enum([
+  'json',
+  'jsonl',
+  'csv',
+  'tsv',
+  'xlsx',
+  'txt',
+  'markdown',
+  'latex',
+  'typst',
+]);
+
+const CardImportPayloadSchema = z.object({
+  encoding: z.enum(['text', 'base64']),
+  content: z.string().min(1, 'Import payload cannot be empty'),
+});
+
+const CardImportMappingTargetSchema = z.enum([
+  'front',
+  'back',
+  'hint',
+  'explanation',
+  'tags',
+  'knowledgeNodeIds',
+  'difficulty',
+  'state',
+  'dump',
+]);
+
+export const CardImportPreviewInputSchema = z.object({
+  fileName: z.string().min(1),
+  fileType: CardImportFileTypeSchema,
+  formatId: z.string().min(1),
+  payload: CardImportPayloadSchema,
+  sheetName: z.string().min(1).optional(),
+});
+
+export const CardImportFieldMappingSchema = z.object({
+  sourceKey: z.string().min(1),
+  targetFieldId: CardImportMappingTargetSchema,
+  dumpKey: z.string().min(1).optional(),
+});
+
+export const CardImportExecuteInputSchema = CardImportPreviewInputSchema.extend({
+  mappings: z
+    .array(CardImportFieldMappingSchema)
+    .min(1, 'Import execution requires at least one field mapping'),
+  sharedTags: z.array(TagSchema).max(30).default([]),
+  sharedKnowledgeNodeIds: z.array(NodeIdItemSchema).max(50).default([]),
+  sharedDifficulty: DifficultyLevelSchema.optional(),
+  sharedState: z.enum([CardState.DRAFT, CardState.ACTIVE]).default(CardState.DRAFT),
+});
+
 /**
  * Schema for updating a card.
  * Note: content is validated against the base schema here. Type-specific
@@ -242,6 +295,8 @@ export const SessionSeedInputSchema = z.object({
 
 export type CreateCardInputSchemaType = z.infer<typeof CreateCardInputSchema>;
 export type BatchCreateCardInputSchemaType = z.infer<typeof BatchCreateCardInputSchema>;
+export type CardImportPreviewInputSchemaType = z.infer<typeof CardImportPreviewInputSchema>;
+export type CardImportExecuteInputSchemaType = z.infer<typeof CardImportExecuteInputSchema>;
 export type UpdateCardInputSchemaType = z.infer<typeof UpdateCardInputSchema>;
 export type ChangeCardStateInputSchemaType = z.infer<typeof ChangeCardStateInputSchema>;
 export type DeckQuerySchemaType = z.infer<typeof DeckQuerySchema>;

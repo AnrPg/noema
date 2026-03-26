@@ -12,6 +12,8 @@ import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type { IBatchSummary } from '../../domain/content-service/content.repository.js';
 import type {
   IBatchChangeStateItem,
+  ICardImportExecuteInput,
+  ICardImportPreviewInput,
   IChangeCardStateInput,
   ICreateCardInput,
   IDeckQuery,
@@ -165,6 +167,137 @@ export function registerContentRoutes(
       try {
         const context = buildContext(request);
         const result = await contentService.createBatch(request.body.cards, context);
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/cards/import/preview - Parse an import payload and infer field mappings
+   */
+  fastify.post<{ Body: ICardImportPreviewInput }>(
+    '/v1/cards/import/preview',
+    {
+      preHandler: authMiddleware,
+      bodyLimit: options?.bodyLimits?.batchLimit ?? 5_242_880,
+      config: batchRouteConfig,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Preview a card import',
+        description:
+          'Parse a structured source file into card-shaped records and infer explicit mappings for front/back and auxiliary fields.',
+        body: {
+          type: 'object',
+          required: ['fileName', 'fileType', 'formatId', 'payload'],
+          properties: {
+            fileName: { type: 'string' },
+            fileType: {
+              type: 'string',
+              enum: ['json', 'jsonl', 'csv', 'tsv', 'xlsx', 'txt', 'markdown', 'latex', 'typst'],
+            },
+            formatId: { type: 'string' },
+            sheetName: { type: 'string' },
+            payload: {
+              type: 'object',
+              required: ['encoding', 'content'],
+              properties: {
+                encoding: { type: 'string', enum: ['text', 'base64'] },
+                content: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = contentService.previewImport(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/cards/import/execute - Parse, map, and create imported cards
+   */
+  fastify.post<{ Body: ICardImportExecuteInput }>(
+    '/v1/cards/import/execute',
+    {
+      preHandler: authMiddleware,
+      bodyLimit: options?.bodyLimits?.batchLimit ?? 5_242_880,
+      config: batchRouteConfig,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Execute a card import',
+        description:
+          'Run the import pipeline end-to-end: parse the uploaded payload, apply the explicit field mapping, then create cards in a tracked batch.',
+        body: {
+          type: 'object',
+          required: ['fileName', 'fileType', 'formatId', 'payload', 'mappings'],
+          properties: {
+            fileName: { type: 'string' },
+            fileType: {
+              type: 'string',
+              enum: ['json', 'jsonl', 'csv', 'tsv', 'xlsx', 'txt', 'markdown', 'latex', 'typst'],
+            },
+            formatId: { type: 'string' },
+            sheetName: { type: 'string' },
+            sharedTags: { type: 'array', items: { type: 'string' } },
+            sharedKnowledgeNodeIds: {
+              type: 'array',
+              items: { type: 'string', pattern: '^node_[a-zA-Z0-9]{21}$' },
+            },
+            sharedDifficulty: {
+              type: 'string',
+              enum: ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'],
+            },
+            sharedState: { type: 'string', enum: ['draft', 'active'] },
+            mappings: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['sourceKey', 'targetFieldId'],
+                properties: {
+                  sourceKey: { type: 'string' },
+                  targetFieldId: {
+                    type: 'string',
+                    enum: [
+                      'front',
+                      'back',
+                      'hint',
+                      'explanation',
+                      'tags',
+                      'knowledgeNodeIds',
+                      'difficulty',
+                      'state',
+                      'dump',
+                    ],
+                  },
+                  dumpKey: { type: 'string' },
+                },
+              },
+            },
+            payload: {
+              type: 'object',
+              required: ['encoding', 'content'],
+              properties: {
+                encoding: { type: 'string', enum: ['text', 'base64'] },
+                content: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.executeImport(request.body, context);
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

@@ -19,9 +19,11 @@ import {
   createCountCardsHandler,
   createCreateCardHandler,
   createCursorQueryCardsHandler,
+  createExecuteCardImportHandler,
   createGetCardByIdHandler,
   createGetCardHistoryHandler,
   createGetCardStatsHandler,
+  createPreviewCardImportHandler,
   createQueryCardsHandler,
   createRecoverBatchHandler,
   createRestoreCardHandler,
@@ -398,6 +400,8 @@ export class ToolRegistry {
 const EXPECTED_CONTENT_TOOL_NAMES = [
   'create-card',
   'batch-create-cards',
+  'preview-card-import',
+  'execute-card-import',
   'validate-card-content',
   'query-cards',
   'build-session-seed',
@@ -449,6 +453,14 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
     createBatchCreateCardsHandler(contentService)
   );
   registry.register(
+    requireDefinition('preview-card-import'),
+    createPreviewCardImportHandler(contentService)
+  );
+  registry.register(
+    requireDefinition('execute-card-import'),
+    createExecuteCardImportHandler(contentService)
+  );
+  registry.register(
     requireDefinition('validate-card-content'),
     createValidateCardContentHandler(contentService)
   );
@@ -494,10 +506,7 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
     requireDefinition('get-card-history'),
     createGetCardHistoryHandler(contentService)
   );
-  registry.register(
-    requireDefinition('get-card-stats'),
-    createGetCardStatsHandler(contentService)
-  );
+  registry.register(requireDefinition('get-card-stats'), createGetCardStatsHandler(contentService));
 
   return registry;
 }

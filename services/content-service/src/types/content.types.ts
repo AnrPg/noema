@@ -373,17 +373,91 @@ export interface IBatchCreateResult {
 }
 
 // ============================================================================
+// Import Preview / Execute
+// ============================================================================
+
+export type CardImportFileType =
+  | 'json'
+  | 'jsonl'
+  | 'csv'
+  | 'tsv'
+  | 'xlsx'
+  | 'txt'
+  | 'markdown'
+  | 'latex'
+  | 'typst';
+
+export type CardImportTargetFieldId =
+  | 'front'
+  | 'back'
+  | 'hint'
+  | 'explanation'
+  | 'tags'
+  | 'knowledgeNodeIds'
+  | 'difficulty'
+  | 'state';
+
+export type CardImportMappingTarget = CardImportTargetFieldId | 'dump';
+
+export interface ICardImportPayload {
+  encoding: 'text' | 'base64';
+  content: string;
+}
+
+export interface ICardImportPreviewInput {
+  fileName: string;
+  fileType: CardImportFileType;
+  formatId: string;
+  payload: ICardImportPayload;
+  sheetName?: string;
+}
+
+export interface ICardImportSourceField {
+  key: string;
+  sample: string;
+}
+
+export interface ICardImportRecord {
+  values: Record<string, string>;
+}
+
+export interface ICardImportFieldMapping {
+  sourceKey: string;
+  targetFieldId: CardImportMappingTarget;
+  dumpKey?: string;
+}
+
+export interface ICardImportPreviewResult {
+  fileName: string;
+  fileType: CardImportFileType;
+  formatId: string;
+  sourceFields: ICardImportSourceField[];
+  records: ICardImportRecord[];
+  warnings: string[];
+  sheetNames?: string[];
+  suggestedMappings: ICardImportFieldMapping[];
+}
+
+export interface ICardImportExecuteInput extends ICardImportPreviewInput {
+  mappings: ICardImportFieldMapping[];
+  sharedTags?: string[];
+  sharedKnowledgeNodeIds?: NodeId[];
+  sharedDifficulty?: DifficultyLevel;
+  sharedState?: Extract<CardState, 'draft' | 'active'>;
+}
+
+export interface ICardImportExecuteResult extends IBatchCreateResult {
+  importWarnings: string[];
+}
+
+// ============================================================================
 // Card History (Version Snapshots)
 // ============================================================================
 
 /**
  * Change type discriminator for card history entries.
  */
-export type CardHistoryChangeType =
-  | 'update'
-  | 'state_change'
-  | 'tags_update'
-  | 'node_links_update';
+export type CardHistoryChangeType = 'update' | 'state_change' | 'tags_update' | 'node_links_update';
 
 /**
  * A point-in-time snapshot of a card, captured before each mutation.

@@ -22,19 +22,29 @@ function buildAgentHints(reasoning: string) {
   };
 }
 
+function getDefinition(name: string): IToolDefinition {
+  const definition = CONTENT_TOOL_DEFINITIONS.find((item) => item.name === name);
+  if (definition === undefined) {
+    throw new Error(`Missing tool definition: ${name}`);
+  }
+  return definition;
+}
+
 describe('content tool registry contract', () => {
   it('registers full content tool surface', () => {
     const service = {} as ContentService;
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(17);
+    expect(definitions).toHaveLength(19);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
       expect.arrayContaining([
         'create-card',
         'batch-create-cards',
+        'preview-card-import',
+        'execute-card-import',
         'validate-card-content',
         'query-cards',
         'build-session-seed',
@@ -118,12 +128,14 @@ describe('content tool registry contract', () => {
   it('attaches observability metadata for successful execution', async () => {
     const registry = new ToolRegistry();
 
-    const definition = CONTENT_TOOL_DEFINITIONS[8] as IToolDefinition;
-    registry.register(definition, async () => ({
-      success: true,
-      data: { ok: true },
-      agentHints: buildAgentHints('ok'),
-    }));
+    const definition = getDefinition('count-cards');
+    registry.register(definition, () =>
+      Promise.resolve({
+        success: true,
+        data: { ok: true },
+        agentHints: buildAgentHints('ok'),
+      })
+    );
 
     const result = await registry.execute('count-cards', {}, 'usr_1', 'cor_1');
 
@@ -142,15 +154,17 @@ describe('content tool registry contract', () => {
   it('categorizes handler failures for retry and domain', async () => {
     const registry = new ToolRegistry();
 
-    const definition = CONTENT_TOOL_DEFINITIONS[8] as IToolDefinition;
-    registry.register(definition, async () => ({
-      success: false,
-      error: {
-        code: 'VALIDATION_FAILED',
-        message: 'bad input',
-      },
-      agentHints: buildAgentHints('bad input'),
-    }));
+    const definition = getDefinition('count-cards');
+    registry.register(definition, () =>
+      Promise.resolve({
+        success: false,
+        error: {
+          code: 'VALIDATION_FAILED',
+          message: 'bad input',
+        },
+        agentHints: buildAgentHints('bad input'),
+      })
+    );
 
     const result = await registry.execute('count-cards', {}, 'usr_1', 'cor_1');
 

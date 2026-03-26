@@ -19,6 +19,10 @@ import type {
   CardHistoryChangeType,
   IBatchChangeStateItem,
   IBatchCreateResult,
+  ICardImportExecuteInput,
+  ICardImportExecuteResult,
+  ICardImportPreviewInput,
+  ICardImportPreviewResult,
   ICard,
   ICardHistory,
   ICardStats,
@@ -35,9 +39,12 @@ import { generateContentHash } from '../../utils/content-hash.js';
 import { sanitizeCardContent } from '../../utils/content-sanitizer.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import { validateCardContent } from './card-content.schemas.js';
+import { prepareImportedCards, previewCardImport } from './card-import.js';
 import type { IBatchSummary, IContentRepository } from './content.repository.js';
 import {
   BatchCreateCardInputSchema,
+  CardImportExecuteInputSchema,
+  CardImportPreviewInputSchema,
   ChangeCardStateInputSchema,
   CreateCardInputSchema,
   DeckQuerySchema,
@@ -1001,6 +1008,145 @@ export class ContentService {
         preferenceAlignment: [],
         reasoning: `Content does not match ${cardType} schema: ${String(result.error.issues.length)} error(s)`,
       },
+    };
+  }
+
+  previewImport(
+    input: ICardImportPreviewInput,
+    context: IExecutionContext
+  ): IServiceResult<ICardImportPreviewResult> {
+    this.requireAuth(context);
+    this.logger.info(
+      { fileType: input.fileType, formatId: input.formatId },
+      'Previewing card import'
+    );
+
+    const parseResult = CardImportPreviewInputSchema.safeParse(input);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError(
+        'Invalid import preview input',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+
+    const previewInput: ICardImportPreviewInput = {
+      fileName: parseResult.data.fileName,
+      fileType: parseResult.data.fileType,
+      formatId: parseResult.data.formatId,
+      payload: parseResult.data.payload,
+      ...(parseResult.data.sheetName !== undefined
+        ? { sheetName: parseResult.data.sheetName }
+        : {}),
+    };
+
+    const preview = previewCardImport(previewInput);
+
+    return {
+      data: preview,
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: 'confirm_mapping',
+            description: 'Review the inferred field mappings before import execution',
+            priority: 'high',
+            category: 'optimization',
+          },
+        ],
+        relatedResources: [],
+        confidence: preview.records.length > 0 ? 0.9 : 0.5,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.8, effort: 0.2, roi: 4.0 },
+        preferenceAlignment: [],
+        reasoning: `Import preview parsed ${String(preview.records.length)} records from ${preview.fileType}`,
+      },
+    };
+  }
+
+  async executeImport(
+    input: ICardImportExecuteInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICardImportExecuteResult>> {
+    this.requireAuth(context);
+    this.logger.info(
+      { fileType: input.fileType, formatId: input.formatId },
+      'Executing card import'
+    );
+
+    const parseResult = CardImportExecuteInputSchema.safeParse(input);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError(
+        'Invalid import execution input',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+
+    const previewInput: ICardImportPreviewInput = {
+      fileName: parseResult.data.fileName,
+      fileType: parseResult.data.fileType,
+      formatId: parseResult.data.formatId,
+      payload: parseResult.data.payload,
+      ...(parseResult.data.sheetName !== undefined
+        ? { sheetName: parseResult.data.sheetName }
+        : {}),
+    };
+    const preview = previewCardImport(previewInput);
+    const prepared = prepareImportedCards(preview, {
+      mappings: parseResult.data.mappings.map((mapping) =>
+        mapping.dumpKey === undefined
+          ? { sourceKey: mapping.sourceKey, targetFieldId: mapping.targetFieldId }
+          : {
+              sourceKey: mapping.sourceKey,
+              targetFieldId: mapping.targetFieldId,
+              dumpKey: mapping.dumpKey,
+            }
+      ),
+      sharedDifficulty: parseResult.data.sharedDifficulty,
+      sharedKnowledgeNodeIds: parseResult.data.sharedKnowledgeNodeIds,
+      sharedState: parseResult.data.sharedState,
+      sharedTags: parseResult.data.sharedTags,
+    });
+    const batchResult = await this.createBatch(prepared.cards, context);
+
+    const failureIndexes = new Set(batchResult.data.failed.map((item) => item.index));
+    const desiredStatesForCreated: Extract<CardState, 'draft' | 'active'>[] = [];
+
+    for (let index = 0, createdIndex = 0; index < prepared.desiredStates.length; index += 1) {
+      if (failureIndexes.has(index)) continue;
+      const desiredState = prepared.desiredStates[index];
+      if (desiredState === undefined) continue;
+      desiredStatesForCreated[createdIndex] = desiredState;
+      createdIndex += 1;
+    }
+
+    for (let index = 0; index < batchResult.data.created.length; index += 1) {
+      const card = batchResult.data.created[index];
+      if (card === undefined) continue;
+      const desiredState = desiredStatesForCreated[index] ?? 'draft';
+      if (desiredState === 'draft') continue;
+
+      const stateResult = await this.changeState(
+        card.id,
+        { state: desiredState },
+        card.version,
+        context
+      );
+
+      batchResult.data.created[index] = stateResult.data;
+    }
+
+    return {
+      data: {
+        ...batchResult.data,
+        importWarnings: prepared.warnings,
+      },
+      agentHints: batchResult.agentHints,
     };
   }
 
