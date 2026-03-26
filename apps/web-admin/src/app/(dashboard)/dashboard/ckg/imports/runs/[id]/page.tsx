@@ -163,7 +163,7 @@ export default function OntologyImportRunDetailPage({
     liveActionsEnabled && (detail.run.status === 'failed' || detail.run.status === 'cancelled');
   const canSubmitPreview =
     liveActionsEnabled &&
-    detail.run.status === 'ready_for_normalization' &&
+    detail.run.status === 'ready_for_review' &&
     (detail.mutationPreview?.readyProposalCount ?? 0) > 0;
   const canReviewSubmittedMutations = detail.run.submittedMutationIds.length > 0;
   const sourceHomepageUrl = detail.source?.homepageUrl ?? null;
@@ -175,8 +175,9 @@ export default function OntologyImportRunDetailPage({
         <div>
           <h1 className="text-3xl font-bold">Ontology import run</h1>
           <p className="mt-1 text-muted-foreground">
-            Inspect fetch, parse, normalization, and mutation-preview checkpoints, then submit the
-            ready proposals into the CKG review queue when the run is ready.
+            Start runs execute fetch, parse, normalization, and mutation-preview generation
+            automatically. Once the preview is ready, submit the ready proposals into the CKG review
+            queue.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -211,7 +212,7 @@ export default function OntologyImportRunDetailPage({
               submitPreview.mutate(params.id);
             }}
           >
-            {submitPreview.isPending ? 'Submitting…' : 'Submit preview'}
+            {submitPreview.isPending ? 'Submitting…' : 'Submit to review queue'}
           </Button>
           {canReviewSubmittedMutations ? (
             <Button asChild variant="outline">

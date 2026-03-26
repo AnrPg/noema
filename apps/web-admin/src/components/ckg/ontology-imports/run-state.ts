@@ -39,8 +39,8 @@ export function describeOntologyImportSourceVersion(
       return 'release unavailable';
     case 'cancelled':
       return 'release not captured';
-    case 'staging_validated':
-    case 'ready_for_normalization':
+    case 'review_submitted':
+    case 'ready_for_review':
       return 'release unspecified';
     default:
       return 'release pending';
@@ -59,8 +59,8 @@ export function describeOntologyImportRunVersion(
       return 'Unavailable for failed run';
     case 'cancelled':
       return 'Not captured before cancellation';
-    case 'staging_validated':
-    case 'ready_for_normalization':
+    case 'review_submitted':
+    case 'ready_for_review':
       return 'Not reported by source';
     default:
       return 'Pending discovery';
@@ -79,12 +79,12 @@ export function getOntologyImportRunTone(status: OntologyImportStatus): IRunTone
         badgeClassName: 'border-zinc-400/30 bg-zinc-500/10 text-zinc-200',
         cardClassName: 'border-zinc-400/20 bg-zinc-500/[0.04]',
       };
-    case 'staging_validated':
+    case 'review_submitted':
       return {
         badgeClassName: 'border-violet-400/30 bg-violet-500/10 text-violet-200',
         cardClassName: 'border-violet-400/20 bg-violet-500/[0.045]',
       };
-    case 'ready_for_normalization':
+    case 'ready_for_review':
       return {
         badgeClassName: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200',
         cardClassName: 'border-emerald-400/20 bg-emerald-500/[0.045]',

@@ -4,13 +4,9 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
-  useCancelOntologyImportRun,
-  useOntologyImportRun,
   useOntologyImportRuns,
   useOntologyImportsSystemStatus,
   useOntologyImportSources,
-  useRetryOntologyImportRun,
-  useStartOntologyImportRun,
   type IOntologyImportRunDto,
   type OntologyImportStatus,
 } from '@noema/api-client';
@@ -25,14 +21,7 @@ import {
   CardTitle,
   MetricTile,
 } from '@noema/ui';
-import {
-  AlertCircle,
-  CheckCircle2,
-  DatabaseBackup,
-  GitBranchPlus,
-  Layers3,
-  RefreshCw,
-} from 'lucide-react';
+import { AlertCircle, DatabaseBackup, GitBranchPlus, Layers3, RefreshCw } from 'lucide-react';
 import { OntologyImportCreateRunCard } from '@/components/ckg/ontology-imports/create-run-card';
 import {
   ontologyImportRunsPlaceholder,
@@ -45,29 +34,66 @@ import {
   isOntologyImportRunActive,
 } from '@/components/ckg/ontology-imports/run-state';
 
-type MessageState = { type: 'success'; text: string } | { type: 'error'; text: string } | null;
+function formatDateTime(value: string | null): string {
+  if (value === null) {
+    return 'Not started';
+  }
 
-type BulkAction = 'start' | 'cancel' | 'retry';
+  return new Date(value).toLocaleString();
+}
 
-function isBulkActionEligible(action: BulkAction, run: IOntologyImportRunDto): boolean {
-  switch (action) {
-    case 'start':
-      return run.status === 'queued' || run.status === 'failed';
-    case 'cancel':
-      return run.status === 'queued' || run.status === 'fetching';
-    case 'retry':
-      return run.status === 'failed' || run.status === 'cancelled';
+function formatDuration(startedAt: string | null, completedAt: string | null): string {
+  if (startedAt === null) {
+    return 'Not started';
+  }
+
+  const start = new Date(startedAt).getTime();
+  const end = new Date(completedAt ?? Date.now()).getTime();
+  const totalSeconds = Math.max(0, Math.round((end - start) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${String(hours)}h ${String(minutes)}m`;
+  }
+
+  if (minutes > 0) {
+    return `${String(minutes)}m ${String(seconds)}s`;
+  }
+
+  return `${String(seconds)}s`;
+}
+
+function describeNextAction(run: IOntologyImportRunDto): string {
+  switch (run.status) {
+    case 'queued':
+      return 'Start run';
+    case 'fetching':
+    case 'fetched':
+    case 'parsing':
+    case 'parsed':
+      return 'Monitor pipeline';
+    case 'ready_for_review':
+      return 'Submit to review queue';
+    case 'review_submitted':
+      return 'Review submitted mutations';
+    case 'failed':
+      return 'Retry run';
+    case 'cancelled':
+      return 'Restart or hide';
+    default:
+      return 'Inspect run';
   }
 }
 
 export function OntologyImportRunsWorkspace(): React.JSX.Element {
   const searchParams = useSearchParams();
-  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<string>(searchParams.get('sourceId') ?? 'all');
   const [versionFilter, setVersionFilter] = useState<string>('');
   const [modeFilter, setModeFilter] = useState<string>('');
-  const [message, setMessage] = useState<MessageState>(null);
+  const [hiddenRunIds, setHiddenRunIds] = useState<string[]>([]);
 
   const {
     data: systemStatus,
@@ -118,6 +144,9 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
   const visibleRuns = useMemo(
     () =>
       runs.filter((run) => {
+        if (hiddenRunIds.includes(run.id)) {
+          return false;
+        }
         if (sourceFilter !== 'all' && run.sourceId !== sourceFilter) {
           return false;
         }
@@ -138,21 +167,8 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
         }
         return true;
       }),
-    [modeFilter, runs, sourceFilter, statusFilter, versionFilter]
+    [hiddenRunIds, modeFilter, runs, sourceFilter, statusFilter, versionFilter]
   );
-  const comparedRunIds = selectedRunIds.slice(0, 2);
-  const { data: comparedRunLeft } = useOntologyImportRun(comparedRunIds[0] ?? '', {
-    enabled: canReadRegistry && comparedRunIds[0] !== undefined,
-    retry: false,
-  });
-  const { data: comparedRunRight } = useOntologyImportRun(comparedRunIds[1] ?? '', {
-    enabled: canReadRegistry && comparedRunIds[1] !== undefined,
-    retry: false,
-  });
-
-  const startRun = useStartOntologyImportRun();
-  const cancelRun = useCancelOntologyImportRun();
-  const retryRun = useRetryOntologyImportRun();
 
   async function refresh(): Promise<void> {
     await refetchStatus();
@@ -160,53 +176,7 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
       await Promise.all([refetchSources(), refetchRuns()]);
     }
   }
-
-  async function runBulkAction(action: BulkAction): Promise<void> {
-    const selectedRuns = visibleRuns.filter((run) => selectedRunIds.includes(run.id));
-    const actionableRuns = selectedRuns.filter((run) => isBulkActionEligible(action, run));
-    if (actionableRuns.length === 0) {
-      setMessage({
-        type: 'error',
-        text: `No selected runs can be ${action}ed from their current status.`,
-      });
-      return;
-    }
-
-    try {
-      await Promise.all(
-        actionableRuns.map((run) => {
-          switch (action) {
-            case 'start':
-              return startRun.mutateAsync(run.id);
-            case 'cancel':
-              return cancelRun.mutateAsync({
-                runId: run.id,
-                reason: 'Bulk-cancelled from admin imports workspace',
-              });
-            case 'retry':
-              return retryRun.mutateAsync(run.id);
-          }
-        })
-      );
-      setMessage({
-        type: 'success',
-        text: `${String(actionableRuns.length)} run${actionableRuns.length === 1 ? '' : 's'} ${action}ed successfully.`,
-      });
-      setSelectedRunIds([]);
-      await refresh();
-    } catch (error) {
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : `Bulk ${action} failed.`,
-      });
-    }
-  }
-
-  const pendingBulkAction =
-    startRun.isPending || cancelRun.isPending || retryRun.isPending || healthLoading;
-  const readyForNormalization = runs.filter(
-    (run) => run.status === 'ready_for_normalization'
-  ).length;
+  const readyForReview = runs.filter((run) => run.status === 'ready_for_review').length;
   const activeRunCount = runs.filter((run) => isOntologyImportRunActive(run.status)).length;
 
   return (
@@ -259,17 +229,6 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
         </Alert>
       )}
 
-      {message !== null && (
-        <Alert variant={message.type === 'error' ? 'destructive' : 'success'}>
-          {message.type === 'error' ? (
-            <AlertCircle className="h-4 w-4" />
-          ) : (
-            <CheckCircle2 className="h-4 w-4" />
-          )}
-          <AlertDescription>{message.text}</AlertDescription>
-        </Alert>
-      )}
-
       <div className="grid gap-4 md:grid-cols-3">
         <MetricTile
           label="Visible sources"
@@ -285,229 +244,141 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
         />
         <MetricTile
           label="Ready for review"
-          value={readyForNormalization}
+          value={readyForReview}
           icon={<GitBranchPlus className="h-4 w-4" />}
-          colorFamily={readyForNormalization > 0 ? 'axon' : 'cortex'}
+          colorFamily={readyForReview > 0 ? 'axon' : 'cortex'}
         />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Run filters</CardTitle>
-          <CardDescription>
-            Narrow the import registry by source, status, version, or source mode before taking bulk
-            actions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-4">
-          <label className="space-y-2 text-sm">
-            <span className="font-medium text-foreground">Source</span>
-            <select
-              id="ontology-import-filter-source"
-              name="sourceFilter"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={sourceFilter}
-              disabled={sources.length === 0}
-              onChange={(event) => {
-                setSourceFilter(event.target.value);
-              }}
-            >
-              <option value="all">All sources</option>
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="font-medium text-foreground">Status</span>
-            <select
-              id="ontology-import-filter-status"
-              name="statusFilter"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value);
-              }}
-            >
-              <option value="all">All statuses</option>
-              {[
-                'queued',
-                'fetching',
-                'fetched',
-                'parsing',
-                'parsed',
-                'ready_for_normalization',
-                'staging_validated',
-                'failed',
-                'cancelled',
-              ].map((status) => (
-                <option key={status} value={status}>
-                  {formatOntologyImportStatus(status as OntologyImportStatus)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="font-medium text-foreground">Source version</span>
-            <input
-              id="ontology-import-filter-version"
-              name="versionFilter"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              placeholder="Search release or checksum tag"
-              value={versionFilter}
-              disabled={runs.length === 0}
-              onChange={(event) => {
-                setVersionFilter(event.target.value);
-              }}
-            />
-          </label>
-          <label className="space-y-2 text-sm">
-            <span className="font-medium text-foreground">Mode</span>
-            <input
-              id="ontology-import-filter-mode"
-              name="modeFilter"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-              placeholder="snapshot, skills, targeted..."
-              value={modeFilter}
-              disabled={runs.length === 0}
-              onChange={(event) => {
-                setModeFilter(event.target.value);
-              }}
-            />
-          </label>
-        </CardContent>
-      </Card>
-
-      {selectedRunIds.length === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Run comparison</CardTitle>
-            <CardDescription>Side-by-side comparison for the two selected runs.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            {[comparedRunLeft, comparedRunRight].map((detail, index) => {
-              const run =
-                detail?.run ?? visibleRuns.find((entry) => entry.id === comparedRunIds[index]);
-              return (
-                <div
-                  key={comparedRunIds[index]}
-                  className="rounded-md border border-border bg-muted/20 p-4 text-sm"
-                >
-                  <p className="font-medium text-foreground">
-                    {run?.sourceName ?? comparedRunIds[index]}
-                  </p>
-                  <div className="mt-2 space-y-1 text-muted-foreground">
-                    <p>Run id: {run?.id ?? comparedRunIds[index]}</p>
-                    <p>
-                      Status:{' '}
-                      {run !== undefined ? formatOntologyImportStatus(run.status) : 'unknown'}
-                    </p>
-                    <p>
-                      Version:{' '}
-                      {run !== undefined
-                        ? describeOntologyImportSourceVersion(run)
-                        : 'release pending'}
-                    </p>
-                    <p>Mode: {run?.configuration.mode ?? 'default'}</p>
-                    <p>
-                      Parsed records:{' '}
-                      {detail?.parsedBatch !== null && detail?.parsedBatch !== undefined
-                        ? String(detail.parsedBatch.recordCount)
-                        : 'n/a'}
-                    </p>
-                    <p>
-                      Concepts:{' '}
-                      {detail?.normalizedBatch !== null && detail?.normalizedBatch !== undefined
-                        ? String(detail.normalizedBatch.conceptCount)
-                        : 'n/a'}
-                    </p>
-                    <p>
-                      Ready proposals:{' '}
-                      {detail?.mutationPreview !== null && detail?.mutationPreview !== undefined
-                        ? String(detail.mutationPreview.readyProposalCount)
-                        : 'n/a'}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>Bulk actions</CardTitle>
+              <CardTitle>Import runs</CardTitle>
               <CardDescription>
-                Select visible runs, then start, cancel, or retry the subset whose current status
-                allows that action.
+                {usingDemoData
+                  ? 'Demo-only registry shown while the backend reports degraded ontology-import capabilities.'
+                  : healthLoading || sourcesLoading || runsLoading
+                    ? 'Loading live import runs...'
+                    : 'Live import-run registry from the knowledge graph service.'}
               </CardDescription>
             </div>
             <div className="text-sm text-muted-foreground">
-              {selectedRunIds.length} selected of {visibleRuns.length} visible
+              {String(visibleRuns.length)} visible
+              {hiddenRunIds.length > 0 ? ` · ${String(hiddenRunIds.length)} hidden` : ''}
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            disabled={usingDemoData || pendingBulkAction}
-            onClick={() => {
-              void runBulkAction('start');
-            }}
-          >
-            Bulk start
-          </Button>
-          <Button
-            variant="outline"
-            disabled={usingDemoData || pendingBulkAction}
-            onClick={() => {
-              void runBulkAction('cancel');
-            }}
-          >
-            Bulk cancel
-          </Button>
-          <Button
-            variant="outline"
-            disabled={usingDemoData || pendingBulkAction}
-            onClick={() => {
-              void runBulkAction('retry');
-            }}
-          >
-            Bulk retry
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={visibleRuns.length === 0}
-            onClick={() => {
-              setSelectedRunIds(
-                selectedRunIds.length === visibleRuns.length ? [] : visibleRuns.map((run) => run.id)
-              );
-            }}
-          >
-            {visibleRuns.length > 0 && selectedRunIds.length === visibleRuns.length
-              ? 'Clear selection'
-              : 'Select visible'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Import runs</CardTitle>
-          <CardDescription>
-            {usingDemoData
-              ? 'Demo-only registry shown while the backend reports degraded ontology-import capabilities.'
-              : healthLoading || sourcesLoading || runsLoading
-                ? 'Loading live import runs...'
-                : 'Live import-run registry from the knowledge graph service.'}
-          </CardDescription>
-        </CardHeader>
         <CardContent className="space-y-3">
+          <div className="grid gap-3 rounded-md border border-border bg-background/30 p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+            <label className="space-y-1 text-xs">
+              <span className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Source
+              </span>
+              <select
+                id="ontology-import-filter-source"
+                name="sourceFilter"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                value={sourceFilter}
+                disabled={sources.length === 0}
+                onChange={(event) => {
+                  setSourceFilter(event.target.value);
+                }}
+              >
+                <option value="all">All sources</option>
+                {sources.map((source) => (
+                  <option key={source.id} value={source.id}>
+                    {source.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Status
+              </span>
+              <select
+                id="ontology-import-filter-status"
+                name="statusFilter"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value);
+                }}
+              >
+                <option value="all">All statuses</option>
+                {[
+                  'queued',
+                  'fetching',
+                  'fetched',
+                  'parsing',
+                  'parsed',
+                  'ready_for_review',
+                  'review_submitted',
+                  'failed',
+                  'cancelled',
+                ].map((status) => (
+                  <option key={status} value={status}>
+                    {formatOntologyImportStatus(status as OntologyImportStatus)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Version
+              </span>
+              <input
+                id="ontology-import-filter-version"
+                name="versionFilter"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                placeholder="Search release or checksum tag"
+                value={versionFilter}
+                disabled={runs.length === 0}
+                onChange={(event) => {
+                  setVersionFilter(event.target.value);
+                }}
+              />
+            </label>
+            <label className="space-y-1 text-xs">
+              <span className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Mode
+              </span>
+              <input
+                id="ontology-import-filter-mode"
+                name="modeFilter"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                placeholder="snapshot, skills, targeted..."
+                value={modeFilter}
+                disabled={runs.length === 0}
+                onChange={(event) => {
+                  setModeFilter(event.target.value);
+                }}
+              />
+            </label>
+            <div className="flex items-end gap-2">
+              <Button
+                variant="ghost"
+                disabled={
+                  sourceFilter === 'all' &&
+                  statusFilter === 'all' &&
+                  versionFilter === '' &&
+                  modeFilter === '' &&
+                  hiddenRunIds.length === 0
+                }
+                onClick={() => {
+                  setSourceFilter('all');
+                  setStatusFilter('all');
+                  setVersionFilter('');
+                  setModeFilter('');
+                  setHiddenRunIds([]);
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+
           {visibleRuns.length === 0 ? (
             <div className="rounded-md border border-dashed border-border p-6 text-sm text-muted-foreground">
               No import runs match the current filters.
@@ -516,46 +387,94 @@ export function OntologyImportRunsWorkspace(): React.JSX.Element {
             visibleRuns.map((run) => (
               <div
                 key={run.id}
-                className={`flex flex-wrap items-center justify-between gap-3 rounded-md border p-4 ${getOntologyImportRunTone(run.status).cardClassName}`}
+                className={`flex flex-wrap items-start justify-between gap-4 rounded-md border p-4 ${getOntologyImportRunTone(run.status).cardClassName}`}
               >
-                <div className="flex items-start gap-3">
-                  <input
-                    name={`selectedRunIds.${run.id}`}
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 rounded border border-input bg-background"
-                    checked={selectedRunIds.includes(run.id)}
-                    onChange={() => {
-                      setSelectedRunIds((current) =>
-                        current.includes(run.id)
-                          ? current.filter((entry) => entry !== run.id)
-                          : [...current, run.id]
-                      );
-                    }}
-                  />
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">{run.sourceName}</p>
-                    <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                      <span>{run.id}</span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${getOntologyImportRunTone(run.status).badgeClassName}`}
-                      >
-                        {formatOntologyImportStatus(run.status)}
-                      </span>
-                      <span>{describeOntologyImportSourceVersion(run)}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Mode: {run.configuration.mode ?? 'default'} · Language:{' '}
-                      {run.configuration.language ?? 'default'} · Submitted mutations:{' '}
-                      {run.submittedMutationIds.length}
-                    </p>
-                    {isOntologyImportRunActive(run.status) && (
-                      <p className="text-xs text-emerald-300">
-                        Live monitor: this run is still progressing through the pipeline.
-                      </p>
-                    )}
+                <div className="min-w-0 flex-1 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="font-medium text-foreground">{run.sourceName}</p>
+                      <p className="break-all text-sm text-muted-foreground">{run.id}</p>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${getOntologyImportRunTone(run.status).badgeClassName}`}
+                    >
+                      {formatOntologyImportStatus(run.status)}
+                    </span>
                   </div>
+                  <div className="grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-md border border-border bg-background/40 p-3">
+                      <p className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Status
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {formatOntologyImportStatus(run.status)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background/40 p-3">
+                      <p className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Source version
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {describeOntologyImportSourceVersion(run)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background/40 p-3">
+                      <p className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Next action
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">{describeNextAction(run)}</p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background/40 p-3">
+                      <p className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Started
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {formatDateTime(run.startedAt)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background/40 p-3">
+                      <p className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Finished
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {run.completedAt === null
+                          ? 'Still running'
+                          : formatDateTime(run.completedAt)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border border-border bg-background/40 p-3">
+                      <p className="font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                        Duration
+                      </p>
+                      <p className="mt-1 text-sm text-foreground">
+                        {formatDuration(run.startedAt, run.completedAt)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                    <p>Mode: {run.configuration.mode ?? 'default'}</p>
+                    <p>Language: {run.configuration.language ?? 'default'}</p>
+                    <p>Submitted mutations: {run.submittedMutationIds.length}</p>
+                    <p>Created: {formatDateTime(run.createdAt)}</p>
+                  </div>
+                  {isOntologyImportRunActive(run.status) && (
+                    <p className="text-xs text-emerald-300">
+                      Live monitor: this run is still progressing through the pipeline.
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setHiddenRunIds((current) =>
+                        current.includes(run.id) ? current : [...current, run.id]
+                      );
+                    }}
+                  >
+                    Hide
+                  </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/dashboard/ckg/imports/runs/${run.id}`}>Inspect run</Link>
                   </Button>

@@ -60,6 +60,16 @@ The run-detail page now surfaces the full import progression that exists today:
 - normalized batch summary
 - mutation-preview counts and sample candidates
 
+Current operator truth:
+
+- starting a run now executes fetch, parse, normalization, and mutation-preview
+  generation automatically
+- the first admin handoff happens after the preview is ready
+- the run-detail screen now groups these views into collapsible sections so the
+  page opens in a calmer, scan-first state
+- mutation preview candidates are paginated in groups of 5 and scroll within the
+  section when the preview is larger than the compact panel
+
 ## Latest admin workflow
 
 The imports workspace now lands on a proper run registry instead of a

@@ -117,8 +117,8 @@ export function OntologyImportCreateRunCard({
       <CardHeader>
         <CardTitle>Create import run</CardTitle>
         <CardDescription>
-          Queue a new source-aware import with an explicit source version and fetch mode before we
-          start the pipeline.
+          Queue a new source-aware import with an explicit source version and fetch mode before
+          starting the automated pipeline.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -248,8 +248,9 @@ export function OntologyImportCreateRunCard({
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            Runs are created as queued records first. You can inspect them, then start fetching from
-            the run detail page.
+            Runs are created as queued records first. Starting a run executes fetch, parse,
+            normalization, and mutation-preview generation automatically, then waits for admin
+            submission to the review queue.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {selectedSourceHomepageUrl !== null && (

@@ -107,7 +107,7 @@ const escoRun: IOntologyImportRunDto = {
     seedNodes: [],
   },
   submittedMutationIds: ['mutation_seed_esco_001', 'mutation_seed_esco_002'],
-  status: 'staging_validated',
+  status: 'review_submitted',
   trigger: 'manual',
   initiatedBy: 'admin',
   createdAt: now,
