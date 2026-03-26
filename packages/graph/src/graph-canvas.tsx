@@ -88,6 +88,17 @@ export interface IGraphCanvasProps {
 const EMPTY_SET = new Set<string>();
 const EMPTY_MASTERY_MAP: Record<string, number> = {};
 
+function seededNodePosition(index: number, total: number): { x: number; y: number } {
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const spacing = total > 220 ? 72 : total > 120 ? 86 : 98;
+  const radius = Math.sqrt(index + 1) * spacing;
+  const angle = index * goldenAngle;
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
+}
+
 // ============================================================================
 // GraphCanvas
 // ============================================================================
@@ -174,7 +185,7 @@ export function GraphCanvas({
 
   React.useEffect(() => {
     const basePositions = basePositionMapRef.current;
-    for (const node of forceNodes) {
+    forceNodes.forEach((node, index) => {
       const savedPosition = basePositions.get(node.id);
       if (savedPosition !== undefined && layoutMode === 'force') {
         node.x = savedPosition.x;
@@ -183,11 +194,17 @@ export function GraphCanvas({
         node.fy = savedPosition.y;
         node.vx = 0;
         node.vy = 0;
+      } else if (layoutMode === 'force') {
+        const seededPosition = seededNodePosition(index, forceNodes.length);
+        node.x = seededPosition.x;
+        node.y = seededPosition.y;
+        node.fx = null;
+        node.fy = null;
       } else {
         node.fx = null;
         node.fy = null;
       }
-    }
+    });
 
     graphRef.current?.d3ReheatSimulation?.();
   }, [forceNodes, layoutMode]);
@@ -295,7 +312,7 @@ export function GraphCanvas({
           const distance = Math.hypot(dx, dy) || 0.001;
           const baseSpacing =
             nodeRadius(currentNode.__degree ?? 0) + nodeRadius(otherNode.__degree ?? 0);
-          const labelPadding = nodes.length > 160 ? 24 : nodes.length > 80 ? 18 : 12;
+          const labelPadding = nodes.length > 220 ? 64 : nodes.length > 120 ? 48 : 32;
           const minDistance = baseSpacing + labelPadding;
           if (distance >= minDistance) {
             continue;
@@ -304,7 +321,7 @@ export function GraphCanvas({
           const overlap = (minDistance - distance) / minDistance;
           const unitX = dx / distance;
           const unitY = dy / distance;
-          const impulse = overlap * alpha * 16;
+          const impulse = overlap * alpha * 28;
 
           currentNode.vx = (currentNode.vx ?? 0) - unitX * impulse;
           currentNode.vy = (currentNode.vy ?? 0) - unitY * impulse;
@@ -331,15 +348,22 @@ export function GraphCanvas({
     graph.d3Force?.('spacing', spacingForce);
     graph
       .d3Force?.('charge')
-      ?.strength?.(nodes.length > 220 ? -320 : nodes.length > 120 ? -250 : nodes.length > 60 ? -180 : -130);
+      ?.strength?.(nodes.length > 220 ? -460 : nodes.length > 120 ? -360 : nodes.length > 60 ? -240 : -170);
     graph.d3ReheatSimulation?.();
   }, [hoverRepelForce, spacingForce, nodes.length]);
 
   React.useEffect(() => {
     const basePositions = basePositionMapRef.current;
-    const focusNode = interactionFocusId !== null ? forceNodes.find((node) => node.id === interactionFocusId) : undefined;
+    const focusNode =
+      interactionFocusId !== null
+        ? forceNodes.find((node) => node.id === interactionFocusId)
+        : undefined;
     const focusAnchor =
       interactionFocusId !== null ? basePositions.get(interactionFocusId) : undefined;
+    const selectedFocusActive =
+      selectedNodeId !== null &&
+      interactionFocusId !== null &&
+      interactionFocusId === selectedNodeId;
 
     for (const node of forceNodes) {
       const basePosition = basePositions.get(node.id);
@@ -364,7 +388,8 @@ export function GraphCanvas({
       const dx = basePosition.x - focusAnchor.x;
       const dy = basePosition.y - focusAnchor.y;
       const distance = Math.hypot(dx, dy) || 0.001;
-      const effectRadius = 280 + nodeRadius(node.__degree ?? 0) * 6;
+      const effectRadius =
+        (selectedFocusActive ? 420 : 320) + nodeRadius(node.__degree ?? 0) * 8;
 
       if (distance > effectRadius) {
         node.fx = basePosition.x;
@@ -374,24 +399,28 @@ export function GraphCanvas({
 
       const unitX = dx / distance;
       const unitY = dy / distance;
-      const push = (1 - distance / effectRadius) * 72;
+      const push = (1 - distance / effectRadius) * (selectedFocusActive ? 160 : 104);
       node.fx = basePosition.x + unitX * push;
       node.fy = basePosition.y + unitY * push;
+      node.vx = (node.vx ?? 0) + unitX * (selectedFocusActive ? 4.5 : 2.8);
+      node.vy = (node.vy ?? 0) + unitY * (selectedFocusActive ? 4.5 : 2.8);
     }
 
     graphRef.current?.d3ReheatSimulation?.();
-  }, [forceNodes, interactionFocusId]);
+  }, [forceNodes, interactionFocusId, selectedNodeId]);
 
   const nodeCanvasObject = React.useCallback(
     (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const n = node as IForceNode;
       const masteryVal: number | undefined = masteryMap[n.id];
+      const isFocusNode = n.id === interactionFocusId;
       const shouldShowLabel =
-        showLabels ||
-        n.id === selectedNodeId ||
-        n.id === hoveredNodeId ||
-        highlightedNodeIds.has(n.id) ||
-        recentNodeIds.has(n.id);
+        !isFocusNode &&
+        (showLabels ||
+          n.id === selectedNodeId ||
+          n.id === hoveredNodeId ||
+          highlightedNodeIds.has(n.id) ||
+          recentNodeIds.has(n.id));
       drawNode({
         node: n,
         ctx,
@@ -417,6 +446,7 @@ export function GraphCanvas({
       recentNodeIds,
       highlightedNodeIds,
       showLabels,
+      interactionFocusId,
     ]
   );
 
@@ -493,6 +523,50 @@ export function GraphCanvas({
         nodeCanvasObject,
         nodePointerAreaPaint,
         linkCanvasObject,
+        onRenderFramePost: (ctx: CanvasRenderingContext2D, globalScale: number) => {
+          if (interactionFocusId === null) {
+            return;
+          }
+
+          const focusNode = forceNodes.find((node) => node.id === interactionFocusId);
+          if (
+            focusNode === undefined ||
+            typeof focusNode.x !== 'number' ||
+            typeof focusNode.y !== 'number'
+          ) {
+            return;
+          }
+
+          const radius =
+            nodeRadius(focusNode.__degree ?? 0) *
+            (focusNode.id === selectedNodeId ? 1.35 : 1);
+          const fontSize = Math.max(9, 12 / globalScale);
+          const labelX = focusNode.x;
+          const labelY = focusNode.y + radius + fontSize;
+
+          ctx.save();
+          ctx.font = `${String(fontSize)}px sans-serif`;
+          const measuredWidth = ctx.measureText(focusNode.label).width;
+          const paddingX = 8 / globalScale;
+          const paddingY = 5 / globalScale;
+
+          ctx.fillStyle = 'rgba(10, 10, 18, 0.88)';
+          ctx.beginPath();
+          ctx.roundRect(
+            labelX - measuredWidth / 2 - paddingX,
+            labelY - fontSize / 2 - paddingY,
+            measuredWidth + paddingX * 2,
+            fontSize + paddingY * 2,
+            8 / globalScale
+          );
+          ctx.fill();
+
+          ctx.fillStyle = '#f8fafc';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(focusNode.label, labelX, labelY);
+          ctx.restore();
+        },
         onNodeClick: handleNodeClick,
         onNodeHover: handleNodeHover,
         onNodeRightClick: handleNodeRightClick,

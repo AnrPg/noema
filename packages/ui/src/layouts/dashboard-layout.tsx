@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Menu } from 'lucide-react';
+import { ChevronRight, Menu, PanelLeftClose } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '../lib/utils.js';
 import { Button } from '../primitives/button.js';
@@ -20,6 +20,7 @@ interface SidebarContextValue {
   isOpen: boolean;
   toggle: () => void;
   close: () => void;
+  closeOnMobile: () => void;
 }
 
 const SidebarContext = React.createContext<SidebarContextValue | null>(null);
@@ -46,9 +47,14 @@ export function DashboardLayout({ children, className }: DashboardLayoutProps) {
 
   const toggle = React.useCallback(() => setIsOpen((prev) => !prev), []);
   const close = React.useCallback(() => setIsOpen(false), []);
+  const closeOnMobile = React.useCallback(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches) {
+      setIsOpen(false);
+    }
+  }, []);
 
   return (
-    <SidebarContext.Provider value={{ isOpen, toggle, close }}>
+    <SidebarContext.Provider value={{ isOpen, toggle, close, closeOnMobile }}>
       <div className={cn('min-h-screen bg-background', className)}>{children}</div>
     </SidebarContext.Provider>
   );
@@ -62,18 +68,31 @@ export interface DashboardSidebarProps {
 }
 
 export function DashboardSidebar({ children, header, footer, className }: DashboardSidebarProps) {
-  const { isOpen, close } = useSidebar();
+  const { isOpen, close, toggle } = useSidebar();
 
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={close} />}
 
+      {!isOpen && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="fixed left-3 top-20 z-40 h-11 w-11 rounded-full border border-sky-400/40 bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-[0_10px_24px_rgba(59,130,246,0.28)] hover:from-sky-400 hover:to-fuchsia-400 hover:text-white lg:left-4"
+          onClick={toggle}
+          aria-label="Open sidebar"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </Button>
+      )}
+
       {/* Sidebar */}
       <aside
+        data-state={isOpen ? 'open' : 'closed'}
         className={cn(
-          'fixed left-0 top-0 z-50 h-full w-64 border-r bg-card transition-transform duration-300 lg:translate-x-0',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
+          'fixed left-0 top-0 z-50 h-full border-r bg-card transition-[width,transform] duration-300 overflow-hidden',
+          isOpen ? 'w-64 translate-x-0 border-r' : 'w-0 -translate-x-full border-r-0 lg:translate-x-0',
           className
         )}
       >
@@ -103,7 +122,16 @@ export interface DashboardMainProps {
 }
 
 export function DashboardMain({ children, className }: DashboardMainProps) {
-  return <main className={cn('lg:pl-64', className)}>{children}</main>;
+  const { isOpen } = useSidebar();
+
+  return (
+    <main
+      data-sidebar-state={isOpen ? 'open' : 'closed'}
+      className={cn('transition-[padding] duration-300', isOpen ? 'lg:pl-64' : 'lg:pl-14', className)}
+    >
+      {children}
+    </main>
+  );
 }
 
 export interface DashboardHeaderProps {
@@ -113,7 +141,7 @@ export interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ children, title, className }: DashboardHeaderProps) {
-  const { toggle } = useSidebar();
+  const { isOpen, toggle } = useSidebar();
 
   return (
     <header
@@ -122,8 +150,8 @@ export function DashboardHeader({ children, title, className }: DashboardHeaderP
         className
       )}
     >
-      <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggle}>
-        <Menu className="h-5 w-5" />
+      <Button variant="ghost" size="icon" aria-expanded={isOpen} onClick={toggle}>
+        {isOpen ? <PanelLeftClose className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         <span className="sr-only">Toggle sidebar</span>
       </Button>
       {title && <h1 className="text-lg font-semibold">{title}</h1>}
@@ -158,10 +186,10 @@ export function SidebarNavItem({
   onClick,
   className,
 }: SidebarNavItemProps) {
-  const { close } = useSidebar();
+  const { closeOnMobile } = useSidebar();
 
   const handleClick = () => {
-    close();
+    closeOnMobile();
     onClick?.();
   };
 
