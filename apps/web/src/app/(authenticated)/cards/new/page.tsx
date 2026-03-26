@@ -14,20 +14,13 @@
 'use client';
 
 import type {
-  IBatchCreateInput,
   ICardDto,
   ICreateCardInput,
   ICreateNodeInput,
   IGraphNodeDto,
   NodeType,
 } from '@noema/api-client';
-import {
-  contentKeys,
-  useBatchCreateCards,
-  useCreateCard,
-  useCreatePKGNode,
-  usePKGNodes,
-} from '@noema/api-client';
+import { contentKeys, useCreateCard, useCreatePKGNode, usePKGNodes } from '@noema/api-client';
 import { useAuth } from '@noema/auth';
 import type { UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
@@ -79,13 +72,12 @@ interface ISettingsFormData {
   knowledgeNodeIds: string;
   difficulty: string;
   state: 'ACTIVE' | 'DRAFT';
-  batchMode: boolean;
-  batchJson: string;
 }
 
-type CreatedResult =
-  | { mode: 'single'; card: ICardDto }
-  | { mode: 'batch'; batchId: string; created: ICardDto[]; total: number; failed: number };
+interface ICreatedResult {
+  mode: 'single';
+  card: ICardDto;
+}
 
 interface INodeTypeOption {
   value: NodeType;
@@ -1274,58 +1266,6 @@ function Step3Settings({
         </select>
       </FieldGroup>
 
-      {/* Batch mode toggle */}
-      <div className="rounded-lg border border-border p-4">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            name="batchMode"
-            type="checkbox"
-            checked={settings.batchMode}
-            onChange={(e) => {
-              onChange({ batchMode: e.target.checked });
-            }}
-            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
-          />
-          <div>
-            <span className="text-sm font-medium">Batch mode — create multiple cards at once</span>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Provide a JSON array of card content objects. All cards will share the settings above.
-            </p>
-          </div>
-        </label>
-
-        {settings.batchMode && (
-          <div className="mt-4 flex flex-col gap-2">
-            <label className="text-sm font-medium">
-              Batch content (JSON array of content objects)
-            </label>
-            <textarea
-              name="batchJson"
-              value={settings.batchJson}
-              onChange={(e) => {
-                onChange({ batchJson: e.target.value });
-              }}
-              rows={10}
-              spellCheck={false}
-              placeholder={JSON.stringify(
-                [
-                  { front: 'Question 1', back: 'Answer 1' },
-                  { front: 'Question 2', back: 'Answer 2' },
-                ],
-                null,
-                2
-              )}
-              className={[textareaClass, 'font-mono text-xs'].join(' ')}
-            />
-            <p className="text-xs text-muted-foreground">
-              Each element is the <code className="rounded bg-muted px-1 py-0.5">content</code>{' '}
-              object for one card of type{' '}
-              <code className="rounded bg-muted px-1 py-0.5">{cardType}</code>.
-            </p>
-          </div>
-        )}
-      </div>
-
       {/* Submit error */}
       {submitError !== null && (
         <div
@@ -1355,7 +1295,7 @@ function Step3Settings({
           ) : (
             <Check className="h-4 w-4" />
           )}
-          {settings.batchMode ? 'Create Batch' : 'Create Card'}
+          Create Card
         </button>
       </div>
     </div>
@@ -1367,99 +1307,38 @@ function Step3Settings({
 // ============================================================================
 
 interface IStep4Props {
-  result: CreatedResult;
+  result: ICreatedResult;
   onCreateAnother: () => void;
 }
 
 function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Element {
   const router = useRouter();
-
-  if (result.mode === 'single') {
-    const { card } = result;
-    return (
-      <div className="flex flex-col items-center gap-6 py-8 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-          <Check className="h-8 w-8 text-primary" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold">Card created successfully</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Card ID: {card.id}</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              router.push(`/cards/${card.id}` as Route);
-            }}
-            className={primaryBtnClass}
-          >
-            View Card
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              router.push('/cards');
-            }}
-            className={secondaryBtnClass}
-          >
-            View Library
-          </button>
-          <button type="button" onClick={onCreateAnother} className={secondaryBtnClass}>
-            <Plus className="h-4 w-4" />
-            Create Another
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Batch result
-  const { batchId, created, total, failed } = result;
+  const { card } = result;
   return (
     <div className="flex flex-col items-center gap-6 py-8 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
         <Check className="h-8 w-8 text-primary" />
       </div>
       <div>
-        <h2 className="text-xl font-semibold">Batch created successfully</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Batch ID: {batchId} &mdash; {String(created.length)} of {String(total)} card
-          {total === 1 ? '' : 's'} created
-          {failed > 0 ? [', ', String(failed), ' failed'].join('') : ''}.
-        </p>
+        <h2 className="text-xl font-semibold">Card created successfully</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Card ID: {card.id}</p>
       </div>
-
-      {created.length > 0 && (
-        <div className="w-full max-w-md rounded-lg border border-border bg-muted/20 p-4 text-left">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Created Cards
-          </p>
-          <ul className="flex flex-col gap-1">
-            {created.map((card) => (
-              <li key={card.id} className="flex items-center justify-between text-sm">
-                <code className="text-xs text-muted-foreground">{card.id}</code>
-                <button
-                  type="button"
-                  onClick={() => {
-                    router.push(`/cards/${card.id}` as Route);
-                  }}
-                  className="ml-2 text-xs text-primary underline-offset-2 hover:underline"
-                >
-                  View
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            router.push(`/cards/${card.id}` as Route);
+          }}
+          className={primaryBtnClass}
+        >
+          View Card
+        </button>
         <button
           type="button"
           onClick={() => {
             router.push('/cards');
           }}
-          className={primaryBtnClass}
+          className={secondaryBtnClass}
         >
           View Library
         </button>
@@ -1646,8 +1525,6 @@ function defaultSettings(): ISettingsFormData {
     knowledgeNodeIds: '',
     difficulty: '',
     state: 'ACTIVE',
-    batchMode: false,
-    batchJson: '',
   };
 }
 
@@ -1711,7 +1588,7 @@ export default function NewCardPage(): React.JSX.Element {
   const [selectedType, setSelectedType] = React.useState<string>('');
   const [contentForm, setContentForm] = React.useState<IContentFormData>(defaultContent);
   const [settings, setSettings] = React.useState<ISettingsFormData>(defaultSettings);
-  const [result, setResult] = React.useState<CreatedResult | null>(null);
+  const [result, setResult] = React.useState<ICreatedResult | null>(null);
 
   // Validation error shown inline on Step 2 for JSON / required fields
   const [step2Error, setStep2Error] = React.useState<string | null>(null);
@@ -1724,10 +1601,9 @@ export default function NewCardPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   const createCard = useCreateCard();
-  const batchCreate = useBatchCreateCards();
   const createNode = useCreatePKGNode(userId);
 
-  const isSubmitting = createCard.isPending || batchCreate.isPending || createNode.isPending;
+  const isSubmitting = createCard.isPending || createNode.isPending;
 
   // --------------------------------------------------------------------------
   // Step 1 handlers
@@ -1799,51 +1675,6 @@ export default function NewCardPage(): React.JSX.Element {
     // Map state label to API value
     const state = settings.state === 'ACTIVE' ? 'active' : 'draft';
 
-    if (settings.batchMode) {
-      // Batch creation
-      let items: unknown[];
-      try {
-        const parsed: unknown = JSON.parse(settings.batchJson);
-        if (!Array.isArray(parsed)) {
-          setSubmitError('Batch JSON must be a JSON array.');
-          return;
-        }
-        items = parsed;
-      } catch {
-        setSubmitError('Invalid JSON in batch textarea — please check the syntax.');
-        return;
-      }
-
-      const cards: ICreateCardInput[] = items.map((item) => {
-        const card: ICreateCardInput = {
-          cardType: selectedType,
-          content: item as Record<string, unknown>,
-          metadata: difficulty !== undefined ? { difficulty, state } : { state },
-        };
-        if (tags.length > 0) card.tags = tags;
-        if (knowledgeNodeIds.length > 0) card.knowledgeNodeIds = knowledgeNodeIds;
-        return card;
-      });
-
-      const batchInput: IBatchCreateInput = { cards };
-
-      try {
-        const response = await batchCreate.mutateAsync(batchInput);
-        void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
-        setResult({
-          mode: 'batch',
-          batchId: response.data.batchId,
-          created: response.data.created,
-          total: response.data.total,
-          failed: response.data.failed,
-        });
-        setStep(4);
-      } catch (err) {
-        setSubmitError(err instanceof Error ? err.message : 'Batch creation failed.');
-      }
-      return;
-    }
-
     // Single card creation
     const isSimple = SIMPLE_TYPES.has(selectedType);
     let content: Record<string, unknown>;
@@ -1891,7 +1722,6 @@ export default function NewCardPage(): React.JSX.Element {
     setSubmitError(null);
     setNodeCreateError(null);
     createCard.reset();
-    batchCreate.reset();
     createNode.reset();
   }
 

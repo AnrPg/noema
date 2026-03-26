@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-03-26 - API-First Card Import Wizard
+
+- added an API-first card import pipeline to `content-service` with preview and
+  execute endpoints for multi-format imports
+- exposed the same import workflow to agents through new content MCP tools for
+  previewing and executing imports
+- added service-side support for `JSON`, `JSONL`, `CSV`, `TSV`, `XLSX`, `TXT`,
+  `Markdown`, `LaTeX`, and `Typst` source payloads
+- rebuilt `/cards/batch` as a multi-step import wizard with file-type selection,
+  format selection, explicit field mapping, workbook sheet switching, and shared
+  defaults
+- documented the new import architecture in ADR-008 plus frontend and backend
+  import docs
+
 ## 2026-03-24 - Batch 1 - Ontology Imports Foundation
 
 - added ontology-import architecture ADR and phased execution plan
