@@ -25,10 +25,13 @@ export { PositiveDepth } from './branded-numerics.js';
 export type { PositiveDepth as PositiveDepthType } from './branded-numerics.js';
 
 // PKG↔CKG comparison
-export { DivergenceSeverity, DivergenceType } from './comparison.js';
+export { ComparisonScopeMode, DivergenceSeverity, DivergenceType } from './comparison.js';
 export type {
+  ComparisonScopeMode as ComparisonScopeModeType,
   DivergenceSeverity as DivergenceSeverityType,
   DivergenceType as DivergenceTypeType,
+  IComparisonRequest,
+  IComparisonScopeMetadata,
   IGraphComparison,
   IStructuralDivergence,
 } from './comparison.js';

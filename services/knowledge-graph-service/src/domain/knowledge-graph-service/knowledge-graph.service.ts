@@ -38,6 +38,7 @@ import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IPkgOperationLogEntry } from './pkg-operation-log.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
+import type { IComparisonRequest } from './value-objects/comparison.js';
 import type {
   IBridgeNodesResult,
   IBridgeQuery,
@@ -586,7 +587,7 @@ export interface IKnowledgeGraphService {
    */
   compareWithCkg(
     userId: UserId,
-    domain: string,
+    request: IComparisonRequest,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphComparison>>;
 

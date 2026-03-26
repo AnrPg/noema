@@ -30,6 +30,7 @@ import type { Logger } from 'pino';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
+import { buildScopedGraphComparison } from './comparison-scope.builder.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import type { IGraphRepository } from './graph.repository.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
@@ -48,6 +49,7 @@ import { resolveFamily } from './misconception/misconception-family.config.js';
 import { KG_COUNTERS, kgCounters, withSpan } from './observability.js';
 import { detectSignificantMetricChange, requireAuth } from './service-helpers.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
+import type { IComparisonRequest } from './value-objects/comparison.js';
 import type { INodeFilter } from './value-objects/graph.value-objects.js';
 
 /**
@@ -545,18 +547,18 @@ export class MetricsOrchestrator {
 
   async compareWithCkg(
     userId: UserId,
-    domain: string,
+    request: IComparisonRequest,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphComparison>> {
     requireAuth(context);
-    this.logger.info({ userId, domain }, 'Comparing PKG with CKG');
+    this.logger.info({ userId, request }, 'Comparing PKG with CKG');
 
     const [pkgSubgraph, ckgSubgraph] = await Promise.all([
-      this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
-      this.fetchDomainSubgraph(GraphType.CKG, domain),
+      this.fetchComparisonSubgraph(GraphType.PKG, request.domain, userId),
+      this.fetchComparisonSubgraph(GraphType.CKG, request.domain),
     ]);
 
-    const comparison = buildGraphComparison(pkgSubgraph, ckgSubgraph);
+    const comparison = buildScopedGraphComparison(pkgSubgraph, ckgSubgraph, request);
 
     return {
       data: comparison,
@@ -618,6 +620,46 @@ export class MetricsOrchestrator {
         nodeIdSet.has(edge.sourceNodeId as string) &&
         nodeIdSet.has(edge.targetNodeId as string)
       ) {
+        edges.push(edge);
+      }
+    }
+
+    return { nodes, edges };
+  }
+
+  /**
+   * Fetch nodes and intra-scope edges for comparison.
+   * When domain is omitted, the comparison spans the learner's full graph.
+   */
+  private async fetchComparisonSubgraph(
+    graphType: GraphType,
+    domain?: string,
+    userId?: UserId
+  ): Promise<ISubgraph> {
+    const filter: INodeFilter = {
+      graphType,
+      ...(domain !== undefined ? { domain } : {}),
+      ...(userId !== undefined ? { userId: userId as string } : {}),
+      includeDeleted: false,
+    };
+
+    const maxNodes = MetricsOrchestrator.MAX_DOMAIN_NODES_FOR_METRICS;
+    const nodes = await this.graphRepository.findNodes(filter, maxNodes, 0);
+
+    if (nodes.length === 0) {
+      return { nodes: [], edges: [] };
+    }
+
+    const nodeIdSet = new Set<string>(nodes.map((node) => node.nodeId as string));
+    const allEdges = await this.graphRepository.getEdgesForNodes(
+      nodes.map((node) => node.nodeId),
+      {},
+      userId as string | undefined
+    );
+
+    const edges: IGraphEdge[] = [];
+    for (const edge of allEdges) {
+      if (nodeIdSet.has(edge.sourceNodeId as string) && nodeIdSet.has(edge.targetNodeId as string)) {
         edges.push(edge);
       }
     }

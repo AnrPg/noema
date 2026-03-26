@@ -11,6 +11,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { registerComparisonRoutes } from '../../src/api/rest/comparison.routes.js';
 import {
   OTHER_USER_ID,
+  graphNode,
   resetIdCounter,
   serviceResult,
   TEST_DOMAIN,
@@ -51,25 +52,51 @@ const BASE = `/api/v1/users/${TEST_USER_ID}/comparison`;
 
 describe('GET /users/:userId/comparison', () => {
   it('returns PKG ↔ CKG comparison', async () => {
+    const pkgNode = graphNode({ graphType: 'pkg', label: 'Algebra', domain: TEST_DOMAIN });
+    const ckgNode = graphNode({
+      graphType: 'ckg',
+      label: 'Algebra',
+      domain: TEST_DOMAIN,
+      nodeId: 'node_ckg_0001' as typeof pkgNode.nodeId,
+    });
+
     service.compareWithCkg.mockResolvedValue(
       serviceResult({
-        userId: TEST_USER_ID,
-        domain: TEST_DOMAIN,
-        coverageRatio: 0.65,
-        missingCkgNodes: [],
-        extraPkgNodes: [],
-        structuralDifferences: [],
-        comparedAt: '2025-01-01T00:00:00.000Z',
+        pkgSubgraph: {
+          nodes: [pkgNode],
+          edges: [],
+          rootNodeId: pkgNode.nodeId,
+        },
+        ckgSubgraph: {
+          nodes: [ckgNode],
+          edges: [],
+          rootNodeId: ckgNode.nodeId,
+        },
+        nodeAlignment: new Map([[pkgNode.nodeId, ckgNode.nodeId]]),
+        unmatchedPkgNodes: [],
+        unmatchedCkgNodes: [],
+        edgeAlignmentScore: 1,
+        structuralDivergences: [],
+        scope: {
+          mode: 'engagement_hops',
+          hopCount: 2,
+          requestedDomain: TEST_DOMAIN,
+          bootstrapApplied: false,
+          seedNodeCount: 1,
+          scopedCkgNodeCount: 1,
+          totalCkgNodeCount: 1,
+        },
       })
     );
 
     const res = await app.inject({
       method: 'GET',
-      url: `${BASE}?domain=${TEST_DOMAIN}`,
+      url: `${BASE}?domain=${TEST_DOMAIN}&scopeMode=engagement_hops&hopCount=2`,
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().data).toBeDefined();
+    expect(res.json().data.missingFromPkg).toEqual([]);
+    expect(res.json().data.scope.mode).toBe('engagement_hops');
     expect(service.compareWithCkg).toHaveBeenCalledOnce();
   });
 

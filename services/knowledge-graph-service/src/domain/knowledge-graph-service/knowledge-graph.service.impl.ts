@@ -80,6 +80,7 @@ import type {
 import { PkgWriteService } from './pkg-write.service.js';
 import { MAX_PAGE_SIZE, requireAuth, validateInput } from './service-helpers.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
+import type { IComparisonRequest } from './value-objects/comparison.js';
 import type {
   IBridgeNodesResult,
   IBridgeQuery,
@@ -571,10 +572,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
 
   compareWithCkg(
     userId: UserId,
-    domain: string,
+    request: IComparisonRequest,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphComparison>> {
-    return this.metricsOrch.compareWithCkg(userId, domain, context);
+    return this.metricsOrch.compareWithCkg(userId, request, context);
   }
 
   // ========================================================================

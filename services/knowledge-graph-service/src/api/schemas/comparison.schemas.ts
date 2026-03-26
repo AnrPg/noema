@@ -20,7 +20,16 @@ export const ComparisonUserIdParamsSchema = z.object({
 // ============================================================================
 
 export const ComparisonQueryParamsSchema = z.object({
-  domain: z.string().min(1, 'Domain is required').max(200),
+  domain: z
+    .string()
+    .trim()
+    .min(1, 'Domain must not be empty')
+    .max(200)
+    .optional()
+    .transform((value) => (value === 'all' ? undefined : value)),
+  scopeMode: z.enum(['domain', 'engagement_hops']).default('engagement_hops'),
+  hopCount: z.coerce.number().int().min(0).max(5).default(2),
+  bootstrapWhenUnseeded: z.coerce.boolean().default(false),
 });
 
 // ============================================================================

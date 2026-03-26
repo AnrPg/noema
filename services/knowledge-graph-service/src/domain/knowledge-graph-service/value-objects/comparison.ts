@@ -128,4 +128,34 @@ export interface IGraphComparison {
    * Sorted by severity (critical first).
    */
   readonly structuralDivergences: readonly IStructuralDivergence[];
+
+  /**
+   * Metadata describing which canonical scope was compared.
+   * Optional for backward compatibility with older comparisons.
+   */
+  readonly scope?: IComparisonScopeMetadata;
+}
+
+export const ComparisonScopeMode = {
+  DOMAIN: 'domain',
+  ENGAGEMENT_HOPS: 'engagement_hops',
+} as const;
+
+export type ComparisonScopeMode = (typeof ComparisonScopeMode)[keyof typeof ComparisonScopeMode];
+
+export interface IComparisonRequest {
+  readonly domain?: string;
+  readonly scopeMode: ComparisonScopeMode;
+  readonly hopCount: number;
+  readonly bootstrapWhenUnseeded: boolean;
+}
+
+export interface IComparisonScopeMetadata {
+  readonly mode: ComparisonScopeMode;
+  readonly hopCount: number;
+  readonly requestedDomain: string | null;
+  readonly bootstrapApplied: boolean;
+  readonly seedNodeCount: number;
+  readonly scopedCkgNodeCount: number;
+  readonly totalCkgNodeCount: number;
 }
