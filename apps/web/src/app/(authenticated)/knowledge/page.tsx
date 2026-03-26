@@ -145,7 +145,12 @@ export default function KnowledgePage(): React.JSX.Element {
   const { data: edgesData, isLoading: edgesLoading } = usePKGEdges(userId);
   const { data: frontierData } = useKnowledgeFrontier(userId, selectedDomain);
   const { data: bridgesData } = useBridgeNodes(userId, selectedDomain);
-  const { data: comparisonData, isLoading: comparisonLoading } = usePKGCKGComparison(userId);
+  const { data: comparisonData, isLoading: comparisonLoading } = usePKGCKGComparison(userId, {
+    domain: selectedDomain ?? 'general',
+    scopeMode: 'engagement_hops',
+    hopCount: 2,
+    bootstrapWhenUnseeded: true,
+  });
 
   const nodes: IGraphNodeDto[] = nodesData ?? [];
   const edges: IGraphEdgeDto[] = edgesData ?? [];
@@ -166,6 +171,7 @@ export default function KnowledgePage(): React.JSX.Element {
   const setNeighborhoodHighlight = useGraphStore((s) => s.setNeighborhoodHighlight);
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [showLabels, setShowLabels] = React.useState(false);
   const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = React.useState<{
     node: IGraphNodeDto;
@@ -669,10 +675,14 @@ export default function KnowledgePage(): React.JSX.Element {
         nodes={visibleNodes}
         layoutMode={layoutMode}
         activeOverlays={activeOverlays}
+        showLabels={showLabels}
         searchQuery={searchQuery}
         hiddenTypes={hiddenTypes}
         onLayoutChange={setLayoutMode}
         onOverlayToggle={toggleOverlay}
+        onToggleLabels={() => {
+          setShowLabels((prev) => !prev);
+        }}
         onSearchChange={setSearchQuery}
         onNodeSelect={handleNodeSelect}
         onToggleType={handleToggleType}
@@ -686,6 +696,7 @@ export default function KnowledgePage(): React.JSX.Element {
           hoveredNodeId={hoveredNodeId}
           activeOverlays={activeOverlaysArray}
           layoutMode={layoutMode}
+          showLabels={showLabels}
           onNodeClick={handleNodeClick}
           onNodeHover={handleNodeHover}
           onNodeRightClick={handleNodeRightClick}
@@ -959,7 +970,13 @@ export default function KnowledgePage(): React.JSX.Element {
                 label="Type"
                 hint="Node type is set at creation time and shown here for review."
               >
-                <input type="text" name="editNodeType" value={selectedNode.type} readOnly className={inputClass} />
+                <input
+                  type="text"
+                  name="editNodeType"
+                  value={selectedNode.type}
+                  readOnly
+                  className={inputClass}
+                />
               </Field>
               <Field label="Description">
                 <textarea

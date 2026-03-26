@@ -12,14 +12,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useAuth } from '@noema/auth';
-import {
-  usePKGNodes,
-  usePKGEdges,
-  useCKGNodes,
-  useCKGEdges,
-  usePKGCKGComparison,
-  useCreatePKGNode,
-} from '@noema/api-client';
+import { usePKGCKGComparison, useCreatePKGNode } from '@noema/api-client';
 import type { IGraphNodeDto, IGraphEdgeDto } from '@noema/api-client';
 import type { UserId } from '@noema/types';
 import { Button } from '@noema/ui';
@@ -38,26 +31,24 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
   const [createError, setCreateError] = React.useState<string | null>(null);
 
   // ── Data hooks ─────────────────────────────────────────────────────────────
-  const { data: pkgNodesData, isLoading: pkgNodesLoading } = usePKGNodes(userId);
-  const { data: pkgEdgesData, isLoading: pkgEdgesLoading } = usePKGEdges(userId);
-  const { data: ckgNodesData, isLoading: ckgNodesLoading } = useCKGNodes();
-  const { data: ckgEdgesData, isLoading: ckgEdgesLoading } = useCKGEdges();
-  const { data: comparisonData, isLoading: compLoading } = usePKGCKGComparison(userId);
+  const { data: comparisonData, isLoading: compLoading } = usePKGCKGComparison(userId, {
+    scopeMode: 'engagement_hops',
+    hopCount: 2,
+  });
   const createNode = useCreatePKGNode(userId);
 
-  const isLoading =
-    pkgNodesLoading || pkgEdgesLoading || ckgNodesLoading || ckgEdgesLoading || compLoading;
+  const isLoading = compLoading;
 
   // ── Data extraction ────────────────────────────────────────────────────────
-  const pkgNodes: IGraphNodeDto[] = pkgNodesData ?? [];
-  const pkgEdges: IGraphEdgeDto[] = pkgEdgesData ?? [];
-  const ckgNodes: IGraphNodeDto[] = ckgNodesData ?? [];
-  const ckgEdges: IGraphEdgeDto[] = ckgEdgesData ?? [];
-
   const comparison = comparisonData ?? null;
+  const pkgNodes: IGraphNodeDto[] = comparison?.pkgSubgraph.nodes ?? [];
+  const pkgEdges: IGraphEdgeDto[] = comparison?.pkgSubgraph.edges ?? [];
+  const ckgNodes: IGraphNodeDto[] = comparison?.ckgSubgraph.nodes ?? [];
+  const ckgEdges: IGraphEdgeDto[] = comparison?.ckgSubgraph.edges ?? [];
   const missingFromPkg: IGraphNodeDto[] = comparison?.missingFromPkg ?? [];
   const extraInPkg: IGraphNodeDto[] = comparison?.extraInPkg ?? [];
   const alignmentScore: number = comparison?.alignmentScore ?? 0;
+  const scope = comparison?.scope ?? null;
 
   // ── Derived sets ───────────────────────────────────────────────────────────
   // Ghost nodes: in CKG but not PKG — shown as highlights in the PKG panel
@@ -127,6 +118,15 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
             {' \u00b7 '}
             <span className="text-blue-500">{String(extraInPkg.length)} personal-only</span>
           </p>
+          {scope !== null && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Engaged scope: {String(scope.seedNodeCount)} seed
+              {scope.seedNodeCount === 1 ? '' : 's'}, {String(scope.hopCount)} hop
+              {scope.hopCount === 1 ? '' : 's'}, {String(scope.scopedCkgNodeCount)} canonical node
+              {scope.scopedCkgNodeCount === 1 ? '' : 's'}
+              {scope.bootstrapApplied ? ' (bootstrap fallback applied)' : ''}.
+            </p>
+          )}
         </div>
       </div>
 
@@ -138,15 +138,21 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
             Personal Knowledge Graph (PKG)
           </div>
           <div className="flex-1 overflow-hidden">
-            <GraphCanvas
-              nodes={pkgNodesWithGhosts}
-              edges={pkgEdges}
-              selectedNodeId={selectedNodeId}
-              onNodeClick={handleNodeClick}
-              onBackgroundClick={handleBackgroundClick}
-              highlightedNodeIds={ghostNodeIds}
-              className="h-full w-full"
-            />
+            {pkgNodesWithGhosts.length > 0 ? (
+              <GraphCanvas
+                nodes={pkgNodesWithGhosts}
+                edges={pkgEdges}
+                selectedNodeId={selectedNodeId}
+                onNodeClick={handleNodeClick}
+                onBackgroundClick={handleBackgroundClick}
+                highlightedNodeIds={ghostNodeIds}
+                className="h-full w-full"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                No personal concepts are inside the current comparison scope yet.
+              </div>
+            )}
           </div>
         </div>
 
@@ -156,15 +162,22 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
             Canonical Knowledge Graph (CKG)
           </div>
           <div className="flex-1 overflow-hidden">
-            <GraphCanvas
-              nodes={ckgNodes}
-              edges={ckgEdges}
-              selectedNodeId={selectedNodeId}
-              onNodeClick={handleNodeClick}
-              onBackgroundClick={handleBackgroundClick}
-              highlightedNodeIds={personalNodeIds}
-              className="h-full w-full"
-            />
+            {ckgNodes.length > 0 ? (
+              <GraphCanvas
+                nodes={ckgNodes}
+                edges={ckgEdges}
+                selectedNodeId={selectedNodeId}
+                onNodeClick={handleNodeClick}
+                onBackgroundClick={handleBackgroundClick}
+                highlightedNodeIds={personalNodeIds}
+                className="h-full w-full"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+                No canonical concepts are in scope yet. Add or study a concept to seed the
+                comparison.
+              </div>
+            )}
           </div>
         </div>
       </div>
