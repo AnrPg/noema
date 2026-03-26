@@ -574,21 +574,12 @@ export default function KnowledgePage(): React.JSX.Element {
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No canonical suggestions are available yet. You can still create your PKG manually or
-              build it organically through study sessions.
+              No canonical suggestions are available yet. You can still create your PKG manually
+              from the graph builder controls on this page.
             </p>
           )}
 
           {systemError !== null && <p className="text-sm text-destructive">{systemError}</p>}
-
-          <div className="flex flex-wrap gap-3">
-            <Button asChild>
-              <Link href="/session/new">Start Session</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/sessions">View Sessions</Link>
-            </Button>
-          </div>
         </Section>
 
         <div className="flex h-full flex-col gap-4 overflow-y-auto pr-1">
