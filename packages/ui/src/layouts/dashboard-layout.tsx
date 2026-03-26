@@ -6,7 +6,7 @@
 
 'use client';
 
-import { ChevronRight, Menu, PanelLeftClose } from 'lucide-react';
+import { Menu, PanelLeftClose } from 'lucide-react';
 import * as React from 'react';
 import { cn } from '../lib/utils.js';
 import { Button } from '../primitives/button.js';
@@ -68,24 +68,12 @@ export interface DashboardSidebarProps {
 }
 
 export function DashboardSidebar({ children, header, footer, className }: DashboardSidebarProps) {
-  const { isOpen, close, toggle } = useSidebar();
+  const { isOpen, close } = useSidebar();
 
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={close} />}
-
-      {!isOpen && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="fixed left-3 top-20 z-40 h-11 w-11 rounded-full border border-sky-400/40 bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-[0_10px_24px_rgba(59,130,246,0.28)] hover:from-sky-400 hover:to-fuchsia-400 hover:text-white lg:left-4"
-          onClick={toggle}
-          aria-label="Open sidebar"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </Button>
-      )}
 
       {/* Sidebar */}
       <aside
@@ -150,7 +138,16 @@ export function DashboardHeader({ children, title, className }: DashboardHeaderP
         className
       )}
     >
-      <Button variant="ghost" size="icon" aria-expanded={isOpen} onClick={toggle}>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-expanded={isOpen}
+        onClick={toggle}
+        className={cn(
+          !isOpen &&
+            'rounded-full border border-sky-400/40 bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-[0_10px_24px_rgba(59,130,246,0.28)] hover:from-sky-400 hover:to-fuchsia-400 hover:text-white'
+        )}
+      >
         {isOpen ? <PanelLeftClose className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         <span className="sr-only">Toggle sidebar</span>
       </Button>
