@@ -33,6 +33,7 @@ export interface INodeDrawOptions {
   globalScale: number;
   isSelected: boolean;
   isHovered: boolean;
+  showLabel?: boolean;
   mastery?: number; // 0–1, undefined = not loaded
   recentlyActive?: boolean; // pulse animation
 }
@@ -49,6 +50,7 @@ export function drawNode({
   globalScale,
   isSelected,
   isHovered,
+  showLabel = false,
   mastery = 0,
   recentlyActive = false,
 }: INodeDrawOptions): void {
@@ -126,8 +128,8 @@ export function drawNode({
     ctx.restore();
   }
 
-  // -- Label (visible when zoomed in enough) --
-  if (globalScale > 1.5) {
+  // -- Label --
+  if (showLabel) {
     const fontSize = Math.max(8, 11 / globalScale);
     const label: string = node.label ?? '';
     ctx.font = `${String(fontSize)}px sans-serif`;

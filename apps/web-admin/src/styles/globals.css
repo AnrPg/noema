@@ -2,3 +2,34 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer utilities {
+  .noema-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(124, 110, 230, 0.72) rgba(15, 23, 42, 0.45);
+  }
+
+  .noema-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .noema-scrollbar::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.35);
+    border-radius: 9999px;
+  }
+
+  .noema-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(167, 139, 250, 0.92), rgba(124, 110, 230, 0.78));
+    border: 2px solid rgba(15, 23, 42, 0.9);
+    border-radius: 9999px;
+  }
+
+  .noema-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(196, 181, 253, 0.98), rgba(139, 92, 246, 0.9));
+  }
+
+  .noema-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}

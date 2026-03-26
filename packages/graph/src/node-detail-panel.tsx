@@ -25,6 +25,128 @@ export interface INodeDetailPanelProps {
   onViewPrerequisites?: (nodeId: string) => void;
 }
 
+function decodeEscapedText(value: string): string {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    );
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractLocalizedText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return null;
+    }
+
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const parsed = parseJsonRecord(trimmed);
+      if (parsed !== null) {
+        return extractLocalizedText(parsed);
+      }
+    }
+
+    return decodeEscapedText(trimmed);
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const text = extractLocalizedText(entry);
+      if (text !== null) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of ['literal', 'label', 'preferredLabel', 'title', 'name', 'description']) {
+    const text = extractLocalizedText(record[key]);
+    if (text !== null) {
+      return text;
+    }
+  }
+
+  for (const [key, entry] of Object.entries(record)) {
+    if (/^[a-z]{2}(-[A-Z]{2})?$/u.test(key)) {
+      const text = extractLocalizedText(entry);
+      if (text !== null) {
+        return text;
+      }
+    }
+  }
+
+  return null;
+}
+
+function humanizeIdentifier(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function deriveBadge(node: Record<string, unknown>): string {
+  const metadata =
+    typeof node['metadata'] === 'object' && node['metadata'] !== null
+      ? (node['metadata'] as Record<string, unknown>)
+      : {};
+  const rawId =
+    typeof node['id'] === 'string'
+      ? node['id']
+      : typeof metadata['uri'] === 'string'
+        ? (metadata['uri'] as string)
+        : '';
+
+  const uriMatch = rawId.match(/\/esco\/([^/]+)\/([^/?#]+)$/u);
+  if (uriMatch !== null) {
+    return `${String(uriMatch[1]).toUpperCase()} ${uriMatch[2]}`;
+  }
+
+  const type = typeof node['type'] === 'string' ? node['type'] : '';
+  if (type !== '') {
+    return humanizeIdentifier(type);
+  }
+
+  return 'Node';
+}
+
+function deriveDescription(node: Record<string, unknown>): string | null {
+  const metadata =
+    typeof node['metadata'] === 'object' && node['metadata'] !== null
+      ? (node['metadata'] as Record<string, unknown>)
+      : {};
+
+  const candidates = [node['description'], metadata['description']];
+  for (const candidate of candidates) {
+    const text = extractLocalizedText(candidate);
+    if (text !== null && text !== '') {
+      return text;
+    }
+  }
+
+  return null;
+}
+
 export function NodeDetailPanel({
   node,
   allNodes,
@@ -60,9 +182,15 @@ export function NodeDetailPanel({
   const nodeAny = node as any;
   const color: string = NODE_TYPE_COLOR[String(nodeAny.type)] ?? '#6b7280';
   const mastery: number = masteryMap[String(nodeAny.id)] ?? 0;
+  const titleText =
+    extractLocalizedText(nodeAny.label) ??
+    (typeof nodeAny.label === 'string' && nodeAny.label !== '' ? nodeAny.label : String(nodeAny.id));
+  const badgeText = deriveBadge(nodeAny as Record<string, unknown>);
+  const descriptionText = deriveDescription(nodeAny as Record<string, unknown>);
+  const connectedTitle = connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
 
   return (
-    <div className="flex max-h-[340px] w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+    <div className="flex h-full min-h-0 max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -71,10 +199,10 @@ export function NodeDetailPanel({
             style={{ backgroundColor: color }}
           />
           <span className="flex-shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {String(nodeAny.type)}
+            {badgeText}
           </span>
           <span className="truncate text-sm font-semibold text-foreground">
-            {String(nodeAny.label)}
+            {titleText}
           </span>
         </div>
         <button
@@ -87,14 +215,22 @@ export function NodeDetailPanel({
         </button>
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left: Description + mastery + actions */}
-        <div className="flex w-1/2 flex-col gap-3 overflow-y-auto border-r border-border p-3">
-          {nodeAny.description !== null &&
-            nodeAny.description !== undefined &&
-            String(nodeAny.description) !== '' && (
-              <p className="text-xs text-muted-foreground">{String(nodeAny.description)}</p>
-            )}
+        <div className="noema-scrollbar flex min-h-0 w-1/2 flex-col gap-3 overflow-y-auto border-r border-border p-3">
+          {descriptionText !== null && descriptionText !== '' && (
+            <div className="space-y-2 text-xs text-muted-foreground">
+              {descriptionText
+                .split(/\n{2,}/)
+                .map((block) => block.trim())
+                .filter((block) => block !== '')
+                .map((block) => (
+                  <p key={block} className="whitespace-pre-line">
+                    {block}
+                  </p>
+                ))}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Mastery</span>
@@ -172,9 +308,9 @@ export function NodeDetailPanel({
         </div>
 
         {/* Right: Connected edges grouped by type */}
-        <div className="flex w-1/2 flex-col overflow-y-auto p-3">
+        <div className="noema-scrollbar flex min-h-0 w-1/2 flex-col overflow-y-auto p-3">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Connected ({String(connectedEdges.length)})
+            {connectedTitle}
           </p>
           <div className="flex flex-col gap-1">
             {Object.entries(edgesByType).map(([type, typeEdges]) => (
@@ -195,7 +331,9 @@ export function NodeDetailPanel({
                       className="flex items-center justify-between text-xs"
                     >
                       <span className="truncate text-foreground">
-                        {other !== undefined ? String((other as any).label) : otherId}
+                        {other !== undefined
+                          ? extractLocalizedText((other as any).label) ?? String((other as any).label)
+                          : otherId}
                       </span>
                       <span className="ml-2 flex-shrink-0 tabular-nums text-muted-foreground">
                         {Number(edgeAny.weight).toFixed(2)}

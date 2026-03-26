@@ -21,10 +21,19 @@ import type { OverlayType, LayoutMode } from './types.js';
 import { drawNode, nodeRadius } from './graph-node.js';
 import { drawEdge } from './graph-edge.js';
 
-// SSR-safe import — ForceGraph2D uses browser canvas APIs
-const ForceGraph2D = dynamic(() => import('react-force-graph').then((m) => m.ForceGraph2D), {
-  ssr: false,
-});
+// SSR-safe import — ForceGraph2D uses browser canvas APIs.
+// react-force-graph's package entrypoint also wires VR helpers that expect a
+// global AFRAME object, so preload aframe in the client before importing it.
+const ForceGraph2D = dynamic(
+  async () => {
+    await import('aframe');
+    const forceGraphModule = await import('react-force-graph');
+    return forceGraphModule.ForceGraph2D;
+  },
+  {
+    ssr: false,
+  }
+);
 
 // ============================================================================
 // Types
@@ -38,6 +47,8 @@ interface IForceNode {
   label: string;
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
   fx?: number | null;
   fy?: number | null;
   __degree?: number;
@@ -55,12 +66,14 @@ export interface IGraphCanvasProps {
   edges: IGraphEdgeDto[];
   selectedNodeId?: string | null;
   hoveredNodeId?: string | null;
+  showLabels?: boolean;
   activeOverlays?: OverlayType[];
   layoutMode?: LayoutMode;
   onNodeClick?: (node: IGraphNodeDto) => void;
   onNodeHover?: (node: IGraphNodeDto | null) => void;
   onNodeRightClick?: (node: IGraphNodeDto, event: MouseEvent) => void;
   onBackgroundClick?: () => void;
+  onPositionSnapshot?: (nodes: Array<{ id: string; type: string; x: number; y: number }>) => void;
   masteryMap?: Record<string, number>;
   recentNodeIds?: Set<string>;
   highlightedNodeIds?: Set<string>;
@@ -84,19 +97,24 @@ export function GraphCanvas({
   edges,
   selectedNodeId,
   hoveredNodeId,
+  showLabels = false,
   activeOverlays = [],
   layoutMode = 'force',
   onNodeClick,
   onNodeHover,
   onNodeRightClick,
   onBackgroundClick,
+  onPositionSnapshot,
   masteryMap = EMPTY_MASTERY_MAP,
   recentNodeIds = EMPTY_SET,
   highlightedNodeIds = EMPTY_SET,
   className,
 }: IGraphCanvasProps): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const graphRef = React.useRef<any>(undefined);
   const [dimensions, setDimensions] = React.useState({ width: 800, height: 600 });
+  const basePositionMapRef = React.useRef<Map<string, { x: number; y: number }>>(new Map());
+  const interactionFocusId = selectedNodeId ?? hoveredNodeId ?? null;
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -149,16 +167,238 @@ export function GraphCanvas({
     [edges]
   );
 
+  const graphData = React.useMemo(
+    () => ({ nodes: forceNodes, links: forceLinks }),
+    [forceLinks, forceNodes]
+  );
+
+  React.useEffect(() => {
+    const basePositions = basePositionMapRef.current;
+    for (const node of forceNodes) {
+      const savedPosition = basePositions.get(node.id);
+      if (savedPosition !== undefined && layoutMode === 'force') {
+        node.x = savedPosition.x;
+        node.y = savedPosition.y;
+        node.fx = savedPosition.x;
+        node.fy = savedPosition.y;
+        node.vx = 0;
+        node.vy = 0;
+      } else {
+        node.fx = null;
+        node.fy = null;
+      }
+    }
+
+    graphRef.current?.d3ReheatSimulation?.();
+  }, [forceNodes, layoutMode]);
+
+  const emitPositionSnapshot = React.useCallback(() => {
+    if (onPositionSnapshot === undefined) {
+      return;
+    }
+
+    onPositionSnapshot(
+      forceNodes
+        .filter((node) => Number.isFinite(node.x) && Number.isFinite(node.y))
+        .map((node) => ({
+          id: node.id,
+          type: node.type,
+          x: node.x ?? 0,
+          y: node.y ?? 0,
+        }))
+    );
+  }, [forceNodes, onPositionSnapshot]);
+
+  const hoveredNodeRef = React.useRef<string | null>(interactionFocusId);
+
+  React.useEffect(() => {
+    hoveredNodeRef.current = interactionFocusId;
+  }, [interactionFocusId]);
+
+  const hoverRepelForce = React.useMemo(() => {
+    let simulationNodes: IForceNode[] = [];
+
+    const force = ((alpha: number) => {
+      const hoveredId = hoveredNodeRef.current;
+      if (hoveredId === null) {
+        return;
+      }
+
+      const hoveredNode = simulationNodes.find((node) => node.id === hoveredId);
+      if (
+        hoveredNode === undefined ||
+        typeof hoveredNode.x !== 'number' ||
+        typeof hoveredNode.y !== 'number'
+      ) {
+        return;
+      }
+
+      for (const node of simulationNodes) {
+        if (
+          node.id === hoveredId ||
+          typeof node.x !== 'number' ||
+          typeof node.y !== 'number'
+        ) {
+          continue;
+        }
+
+        const dx = node.x - hoveredNode.x;
+        const dy = node.y - hoveredNode.y;
+        const distance = Math.hypot(dx, dy);
+        const effectRadius = 140 + nodeRadius(node.__degree ?? 0) * 6;
+        if (distance === 0 || distance > effectRadius) {
+          continue;
+        }
+
+        const unitX = dx / distance;
+        const unitY = dy / distance;
+        const impulse = (1 - distance / effectRadius) * alpha * 18;
+        node.vx = (node.vx ?? 0) + unitX * impulse;
+        node.vy = (node.vy ?? 0) + unitY * impulse;
+      }
+
+      hoveredNode.vx = 0;
+      hoveredNode.vy = 0;
+    }) as ((alpha: number) => void) & { initialize?: (nodes: IForceNode[]) => void };
+
+    force.initialize = (nodes: IForceNode[]) => {
+      simulationNodes = nodes;
+    };
+
+    return force;
+  }, []);
+
+  const spacingForce = React.useMemo(() => {
+    let simulationNodes: IForceNode[] = [];
+
+    const force = ((alpha: number) => {
+      for (let index = 0; index < simulationNodes.length; index += 1) {
+        const currentNode = simulationNodes[index];
+        if (currentNode === undefined) {
+          continue;
+        }
+        if (typeof currentNode.x !== 'number' || typeof currentNode.y !== 'number') {
+          continue;
+        }
+
+        for (let innerIndex = index + 1; innerIndex < simulationNodes.length; innerIndex += 1) {
+          const otherNode = simulationNodes[innerIndex];
+          if (otherNode === undefined) {
+            continue;
+          }
+          if (typeof otherNode.x !== 'number' || typeof otherNode.y !== 'number') {
+            continue;
+          }
+
+          const dx = otherNode.x - currentNode.x;
+          const dy = otherNode.y - currentNode.y;
+          const distance = Math.hypot(dx, dy) || 0.001;
+          const baseSpacing =
+            nodeRadius(currentNode.__degree ?? 0) + nodeRadius(otherNode.__degree ?? 0);
+          const labelPadding = nodes.length > 160 ? 24 : nodes.length > 80 ? 18 : 12;
+          const minDistance = baseSpacing + labelPadding;
+          if (distance >= minDistance) {
+            continue;
+          }
+
+          const overlap = (minDistance - distance) / minDistance;
+          const unitX = dx / distance;
+          const unitY = dy / distance;
+          const impulse = overlap * alpha * 16;
+
+          currentNode.vx = (currentNode.vx ?? 0) - unitX * impulse;
+          currentNode.vy = (currentNode.vy ?? 0) - unitY * impulse;
+          otherNode.vx = (otherNode.vx ?? 0) + unitX * impulse;
+          otherNode.vy = (otherNode.vy ?? 0) + unitY * impulse;
+        }
+      }
+    }) as ((alpha: number) => void) & { initialize?: (nodes: IForceNode[]) => void };
+
+    force.initialize = (nodes: IForceNode[]) => {
+      simulationNodes = nodes;
+    };
+
+    return force;
+  }, [nodes.length]);
+
+  React.useEffect(() => {
+    const graph = graphRef.current;
+    if (graph === undefined) {
+      return;
+    }
+
+    graph.d3Force?.('hover-repel', hoverRepelForce);
+    graph.d3Force?.('spacing', spacingForce);
+    graph
+      .d3Force?.('charge')
+      ?.strength?.(nodes.length > 220 ? -320 : nodes.length > 120 ? -250 : nodes.length > 60 ? -180 : -130);
+    graph.d3ReheatSimulation?.();
+  }, [hoverRepelForce, spacingForce, nodes.length]);
+
+  React.useEffect(() => {
+    const basePositions = basePositionMapRef.current;
+    const focusNode = interactionFocusId !== null ? forceNodes.find((node) => node.id === interactionFocusId) : undefined;
+    const focusAnchor =
+      interactionFocusId !== null ? basePositions.get(interactionFocusId) : undefined;
+
+    for (const node of forceNodes) {
+      const basePosition = basePositions.get(node.id);
+      if (basePosition === undefined) {
+        continue;
+      }
+
+      if (focusNode === undefined || focusAnchor === undefined) {
+        node.fx = basePosition.x;
+        node.fy = basePosition.y;
+        continue;
+      }
+
+      if (node.id === focusNode.id) {
+        node.fx = focusAnchor.x;
+        node.fy = focusAnchor.y;
+        node.vx = 0;
+        node.vy = 0;
+        continue;
+      }
+
+      const dx = basePosition.x - focusAnchor.x;
+      const dy = basePosition.y - focusAnchor.y;
+      const distance = Math.hypot(dx, dy) || 0.001;
+      const effectRadius = 280 + nodeRadius(node.__degree ?? 0) * 6;
+
+      if (distance > effectRadius) {
+        node.fx = basePosition.x;
+        node.fy = basePosition.y;
+        continue;
+      }
+
+      const unitX = dx / distance;
+      const unitY = dy / distance;
+      const push = (1 - distance / effectRadius) * 72;
+      node.fx = basePosition.x + unitX * push;
+      node.fy = basePosition.y + unitY * push;
+    }
+
+    graphRef.current?.d3ReheatSimulation?.();
+  }, [forceNodes, interactionFocusId]);
+
   const nodeCanvasObject = React.useCallback(
     (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const n = node as IForceNode;
       const masteryVal: number | undefined = masteryMap[n.id];
+      const shouldShowLabel =
+        showLabels ||
+        n.id === selectedNodeId ||
+        n.id === hoveredNodeId ||
+        highlightedNodeIds.has(n.id) ||
+        recentNodeIds.has(n.id);
       drawNode({
         node: n,
         ctx,
         globalScale,
         isSelected: n.id === selectedNodeId,
         isHovered: n.id === hoveredNodeId,
+        showLabel: shouldShowLabel,
         ...(masteryVal !== undefined ? { mastery: masteryVal } : {}),
         recentlyActive: recentNodeIds.has(n.id),
       });
@@ -170,13 +410,20 @@ export function GraphCanvas({
         ctx.fill();
       }
     },
-    [selectedNodeId, hoveredNodeId, masteryMap, recentNodeIds, highlightedNodeIds]
+    [
+      selectedNodeId,
+      hoveredNodeId,
+      masteryMap,
+      recentNodeIds,
+      highlightedNodeIds,
+      showLabels,
+    ]
   );
 
   const nodePointerAreaPaint = React.useCallback(
     (node: any, color: string, ctx: CanvasRenderingContext2D) => {
       const n = node as IForceNode;
-      const r = nodeRadius(n.__degree ?? 0) + 4;
+      const r = Math.max(nodeRadius(n.__degree ?? 0) + 12, 20);
       ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(n.x ?? 0, n.y ?? 0, r, 0, 2 * Math.PI);
@@ -236,9 +483,10 @@ export function GraphCanvas({
     <div ref={containerRef} className={className ?? 'h-full w-full'}>
       {/* Cast as any: react-force-graph ForceGraphProps conflicts with exactOptionalPropertyTypes */}
       {React.createElement(ForceGraph2D as any, {
+        ref: graphRef,
         width: dimensions.width,
         height: dimensions.height,
-        graphData: { nodes: forceNodes, links: forceLinks },
+        graphData,
         nodeId: 'id',
         linkSource: 'source',
         linkTarget: 'target',
@@ -253,9 +501,26 @@ export function GraphCanvas({
         dagMode:
           layoutMode === 'hierarchical' ? 'td' : layoutMode === 'radial' ? 'radialout' : undefined,
         dagLevelDistance: layoutMode === 'hierarchical' ? 80 : undefined,
-        cooldownTicks: layoutMode === 'force' ? 300 : 50,
-        d3AlphaDecay: layoutMode === 'radial' ? 0.05 : 0.0228,
-        d3VelocityDecay: 0.4,
+        cooldownTicks: layoutMode === 'force' ? 260 : 80,
+        d3AlphaDecay: layoutMode === 'radial' ? 0.05 : 0.03,
+        d3VelocityDecay: 0.22,
+        enableNodeDrag: false,
+        onEngineStop: () => {
+          if (layoutMode === 'force' && interactionFocusId === null) {
+            const nextBasePositions = new Map<string, { x: number; y: number }>();
+            for (const node of forceNodes) {
+              if (typeof node.x === 'number' && typeof node.y === 'number') {
+                nextBasePositions.set(node.id, { x: node.x, y: node.y });
+                node.fx = node.x;
+                node.fy = node.y;
+              }
+            }
+            if (nextBasePositions.size > 0) {
+              basePositionMapRef.current = nextBasePositions;
+            }
+          }
+          emitPositionSnapshot();
+        },
       })}
     </div>
   );
