@@ -4,7 +4,7 @@
  */
 import * as React from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useBulkReviewMutations, useCKGMutations } from '@noema/api-client';
 import type { ICkgMutationDto, MutationWorkflowState } from '@noema/api-client';
 import {
@@ -30,6 +30,34 @@ import {
   MUTATION_WORKFLOW_FILTERS,
 } from '@/lib/mutation-workflow';
 
+const MAX_BULK_REVIEW_SIZE = 200;
+const WORKFLOW_SORT_ORDER: Record<MutationWorkflowState, number> = {
+  pending_review: 0,
+  proposed: 1,
+  validating: 2,
+  validated: 3,
+  revision_requested: 4,
+  proving: 5,
+  proven: 6,
+  committing: 7,
+  committed: 8,
+  rejected: 9,
+};
+
+function formatMutationDate(value: string | null | undefined): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return '—';
+  }
+
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    return '—';
+  }
+
+  const date = new Date(parsed);
+  return date.getUTCFullYear() <= 1970 ? '—' : date.toLocaleDateString();
+}
+
 function mutationTypeBadgeClass(type: string): string {
   if (type.includes('delete')) return 'bg-red-500/20 text-red-400 border-red-500/30';
   if (type.includes('create')) return 'bg-green-500/20 text-green-400 border-green-500/30';
@@ -54,11 +82,13 @@ function MutationRow({
   checked,
   selectable,
   onToggle,
+  onOpenReview,
 }: {
   mutation: ICkgMutationDto;
   checked: boolean;
   selectable: boolean;
   onToggle: () => void;
+  onOpenReview: () => void;
 }): React.JSX.Element {
   const workflow = getMutationWorkflowMeta(mutation);
   const workflowState = getMutationWorkflowState(mutation);
@@ -106,13 +136,11 @@ function MutationRow({
           {String(mutation.proposedBy)}
         </span>
         <span className="text-xs text-muted-foreground flex-shrink-0">
-          {new Date(mutation.proposedAt).toLocaleDateString()}
+          {formatMutationDate(mutation.proposedAt)}
         </span>
-        <Link href={`/dashboard/ckg/mutations/${String(mutation.id)}`}>
-          <Button size="sm" variant="ghost" className="gap-1">
-            Review <ArrowRight className="h-3 w-3" />
-          </Button>
-        </Link>
+        <Button size="sm" variant="ghost" className="gap-1" onClick={onOpenReview}>
+          Review <ArrowRight className="h-3 w-3" />
+        </Button>
       </div>
       {(reviewHints.confidenceBand !== null || reviewHints.conflicts.length > 0) && (
         <div className="mt-2 flex flex-wrap items-center gap-2 pl-8">
@@ -148,6 +176,33 @@ interface IOntologyImportGroup {
   mutations: ICkgMutationDto[];
 }
 
+function chunkMutationIds(
+  mutationIds: ICkgMutationDto['id'][],
+  chunkSize = MAX_BULK_REVIEW_SIZE
+): ICkgMutationDto['id'][][] {
+  const chunks: ICkgMutationDto['id'][][] = [];
+  for (let startIndex = 0; startIndex < mutationIds.length; startIndex += chunkSize) {
+    chunks.push(mutationIds.slice(startIndex, startIndex + chunkSize));
+  }
+  return chunks;
+}
+
+function compareMutations(left: ICkgMutationDto, right: ICkgMutationDto): number {
+  const leftState = getMutationWorkflowState(left);
+  const rightState = getMutationWorkflowState(right);
+  const workflowDelta = WORKFLOW_SORT_ORDER[leftState] - WORKFLOW_SORT_ORDER[rightState];
+  if (workflowDelta !== 0) {
+    return workflowDelta;
+  }
+
+  const timeDelta = Date.parse(right.proposedAt) - Date.parse(left.proposedAt);
+  if (Number.isFinite(timeDelta) && timeDelta !== 0) {
+    return timeDelta;
+  }
+
+  return String(right.id).localeCompare(String(left.id));
+}
+
 function groupOntologyImportMutations(mutations: ICkgMutationDto[]): {
   groupedImports: IOntologyImportGroup[];
   directReviewMutations: ICkgMutationDto[];
@@ -178,20 +233,33 @@ function groupOntologyImportMutations(mutations: ICkgMutationDto[]): {
   }
 
   return {
-    groupedImports: [...groups.values()].sort((left, right) =>
-      left.runId.localeCompare(right.runId)
-    ),
-    directReviewMutations,
+    groupedImports: [...groups.values()]
+      .map((group) => ({
+        ...group,
+        mutations: [...group.mutations].sort(compareMutations),
+      }))
+      .sort((left, right) => {
+        const leftMostRecent = left.mutations[0]?.proposedAt ?? '';
+        const rightMostRecent = right.mutations[0]?.proposedAt ?? '';
+        const timeDelta = Date.parse(rightMostRecent) - Date.parse(leftMostRecent);
+        if (Number.isFinite(timeDelta) && timeDelta !== 0) {
+          return timeDelta;
+        }
+        return right.runId.localeCompare(left.runId);
+      }),
+    directReviewMutations: [...directReviewMutations].sort(compareMutations),
   };
 }
 
 export default function CKGMutationsPage(): React.JSX.Element {
-  const [stateFilter, setStateFilter] = React.useState<MutationWorkflowState>('pending_review');
+  const [stateFilter, setStateFilter] = React.useState<MutationWorkflowState | 'all'>('all');
   const [confidenceFilter, setConfidenceFilter] = React.useState<'all' | 'high' | 'medium' | 'low'>(
     'all'
   );
   const [conflictFilter, setConflictFilter] = React.useState<'all' | 'conflicted' | 'clean'>('all');
   const [selectedMutationIds, setSelectedMutationIds] = React.useState<string[]>([]);
+  const [bulkActionError, setBulkActionError] = React.useState<string | null>(null);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const nodeIdFilter = searchParams.get('nodeId');
   const importRunIdFilter = searchParams.get('importRunId');
@@ -204,7 +272,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
     isFetching,
   } = useCKGMutations(
     {
-      state: stateFilter,
+      ...(stateFilter !== 'all' ? { state: stateFilter } : {}),
       ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
       includeImportRunAggregation: importRunIdFilter === null,
     },
@@ -216,46 +284,54 @@ export default function CKGMutationsPage(): React.JSX.Element {
     ? getRequestErrorDetails(error, 'the mutation queue', 'the knowledge graph service')
     : null;
   const bulkReview = useBulkReviewMutations();
+  const selectedWorkflowMeta = stateFilter === 'all' ? null : getMutationWorkflowMeta(stateFilter);
 
-  const displayedMutations = mutations.filter((mutation) => {
-    if (nodeIdFilter !== null) {
-      const payload = mutation.payload;
-      const matchesNode =
-        (typeof payload['nodeId'] === 'string' && payload['nodeId'] === nodeIdFilter) ||
-        (typeof payload['sourceId'] === 'string' && payload['sourceId'] === nodeIdFilter) ||
-        (typeof payload['targetId'] === 'string' && payload['targetId'] === nodeIdFilter);
+  const displayedMutations = React.useMemo(
+    () =>
+      mutations
+        .filter((mutation) => {
+          if (nodeIdFilter !== null) {
+            const payload = mutation.payload;
+            const matchesNode =
+              (typeof payload['nodeId'] === 'string' && payload['nodeId'] === nodeIdFilter) ||
+              (typeof payload['sourceId'] === 'string' && payload['sourceId'] === nodeIdFilter) ||
+              (typeof payload['targetId'] === 'string' && payload['targetId'] === nodeIdFilter);
 
-      if (!matchesNode) {
-        return false;
-      }
-    }
+            if (!matchesNode) {
+              return false;
+            }
+          }
 
-    const reviewHints = getMutationReviewHints(mutation);
-    if (confidenceFilter !== 'all' && reviewHints.confidenceBand !== confidenceFilter) {
-      return false;
-    }
-    if (conflictFilter === 'conflicted' && reviewHints.conflicts.length === 0) {
-      return false;
-    }
-    if (conflictFilter === 'clean' && reviewHints.conflicts.length > 0) {
-      return false;
-    }
+          const reviewHints = getMutationReviewHints(mutation);
+          if (confidenceFilter !== 'all' && reviewHints.confidenceBand !== confidenceFilter) {
+            return false;
+          }
+          if (conflictFilter === 'conflicted' && reviewHints.conflicts.length === 0) {
+            return false;
+          }
+          if (conflictFilter === 'clean' && reviewHints.conflicts.length > 0) {
+            return false;
+          }
 
-    return true;
-  });
+          return true;
+        })
+        .sort(compareMutations),
+    [confidenceFilter, conflictFilter, mutations, nodeIdFilter]
+  );
   const { groupedImports, directReviewMutations } =
     groupOntologyImportMutations(displayedMutations);
   const shouldGroupOntologyImports = importRunIdFilter === null && groupedImports.length > 0;
   const ontologyImportMutations = displayedMutations.filter(
     (mutation) => getOntologyImportMutationContext(mutation).runId !== null
   );
-
-  React.useEffect(() => {
-    const visibleIds = new Set(ontologyImportMutations.map((mutation) => String(mutation.id)));
-    setSelectedMutationIds((current) => current.filter((mutationId) => visibleIds.has(mutationId)));
-  }, [ontologyImportMutations]);
+  const visibleOntologyMutationIds = ontologyImportMutations.map((mutation) => String(mutation.id));
+  const visibleOntologyMutationIdSet = new Set(visibleOntologyMutationIds);
+  const visibleSelectedMutationIds = selectedMutationIds.filter((mutationId) =>
+    visibleOntologyMutationIdSet.has(mutationId)
+  );
 
   function toggleSelection(mutationId: string): void {
+    setBulkActionError(null);
     setSelectedMutationIds((current) =>
       current.includes(mutationId)
         ? current.filter((currentId) => currentId !== mutationId)
@@ -264,14 +340,17 @@ export default function CKGMutationsPage(): React.JSX.Element {
   }
 
   function selectAllVisible(): void {
+    setBulkActionError(null);
     setSelectedMutationIds(ontologyImportMutations.map((mutation) => String(mutation.id)));
   }
 
   function clearSelection(): void {
+    setBulkActionError(null);
     setSelectedMutationIds([]);
   }
 
   function selectReadyOnly(): void {
+    setBulkActionError(null);
     setSelectedMutationIds(
       ontologyImportMutations
         .filter((mutation) => {
@@ -283,6 +362,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
   }
 
   function selectConflictedOnly(): void {
+    setBulkActionError(null);
     setSelectedMutationIds(
       ontologyImportMutations
         .filter((mutation) => getMutationReviewHints(mutation).conflicts.length > 0)
@@ -291,6 +371,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
   }
 
   function toggleGroupSelection(group: IOntologyImportGroup): void {
+    setBulkActionError(null);
     const groupIds = group.mutations.map((mutation) => String(mutation.id));
     setSelectedMutationIds((current) => {
       const hasAllSelected = groupIds.every((groupId) => current.includes(groupId));
@@ -300,20 +381,41 @@ export default function CKGMutationsPage(): React.JSX.Element {
     });
   }
 
-  function submitBulkReview(action: 'approve' | 'reject' | 'request_revision', note: string): void {
-    bulkReview.mutate(
-      {
-        action,
-        mutationIds: selectedMutationIds as ICkgMutationDto['id'][],
-        ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
-        note,
-      },
-      {
-        onSuccess: () => {
-          clearSelection();
-          void refetch();
-        },
+  async function submitReviewBatches(
+    action: 'approve' | 'reject' | 'request_revision',
+    mutationIds: ICkgMutationDto['id'][],
+    note: string
+  ): Promise<void> {
+    if (mutationIds.length === 0) {
+      return;
+    }
+
+    setBulkActionError(null);
+
+    try {
+      const chunks = chunkMutationIds(mutationIds);
+
+      for (const chunk of chunks) {
+        await bulkReview.mutateAsync({
+          action,
+          mutationIds: chunk,
+          ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
+          note,
+        });
       }
+
+      clearSelection();
+      await refetch();
+    } catch (error) {
+      setBulkActionError(error instanceof Error ? error.message : 'Bulk review failed.');
+    }
+  }
+
+  function submitBulkReview(action: 'approve' | 'reject' | 'request_revision', note: string): void {
+    void submitReviewBatches(
+      action,
+      visibleSelectedMutationIds as ICkgMutationDto['id'][],
+      note
     );
   }
 
@@ -324,23 +426,11 @@ export default function CKGMutationsPage(): React.JSX.Element {
   ): void {
     const mutationIds = ontologyImportMutations.filter(selector).map((mutation) => mutation.id);
     if (mutationIds.length === 0) {
+      setBulkActionError(null);
       return;
     }
 
-    bulkReview.mutate(
-      {
-        action,
-        mutationIds,
-        ...(importRunIdFilter !== null ? { importRunId: importRunIdFilter } : {}),
-        note,
-      },
-      {
-        onSuccess: () => {
-          clearSelection();
-          void refetch();
-        },
-      }
-    );
+    void submitReviewBatches(action, mutationIds, note);
   }
 
   return (
@@ -361,12 +451,15 @@ export default function CKGMutationsPage(): React.JSX.Element {
           <span>
             Filtered by node: <code className="font-mono">{nodeIdFilter}</code>
           </span>
-          <Link
-            href="/dashboard/ckg/mutations"
+          <button
+            type="button"
             className="ml-auto text-xs text-primary underline-offset-2 hover:underline"
+            onClick={() => {
+              router.replace('/dashboard/ckg/mutations');
+            }}
           >
             Clear
-          </Link>
+          </button>
         </div>
       )}
 
@@ -375,44 +468,56 @@ export default function CKGMutationsPage(): React.JSX.Element {
           <span>
             Filtered by ontology import run: <code className="font-mono">{importRunIdFilter}</code>
           </span>
-          <Link
-            href="/dashboard/ckg/mutations"
+          <button
+            type="button"
             className="ml-auto text-xs text-primary underline-offset-2 hover:underline"
+            onClick={() => {
+              router.replace('/dashboard/ckg/mutations');
+            }}
           >
             Clear
-          </Link>
+          </button>
         </div>
       )}
 
       {ontologyImportMutations.length > 0 && (
-        <BulkReviewToolbar
-          selectedCount={selectedMutationIds.length}
-          visibleCount={ontologyImportMutations.length}
-          importRunId={importRunIdFilter}
-          isPending={bulkReview.isPending}
-          onSelectAllVisible={selectAllVisible}
-          onSelectReadyOnly={selectReadyOnly}
-          onSelectConflictedOnly={selectConflictedOnly}
-          onClearSelection={clearSelection}
-          onSubmit={submitBulkReview}
-          onApproveReadyOnly={(note) => {
-            submitScopedReview(
-              'approve',
-              (mutation) => {
-                const hints = getMutationReviewHints(mutation);
-                return hints.conflicts.length === 0 && hints.confidenceBand !== 'low';
-              },
-              note
-            );
-          }}
-          onRejectConflictedOnly={(note) => {
-            submitScopedReview(
-              'reject',
-              (mutation) => getMutationReviewHints(mutation).conflicts.length > 0,
-              note
-            );
-          }}
-        />
+        <div className="space-y-3">
+          {bulkActionError !== null && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Bulk review failed</AlertTitle>
+              <AlertDescription>{bulkActionError}</AlertDescription>
+            </Alert>
+          )}
+          <BulkReviewToolbar
+            selectedCount={visibleSelectedMutationIds.length}
+            visibleCount={ontologyImportMutations.length}
+            importRunId={importRunIdFilter}
+            isPending={bulkReview.isPending}
+            onSelectAllVisible={selectAllVisible}
+            onSelectReadyOnly={selectReadyOnly}
+            onSelectConflictedOnly={selectConflictedOnly}
+            onClearSelection={clearSelection}
+            onSubmit={submitBulkReview}
+            onApproveReadyOnly={(note) => {
+              submitScopedReview(
+                'approve',
+                (mutation) => {
+                  const hints = getMutationReviewHints(mutation);
+                  return hints.conflicts.length === 0 && hints.confidenceBand !== 'low';
+                },
+                note
+              );
+            }}
+            onRejectConflictedOnly={(note) => {
+              submitScopedReview(
+                'reject',
+                (mutation) => getMutationReviewHints(mutation).conflicts.length > 0,
+                note
+              );
+            }}
+          />
+        </div>
       )}
 
       <Card>
@@ -421,8 +526,10 @@ export default function CKGMutationsPage(): React.JSX.Element {
             <div>
               <CardTitle>Mutations</CardTitle>
               <CardDescription>
-                {displayedMutations.length} mutation{displayedMutations.length !== 1 ? 's' : ''} in{' '}
-                {getMutationWorkflowMeta(stateFilter).label.toLowerCase()}
+                {displayedMutations.length} mutation{displayedMutations.length !== 1 ? 's' : ''}{' '}
+                {selectedWorkflowMeta === null
+                  ? 'across all workflow states'
+                  : `in ${selectedWorkflowMeta.label.toLowerCase()}`}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -430,10 +537,11 @@ export default function CKGMutationsPage(): React.JSX.Element {
                 name="stateFilter"
                 value={stateFilter}
                 onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                  setStateFilter(e.target.value as MutationWorkflowState);
+                  setStateFilter(e.target.value as MutationWorkflowState | 'all');
                 }}
                 className="rounded-md border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
+                <option value="all">All states</option>
                 {MUTATION_WORKFLOW_FILTERS.map((state) => (
                   <option key={state} value={state}>
                     {getMutationWorkflowMeta(state).label}
@@ -498,8 +606,10 @@ export default function CKGMutationsPage(): React.JSX.Element {
             </Alert>
           ) : displayedMutations.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
-              No mutations found in the &quot;{getMutationWorkflowMeta(stateFilter).label}&quot;{' '}
-              workflow stage
+              No mutations found
+              {selectedWorkflowMeta !== null
+                ? ` in the "${selectedWorkflowMeta.label}" workflow stage`
+                : ' across all workflow states'}
               {nodeIdFilter !== null ? ` for node ${nodeIdFilter}` : ''}
               {importRunIdFilter !== null ? ` for import run ${importRunIdFilter}` : ''}.
             </div>
@@ -549,7 +659,7 @@ export default function CKGMutationsPage(): React.JSX.Element {
                       mutationCount={group.mutations.length}
                       selectedCount={
                         group.mutations.filter((mutation) =>
-                          selectedMutationIds.includes(String(mutation.id))
+                          visibleSelectedMutationIds.includes(String(mutation.id))
                         ).length
                       }
                       readyCount={
@@ -571,10 +681,13 @@ export default function CKGMutationsPage(): React.JSX.Element {
                         <MutationRow
                           key={String(mutation.id)}
                           mutation={mutation}
-                          checked={selectedMutationIds.includes(String(mutation.id))}
+                          checked={visibleSelectedMutationIds.includes(String(mutation.id))}
                           selectable
                           onToggle={() => {
                             toggleSelection(String(mutation.id));
+                          }}
+                          onOpenReview={() => {
+                            router.push(`/dashboard/ckg/mutations/${String(mutation.id)}`);
                           }}
                         />
                       ))}
@@ -598,6 +711,9 @@ export default function CKGMutationsPage(): React.JSX.Element {
                         onToggle={() => {
                           return;
                         }}
+                        onOpenReview={() => {
+                          router.push(`/dashboard/ckg/mutations/${String(mutation.id)}`);
+                        }}
                       />
                     ))}
                   </div>
@@ -610,13 +726,16 @@ export default function CKGMutationsPage(): React.JSX.Element {
                 <MutationRow
                   key={String(m.id)}
                   mutation={m}
-                  checked={selectedMutationIds.includes(String(m.id))}
+                  checked={visibleSelectedMutationIds.includes(String(m.id))}
                   selectable={getOntologyImportMutationContext(m).runId !== null}
                   onToggle={() => {
                     if (getOntologyImportMutationContext(m).runId === null) {
                       return;
                     }
                     toggleSelection(String(m.id));
+                  }}
+                  onOpenReview={() => {
+                    router.push(`/dashboard/ckg/mutations/${String(m.id)}`);
                   }}
                 />
               ))}

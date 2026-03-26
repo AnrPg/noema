@@ -57,8 +57,8 @@ export type OntologyImportStatus =
   | 'fetched'
   | 'parsing'
   | 'parsed'
-  | 'staging_validated'
-  | 'ready_for_normalization'
+  | 'review_submitted'
+  | 'ready_for_review'
   | 'failed'
   | 'cancelled';
 export type OntologyImportStepType = 'fetch' | 'checksum' | 'parse' | 'stage' | 'validation';
@@ -356,6 +356,22 @@ export interface ICkgMutationDto {
   reviewedAt: string | null;
 }
 
+export interface ICkgMutationRecoveryCheckDto {
+  mutationId: MutationId;
+  check: 'safe_retry' | 'reconcile_commit';
+  eligible: boolean;
+  recommendedAction: 'recover_reject' | 'reconcile_commit' | 'wait' | 'none';
+  mutationState: string;
+  summary: string;
+  details: string[];
+  checkedAt: string;
+  graphEvidence: {
+    writeDetected: boolean;
+    matchedNodeIds: NodeId[];
+    matchedEdgeIds: EdgeId[];
+  };
+}
+
 export interface ICkgMutationAuditEntry {
   id: string;
   mutationId: MutationId;
@@ -380,6 +396,8 @@ export interface ICkgMutationFilters {
   proposedBy?: ProposerId;
   importRunId?: string;
   includeImportRunAggregation?: boolean;
+  page?: number;
+  pageSize?: number;
   limit?: number;
   offset?: number;
 }
@@ -692,6 +710,7 @@ export type MisconceptionResponse = IApiResponse<IMisconceptionDto>;
 export type MisconceptionDetectionResponse = IApiResponse<IMisconceptionDetectionResult>;
 export type CkgMutationsResponse = IApiResponse<ICkgMutationDto[]>;
 export type CkgMutationResponse = IApiResponse<ICkgMutationDto>;
+export type CkgMutationRecoveryCheckResponse = IApiResponse<ICkgMutationRecoveryCheckDto>;
 export type CkgBulkReviewResponse = IApiResponse<ICkgBulkReviewResult>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
 export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;

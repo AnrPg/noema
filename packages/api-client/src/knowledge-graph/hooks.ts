@@ -56,6 +56,7 @@ import type {
   CentralityResponse,
   CkgBulkReviewResponse,
   CkgMutationAuditLogResponse,
+  CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
   ComparisonResponse,
@@ -111,6 +112,253 @@ function extractListData<T>(value: unknown): T[] {
 function stringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback;
 }
+
+function numberValue(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function stringIfPresent(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeEscapedText(value: string): string {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_match, hex: string) =>
+      String.fromCharCode(Number.parseInt(hex, 16))
+    );
+}
+
+function isUriLike(value: string): boolean {
+  return /^https?:\/\//u.test(value.trim());
+}
+
+function isValidIsoDate(value: string | null): value is string {
+  return value !== null && Number.isFinite(Date.parse(value));
+}
+
+function pickIsoDate(...candidates: unknown[]): string {
+  for (const candidate of candidates) {
+    const value = stringIfPresent(candidate);
+    if (isValidIsoDate(value)) {
+      return value;
+    }
+  }
+
+  return new Date(0).toISOString();
+}
+
+function collectMetadataSourceTypes(metadata: Record<string, unknown>): string[] {
+  const ontologyImport = recordValue(metadata['ontologyImport']);
+  const sourceTypes = stringArrayValue(ontologyImport['sourceTypes']);
+  const className = stringIfPresent(metadata['className']);
+  const nodeType = stringIfPresent(metadata['nodeType']);
+
+  return [
+    ...sourceTypes,
+    ...(className !== null ? [className] : []),
+    ...(nodeType !== null ? [nodeType] : []),
+  ];
+}
+
+function inferNormalizedGraphNodeType(
+  entry: Record<string, unknown>,
+  metadata: Record<string, unknown>
+): IGraphNodeDto['type'] {
+  const explicitType = stringValue(entry['type'], stringValue(entry['nodeType'], ''));
+  if (explicitType !== '' && explicitType !== 'concept') {
+    return explicitType as IGraphNodeDto['type'];
+  }
+
+  const lexicalSignals = collectMetadataSourceTypes(metadata).join(' ').toLowerCase();
+  if (lexicalSignals.includes('skill')) {
+    return 'skill';
+  }
+  if (lexicalSignals.includes('procedure') || lexicalSignals.includes('method')) {
+    return 'procedure';
+  }
+  if (lexicalSignals.includes('principle') || lexicalSignals.includes('law')) {
+    return 'principle';
+  }
+  if (lexicalSignals.includes('example')) {
+    return 'example';
+  }
+  if (lexicalSignals.includes('fact') || lexicalSignals.includes('literal')) {
+    return 'fact';
+  }
+
+  return 'concept';
+}
+
+function extractLocalizedText(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      return null;
+    }
+
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      const parsed = parseJsonRecord(trimmed);
+      if (parsed !== null) {
+        return extractLocalizedText(parsed);
+      }
+    }
+
+    return decodeEscapedText(trimmed);
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const text = extractLocalizedText(entry);
+      if (text !== null) {
+        return text;
+      }
+    }
+    return null;
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  for (const key of ['literal', 'label', 'preferredLabel', 'title', 'name', 'description']) {
+    const text = extractLocalizedText(record[key]);
+    if (text !== null) {
+      return text;
+    }
+  }
+
+  const localizedEntries = Object.entries(record).filter(([key]) =>
+    /^[a-z]{2}(-[A-Z]{2})?$/u.test(key)
+  );
+
+  const englishEntry = localizedEntries.find(([key]) => key.toLowerCase() === 'en');
+  if (englishEntry !== undefined) {
+    const text = extractLocalizedText(englishEntry[1]);
+    if (text !== null) {
+      return text;
+    }
+  }
+
+  for (const [, entry] of localizedEntries) {
+    const text = extractLocalizedText(entry);
+    if (text !== null) {
+      return text;
+    }
+  }
+
+  return null;
+}
+
+function normalizeGraphLabel(rawLabel: string, metadata: Record<string, unknown>): string {
+  if (!isUriLike(rawLabel)) {
+    return rawLabel;
+  }
+
+  const metadataLabelCandidates = [
+    metadata['preferredLabel'],
+    metadata['title'],
+    metadata['name'],
+    metadata['label'],
+  ];
+
+  for (const candidate of metadataLabelCandidates) {
+    const text = extractLocalizedText(candidate);
+    if (text !== null && text !== '') {
+      return text;
+    }
+  }
+
+  const uriSuffix = rawLabel.split('/').filter((segment) => segment !== '').at(-1);
+  return uriSuffix ?? rawLabel;
+}
+
+function normalizeGraphDescription(
+  entry: Record<string, unknown>,
+  metadata: Record<string, unknown>
+): string | null {
+  const directDescription = entry['description'];
+  if (typeof directDescription === 'string' && directDescription.trim() !== '') {
+    return directDescription;
+  }
+
+  if (directDescription !== undefined && directDescription !== null) {
+    return JSON.stringify(directDescription);
+  }
+
+  const metadataDescription = metadata['description'];
+  if (typeof metadataDescription === 'string' && metadataDescription.trim() !== '') {
+    return metadataDescription;
+  }
+
+  if (metadataDescription !== undefined && metadataDescription !== null) {
+    return JSON.stringify(metadataDescription);
+  }
+
+  return null;
+}
+
+function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto {
+  const metadata = recordValue(entry['metadata'] ?? entry['properties']);
+  const rawLabel = stringValue(
+    entry['label'],
+    stringValue(entry['nodeId'], stringValue(metadata['uri'], ''))
+  );
+  const domain = stringValue(entry['domain']);
+
+  return {
+    id: stringValue(entry['id'], stringValue(entry['nodeId'])) as NodeId,
+    type: inferNormalizedGraphNodeType(entry, metadata),
+    label: normalizeGraphLabel(rawLabel, metadata),
+    description: normalizeGraphDescription(entry, metadata),
+    tags: stringArrayValue(entry['tags']).length > 0 ? stringArrayValue(entry['tags']) : domain !== '' ? [domain] : [],
+    metadata,
+    createdAt: pickIsoDate(entry['createdAt'], metadata['createdAt']),
+    updatedAt: pickIsoDate(entry['updatedAt'], entry['createdAt'], metadata['updatedAt'], metadata['createdAt']),
+  };
+}
+
+function normalizeGraphEdgeEntry(entry: Record<string, unknown>): IGraphEdgeDto {
+  return {
+    id: stringValue(entry['id'], stringValue(entry['edgeId'])) as EdgeId,
+    sourceId: stringValue(entry['sourceId'], stringValue(entry['sourceNodeId'])) as NodeId,
+    targetId: stringValue(entry['targetId'], stringValue(entry['targetNodeId'])) as NodeId,
+    type: stringValue(entry['type'], stringValue(entry['edgeType'], 'related')) as IGraphEdgeDto['type'],
+    weight: numberValue(entry['weight'], 1),
+    metadata: recordValue(entry['metadata'] ?? entry['properties']),
+    createdAt: pickIsoDate(entry['createdAt']),
+  };
+}
+
+function normalizeNodeResponse(response: NodeResponse): NodeResponse {
+  return {
+    ...response,
+    data: normalizeGraphNodeEntry(recordValue(response.data)),
+  };
+}
+
 
 function titleCaseWords(input: string): string {
   return input
@@ -238,7 +486,21 @@ function normalizeMutationEntry(entry: Record<string, unknown>): ICkgMutationDto
     : [];
   const firstOperation = operations[0];
   const state = stringValue(entry['state'], 'proposed');
-  const updatedAt = stringValue(entry['updatedAt'], stringValue(entry['createdAt']));
+  const proposedAt = pickIsoDate(
+    entry['createdAt'],
+    entry['proposedAt'],
+    entry['submittedAt'],
+    entry['timestamp'],
+    entry['updatedAt']
+  );
+  const updatedAt = pickIsoDate(
+    entry['updatedAt'],
+    entry['reviewedAt'],
+    entry['committedAt'],
+    entry['submittedAt'],
+    entry['createdAt'],
+    entry['proposedAt']
+  );
   const terminalState = state === 'committed' || state === 'rejected';
 
   return {
@@ -308,7 +570,7 @@ function normalizeMutationEntry(entry: Record<string, unknown>): ICkgMutationDto
       : {}),
     reviewedBy: null,
     reviewNote: typeof entry['revisionFeedback'] === 'string' ? entry['revisionFeedback'] : null,
-    proposedAt: stringValue(entry['createdAt'], new Date(0).toISOString()),
+    proposedAt,
     reviewedAt: terminalState ? updatedAt : null,
   };
 }
@@ -324,6 +586,38 @@ function normalizeMutationsResponse(response: CkgMutationsResponse): CkgMutation
   return {
     ...response,
     data: extractListData<Record<string, unknown>>(response).map(normalizeMutationEntry),
+  };
+}
+
+function upsertMutationInMutationsResponse(
+  response: CkgMutationsResponse | undefined,
+  mutation: ICkgMutationDto,
+  replacedMutationId?: MutationId
+): CkgMutationsResponse | undefined {
+  if (response === undefined) {
+    return response;
+  }
+
+  const normalized = normalizeMutationsResponse(response);
+  const nextData = [
+    mutation,
+    ...normalized.data.filter(
+      (entry) => entry.id !== mutation.id && entry.id !== replacedMutationId
+    ),
+  ];
+
+  return {
+    ...normalized,
+    data: nextData,
+    ...(normalized.pagination !== undefined
+      ? {
+          pagination: {
+            ...normalized.pagination,
+            total: nextData.length,
+            hasMore: false,
+          },
+        }
+      : {}),
   };
 }
 
@@ -427,7 +721,7 @@ export function usePKGNodes(
   return useQuery({
     queryKey: kgKeys.pkgNodes(userId),
     queryFn: () => pkgNodesApi.list(userId),
-    select: (r) => extractListData<IGraphNodeDto>(r),
+    select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphNodeEntry),
     enabled: userId !== '',
     ...options,
   });
@@ -441,7 +735,7 @@ export function usePKGNode(
   return useQuery({
     queryKey: kgKeys.pkgNode(userId, nodeId),
     queryFn: () => pkgNodesApi.get(userId, nodeId),
-    select: (r) => r.data,
+    select: (r) => normalizeNodeResponse(r).data,
     enabled: userId !== '' && nodeId !== '',
     staleTime: 5 * 60 * 1000,
     ...options,
@@ -472,7 +766,7 @@ export function useUpdatePKGNode(
   return useMutation({
     mutationFn: (data) => pkgNodesApi.update(userId, nodeId, data),
     onSuccess: (response) => {
-      queryClient.setQueryData(kgKeys.pkgNode(userId, nodeId), response);
+      queryClient.setQueryData(kgKeys.pkgNode(userId, nodeId), normalizeNodeResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.pkgNodes(userId) });
     },
     ...options,
@@ -506,7 +800,7 @@ export function usePKGEdges(
   return useQuery({
     queryKey: kgKeys.pkgEdges(userId),
     queryFn: () => pkgEdgesApi.list(userId),
-    select: (r) => extractListData<IGraphEdgeDto>(r),
+    select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphEdgeEntry),
     enabled: userId !== '',
     ...options,
   });
@@ -640,10 +934,42 @@ export function usePKGOperations(
 export function useCKGNodes(
   options?: Omit<UseQueryOptions<NodesListResponse, Error, IGraphNodeDto[]>, 'queryKey' | 'queryFn'>
 ) {
+  async function fetchAllNodes(): Promise<NodesListResponse> {
+    let response = await ckgNodesApi.list({ page: 1, pageSize: 200 });
+    if (response.pagination?.hasMore !== true) {
+      return response;
+    }
+
+    const collected = [...extractListData<Record<string, unknown>>(response)];
+    let nextPage = 2;
+
+    while (response.pagination?.hasMore === true) {
+      response = await ckgNodesApi.list({ page: nextPage, pageSize: 200 });
+      collected.push(...extractListData<Record<string, unknown>>(response));
+      nextPage += 1;
+    }
+
+    return {
+      ...response,
+      data: collected as unknown as IGraphNodeDto[],
+      ...(response.pagination !== undefined
+        ? {
+            pagination: {
+              ...response.pagination,
+              offset: 0,
+              limit: 200,
+              total: collected.length,
+              hasMore: false,
+            },
+          }
+        : {}),
+    };
+  }
+
   return useQuery({
     queryKey: kgKeys.ckgNodes(),
-    queryFn: ckgNodesApi.list,
-    select: (r) => extractListData<IGraphNodeDto>(r),
+    queryFn: fetchAllNodes,
+    select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphNodeEntry),
     staleTime: 10 * 60 * 1000,
     ...options,
   });
@@ -652,10 +978,42 @@ export function useCKGNodes(
 export function useCKGEdges(
   options?: Omit<UseQueryOptions<EdgesListResponse, Error, IGraphEdgeDto[]>, 'queryKey' | 'queryFn'>
 ) {
+  async function fetchAllEdges(): Promise<EdgesListResponse> {
+    let response = await ckgEdgesApi.list({ page: 1, pageSize: 200 });
+    if (response.pagination?.hasMore !== true) {
+      return response;
+    }
+
+    const collected = [...extractListData<Record<string, unknown>>(response)];
+    let nextPage = 2;
+
+    while (response.pagination?.hasMore === true) {
+      response = await ckgEdgesApi.list({ page: nextPage, pageSize: 200 });
+      collected.push(...extractListData<Record<string, unknown>>(response));
+      nextPage += 1;
+    }
+
+    return {
+      ...response,
+      data: collected as unknown as IGraphEdgeDto[],
+      ...(response.pagination !== undefined
+        ? {
+            pagination: {
+              ...response.pagination,
+              offset: 0,
+              limit: 200,
+              total: collected.length,
+              hasMore: false,
+            },
+          }
+        : {}),
+    };
+  }
+
   return useQuery({
     queryKey: kgKeys.ckgEdges(),
-    queryFn: ckgEdgesApi.list,
-    select: (r) => extractListData<IGraphEdgeDto>(r),
+    queryFn: fetchAllEdges,
+    select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphEdgeEntry),
     staleTime: 10 * 60 * 1000,
     ...options,
   });
@@ -668,9 +1026,54 @@ export function useCKGMutations(
     'queryKey' | 'queryFn'
   >
 ) {
+  async function fetchAllMutations(): Promise<CkgMutationsResponse> {
+    const pageSize = Math.min(filters?.pageSize ?? filters?.limit ?? 100, 100);
+    const requestedPage =
+      filters?.page ??
+      (filters?.offset !== undefined ? Math.floor(filters.offset / pageSize) + 1 : undefined);
+    let response = await ckgMutationsApi.list({
+      ...filters,
+      ...(requestedPage !== undefined ? { page: requestedPage } : {}),
+      pageSize,
+    });
+
+    if (requestedPage !== undefined || response.pagination?.hasMore !== true) {
+      return response;
+    }
+
+    const collected = [...normalizeMutationsResponse(response).data];
+    let nextPage = 2;
+
+    while (response.pagination?.hasMore === true) {
+      response = await ckgMutationsApi.list({
+        ...filters,
+        page: nextPage,
+        pageSize,
+      });
+      collected.push(...normalizeMutationsResponse(response).data);
+      nextPage += 1;
+    }
+
+    return {
+      ...response,
+      data: collected,
+      ...(response.pagination !== undefined
+        ? {
+            pagination: {
+              ...response.pagination,
+              offset: 0,
+              limit: pageSize,
+              total: collected.length,
+              hasMore: false,
+            },
+          }
+        : {}),
+    };
+  }
+
   return useQuery({
     queryKey: kgKeys.ckgMutations(filters),
-    queryFn: () => ckgMutationsApi.list(filters),
+    queryFn: fetchAllMutations,
     select: (response) =>
       normalizeMutationsResponse(response).data.filter((mutation) =>
         matchesMutationFilters(mutation, filters)
@@ -719,6 +1122,60 @@ export function useRejectMutation(
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
+    ...options,
+  });
+}
+
+export function useReconcileMutation(
+  options?: UseMutationOptions<CkgMutationResponse, Error, { id: MutationId; note: string }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }) => ckgMutationsApi.reconcile(id, note),
+    onSuccess: (response, { id }) => {
+      queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useRecoverRejectMutation(
+  options?: UseMutationOptions<CkgMutationResponse, Error, { id: MutationId; note: string }>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }) => ckgMutationsApi.recoverReject(id, note),
+    onSuccess: (response, { id }) => {
+      queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useCheckMutationSafeRetry(
+  options?: UseMutationOptions<
+    CkgMutationRecoveryCheckResponse,
+    Error,
+    { id: MutationId }
+  >
+) {
+  return useMutation({
+    mutationFn: ({ id }) => ckgMutationsApi.checkSafeRetry(id),
+    ...options,
+  });
+}
+
+export function useCheckMutationReconcile(
+  options?: UseMutationOptions<
+    CkgMutationRecoveryCheckResponse,
+    Error,
+    { id: MutationId }
+  >
+) {
+  return useMutation({
+    mutationFn: ({ id }) => ckgMutationsApi.checkReconcile(id),
     ...options,
   });
 }
@@ -785,6 +1242,25 @@ export function useCancelMutation(
     mutationFn: (id) => ckgMutationsApi.cancel(id),
     onSuccess: (response, id) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
+export function useRetryMutation(
+  options?: UseMutationOptions<CkgMutationResponse, Error, MutationId>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id) => normalizeMutationResponse(await ckgMutationsApi.retry(id)),
+    onSuccess: (response, id) => {
+      queryClient.setQueryData(kgKeys.ckgMutation(response.data.id), response);
+      queryClient.setQueriesData<CkgMutationsResponse>(
+        { queryKey: kgKeys.ckgMutations() },
+        (cached) => upsertMutationInMutationsResponse(cached, response.data, id)
+      );
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },
     ...options,

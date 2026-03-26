@@ -16,6 +16,7 @@ import type {
   CkgMutationAuditLogResponse,
   ICkgBulkReviewInput,
   ICkgMutationFilters,
+  CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
   ICommonAncestorsInput,
@@ -155,13 +156,15 @@ export const pkgOperationsApi = {
 // ============================================================================
 
 export const ckgNodesApi = {
-  list: (): Promise<NodesListResponse> => http.get(`${ckgBase}/nodes`),
+  list: (params?: { page?: number; pageSize?: number }): Promise<NodesListResponse> =>
+    params === undefined ? http.get(`${ckgBase}/nodes`) : http.get(`${ckgBase}/nodes`, { params }),
 
   get: (nodeId: NodeId): Promise<NodeResponse> => http.get(`${ckgBase}/nodes/${nodeId}`),
 };
 
 export const ckgEdgesApi = {
-  list: (): Promise<EdgesListResponse> => http.get(`${ckgBase}/edges`),
+  list: (params?: { page?: number; pageSize?: number }): Promise<EdgesListResponse> =>
+    params === undefined ? http.get(`${ckgBase}/edges`) : http.get(`${ckgBase}/edges`, { params }),
 
   get: (edgeId: EdgeId): Promise<EdgeResponse> => http.get(`${ckgBase}/edges/${edgeId}`),
 };
@@ -178,6 +181,12 @@ export const ckgMutationsApi = {
         proposedBy: filters?.proposedBy,
         importRunId: filters?.importRunId,
         includeImportRunAggregation: filters?.includeImportRunAggregation,
+        page:
+          filters?.page ??
+          (filters?.offset !== undefined && (filters.pageSize ?? filters.limit) !== undefined
+            ? Math.floor(filters.offset / (filters.pageSize ?? filters.limit ?? 20)) + 1
+            : undefined),
+        pageSize: filters?.pageSize ?? filters?.limit,
       },
     }),
 
@@ -192,6 +201,22 @@ export const ckgMutationsApi = {
   reject: (mutationId: MutationId, note?: string): Promise<CkgMutationResponse> =>
     http.post(`${ckgBase}/mutations/${mutationId}/reject`, {
       reason: note ?? 'Rejected from admin console',
+    }),
+
+  reconcile: (mutationId: MutationId, note: string): Promise<CkgMutationResponse> =>
+    http.post(`${ckgBase}/mutations/${mutationId}/reconcile`, {
+      reason: note,
+    }),
+
+  checkSafeRetry: (mutationId: MutationId): Promise<CkgMutationRecoveryCheckResponse> =>
+    http.get(`${ckgBase}/mutations/${mutationId}/check-safe-retry`),
+
+  checkReconcile: (mutationId: MutationId): Promise<CkgMutationRecoveryCheckResponse> =>
+    http.get(`${ckgBase}/mutations/${mutationId}/check-reconcile`),
+
+  recoverReject: (mutationId: MutationId, note: string): Promise<CkgMutationResponse> =>
+    http.post(`${ckgBase}/mutations/${mutationId}/recover-reject`, {
+      reason: note,
     }),
 
   cancel: (mutationId: MutationId): Promise<CkgMutationResponse> =>
