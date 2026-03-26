@@ -1,0 +1,13 @@
+{
+  "artifact": {
+    "id": "artifact_2qrye79Eo-vs5Hnh1mNL_",
+    "runId": "run_1lVFLsThxztjtcsEACREZ",
+    "sourceId": "esco",
+    "kind": "parsed_batch",
+    "storageKey": "ontology-imports/esco/run_1lVFLsThxztjtcsEACREZ/parsed-batch.json",
+    "contentType": "application/json",
+    "checksum": "4dd67a164237fadc8f6bc73a09a1ff9bcd41c073d39597bc78f6603912e487f1",
+    "sizeBytes": 8528888,
+    "createdAt": "2026-03-25T13:25:45.271Z"
+  }
+}

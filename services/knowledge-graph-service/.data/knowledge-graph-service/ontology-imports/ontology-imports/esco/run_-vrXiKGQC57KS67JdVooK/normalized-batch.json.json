@@ -1,0 +1,13 @@
+{
+  "artifact": {
+    "id": "artifact_e0F1vV9YBEIhqWRlSRd9c",
+    "runId": "run_-vrXiKGQC57KS67JdVooK",
+    "sourceId": "esco",
+    "kind": "normalized_batch",
+    "storageKey": "ontology-imports/esco/run_-vrXiKGQC57KS67JdVooK/normalized-batch.json",
+    "contentType": "application/json",
+    "checksum": "0fbac9a4afa38f7f03dcf381da1daecb5fe50b0c62bc01bba36de5748beada89",
+    "sizeBytes": 8538345,
+    "createdAt": "2026-03-25T00:35:25.870Z"
+  }
+}

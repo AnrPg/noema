@@ -1,0 +1,13 @@
+{
+  "artifact": {
+    "id": "artifact_QM4ilMe07Wd0-MRlnyPBd",
+    "runId": "run_-vrXiKGQC57KS67JdVooK",
+    "sourceId": "esco",
+    "kind": "raw_payload",
+    "storageKey": "ontology-imports/esco/run_-vrXiKGQC57KS67JdVooK/occupations/page-0.json",
+    "contentType": "application/json;charset=UTF-8",
+    "checksum": "3607d387327043dc73825566466d354ed1a6753f58b0026e0d0fc2c5608c7c9d",
+    "sizeBytes": 2999558,
+    "createdAt": "2026-03-25T00:35:16.342Z"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "artifact": {
+    "id": "artifact_BBRNQk_6bQGpBceGMItsW",
+    "runId": "run_1lVFLsThxztjtcsEACREZ",
+    "sourceId": "esco",
+    "kind": "manifest",
+    "storageKey": "ontology-imports/esco/run_1lVFLsThxztjtcsEACREZ/manifest.json",
+    "contentType": "application/json",
+    "checksum": "88c63ec849c1619d420325f6331a5adf61a48279dba01a1e89cfe51654f73882",
+    "sizeBytes": 1647,
+    "createdAt": "2026-03-25T13:25:44.895Z"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "sourceId": "esco",
+  "runId": "run_-vrXiKGQC57KS67JdVooK",
+  "selectedVersion": null,
+  "language": "en",
+  "includeObsolete": false,
+  "mode": "full",
+  "pageSize": 100,
+  "fetchedAt": "2026-03-25T00:34:54.752Z",
+  "pages": [
+    {
+      "schemeId": "occupations",
+      "page": 0,
+      "requestUrl": "https://ec.europa.eu/esco/api/resource/occupation?isInScheme=http%3A%2F%2Fdata.europa.eu%2Fesco%2Fconcept-scheme%2Foccupations&language=en&offset=0&limit=100&viewObsolete=false",
+      "storageKey": "ontology-imports/esco/run_-vrXiKGQC57KS67JdVooK/occupations/page-0.json",
+      "recordCount": 100,
+      "checksum": "3607d387327043dc73825566466d354ed1a6753f58b0026e0d0fc2c5608c7c9d"
+    },
+    {
+      "schemeId": "skills",
+      "page": 0,
+      "requestUrl": "https://ec.europa.eu/esco/api/resource/skill?isInScheme=http%3A%2F%2Fdata.europa.eu%2Fesco%2Fconcept-scheme%2Fskills&language=en&offset=0&limit=100&viewObsolete=false",
+      "storageKey": "ontology-imports/esco/run_-vrXiKGQC57KS67JdVooK/skills/page-0.json",
+      "recordCount": 100,
+      "checksum": "5d4ef1320f8e9c8d689c9c4c4d69c4d9999493c1d90e7957c14d377e2b6d3c20"
+    },
+    {
+      "schemeId": "skills",
+      "page": 1,
+      "requestUrl": "https://ec.europa.eu/esco/api/resource/skill?isInScheme=http%3A%2F%2Fdata.europa.eu%2Fesco%2Fconcept-scheme%2Fskills&language=en&offset=100&limit=100&viewObsolete=false",
+      "storageKey": "ontology-imports/esco/run_-vrXiKGQC57KS67JdVooK/skills/page-1.json",
+      "recordCount": 100,
+      "checksum": "28f0b23d6446b77afe72e105628f3ba4fd2f5a46fe7ea8db734dce46450a58f1"
+    }
+  ],
+  "totalPages": 3,
+  "totalRecords": 300
+}

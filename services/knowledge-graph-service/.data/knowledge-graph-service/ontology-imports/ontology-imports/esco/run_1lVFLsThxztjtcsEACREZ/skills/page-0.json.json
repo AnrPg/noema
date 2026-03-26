@@ -1,0 +1,13 @@
+{
+  "artifact": {
+    "id": "artifact_3ggijjPwRdkg8q6C4lvwf",
+    "runId": "run_1lVFLsThxztjtcsEACREZ",
+    "sourceId": "esco",
+    "kind": "raw_payload",
+    "storageKey": "ontology-imports/esco/run_1lVFLsThxztjtcsEACREZ/skills/page-0.json",
+    "contentType": "application/json;charset=UTF-8",
+    "checksum": "0ec2cf0ef7d9e3bdf1e724972565c697533465b7e3789ce6b0ab7ed0e4c724bf",
+    "sizeBytes": 1403981,
+    "createdAt": "2026-03-25T13:25:39.718Z"
+  }
+}

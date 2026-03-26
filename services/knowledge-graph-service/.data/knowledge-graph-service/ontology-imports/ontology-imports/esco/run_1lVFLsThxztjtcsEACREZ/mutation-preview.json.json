@@ -1,0 +1,13 @@
+{
+  "artifact": {
+    "id": "artifact_awwmCw4178n1GZv7pkPfQ",
+    "runId": "run_1lVFLsThxztjtcsEACREZ",
+    "sourceId": "esco",
+    "kind": "mutation_preview",
+    "storageKey": "ontology-imports/esco/run_1lVFLsThxztjtcsEACREZ/mutation-preview.json",
+    "contentType": "application/json",
+    "checksum": "df48f837bf5695b47754771730c9a1298afce06ebb4d075cdc837fc581d72a90",
+    "sizeBytes": 10113696,
+    "createdAt": "2026-03-25T13:25:48.241Z"
+  }
+}
