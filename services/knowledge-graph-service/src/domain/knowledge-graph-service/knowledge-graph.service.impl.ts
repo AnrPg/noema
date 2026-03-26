@@ -1113,11 +1113,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       check,
       eligible,
       recommendedAction:
-        mutation.state !== 'committing'
-          ? 'none'
-          : eligible
-            ? 'reconcile_commit'
-            : 'wait',
+        mutation.state !== 'committing' ? 'none' : eligible ? 'reconcile_commit' : 'wait',
       mutationState: mutation.state,
       summary:
         mutation.state !== 'committing'
@@ -1192,15 +1188,11 @@ function buildRecoveryDetails(
   const details = [`Current mutation state: ${mutationState}.`];
 
   if (evidence.matchedNodeIds.length > 0) {
-    details.push(
-      `Matched canonical node ids: ${evidence.matchedNodeIds.map(String).join(', ')}.`
-    );
+    details.push(`Matched canonical node ids: ${evidence.matchedNodeIds.map(String).join(', ')}.`);
   }
 
   if (evidence.matchedEdgeIds.length > 0) {
-    details.push(
-      `Matched canonical edge ids: ${evidence.matchedEdgeIds.map(String).join(', ')}.`
-    );
+    details.push(`Matched canonical edge ids: ${evidence.matchedEdgeIds.map(String).join(', ')}.`);
   }
 
   if (!evidence.writeDetected) {
@@ -1228,7 +1220,7 @@ function nodeMatchesAddNodeOperation(node: IGraphNode, operation: IAddNodeOperat
   return identityMatches.length > 0 || extractIdentityEntries(operation.properties).length === 0;
 }
 
-function extractIdentityEntries(properties: Record<string, unknown>): Array<[string, unknown]> {
+function extractIdentityEntries(properties: Record<string, unknown>): [string, unknown][] {
   const identityKeys = ['uri', 'externalId', 'iri', 'code', 'ontologyImport'];
   return identityKeys
     .filter((key) => key in properties)
