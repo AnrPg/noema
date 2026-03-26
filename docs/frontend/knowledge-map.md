@@ -9,7 +9,10 @@ editing, and managing the Personal Knowledge Graph (PKG).
 
 - Stage 1 follows the product rule "system builds, user reviews".
 - The page shows canonical comparison signals (`missingFromPkg`,
-  `alignmentScore`, `extraInPkg`) and surfaces the next suggested concepts.
+  `alignmentScore`, `extraInPkg`) from an engagement-scoped comparison.
+- Canonical suggestions are scoped to the learner's aligned PKG neighborhood and
+  expand outward by a small hop radius. When the learner has not engaged with
+  any seed concepts yet, the page can bootstrap from the requested domain.
 - Learners can apply a single suggestion or let the system scaffold the next
   batch of suggested concepts into the PKG.
 
