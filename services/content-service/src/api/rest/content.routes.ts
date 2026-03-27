@@ -89,6 +89,8 @@ export function registerContentRoutes(
       schema: {
         tags: ['Cards'],
         summary: 'Create a new card',
+        description:
+          'Create a single card with schema-validated content. `content` is card-type specific and is not restricted to a fixed front/back shape.',
         body: {
           type: 'object',
           required: ['cardType', 'content'],
@@ -96,13 +98,9 @@ export function registerContentRoutes(
             cardType: { type: 'string' },
             content: {
               type: 'object',
-              required: ['front', 'back'],
-              properties: {
-                front: { type: 'string' },
-                back: { type: 'string' },
-                hint: { type: 'string' },
-                explanation: { type: 'string' },
-              },
+              additionalProperties: true,
+              description:
+                'Card-type specific payload. Atomic cards use front/back fields, but other card types submit different validated structures.',
             },
             difficulty: { type: 'string' },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },

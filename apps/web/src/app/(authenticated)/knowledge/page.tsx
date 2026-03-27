@@ -37,9 +37,9 @@ const NODE_TYPE_OPTIONS: { value: NodeType; label: string }[] = [
 
 const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string }[] = [
   { value: 'prerequisite', label: 'Prerequisite' },
-  { value: 'related', label: 'Related' },
+  { value: 'related_to', label: 'Related' },
   { value: 'part_of', label: 'Part of' },
-  { value: 'example_of', label: 'Example of' },
+  { value: 'exemplifies', label: 'Example of' },
   { value: 'contradicts', label: 'Contradicts' },
 ];
 
@@ -88,7 +88,7 @@ function defaultCreateNodeForm(): INodeFormState {
 }
 
 function defaultEdgeForm(): IEdgeFormState {
-  return { targetId: '', type: 'related', weight: '1' };
+  return { targetId: '', type: 'related_to', weight: '1' };
 }
 
 function formatPercent(value: number): string {

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NewCardPage from './page.js';
 
 const createCardMock = vi.fn();
+const transitionCardStateMock = vi.fn();
 const createNodeMock = vi.fn();
 const batchCreateMock = vi.fn();
 
@@ -27,6 +28,11 @@ vi.mock('@noema/api-client', () => ({
   }),
   useCreateCard: () => ({
     mutateAsync: createCardMock,
+    isPending: false,
+    reset: vi.fn(),
+  }),
+  useCardStateTransition: () => ({
+    mutateAsync: transitionCardStateMock,
     isPending: false,
     reset: vi.fn(),
   }),
@@ -59,6 +65,7 @@ function renderPage(): void {
 
 beforeEach(() => {
   createCardMock.mockReset();
+  transitionCardStateMock.mockReset();
   createNodeMock.mockReset();
   batchCreateMock.mockReset();
 });
@@ -80,6 +87,13 @@ test('creates and attaches a new PKG node before card creation', async () => {
     data: {
       id: 'card_1',
       knowledgeNodeIds: ['node_abcdefghijklmnopqrstu'],
+    },
+  });
+  transitionCardStateMock.mockResolvedValue({
+    data: {
+      id: 'card_1',
+      knowledgeNodeIds: ['node_abcdefghijklmnopqrstu'],
+      state: 'active',
     },
   });
 
@@ -114,8 +128,16 @@ test('creates and attaches a new PKG node before card creation', async () => {
     expect(createCardMock).toHaveBeenCalledWith(
       expect.objectContaining({
         cardType: 'atomic',
+        metadata: { state: 'active' },
         knowledgeNodeIds: ['node_abcdefghijklmnopqrstu'],
       })
     );
+  });
+
+  await waitFor(() => {
+    expect(transitionCardStateMock).toHaveBeenCalledWith({
+      id: 'card_1',
+      data: { state: 'active' },
+    });
   });
 });

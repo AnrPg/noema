@@ -1,11 +1,11 @@
 /**
  * Card Creator Wizard — /cards/new
  *
- * Multi-step wizard for creating a single card or a batch of cards.
+ * Multi-step wizard for creating a single card.
  *
  * Step 1 — Card Type Selection (Standard 22 + Remediation 20)
  * Step 2 — Content Entry (structured form for simple types, raw JSON textarea for complex)
- * Step 3 — Card Settings (tags, nodes, difficulty, state, batch mode)
+ * Step 3 — Card Settings (tags, nodes, difficulty, state)
  * Step 4 — Result (success, links to created card(s))
  *
  * ADR-007 D6: Phase 10 will replace complex-type JSON textarea with rich editors.
@@ -20,9 +20,15 @@ import type {
   IGraphNodeDto,
   NodeType,
 } from '@noema/api-client';
-import { contentKeys, useCreateCard, useCreatePKGNode, usePKGNodes } from '@noema/api-client';
+import {
+  contentKeys,
+  useCardStateTransition,
+  useCreateCard,
+  useCreatePKGNode,
+  usePKGNodes,
+} from '@noema/api-client';
 import { useAuth } from '@noema/auth';
-import type { UserId } from '@noema/types';
+import type { DifficultyLevel, UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react';
@@ -519,11 +525,17 @@ function validateKnowledgeNodeIds(ids: string[]): string | null {
   return null;
 }
 
-function parseDifficulty(raw: string): number | undefined {
+function parseDifficulty(raw: string): DifficultyLevel | undefined {
   if (raw.trim() === '') return undefined;
   const n = parseFloat(raw);
   if (isNaN(n)) return undefined;
-  return Math.min(1, Math.max(0, n));
+  const clamped = Math.min(1, Math.max(0, n));
+
+  if (clamped < 0.2) return 'beginner';
+  if (clamped < 0.4) return 'elementary';
+  if (clamped < 0.6) return 'intermediate';
+  if (clamped < 0.8) return 'advanced';
+  return 'expert';
 }
 
 function labelForType(value: string): string {
@@ -1601,9 +1613,11 @@ export default function NewCardPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   const createCard = useCreateCard();
+  const transitionCardState = useCardStateTransition();
   const createNode = useCreatePKGNode(userId);
 
-  const isSubmitting = createCard.isPending || createNode.isPending;
+  const isSubmitting =
+    createCard.isPending || transitionCardState.isPending || createNode.isPending;
 
   // --------------------------------------------------------------------------
   // Step 1 handlers
@@ -1693,15 +1707,25 @@ export default function NewCardPage(): React.JSX.Element {
     const input: ICreateCardInput = {
       cardType: selectedType,
       content,
-      metadata: difficulty !== undefined ? { difficulty, state } : { state },
+      ...(difficulty !== undefined ? { difficulty } : {}),
+      metadata: { state },
     };
     if (tags.length > 0) input.tags = tags;
     if (knowledgeNodeIds.length > 0) input.knowledgeNodeIds = knowledgeNodeIds;
 
     try {
       const response = await createCard.mutateAsync(input);
+      const card =
+        state === 'active'
+          ? (
+              await transitionCardState.mutateAsync({
+                id: response.data.id,
+                data: { state: 'active' },
+              })
+            ).data
+          : response.data;
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
-      setResult({ mode: 'single', card: response.data });
+      setResult({ mode: 'single', card });
       setStep(4);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Card creation failed.');
@@ -1722,6 +1746,7 @@ export default function NewCardPage(): React.JSX.Element {
     setSubmitError(null);
     setNodeCreateError(null);
     createCard.reset();
+    transitionCardState.reset();
     createNode.reset();
   }
 

@@ -6,7 +6,7 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CardState, MediaId, TemplateId } from '@noema/types';
+import type { CardId, CardState, DifficultyLevel, MediaId, TemplateId } from '@noema/types';
 import type { CardType, RemediationCardType } from '@noema/types';
 
 // ============================================================================
@@ -653,6 +653,7 @@ export interface ICreateCardInput {
   tags?: string[];
   knowledgeNodeIds?: string[];
   source?: string;
+  difficulty?: DifficultyLevel;
   metadata?: Record<string, unknown>;
 }
 
