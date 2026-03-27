@@ -21,8 +21,16 @@
 
   .auth-neural-bg {
     background-image:
-      radial-gradient(ellipse 80% 50% at 20% 20%, hsl(var(--synapse-400) / 0.06) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 80%, hsl(var(--dendrite-400) / 0.05) 0%, transparent 60%);
+      radial-gradient(
+        ellipse 80% 50% at 20% 20%,
+        hsl(var(--synapse-400) / 0.06) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 60% 40% at 80% 80%,
+        hsl(var(--dendrite-400) / 0.05) 0%,
+        transparent 60%
+      );
   }
 
   .animate-fade-slide-in {
@@ -37,6 +45,250 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  .error-neural-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--axon-100) / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--axon-100) / 0.05) 1px, transparent 1px);
+    background-size: 3.75rem 3.75rem;
+    mask-image: radial-gradient(circle at center, black 34%, transparent 86%);
+  }
+
+  .error-neural-noise {
+    background-image:
+      repeating-linear-gradient(
+        135deg,
+        transparent 0,
+        transparent 18px,
+        hsl(var(--synapse-100) / 0.018) 18px,
+        hsl(var(--synapse-100) / 0.018) 19px
+      ),
+      repeating-linear-gradient(
+        -135deg,
+        transparent 0,
+        transparent 24px,
+        hsl(var(--dendrite-100) / 0.02) 24px,
+        hsl(var(--dendrite-100) / 0.02) 25px
+      );
+  }
+
+  .error-orb {
+    animation: error-orb 18s ease-in-out infinite alternate;
+  }
+
+  .error-orb-reverse {
+    animation: error-orb-reverse 22s ease-in-out infinite alternate;
+  }
+
+  .error-float-card {
+    animation: error-float-card 7s ease-in-out infinite;
+  }
+
+  .error-network-line {
+    stroke-dasharray: 10 14;
+    animation: error-dash 14s linear infinite;
+  }
+
+  .error-network-node {
+    transform-origin: center;
+    animation: error-node-pulse 4.8s ease-in-out infinite;
+  }
+
+  .error-network-node-alert {
+    transform-origin: center;
+    animation: error-node-alert 1.8s ease-in-out infinite;
+  }
+
+  .error-signal-dot {
+    animation: error-signal-dot 2.4s ease-in-out infinite;
+  }
+
+  .error-scanline {
+    background-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      hsl(var(--axon-50) / 0.02) 35%,
+      transparent 70%
+    );
+    background-size: 100% 16px;
+    animation: error-scanline 12s linear infinite;
+  }
+
+  .error-panel-stage {
+    animation: error-panel-stage-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .error-preview-ring {
+    animation: error-preview-ring 3.6s ease-out infinite;
+  }
+
+  .error-preview-signal {
+    animation: error-preview-signal 5.8s linear infinite;
+  }
+
+  .error-preview-ghost {
+    animation: error-preview-ghost 3.8s ease-in-out infinite alternate;
+  }
+
+  @keyframes error-orb {
+    0% {
+      transform: translate3d(0, 0, 0) scale(0.95);
+    }
+    50% {
+      transform: translate3d(2rem, 1rem, 0) scale(1.05);
+    }
+    100% {
+      transform: translate3d(-1rem, 3rem, 0) scale(0.98);
+    }
+  }
+
+  @keyframes error-orb-reverse {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1.02);
+    }
+    50% {
+      transform: translate3d(-2rem, -1rem, 0) scale(0.96);
+    }
+    100% {
+      transform: translate3d(1rem, 2rem, 0) scale(1.04);
+    }
+  }
+
+  @keyframes error-float-card {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    50% {
+      transform: translateY(-10px) rotate(-1deg);
+    }
+  }
+
+  @keyframes error-dash {
+    from {
+      stroke-dashoffset: 0;
+    }
+    to {
+      stroke-dashoffset: -144;
+    }
+  }
+
+  @keyframes error-node-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 0.32;
+    }
+    50% {
+      transform: scale(1.12);
+      opacity: 0.85;
+    }
+  }
+
+  @keyframes error-node-alert {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    35% {
+      transform: scale(1.16);
+      opacity: 0.75;
+    }
+    70% {
+      transform: scale(0.94);
+      opacity: 1;
+    }
+  }
+
+  @keyframes error-signal-dot {
+    0%,
+    100% {
+      opacity: 0.7;
+      transform: scale(0.9);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.25);
+    }
+  }
+
+  @keyframes error-scanline {
+    from {
+      transform: translateY(-20%);
+    }
+    to {
+      transform: translateY(20%);
+    }
+  }
+
+  @keyframes error-panel-stage-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes error-preview-ring {
+    0% {
+      opacity: 0.8;
+      transform: translate(-50%, -50%) scale(0.45);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(1.65);
+    }
+  }
+
+  @keyframes error-preview-signal {
+    0% {
+      transform: translate(0, -50%);
+    }
+    25% {
+      transform: translate(52px, -50%);
+    }
+    50% {
+      transform: translate(52px, 24px);
+    }
+    75% {
+      transform: translate(110px, 24px);
+    }
+    100% {
+      transform: translate(110px, -14px);
+    }
+  }
+
+  @keyframes error-preview-ghost {
+    from {
+      transform: translate(0, 0);
+      opacity: 0.9;
+    }
+    to {
+      transform: translate(-18px, 34px);
+      opacity: 0.55;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .error-orb,
+    .error-orb-reverse,
+    .error-float-card,
+    .error-network-line,
+    .error-network-node,
+    .error-network-node-alert,
+    .error-signal-dot,
+    .error-scanline,
+    .error-panel-stage,
+    .error-preview-ring,
+    .error-preview-signal,
+    .error-preview-ghost {
+      animation: none;
     }
   }
 }

@@ -195,3 +195,15 @@
   active runs are still progressing
 - expanded run detail with pipeline-progress status, quick artifact jumps, and
   mutation-preview candidate filters for ready, blocked, and conflicted items
+
+## 2026-03-27 - Web Error Pages
+
+- added a custom full-screen `404` route for the learner app with animated
+  neural-graph visuals and recovery links back into Noema
+- added shared runtime failure screens for both segment-level and root-level app
+  errors, including a retry action and safe digest/message handling
+- kept the effect dependency-free by implementing the motion layer with CSS and
+  SVG instead of introducing a new animation package
+- replaced the right-side incident visual with a cognitive recovery panel that
+  offers retry plus two panel-native mini-games: `Neural Timing` and
+  `Brain Maze`
