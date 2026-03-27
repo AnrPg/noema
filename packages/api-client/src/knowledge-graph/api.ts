@@ -13,9 +13,14 @@ import type {
   BridgeNodesResponse,
   CentralityResponse,
   CkgBulkReviewResponse,
+  CkgEdgeAuthoringPreviewResponse,
+  CkgNodeBatchAuthoringPreviewResponse,
   CkgMutationAuditLogResponse,
   ICkgBulkReviewInput,
+  ICkgEdgeAuthoringPreviewInput,
+  ICkgNodeBatchAuthoringPreviewInput,
   ICkgMutationFilters,
+  ICkgMutationProposalInput,
   CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
@@ -27,6 +32,7 @@ import type {
   ICreateNodeInput,
   ICancelOntologyImportRunInput,
   IRegisterOntologyImportSourceInput,
+  ISubmitOntologyImportRunPreviewInput,
   IUpdateOntologyImportSourceInput,
   EdgeResponse,
   EdgesListResponse,
@@ -161,6 +167,11 @@ export const ckgNodesApi = {
     params === undefined ? http.get(`${ckgBase}/nodes`) : http.get(`${ckgBase}/nodes`, { params }),
 
   get: (nodeId: NodeId): Promise<NodeResponse> => http.get(`${ckgBase}/nodes/${nodeId}`),
+
+  previewBatchAuthoring: (
+    input: ICkgNodeBatchAuthoringPreviewInput
+  ): Promise<CkgNodeBatchAuthoringPreviewResponse> =>
+    http.post(`${ckgBase}/nodes/batch-authoring-preview`, input),
 };
 
 export const ckgEdgesApi = {
@@ -168,6 +179,11 @@ export const ckgEdgesApi = {
     params === undefined ? http.get(`${ckgBase}/edges`) : http.get(`${ckgBase}/edges`, { params }),
 
   get: (edgeId: EdgeId): Promise<EdgeResponse> => http.get(`${ckgBase}/edges/${edgeId}`),
+
+  previewAuthoring: (
+    input: ICkgEdgeAuthoringPreviewInput
+  ): Promise<CkgEdgeAuthoringPreviewResponse> =>
+    http.post(`${ckgBase}/edges/authoring-preview`, input),
 };
 
 // ============================================================================
@@ -175,6 +191,9 @@ export const ckgEdgesApi = {
 // ============================================================================
 
 export const ckgMutationsApi = {
+  propose: (input: ICkgMutationProposalInput): Promise<CkgMutationResponse> =>
+    http.post(`${ckgBase}/mutations`, input),
+
   list: (filters?: ICkgMutationFilters): Promise<CkgMutationsResponse> =>
     http.get(`${ckgBase}/mutations`, {
       params: {
@@ -294,8 +313,12 @@ export const ontologyImportsApi = {
   retryRun: (runId: string): Promise<OntologyImportRunResponse> =>
     http.post(`${ontologyImportsBase}/runs/${runId}/retry`, {}),
 
-  submitRunPreview: (runId: string): Promise<OntologyMutationPreviewSubmissionResponse> =>
-    http.post(`${ontologyImportsBase}/runs/${runId}/submit`, {}),
+  submitRunPreview: (
+    input: ISubmitOntologyImportRunPreviewInput
+  ): Promise<OntologyMutationPreviewSubmissionResponse> =>
+    http.post(`${ontologyImportsBase}/runs/${input.runId}/submit`, {
+      ...(input.candidateIds !== undefined ? { candidateIds: input.candidateIds } : {}),
+    }),
 };
 
 // ============================================================================

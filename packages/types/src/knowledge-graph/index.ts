@@ -9,6 +9,7 @@ import type { Metadata } from '../base/index.js';
 import type { EdgeId, MisconceptionPatternId, NodeId, UserId } from '../branded-ids/index.js';
 import type { ConfidenceScore, EdgeWeight, MasteryLevel } from '../branded-numerics/index.js';
 import type {
+  CkgNodeStatus,
   GraphEdgeType,
   GraphNodeType,
   GraphType,
@@ -24,6 +25,121 @@ import type {
 // ============================================================================
 // Graph Data Interfaces
 // ============================================================================
+
+/**
+ * Stable reference to a source-system entity that contributed to a canonical node.
+ */
+export interface ICanonicalExternalRef {
+  /** Source registry identifier (ESCO, YAGO, WordNet, etc.) */
+  readonly sourceId: string;
+
+  /** External identifier within that source */
+  readonly externalId: string;
+
+  /** Optional resolvable IRI/URI for linked-data style sources */
+  readonly iri?: string | null;
+
+  /** Optional source-specific semantic kind/classification */
+  readonly refType?: string | null;
+
+  /** Source release/version used when this ref was harvested */
+  readonly sourceVersion?: string | null;
+
+  /** Optional canonical source URL if separate from the IRI */
+  readonly url?: string | null;
+
+  /** Indicates whether this is the primary external ref for the node */
+  readonly isCanonical?: boolean;
+
+  /** Confidence for this external reference attachment */
+  readonly confidenceScore?: number | null;
+}
+
+/**
+ * Cross-source ontology mapping preserved as first-class enrichment.
+ */
+export interface IOntologyMapping {
+  /** Source system that emitted or owns this mapping */
+  readonly sourceId: string;
+
+  /** External identifier or local mapping identifier */
+  readonly externalId: string;
+
+  /** Mapping kind, such as exact_match or close_match */
+  readonly mappingKind: string;
+
+  /** The mapped target external identifier, if available */
+  readonly targetExternalId?: string | null;
+
+  /** Optional mapped target IRI */
+  readonly targetIri?: string | null;
+
+  /** Confidence score in the mapping */
+  readonly confidenceScore?: number | null;
+
+  /** Confidence band, if the producing pipeline provides one */
+  readonly confidenceBand?: 'low' | 'medium' | 'high' | null;
+
+  /** Conflict flags or reviewer flags associated with this mapping */
+  readonly conflictFlags?: string[];
+}
+
+/**
+ * Structured origin trail for canonical node enrichment.
+ */
+export interface INodeProvenanceEntry {
+  readonly sourceId: string;
+  readonly sourceVersion?: string | null;
+  readonly runId?: string | null;
+  readonly artifactId?: string | null;
+  readonly harvestedAt?: string | null;
+  readonly license?: string | null;
+  readonly requestUrl?: string | null;
+  readonly recordKind?: string | null;
+}
+
+/**
+ * Reviewer-facing metadata for candidate or canonical nodes.
+ */
+export interface INodeReviewMetadata {
+  /** Confidence score in [0, 1] for the current canonical shape */
+  readonly confidenceScore?: number | null;
+
+  /** Bucketed confidence for fast UI triage */
+  readonly confidenceBand?: 'low' | 'medium' | 'high' | null;
+
+  /** Structured conflict flags preserved from import/review workflows */
+  readonly conflictFlags?: string[];
+
+  /** Review state for UI and workflow routing */
+  readonly reviewState?: 'ready' | 'blocked' | 'reviewer_overridden' | 'endpoint_unresolved' | null;
+
+  /** Freeform notes captured during review */
+  readonly notes?: string[];
+
+  /** Whether a human reviewer explicitly overrode an automated decision */
+  readonly overridden?: boolean;
+}
+
+/**
+ * Summary of which ontology sources currently enrich a canonical node.
+ */
+export interface ISourceCoverageSummary {
+  /** Source IDs that currently contribute enrichment */
+  readonly contributingSourceIds: string[];
+
+  /** Count of contributing sources */
+  readonly sourceCount: number;
+
+  /** Whether at least one backbone ontology contributes to this node */
+  readonly hasBackboneSource?: boolean;
+
+  /** Whether at least one enhancement ontology contributes to this node */
+  readonly hasEnhancementSource?: boolean;
+
+  /** Most recent enrichment timestamp across contributing sources */
+  readonly lastEnrichedAt?: string | null;
+}
 
 /**
  * Universal representation of a graph node.
@@ -50,8 +166,38 @@ export interface IGraphNode {
   /** Knowledge domain this node belongs to */
   domain: string;
 
+  /** Lifecycle / trust status for canonical nodes */
+  status?: CkgNodeStatus;
+
   /** Owner user ID — present for PKG nodes, absent for CKG nodes */
   userId?: UserId;
+
+  /** Alternate labels for search, resolution, and reviewer context */
+  aliases?: string[];
+
+  /** Languages represented in labels / aliases */
+  languages?: string[];
+
+  /** Lightweight classification labels for filtering and ranking */
+  tags?: string[];
+
+  /** Source-derived semantic descriptors useful for triage and agents */
+  semanticHints?: string[];
+
+  /** Structured references back to external ontology/source records */
+  canonicalExternalRefs?: ICanonicalExternalRef[];
+
+  /** Cross-source mapping evidence preserved as first-class enrichment */
+  ontologyMappings?: IOntologyMapping[];
+
+  /** Import and lineage provenance for this node */
+  provenance?: INodeProvenanceEntry[];
+
+  /** Reviewer-facing confidence and conflict metadata */
+  reviewMetadata?: INodeReviewMetadata | null;
+
+  /** Summary of source participation in the canonical node */
+  sourceCoverage?: ISourceCoverageSummary | null;
 
   /** Extensible key-value properties */
   properties: Metadata;

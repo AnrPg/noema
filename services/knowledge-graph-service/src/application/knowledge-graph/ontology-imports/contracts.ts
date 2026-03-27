@@ -70,6 +70,7 @@ export interface IOntologyImportsApplicationService {
   submitMutationPreview(input: {
     runId: string;
     context: IExecutionContext;
+    candidateIds?: string[];
   }): Promise<IOntologyMutationPreviewSubmission>;
 }
 

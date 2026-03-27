@@ -385,6 +385,24 @@ export type EdgeOntologicalCategory =
   (typeof EdgeOntologicalCategory)[keyof typeof EdgeOntologicalCategory];
 
 /**
+ * Lifecycle / trust status for canonical CKG nodes.
+ */
+export const CkgNodeStatus = {
+  /** Current canonical node, safe for normal retrieval and suggestions */
+  ACTIVE: 'active',
+  /** Historical or superseded node kept for lineage/reference */
+  DEPRECATED: 'deprecated',
+  /** Node has been merged into another canonical node */
+  MERGED: 'merged',
+  /** Node has been split into multiple canonical nodes */
+  SPLIT: 'split',
+  /** Node is present but under active semantic dispute/review */
+  DISPUTED: 'disputed',
+} as const;
+
+export type CkgNodeStatus = (typeof CkgNodeStatus)[keyof typeof CkgNodeStatus];
+
+/**
  * CKG mutation typestate (from Knowledge Graph spec).
  */
 export const MutationState = {

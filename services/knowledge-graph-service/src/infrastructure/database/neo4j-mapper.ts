@@ -14,14 +14,20 @@
  */
 
 import type {
+  CkgNodeStatus,
   EdgeId,
   EdgeWeight,
   GraphEdgeType,
   GraphNodeType,
   GraphType,
+  ICanonicalExternalRef,
   IGraphEdge,
   IGraphNode,
+  INodeProvenanceEntry,
+  INodeReviewMetadata,
+  IOntologyMapping,
   ISubgraph,
+  ISourceCoverageSummary,
   MasteryLevel,
   Metadata,
   NodeId,
@@ -80,6 +86,52 @@ function toDomainValue(value: unknown): unknown {
   if (neo4j.isInt(value)) return value.toNumber();
   if (Array.isArray(value)) return value.map(toDomainValue);
   return value;
+}
+
+function parseJsonValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (
+    !(
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    )
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value
+    .filter((entry) => typeof entry === 'object' && entry !== null && !Array.isArray(entry))
+    .map((entry) => entry as Record<string, unknown>);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 // ============================================================================
@@ -169,7 +221,7 @@ export function relTypeToEdgeType(relType: string): GraphEdgeType {
 function extractNodeProperties(node: Node): Record<string, unknown> {
   const props: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(node.properties)) {
-    props[key] = toDomainValue(value);
+    props[key] = parseJsonValue(toDomainValue(value));
   }
   return props;
 }
@@ -189,7 +241,17 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     label,
     description,
     domain,
+    status,
     userId,
+    aliases,
+    languages,
+    tags,
+    semanticHints,
+    canonicalExternalRefs,
+    ontologyMappings,
+    provenance,
+    reviewMetadata,
+    sourceCoverage,
     masteryLevel,
     createdAt,
     updatedAt,
@@ -198,6 +260,22 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     ...extraProps
   } = props;
 
+  const nodeAliases = asStringArray(aliases);
+  const nodeLanguages = asStringArray(languages);
+  const nodeTags = asStringArray(tags);
+  const nodeSemanticHints = asStringArray(semanticHints);
+  const nodeExternalRefs = asRecordArray<ICanonicalExternalRef>(canonicalExternalRefs);
+  const nodeOntologyMappings = asRecordArray<IOntologyMapping>(ontologyMappings);
+  const nodeProvenance = asRecordArray<INodeProvenanceEntry>(provenance);
+  const nodeReviewMetadata =
+    reviewMetadata !== undefined
+      ? (asRecord<INodeReviewMetadata>(reviewMetadata) ?? null)
+      : undefined;
+  const nodeSourceCoverage =
+    sourceCoverage !== undefined
+      ? (asRecord<ISourceCoverageSummary>(sourceCoverage) ?? null)
+      : undefined;
+
   return {
     nodeId: nodeId as string as NodeId,
     graphType: inferGraphType(labels),
@@ -205,7 +283,17 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     label: typeof label === 'string' ? label : '',
     ...(description !== null ? { description: description as string } : {}),
     domain: typeof domain === 'string' ? domain : '',
+    ...(typeof status === 'string' ? { status: status as CkgNodeStatus } : {}),
     ...(userId !== null ? { userId: userId as UserId } : {}),
+    ...(nodeAliases !== undefined ? { aliases: nodeAliases } : {}),
+    ...(nodeLanguages !== undefined ? { languages: nodeLanguages } : {}),
+    ...(nodeTags !== undefined ? { tags: nodeTags } : {}),
+    ...(nodeSemanticHints !== undefined ? { semanticHints: nodeSemanticHints } : {}),
+    ...(nodeExternalRefs !== undefined ? { canonicalExternalRefs: nodeExternalRefs } : {}),
+    ...(nodeOntologyMappings !== undefined ? { ontologyMappings: nodeOntologyMappings } : {}),
+    ...(nodeProvenance !== undefined ? { provenance: nodeProvenance } : {}),
+    ...(nodeReviewMetadata !== undefined ? { reviewMetadata: nodeReviewMetadata } : {}),
+    ...(nodeSourceCoverage !== undefined ? { sourceCoverage: nodeSourceCoverage } : {}),
     properties: extraProps as Metadata,
     ...(masteryLevel !== null ? { masteryLevel: masteryLevel as number as MasteryLevel } : {}),
     createdAt: toIsoString(createdAt),
@@ -314,6 +402,16 @@ export function buildNodeProperties(
     nodeType: string;
     domain: string;
     description?: string;
+    status?: CkgNodeStatus;
+    aliases?: string[];
+    languages?: string[];
+    tags?: string[];
+    semanticHints?: string[];
+    canonicalExternalRefs?: ICanonicalExternalRef[];
+    ontologyMappings?: IOntologyMapping[];
+    provenance?: INodeProvenanceEntry[];
+    reviewMetadata?: INodeReviewMetadata | null;
+    sourceCoverage?: ISourceCoverageSummary | null;
     properties?: Record<string, unknown>;
     masteryLevel?: MasteryLevel;
   },
@@ -330,7 +428,19 @@ export function buildNodeProperties(
     label: input.label,
     ...(input.description !== undefined ? { description: input.description } : {}),
     domain: input.domain,
+    ...(input.status !== undefined ? { status: input.status } : {}),
     ...(userId !== undefined ? { userId } : {}),
+    ...(input.aliases !== undefined ? { aliases: input.aliases } : {}),
+    ...(input.languages !== undefined ? { languages: input.languages } : {}),
+    ...(input.tags !== undefined ? { tags: input.tags } : {}),
+    ...(input.semanticHints !== undefined ? { semanticHints: input.semanticHints } : {}),
+    ...(input.canonicalExternalRefs !== undefined
+      ? { canonicalExternalRefs: input.canonicalExternalRefs }
+      : {}),
+    ...(input.ontologyMappings !== undefined ? { ontologyMappings: input.ontologyMappings } : {}),
+    ...(input.provenance !== undefined ? { provenance: input.provenance } : {}),
+    ...(input.reviewMetadata !== undefined ? { reviewMetadata: input.reviewMetadata } : {}),
+    ...(input.sourceCoverage !== undefined ? { sourceCoverage: input.sourceCoverage } : {}),
     ...(input.masteryLevel !== undefined ? { masteryLevel: input.masteryLevel as number } : {}),
     ...flattenProperties(input.properties),
     createdAt: now,
@@ -344,9 +454,20 @@ export function buildNodeProperties(
  * Only includes fields that are actually provided (not undefined).
  */
 export function buildNodeUpdateProperties(updates: {
+  nodeType?: string;
   label?: string;
   description?: string;
   domain?: string;
+  status?: CkgNodeStatus;
+  aliases?: string[];
+  languages?: string[];
+  tags?: string[];
+  semanticHints?: string[];
+  canonicalExternalRefs?: ICanonicalExternalRef[];
+  ontologyMappings?: IOntologyMapping[];
+  provenance?: INodeProvenanceEntry[];
+  reviewMetadata?: INodeReviewMetadata | null;
+  sourceCoverage?: ISourceCoverageSummary | null;
   properties?: Record<string, unknown>;
   masteryLevel?: MasteryLevel;
 }): Record<string, unknown> {
@@ -354,9 +475,22 @@ export function buildNodeUpdateProperties(updates: {
     updatedAt: new Date().toISOString(),
   };
 
+  if (updates.nodeType !== undefined) props['nodeType'] = updates.nodeType;
   if (updates.label !== undefined) props['label'] = updates.label;
   if (updates.description !== undefined) props['description'] = updates.description;
   if (updates.domain !== undefined) props['domain'] = updates.domain;
+  if (updates.status !== undefined) props['status'] = updates.status;
+  if (updates.aliases !== undefined) props['aliases'] = updates.aliases;
+  if (updates.languages !== undefined) props['languages'] = updates.languages;
+  if (updates.tags !== undefined) props['tags'] = updates.tags;
+  if (updates.semanticHints !== undefined) props['semanticHints'] = updates.semanticHints;
+  if (updates.canonicalExternalRefs !== undefined) {
+    props['canonicalExternalRefs'] = updates.canonicalExternalRefs;
+  }
+  if (updates.ontologyMappings !== undefined) props['ontologyMappings'] = updates.ontologyMappings;
+  if (updates.provenance !== undefined) props['provenance'] = updates.provenance;
+  if (updates.reviewMetadata !== undefined) props['reviewMetadata'] = updates.reviewMetadata;
+  if (updates.sourceCoverage !== undefined) props['sourceCoverage'] = updates.sourceCoverage;
   if (updates.masteryLevel !== undefined) props['masteryLevel'] = updates.masteryLevel as number;
   if (updates.properties !== undefined) {
     Object.assign(props, flattenProperties(updates.properties));
@@ -426,9 +560,5 @@ function toNeo4jPropertyValue(value: unknown): unknown {
 }
 
 function isNeo4jPrimitive(value: unknown): boolean {
-  return (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  );
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 }

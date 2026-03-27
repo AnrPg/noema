@@ -26,12 +26,19 @@ import type {
   EdgeId,
   IGraphEdge,
   IGraphNode,
+  ICanonicalExternalRef,
   IMetacognitiveStageAssessment,
   IMisconceptionDetection,
+  INodeProvenanceEntry,
+  INodeReviewMetadata,
+  IOntologyMapping,
   IPaginatedResponse,
+  ISourceCoverageSummary,
   IStructuralHealthReport,
   IStructuralMetrics,
   ISubgraph,
+  JsonValue,
+  Metadata,
   MutationId,
   MutationState,
   NodeId,
@@ -39,6 +46,7 @@ import type {
   UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
+import type { z } from 'zod';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
@@ -49,7 +57,7 @@ import type {
   IMutationFilter,
   IMutationProposal,
 } from './ckg-mutation-dsl.js';
-import { CkgOperationType } from './ckg-mutation-dsl.js';
+import { CkgMutationOperationSchema, CkgOperationType } from './ckg-mutation-dsl.js';
 import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
@@ -78,6 +86,337 @@ import type {
   IPkgOperationLogRepository,
 } from './pkg-operation-log.repository.js';
 import { PkgWriteService } from './pkg-write.service.js';
+
+type ParsedMutationOperation = z.infer<typeof CkgMutationOperationSchema>;
+
+function toJsonValue(value: unknown): JsonValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter((entry) => entry !== undefined).map((entry) => toJsonValue(entry));
+  }
+
+  if (typeof value === 'object') {
+    const record: Metadata = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (entry !== undefined) {
+        record[key] = toJsonValue(entry);
+      }
+    }
+    return record;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  return value;
+}
+
+function toMetadata(value: Record<string, unknown>): Metadata {
+  const record: Metadata = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) {
+      record[key] = toJsonValue(entry);
+    }
+  }
+  return record;
+}
+
+function sanitizeCanonicalExternalRef(ref: {
+  sourceId: string;
+  externalId: string;
+  iri?: string | null | undefined;
+  refType?: string | null | undefined;
+  sourceVersion?: string | null | undefined;
+  url?: string | null | undefined;
+  isCanonical?: boolean | undefined;
+  confidenceScore?: number | null | undefined;
+}): ICanonicalExternalRef {
+  return {
+    sourceId: ref.sourceId,
+    externalId: ref.externalId,
+    ...(ref.iri !== undefined ? { iri: ref.iri } : {}),
+    ...(ref.refType !== undefined ? { refType: ref.refType } : {}),
+    ...(ref.sourceVersion !== undefined ? { sourceVersion: ref.sourceVersion } : {}),
+    ...(ref.url !== undefined ? { url: ref.url } : {}),
+    ...(ref.isCanonical !== undefined ? { isCanonical: ref.isCanonical } : {}),
+    ...(ref.confidenceScore !== undefined ? { confidenceScore: ref.confidenceScore } : {}),
+  };
+}
+
+function sanitizeOntologyMapping(mapping: {
+  sourceId: string;
+  externalId: string;
+  mappingKind: string;
+  targetExternalId?: string | null | undefined;
+  targetIri?: string | null | undefined;
+  confidenceScore?: number | null | undefined;
+  confidenceBand?: 'low' | 'medium' | 'high' | null | undefined;
+  conflictFlags?: string[] | undefined;
+}): IOntologyMapping {
+  return {
+    sourceId: mapping.sourceId,
+    externalId: mapping.externalId,
+    mappingKind: mapping.mappingKind,
+    ...(mapping.targetExternalId !== undefined
+      ? { targetExternalId: mapping.targetExternalId }
+      : {}),
+    ...(mapping.targetIri !== undefined ? { targetIri: mapping.targetIri } : {}),
+    ...(mapping.confidenceScore !== undefined ? { confidenceScore: mapping.confidenceScore } : {}),
+    ...(mapping.confidenceBand !== undefined ? { confidenceBand: mapping.confidenceBand } : {}),
+    ...(mapping.conflictFlags !== undefined ? { conflictFlags: mapping.conflictFlags } : {}),
+  };
+}
+
+function sanitizeNodeProvenanceEntry(entry: {
+  sourceId: string;
+  sourceVersion?: string | null | undefined;
+  runId?: string | null | undefined;
+  artifactId?: string | null | undefined;
+  harvestedAt?: string | null | undefined;
+  license?: string | null | undefined;
+  requestUrl?: string | null | undefined;
+  recordKind?: string | null | undefined;
+}): INodeProvenanceEntry {
+  return {
+    sourceId: entry.sourceId,
+    ...(entry.sourceVersion !== undefined ? { sourceVersion: entry.sourceVersion } : {}),
+    ...(entry.runId !== undefined ? { runId: entry.runId } : {}),
+    ...(entry.artifactId !== undefined ? { artifactId: entry.artifactId } : {}),
+    ...(entry.harvestedAt !== undefined ? { harvestedAt: entry.harvestedAt } : {}),
+    ...(entry.license !== undefined ? { license: entry.license } : {}),
+    ...(entry.requestUrl !== undefined ? { requestUrl: entry.requestUrl } : {}),
+    ...(entry.recordKind !== undefined ? { recordKind: entry.recordKind } : {}),
+  };
+}
+
+function sanitizeNodeReviewMetadata(metadata: {
+  confidenceScore?: number | null | undefined;
+  confidenceBand?: 'low' | 'medium' | 'high' | null | undefined;
+  conflictFlags?: string[] | undefined;
+  reviewState?:
+    | 'ready'
+    | 'blocked'
+    | 'reviewer_overridden'
+    | 'endpoint_unresolved'
+    | null
+    | undefined;
+  notes?: string[] | undefined;
+  overridden?: boolean | undefined;
+}): INodeReviewMetadata {
+  return {
+    ...(metadata.confidenceScore !== undefined
+      ? { confidenceScore: metadata.confidenceScore }
+      : {}),
+    ...(metadata.confidenceBand !== undefined ? { confidenceBand: metadata.confidenceBand } : {}),
+    ...(metadata.conflictFlags !== undefined ? { conflictFlags: metadata.conflictFlags } : {}),
+    ...(metadata.reviewState !== undefined ? { reviewState: metadata.reviewState } : {}),
+    ...(metadata.notes !== undefined ? { notes: metadata.notes } : {}),
+    ...(metadata.overridden !== undefined ? { overridden: metadata.overridden } : {}),
+  };
+}
+
+function sanitizeSourceCoverageSummary(summary: {
+  contributingSourceIds: string[];
+  sourceCount: number;
+  hasBackboneSource?: boolean | undefined;
+  hasEnhancementSource?: boolean | undefined;
+  lastEnrichedAt?: string | null | undefined;
+}): ISourceCoverageSummary {
+  return {
+    contributingSourceIds: summary.contributingSourceIds,
+    sourceCount: summary.sourceCount,
+    ...(summary.hasBackboneSource !== undefined
+      ? { hasBackboneSource: summary.hasBackboneSource }
+      : {}),
+    ...(summary.hasEnhancementSource !== undefined
+      ? { hasEnhancementSource: summary.hasEnhancementSource }
+      : {}),
+    ...(summary.lastEnrichedAt !== undefined ? { lastEnrichedAt: summary.lastEnrichedAt } : {}),
+  };
+}
+
+function normalizeRecoveredMutationOperations(
+  operations: readonly ParsedMutationOperation[]
+): CkgMutationOperation[] {
+  return operations.map((operation) => {
+    switch (operation.type) {
+      case CkgOperationType.ADD_NODE:
+        return {
+          type: operation.type,
+          nodeType: operation.nodeType,
+          label: operation.label,
+          description: operation.description,
+          domain: operation.domain,
+          properties: toMetadata(operation.properties),
+          ...(operation.status !== undefined ? { status: operation.status } : {}),
+          ...(operation.aliases !== undefined ? { aliases: operation.aliases } : {}),
+          ...(operation.languages !== undefined ? { languages: operation.languages } : {}),
+          ...(operation.tags !== undefined ? { tags: operation.tags } : {}),
+          ...(operation.semanticHints !== undefined
+            ? { semanticHints: operation.semanticHints }
+            : {}),
+          ...(operation.canonicalExternalRefs !== undefined
+            ? {
+                canonicalExternalRefs: operation.canonicalExternalRefs.map(
+                  sanitizeCanonicalExternalRef
+                ),
+              }
+            : {}),
+          ...(operation.ontologyMappings !== undefined
+            ? { ontologyMappings: operation.ontologyMappings.map(sanitizeOntologyMapping) }
+            : {}),
+          ...(operation.provenance !== undefined
+            ? { provenance: operation.provenance.map(sanitizeNodeProvenanceEntry) }
+            : {}),
+          ...(operation.reviewMetadata !== undefined
+            ? {
+                reviewMetadata:
+                  operation.reviewMetadata === null
+                    ? null
+                    : sanitizeNodeReviewMetadata(operation.reviewMetadata),
+              }
+            : {}),
+          ...(operation.sourceCoverage !== undefined
+            ? {
+                sourceCoverage:
+                  operation.sourceCoverage === null
+                    ? null
+                    : sanitizeSourceCoverageSummary(operation.sourceCoverage),
+              }
+            : {}),
+        } satisfies CkgMutationOperation;
+
+      case CkgOperationType.REMOVE_NODE:
+        return {
+          type: operation.type,
+          nodeId: operation.nodeId,
+          rationale: operation.rationale,
+        } satisfies CkgMutationOperation;
+
+      case CkgOperationType.UPDATE_NODE:
+        return {
+          type: operation.type,
+          nodeId: operation.nodeId,
+          rationale: operation.rationale,
+          updates: {
+            ...(operation.updates.nodeType !== undefined
+              ? { nodeType: operation.updates.nodeType }
+              : {}),
+            ...(operation.updates.label !== undefined ? { label: operation.updates.label } : {}),
+            ...(operation.updates.description !== undefined
+              ? { description: operation.updates.description }
+              : {}),
+            ...(operation.updates.domain !== undefined ? { domain: operation.updates.domain } : {}),
+            ...(operation.updates.status !== undefined ? { status: operation.updates.status } : {}),
+            ...(operation.updates.aliases !== undefined
+              ? { aliases: operation.updates.aliases }
+              : {}),
+            ...(operation.updates.languages !== undefined
+              ? { languages: operation.updates.languages }
+              : {}),
+            ...(operation.updates.tags !== undefined ? { tags: operation.updates.tags } : {}),
+            ...(operation.updates.semanticHints !== undefined
+              ? { semanticHints: operation.updates.semanticHints }
+              : {}),
+            ...(operation.updates.canonicalExternalRefs !== undefined
+              ? {
+                  canonicalExternalRefs: operation.updates.canonicalExternalRefs.map(
+                    sanitizeCanonicalExternalRef
+                  ),
+                }
+              : {}),
+            ...(operation.updates.ontologyMappings !== undefined
+              ? {
+                  ontologyMappings: operation.updates.ontologyMappings.map(sanitizeOntologyMapping),
+                }
+              : {}),
+            ...(operation.updates.provenance !== undefined
+              ? {
+                  provenance: operation.updates.provenance.map(sanitizeNodeProvenanceEntry),
+                }
+              : {}),
+            ...(operation.updates.reviewMetadata !== undefined
+              ? {
+                  reviewMetadata:
+                    operation.updates.reviewMetadata === null
+                      ? null
+                      : sanitizeNodeReviewMetadata(operation.updates.reviewMetadata),
+                }
+              : {}),
+            ...(operation.updates.sourceCoverage !== undefined
+              ? {
+                  sourceCoverage:
+                    operation.updates.sourceCoverage === null
+                      ? null
+                      : sanitizeSourceCoverageSummary(operation.updates.sourceCoverage),
+                }
+              : {}),
+            ...(operation.updates.properties !== undefined
+              ? { properties: toMetadata(operation.updates.properties) }
+              : {}),
+          },
+        } satisfies CkgMutationOperation;
+
+      case CkgOperationType.ADD_EDGE:
+        return {
+          type: operation.type,
+          edgeType: operation.edgeType,
+          sourceNodeId: operation.sourceNodeId,
+          targetNodeId: operation.targetNodeId,
+          weight: operation.weight,
+          rationale: operation.rationale,
+        } satisfies CkgMutationOperation;
+
+      case CkgOperationType.REMOVE_EDGE:
+        return {
+          type: operation.type,
+          edgeId: operation.edgeId,
+          rationale: operation.rationale,
+        } satisfies CkgMutationOperation;
+
+      case CkgOperationType.MERGE_NODES:
+        return {
+          type: operation.type,
+          sourceNodeId: operation.sourceNodeId,
+          targetNodeId: operation.targetNodeId,
+          mergedProperties: toMetadata(operation.mergedProperties),
+          rationale: operation.rationale,
+        } satisfies CkgMutationOperation;
+
+      case CkgOperationType.SPLIT_NODE:
+        return {
+          type: operation.type,
+          nodeId: operation.nodeId,
+          rationale: operation.rationale,
+          newNodeA: {
+            label: operation.newNodeA.label,
+            description: operation.newNodeA.description,
+            nodeType: operation.newNodeA.nodeType,
+            properties: toMetadata(operation.newNodeA.properties),
+          },
+          newNodeB: {
+            label: operation.newNodeB.label,
+            description: operation.newNodeB.description,
+            nodeType: operation.newNodeB.nodeType,
+            properties: toMetadata(operation.newNodeB.properties),
+          },
+          edgeReassignmentRules: operation.edgeReassignmentRules.map((rule) => ({
+            edgeId: rule.edgeId,
+            assignTo: rule.assignTo,
+          })),
+        } satisfies CkgMutationOperation;
+    }
+  });
+}
 import { MAX_PAGE_SIZE, requireAuth, validateInput } from './service-helpers.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type { IComparisonRequest } from './value-objects/comparison.js';
@@ -1084,9 +1423,10 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     check: IMutationRecoveryCheckResult['check']
   ): Promise<IMutationRecoveryCheckResult> {
     const mutation = await this.mutationPipeline.getMutation(mutationId);
-    const evidence = await this.collectGraphWriteEvidence(
-      mutation.operations as unknown as readonly CkgMutationOperation[]
+    const operations = normalizeRecoveredMutationOperations(
+      CkgMutationOperationSchema.array().parse(mutation.operations)
     );
+    const evidence = await this.collectGraphWriteEvidence(operations);
     const checkedAt = new Date().toISOString();
 
     if (check === 'safe_retry') {

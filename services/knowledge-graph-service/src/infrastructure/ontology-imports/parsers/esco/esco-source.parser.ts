@@ -10,6 +10,8 @@ import {
   buildAliasRecords,
   buildConceptRecord,
   buildMappingRecord,
+  buildRelationRecord,
+  decodeGraphIdentifier,
   normalizeStringArray,
   readArtifactText,
 } from '../helpers.js';
@@ -93,6 +95,16 @@ export class EscoSourceParser implements ISourceParser {
             externalId,
             itemRecord,
             requestUrl,
+          })
+        );
+        records.push(
+          ...buildRelationRecords({
+            run,
+            artifact,
+            externalId,
+            itemRecord,
+            requestUrl,
+            languages,
           })
         );
       }
@@ -272,6 +284,92 @@ function buildMappingRecords(input: {
   return dedupeMappings(mappingRecords);
 }
 
+function buildRelationRecords(input: {
+  run: IOntologyImportRun;
+  artifact: IOntologyImportArtifact;
+  externalId: string;
+  itemRecord: Record<string, unknown>;
+  requestUrl: string | null;
+  languages: string[];
+}): IOntologyGraphRecord[] {
+  const relationConfigs: {
+    key: string;
+    subjectRole: 'self' | 'linked';
+    objectRole: 'self' | 'linked';
+  }[] = [
+    { key: 'broaderConcept', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'broaderSkill', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'broaderOccupation', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'broaderTaxonomy', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'narrowerConcept', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'narrowerSkill', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'narrowerOccupation', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'narrowerTaxonomy', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'hasEssentialSkill', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'hasOptionalSkill', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'isEssentialForOccupation', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'isOptionalForOccupation', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'essentialSkillForOccupation', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'optionalSkillForOccupation', subjectRole: 'linked', objectRole: 'self' },
+    { key: 'hasSkillType', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'skillType', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'relatedConcept', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'relatedSkill', subjectRole: 'self', objectRole: 'linked' },
+    { key: 'relatedOccupation', subjectRole: 'self', objectRole: 'linked' },
+  ];
+
+  const relationRecords: IOntologyGraphRecord[] = [];
+
+  for (const config of relationConfigs) {
+    extractUriValues(input.itemRecord[config.key]).forEach((linkedExternalId, index) => {
+      relationRecords.push(
+        buildRelationRecord({
+          sourceId: 'esco',
+          run: input.run,
+          artifact: input.artifact,
+          requestUrl: input.requestUrl,
+          externalId: `${input.externalId}#relation-${config.key}-${String(index)}`,
+          subjectExternalId: config.subjectRole === 'self' ? input.externalId : linkedExternalId,
+          objectExternalId: config.objectRole === 'self' ? input.externalId : linkedExternalId,
+          sourcePredicate: config.key,
+          predicateLabel: decodeGraphIdentifier(config.key),
+          iri: null,
+          direction: 'directed',
+          languages: input.languages,
+          properties: {
+            sourceField: config.key,
+            sourceRecordExternalId: input.externalId,
+            linkedExternalId,
+          },
+        })
+      );
+    });
+  }
+
+  const linkRelations = extractLinkedRelations(input.itemRecord);
+  linkRelations.forEach((relation, index) => {
+    relationRecords.push(
+      buildRelationRecord({
+        sourceId: 'esco',
+        run: input.run,
+        artifact: input.artifact,
+        requestUrl: input.requestUrl,
+        externalId: `${input.externalId}#linked-relation-${relation.key}-${String(index)}`,
+        subjectExternalId: relation.subjectExternalId,
+        objectExternalId: relation.objectExternalId,
+        sourcePredicate: relation.key,
+        predicateLabel: decodeGraphIdentifier(relation.key),
+        iri: null,
+        direction: 'directed',
+        languages: input.languages,
+        properties: relation.properties,
+      })
+    );
+  });
+
+  return dedupeRelations(relationRecords);
+}
+
 function extractLinkedMappings(record: Record<string, unknown>): {
   targetExternalId: string;
   mappingKind: OntologyMappingKind;
@@ -315,6 +413,74 @@ function extractLinkedMappings(record: Record<string, unknown>): {
   }
 
   return candidates;
+}
+
+function extractLinkedRelations(record: Record<string, unknown>): {
+  key: string;
+  subjectExternalId: string;
+  objectExternalId: string;
+  properties: Record<string, unknown>;
+}[] {
+  const links =
+    typeof record['_links'] === 'object' && record['_links'] !== null
+      ? (record['_links'] as Record<string, unknown>)
+      : null;
+  const currentExternalId = readString(record, ['uri', '@id', 'id']);
+  if (links === null || currentExternalId === null) {
+    return [];
+  }
+
+  const directionOverrides: Record<
+    string,
+    { subjectRole: 'self' | 'linked'; objectRole: 'self' | 'linked' }
+  > = {
+    broaderConcept: { subjectRole: 'self', objectRole: 'linked' },
+    broaderSkill: { subjectRole: 'self', objectRole: 'linked' },
+    broaderOccupation: { subjectRole: 'self', objectRole: 'linked' },
+    narrowerConcept: { subjectRole: 'linked', objectRole: 'self' },
+    narrowerSkill: { subjectRole: 'linked', objectRole: 'self' },
+    narrowerOccupation: { subjectRole: 'linked', objectRole: 'self' },
+    hasEssentialSkill: { subjectRole: 'self', objectRole: 'linked' },
+    hasOptionalSkill: { subjectRole: 'self', objectRole: 'linked' },
+    isEssentialForOccupation: { subjectRole: 'linked', objectRole: 'self' },
+    isOptionalForOccupation: { subjectRole: 'linked', objectRole: 'self' },
+    essentialSkillForOccupation: { subjectRole: 'linked', objectRole: 'self' },
+    optionalSkillForOccupation: { subjectRole: 'linked', objectRole: 'self' },
+    relatedConcept: { subjectRole: 'self', objectRole: 'linked' },
+    relatedSkill: { subjectRole: 'self', objectRole: 'linked' },
+    relatedOccupation: { subjectRole: 'self', objectRole: 'linked' },
+    hasSkillType: { subjectRole: 'self', objectRole: 'linked' },
+    skillType: { subjectRole: 'self', objectRole: 'linked' },
+  };
+
+  const results: {
+    key: string;
+    subjectExternalId: string;
+    objectExternalId: string;
+    properties: Record<string, unknown>;
+  }[] = [];
+
+  for (const [key, value] of Object.entries(links)) {
+    const override = directionOverrides[key];
+    if (override === undefined) {
+      continue;
+    }
+
+    for (const linkedExternalId of extractUriValues(value)) {
+      results.push({
+        key,
+        subjectExternalId: override.subjectRole === 'self' ? currentExternalId : linkedExternalId,
+        objectExternalId: override.objectRole === 'self' ? currentExternalId : linkedExternalId,
+        properties: {
+          sourceField: `_links.${key}`,
+          sourceRecordExternalId: currentExternalId,
+          linkedExternalId,
+        },
+      });
+    }
+  }
+
+  return results;
 }
 
 function extractUriValues(value: unknown): string[] {
@@ -383,6 +549,24 @@ function dedupeMappings(records: IOntologyGraphRecord[]): IOntologyGraphRecord[]
     }
 
     const key = [record.sourceExternalId, record.targetExternalId, record.mappingKind].join('|');
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function dedupeRelations(records: IOntologyGraphRecord[]): IOntologyGraphRecord[] {
+  const seen = new Set<string>();
+  return records.filter((record) => {
+    if (record.recordKind !== 'relation') {
+      return true;
+    }
+
+    const key = [record.subjectExternalId, record.sourcePredicate, record.objectExternalId].join(
+      '|'
+    );
     if (seen.has(key)) {
       return false;
     }

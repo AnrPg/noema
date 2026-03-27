@@ -9,13 +9,18 @@
 
 import type { EdgeId, GraphEdgeType, NodeId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
+import type { ICkgEdgeAuthoringService } from '../../application/knowledge-graph/edge-authoring/index.js';
 import type { IEdgeFilter } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
-import { CkgEdgeQueryParamsSchema } from '../schemas/ckg-edge.schemas.js';
+import {
+  CkgEdgeAuthoringPreviewRequestSchema,
+  CkgEdgeQueryParamsSchema,
+} from '../schemas/ckg-edge.schemas.js';
 import {
   type IRouteOptions,
   EdgeIdParamSchema,
+  assertAdminOrAgent,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -33,6 +38,7 @@ import {
 export function registerCkgEdgeRoutes(
   fastify: FastifyInstance,
   service: IKnowledgeGraphService,
+  edgeAuthoringService: ICkgEdgeAuthoringService,
   authMiddleware: ReturnType<typeof createAuthMiddleware>,
   _options?: IRouteOptions
 ): void {
@@ -130,6 +136,44 @@ export function registerCkgEdgeRoutes(
 
         const result = await service.getCkgEdge(edgeId as EdgeId, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Body: unknown }>(
+    '/api/v1/ckg/edges/authoring-preview',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Edges'],
+        summary: 'Preview manual CKG edge authoring options',
+        description:
+          'Evaluate the allowed and blocked canonical relation types between two existing CKG nodes.',
+        body: {
+          type: 'object',
+          required: ['sourceNodeId', 'targetNodeId'],
+          properties: {
+            sourceNodeId: { type: 'string' },
+            targetNodeId: { type: 'string' },
+            edgeType: { type: 'string' },
+            rationale: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const parsed = CkgEdgeAuthoringPreviewRequestSchema.parse(request.body);
+        const preview = await edgeAuthoringService.preview({
+          sourceNodeId: parsed.sourceNodeId as NodeId,
+          targetNodeId: parsed.targetNodeId as NodeId,
+          ...(parsed.edgeType !== undefined ? { edgeType: parsed.edgeType as GraphEdgeType } : {}),
+          ...(parsed.rationale !== undefined ? { rationale: parsed.rationale } : {}),
+        });
+        reply.send(wrapResponse(preview, undefined, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

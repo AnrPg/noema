@@ -191,6 +191,18 @@ export class Neo4jGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphNode> {
     const updateProps = buildNodeUpdateProperties(updates);
+    const nextNodeTypeLabel =
+      updates.nodeType !== undefined ? nodeTypeToLabel(updates.nodeType) : null;
+    const removableNodeLabels = [
+      'Concept',
+      'Skill',
+      'Fact',
+      'Procedure',
+      'Principle',
+      'Example',
+      'Counterexample',
+      'Misconception',
+    ].join(':');
 
     const session = this.neo4j.getSession();
     try {
@@ -199,6 +211,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
           `MATCH (n {nodeId: $nodeId, isDeleted: false})
            ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
            SET n += $updateProps
+           ${nextNodeTypeLabel !== null ? `REMOVE n:${removableNodeLabels} SET n:${nextNodeTypeLabel}` : ''}
            RETURN n`,
           { nodeId, updateProps, ...(userId !== undefined ? { userId } : {}) }
         );
@@ -378,8 +391,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
         return tx.run(
           `MATCH (source)-[r:${relTypePattern}]->(target)
            WHERE r.edgeId = $edgeId
-           RETURN r, source.nodeId AS sourceId, target.nodeId AS targetId,
-                  source.graphType AS graphType`,
+             AND coalesce(r.isDeleted, false) = false
+            RETURN r, source.nodeId AS sourceId, target.nodeId AS targetId,
+                   source.graphType AS graphType`,
           { edgeId }
         );
       });
@@ -420,8 +434,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
         return tx.run(
           `MATCH (src)-[r:${relTypePattern}]->(tgt)
            WHERE r.edgeId = $edgeId
-           SET r += $updateProps
-           RETURN r, src.nodeId AS sourceNodeId, tgt.nodeId AS targetNodeId, labels(src) AS srcLabels`,
+             AND coalesce(r.isDeleted, false) = false
+            SET r += $updateProps
+            RETURN r, src.nodeId AS sourceNodeId, tgt.nodeId AS targetNodeId, labels(src) AS srcLabels`,
           { edgeId, updateProps }
         );
       });
@@ -478,7 +493,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const relTypes =
       filter.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
 
-    const whereClauses: string[] = [];
+    const whereClauses: string[] = ['coalesce(r.isDeleted, false) = false'];
     const params: Record<string, unknown> = {};
 
     if (filter.sourceNodeId !== undefined) {
@@ -547,7 +562,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
         // For 'both', we need to determine direction per relationship
         if (direction === 'both') {
           return tx.run(
-            `MATCH (n {nodeId: $nodeId})-[r:${relTypePattern}]-(other)
+            `MATCH (n {nodeId: $nodeId, isDeleted: false})-[r:${relTypePattern}]-(other {isDeleted: false})
+             WHERE coalesce(r.isDeleted, false) = false
              RETURN r, startNode(r).nodeId AS sourceId, endNode(r).nodeId AS targetId,
                     n.graphType AS graphType`,
             { nodeId }
@@ -556,7 +572,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
         if (direction === 'inbound') {
           return tx.run(
-            `MATCH (source)-[r:${relTypePattern}]->(n {nodeId: $nodeId})
+            `MATCH (source {isDeleted: false})-[r:${relTypePattern}]->(n {nodeId: $nodeId, isDeleted: false})
+             WHERE coalesce(r.isDeleted, false) = false
              RETURN r, source.nodeId AS sourceId, n.nodeId AS targetId,
                     source.graphType AS graphType`,
             { nodeId }
@@ -565,7 +582,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
         // outbound
         return tx.run(
-          `MATCH (n {nodeId: $nodeId})-[r:${relTypePattern}]->(target)
+          `MATCH (n {nodeId: $nodeId, isDeleted: false})-[r:${relTypePattern}]->(target {isDeleted: false})
+           WHERE coalesce(r.isDeleted, false) = false
            RETURN r, n.nodeId AS sourceId, target.nodeId AS targetId,
                   n.graphType AS graphType`,
           { nodeId }
@@ -589,7 +607,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const relTypes =
       filter.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
 
-    const whereClauses: string[] = [];
+    const whereClauses: string[] = ['coalesce(r.isDeleted, false) = false'];
     const params: Record<string, unknown> = {};
 
     if (filter.sourceNodeId !== undefined) {
@@ -644,7 +662,12 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const relTypePattern =
       filter?.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
 
-    const whereClauses: string[] = ['(source.nodeId IN $nodeIds OR target.nodeId IN $nodeIds)'];
+    const whereClauses: string[] = [
+      '(source.nodeId IN $nodeIds OR target.nodeId IN $nodeIds)',
+      'source.isDeleted = false',
+      'target.isDeleted = false',
+      'coalesce(r.isDeleted, false) = false',
+    ];
     const params: Record<string, unknown> = { nodeIds: [...nodeIds] };
 
     if (userId !== undefined) {
@@ -697,7 +720,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const result = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH path = (n {nodeId: $nodeId})<-[:${relPattern}*1..${String(options.maxDepth)}]-(ancestor)
-           WHERE ancestor.isDeleted = false ${userFilter}
+           WHERE n.isDeleted = false
+             AND ancestor.isDeleted = false
+             AND all(rel IN relationships(path) WHERE coalesce(rel.isDeleted, false) = false)
+             ${userFilter}
            RETURN DISTINCT ancestor`,
           { nodeId, ...(userId !== undefined ? { userId } : {}) }
         );
@@ -723,7 +749,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const result = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH path = (n {nodeId: $nodeId})-[:${relPattern}*1..${String(options.maxDepth)}]->(descendant)
-           WHERE descendant.isDeleted = false ${userFilter}
+           WHERE n.isDeleted = false
+             AND descendant.isDeleted = false
+             AND all(rel IN relationships(path) WHERE coalesce(rel.isDeleted, false) = false)
+             ${userFilter}
            RETURN DISTINCT descendant`,
           { nodeId, ...(userId !== undefined ? { userId } : {}) }
         );
@@ -783,8 +812,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
           `MATCH (from {nodeId: $fromNodeId}), (to {nodeId: $toNodeId})
            MATCH path = shortestPath((from)-[:${relPattern}${depthRange}]-(to))
            WHERE all(x IN nodes(path) WHERE x.isDeleted = false)
-           ${nodeFilterClause} ${userClause}
-           RETURN [n IN nodes(path) | n] AS pathNodes`,
+             AND all(rel IN relationships(path) WHERE coalesce(rel.isDeleted, false) = false)
+            ${nodeFilterClause} ${userClause}
+            RETURN [n IN nodes(path) | n] AS pathNodes`,
           params
         );
       });
@@ -814,9 +844,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
         return tx.run(
           `MATCH path = (root {nodeId: $rootNodeId})-[:${relPattern}*0..${String(options.maxDepth)}]-(connected)
            WHERE all(x IN nodes(path) WHERE x.isDeleted = false)
-           ${userFilter}
-           WITH collect(DISTINCT connected) AS allNodes,
-                [r IN collect(DISTINCT relationships(path)) | head(r)] AS allRels
+             AND all(rel IN relationships(path) WHERE coalesce(rel.isDeleted, false) = false)
+            ${userFilter}
+            WITH collect(DISTINCT connected) AS allNodes,
+                 [r IN collect(DISTINCT relationships(path)) | head(r)] AS allRels
            UNWIND allNodes AS n
            WITH collect(DISTINCT n) AS nodes, allRels
            UNWIND allRels AS r
@@ -1108,14 +1139,16 @@ export class Neo4jGraphRepository implements IGraphRepository {
         const result = await session.executeRead(async (tx: ManagedTransaction) => {
           return tx.run(
             `MATCH (origin {nodeId: $nodeId})${dirArrowLeft}-[r1:${relPattern}]-${dirArrowRight}(hop1)
-             WHERE hop1.isDeleted = false AND origin.isDeleted = false
-               ${userId !== undefined ? 'AND origin.userId = $userId AND hop1.userId = $userId' : ''}
-             WITH origin, hop1, r1, type(r1) AS firstEdgeType,
-                  CASE WHEN startNode(r1) = origin THEN 'outbound' ELSE 'inbound' END AS dir
-             OPTIONAL MATCH path = (hop1)-[*1..${String(remainingHops)}]-(further)
-             WHERE all(n IN nodes(path) WHERE n.isDeleted = false)
-               ${query.nodeTypes !== undefined && query.nodeTypes.length > 0 ? 'AND all(n IN nodes(path) WHERE n.nodeType IN $nodeTypes)' : ''}
-               ${userId !== undefined ? 'AND all(n IN nodes(path) WHERE n.userId = $userId)' : ''}
+              WHERE hop1.isDeleted = false AND origin.isDeleted = false
+                AND coalesce(r1.isDeleted, false) = false
+                ${userId !== undefined ? 'AND origin.userId = $userId AND hop1.userId = $userId' : ''}
+              WITH origin, hop1, r1, type(r1) AS firstEdgeType,
+                   CASE WHEN startNode(r1) = origin THEN 'outbound' ELSE 'inbound' END AS dir
+              OPTIONAL MATCH path = (hop1)-[*1..${String(remainingHops)}]-(further)
+              WHERE all(n IN nodes(path) WHERE n.isDeleted = false)
+                AND all(rel IN relationships(path) WHERE coalesce(rel.isDeleted, false) = false)
+                ${query.nodeTypes !== undefined && query.nodeTypes.length > 0 ? 'AND all(n IN nodes(path) WHERE n.nodeType IN $nodeTypes)' : ''}
+                ${userId !== undefined ? 'AND all(n IN nodes(path) WHERE n.userId = $userId)' : ''}
              WITH firstEdgeType, dir,
                   collect(DISTINCT hop1) + collect(DISTINCT further) AS allNeighbors
              UNWIND allNeighbors AS neighbor
@@ -1141,8 +1174,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
           return tx.run(
             `MATCH path = (origin {nodeId: $nodeId})${dirArrowLeft}-[rels:${relPattern}*1..${String(query.hops)}]-${dirArrowRight}(neighbor)
              WHERE all(n IN nodes(path) WHERE n.isDeleted = false)
-               ${nodeTypeFilter}
-               ${userFilter}
+               AND all(rel IN relationships(path) WHERE coalesce(rel.isDeleted, false) = false)
+                ${nodeTypeFilter}
+                ${userFilter}
              WITH origin, neighbor, relationships(path) AS pathRels, length(path) AS dist
              WITH origin, neighbor, head(pathRels) AS firstRel, dist
              ORDER BY dist ASC
@@ -1173,9 +1207,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
             return tx.run(
               `MATCH (a)-[r]->(b)
                WHERE (a.nodeId = $nodeId OR a.nodeId IN $neighborNodeIds)
-                 AND (b.nodeId = $nodeId OR b.nodeId IN $neighborNodeIds)
-                 AND a.isDeleted = false AND b.isDeleted = false
-               RETURN r, a.nodeId AS sourceId, b.nodeId AS targetId, a.graphType AS graphType`,
+                  AND (b.nodeId = $nodeId OR b.nodeId IN $neighborNodeIds)
+                  AND a.isDeleted = false AND b.isDeleted = false
+                  AND coalesce(r.isDeleted, false) = false
+                RETURN r, a.nodeId AS sourceId, b.nodeId AS targetId, a.graphType AS graphType`,
               { nodeId, neighborNodeIds: allNeighborNodeIds }
             );
           });
@@ -1276,6 +1311,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
           `MATCH (a)-[r:${relPattern}]->(b)
            WHERE a.domain = $domain AND b.domain = $domain
              AND a.isDeleted = false AND b.isDeleted = false
+             AND coalesce(r.isDeleted, false) = false
              AND a.nodeId IN $nodeIds AND b.nodeId IN $nodeIds
              ${edgeUserFilter}
            RETURN r, a.nodeId AS sourceId, b.nodeId AS targetId,
@@ -1322,6 +1358,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const nodeQuery = `MATCH (n {domain: $domain}) WHERE n.isDeleted = false ${userFilter} RETURN id(n) AS id`;
       const relQuery = `MATCH (a {domain: $domain})-[r:${relPattern}]->(b {domain: $domain})
                         WHERE a.isDeleted = false AND b.isDeleted = false
+                          AND coalesce(r.isDeleted, false) = false
                           ${userId !== undefined ? 'AND a.userId = $userId AND b.userId = $userId' : ''}
                         RETURN id(a) AS source, id(b) AS target`;
 
@@ -1490,18 +1527,18 @@ export class Neo4jGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<ICommonAncestorsResult> {
     const relPattern = buildRelTypePattern(query.edgeTypes);
-    const userFilter = userId !== undefined ? 'AND a.userId = $userId' : '';
+    const nodeUserFilter = userId !== undefined ? 'AND a.userId = $userId' : '';
     const ancestorUserFilter =
       userId !== undefined
-        ? 'WHERE ancestor.userId = $userId AND ancestor.isDeleted = false'
-        : 'WHERE ancestor.isDeleted = false';
+        ? 'AND ancestor.userId = $userId AND ancestor.isDeleted = false'
+        : 'AND ancestor.isDeleted = false';
 
     const session = this.neo4j.getSession();
     try {
       // Fetch both query nodes
       const nodesResult = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
-          `MATCH (a) WHERE a.nodeId IN [$nodeIdA, $nodeIdB] AND a.isDeleted = false ${userFilter}
+          `MATCH (a) WHERE a.nodeId IN [$nodeIdA, $nodeIdB] AND a.isDeleted = false ${nodeUserFilter}
            RETURN a`,
           {
             nodeIdA,
@@ -1546,6 +1583,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const directResult = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH (a {nodeId: $nodeIdA})-[r:${relPattern}]-(b {nodeId: $nodeIdB})
+           WHERE coalesce(r.isDeleted, false) = false
            RETURN count(r) > 0 AS connected`,
           { nodeIdA, nodeIdB }
         );
@@ -1556,10 +1594,14 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const ancestorsResult = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH pathA = (a {nodeId: $nodeIdA})-[:${relPattern}*1..${String(query.maxDepth)}]->(ancestorA)
+           WHERE a.isDeleted = false
+             AND all(rel IN relationships(pathA) WHERE coalesce(rel.isDeleted, false) = false)
            ${ancestorUserFilter.replace('ancestor', 'ancestorA')}
            WITH collect(DISTINCT {nodeId: ancestorA.nodeId, node: ancestorA, depth: length(pathA)}) AS ancestorsA
 
            MATCH pathB = (b {nodeId: $nodeIdB})-[:${relPattern}*1..${String(query.maxDepth)}]->(ancestorB)
+           WHERE b.isDeleted = false
+             AND all(rel IN relationships(pathB) WHERE coalesce(rel.isDeleted, false) = false)
            ${ancestorUserFilter.replace('ancestor', 'ancestorB')}
            WITH ancestorsA, collect(DISTINCT {nodeId: ancestorB.nodeId, node: ancestorB, depth: length(pathB)}) AS ancestorsB
 
@@ -1606,8 +1648,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
         const pathsResult = await session.executeRead(async (tx: ManagedTransaction) => {
           return tx.run(
             `OPTIONAL MATCH pathA = shortestPath((a {nodeId: $nodeIdA})-[:${relPattern}*1..${String(query.maxDepth)}]->(lca {nodeId: $lcaNodeId}))
+             WHERE pathA IS NULL OR all(rel IN relationships(pathA) WHERE coalesce(rel.isDeleted, false) = false)
              WITH [n IN nodes(pathA) | n] AS nodesA
              OPTIONAL MATCH pathB = shortestPath((b {nodeId: $nodeIdB})-[:${relPattern}*1..${String(query.maxDepth)}]->(lca2 {nodeId: $lcaNodeId}))
+             WHERE pathB IS NULL OR all(rel IN relationships(pathB) WHERE coalesce(rel.isDeleted, false) = false)
              RETURN nodesA, [n IN nodes(pathB) | n] AS nodesB`,
             { nodeIdA, nodeIdB, lcaNodeId }
           );
@@ -1649,7 +1693,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
       WHERE n.isDeleted = false
       ${userId !== undefined ? 'AND n.userId = $userId' : ''}
       OPTIONAL MATCH (n)<-[rIn:${relPattern}]-()
+      WHERE coalesce(rIn.isDeleted, false) = false
       OPTIONAL MATCH (n)-[rOut:${relPattern}]->()
+      WHERE coalesce(rOut.isDeleted, false) = false
       WITH n, count(DISTINCT rIn) AS inDeg, count(DISTINCT rOut) AS outDeg
       RETURN n, inDeg, outDeg, (inDeg + outDeg) AS totalDeg
       ORDER BY totalDeg DESC
@@ -1701,6 +1747,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
     const cypher = `
       MATCH (a {nodeId: $nodeA})-[r:${relTypePattern}]-(b {nodeId: $nodeB})
+      WHERE coalesce(r.isDeleted, false) = false
       RETURN r, startNode(r).nodeId AS sourceId, endNode(r).nodeId AS targetId,
              a.graphType AS graphType
     `;
@@ -2197,6 +2244,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     const result = await this.tx.run(
       `MATCH (source)-[r:${relTypePattern}]->(target)
        WHERE r.edgeId = $edgeId
+         AND coalesce(r.isDeleted, false) = false
        RETURN r, source.nodeId AS sourceId, target.nodeId AS targetId,
               source.graphType AS graphType`,
       { edgeId }
@@ -2226,6 +2274,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     const result = await this.tx.run(
       `MATCH (src)-[r:${relTypePattern}]->(tgt)
        WHERE r.edgeId = $edgeId
+         AND coalesce(r.isDeleted, false) = false
        SET r += $updateProps
        RETURN r, src.nodeId AS sourceNodeId, tgt.nodeId AS targetNodeId, labels(src) AS srcLabels`,
       { edgeId, updateProps }
@@ -2273,15 +2322,18 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
 
     switch (direction) {
       case 'outbound':
-        query = `MATCH (n {nodeId: $nodeId})-[r:${relTypePattern}]->(target)
+        query = `MATCH (n {nodeId: $nodeId, isDeleted: false})-[r:${relTypePattern}]->(target {isDeleted: false})
+                 WHERE coalesce(r.isDeleted, false) = false
                  RETURN r, n.nodeId AS sourceId, target.nodeId AS targetId, labels(n) AS srcLabels`;
         break;
       case 'inbound':
-        query = `MATCH (source)-[r:${relTypePattern}]->(n {nodeId: $nodeId})
+        query = `MATCH (source {isDeleted: false})-[r:${relTypePattern}]->(n {nodeId: $nodeId, isDeleted: false})
+                 WHERE coalesce(r.isDeleted, false) = false
                  RETURN r, source.nodeId AS sourceId, n.nodeId AS targetId, labels(source) AS srcLabels`;
         break;
       default:
-        query = `MATCH (n {nodeId: $nodeId})-[r:${relTypePattern}]-(other)
+        query = `MATCH (n {nodeId: $nodeId, isDeleted: false})-[r:${relTypePattern}]-(other {isDeleted: false})
+                 WHERE coalesce(r.isDeleted, false) = false
                  RETURN r, startNode(r).nodeId AS sourceId, endNode(r).nodeId AS targetId, labels(startNode(r)) AS srcLabels`;
     }
 

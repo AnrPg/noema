@@ -456,6 +456,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
   async submitMutationPreview(input: {
     runId: string;
     context: IExecutionContext;
+    candidateIds?: string[];
   }): Promise<IOntologyMutationPreviewSubmission> {
     if (this.mutationSubmissionPort === undefined) {
       throw new Error('Ontology mutation submission is not configured for this service.');
@@ -487,8 +488,20 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       throw new Error(`Run ${input.runId} does not contain any mutation-ready proposals.`);
     }
 
+    const requestedCandidateIds = new Set(input.candidateIds ?? []);
+    const candidatesToSubmit =
+      requestedCandidateIds.size === 0
+        ? readyCandidates
+        : readyCandidates.filter((candidate) => requestedCandidateIds.has(candidate.candidateId));
+
+    if (candidatesToSubmit.length === 0) {
+      throw new Error(
+        `Run ${input.runId} does not contain any mutation-ready proposals for the requested candidate ids.`
+      );
+    }
+
     const mutationIds: string[] = [];
-    for (const candidate of readyCandidates) {
+    for (const candidate of candidatesToSubmit) {
       if (candidate.proposal === null) {
         continue;
       }
@@ -507,7 +520,10 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       status: 'completed',
       startedAt: submittedAt,
       completedAt: submittedAt,
-      detail: `Submitted ${String(mutationIds.length)} mutation proposals to the CKG review queue from ${String(readyCandidates.length)} ready candidates.`,
+      detail:
+        requestedCandidateIds.size === 0
+          ? `Submitted ${String(mutationIds.length)} mutation proposals to the CKG review queue from ${String(readyCandidates.length)} ready candidates.`
+          : `Submitted ${String(mutationIds.length)} selected mutation proposals to the CKG review queue from ${String(candidatesToSubmit.length)} ready candidates.`,
     });
     await this.runRepository.recordSubmittedMutations(input.runId, mutationIds);
     await this.runRepository.updateStatus(input.runId, 'review_submitted', {
@@ -519,7 +535,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       runId: input.runId,
       submittedAt,
       submittedCount: mutationIds.length,
-      skippedCount: mutationPreview.candidates.length - readyCandidates.length,
+      skippedCount: mutationPreview.candidates.length - candidatesToSubmit.length,
       mutationIds,
     };
   }

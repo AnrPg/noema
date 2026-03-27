@@ -29,9 +29,17 @@ export const CkgEdgeQueryParamsSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
 });
 
+export const CkgEdgeAuthoringPreviewRequestSchema = z.object({
+  sourceNodeId: NodeIdSchema,
+  targetNodeId: NodeIdSchema,
+  edgeType: GraphEdgeTypeSchema.optional(),
+  rationale: z.string().min(1).max(2000).optional(),
+});
+
 // ============================================================================
 // Type Inference
 // ============================================================================
 
 export type CkgEdgeIdParams = z.infer<typeof CkgEdgeIdParamsSchema>;
 export type CkgEdgeQueryParams = z.infer<typeof CkgEdgeQueryParamsSchema>;
+export type CkgEdgeAuthoringPreviewRequest = z.infer<typeof CkgEdgeAuthoringPreviewRequestSchema>;

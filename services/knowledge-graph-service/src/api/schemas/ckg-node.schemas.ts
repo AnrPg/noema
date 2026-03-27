@@ -30,9 +30,25 @@ export const CkgNodeQueryParamsSchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
+export const CkgNodeBatchAuthoringPreviewRequestSchema = z.object({
+  nodeIds: z.array(NodeIdSchema).min(1).max(100),
+  action: z.enum(['delete', 'update']),
+  updates: z
+    .object({
+      nodeType: GraphNodeTypeSchema.optional(),
+      domain: z.string().min(1).max(200).optional(),
+      tags: z.array(z.string().min(1).max(100)).max(50).optional(),
+    })
+    .optional(),
+  rationale: z.string().min(1).max(2000).optional(),
+});
+
 // ============================================================================
 // Type Inference
 // ============================================================================
 
 export type CkgNodeIdParams = z.infer<typeof CkgNodeIdParamsSchema>;
 export type CkgNodeQueryParams = z.infer<typeof CkgNodeQueryParamsSchema>;
+export type CkgNodeBatchAuthoringPreviewRequest = z.infer<
+  typeof CkgNodeBatchAuthoringPreviewRequestSchema
+>;

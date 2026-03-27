@@ -53,6 +53,8 @@ import {
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
 import { UserDeletedConsumer } from './events/consumers/index.js';
+import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
+import { CkgNodeBatchAuthoringService } from './application/knowledge-graph/node-authoring/index.js';
 import {
   NoopNormalizationPublisher,
   OntologyImportsApplicationService,
@@ -384,6 +386,8 @@ async function bootstrap(): Promise<void> {
     new AgentHintsFactory(),
     logger
   );
+  const ckgEdgeAuthoringService = new CkgEdgeAuthoringService(graphRepository);
+  const ckgNodeBatchAuthoringService = new CkgNodeBatchAuthoringService(graphRepository);
 
   const ontologyImportsService = new OntologyImportsApplicationService(
     ontologySourceRepository,
@@ -467,8 +471,8 @@ async function bootstrap(): Promise<void> {
   registerPkgTraversalRoutes(app, service, authMiddleware, routeOptions);
 
   // CKG routes (shared graph)
-  registerCkgNodeRoutes(app, service, authMiddleware, routeOptions);
-  registerCkgEdgeRoutes(app, service, authMiddleware, routeOptions);
+  registerCkgNodeRoutes(app, service, ckgNodeBatchAuthoringService, authMiddleware, routeOptions);
+  registerCkgEdgeRoutes(app, service, ckgEdgeAuthoringService, authMiddleware, routeOptions);
   registerCkgTraversalRoutes(app, service, authMiddleware, routeOptions);
   registerCkgMutationRoutes(app, service, authMiddleware, routeOptions);
 

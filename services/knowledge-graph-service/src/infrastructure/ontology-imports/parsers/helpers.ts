@@ -4,6 +4,7 @@ import path from 'node:path';
 import type {
   IOntologyGraphAliasRecord,
   IOntologyGraphConceptRecord,
+  IOntologyGraphRelationRecord,
   IOntologyGraphMappingRecord,
   IOntologyGraphRecordProvenance,
   IOntologyImportArtifact,
@@ -148,6 +149,36 @@ export function buildMappingRecord(input: {
     sourceExternalId: input.sourceExternalId,
     targetExternalId: input.targetExternalId,
     mappingKind: input.mappingKind,
+    provenance: buildProvenance(input.sourceId, input.run, input.artifact, input.requestUrl),
+  };
+}
+
+export function buildRelationRecord(input: {
+  sourceId: OntologySourceId;
+  run: IOntologyImportRun;
+  artifact: IOntologyImportArtifact;
+  requestUrl: string | null;
+  externalId: string;
+  subjectExternalId: string;
+  objectExternalId: string;
+  sourcePredicate: string;
+  predicateLabel?: string | null;
+  iri?: string | null;
+  direction?: IOntologyGraphRelationRecord['direction'];
+  languages?: string[];
+  properties?: Record<string, unknown>;
+}): IOntologyGraphRelationRecord {
+  return {
+    recordKind: 'relation',
+    externalId: input.externalId,
+    iri: input.iri ?? null,
+    sourcePredicate: input.sourcePredicate,
+    predicateLabel: input.predicateLabel ?? null,
+    subjectExternalId: input.subjectExternalId,
+    objectExternalId: input.objectExternalId,
+    direction: input.direction ?? 'directed',
+    languages: input.languages ?? [],
+    properties: input.properties ?? {},
     provenance: buildProvenance(input.sourceId, input.run, input.artifact, input.requestUrl),
   };
 }

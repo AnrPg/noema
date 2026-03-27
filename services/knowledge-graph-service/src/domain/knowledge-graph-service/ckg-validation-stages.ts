@@ -14,7 +14,14 @@
  * structural integrity if schema validation fails.
  */
 
-import type { EdgeId, GraphEdgeType, Metadata, MutationState, NodeId } from '@noema/types';
+import type {
+  EdgeId,
+  GraphEdgeType,
+  GraphNodeType,
+  Metadata,
+  MutationState,
+  NodeId,
+} from '@noema/types';
 import { z } from 'zod';
 
 import type { IAggregationEvidenceRepository } from './aggregation-evidence.repository.js';
@@ -149,7 +156,7 @@ export class StructuralIntegrityStage implements IValidationStage {
     for (let i = 0; i < operations.length; i++) {
       const op = operations[i];
       if (!op) continue;
-      const opViolations = await this.validateOperation(op, i);
+      const opViolations = await this.validateOperation(op, i, operations);
       violations.push(...opViolations);
 
       if (context.shortCircuitOnError && opViolations.some((v) => v.severity === 'error')) {
@@ -173,15 +180,16 @@ export class StructuralIntegrityStage implements IValidationStage {
 
   private async validateOperation(
     op: CkgMutationOperation,
-    index: number
+    index: number,
+    operations: readonly CkgMutationOperation[]
   ): Promise<IValidationViolation[]> {
     switch (op.type) {
       case CkgOperationType.ADD_EDGE:
-        return this.validateAddEdge(op, index);
+        return this.validateAddEdge(op, index, operations);
       case CkgOperationType.REMOVE_NODE:
         return this.validateRemoveNode(op, index);
       case CkgOperationType.UPDATE_NODE:
-        return this.validateUpdateNode(op, index);
+        return this.validateUpdateNode(op, index, operations);
       case CkgOperationType.MERGE_NODES:
         return this.validateMergeNodes(op, index);
       case CkgOperationType.SPLIT_NODE:
@@ -198,7 +206,8 @@ export class StructuralIntegrityStage implements IValidationStage {
 
   private async validateAddEdge(
     op: Extract<CkgMutationOperation, { type: 'add_edge' }>,
-    index: number
+    index: number,
+    operations: readonly CkgMutationOperation[]
   ): Promise<IValidationViolation[]> {
     const violations: IValidationViolation[] = [];
 
@@ -236,29 +245,42 @@ export class StructuralIntegrityStage implements IValidationStage {
     const policy = getEdgePolicy(op.edgeType);
 
     // Node type compatibility
-    if (!policy.allowedSourceTypes.includes(sourceNode.nodeType)) {
+    const effectiveSourceType = this.getEffectiveNodeType(
+      sourceNode.nodeId,
+      sourceNode.nodeType,
+      operations
+    );
+    const effectiveTargetType = this.getEffectiveNodeType(
+      targetNode.nodeId,
+      targetNode.nodeType,
+      operations
+    );
+
+    if (!policy.allowedSourceTypes.includes(effectiveSourceType)) {
       violations.push({
         code: 'INVALID_SOURCE_NODE_TYPE',
-        message: `Edge type '${op.edgeType}' does not allow source node type '${sourceNode.nodeType}'`,
+        message: `Edge type '${op.edgeType}' does not allow source node type '${effectiveSourceType}'`,
         severity: 'error',
         affectedOperationIndex: index,
         metadata: {
           edgeType: op.edgeType,
-          nodeType: sourceNode.nodeType,
+          nodeType: effectiveSourceType,
+          currentNodeType: sourceNode.nodeType,
           allowed: [...policy.allowedSourceTypes],
         },
       });
     }
 
-    if (!policy.allowedTargetTypes.includes(targetNode.nodeType)) {
+    if (!policy.allowedTargetTypes.includes(effectiveTargetType)) {
       violations.push({
         code: 'INVALID_TARGET_NODE_TYPE',
-        message: `Edge type '${op.edgeType}' does not allow target node type '${targetNode.nodeType}'`,
+        message: `Edge type '${op.edgeType}' does not allow target node type '${effectiveTargetType}'`,
         severity: 'error',
         affectedOperationIndex: index,
         metadata: {
           edgeType: op.edgeType,
-          nodeType: targetNode.nodeType,
+          nodeType: effectiveTargetType,
+          currentNodeType: targetNode.nodeType,
           allowed: [...policy.allowedTargetTypes],
         },
       });
@@ -319,8 +341,8 @@ export class StructuralIntegrityStage implements IValidationStage {
       violations.push({
         code: 'ORPHAN_EDGES_DETECTED',
         message:
-          `Removing node '${op.nodeId}' would orphan ${String(edges.length)} edge(s). ` +
-          'Consider removing edges first or using MergeNodes.',
+          `Removing node '${op.nodeId}' will also remove ${String(edges.length)} attached edge(s). ` +
+          'Review the impacted relations before submitting, or use MergeNodes if you need to preserve connectivity.',
         severity: 'warning',
         affectedOperationIndex: index,
         metadata: {
@@ -336,7 +358,8 @@ export class StructuralIntegrityStage implements IValidationStage {
 
   private async validateUpdateNode(
     op: Extract<CkgMutationOperation, { type: 'update_node' }>,
-    index: number
+    index: number,
+    operations: readonly CkgMutationOperation[]
   ): Promise<IValidationViolation[]> {
     const violations: IValidationViolation[] = [];
 
@@ -351,7 +374,127 @@ export class StructuralIntegrityStage implements IValidationStage {
       });
     }
 
+    if (node === null || op.updates.nodeType === undefined) {
+      return violations;
+    }
+
+    const removedEdgeIds = new Set(
+      operations
+        .filter(
+          (candidate): candidate is Extract<CkgMutationOperation, { type: 'remove_edge' }> => {
+            return candidate.type === CkgOperationType.REMOVE_EDGE;
+          }
+        )
+        .map((candidate) => candidate.edgeId as EdgeId)
+    );
+    const removedNodeIds = new Set(
+      operations
+        .filter(
+          (candidate): candidate is Extract<CkgMutationOperation, { type: 'remove_node' }> => {
+            return candidate.type === CkgOperationType.REMOVE_NODE;
+          }
+        )
+        .map((candidate) => candidate.nodeId)
+    );
+
+    const attachedEdges = await this.graphRepository.getEdgesForNode(op.nodeId, 'both');
+    const relevantEdges = attachedEdges.filter((edge) => {
+      return (
+        !removedEdgeIds.has(edge.edgeId) &&
+        !removedNodeIds.has(edge.sourceNodeId) &&
+        !removedNodeIds.has(edge.targetNodeId)
+      );
+    });
+
+    if (relevantEdges.length === 0) {
+      return violations;
+    }
+
+    const nodeCache = new Map<NodeId, Awaited<ReturnType<IGraphRepository['getNode']>>>();
+    nodeCache.set(op.nodeId, node);
+
+    const getCachedNode = async (nodeId: NodeId) => {
+      if (!nodeCache.has(nodeId)) {
+        nodeCache.set(nodeId, await this.graphRepository.getNode(nodeId));
+      }
+
+      return nodeCache.get(nodeId) ?? null;
+    };
+
+    const nextNodeType = op.updates.nodeType;
+
+    for (const edge of relevantEdges) {
+      const sourceNode =
+        edge.sourceNodeId === op.nodeId ? node : await getCachedNode(edge.sourceNodeId);
+      const targetNode =
+        edge.targetNodeId === op.nodeId ? node : await getCachedNode(edge.targetNodeId);
+
+      if (sourceNode === null || targetNode === null) {
+        continue;
+      }
+
+      const effectiveSourceType =
+        edge.sourceNodeId === op.nodeId
+          ? nextNodeType
+          : this.getEffectiveNodeType(edge.sourceNodeId, sourceNode.nodeType, operations);
+      const effectiveTargetType =
+        edge.targetNodeId === op.nodeId
+          ? nextNodeType
+          : this.getEffectiveNodeType(edge.targetNodeId, targetNode.nodeType, operations);
+      const policy = getEdgePolicy(edge.edgeType);
+
+      if (
+        policy.allowedSourceTypes.includes(effectiveSourceType) &&
+        policy.allowedTargetTypes.includes(effectiveTargetType)
+      ) {
+        continue;
+      }
+
+      violations.push({
+        code: 'RETYPING_BREAKS_ATTACHED_EDGE',
+        message:
+          `Cannot change node '${op.nodeId}' from '${node.nodeType}' to '${nextNodeType}' because attached edge '${edge.edgeId}' ` +
+          `(${edge.edgeType}) would become invalid for ${effectiveSourceType} -> ${effectiveTargetType}. ` +
+          'Remove or update the conflicting edge first, or choose a compatible node type, then retry.',
+        severity: 'error',
+        affectedOperationIndex: index,
+        metadata: {
+          nodeId: op.nodeId,
+          currentNodeType: node.nodeType,
+          nextNodeType,
+          edgeId: edge.edgeId,
+          edgeType: edge.edgeType,
+          sourceNodeId: edge.sourceNodeId,
+          targetNodeId: edge.targetNodeId,
+          effectiveSourceType,
+          effectiveTargetType,
+          allowedSourceTypes: [...policy.allowedSourceTypes],
+          allowedTargetTypes: [...policy.allowedTargetTypes],
+          remediation: [
+            'Remove the conflicting edge before changing the node type.',
+            'Change the connected node or edge type so the policy remains valid.',
+            'Choose a different target node type for this re-typing operation.',
+          ],
+        },
+      });
+    }
+
     return violations;
+  }
+
+  private getEffectiveNodeType(
+    nodeId: NodeId,
+    currentNodeType: GraphNodeType,
+    operations: readonly CkgMutationOperation[]
+  ): GraphNodeType {
+    const plannedNodeType = operations.find(
+      (candidate): candidate is Extract<CkgMutationOperation, { type: 'update_node' }> =>
+        candidate.type === CkgOperationType.UPDATE_NODE &&
+        candidate.nodeId === nodeId &&
+        candidate.updates.nodeType !== undefined
+    )?.updates.nodeType;
+
+    return plannedNodeType ?? currentNodeType;
   }
 
   private async validateMergeNodes(

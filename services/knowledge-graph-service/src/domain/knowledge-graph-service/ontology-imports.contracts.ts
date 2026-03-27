@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { GraphEdgeType } from '@noema/types';
 import { MutationProposalSchema, type IMutationProposal } from './ckg-mutation-dsl.js';
 import type { IExecutionContext } from './execution-context.js';
 
@@ -116,6 +117,23 @@ export type OntologyMutationPreviewStatus = (typeof ONTOLOGY_MUTATION_PREVIEW_ST
 export const ONTOLOGY_MUTATION_PREVIEW_ENTITY_KINDS = ['concept', 'relation'] as const;
 export type OntologyMutationPreviewEntityKind =
   (typeof ONTOLOGY_MUTATION_PREVIEW_ENTITY_KINDS)[number];
+
+export const ONTOLOGY_RELATION_REVIEW_STATES = [
+  'ready',
+  'blocked',
+  'reviewer_overridden',
+  'endpoint_unresolved',
+] as const;
+export type OntologyRelationReviewState = (typeof ONTOLOGY_RELATION_REVIEW_STATES)[number];
+
+export const ONTOLOGY_ENDPOINT_RESOLUTION_STATUSES = [
+  'resolved',
+  'unresolved',
+  'ambiguous',
+  'deferred',
+] as const;
+export type OntologyEndpointResolutionState =
+  (typeof ONTOLOGY_ENDPOINT_RESOLUTION_STATUSES)[number];
 
 export interface IOntologySourceRelease {
   version: string;
@@ -288,6 +306,88 @@ export interface INormalizedOntologyRelationCandidate {
   provenance: IOntologyGraphRecordProvenance[];
 }
 
+export interface ISourceRelationHint {
+  externalId: string;
+  sourceId: OntologySourceId;
+  sourceField: string;
+  sourcePredicate: string | null;
+  predicateLabel: string | null;
+  subjectExternalId: string;
+  objectExternalId: string;
+  direction: OntologyGraphEdgeDirection;
+  evidence: string | null;
+  properties: Record<string, unknown>;
+  provenance: IOntologyGraphRecordProvenance[];
+}
+
+export interface ISourceRelationCandidate {
+  externalId: string;
+  sourceId: OntologySourceId;
+  sourceRelationType: string;
+  predicateLabel: string | null;
+  subjectExternalId: string;
+  objectExternalId: string;
+  direction: OntologyGraphEdgeDirection;
+  sourcePredicates: string[];
+  confidenceScore: number;
+  confidenceBand: OntologyMergeConfidenceBand;
+  hints: ISourceRelationHint[];
+  properties: Record<string, unknown>;
+  provenance: IOntologyGraphRecordProvenance[];
+}
+
+export interface IRelationInferenceReason {
+  code: string;
+  message: string;
+  sourceField: string | null;
+  evidence: string | null;
+  confidenceDelta: number | null;
+}
+
+export interface IRelationBlockingReason {
+  code: string;
+  message: string;
+  blocking: boolean;
+  detail: string | null;
+}
+
+export interface IResolvedRelationEndpoint {
+  role: 'subject' | 'object';
+  externalId: string;
+  status: OntologyEndpointResolutionState;
+  canonicalNodeId: string | null;
+  canonicalLabel: string | null;
+  canonicalNodeType: string | null;
+  domain: string | null;
+  strategy: string | null;
+  confidenceScore: number | null;
+  confidenceBand: OntologyMergeConfidenceBand | null;
+  conflictFlags: OntologyMergeConflictKind[];
+  blockingReasons: string[];
+}
+
+export interface IEndpointResolutionStatus {
+  subject: IResolvedRelationEndpoint;
+  object: IResolvedRelationEndpoint;
+}
+
+export interface INormalizedOntologyRelationCandidateV2 {
+  externalId: string;
+  sourceId: OntologySourceId;
+  sourceRelationType: string;
+  subjectExternalId: string;
+  objectExternalId: string;
+  candidateEdgeTypes: GraphEdgeType[];
+  selectedEdgeType: GraphEdgeType | null;
+  confidenceScore: number;
+  confidenceBand: OntologyMergeConfidenceBand;
+  inferenceReasons: IRelationInferenceReason[];
+  blockingReasons: IRelationBlockingReason[];
+  endpointResolution: IEndpointResolutionStatus;
+  properties: Record<string, unknown>;
+  provenance: IOntologyGraphRecordProvenance[];
+}
+
 export interface INormalizedOntologyMappingCandidate {
   externalId: string;
   sourceExternalId: string;
@@ -329,6 +429,8 @@ export interface IOntologyImportReviewMetadata {
   confidenceScore: number;
   confidenceBand: OntologyMergeConfidenceBand;
   conflictFlags: OntologyMergeConflictKind[];
+  reviewState?: OntologyRelationReviewState | undefined;
+  notes?: string[] | undefined;
 }
 
 export interface IOntologyMutationPreviewCandidate {
@@ -339,6 +441,13 @@ export interface IOntologyMutationPreviewCandidate {
   summary: string;
   rationale: string;
   review: IOntologyImportReviewMetadata;
+  sourceRelationType?: string | null | undefined;
+  candidateEdgeTypes?: GraphEdgeType[] | undefined;
+  selectedEdgeType?: GraphEdgeType | null | undefined;
+  endpointResolution?: IEndpointResolutionStatus | null | undefined;
+  inferenceReasons?: IRelationInferenceReason[] | undefined;
+  blockingReasons?: IRelationBlockingReason[] | undefined;
+  evidenceSummary?: string[] | undefined;
   blockedReason: string | null;
   dependencyExternalIds: string[];
   proposal: IMutationProposal | null;
@@ -567,6 +676,27 @@ export const OntologyMutationPreviewStatusSchema = z.enum(ONTOLOGY_MUTATION_PREV
 export const OntologyMutationPreviewEntityKindSchema = z.enum(
   ONTOLOGY_MUTATION_PREVIEW_ENTITY_KINDS
 );
+export const OntologyRelationReviewStateSchema = z.enum(ONTOLOGY_RELATION_REVIEW_STATES);
+export const OntologyEndpointResolutionStateSchema = z.enum(ONTOLOGY_ENDPOINT_RESOLUTION_STATUSES);
+const GraphEdgeTypeSchema = z.enum([
+  'is_a',
+  'exemplifies',
+  'part_of',
+  'constituted_by',
+  'equivalent_to',
+  'entails',
+  'disjoint_with',
+  'contradicts',
+  'causes',
+  'precedes',
+  'depends_on',
+  'related_to',
+  'analogous_to',
+  'contrasts_with',
+  'prerequisite',
+  'derived_from',
+  'has_property',
+]);
 export const OntologyImportRunConfigurationSchema = z.object({
   mode: z.string().min(1).nullable().default(null),
   language: z.string().min(1).nullable().default(null),
@@ -672,6 +802,88 @@ export const NormalizedOntologyRelationCandidateSchema = z.object({
   provenance: z.array(OntologyGraphRecordProvenanceSchema),
 });
 
+export const SourceRelationHintSchema = z.object({
+  externalId: z.string().min(1, 'External id is required'),
+  sourceId: OntologySourceIdSchema,
+  sourceField: z.string().min(1, 'Source field is required'),
+  sourcePredicate: z.string().min(1).nullable(),
+  predicateLabel: z.string().min(1).nullable(),
+  subjectExternalId: z.string().min(1, 'Subject external id is required'),
+  objectExternalId: z.string().min(1, 'Object external id is required'),
+  direction: OntologyGraphEdgeDirectionSchema,
+  evidence: z.string().min(1).nullable(),
+  properties: z.record(z.unknown()).default({}),
+  provenance: z.array(OntologyGraphRecordProvenanceSchema),
+});
+
+export const SourceRelationCandidateSchema = z.object({
+  externalId: z.string().min(1, 'External id is required'),
+  sourceId: OntologySourceIdSchema,
+  sourceRelationType: z.string().min(1, 'Source relation type is required'),
+  predicateLabel: z.string().min(1).nullable(),
+  subjectExternalId: z.string().min(1, 'Subject external id is required'),
+  objectExternalId: z.string().min(1, 'Object external id is required'),
+  direction: OntologyGraphEdgeDirectionSchema,
+  sourcePredicates: z.array(z.string().min(1)).default([]),
+  confidenceScore: z.number().min(0).max(1),
+  confidenceBand: z.enum(ONTOLOGY_MERGE_CONFIDENCE_BANDS),
+  hints: z.array(SourceRelationHintSchema).default([]),
+  properties: z.record(z.unknown()).default({}),
+  provenance: z.array(OntologyGraphRecordProvenanceSchema),
+});
+
+export const RelationInferenceReasonSchema = z.object({
+  code: z.string().min(1, 'Reason code is required'),
+  message: z.string().min(1, 'Reason message is required'),
+  sourceField: z.string().min(1).nullable(),
+  evidence: z.string().min(1).nullable(),
+  confidenceDelta: z.number().min(-1).max(1).nullable(),
+});
+
+export const RelationBlockingReasonSchema = z.object({
+  code: z.string().min(1, 'Blocking reason code is required'),
+  message: z.string().min(1, 'Blocking reason message is required'),
+  blocking: z.boolean(),
+  detail: z.string().min(1).nullable(),
+});
+
+export const ResolvedRelationEndpointSchema = z.object({
+  role: z.enum(['subject', 'object']),
+  externalId: z.string().min(1, 'External id is required'),
+  status: OntologyEndpointResolutionStateSchema,
+  canonicalNodeId: z.string().min(1).nullable(),
+  canonicalLabel: z.string().min(1).nullable(),
+  canonicalNodeType: z.string().min(1).nullable(),
+  domain: z.string().min(1).nullable(),
+  strategy: z.string().min(1).nullable(),
+  confidenceScore: z.number().min(0).max(1).nullable(),
+  confidenceBand: z.enum(ONTOLOGY_MERGE_CONFIDENCE_BANDS).nullable(),
+  conflictFlags: z.array(z.enum(ONTOLOGY_MERGE_CONFLICT_KINDS)).default([]),
+  blockingReasons: z.array(z.string().min(1)).default([]),
+});
+
+export const EndpointResolutionStatusSchema = z.object({
+  subject: ResolvedRelationEndpointSchema,
+  object: ResolvedRelationEndpointSchema,
+});
+
+export const NormalizedOntologyRelationCandidateV2Schema = z.object({
+  externalId: z.string().min(1, 'External id is required'),
+  sourceId: OntologySourceIdSchema,
+  sourceRelationType: z.string().min(1, 'Source relation type is required'),
+  subjectExternalId: z.string().min(1, 'Subject external id is required'),
+  objectExternalId: z.string().min(1, 'Object external id is required'),
+  candidateEdgeTypes: z.array(GraphEdgeTypeSchema).default([]),
+  selectedEdgeType: GraphEdgeTypeSchema.nullable(),
+  confidenceScore: z.number().min(0).max(1),
+  confidenceBand: z.enum(ONTOLOGY_MERGE_CONFIDENCE_BANDS),
+  inferenceReasons: z.array(RelationInferenceReasonSchema).default([]),
+  blockingReasons: z.array(RelationBlockingReasonSchema).default([]),
+  endpointResolution: EndpointResolutionStatusSchema,
+  properties: z.record(z.unknown()).default({}),
+  provenance: z.array(OntologyGraphRecordProvenanceSchema),
+});
+
 export const NormalizedOntologyMappingCandidateSchema = z.object({
   externalId: z.string().min(1, 'External id is required'),
   sourceExternalId: z.string().min(1, 'Source external id is required'),
@@ -717,7 +929,16 @@ export const OntologyMutationPreviewCandidateSchema = z.object({
     confidenceScore: z.number().min(0).max(1),
     confidenceBand: z.enum(ONTOLOGY_MERGE_CONFIDENCE_BANDS),
     conflictFlags: z.array(z.enum(ONTOLOGY_MERGE_CONFLICT_KINDS)).default([]),
+    reviewState: OntologyRelationReviewStateSchema.optional(),
+    notes: z.array(z.string().min(1)).default([]).optional(),
   }),
+  sourceRelationType: z.string().min(1).nullable().optional(),
+  candidateEdgeTypes: z.array(GraphEdgeTypeSchema).default([]).optional(),
+  selectedEdgeType: GraphEdgeTypeSchema.nullable().optional(),
+  endpointResolution: EndpointResolutionStatusSchema.nullable().optional(),
+  inferenceReasons: z.array(RelationInferenceReasonSchema).default([]).optional(),
+  blockingReasons: z.array(RelationBlockingReasonSchema).default([]).optional(),
+  evidenceSummary: z.array(z.string().min(1)).default([]).optional(),
   blockedReason: z.string().min(1).nullable(),
   dependencyExternalIds: z.array(z.string().min(1)).default([]),
   proposal: MutationProposalSchema.nullable(),

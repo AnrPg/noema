@@ -31,13 +31,17 @@ import {
 import type {
   ICentralityDto,
   ICkgBulkReviewInput,
+  ICkgEdgeAuthoringPreviewInput,
+  ICkgNodeBatchAuthoringPreviewInput,
   ICkgMutationAuditLogDto,
   ICkgMutationDto,
   ICkgMutationFilters,
+  ICkgMutationProposalInput,
   ICommonAncestorsInput,
   IComparisonQueryParams,
   ICreateOntologyImportRunInput,
   IRegisterOntologyImportSourceInput,
+  ISubmitOntologyImportRunPreviewInput,
   ICreateEdgeInput,
   ICreateNodeInput,
   IGraphEdgeDto,
@@ -56,6 +60,8 @@ import type {
   BridgeNodesResponse,
   CentralityResponse,
   CkgBulkReviewResponse,
+  CkgEdgeAuthoringPreviewResponse,
+  CkgNodeBatchAuthoringPreviewResponse,
   CkgMutationAuditLogResponse,
   CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
@@ -122,6 +128,10 @@ function recordValue(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 }
 
+function recordOrNullValue(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
+}
+
 function stringIfPresent(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
@@ -141,6 +151,40 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function parseJsonValue(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function parsedValue(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    return parseJsonValue(trimmed);
+  }
+
+  return value;
+}
+
+function recordArrayValue(value: unknown): Record<string, unknown>[] {
+  const parsed = parsedValue(value);
+  return Array.isArray(parsed)
+    ? parsed.filter(
+        (entry): entry is Record<string, unknown> =>
+          typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+      )
+    : [];
 }
 
 function decodeEscapedText(value: string): string {
@@ -191,7 +235,15 @@ function inferNormalizedGraphNodeType(
   metadata: Record<string, unknown>
 ): IGraphNodeDto['type'] {
   const explicitType = stringValue(entry['type'], stringValue(entry['nodeType'], ''));
-  if (explicitType !== '' && explicitType !== 'concept') {
+  if (
+    explicitType === 'skill' ||
+    explicitType === 'fact' ||
+    explicitType === 'procedure' ||
+    explicitType === 'principle' ||
+    explicitType === 'example' ||
+    explicitType === 'counterexample' ||
+    explicitType === 'misconception'
+  ) {
     return explicitType as IGraphNodeDto['type'];
   }
 
@@ -207,6 +259,12 @@ function inferNormalizedGraphNodeType(
   }
   if (lexicalSignals.includes('example')) {
     return 'example';
+  }
+  if (lexicalSignals.includes('counterexample')) {
+    return 'counterexample';
+  }
+  if (lexicalSignals.includes('misconception')) {
+    return 'misconception';
   }
   if (lexicalSignals.includes('fact') || lexicalSignals.includes('literal')) {
     return 'fact';
@@ -331,6 +389,64 @@ function normalizeGraphDescription(
   return null;
 }
 
+function normalizeCanonicalExternalRefs(
+  entry: Record<string, unknown>,
+  metadata: Record<string, unknown>
+): IGraphNodeDto['canonicalExternalRefs'] {
+  const directRefs = recordArrayValue(entry['canonicalExternalRefs']);
+  if (directRefs.length > 0) {
+    return directRefs as unknown as IGraphNodeDto['canonicalExternalRefs'];
+  }
+
+  const ontologyImport = recordValue(metadata['ontologyImport']);
+  const externalId = stringIfPresent(ontologyImport['externalId']);
+  const sourceId = stringIfPresent(ontologyImport['sourceId']);
+  const iri = stringIfPresent(ontologyImport['iri']);
+  const sourceVersion = stringIfPresent(ontologyImport['sourceVersion']);
+
+  if (externalId === null || sourceId === null) {
+    return [];
+  }
+
+  return [
+    {
+      sourceId,
+      externalId,
+      ...(iri !== null ? { iri } : {}),
+      ...(sourceVersion !== null ? { sourceVersion } : {}),
+      isCanonical: true,
+    },
+  ];
+}
+
+function normalizeNodeReviewMetadata(
+  entry: Record<string, unknown>
+): IGraphNodeDto['reviewMetadata'] {
+  const reviewMetadata = recordOrNullValue(parsedValue(entry['reviewMetadata']));
+  return reviewMetadata as IGraphNodeDto['reviewMetadata'];
+}
+
+function normalizeNodeSourceCoverage(
+  entry: Record<string, unknown>,
+  metadata: Record<string, unknown>
+): IGraphNodeDto['sourceCoverage'] {
+  const directCoverage = recordOrNullValue(parsedValue(entry['sourceCoverage']));
+  if (directCoverage !== null) {
+    return directCoverage as unknown as IGraphNodeDto['sourceCoverage'];
+  }
+
+  const ontologyImport = recordValue(metadata['ontologyImport']);
+  const sourceId = stringIfPresent(ontologyImport['sourceId']);
+  if (sourceId === null) {
+    return null;
+  }
+
+  return {
+    contributingSourceIds: [sourceId],
+    sourceCount: 1,
+  };
+}
+
 function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto {
   const metadata = recordValue(entry['metadata'] ?? entry['properties']);
   const rawLabel = stringValue(
@@ -338,18 +454,52 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
     stringValue(entry['nodeId'], stringValue(metadata['uri'], ''))
   );
   const domain = stringValue(entry['domain']);
+  const ontologyImport = recordValue(metadata['ontologyImport']);
+  const aliases =
+    stringArrayValue(parsedValue(entry['aliases'])).length > 0
+      ? stringArrayValue(parsedValue(entry['aliases']))
+      : stringArrayValue(parsedValue(ontologyImport['aliases']));
+  const languages =
+    stringArrayValue(parsedValue(entry['languages'])).length > 0
+      ? stringArrayValue(parsedValue(entry['languages']))
+      : stringArrayValue(parsedValue(ontologyImport['languages']));
+  const semanticHints =
+    stringArrayValue(parsedValue(entry['semanticHints'])).length > 0
+      ? stringArrayValue(parsedValue(entry['semanticHints']))
+      : collectMetadataSourceTypes(metadata);
+  const tags =
+    stringArrayValue(parsedValue(entry['tags'])).length > 0
+      ? stringArrayValue(parsedValue(entry['tags']))
+      : domain !== ''
+        ? [domain]
+        : [];
 
   return {
     id: stringValue(entry['id'], stringValue(entry['nodeId'])) as NodeId,
     type: inferNormalizedGraphNodeType(entry, metadata),
     label: normalizeGraphLabel(rawLabel, metadata),
     description: normalizeGraphDescription(entry, metadata),
-    tags:
-      stringArrayValue(entry['tags']).length > 0
-        ? stringArrayValue(entry['tags'])
-        : domain !== ''
-          ? [domain]
-          : [],
+    domain: domain !== '' ? domain : null,
+    status:
+      stringIfPresent(entry['status']) !== null
+        ? (stringIfPresent(entry['status']) as NonNullable<IGraphNodeDto['status']>)
+        : null,
+    aliases,
+    languages,
+    tags,
+    semanticHints,
+    canonicalExternalRefs: normalizeCanonicalExternalRefs(entry, metadata),
+    ontologyMappings: recordArrayValue(
+      entry['ontologyMappings']
+    ) as unknown as IGraphNodeDto['ontologyMappings'],
+    provenance:
+      recordArrayValue(entry['provenance']).length > 0
+        ? (recordArrayValue(entry['provenance']) as unknown as IGraphNodeDto['provenance'])
+        : (recordArrayValue(
+            ontologyImport['provenance']
+          ) as unknown as IGraphNodeDto['provenance']),
+    reviewMetadata: normalizeNodeReviewMetadata(entry),
+    sourceCoverage: normalizeNodeSourceCoverage(entry, metadata),
     metadata,
     createdAt: pickIsoDate(entry['createdAt'], metadata['createdAt']),
     updatedAt: pickIsoDate(
@@ -368,7 +518,7 @@ function normalizeGraphEdgeEntry(entry: Record<string, unknown>): IGraphEdgeDto 
     targetId: stringValue(entry['targetId'], stringValue(entry['targetNodeId'])) as NodeId,
     type: stringValue(
       entry['type'],
-      stringValue(entry['edgeType'], 'related')
+      stringValue(entry['edgeType'], 'related_to')
     ) as IGraphEdgeDto['type'],
     weight: numberValue(entry['weight'], 1),
     metadata: recordValue(entry['metadata'] ?? entry['properties']),
@@ -1122,6 +1272,47 @@ export function useCKGMutation(
   });
 }
 
+export function usePreviewCkgEdgeAuthoring(
+  options?: UseMutationOptions<
+    CkgEdgeAuthoringPreviewResponse,
+    Error,
+    ICkgEdgeAuthoringPreviewInput
+  >
+) {
+  return useMutation({
+    mutationFn: (input) => ckgEdgesApi.previewAuthoring(input),
+    ...options,
+  });
+}
+
+export function usePreviewCkgNodeBatchAuthoring(
+  options?: UseMutationOptions<
+    CkgNodeBatchAuthoringPreviewResponse,
+    Error,
+    ICkgNodeBatchAuthoringPreviewInput
+  >
+) {
+  return useMutation({
+    mutationFn: (input) => ckgNodesApi.previewBatchAuthoring(input),
+    ...options,
+  });
+}
+
+export function useProposeCkgMutation(
+  options?: UseMutationOptions<CkgMutationResponse, Error, ICkgMutationProposalInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => ckgMutationsApi.propose(input),
+    onSuccess: async (response) => {
+      const normalized = normalizeMutationResponse(response);
+      queryClient.setQueryData(kgKeys.ckgMutation(normalized.data.id), normalized);
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+    },
+    ...options,
+  });
+}
+
 export function useApproveMutation(
   options?: UseMutationOptions<CkgMutationResponse, Error, { id: MutationId; note?: string }>
 ) {
@@ -1470,13 +1661,17 @@ export function useRetryOntologyImportRun(
 }
 
 export function useSubmitOntologyImportRunPreview(
-  options?: UseMutationOptions<OntologyMutationPreviewSubmissionResponse, Error, string>
+  options?: UseMutationOptions<
+    OntologyMutationPreviewSubmissionResponse,
+    Error,
+    ISubmitOntologyImportRunPreviewInput
+  >
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (runId) => ontologyImportsApi.submitRunPreview(runId),
-    onSuccess: async (_response, runId) => {
-      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(runId) });
+    mutationFn: (input) => ontologyImportsApi.submitRunPreview(input),
+    onSuccess: async (_response, input) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(input.runId) });
       void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
       void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
     },

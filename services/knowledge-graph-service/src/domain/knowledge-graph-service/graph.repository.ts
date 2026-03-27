@@ -14,12 +14,19 @@
  */
 
 import type {
+  CkgNodeStatus,
   EdgeId,
   EdgeWeight,
   GraphEdgeType,
+  GraphNodeType,
+  ICanonicalExternalRef,
   IGraphEdge,
   IGraphNode,
+  INodeProvenanceEntry,
+  INodeReviewMetadata,
+  IOntologyMapping,
   ISubgraph,
+  ISourceCoverageSummary,
   MasteryLevel,
   NodeId,
 } from '@noema/types';
@@ -53,6 +60,16 @@ export interface ICreateNodeInput {
   readonly nodeType: string;
   readonly domain: string;
   readonly description?: string;
+  readonly status?: CkgNodeStatus;
+  readonly aliases?: string[];
+  readonly languages?: string[];
+  readonly tags?: string[];
+  readonly semanticHints?: string[];
+  readonly canonicalExternalRefs?: ICanonicalExternalRef[];
+  readonly ontologyMappings?: IOntologyMapping[];
+  readonly provenance?: INodeProvenanceEntry[];
+  readonly reviewMetadata?: INodeReviewMetadata | null;
+  readonly sourceCoverage?: ISourceCoverageSummary | null;
   readonly properties?: Record<string, unknown>;
   readonly masteryLevel?: MasteryLevel;
 }
@@ -61,9 +78,20 @@ export interface ICreateNodeInput {
  * Input for updating a graph node (partial update).
  */
 export interface IUpdateNodeInput {
+  readonly nodeType?: GraphNodeType;
   readonly label?: string;
   readonly description?: string;
   readonly domain?: string;
+  readonly status?: CkgNodeStatus;
+  readonly aliases?: string[];
+  readonly languages?: string[];
+  readonly tags?: string[];
+  readonly semanticHints?: string[];
+  readonly canonicalExternalRefs?: ICanonicalExternalRef[];
+  readonly ontologyMappings?: IOntologyMapping[];
+  readonly provenance?: INodeProvenanceEntry[];
+  readonly reviewMetadata?: INodeReviewMetadata | null;
+  readonly sourceCoverage?: ISourceCoverageSummary | null;
   readonly properties?: Record<string, unknown>;
   readonly masteryLevel?: MasteryLevel;
 }

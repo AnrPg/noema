@@ -18,7 +18,22 @@
 
 import { z } from 'zod';
 
-import type { GraphEdgeType, GraphNodeType, Metadata } from '@noema/types';
+import {
+  CkgNodeStatus,
+  GraphEdgeType as GraphEdgeTypeEnum,
+  GraphNodeType as GraphNodeTypeEnum,
+} from '@noema/types';
+import type {
+  CkgNodeStatus as CkgNodeStatusType,
+  GraphEdgeType,
+  GraphNodeType,
+  ICanonicalExternalRef,
+  INodeProvenanceEntry,
+  INodeReviewMetadata,
+  IOntologyMapping,
+  ISourceCoverageSummary,
+  Metadata,
+} from '@noema/types';
 
 // ============================================================================
 // Operation Type Discriminator
@@ -54,6 +69,16 @@ export interface IAddNodeOperation {
   readonly label: string;
   readonly description: string;
   readonly domain: string;
+  readonly status?: CkgNodeStatusType;
+  readonly aliases?: string[];
+  readonly languages?: string[];
+  readonly tags?: string[];
+  readonly semanticHints?: string[];
+  readonly canonicalExternalRefs?: ICanonicalExternalRef[];
+  readonly ontologyMappings?: IOntologyMapping[];
+  readonly provenance?: INodeProvenanceEntry[];
+  readonly reviewMetadata?: INodeReviewMetadata | null;
+  readonly sourceCoverage?: ISourceCoverageSummary | null;
   readonly properties: Metadata;
 }
 
@@ -74,9 +99,20 @@ export interface IUpdateNodeOperation {
   readonly type: typeof CkgOperationType.UPDATE_NODE;
   readonly nodeId: string;
   readonly updates: {
+    readonly nodeType?: GraphNodeType;
     readonly label?: string;
     readonly description?: string;
     readonly domain?: string;
+    readonly status?: CkgNodeStatusType;
+    readonly aliases?: string[];
+    readonly languages?: string[];
+    readonly tags?: string[];
+    readonly semanticHints?: string[];
+    readonly canonicalExternalRefs?: ICanonicalExternalRef[];
+    readonly ontologyMappings?: IOntologyMapping[];
+    readonly provenance?: INodeProvenanceEntry[];
+    readonly reviewMetadata?: INodeReviewMetadata | null;
+    readonly sourceCoverage?: ISourceCoverageSummary | null;
     readonly properties?: Metadata;
   };
   readonly rationale: string;
@@ -178,27 +214,85 @@ export type CkgMutationOperation =
 // Shared sub-schemas
 const MetadataSchema = z.record(z.unknown()).default({});
 
-const NodeTypeSchema = z.enum([
-  'concept',
-  'skill',
-  'fact',
-  'procedure',
-  'principle',
-  'example',
-  'counterexample',
-  'misconception',
-]);
+const NodeTypeSchema = z.enum(
+  Object.values(GraphNodeTypeEnum) as [GraphNodeType, ...GraphNodeType[]]
+);
 
-const EdgeTypeSchema = z.enum([
-  'prerequisite',
-  'part_of',
-  'is_a',
-  'related_to',
-  'contradicts',
-  'exemplifies',
-  'causes',
-  'derived_from',
-]);
+const EdgeTypeSchema = z.enum(
+  Object.values(GraphEdgeTypeEnum) as [GraphEdgeType, ...GraphEdgeType[]]
+);
+
+const CkgNodeStatusSchema = z.enum(
+  Object.values(CkgNodeStatus) as [CkgNodeStatusType, ...CkgNodeStatusType[]]
+);
+
+const ConfidenceBandSchema = z.enum(['low', 'medium', 'high']);
+
+const CanonicalExternalRefSchema = z.object({
+  sourceId: z.string().min(1),
+  externalId: z.string().min(1),
+  iri: z.string().min(1).nullable().optional(),
+  refType: z.string().min(1).nullable().optional(),
+  sourceVersion: z.string().min(1).nullable().optional(),
+  url: z.string().min(1).nullable().optional(),
+  isCanonical: z.boolean().optional(),
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
+});
+
+const OntologyMappingSchema = z.object({
+  sourceId: z.string().min(1),
+  externalId: z.string().min(1),
+  mappingKind: z.string().min(1),
+  targetExternalId: z.string().min(1).nullable().optional(),
+  targetIri: z.string().min(1).nullable().optional(),
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
+  confidenceBand: ConfidenceBandSchema.nullable().optional(),
+  conflictFlags: z.array(z.string().min(1)).default([]).optional(),
+});
+
+const NodeProvenanceEntrySchema = z.object({
+  sourceId: z.string().min(1),
+  sourceVersion: z.string().min(1).nullable().optional(),
+  runId: z.string().min(1).nullable().optional(),
+  artifactId: z.string().min(1).nullable().optional(),
+  harvestedAt: z.string().datetime().nullable().optional(),
+  license: z.string().min(1).nullable().optional(),
+  requestUrl: z.string().url().nullable().optional(),
+  recordKind: z.string().min(1).nullable().optional(),
+});
+
+const NodeReviewMetadataSchema = z.object({
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
+  confidenceBand: ConfidenceBandSchema.nullable().optional(),
+  conflictFlags: z.array(z.string().min(1)).default([]).optional(),
+  reviewState: z
+    .enum(['ready', 'blocked', 'reviewer_overridden', 'endpoint_unresolved'])
+    .nullable()
+    .optional(),
+  notes: z.array(z.string().min(1)).default([]).optional(),
+  overridden: z.boolean().optional(),
+});
+
+const SourceCoverageSummarySchema = z.object({
+  contributingSourceIds: z.array(z.string().min(1)).default([]),
+  sourceCount: z.number().int().nonnegative(),
+  hasBackboneSource: z.boolean().optional(),
+  hasEnhancementSource: z.boolean().optional(),
+  lastEnrichedAt: z.string().datetime().nullable().optional(),
+});
+
+const NodeEnrichmentSchema = {
+  status: CkgNodeStatusSchema.optional(),
+  aliases: z.array(z.string().min(1)).default([]).optional(),
+  languages: z.array(z.string().min(1)).default([]).optional(),
+  tags: z.array(z.string().min(1)).default([]).optional(),
+  semanticHints: z.array(z.string().min(1)).default([]).optional(),
+  canonicalExternalRefs: z.array(CanonicalExternalRefSchema).default([]).optional(),
+  ontologyMappings: z.array(OntologyMappingSchema).default([]).optional(),
+  provenance: z.array(NodeProvenanceEntrySchema).default([]).optional(),
+  reviewMetadata: NodeReviewMetadataSchema.nullable().optional(),
+  sourceCoverage: SourceCoverageSummarySchema.nullable().optional(),
+} as const;
 
 // ── Individual operation schemas ──────────────────────────────────────────
 
@@ -208,6 +302,7 @@ export const AddNodeOperationSchema = z.object({
   label: z.string().min(1).max(500),
   description: z.string().max(2000),
   domain: z.string().min(1).max(200),
+  ...NodeEnrichmentSchema,
   properties: MetadataSchema,
 });
 
@@ -222,16 +317,29 @@ export const UpdateNodeOperationSchema = z.object({
   nodeId: z.string().min(1),
   updates: z
     .object({
+      nodeType: NodeTypeSchema.optional(),
       label: z.string().min(1).max(500).optional(),
       description: z.string().max(2000).optional(),
       domain: z.string().min(1).max(200).optional(),
+      ...NodeEnrichmentSchema,
       properties: MetadataSchema.optional(),
     })
     .refine(
       (u) =>
+        u.nodeType !== undefined ||
         u.label !== undefined ||
         u.description !== undefined ||
         u.domain !== undefined ||
+        u.status !== undefined ||
+        u.aliases !== undefined ||
+        u.languages !== undefined ||
+        u.tags !== undefined ||
+        u.semanticHints !== undefined ||
+        u.canonicalExternalRefs !== undefined ||
+        u.ontologyMappings !== undefined ||
+        u.provenance !== undefined ||
+        u.reviewMetadata !== undefined ||
+        u.sourceCoverage !== undefined ||
         u.properties !== undefined,
       { message: 'At least one update field is required' }
     ),

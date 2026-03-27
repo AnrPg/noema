@@ -9,13 +9,18 @@
 
 import type { GraphNodeType, NodeId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
+import type { ICkgNodeBatchAuthoringService } from '../../application/knowledge-graph/node-authoring/index.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import { NodeFilter } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
-import { CkgNodeQueryParamsSchema } from '../schemas/ckg-node.schemas.js';
+import {
+  CkgNodeBatchAuthoringPreviewRequestSchema,
+  CkgNodeQueryParamsSchema,
+} from '../schemas/ckg-node.schemas.js';
 import {
   type IRouteOptions,
   NodeIdParamSchema,
+  assertAdminOrAgent,
   attachStartTimeHook,
   buildContext,
   handleError,
@@ -33,6 +38,7 @@ import {
 export function registerCkgNodeRoutes(
   fastify: FastifyInstance,
   service: IKnowledgeGraphService,
+  nodeAuthoringService: ICkgNodeBatchAuthoringService,
   authMiddleware: ReturnType<typeof createAuthMiddleware>,
   _options?: IRouteOptions
 ): void {
@@ -124,6 +130,61 @@ export function registerCkgNodeRoutes(
 
         const result = await service.getCkgNode(nodeId as NodeId, context);
         reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Body: unknown }>(
+    '/api/v1/ckg/nodes/batch-authoring-preview',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['CKG Nodes'],
+        summary: 'Preview batch CKG node changes',
+        description:
+          'Preview node deletion or batch metadata updates, including re-typing validation against attached edges.',
+        body: {
+          type: 'object',
+          required: ['nodeIds', 'action'],
+          properties: {
+            nodeIds: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 100 },
+            action: { type: 'string', enum: ['delete', 'update'] },
+            updates: {
+              type: 'object',
+              properties: {
+                nodeType: { type: 'string' },
+                domain: { type: 'string' },
+                tags: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            rationale: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        assertAdminOrAgent(request);
+        const parsed = CkgNodeBatchAuthoringPreviewRequestSchema.parse(request.body);
+        const preview = await nodeAuthoringService.preview({
+          nodeIds: parsed.nodeIds as NodeId[],
+          action: parsed.action,
+          ...(parsed.updates !== undefined
+            ? {
+                updates: {
+                  ...(parsed.updates.nodeType !== undefined
+                    ? { nodeType: parsed.updates.nodeType as GraphNodeType }
+                    : {}),
+                  ...(parsed.updates.domain !== undefined ? { domain: parsed.updates.domain } : {}),
+                  ...(parsed.updates.tags !== undefined ? { tags: parsed.updates.tags } : {}),
+                },
+              }
+            : {}),
+          ...(parsed.rationale !== undefined ? { rationale: parsed.rationale } : {}),
+        });
+        reply.send(wrapResponse(preview, undefined, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

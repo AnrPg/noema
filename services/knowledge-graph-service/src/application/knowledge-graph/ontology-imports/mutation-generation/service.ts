@@ -1,4 +1,4 @@
-import { GraphNodeType } from '@noema/types';
+import { GraphEdgeType, GraphNodeType } from '@noema/types';
 import type {
   IAddNodeOperation,
   IMutationProposal,
@@ -8,6 +8,7 @@ import type {
   ICanonicalNodeResolution,
   ICanonicalNodeResolutionResult,
   ICanonicalNodeResolver,
+  IEndpointResolutionStatus,
   IMutationPreviewGenerator,
   INormalizedOntologyConceptCandidate,
   INormalizedOntologyGraphBatch,
@@ -15,19 +16,14 @@ import type {
   IOntologyImportReviewMetadata,
   IOntologyMutationPreviewBatch,
   IOntologyMutationPreviewCandidate,
+  IRelationBlockingReason,
+  IRelationInferenceReason,
+  IResolvedRelationEndpoint,
   OntologyMergeConflictKind,
 } from '../../../../domain/knowledge-graph-service/ontology-imports.contracts.js';
+import { getEdgePolicy } from '../../../../domain/knowledge-graph-service/policies/edge-type-policies.js';
 
 const DEFAULT_PRIORITY = 10;
-type SupportedEdgeType =
-  | 'prerequisite'
-  | 'part_of'
-  | 'is_a'
-  | 'related_to'
-  | 'contradicts'
-  | 'exemplifies'
-  | 'causes'
-  | 'derived_from';
 const RELATION_BLOCK_REASON =
   'CKG edge mutations need canonical node ids for both ends. Resolve both concepts first, then the relation can enter the review queue.';
 const MAPPING_KINDS_FOR_PROPAGATION = new Set(['exact_match', 'close_match']);
@@ -42,17 +38,6 @@ const SOURCE_DOMAINS: Record<string, string> = {
   conceptnet: 'commonsense',
 };
 
-const EDGE_TYPES_BY_PREDICATE: Record<string, SupportedEdgeType> = {
-  prerequisite: 'prerequisite',
-  part_of: 'part_of',
-  is_a: 'is_a',
-  related_to: 'related_to',
-  contradicts: 'contradicts',
-  exemplifies: 'exemplifies',
-  causes: 'causes',
-  derived_from: 'derived_from',
-};
-
 export class OntologyImportMutationGenerationService implements IMutationPreviewGenerator {
   constructor(private readonly canonicalNodeResolver?: ICanonicalNodeResolver) {}
 
@@ -63,7 +48,7 @@ export class OntologyImportMutationGenerationService implements IMutationPreview
       buildConceptCandidate(batch, concept, resolutions.get(concept.externalId) ?? unresolved())
     );
     const relationCandidates = batch.relations.map((relation) =>
-      buildRelationCandidate(relation, resolutions)
+      buildRelationCandidate(relation, batch, resolutions)
     );
     const candidates = [...conceptCandidates, ...relationCandidates];
     const readyProposalCount = candidates.filter(
@@ -158,21 +143,21 @@ function buildConceptCandidate(
 
 function buildRelationCandidate(
   relation: INormalizedOntologyRelationCandidate,
+  _batch: INormalizedOntologyGraphBatch,
   resolutions: Map<string, ICanonicalNodeResolutionResult>
 ): IOntologyMutationPreviewCandidate {
-  const edgeType = EDGE_TYPES_BY_PREDICATE[relation.normalizedPredicate];
   const subjectResolution = resolutions.get(relation.subjectExternalId) ?? unresolved();
   const objectResolution = resolutions.get(relation.objectExternalId) ?? unresolved();
-
-  if (edgeType === undefined) {
-    return buildBlockedRelationCandidate(
-      relation,
-      `The normalized predicate "${relation.normalizedPredicate}" does not map to a CKG edge type yet.`,
-      buildReviewSummary(unresolved(), [])
-    );
-  }
+  const relationMapping = inferRelationMapping(relation, subjectResolution, objectResolution);
+  const endpointResolution = buildEndpointResolutionStatus(
+    relation,
+    subjectResolution,
+    objectResolution
+  );
+  const evidenceSummary = buildRelationEvidenceSummary(relation);
 
   if (
+    relationMapping.selectedEdgeType === null ||
     subjectResolution.resolution === null ||
     objectResolution.resolution === null ||
     hasBlockingConflicts(subjectResolution.conflictFlags) ||
@@ -190,6 +175,11 @@ function buildRelationCandidate(
       missing.length > 0 ? ` Unresolved endpoints: ${missing.join(', ')}.` : '';
     const conflictMessage =
       conflictFlags.length > 0 ? ` Conflicts: ${formatConflictFlags(conflictFlags)}.` : '';
+    const mappingMessage = relationMapping.blockingReasons.some(
+      (reason) => reason.code === 'predicate_unmapped'
+    )
+      ? ` The normalized predicate "${relation.normalizedPredicate}" does not map to a CKG edge type yet.`
+      : '';
 
     const review = buildReviewSummary(
       {
@@ -198,10 +188,19 @@ function buildRelationCandidate(
       },
       conflictFlags
     );
+    review.reviewState =
+      missing.length > 0 || conflictFlags.length > 0 ? 'endpoint_unresolved' : 'blocked';
+    review.notes = [
+      ...relationMapping.inferenceReasons.map((reason) => reason.message),
+      ...relationMapping.blockingReasons.map((reason) => reason.message),
+    ];
     return buildBlockedRelationCandidate(
       relation,
-      `${RELATION_BLOCK_REASON}${unresolvedMessage}${conflictMessage}`,
-      review
+      `${RELATION_BLOCK_REASON}${unresolvedMessage}${conflictMessage}${mappingMessage}`,
+      review,
+      relationMapping,
+      endpointResolution,
+      evidenceSummary
     );
   }
 
@@ -209,10 +208,12 @@ function buildRelationCandidate(
     relation,
     subjectResolution.resolution,
     objectResolution.resolution,
-    edgeType
+    relationMapping.selectedEdgeType
   );
 
   const review = proposal.review;
+  review.reviewState = 'ready';
+  review.notes = relationMapping.inferenceReasons.map((reason) => reason.message);
   return {
     candidateId: `relation:${relation.externalId}`,
     entityKind: 'relation',
@@ -221,8 +222,15 @@ function buildRelationCandidate(
     summary: `${subjectResolution.resolution.label} ${relation.normalizedPredicate} ${objectResolution.resolution.label}`,
     rationale: proposal.rationale,
     review,
+    sourceRelationType: relationMapping.sourceRelationType,
+    candidateEdgeTypes: relationMapping.candidateEdgeTypes,
+    selectedEdgeType: relationMapping.selectedEdgeType,
+    endpointResolution,
+    inferenceReasons: relationMapping.inferenceReasons,
+    blockingReasons: relationMapping.blockingReasons,
+    evidenceSummary,
     blockedReason: null,
-    dependencyExternalIds: [],
+    dependencyExternalIds: [relation.subjectExternalId, relation.objectExternalId],
     proposal,
   };
 }
@@ -230,7 +238,10 @@ function buildRelationCandidate(
 function buildBlockedRelationCandidate(
   relation: INormalizedOntologyRelationCandidate,
   blockedReason: string,
-  review: IOntologyImportReviewMetadata
+  review: IOntologyImportReviewMetadata,
+  relationMapping: ReturnType<typeof inferRelationMapping>,
+  endpointResolution: ReturnType<typeof buildEndpointResolutionStatus>,
+  evidenceSummary: string[]
 ): IOntologyMutationPreviewCandidate {
   const summary = `${relation.subjectExternalId} ${relation.normalizedPredicate} ${relation.objectExternalId}`;
 
@@ -242,6 +253,13 @@ function buildBlockedRelationCandidate(
     summary,
     rationale: buildReviewMetadata(review),
     review,
+    sourceRelationType: relationMapping.sourceRelationType,
+    candidateEdgeTypes: relationMapping.candidateEdgeTypes,
+    selectedEdgeType: relationMapping.selectedEdgeType,
+    endpointResolution,
+    inferenceReasons: relationMapping.inferenceReasons,
+    blockingReasons: relationMapping.blockingReasons,
+    evidenceSummary,
     blockedReason,
     dependencyExternalIds: [relation.subjectExternalId, relation.objectExternalId],
     proposal: null,
@@ -256,12 +274,27 @@ function buildConceptAddProposal(
   const importMetadata = buildImportMetadata(batch, `concept:${concept.externalId}`);
   const review = buildReviewSummary(unresolved(), conflictFlags);
   const reviewMetadata = buildReviewMetadata(review);
+  const sourceCoverage = buildSourceCoverage(batch, concept);
   const operation: IAddNodeOperation = {
     type: 'add_node',
     nodeType: inferNodeType(concept),
     label: concept.preferredLabel,
     description: concept.description ?? '',
     domain: inferDomain(batch.sourceId, concept),
+    status: 'active',
+    aliases: concept.aliases,
+    languages: concept.languages,
+    tags: buildConceptTags(batch, concept),
+    semanticHints: buildConceptSemanticHints(concept),
+    canonicalExternalRefs: buildCanonicalExternalRefs(batch, concept),
+    ontologyMappings: buildOntologyMappingsForConcept(batch, concept),
+    provenance: buildNodeProvenance(concept),
+    reviewMetadata: {
+      ...review,
+      reviewState: 'ready',
+      notes: [`Imported from ${batch.sourceId.toUpperCase()} concept normalization pipeline.`],
+    },
+    sourceCoverage,
     properties: {
       ontologyImport: buildOntologyImportProperties(batch, concept),
       ...concept.properties,
@@ -285,10 +318,24 @@ function buildConceptEnrichmentProposal(
   const importMetadata = buildImportMetadata(batch, `concept:${concept.externalId}`);
   const review = buildReviewSummary(resolution, resolution.conflictFlags);
   const reviewMetadata = buildReviewMetadata(review);
+  const sourceCoverage = buildSourceCoverage(batch, concept);
   const operation: IUpdateNodeOperation = {
     type: 'update_node',
     nodeId: resolution.nodeId,
     updates: {
+      aliases: concept.aliases,
+      languages: concept.languages,
+      tags: buildConceptTags(batch, concept),
+      semanticHints: buildConceptSemanticHints(concept),
+      canonicalExternalRefs: buildCanonicalExternalRefs(batch, concept),
+      ontologyMappings: buildOntologyMappingsForConcept(batch, concept),
+      provenance: buildNodeProvenance(concept),
+      reviewMetadata: {
+        ...review,
+        reviewState: 'ready',
+        notes: [`Enriched from ${batch.sourceId.toUpperCase()} ontology import evidence.`],
+      },
+      sourceCoverage,
       properties: {
         ontologyImportEnrichment: buildOntologyImportProperties(batch, concept),
       } as NonNullable<IUpdateNodeOperation['updates']['properties']>,
@@ -309,7 +356,7 @@ function buildRelationProposal(
   relation: INormalizedOntologyRelationCandidate,
   subject: ICanonicalNodeResolution,
   object: ICanonicalNodeResolution,
-  edgeType: SupportedEdgeType
+  edgeType: GraphEdgeType
 ): IMutationProposal & { review: IOntologyImportReviewMetadata } {
   const importMetadata = buildImportMetadata(
     {
@@ -422,20 +469,550 @@ function inferDomain(
   return propertyDomain !== '' ? propertyDomain : (SOURCE_DOMAINS[sourceId] ?? 'general');
 }
 
-function inferEdgeWeight(edgeType: SupportedEdgeType): number {
+function inferEdgeWeight(edgeType: GraphEdgeType): number {
   switch (edgeType) {
-    case 'prerequisite':
-    case 'part_of':
-    case 'is_a':
+    case GraphEdgeType.PREREQUISITE:
+    case GraphEdgeType.PART_OF:
+    case GraphEdgeType.IS_A:
+    case GraphEdgeType.EQUIVALENT_TO:
       return 1;
-    case 'contradicts':
+    case GraphEdgeType.CONTRADICTS:
+    case GraphEdgeType.DISJOINT_WITH:
+    case GraphEdgeType.DEPENDS_ON:
       return 0.9;
-    case 'causes':
-    case 'derived_from':
+    case GraphEdgeType.CAUSES:
+    case GraphEdgeType.DERIVED_FROM:
+    case GraphEdgeType.HAS_PROPERTY:
+    case GraphEdgeType.ENTAILS:
       return 0.8;
     default:
       return 0.7;
   }
+}
+
+function buildConceptTags(
+  batch: INormalizedOntologyGraphBatch,
+  concept: INormalizedOntologyConceptCandidate
+): string[] {
+  return dedupeStrings([inferDomain(batch.sourceId, concept), ...concept.sourceTypes]);
+}
+
+function buildConceptSemanticHints(concept: INormalizedOntologyConceptCandidate): string[] {
+  const className =
+    typeof concept.properties['className'] === 'string' ? concept.properties['className'] : null;
+  const conceptType =
+    typeof concept.properties['conceptType'] === 'string'
+      ? concept.properties['conceptType']
+      : null;
+
+  return dedupeStrings([
+    concept.nodeKind,
+    ...concept.sourceTypes,
+    ...(className !== null ? [className] : []),
+    ...(conceptType !== null ? [conceptType] : []),
+  ]);
+}
+
+function buildCanonicalExternalRefs(
+  batch: INormalizedOntologyGraphBatch,
+  concept: INormalizedOntologyConceptCandidate
+): NonNullable<IAddNodeOperation['canonicalExternalRefs']> {
+  return [
+    {
+      sourceId: batch.sourceId,
+      externalId: concept.externalId,
+      iri: concept.iri,
+      refType: concept.nodeKind,
+      sourceVersion: batch.sourceVersion,
+      isCanonical: true,
+      confidenceScore: 1,
+    },
+  ];
+}
+
+function buildOntologyMappingsForConcept(
+  batch: INormalizedOntologyGraphBatch,
+  concept: INormalizedOntologyConceptCandidate
+): NonNullable<IAddNodeOperation['ontologyMappings']> {
+  return batch.mappings
+    .filter((mapping) => mapping.sourceExternalId === concept.externalId)
+    .map((mapping) => ({
+      sourceId: batch.sourceId,
+      externalId: mapping.externalId,
+      mappingKind: mapping.mappingKind,
+      targetExternalId: mapping.targetExternalId,
+      confidenceScore: mapping.confidenceScore,
+      confidenceBand: mapping.confidenceBand,
+      conflictFlags: mapping.conflictFlags,
+    }));
+}
+
+function buildNodeProvenance(
+  concept: INormalizedOntologyConceptCandidate
+): NonNullable<IAddNodeOperation['provenance']> {
+  return concept.provenance.map((entry) => ({
+    sourceId: entry.sourceId,
+    sourceVersion: entry.sourceVersion,
+    runId: entry.runId,
+    artifactId: entry.artifactId,
+    harvestedAt: entry.harvestedAt,
+    license: entry.license,
+    requestUrl: entry.requestUrl,
+    recordKind: 'concept',
+  }));
+}
+
+function buildSourceCoverage(
+  batch: INormalizedOntologyGraphBatch,
+  concept: INormalizedOntologyConceptCandidate
+): NonNullable<IAddNodeOperation['sourceCoverage']> {
+  const backboneSources = new Set(['yago', 'esco', 'conceptnet', 'unesco', 'wordnet']);
+  const contributingSourceIds = dedupeStrings([
+    batch.sourceId,
+    ...concept.provenance.map((entry) => entry.sourceId),
+  ]);
+
+  return {
+    contributingSourceIds,
+    sourceCount: contributingSourceIds.length,
+    hasBackboneSource: contributingSourceIds.some((sourceId) => backboneSources.has(sourceId)),
+    hasEnhancementSource: contributingSourceIds.some((sourceId) => !backboneSources.has(sourceId)),
+    lastEnrichedAt: concept.provenance.at(-1)?.harvestedAt ?? batch.generatedAt,
+  };
+}
+
+function buildEndpointResolutionStatus(
+  relation: INormalizedOntologyRelationCandidate,
+  subjectResolution: ICanonicalNodeResolutionResult,
+  objectResolution: ICanonicalNodeResolutionResult
+): IEndpointResolutionStatus {
+  return {
+    subject: buildResolvedEndpoint('subject', relation.subjectExternalId, subjectResolution),
+    object: buildResolvedEndpoint('object', relation.objectExternalId, objectResolution),
+  };
+}
+
+function buildResolvedEndpoint(
+  role: 'subject' | 'object',
+  externalId: string,
+  resolution: ICanonicalNodeResolutionResult
+): IResolvedRelationEndpoint {
+  if (resolution.resolution === null) {
+    return {
+      role,
+      externalId,
+      status: hasBlockingConflicts(resolution.conflictFlags) ? 'ambiguous' : 'unresolved',
+      canonicalNodeId: null,
+      canonicalLabel: null,
+      canonicalNodeType: null,
+      domain: null,
+      strategy: null,
+      confidenceScore: null,
+      confidenceBand: null,
+      conflictFlags: resolution.conflictFlags,
+      blockingReasons: buildEndpointBlockingReasons(resolution),
+    };
+  }
+
+  return {
+    role,
+    externalId,
+    status: 'resolved',
+    canonicalNodeId: resolution.resolution.nodeId,
+    canonicalLabel: resolution.resolution.label,
+    canonicalNodeType: resolution.resolution.nodeType,
+    domain: resolution.resolution.domain,
+    strategy: resolution.resolution.strategy,
+    confidenceScore: resolution.resolution.confidenceScore,
+    confidenceBand: resolution.resolution.confidenceBand,
+    conflictFlags: resolution.resolution.conflictFlags,
+    blockingReasons: buildEndpointBlockingReasons(resolution),
+  };
+}
+
+function buildEndpointBlockingReasons(resolution: ICanonicalNodeResolutionResult): string[] {
+  if (resolution.resolution !== null && resolution.conflictFlags.length === 0) {
+    return [];
+  }
+
+  if (resolution.conflictFlags.length > 0) {
+    return resolution.conflictFlags.map(
+      (flag) => `Resolution conflict detected: ${flag.replaceAll('_', ' ')}`
+    );
+  }
+
+  return ['Canonical endpoint has not been resolved yet.'];
+}
+
+function normalizeRelationSignal(signal: string): string {
+  return signal
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function hasAnyRelationSignal(
+  signals: ReadonlySet<string>,
+  expectedSignals: readonly string[]
+): boolean {
+  return expectedSignals.some((signal) => signals.has(signal));
+}
+
+function inferRelationMapping(
+  relation: INormalizedOntologyRelationCandidate,
+  subjectResolution: ICanonicalNodeResolutionResult,
+  objectResolution: ICanonicalNodeResolutionResult
+): {
+  sourceRelationType: string;
+  candidateEdgeTypes: GraphEdgeType[];
+  selectedEdgeType: GraphEdgeType | null;
+  inferenceReasons: IRelationInferenceReason[];
+  blockingReasons: IRelationBlockingReason[];
+} {
+  const inferenceReasons: IRelationInferenceReason[] = [];
+  const blockingReasons: IRelationBlockingReason[] = [];
+  const sourceRelationType = relation.sourcePredicates[0] ?? relation.normalizedPredicate;
+  const relationSignals = new Set(
+    [relation.normalizedPredicate, ...relation.sourcePredicates].map(normalizeRelationSignal)
+  );
+  let candidateEdgeTypes: GraphEdgeType[] = [];
+
+  if (
+    hasAnyRelationSignal(relationSignals, [
+      'is_a',
+      'subclass_of',
+      'sub_class_of',
+      'instance_of',
+      'type',
+      'broader_concept',
+      'broader_skill',
+      'broader_occupation',
+      'broader_taxonomy',
+      'narrower_concept',
+      'narrower_skill',
+      'narrower_occupation',
+      'narrower_taxonomy',
+    ])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.IS_A, GraphEdgeType.PART_OF];
+    inferenceReasons.push({
+      code: 'hierarchy_signal',
+      message: 'The source predicate expresses a hierarchical broader/narrower or type relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.2,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['part_of', 'has_part', 'component_of'])) {
+    candidateEdgeTypes = [GraphEdgeType.PART_OF];
+    inferenceReasons.push({
+      code: 'mereology_signal',
+      message: 'The predicate encodes a part-whole relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.2,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, [
+      'constituted_by',
+      'composed_of',
+      'consists_of',
+      'made_of',
+    ])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.CONSTITUTED_BY];
+    inferenceReasons.push({
+      code: 'constitution_signal',
+      message: 'The predicate expresses a constitutive or compositional relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.22,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, [
+      'has_essential_skill',
+      'is_essential_for_occupation',
+      'essential_skill_for_occupation',
+    ])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.DEPENDS_ON, GraphEdgeType.PREREQUISITE];
+    inferenceReasons.push({
+      code: 'essential_skill_signal',
+      message: 'The predicate expresses an essential occupation-skill dependency.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.3,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, [
+      'has_optional_skill',
+      'is_optional_for_occupation',
+      'optional_skill_for_occupation',
+    ])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.RELATED_TO, GraphEdgeType.DEPENDS_ON];
+    inferenceReasons.push({
+      code: 'optional_skill_signal',
+      message: 'The predicate expresses an optional occupation-skill association.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.18,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, ['has_skill_type', 'skill_type', 'has_property'])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.HAS_PROPERTY, GraphEdgeType.RELATED_TO];
+    inferenceReasons.push({
+      code: 'property_signal',
+      message: 'The predicate behaves like a source-specific property or typing attribute.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.15,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['example_of', 'exemplifies'])) {
+    candidateEdgeTypes = [GraphEdgeType.EXEMPLIFIES];
+    inferenceReasons.push({
+      code: 'example_signal',
+      message: 'The predicate presents one concept as an example of another.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.2,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, [
+      'equivalent_to',
+      'equivalent_class',
+      'same_as',
+      'sameas',
+      'exact_match',
+      'synonym',
+    ])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.EQUIVALENT_TO];
+    inferenceReasons.push({
+      code: 'equivalence_signal',
+      message: 'The predicate expresses equivalence or an exact cross-source match.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.25,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['entails', 'implies'])) {
+    candidateEdgeTypes = [GraphEdgeType.ENTAILS];
+    inferenceReasons.push({
+      code: 'entailment_signal',
+      message: 'The predicate expresses logical implication or entailment.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.25,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['disjoint_with', 'distinct_from'])) {
+    candidateEdgeTypes = [GraphEdgeType.DISJOINT_WITH];
+    inferenceReasons.push({
+      code: 'disjoint_signal',
+      message: 'The predicate expresses mutual exclusion or disjointness.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.24,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['analogous_to', 'similar_to', 'analogy'])) {
+    candidateEdgeTypes = [GraphEdgeType.ANALOGOUS_TO];
+    inferenceReasons.push({
+      code: 'analogy_signal',
+      message: 'The predicate indicates analogy or strong structural similarity.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.16,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['contrasts_with', 'antonym', 'opposite_of'])) {
+    candidateEdgeTypes = [GraphEdgeType.CONTRASTS_WITH];
+    inferenceReasons.push({
+      code: 'contrast_signal',
+      message: 'The predicate expresses a contrastive or oppositional relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.16,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, [
+      'related_to',
+      'related_concept',
+      'related_skill',
+      'related_occupation',
+      'used_for',
+      'capable_of',
+      'at_location',
+    ])
+  ) {
+    candidateEdgeTypes = [GraphEdgeType.RELATED_TO];
+    inferenceReasons.push({
+      code: 'associative_signal',
+      message: 'The predicate indicates a general associative relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.1,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['contradicts'])) {
+    candidateEdgeTypes = [GraphEdgeType.CONTRADICTS];
+    inferenceReasons.push({
+      code: 'contradiction_signal',
+      message: 'The predicate is already a direct contradiction relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.25,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['causes'])) {
+    candidateEdgeTypes = [GraphEdgeType.CAUSES];
+    inferenceReasons.push({
+      code: 'causal_signal',
+      message: 'The predicate expresses a causal relationship.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.25,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['derived_from'])) {
+    candidateEdgeTypes = [GraphEdgeType.DERIVED_FROM];
+    inferenceReasons.push({
+      code: 'derivation_signal',
+      message: 'The predicate expresses a derivation chain.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.22,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['precedes', 'before'])) {
+    candidateEdgeTypes = [GraphEdgeType.PRECEDES];
+    inferenceReasons.push({
+      code: 'ordering_signal',
+      message: 'The predicate expresses temporal or logical ordering.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.18,
+    });
+  } else {
+    blockingReasons.push({
+      code: 'predicate_unmapped',
+      message: `The normalized predicate "${relation.normalizedPredicate}" is not mapped to a canonical edge repertoire yet.`,
+      blocking: true,
+      detail: relation.sourcePredicates.join(', '),
+    });
+  }
+
+  const subjectType = (subjectResolution.resolution?.nodeType ?? null) as GraphNodeType | null;
+  const objectType = (objectResolution.resolution?.nodeType ?? null) as GraphNodeType | null;
+  if (subjectType !== null && objectType !== null && candidateEdgeTypes.length > 0) {
+    const compatibleEdgeTypes = candidateEdgeTypes.filter((edgeType) => {
+      const policy = getEdgePolicy(edgeType);
+      return (
+        policy.allowedSourceTypes.includes(subjectType) &&
+        policy.allowedTargetTypes.includes(objectType)
+      );
+    });
+
+    if (compatibleEdgeTypes.length !== candidateEdgeTypes.length) {
+      inferenceReasons.push({
+        code: 'policy_filter',
+        message:
+          'Filtered candidate edge types against canonical node-type policy before marking the relation as ready.',
+        sourceField: null,
+        evidence: `${subjectType} -> ${objectType}`,
+        confidenceDelta: 0.05,
+      });
+    }
+
+    if (compatibleEdgeTypes.length === 0) {
+      blockingReasons.push({
+        code: 'policy_incompatible',
+        message: `Resolved endpoint types '${subjectType}' -> '${objectType}' are incompatible with the inferred candidate edge repertoire.`,
+        blocking: true,
+        detail:
+          relation.sourcePredicates.length > 0
+            ? relation.sourcePredicates.join(', ')
+            : relation.normalizedPredicate,
+      });
+    }
+
+    candidateEdgeTypes = compatibleEdgeTypes;
+  }
+
+  const selectedEdgeType =
+    candidateEdgeTypes.length === 0
+      ? null
+      : choosePreferredEdgeType(candidateEdgeTypes, subjectResolution, objectResolution);
+
+  if (candidateEdgeTypes.length > 1 && selectedEdgeType !== null) {
+    inferenceReasons.push({
+      code: 'candidate_selection',
+      message: `Selected ${selectedEdgeType} as the current best-fit canonical edge type from the candidate set.`,
+      sourceField: null,
+      evidence: relation.normalizedPredicate,
+      confidenceDelta: 0.05,
+    });
+  }
+
+  return {
+    sourceRelationType,
+    candidateEdgeTypes,
+    selectedEdgeType,
+    inferenceReasons,
+    blockingReasons,
+  };
+}
+
+function choosePreferredEdgeType(
+  candidateEdgeTypes: GraphEdgeType[],
+  subjectResolution: ICanonicalNodeResolutionResult,
+  objectResolution: ICanonicalNodeResolutionResult
+): GraphEdgeType | null {
+  if (candidateEdgeTypes.length === 0) {
+    return null;
+  }
+
+  const subjectType = subjectResolution.resolution?.nodeType ?? null;
+  const objectType = objectResolution.resolution?.nodeType ?? null;
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.IS_A) &&
+    (subjectType === 'concept' || subjectType === 'skill') &&
+    (objectType === 'concept' || objectType === 'skill')
+  ) {
+    return GraphEdgeType.IS_A;
+  }
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.HAS_PROPERTY) &&
+    (objectType === 'fact' || objectType === 'principle' || objectType === 'concept')
+  ) {
+    return GraphEdgeType.HAS_PROPERTY;
+  }
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.DEPENDS_ON) &&
+    (subjectType === 'concept' ||
+      subjectType === 'skill' ||
+      subjectType === 'procedure' ||
+      subjectType === 'principle')
+  ) {
+    return GraphEdgeType.DEPENDS_ON;
+  }
+
+  return candidateEdgeTypes[0] ?? null;
+}
+
+function buildRelationEvidenceSummary(relation: INormalizedOntologyRelationCandidate): string[] {
+  const provenanceSummary = relation.provenance[0];
+  return [
+    `Normalized predicate: ${relation.normalizedPredicate}`,
+    ...(relation.sourcePredicates.length > 0
+      ? [`Source predicates: ${relation.sourcePredicates.join(', ')}`]
+      : []),
+    ...(relation.predicateLabel !== null ? [`Predicate label: ${relation.predicateLabel}`] : []),
+    ...(provenanceSummary?.sourceId !== undefined
+      ? [`Origin: ${provenanceSummary.sourceId} run ${provenanceSummary.runId}`]
+      : []),
+  ];
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter((value) => value !== ''))];
 }
 
 function propagateMappedResolutions(

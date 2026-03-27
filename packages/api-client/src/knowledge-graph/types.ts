@@ -8,7 +8,16 @@
 
 import type { IApiResponse } from '@noema/contracts';
 import type {
+  CkgNodeStatus,
+  EdgeOntologicalCategory,
   EdgeId,
+  GraphEdgeType,
+  GraphNodeType,
+  ICanonicalExternalRef,
+  INodeProvenanceEntry,
+  INodeReviewMetadata,
+  IOntologyMapping,
+  ISourceCoverageSummary,
   MetacognitiveStage,
   MetricHealthStatus,
   MisconceptionSeverity,
@@ -24,9 +33,9 @@ import type {
 // Enums
 // ============================================================================
 
-export type NodeType = 'concept' | 'skill' | 'fact' | 'procedure' | 'principle' | 'example';
+export type NodeType = GraphNodeType;
 
-export type EdgeType = 'prerequisite' | 'related' | 'part_of' | 'example_of' | 'contradicts';
+export type EdgeType = GraphEdgeType;
 
 export type MutationStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'retrying';
 export type MutationWorkflowState =
@@ -92,7 +101,17 @@ export interface IGraphNodeDto {
   type: NodeType;
   label: string;
   description: string | null;
+  domain: string | null;
+  status?: CkgNodeStatus | null;
+  aliases: string[];
+  languages: string[];
   tags: string[];
+  semanticHints: string[];
+  canonicalExternalRefs: ICanonicalExternalRef[];
+  ontologyMappings: IOntologyMapping[];
+  provenance: INodeProvenanceEntry[];
+  reviewMetadata: INodeReviewMetadata | null;
+  sourceCoverage: ISourceCoverageSummary | null;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -102,14 +121,35 @@ export interface ICreateNodeInput {
   type: NodeType;
   label: string;
   description?: string;
+  domain?: string;
+  status?: CkgNodeStatus;
+  aliases?: string[];
+  languages?: string[];
   tags?: string[];
+  semanticHints?: string[];
+  canonicalExternalRefs?: ICanonicalExternalRef[];
+  ontologyMappings?: IOntologyMapping[];
+  provenance?: INodeProvenanceEntry[];
+  reviewMetadata?: INodeReviewMetadata | null;
+  sourceCoverage?: ISourceCoverageSummary | null;
   metadata?: Record<string, unknown>;
 }
 
 export interface IUpdateNodeInput {
+  nodeType?: NodeType;
   label?: string;
   description?: string | null;
+  domain?: string | null;
+  status?: CkgNodeStatus | null;
+  aliases?: string[];
+  languages?: string[];
   tags?: string[];
+  semanticHints?: string[];
+  canonicalExternalRefs?: ICanonicalExternalRef[];
+  ontologyMappings?: IOntologyMapping[];
+  provenance?: INodeProvenanceEntry[];
+  reviewMetadata?: INodeReviewMetadata | null;
+  sourceCoverage?: ISourceCoverageSummary | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -133,6 +173,91 @@ export interface ICreateEdgeInput {
   type: EdgeType;
   weight?: number;
   metadata?: Record<string, unknown>;
+}
+
+export interface ICkgEdgeAuthoringBlockedReasonDto {
+  code:
+    | 'duplicate_edge'
+    | 'duplicate_symmetric_edge'
+    | 'invalid_source_type'
+    | 'invalid_target_type'
+    | 'self_reference'
+    | 'status_blocked'
+    | 'acyclicity_risk';
+  message: string;
+}
+
+export interface ICkgEdgeAuthoringOptionDto {
+  edgeType: EdgeType;
+  category: EdgeOntologicalCategory;
+  description: string;
+  defaultWeight: number;
+  enabled: boolean;
+  blockedReasons: ICkgEdgeAuthoringBlockedReasonDto[];
+  existingEdgeIds: string[];
+  isSymmetric: boolean;
+  requiresAcyclicity: boolean;
+}
+
+export interface ICkgEdgeAuthoringNodeDto {
+  nodeId: NodeId;
+  label: string;
+  nodeType: NodeType;
+  domain: string;
+  status: CkgNodeStatus | null;
+}
+
+export interface ICkgEdgeAuthoringPreviewInput {
+  sourceNodeId: NodeId;
+  targetNodeId: NodeId;
+  edgeType?: EdgeType;
+  rationale?: string;
+}
+
+export interface ICkgEdgeAuthoringPreviewDto {
+  source: ICkgEdgeAuthoringNodeDto;
+  target: ICkgEdgeAuthoringNodeDto;
+  options: ICkgEdgeAuthoringOptionDto[];
+  warnings: string[];
+  proposal: ICkgMutationProposalInput | null;
+}
+
+export type CkgNodeBatchAuthoringAction = 'delete' | 'update';
+
+export interface ICkgNodeBatchUpdateInput {
+  nodeType?: NodeType;
+  domain?: string;
+  tags?: string[];
+}
+
+export interface ICkgNodeBatchAuthoringConflictDto {
+  nodeId: NodeId;
+  nodeLabel: string;
+  edgeId: string;
+  edgeType: EdgeType;
+  direction: 'source' | 'target';
+  otherNodeId: NodeId;
+  otherNodeLabel: string;
+  message: string;
+  suggestions: string[];
+}
+
+export interface ICkgNodeBatchAuthoringPreviewInput {
+  nodeIds: NodeId[];
+  action: CkgNodeBatchAuthoringAction;
+  updates?: ICkgNodeBatchUpdateInput;
+  rationale?: string;
+}
+
+export interface ICkgNodeBatchAuthoringPreviewDto {
+  action: CkgNodeBatchAuthoringAction;
+  nodes: ICkgEdgeAuthoringNodeDto[];
+  updates: ICkgNodeBatchUpdateInput | null;
+  canProceed: boolean;
+  affectedEdgeCount: number;
+  warnings: string[];
+  conflicts: ICkgNodeBatchAuthoringConflictDto[];
+  proposal: ICkgMutationProposalInput | null;
 }
 
 // ============================================================================
@@ -375,6 +500,15 @@ export interface ICkgMutationDto {
   reviewedAt: string | null;
 }
 
+export interface ICkgMutationProposalInput {
+  operations: Record<string, unknown>[];
+  rationale: string;
+  evidence?: {
+    aggregationId?: string;
+    sourceType?: string;
+  };
+}
+
 export interface ICkgMutationRecoveryCheckDto {
   mutationId: MutationId;
   check: 'safe_retry' | 'reconcile_commit';
@@ -527,7 +661,56 @@ export interface IOntologyMutationPreviewCandidateDto {
     confidenceScore: number;
     confidenceBand: OntologyMergeConfidenceBand;
     conflictFlags: OntologyMergeConflictKind[];
+    reviewState?: 'ready' | 'blocked' | 'reviewer_overridden' | 'endpoint_unresolved';
+    notes?: string[];
   };
+  sourceRelationType?: string | null;
+  candidateEdgeTypes?: EdgeType[];
+  selectedEdgeType?: EdgeType | null;
+  endpointResolution?: {
+    subject: {
+      role: 'subject' | 'object';
+      externalId: string;
+      status: 'resolved' | 'unresolved' | 'ambiguous' | 'deferred';
+      canonicalNodeId: string | null;
+      canonicalLabel: string | null;
+      canonicalNodeType: string | null;
+      domain: string | null;
+      strategy: string | null;
+      confidenceScore: number | null;
+      confidenceBand: OntologyMergeConfidenceBand | null;
+      conflictFlags: OntologyMergeConflictKind[];
+      blockingReasons: string[];
+    };
+    object: {
+      role: 'subject' | 'object';
+      externalId: string;
+      status: 'resolved' | 'unresolved' | 'ambiguous' | 'deferred';
+      canonicalNodeId: string | null;
+      canonicalLabel: string | null;
+      canonicalNodeType: string | null;
+      domain: string | null;
+      strategy: string | null;
+      confidenceScore: number | null;
+      confidenceBand: OntologyMergeConfidenceBand | null;
+      conflictFlags: OntologyMergeConflictKind[];
+      blockingReasons: string[];
+    };
+  } | null;
+  inferenceReasons?: {
+    code: string;
+    message: string;
+    sourceField: string | null;
+    evidence: string | null;
+    confidenceDelta: number | null;
+  }[];
+  blockingReasons?: {
+    code: string;
+    message: string;
+    blocking: boolean;
+    detail: string | null;
+  }[];
+  evidenceSummary?: string[];
   blockedReason: string | null;
   dependencyExternalIds: string[];
   proposal: {
@@ -619,6 +802,11 @@ export interface IOntologyMutationPreviewSubmissionDto {
   mutationIds: string[];
 }
 
+export interface ISubmitOntologyImportRunPreviewInput {
+  runId: string;
+  candidateIds?: string[];
+}
+
 export interface IOntologyImportCapabilitySummaryDto {
   sourceId: string;
   fetch: boolean;
@@ -664,6 +852,10 @@ export type CreateNodeInput = ICreateNodeInput;
 export type UpdateNodeInput = IUpdateNodeInput;
 export type GraphEdgeDto = IGraphEdgeDto;
 export type CreateEdgeInput = ICreateEdgeInput;
+export type CkgEdgeAuthoringPreviewDto = ICkgEdgeAuthoringPreviewDto;
+export type CkgEdgeAuthoringPreviewInput = ICkgEdgeAuthoringPreviewInput;
+export type CkgNodeBatchAuthoringPreviewDto = ICkgNodeBatchAuthoringPreviewDto;
+export type CkgNodeBatchAuthoringPreviewInput = ICkgNodeBatchAuthoringPreviewInput;
 export type SubgraphDto = ISubgraphDto;
 export type SubgraphParams = ISubgraphParams;
 export type PrerequisiteChainDto = IPrerequisiteChainDto;
@@ -685,6 +877,7 @@ export type MisconceptionDto = IMisconceptionDto;
 export type MisconceptionDetectionResult = IMisconceptionDetectionResult;
 export type UpdateMisconceptionStatusInput = IUpdateMisconceptionStatusInput;
 export type CkgMutationDto = ICkgMutationDto;
+export type CkgMutationProposalInput = ICkgMutationProposalInput;
 export type CkgMutationFilters = ICkgMutationFilters;
 export type CkgBulkReviewInput = ICkgBulkReviewInput;
 export type CkgBulkReviewResult = ICkgBulkReviewResult;
@@ -716,6 +909,8 @@ export type NodeResponse = IApiResponse<IGraphNodeDto>;
 export type NodesListResponse = IApiResponse<IGraphNodeDto[]>;
 export type EdgeResponse = IApiResponse<IGraphEdgeDto>;
 export type EdgesListResponse = IApiResponse<IGraphEdgeDto[]>;
+export type CkgEdgeAuthoringPreviewResponse = IApiResponse<ICkgEdgeAuthoringPreviewDto>;
+export type CkgNodeBatchAuthoringPreviewResponse = IApiResponse<ICkgNodeBatchAuthoringPreviewDto>;
 export type SubgraphResponse = IApiResponse<ISubgraphDto>;
 export type PrerequisiteChainResponse = IApiResponse<IPrerequisiteChainDto>;
 export type FrontierResponse = IApiResponse<IKnowledgeFrontierDto>;

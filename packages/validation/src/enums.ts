@@ -13,6 +13,7 @@ import {
   CardQueueStatus,
   CardState,
   CardType,
+  CkgNodeStatus,
   CognitiveLoadLevel,
   DifficultyLevel,
   DocumentFormat,
@@ -83,6 +84,7 @@ export const SchedulingAlgorithmSchema = createEnumSchema(
 );
 export const GraphNodeTypeSchema = createEnumSchema(GraphNodeType, 'Graph node type');
 export const GraphEdgeTypeSchema = createEnumSchema(GraphEdgeType, 'Graph edge type');
+export const CkgNodeStatusSchema = createEnumSchema(CkgNodeStatus, 'CKG node status');
 export const MutationStateSchema = createEnumSchema(MutationState, 'Mutation state');
 export const ToolCategorySchema = createEnumSchema(ToolCategory, 'Tool category');
 export const ToolResponseTimeSchema = createEnumSchema(ToolResponseTime, 'Tool response time');
@@ -146,6 +148,7 @@ export type ForceLevelInput = z.input<typeof ForceLevelSchema>;
 export type SchedulingAlgorithmInput = z.input<typeof SchedulingAlgorithmSchema>;
 export type GraphNodeTypeInput = z.input<typeof GraphNodeTypeSchema>;
 export type GraphEdgeTypeInput = z.input<typeof GraphEdgeTypeSchema>;
+export type CkgNodeStatusInput = z.input<typeof CkgNodeStatusSchema>;
 export type MutationStateInput = z.input<typeof MutationStateSchema>;
 export type ToolCategoryInput = z.input<typeof ToolCategorySchema>;
 export type ToolResponseTimeInput = z.input<typeof ToolResponseTimeSchema>;

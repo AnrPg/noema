@@ -7,6 +7,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
   CancelOntologyImportRunRequestSchema,
@@ -77,6 +78,10 @@ export function registerOntologyImportRoutes(
   authMiddleware: ReturnType<typeof createAuthMiddleware>,
   _options?: IRouteOptions
 ): void {
+  const SubmitOntologyMutationPreviewRequestSchema = z.object({
+    candidateIds: z.array(z.string().min(1)).optional(),
+  });
+
   attachStartTimeHook(fastify);
 
   fastify.get(
@@ -395,7 +400,7 @@ export function registerOntologyImportRoutes(
     }
   );
 
-  fastify.post<{ Params: { runId: string } }>(
+  fastify.post<{ Params: { runId: string }; Body: { candidateIds?: string[] } }>(
     '/api/v1/ckg/imports/runs/:runId/submit',
     {
       preHandler: authMiddleware,
@@ -403,16 +408,20 @@ export function registerOntologyImportRoutes(
         tags: ['Ontology Imports'],
         summary: 'Submit mutation preview to the CKG review queue',
         description:
-          'Submit all mutation-ready ontology preview candidates for a run into the canonical CKG mutation review queue.',
+          'Submit all ready ontology preview candidates, or an explicit selected subset, into the canonical CKG mutation review queue.',
       },
     },
     async (request, reply) => {
       try {
         assertAdminOrAgent(request);
         const { runId } = OntologyImportRunIdParamsSchema.parse(request.params);
+        const parsedBody = SubmitOntologyMutationPreviewRequestSchema.parse(request.body);
         const submission = await ontologyImportsService.submitMutationPreview({
           runId,
           context: buildContext(request),
+          ...(parsedBody.candidateIds !== undefined
+            ? { candidateIds: parsedBody.candidateIds }
+            : {}),
         });
 
         reply.status(201).send(wrapResponse(submission, [], request));
