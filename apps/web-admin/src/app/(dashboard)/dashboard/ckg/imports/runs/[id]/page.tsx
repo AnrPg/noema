@@ -109,12 +109,16 @@ export default function OntologyImportRunDetailPage({
     },
   });
   const submitPreview = useSubmitOntologyImportRunPreview({
-    onSuccess: async (response) => {
+    onSuccess: async (response, input) => {
       const submittedCount = response.data.submittedCount;
       setMessage({
         type: 'success',
         text:
-          `Submitted ${String(submittedCount)} mutation proposal${submittedCount === 1 ? '' : 's'} into the CKG review queue. ` +
+          `Submitted ${String(submittedCount)} mutation proposal${submittedCount === 1 ? '' : 's'} ` +
+          (input.candidateIds !== undefined && input.candidateIds.length > 0
+            ? 'from the selected preview set '
+            : '') +
+          'into the CKG review queue. ' +
           'Run detail now tracks the exact mutation ids for reviewer follow-up.',
       });
       await refetch();
@@ -209,7 +213,7 @@ export default function OntologyImportRunDetailPage({
             variant="outline"
             disabled={!canSubmitPreview || submitPreview.isPending}
             onClick={() => {
-              submitPreview.mutate(params.id);
+              submitPreview.mutate({ runId: params.id });
             }}
           >
             {submitPreview.isPending ? 'Submitting…' : 'Submit to review queue'}
@@ -309,7 +313,14 @@ export default function OntologyImportRunDetailPage({
           </CardHeader>
         </Card>
       ) : (
-        <OntologyImportRunStatusPanel detail={detail} />
+        <OntologyImportRunStatusPanel
+          detail={detail}
+          canSubmitCandidates={canSubmitPreview}
+          isSubmittingCandidates={submitPreview.isPending}
+          onSubmitCandidates={(candidateIds) => {
+            submitPreview.mutate({ runId: params.id, candidateIds });
+          }}
+        />
       )}
     </div>
   );

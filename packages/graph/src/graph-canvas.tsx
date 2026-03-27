@@ -55,25 +55,75 @@ interface IForceNode {
 }
 
 interface IForceLink {
+  id: string;
   source: string;
   target: string;
   type: string;
   weight: number;
 }
 
+interface IForceGraphChargeForce {
+  strength?: (value: number) => void;
+}
+
+interface IForceGraphInstance {
+  d3Force: (name: string, force?: unknown) => IForceGraphChargeForce | undefined;
+  d3ReheatSimulation: () => void;
+}
+
+interface IForceGraph2DProps {
+  ref?: React.Ref<IForceGraphInstance>;
+  width: number;
+  height: number;
+  graphData: {
+    nodes: IForceNode[];
+    links: IForceLink[];
+  };
+  nodeId: string;
+  linkSource: string;
+  linkTarget: string;
+  nodeCanvasObject: (node: unknown, ctx: CanvasRenderingContext2D, globalScale: number) => void;
+  nodePointerAreaPaint: (
+    node: unknown,
+    color: string,
+    ctx: CanvasRenderingContext2D,
+    globalScale: number
+  ) => void;
+  linkCanvasObject: (link: unknown, ctx: CanvasRenderingContext2D, globalScale: number) => void;
+  onRenderFramePost?: (ctx: CanvasRenderingContext2D, globalScale: number) => void;
+  onNodeClick?: (node: unknown, event?: MouseEvent) => void;
+  onLinkClick?: (edge: unknown, event?: MouseEvent) => void;
+  onNodeHover?: (node: unknown) => void;
+  onNodeRightClick?: (node: unknown, event: MouseEvent) => void;
+  onBackgroundClick?: () => void;
+  backgroundColor: string;
+  dagMode?: 'td' | 'radialout';
+  dagLevelDistance?: number;
+  cooldownTicks: number;
+  d3AlphaDecay: number;
+  d3VelocityDecay: number;
+  enableNodeDrag: boolean;
+  onEngineStop?: () => void;
+}
+
+const ForceGraph2DComponent = ForceGraph2D as unknown as React.ComponentType<IForceGraph2DProps>;
+
 export interface IGraphCanvasProps {
   nodes: IGraphNodeDto[];
   edges: IGraphEdgeDto[];
   selectedNodeId?: string | null;
+  selectedNodeIds?: Set<string>;
+  selectedEdgeId?: string | null;
   hoveredNodeId?: string | null;
   showLabels?: boolean;
   activeOverlays?: OverlayType[];
   layoutMode?: LayoutMode;
-  onNodeClick?: (node: IGraphNodeDto) => void;
+  onNodeClick?: (node: IGraphNodeDto, event?: MouseEvent) => void;
+  onEdgeClick?: (edge: IGraphEdgeDto, event?: MouseEvent) => void;
   onNodeHover?: (node: IGraphNodeDto | null) => void;
   onNodeRightClick?: (node: IGraphNodeDto, event: MouseEvent) => void;
   onBackgroundClick?: () => void;
-  onPositionSnapshot?: (nodes: Array<{ id: string; type: string; x: number; y: number }>) => void;
+  onPositionSnapshot?: (nodes: { id: string; type: string; x: number; y: number }[]) => void;
   masteryMap?: Record<string, number>;
   recentNodeIds?: Set<string>;
   highlightedNodeIds?: Set<string>;
@@ -107,11 +157,14 @@ export function GraphCanvas({
   nodes,
   edges,
   selectedNodeId,
+  selectedNodeIds = EMPTY_SET,
+  selectedEdgeId,
   hoveredNodeId,
   showLabels = false,
   activeOverlays = [],
   layoutMode = 'force',
   onNodeClick,
+  onEdgeClick,
   onNodeHover,
   onNodeRightClick,
   onBackgroundClick,
@@ -122,7 +175,7 @@ export function GraphCanvas({
   className,
 }: IGraphCanvasProps): React.JSX.Element {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const graphRef = React.useRef<any>(undefined);
+  const graphRef = React.useRef<IForceGraphInstance | null>(null);
   const [dimensions, setDimensions] = React.useState({ width: 800, height: 600 });
   const basePositionMapRef = React.useRef<Map<string, { x: number; y: number }>>(new Map());
   const interactionFocusId = selectedNodeId ?? hoveredNodeId ?? null;
@@ -168,8 +221,15 @@ export function GraphCanvas({
   const forceLinks: IForceLink[] = React.useMemo(
     () =>
       (
-        edges as unknown as { sourceId: string; targetId: string; type: string; weight: number }[]
+        edges as unknown as {
+          id: string;
+          sourceId: string;
+          targetId: string;
+          type: string;
+          weight: number;
+        }[]
       ).map((e) => ({
+        id: e.id,
         source: e.sourceId,
         target: e.targetId,
         type: e.type,
@@ -206,7 +266,7 @@ export function GraphCanvas({
       }
     });
 
-    graphRef.current?.d3ReheatSimulation?.();
+    graphRef.current?.d3ReheatSimulation();
   }, [forceNodes, layoutMode]);
 
   const emitPositionSnapshot = React.useCallback(() => {
@@ -251,11 +311,7 @@ export function GraphCanvas({
       }
 
       for (const node of simulationNodes) {
-        if (
-          node.id === hoveredId ||
-          typeof node.x !== 'number' ||
-          typeof node.y !== 'number'
-        ) {
+        if (node.id === hoveredId || typeof node.x !== 'number' || typeof node.y !== 'number') {
           continue;
         }
 
@@ -309,7 +365,8 @@ export function GraphCanvas({
 
           const dx = otherNode.x - currentNode.x;
           const dy = otherNode.y - currentNode.y;
-          const distance = Math.hypot(dx, dy) || 0.001;
+          const rawDistance = Math.hypot(dx, dy);
+          const distance = rawDistance > 0 ? rawDistance : 0.001;
           const baseSpacing =
             nodeRadius(currentNode.__degree ?? 0) + nodeRadius(otherNode.__degree ?? 0);
           const labelPadding = nodes.length > 220 ? 64 : nodes.length > 120 ? 48 : 32;
@@ -340,16 +397,17 @@ export function GraphCanvas({
 
   React.useEffect(() => {
     const graph = graphRef.current;
-    if (graph === undefined) {
+    if (graph === null) {
       return;
     }
 
-    graph.d3Force?.('hover-repel', hoverRepelForce);
-    graph.d3Force?.('spacing', spacingForce);
-    graph
-      .d3Force?.('charge')
-      ?.strength?.(nodes.length > 220 ? -460 : nodes.length > 120 ? -360 : nodes.length > 60 ? -240 : -170);
-    graph.d3ReheatSimulation?.();
+    graph.d3Force('hover-repel', hoverRepelForce);
+    graph.d3Force('spacing', spacingForce);
+    const chargeForce = graph.d3Force('charge');
+    chargeForce?.strength?.(
+      nodes.length > 220 ? -460 : nodes.length > 120 ? -360 : nodes.length > 60 ? -240 : -170
+    );
+    graph.d3ReheatSimulation();
   }, [hoverRepelForce, spacingForce, nodes.length]);
 
   React.useEffect(() => {
@@ -387,9 +445,10 @@ export function GraphCanvas({
 
       const dx = basePosition.x - focusAnchor.x;
       const dy = basePosition.y - focusAnchor.y;
-      const distance = Math.hypot(dx, dy) || 0.001;
-      const effectRadius =
-        (selectedFocusActive ? 420 : 320) + nodeRadius(node.__degree ?? 0) * 8;
+      const rawDistance = Math.hypot(dx, dy);
+      const distance = rawDistance > 0 ? rawDistance : 0.001;
+      const nodeDegree = typeof node.__degree === 'number' ? node.__degree : 0;
+      const effectRadius = (selectedFocusActive ? 420 : 320) + nodeRadius(nodeDegree) * 8;
 
       if (distance > effectRadius) {
         node.fx = basePosition.x;
@@ -406,7 +465,7 @@ export function GraphCanvas({
       node.vy = (node.vy ?? 0) + unitY * (selectedFocusActive ? 4.5 : 2.8);
     }
 
-    graphRef.current?.d3ReheatSimulation?.();
+    graphRef.current?.d3ReheatSimulation();
   }, [forceNodes, interactionFocusId, selectedNodeId]);
 
   const nodeCanvasObject = React.useCallback(
@@ -417,6 +476,7 @@ export function GraphCanvas({
       const shouldShowLabel =
         !isFocusNode &&
         (showLabels ||
+          selectedNodeIds.has(n.id) ||
           n.id === selectedNodeId ||
           n.id === hoveredNodeId ||
           highlightedNodeIds.has(n.id) ||
@@ -425,7 +485,7 @@ export function GraphCanvas({
         node: n,
         ctx,
         globalScale,
-        isSelected: n.id === selectedNodeId,
+        isSelected: selectedNodeIds.has(n.id) || n.id === selectedNodeId,
         isHovered: n.id === hoveredNodeId,
         showLabel: shouldShowLabel,
         ...(masteryVal !== undefined ? { mastery: masteryVal } : {}),
@@ -441,6 +501,7 @@ export function GraphCanvas({
     },
     [
       selectedNodeId,
+      selectedNodeIds,
       hoveredNodeId,
       masteryMap,
       recentNodeIds,
@@ -476,18 +537,21 @@ export function GraphCanvas({
         edgeType: String(link.type ?? 'related'),
         weight: Number(link.weight ?? 1),
         isHighlighted:
+          String(link.id ?? '') === (selectedEdgeId ?? '') ||
+          selectedNodeIds.has(src.id) ||
+          selectedNodeIds.has(tgt.id) ||
           src.id === selectedNodeId ||
           tgt.id === selectedNodeId ||
           src.id === hoveredNodeId ||
           tgt.id === hoveredNodeId,
       });
     },
-    [selectedNodeId, hoveredNodeId]
+    [hoveredNodeId, selectedEdgeId, selectedNodeId, selectedNodeIds]
   );
 
   const handleNodeClick = React.useCallback(
-    (node: any) => {
-      onNodeClick?.(node as IGraphNodeDto);
+    (node: any, event?: MouseEvent) => {
+      onNodeClick?.(node as IGraphNodeDto, event);
     },
     [onNodeClick]
   );
@@ -497,6 +561,13 @@ export function GraphCanvas({
       onNodeHover?.(node !== null ? (node as IGraphNodeDto) : null);
     },
     [onNodeHover]
+  );
+
+  const handleEdgeClick = React.useCallback(
+    (edge: any, event?: MouseEvent) => {
+      onEdgeClick?.(edge as IGraphEdgeDto, event);
+    },
+    [onEdgeClick]
   );
 
   const handleNodeRightClick = React.useCallback(
@@ -511,8 +582,7 @@ export function GraphCanvas({
 
   return (
     <div ref={containerRef} className={className ?? 'h-full w-full'}>
-      {/* Cast as any: react-force-graph ForceGraphProps conflicts with exactOptionalPropertyTypes */}
-      {React.createElement(ForceGraph2D as any, {
+      {React.createElement(ForceGraph2DComponent, {
         ref: graphRef,
         width: dimensions.width,
         height: dimensions.height,
@@ -537,9 +607,8 @@ export function GraphCanvas({
             return;
           }
 
-          const radius =
-            nodeRadius(focusNode.__degree ?? 0) *
-            (focusNode.id === selectedNodeId ? 1.35 : 1);
+          const focusNodeDegree = typeof focusNode.__degree === 'number' ? focusNode.__degree : 0;
+          const radius = nodeRadius(focusNodeDegree) * (focusNode.id === selectedNodeId ? 1.35 : 1);
           const fontSize = Math.max(9, 12 / globalScale);
           const labelX = focusNode.x;
           const labelY = focusNode.y + radius + fontSize;
@@ -568,6 +637,7 @@ export function GraphCanvas({
           ctx.restore();
         },
         onNodeClick: handleNodeClick,
+        onLinkClick: handleEdgeClick,
         onNodeHover: handleNodeHover,
         onNodeRightClick: handleNodeRightClick,
         onBackgroundClick,

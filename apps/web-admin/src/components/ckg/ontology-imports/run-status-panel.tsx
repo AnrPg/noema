@@ -224,6 +224,53 @@ function getMutationCardSummary(mutation: ICkgMutationDto): string {
   return `${mutation.type.replaceAll('_', ' ')} · ${workflowState.replaceAll('_', ' ')}`;
 }
 
+function formatRelationReviewState(value: string | null | undefined): string {
+  if (value === null || value === undefined || value.trim() === '') {
+    return 'not classified';
+  }
+
+  return value.replaceAll('_', ' ');
+}
+
+function formatEndpointStatusLabel(status: string | null | undefined): string {
+  if (status === null || status === undefined || status.trim() === '') {
+    return 'unknown';
+  }
+
+  return status.replaceAll('_', ' ');
+}
+
+function summarizeResolvedEndpoint(
+  endpoint:
+    | {
+        externalId: string;
+        status: string;
+        canonicalLabel: string | null;
+        canonicalNodeType: string | null;
+        domain: string | null;
+        strategy: string | null;
+      }
+    | null
+    | undefined
+): string {
+  if (endpoint === null || endpoint === undefined) {
+    return 'No endpoint resolution data recorded.';
+  }
+
+  if (endpoint.status !== 'resolved') {
+    return `${endpoint.externalId} · ${formatEndpointStatusLabel(endpoint.status)}`;
+  }
+
+  const descriptorParts = [
+    endpoint.canonicalLabel,
+    endpoint.canonicalNodeType,
+    endpoint.domain,
+    endpoint.strategy !== null ? `via ${endpoint.strategy}` : null,
+  ].filter((value): value is string => typeof value === 'string' && value.trim() !== '');
+
+  return descriptorParts.join(' · ');
+}
+
 function formatDuration(startedAt: string | null, completedAt: string | null): string {
   if (startedAt === null) {
     return 'Not started';
@@ -386,8 +433,14 @@ function CollapsibleSection({
 
 export function OntologyImportRunStatusPanel({
   detail,
+  canSubmitCandidates = false,
+  isSubmittingCandidates = false,
+  onSubmitCandidates,
 }: {
   detail: IOntologyImportRunDetailDto;
+  canSubmitCandidates?: boolean;
+  isSubmittingCandidates?: boolean;
+  onSubmitCandidates?: (candidateIds: string[]) => void;
 }): React.JSX.Element {
   const [selectedCheckpointId, setSelectedCheckpointId] = useState<string>(
     detail.checkpoints[0]?.id ?? ''
@@ -398,6 +451,9 @@ export function OntologyImportRunStatusPanel({
   const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>('all');
   const [candidatePage, setCandidatePage] = useState(1);
   const [submittedMutationsPage, setSubmittedMutationsPage] = useState(1);
+  const [selectedReadyCandidateIds, setSelectedReadyCandidateIds] = useState<Set<string>>(
+    new Set()
+  );
   const [collapsedSections, setCollapsedSections] =
     useState<Record<SectionKey, boolean>>(INITIAL_SECTION_STATE);
   const selectedCheckpoint = useMemo(
@@ -459,6 +515,21 @@ export function OntologyImportRunStatusPanel({
         return candidates;
     }
   }, [candidateFilter, detail.mutationPreview?.candidates]);
+  const readyCandidateIds = useMemo(
+    () =>
+      new Set(
+        (detail.mutationPreview?.candidates ?? [])
+          .filter((candidate) => candidate.status === 'ready' && candidate.proposal !== null)
+          .map((candidate) => candidate.candidateId)
+      ),
+    [detail.mutationPreview?.candidates]
+  );
+  const selectedReadyCount = useMemo(
+    () =>
+      [...selectedReadyCandidateIds].filter((candidateId) => readyCandidateIds.has(candidateId))
+        .length,
+    [readyCandidateIds, selectedReadyCandidateIds]
+  );
   const totalCandidatePages = Math.max(
     1,
     Math.ceil(filteredCandidates.length / CANDIDATES_PER_PAGE)
@@ -487,6 +558,12 @@ export function OntologyImportRunStatusPanel({
   useEffect(() => {
     setCandidatePage(1);
   }, [candidateFilter, detail.run.id]);
+
+  useEffect(() => {
+    setSelectedReadyCandidateIds((current) => {
+      return new Set([...current].filter((candidateId) => readyCandidateIds.has(candidateId)));
+    });
+  }, [readyCandidateIds]);
 
   useEffect(() => {
     setSubmittedMutationsPage(1);
@@ -921,6 +998,43 @@ export function OntologyImportRunStatusPanel({
                 Filter candidates before sending ready proposals to the CKG review queue.
               </p>
               <div className="flex flex-wrap gap-2">
+                {canSubmitCandidates && readyCandidateIds.size > 0 ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedReadyCandidateIds(new Set(readyCandidateIds));
+                      }}
+                    >
+                      Select all ready
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedReadyCandidateIds(new Set());
+                      }}
+                    >
+                      Clear selection
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={
+                        isSubmittingCandidates ||
+                        selectedReadyCount === 0 ||
+                        onSubmitCandidates === undefined
+                      }
+                      onClick={() => {
+                        onSubmitCandidates?.([...selectedReadyCandidateIds]);
+                      }}
+                    >
+                      {isSubmittingCandidates
+                        ? 'Submitting…'
+                        : `Submit selected ready (${String(selectedReadyCount)})`}
+                    </Button>
+                  </>
+                ) : null}
                 {(['all', 'ready', 'blocked', 'conflicted'] as CandidateFilter[]).map((filter) => (
                   <button
                     key={filter}
@@ -972,7 +1086,28 @@ export function OntologyImportRunStatusPanel({
                       className="rounded-md border border-border bg-background/40 p-3"
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-medium text-foreground">{candidate.title}</p>
+                        <div className="flex items-center gap-2">
+                          {candidate.status === 'ready' && candidate.proposal !== null ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedReadyCandidateIds.has(candidate.candidateId)}
+                              onChange={(event) => {
+                                setSelectedReadyCandidateIds((current) => {
+                                  const next = new Set(current);
+                                  if (event.target.checked) {
+                                    next.add(candidate.candidateId);
+                                  } else {
+                                    next.delete(candidate.candidateId);
+                                  }
+                                  return next;
+                                });
+                              }}
+                              aria-label={`Select candidate ${candidate.title}`}
+                              className="h-4 w-4 rounded border-border"
+                            />
+                          ) : null}
+                          <p className="font-medium text-foreground">{candidate.title}</p>
+                        </div>
                         <span
                           className={`rounded-full border px-2 py-0.5 text-xs ${
                             candidate.status === 'ready'
@@ -991,14 +1126,152 @@ export function OntologyImportRunStatusPanel({
                           ? ` · conflicts: ${candidate.review.conflictFlags.join(', ')}`
                           : ''}
                       </p>
+                      {candidate.entityKind === 'relation' ? (
+                        <div className="mt-3 space-y-3 text-xs">
+                          <div className="flex flex-wrap gap-2 text-muted-foreground">
+                            {candidate.sourceRelationType !== undefined &&
+                            candidate.sourceRelationType !== null ? (
+                              <span className="rounded-full border border-border bg-background/60 px-2 py-0.5">
+                                Source relation: {candidate.sourceRelationType}
+                              </span>
+                            ) : null}
+                            <span className="rounded-full border border-border bg-background/60 px-2 py-0.5">
+                              Review state:{' '}
+                              {formatRelationReviewState(candidate.review.reviewState)}
+                            </span>
+                            {candidate.selectedEdgeType !== undefined &&
+                            candidate.selectedEdgeType !== null ? (
+                              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+                                Selected edge: {candidate.selectedEdgeType}
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {candidate.candidateEdgeTypes !== undefined &&
+                          candidate.candidateEdgeTypes.length > 0 ? (
+                            <div className="space-y-1">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Candidate edges
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {candidate.candidateEdgeTypes.map((edgeType) => (
+                                  <span
+                                    key={`${candidate.candidateId}-${edgeType}`}
+                                    className="rounded-full border border-border bg-background/60 px-2 py-0.5 text-muted-foreground"
+                                  >
+                                    {edgeType}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {candidate.endpointResolution !== undefined &&
+                          candidate.endpointResolution !== null ? (
+                            <div className="grid gap-2 md:grid-cols-2">
+                              <div className="rounded-md border border-border bg-background/50 p-2">
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                  Subject endpoint
+                                </p>
+                                <p className="mt-1 text-foreground">
+                                  {summarizeResolvedEndpoint(candidate.endpointResolution.subject)}
+                                </p>
+                                {candidate.endpointResolution.subject.blockingReasons.length > 0 ? (
+                                  <p className="mt-1 text-amber-300">
+                                    {candidate.endpointResolution.subject.blockingReasons.join(' ')}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="rounded-md border border-border bg-background/50 p-2">
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                  Object endpoint
+                                </p>
+                                <p className="mt-1 text-foreground">
+                                  {summarizeResolvedEndpoint(candidate.endpointResolution.object)}
+                                </p>
+                                {candidate.endpointResolution.object.blockingReasons.length > 0 ? (
+                                  <p className="mt-1 text-amber-300">
+                                    {candidate.endpointResolution.object.blockingReasons.join(' ')}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {candidate.inferenceReasons !== undefined &&
+                          candidate.inferenceReasons.length > 0 ? (
+                            <div className="space-y-1">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Inference reasons
+                              </p>
+                              <div className="space-y-1 text-muted-foreground">
+                                {candidate.inferenceReasons.map((reason) => (
+                                  <p key={`${candidate.candidateId}-${reason.code}`}>
+                                    {reason.message}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {candidate.blockingReasons !== undefined &&
+                          candidate.blockingReasons.length > 0 ? (
+                            <div className="space-y-1">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Blocking reasons
+                              </p>
+                              <div className="space-y-1 text-amber-300">
+                                {candidate.blockingReasons.map((reason) => (
+                                  <p key={`${candidate.candidateId}-${reason.code}`}>
+                                    {reason.message}
+                                    {reason.detail !== null ? ` ${reason.detail}` : ''}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {candidate.evidenceSummary !== undefined &&
+                          candidate.evidenceSummary.length > 0 ? (
+                            <div className="space-y-1">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Evidence summary
+                              </p>
+                              <div className="space-y-1 text-muted-foreground">
+                                {candidate.evidenceSummary.map((entry, index) => (
+                                  <p key={`${candidate.candidateId}-evidence-${String(index)}`}>
+                                    {entry}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {candidate.blockedReason !== null ? (
                         <p className="mt-2 text-amber-300">{candidate.blockedReason}</p>
                       ) : null}
                       {candidate.proposal !== null ? (
-                        <p className="mt-2 text-muted-foreground">
-                          Operations: {candidate.proposal.operations.length} · Priority:{' '}
-                          {candidate.proposal.priority}
-                        </p>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-muted-foreground">
+                            Operations: {candidate.proposal.operations.length} · Priority:{' '}
+                            {candidate.proposal.priority}
+                          </p>
+                          {candidate.status === 'ready' &&
+                          canSubmitCandidates &&
+                          onSubmitCandidates !== undefined ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isSubmittingCandidates}
+                              onClick={() => {
+                                onSubmitCandidates([candidate.candidateId]);
+                              }}
+                            >
+                              Submit this candidate
+                            </Button>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
                   ))}
