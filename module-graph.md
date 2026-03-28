@@ -94,3 +94,9 @@ flowchart TD
   explicitly mode-scoped.
 - Graph lenses are UI projections over one shared PKG/CKG substrate, not
   separate graph systems.
+- Scheduler read models now provide explicit mode-scoped summaries for:
+  - queue/readiness
+  - card focus
+  - review analytics
+- Agent tooling now consumes the same scheduler and graph read models rather
+  than inferring progress from frontend-oriented views.

@@ -29,6 +29,25 @@ It does **not** create:
 - a separate service stack
 - a separate graph substrate
 
+## Current Implementation Coverage
+
+This shared contract is now partially implemented across the live codebase.
+
+Already implemented:
+
+- shared mode enum/type propagation
+- user-level active mode persistence
+- node/card mode membership semantics
+- mode-aware graph reads
+- mode-aware content and batch flows
+- mode-aware scheduler/session/streak/reporting reads
+- explicit node mastery summary
+- explicit scheduler readiness summary
+- explicit scheduler card-focus summary
+
+This means the backend core is already past the “mode as metadata only” stage.
+Mode is now a real operational selector in multiple services.
+
 ## Shared Invariants
 
 ### Shared identity, separate progress
@@ -96,6 +115,9 @@ The following records must be mode-scoped:
 - remediation and misconception instances
 - analytics rollups that summarize user performance
 
+Phase 6 now formalizes node mastery as an explicit read model rather than a
+frontend-only interpretation of raw PKG node state.
+
 ## Record-Keying Rules
 
 ## Scheduler state
@@ -150,6 +172,9 @@ Read APIs should generally:
 - default from active user mode where appropriate
 - label responses clearly when mode-scoped
 
+The current repository now has explicit learner-facing and agent-facing summary
+reads that follow this rule rather than relying on client-side reconstruction.
+
 ## Write contracts
 
 Write APIs should:
@@ -158,6 +183,33 @@ Write APIs should:
 - reject incompatible operations where mode is missing and cannot be safely
   defaulted
 - never silently merge mode-scoped state
+
+## Mastery Read Model
+
+Node-level mastery remains stored on PKG nodes today, but learner-facing and
+agent-facing consumers should no longer reconstruct progress ad hoc.
+
+The mode-aware contract now includes an explicit mastery summary read model:
+
+```ts
+GET /api/v1/users/:userId/pkg/mastery/summary?studyMode=...
+```
+
+This endpoint returns:
+
+- total nodes in scope
+- tracked vs untracked nodes
+- mastered / developing / emerging counts
+- average mastery across tracked nodes
+- strongest and weakest domain rollups
+
+Important implementation rule:
+
+- route and service contracts accept `studyMode` explicitly
+- the summary is produced in the backend and shared across UI and agent
+  consumers
+- the frontend should not invent its own banding logic for dashboard-grade
+  reporting
 
 ## Events
 

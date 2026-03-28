@@ -9,6 +9,26 @@ Implement a detailed, cross-layer architecture that allows Noema to support:
 
 as equally important operating modes on top of one shared substrate.
 
+## Rollout Status Snapshot
+
+Current implementation progress from this conversation:
+
+- Phase 1: shared mode substrate, user settings, node/card membership, shell
+  toggle
+- Phase 2: card creation, batch creation, and knowledge-map query propagation
+- Phase 3: legacy card-query/session-entry compatibility paths updated
+- Phase 4: mode-scoped analytics and legacy dashboard consumers updated
+- Phase 5: mode-aware review reporting and PKG edge filtering
+- Phase 6:
+  - explicit node mastery summary read model
+  - explicit scheduler progress summary read model
+  - explicit scheduler card-focus summary read model
+  - adoption in dashboard, reviews, goals, and session summary
+  - agent-facing scheduler and graph tools for these read models
+
+The remaining work is now less about basic propagation and more about richer
+comparative, prescriptive, and campaign-style learner guidance.
+
 This plan turns the approved architecture into an execution-ready work package
 for shared packages, backend services, and frontend applications. It is intended
 to be specific enough that implementation teams can move with minimal design

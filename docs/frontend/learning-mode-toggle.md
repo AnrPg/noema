@@ -51,6 +51,15 @@ Changing mode updates defaults for:
 - session setup defaults
 - study and analytics context
 
+In the current implementation, this already reaches:
+
+- dashboard vitals and review forecast
+- reviews workspace analytics
+- goals workspace summaries
+- knowledge map and comparison reads
+- card and batch creation flows
+- session summary context
+
 The UI should not require the user to rediscover this on each page.
 
 ## Screen-Level Indicators

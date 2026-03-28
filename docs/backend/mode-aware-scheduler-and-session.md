@@ -104,6 +104,131 @@ Typical learner-facing defaults:
 - due cards for active mode
 - current streaks or progress for active mode
 - active session history for active mode
+- review analytics and scheduler reports for active mode
+
+## Review Reporting and Analytics
+
+Scheduler read models are not only for queue selection. They are also the
+backend contract for learner-facing review reporting.
+
+Mode-aware reporting now includes:
+
+- review queue summaries
+- scheduler progress/readiness summaries
+- forecast projections
+- scheduler-generated review windows
+- aggregate review stats
+- session and streak summaries
+
+This is important architecturally because it keeps reporting close to the domain
+that owns schedule semantics.
+
+The frontend should prefer these scheduler/session read models over
+reconstructing analytics from loosely coupled UI queries.
+
+### Scheduler progress summary contract
+
+The scheduler now owns a dedicated mode-scoped readiness summary endpoint for
+dashboard and legacy progress consumers.
+
+Recommended response fields:
+
+- `studyMode`
+- `totalCards`
+- `trackedCards`
+- `dueNow`
+- `dueToday`
+- `overdueCards`
+- `newCards`
+- `learningCards`
+- `matureCards`
+- `suspendedCards`
+- lane breakdowns
+- algorithm breakdowns
+- `averageRecallProbability`
+- `strongRecallCards`
+- `fragileCards`
+
+This read model matters because it gives agents and UIs one canonical place to
+answer questions like:
+
+- how much active workload exists right now in the current mode
+- how much of the learner's deck is still untracked vs meaningfully retained
+- whether today's issue is backlog, fragility, or simply a large new queue
+
+The old `useMyProgress` compatibility hook should resolve to this scheduler
+summary instead of returning placeholder data or reconstructing progress from
+multiple independent service calls.
+
+### Card focus summary contract
+
+The scheduler also owns a card-level focus summary for answering:
+
+- which cards are currently most fragile in this mode
+- which cards are strongest and probably not the immediate problem
+
+Recommended response fields:
+
+- `weakestCards`
+- `strongestCards`
+- each entry including:
+  - `cardId`
+  - `studyMode`
+  - `lane`
+  - `schedulingAlgorithm`
+  - `nextReviewDate`
+  - `dueStatus`
+  - `daysUntilDue`
+  - `recallProbability`
+  - `readinessBand`
+  - `focusReason`
+
+This read model is useful because goals and agents usually need actionable
+reinforcement targets, not just aggregate counts.
+
+### Study guidance summary contract
+
+The scheduler now also exposes a lightweight prescriptive read model:
+
+- an ordered `recommendations[]` array
+
+Each recommendation should remain simple and composable:
+
+- `action`
+- `headline`
+- `explanation`
+- `suggestedCardCount`
+- `relatedCardIds`
+
+This contract is intentionally list-shaped because learner guidance often needs
+multiple reasonable next steps rather than one artificially singular answer.
+
+### Agent-first access
+
+The same summary should be exposed through the scheduler tool surface so agents
+can ask for the learner's current mode-scoped readiness without scraping UI
+pages or composing queue/forecast endpoints themselves.
+
+That tool should be able to answer:
+
+- how much urgent workload exists right now
+- whether the deck is mostly new, fragile, or mature
+- whether the current issue is coverage, backlog, or retention stability
+
+### Review stats contract guidance
+
+Aggregate review stats should be queryable by:
+
+- `userId`
+- `learningMode`
+- optional card/session/lane filters
+- optional date-range filters
+
+The default learner-facing interpretation remains:
+
+- active mode only
+- clearly labeled scope
+- no implicit cross-mode aggregation
 
 ## Compatibility Guidance
 

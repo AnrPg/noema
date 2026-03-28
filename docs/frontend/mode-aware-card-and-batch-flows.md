@@ -19,6 +19,17 @@ There is still one card authoring model:
 
 What changes by mode is the authoring profile.
 
+## Current Implementation Coverage
+
+The current repository now implements the first stable part of this design:
+
+- single-card creation reads the active mode
+- batch import preview/execute carries mode membership into created cards
+- graph-target lookup in authoring flows respects mode where supported
+
+This means the two-mode architecture now affects creation, not only study and
+reporting.
+
 ## Single-Card Creation
 
 ## Knowledge gaining

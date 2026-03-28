@@ -8,11 +8,16 @@ review surface for PKG quality, metacognitive stage, and cross-metric patterns.
 ## Data Flow
 
 - The page reads the full structural health report through
-  `useStructuralHealth(userId)`.
-- It reads the stage assessment through `useMetacognitiveStage(userId)`.
-- It reads historical score snapshots through `useMetricHistory(userId)`.
+  `useStructuralHealth(userId, { studyMode })`.
+- It reads the stage assessment through
+  `useMetacognitiveStage(userId, { studyMode })`.
+- It reads historical score snapshots through
+  `useMetricHistory(userId, { studyMode })`.
 - All data flows through the Knowledge Graph API client; the page does not call
   service endpoints directly.
+
+The page also reads the active study mode from the shared authenticated-shell
+mode toggle and labels the report scope in the UI.
 
 ## UI Sections
 
@@ -28,3 +33,5 @@ review surface for PKG quality, metacognitive stage, and cross-metric patterns.
 - The KG service owns structural-health computation and stage assessment.
 - The API client exposes DTOs and hooks for the frontend/application boundary.
 - The web page focuses on review and interpretation, not metric computation.
+- Structural health is mode-scoped by default; the page should not merge
+  language and knowledge analytics into one unlabeled report.

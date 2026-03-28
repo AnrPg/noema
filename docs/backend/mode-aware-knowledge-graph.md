@@ -13,6 +13,25 @@ It covers:
 - authoring implications
 - query semantics
 
+## Current Implementation Coverage
+
+The knowledge-graph side of the mode-aware architecture is now partially live.
+
+Implemented today:
+
+- node mode membership metadata
+- PKG node filtering by active study mode
+- knowledge-map mode propagation
+- explicit PKG mastery summary read model
+- legacy learner-facing consumers such as goals and session summary using that
+  explicit summary instead of inventing their own graph mastery aggregation
+
+Still to expand later:
+
+- richer language-specific relation families at scale
+- more advanced comparative graph read models
+- deeper campaign/recommendation logic that combines graph and scheduler state
+
 ## Architectural Position
 
 The graph remains one shared substrate.
@@ -120,6 +139,7 @@ Node reads should support:
 - `learningMode`
 - optional `supportedModes` filter
 - optional lens configuration
+- stable mode-scoped mastery reads
 
 Behavior:
 
@@ -135,6 +155,52 @@ Traversal APIs should be able to:
 - filter to nodes relevant in the active mode
 - filter or rank visible edges by relation family
 - preserve neutral admin/audit access when needed
+
+## Mastery Semantics
+
+The PKG graph now exposes explicit mastery reporting in addition to raw node
+reads.
+
+### Stored state
+
+- node-local `masteryLevel` remains the current persisted mastery signal
+- learner-facing reads must still be scoped by `studyMode`
+
+### Explicit summary read model
+
+The graph service exposes:
+
+- `GET /api/v1/users/:userId/pkg/mastery/summary`
+
+Required query parameter:
+
+- `studyMode`
+
+Optional query parameters:
+
+- `domain`
+- `masteryThreshold`
+
+The summary is intentionally backend-owned so that:
+
+- goals pages
+- dashboards
+- agent tools
+- future campaign planning flows
+
+all consume the same interpretation of mastery bands and domain rollups.
+
+### Mastery bands
+
+The current summary bands are:
+
+- `untracked`
+- `emerging`
+- `developing`
+- `mastered`
+
+These bands are stable read-model concepts. They are not a license for each
+frontend surface to invent new thresholds silently.
 
 The same physical graph can therefore yield different learner-facing subgraphs
 depending on the active mode.

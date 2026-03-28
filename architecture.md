@@ -1,7 +1,8 @@
 # Noema Mode-Aware Dual-Use Architecture
 
 - **Date:** 2026-03-27
-- **Status:** Proposed architecture baseline for implementation
+- **Status:** Proposed architecture baseline for implementation implementation
+  with active rollout in progress
 - **Scope:** Shared graph, content, scheduler, session, analytics, and frontend
   shell
 
@@ -31,6 +32,56 @@ introduces a mode-aware core:
 The architectural center of gravity is:
 
 > Shared item identity is allowed. Shared memory state across modes is not.
+
+## Current Implementation Status
+
+The architecture is no longer only aspirational. The current repository now has
+working mode-aware behavior across multiple hexagonal layers.
+
+Implemented baseline:
+
+- global active mode toggle in the authenticated shell
+- mode-aware user settings and persistence
+- mode-aware node and card membership metadata
+- mode-aware PKG node reads and knowledge-map lensing
+- mode-aware card creation and batch creation defaults
+- mode-aware scheduler/session/streak/reporting reads
+- explicit PKG mastery summary read model
+- explicit scheduler progress/readiness summary read model
+- explicit scheduler card-focus summary read model
+- agent-facing scheduler and graph tools for mode-scoped readiness/memory reads
+
+Still evolving:
+
+- richer cross-service comparative summaries
+- more prescriptive next-session planning across graph mastery plus card
+  fragility
+- broader adoption of the new read models across all learner-facing surfaces
+
+## Mode-Specific Reality in the Current App
+
+### `knowledge_gaining`
+
+Currently emphasized through:
+
+- conceptual graph relations and graph health
+- concept-oriented card creation and batch defaults
+- PKG mastery summaries and weakest-domain rollups
+- scheduler readiness summaries for conceptual decks
+
+### `language_learning`
+
+Currently emphasized through:
+
+- active mode lensing across card, graph, review, goals, dashboard, and session
+  surfaces
+- language-aware content/batch defaults
+- separate schedule, streak, and reporting context
+- separate graph and mastery interpretation even when identity is shared
+
+The current implementation goal is not to fork the product experience into two
+apps. It is to let the same substrate behave differently under a clearly
+selected pedagogical lens.
 
 ## Problem Statement
 
@@ -309,6 +360,23 @@ flowchart LR
   Lens --> PKG
   Lens --> Cards
 ```
+
+## Phase 6 Read-Model Expansion
+
+This conversation extended the architecture most deeply in learner-facing and
+agent-facing read models.
+
+New explicit read models now exist for:
+
+- node mastery summary
+- scheduler progress/readiness summary
+- scheduler card-focus summary
+
+Why this matters:
+
+- frontends no longer need to reconstruct progress from loosely related APIs
+- agents can ask for readiness and focus directly
+- learner surfaces stay aligned on one interpretation of each active mode
 
 ## Example: Shared identity, separate trajectories
 
