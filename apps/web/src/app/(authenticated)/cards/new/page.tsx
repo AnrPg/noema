@@ -13,20 +13,8 @@
 
 'use client';
 
-import type {
-  ICardDto,
-  ICreateCardInput,
-  ICreateNodeInput,
-  IGraphNodeDto,
-  NodeType,
-} from '@noema/api-client';
-import {
-  contentKeys,
-  useCardStateTransition,
-  useCreateCard,
-  useCreatePKGNode,
-  usePKGNodes,
-} from '@noema/api-client';
+import type { ICardDto, ICreateCardInput } from '@noema/api-client';
+import { contentKeys, useCardStateTransition, useCreateCard } from '@noema/api-client';
 import { useAuth } from '@noema/auth';
 import type { DifficultyLevel, StudyMode, UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
@@ -35,6 +23,7 @@ import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react';
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
+import { PkgNodeAuthoringPanel } from '@/components/cards/pkg-node-authoring-panel';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
@@ -85,12 +74,6 @@ interface ISettingsFormData {
 interface ICreatedResult {
   mode: 'single';
   card: ICardDto;
-}
-
-interface INodeTypeOption {
-  value: NodeType;
-  label: string;
-  description: string;
 }
 
 // ============================================================================
@@ -360,16 +343,6 @@ const KNOWLEDGE_RECOMMENDED_CARD_TYPES = new Set<string>([
   RemediationCardType.COUNTEREXAMPLE,
 ]);
 
-const NODE_TYPE_OPTIONS: INodeTypeOption[] = [
-  { value: 'concept', label: 'Concept', description: 'General topic or idea' },
-  { value: 'occupation', label: 'Occupation', description: 'Professional role or vocation' },
-  { value: 'skill', label: 'Skill', description: 'Something the learner can do' },
-  { value: 'fact', label: 'Fact', description: 'Specific information to recall' },
-  { value: 'procedure', label: 'Procedure', description: 'Step-by-step method' },
-  { value: 'principle', label: 'Principle', description: 'Rule or governing idea' },
-  { value: 'example', label: 'Example', description: 'Concrete instance or case' },
-];
-
 // ============================================================================
 // Simple-type set (structured form)
 // ============================================================================
@@ -528,10 +501,6 @@ function normalizeKnowledgeNodeIds(raw: string): string[] {
   return ids;
 }
 
-function ensureNodeList(value: unknown): IGraphNodeDto[] {
-  return Array.isArray(value) ? (value as IGraphNodeDto[]) : [];
-}
-
 function validateKnowledgeNodeIds(ids: string[]): string | null {
   if (ids.length > 50) {
     return 'You can link up to 50 knowledge nodes per card.';
@@ -584,6 +553,12 @@ function prioritizeCardTypes(types: ICardTypeInfo[], activeStudyMode: StudyMode)
   });
 }
 
+function getAuthoringHint(activeStudyMode: StudyMode): string {
+  return activeStudyMode === 'language_learning'
+    ? 'Author around one language target at a time: a lemma, a phrase, a construction, or a pronunciation contrast. Good prompts usually isolate meaning, form, or usage instead of mixing all three.'
+    : 'Author around one knowledge target at a time: a concept, a principle, a procedure step, or a comparison. Strong prompts isolate the exact claim or dependency you want the learner to retrieve.';
+}
+
 // ============================================================================
 // Step 1 — Type Selection
 // ============================================================================
@@ -613,6 +588,7 @@ function Step1TypeSelection({ activeStudyMode, onSelect }: IStep1Props): React.J
           {getStudyModeDescription(activeStudyMode)} Recommended card families rise to the top, but
           the full catalog remains available.
         </p>
+        <p className="mt-2 text-sm text-muted-foreground">{getAuthoringHint(activeStudyMode)}</p>
       </div>
       <TypeGroup label="Standard Types (22)" types={standardTypes} onSelect={onSelect} />
       <TypeGroup label="Remediation Types (20)" types={remediationTypes} onSelect={onSelect} />
@@ -960,14 +936,11 @@ function ComplexJsonForm({
 // ============================================================================
 
 interface IStep3Props {
+  userId: UserId;
+  studyMode: StudyMode;
   cardType: string;
   settings: ISettingsFormData;
-  kgNodes: IGraphNodeDto[];
-  kgNodesLoading: boolean;
-  isCreatingNode: boolean;
-  nodeCreateError: string | null;
   onChange: (patch: Partial<ISettingsFormData>) => void;
-  onCreateNode: (input: ICreateNodeInput) => Promise<IGraphNodeDto>;
   isSubmitting: boolean;
   submitError: string | null;
   onBack: () => void;
@@ -975,93 +948,16 @@ interface IStep3Props {
 }
 
 function Step3Settings({
+  userId,
+  studyMode,
   cardType,
   settings,
-  kgNodes,
-  kgNodesLoading,
-  isCreatingNode,
-  nodeCreateError,
   onChange,
-  onCreateNode,
   isSubmitting,
   submitError,
   onBack,
   onSubmit,
 }: IStep3Props): React.JSX.Element {
-  const [nodeSearch, setNodeSearch] = React.useState('');
-  const [manualEntryOpen, setManualEntryOpen] = React.useState(false);
-  const [newNodeType, setNewNodeType] = React.useState<NodeType>('concept');
-  const [newNodeDescription, setNewNodeDescription] = React.useState('');
-
-  const selectedNodeIds = React.useMemo(
-    () => normalizeKnowledgeNodeIds(settings.knowledgeNodeIds),
-    [settings.knowledgeNodeIds]
-  );
-
-  const selectedNodeMap = React.useMemo(() => {
-    const map = new Map<string, IGraphNodeDto>();
-    for (const node of kgNodes) {
-      map.set(node.id, node);
-    }
-    return map;
-  }, [kgNodes]);
-
-  const trimmedNodeSearch = nodeSearch.trim();
-  const searchLower = trimmedNodeSearch.toLowerCase();
-  const filteredNodes = React.useMemo(() => {
-    if (searchLower === '') return kgNodes.slice(0, 12);
-    return kgNodes
-      .filter(
-        (node) =>
-          node.label.toLowerCase().includes(searchLower) ||
-          node.type.toLowerCase().includes(searchLower) ||
-          node.id.toLowerCase().includes(searchLower)
-      )
-      .slice(0, 12);
-  }, [kgNodes, searchLower]);
-  const exactLabelMatch = React.useMemo(
-    () => kgNodes.find((node) => node.label.trim().toLowerCase() === searchLower),
-    [kgNodes, searchLower]
-  );
-
-  function setSelectedNodeIds(nextIds: string[]): void {
-    onChange({ knowledgeNodeIds: nextIds.join(', ') });
-  }
-
-  function handleAddNode(nodeId: string): void {
-    if (selectedNodeIds.includes(nodeId)) return;
-    setSelectedNodeIds([...selectedNodeIds, nodeId]);
-  }
-
-  function handleRemoveNode(nodeId: string): void {
-    setSelectedNodeIds(selectedNodeIds.filter((id) => id !== nodeId));
-  }
-
-  const selectedNodeValidationError = React.useMemo(
-    () => validateKnowledgeNodeIds(selectedNodeIds),
-    [selectedNodeIds]
-  );
-  const exactMatchAlreadySelected =
-    exactLabelMatch !== undefined && selectedNodeIds.includes(exactLabelMatch.id);
-
-  async function handleCreateNode(): Promise<void> {
-    if (trimmedNodeSearch === '') return;
-    try {
-      const createdNode = await onCreateNode({
-        label: trimmedNodeSearch,
-        type: newNodeType,
-        ...(newNodeDescription.trim() !== '' ? { description: newNodeDescription.trim() } : {}),
-      });
-
-      handleAddNode(createdNode.id);
-      setNodeSearch('');
-      setNewNodeDescription('');
-      setNewNodeType('concept');
-    } catch {
-      // Parent state already captures and renders the error.
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-md border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
@@ -1083,223 +979,14 @@ function Step3Settings({
       </FieldGroup>
 
       {/* Knowledge Nodes */}
-      <FieldGroup
-        label="Knowledge graph nodes (optional)"
-        hint="Search and select nodes by name. IDs are handled automatically."
-      >
-        <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/20 p-3">
-          <input
-            name="knowledgeNodeSearch"
-            type="text"
-            value={nodeSearch}
-            onChange={(e) => {
-              setNodeSearch(e.target.value);
-            }}
-            placeholder="Search node label, type, or ID"
-            className={inputClass}
-          />
-
-          {trimmedNodeSearch !== '' && (
-            <div className="rounded-md border border-dashed border-border bg-background/60 p-3">
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {exactLabelMatch !== undefined
-                      ? 'A matching node already exists'
-                      : 'Create a new PKG node from this label'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {exactLabelMatch !== undefined
-                      ? 'Use the existing node or create a more specific label.'
-                      : 'This creates the node in your personal knowledge graph and attaches this card to it.'}
-                  </p>
-                </div>
-
-                {exactLabelMatch !== undefined ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleAddNode(exactLabelMatch.id);
-                      }}
-                      disabled={exactMatchAlreadySelected}
-                      className={secondaryBtnClass}
-                    >
-                      {exactMatchAlreadySelected ? 'Already selected' : 'Attach existing node'}
-                    </button>
-                    <span className="text-xs text-muted-foreground">
-                      {exactLabelMatch.label} · {exactLabelMatch.type}
-                    </span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
-                      <FieldGroup label="New node label" required>
-                        <input
-                          name="newNodeLabel"
-                          type="text"
-                          value={trimmedNodeSearch}
-                          readOnly
-                          className={inputClass}
-                        />
-                      </FieldGroup>
-                      <FieldGroup label="Node type">
-                        <select
-                          name="newNodeType"
-                          value={newNodeType}
-                          onChange={(e) => {
-                            setNewNodeType(e.target.value as NodeType);
-                          }}
-                          className={selectClass}
-                        >
-                          {NODE_TYPE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label} — {option.description}
-                            </option>
-                          ))}
-                        </select>
-                      </FieldGroup>
-                    </div>
-
-                    <FieldGroup
-                      label="Description (optional)"
-                      hint="Useful when the label is short or ambiguous."
-                    >
-                      <textarea
-                        name="newNodeDescription"
-                        value={newNodeDescription}
-                        onChange={(e) => {
-                          setNewNodeDescription(e.target.value);
-                        }}
-                        rows={2}
-                        placeholder="Optional description for the new knowledge node"
-                        className={textareaClass}
-                      />
-                    </FieldGroup>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleCreateNode();
-                        }}
-                        disabled={isCreatingNode}
-                        className={primaryBtnClass}
-                      >
-                        {isCreatingNode ? 'Creating node…' : 'Create and attach node'}
-                      </button>
-                      <span className="text-xs text-muted-foreground">
-                        The card will still save through the Content service after the node is
-                        created.
-                      </span>
-                    </div>
-                  </>
-                )}
-
-                {nodeCreateError !== null && (
-                  <p className="text-xs text-destructive">{nodeCreateError}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {selectedNodeIds.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {selectedNodeIds.map((id) => {
-                const node = selectedNodeMap.get(id);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      handleRemoveNode(id);
-                    }}
-                    className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-xs hover:bg-muted"
-                    title="Click to remove"
-                  >
-                    <span>{node?.label ?? id}</span>
-                    <span className="text-muted-foreground">×</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="max-h-48 overflow-y-auto rounded-md border border-border bg-background">
-            {kgNodesLoading ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground">Loading knowledge nodes…</p>
-            ) : filteredNodes.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground">No matching nodes found.</p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {filteredNodes.map((node) => {
-                  const selected = selectedNodeIds.includes(node.id);
-                  return (
-                    <li key={node.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleAddNode(node.id);
-                        }}
-                        disabled={selected}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm">{node.label}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {node.type} · {node.id}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {selected ? 'Selected' : 'Add'}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-
-          <div className="text-xs text-muted-foreground">
-            Selected {String(selectedNodeIds.length)} / 50 knowledge nodes.
-          </div>
-
-          {selectedNodeValidationError !== null && (
-            <p className="text-xs text-destructive">{selectedNodeValidationError}</p>
-          )}
-
-          <div className="border-t border-border pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                setManualEntryOpen((prev) => !prev);
-              }}
-              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-              {manualEntryOpen ? 'Hide advanced manual ID entry' : 'Show advanced manual ID entry'}
-            </button>
-
-            {manualEntryOpen && (
-              <div className="mt-2 flex flex-col gap-1.5">
-                <input
-                  name="knowledgeNodeIds"
-                  type="text"
-                  value={settings.knowledgeNodeIds}
-                  onChange={(e) => {
-                    onChange({ knowledgeNodeIds: e.target.value });
-                  }}
-                  placeholder="node_abcdefghijklmnopqrstu, node_bcdefghijklmnopqrstuv"
-                  className={inputClass}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Advanced mode: comma-separated IDs. Format: node_ + 21 alphanumeric chars.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </FieldGroup>
+      <PkgNodeAuthoringPanel
+        userId={userId}
+        studyMode={studyMode}
+        value={settings.knowledgeNodeIds}
+        onChange={(nextValue) => {
+          onChange({ knowledgeNodeIds: nextValue });
+        }}
+      />
 
       {/* Difficulty */}
       <FieldGroup
@@ -1648,10 +1335,6 @@ export default function NewCardPage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
   const activeStudyMode = useActiveStudyMode();
-  const { data: pkgNodesData, isLoading: kgNodesLoading } = usePKGNodes(userId, {
-    studyMode: activeStudyMode,
-  });
-  const pkgNodes = ensureNodeList(pkgNodesData);
 
   // --------------------------------------------------------------------------
   // Wizard state
@@ -1667,7 +1350,6 @@ export default function NewCardPage(): React.JSX.Element {
   const [step2Error, setStep2Error] = React.useState<string | null>(null);
   // Mutation error shown on Step 3
   const [submitError, setSubmitError] = React.useState<string | null>(null);
-  const [nodeCreateError, setNodeCreateError] = React.useState<string | null>(null);
 
   // --------------------------------------------------------------------------
   // Mutations
@@ -1675,10 +1357,8 @@ export default function NewCardPage(): React.JSX.Element {
 
   const createCard = useCreateCard();
   const transitionCardState = useCardStateTransition();
-  const createNode = useCreatePKGNode(userId);
 
-  const isSubmitting =
-    createCard.isPending || transitionCardState.isPending || createNode.isPending;
+  const isSubmitting = createCard.isPending || transitionCardState.isPending;
 
   // --------------------------------------------------------------------------
   // Step 1 handlers
@@ -1719,23 +1399,6 @@ export default function NewCardPage(): React.JSX.Element {
   function handleSettingsChange(patch: Partial<ISettingsFormData>): void {
     setSettings((prev) => ({ ...prev, ...patch }));
     setSubmitError(null);
-    setNodeCreateError(null);
-  }
-
-  async function handleCreateNode(input: ICreateNodeInput): Promise<IGraphNodeDto> {
-    setNodeCreateError(null);
-
-    try {
-      const response = await createNode.mutateAsync({
-        ...input,
-        supportedStudyModes: [activeStudyMode],
-      });
-      return response.data;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Knowledge node creation failed.';
-      setNodeCreateError(message);
-      throw err;
-    }
   }
 
   async function handleSubmit(): Promise<void> {
@@ -1809,10 +1472,8 @@ export default function NewCardPage(): React.JSX.Element {
     setResult(null);
     setStep2Error(null);
     setSubmitError(null);
-    setNodeCreateError(null);
     createCard.reset();
     transitionCardState.reset();
-    createNode.reset();
   }
 
   // --------------------------------------------------------------------------
@@ -1856,14 +1517,11 @@ export default function NewCardPage(): React.JSX.Element {
 
         {step === 3 && (
           <Step3Settings
+            userId={userId}
+            studyMode={activeStudyMode}
             cardType={selectedType}
             settings={settings}
-            kgNodes={pkgNodes}
-            kgNodesLoading={kgNodesLoading}
-            isCreatingNode={createNode.isPending}
-            nodeCreateError={nodeCreateError}
             onChange={handleSettingsChange}
-            onCreateNode={handleCreateNode}
             isSubmitting={isSubmitting}
             submitError={submitError}
             onBack={() => {

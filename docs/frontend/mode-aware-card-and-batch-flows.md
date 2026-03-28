@@ -26,6 +26,10 @@ The current repository now implements the first stable part of this design:
 - single-card creation reads the active mode
 - batch import preview/execute carries mode membership into created cards
 - graph-target lookup in authoring flows respects mode where supported
+- the authenticated shell and Settings page now share one study-mode controller
+  instead of keeping separate local copies of mode state
+- single-card authoring shows a mode-specific hint so language and knowledge
+  prompts start from different authoring assumptions
 
 This means the two-mode architecture now affects creation, not only study and
 reporting.
@@ -74,6 +78,7 @@ The wizard still supports:
 - source family selection
 - format-specific preview
 - explicit mapping
+- per-card metadata review
 - execution
 - history and rollback
 
@@ -111,6 +116,20 @@ Helpful preview cues:
 The review copy should help the user understand why the same source material may
 be interpreted differently by mode.
 
+The current batch flow now includes a dedicated metadata step after mapping:
+
+- the user edits one card at a time
+- front and back stay visible during metadata review
+- tags, PKG links, difficulty, and state are independent per card
+- PKG linking now uses the same richer authoring panel as single-card creation
+- the panel can search PKG plus canonical CKG, copy canonical nodes into the
+  local PKG, create brand-new local nodes, and add local relation edges for the
+  currently selected card node
+- structural analytics refresh after local node or edge changes so graph-health
+  and metacognitive-stage signals stay aligned with card-side graph authoring
+- the next card starts with the previous card's values so repetitive batches
+  stay fast
+
 Example:
 
 - in language mode, the system may emphasize lexical targets and contrastive
@@ -142,6 +161,8 @@ UI response:
 
 - explain incompatibility clearly
 - offer a mode switch or a different graph target if appropriate
+- warn when a canonical node will be copied into the local PKG or when a
+  brand-new local node is created without selecting a canonical suggestion
 
 ### Ambiguous interpretation warning
 

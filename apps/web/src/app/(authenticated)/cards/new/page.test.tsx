@@ -1,12 +1,17 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { beforeEach, expect, test, vi } from 'vitest';
 import NewCardPage from './page.js';
 
 const createCardMock = vi.fn();
 const transitionCardStateMock = vi.fn();
 const createNodeMock = vi.fn();
 const batchCreateMock = vi.fn();
+const createEdgeMock = vi.fn();
+const updateNodeMock = vi.fn();
+const refreshAnalyticsMock = vi.fn();
+const deleteEdgeMock = vi.fn();
 
 vi.mock('@noema/auth', () => ({
   useAuth: () => ({
@@ -22,7 +27,21 @@ vi.mock('@noema/api-client', () => ({
   contentKeys: {
     cards: () => ['cards'],
   },
+  kgKeys: {
+    pkg: () => ['kg', 'pkg'],
+  },
+  pkgEdgesApi: {
+    delete: deleteEdgeMock,
+  },
   usePKGNodes: () => ({
+    data: [],
+    isLoading: false,
+  }),
+  useCKGNodes: () => ({
+    data: [],
+    isLoading: false,
+  }),
+  usePKGEdges: () => ({
     data: [],
     isLoading: false,
   }),
@@ -44,7 +63,21 @@ vi.mock('@noema/api-client', () => ({
   useCreatePKGNode: () => ({
     mutateAsync: createNodeMock,
     isPending: false,
+    error: null,
     reset: vi.fn(),
+  }),
+  useUpdatePKGNode: () => ({
+    mutateAsync: updateNodeMock,
+    isPending: false,
+    error: null,
+  }),
+  useCreatePKGEdge: () => ({
+    mutateAsync: createEdgeMock,
+    isPending: false,
+  }),
+  useRefreshKnowledgeGraphAnalytics: () => ({
+    mutateAsync: refreshAnalyticsMock,
+    isPending: false,
   }),
 }));
 
@@ -68,6 +101,14 @@ beforeEach(() => {
   transitionCardStateMock.mockReset();
   createNodeMock.mockReset();
   batchCreateMock.mockReset();
+  createEdgeMock.mockReset();
+  updateNodeMock.mockReset();
+  refreshAnalyticsMock.mockReset();
+  deleteEdgeMock.mockReset();
+  refreshAnalyticsMock.mockResolvedValue({
+    metrics: {},
+    stage: {},
+  });
 });
 
 test('creates and attaches a new PKG node before card creation', async () => {
@@ -116,10 +157,14 @@ test('creates and attaches a new PKG node before card creation', async () => {
   fireEvent.click(screen.getByRole('button', { name: /create and attach node/i }));
 
   await waitFor(() => {
-    expect(createNodeMock).toHaveBeenCalledWith({
-      label: 'Abstract algebra',
-      type: 'concept',
-    });
+    expect(createNodeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: 'Abstract algebra',
+        type: 'concept',
+        domain: 'general',
+        supportedStudyModes: ['knowledge_gaining'],
+      })
+    );
   });
 
   fireEvent.click(screen.getByRole('button', { name: /^create card$/i }));

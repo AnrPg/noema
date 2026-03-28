@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-03-28 - Mode-Aware Authoring and Guidance Rollout
+
+- unified the authenticated shell and Settings page around one shared study-mode
+  controller with centralized local-storage and settings hydration
+- expanded card authoring and batch metadata review with a shared PKG/CKG node
+  authoring panel, typo-tolerant search, canonical-node copy/upsert, local node
+  creation, local edge editing, and structural analytics refresh
+- added per-record `recordMetadata` overrides to the content import execution
+  path so reviewed batch cards can keep independent metadata without losing
+  import-time inference
+- extended the knowledge graph stack with richer node payload aliases, full-text
+  search support, canonical lookup pathways, and route/integration coverage for
+  the new authoring behavior
+- expanded the graph relation set with an initial language-edge pack and taught
+  structural/metacognitive tooling to accept a `studyMode` lens
+- improved scheduler and session behavior with timezone-aware day boundaries and
+  richer ordered study-guidance recommendations that return card-specific
+  follow-up targets
+- refreshed architecture and frontend/backend docs to reflect the current
+  rollout instead of treating it as purely aspirational
+
 ## 2026-03-26 - API-First Card Import Wizard
 
 - added an API-first card import pipeline to `content-service` with preview and

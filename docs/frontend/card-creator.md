@@ -17,18 +17,32 @@ API-backed import wizard with:
 
 - Cards do not own knowledge-graph structure. They link to PKG nodes through
   `knowledgeNodeIds`.
-- Step 3 lets users search and attach existing PKG nodes.
-- When the searched label does not already exist, the page can now create a new
-  PKG node inline through the Knowledge Graph API client and immediately attach
-  it to the card draft.
+- Step 3 now uses one shared PKG authoring panel across `/cards/new` and
+  `/cards/batch`.
+- Search is typo-tolerant and queries both the user's PKG and the canonical CKG.
+- Choosing an existing PKG node attaches it directly to the current card.
+- Choosing a canonical CKG node copies or upserts that concept into the user's
+  PKG, then attaches the local PKG copy to the card.
+- If the user keeps typing without choosing a suggestion, the workflow pivots
+  into local-node creation inside the PKG.
+- The selected card node can also be edited inline and enriched with local
+  relation edges without leaving the card flow.
+- Local node and edge edits trigger structural analytics refresh so
+  metacognitive-stage and graph-health views can react to those changes.
 - The resulting card submission still goes through the Content API client with
   the resolved `knowledgeNodeIds`.
 
 ## Implementation Notes
 
 - Route: `apps/web/src/app/(authenticated)/cards/new/page.tsx`
-- KG read path: `usePKGNodes(userId)`
-- KG write path: `useCreatePKGNode(userId)`
+- Shared PKG authoring component:
+  `apps/web/src/components/cards/pkg-node-authoring-panel.tsx`
+- KG search paths: `usePKGNodes(userId, { searchMode: 'fulltext' })` and
+  `useCKGNodes({ searchMode: 'fulltext' })`
+- KG write paths: `useCreatePKGNode(userId)`,
+  `useUpdatePKGNode(userId, nodeId)`, `useCreatePKGEdge(userId)`,
+  `pkgEdgesApi.delete(userId, edgeId)`
+- KG analytics refresh path: `useRefreshKnowledgeGraphAnalytics(userId)`
 - Single-card write path: `useCreateCard()`
 - Batch import read path: `usePreviewCardImport()` from
   `apps/web/src/app/(authenticated)/cards/batch/page.tsx`

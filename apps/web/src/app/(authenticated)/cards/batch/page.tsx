@@ -15,7 +15,8 @@ import {
   useRecentBatches,
   useRollbackBatch,
 } from '@noema/api-client';
-import type { JobId } from '@noema/types';
+import { useAuth } from '@noema/auth';
+import type { JobId, UserId } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -31,6 +32,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { PkgNodeAuthoringPanel } from '@/components/cards/pkg-node-authoring-panel';
 import {
   BATCH_IMPORT_ACCEPT,
   BATCH_IMPORT_FILE_TYPES,
@@ -41,9 +43,24 @@ import { formatApiErrorMessage } from '@/lib/api-errors';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
-type WizardStep = 1 | 2 | 3 | 4;
+type WizardStep = 1 | 2 | 3 | 4 | 5;
 type SharedDifficulty = 'beginner' | 'elementary' | 'intermediate' | 'advanced' | 'expert';
 type SharedState = 'draft' | 'active';
+
+interface ICardMetadataState {
+  tags: string;
+  knowledgeNodeIds: string;
+  difficulty: SharedDifficulty;
+  state: SharedState;
+}
+
+interface ICardImportRecordMetadataPayload {
+  index: number;
+  tags: string[];
+  knowledgeNodeIds: string[];
+  difficulty: SharedDifficulty;
+  state: SharedState;
+}
 
 const KNOWLEDGE_NODE_ID_PATTERN = /^node_[a-zA-Z0-9]{21}$/;
 const TARGET_OPTIONS: { value: ICardImportFieldMapping['targetFieldId']; label: string }[] = [
@@ -64,6 +81,7 @@ const CARD_IMPORT_ERROR_FIELDS = {
   formatId: 'Import format',
   mappings: 'Field mapping',
   payload: 'Uploaded file',
+  recordMetadata: 'Per-card metadata',
   sharedKnowledgeNodeIds: 'Shared knowledge node IDs',
   sharedTags: 'Shared tags',
   sheetName: 'Workbook sheet',
@@ -109,7 +127,7 @@ function truncateBatchId(id: string): string {
 
 function parseCommaSeparated(raw: string): string[] {
   return raw
-    .split(',')
+    .split(/[,\n;]+/g)
     .map((value) => value.trim())
     .filter((value) => value !== '');
 }
@@ -185,6 +203,123 @@ function getBatchCardPreview(card: { content: Record<string, unknown> }): {
     front: truncatePreview(front),
     back: truncatePreview(back),
   };
+}
+
+function findMappingByTarget(
+  mappings: readonly ICardImportFieldMapping[],
+  targetFieldId: Exclude<ICardImportFieldMapping['targetFieldId'], 'dump'>
+): ICardImportFieldMapping | null {
+  return mappings.find((mapping) => mapping.targetFieldId === targetFieldId) ?? null;
+}
+
+function getMappedRecordValue(
+  record: ICardImportPreviewResult['records'][number],
+  mappings: readonly ICardImportFieldMapping[],
+  targetFieldId: Exclude<ICardImportFieldMapping['targetFieldId'], 'dump'>
+): string | null {
+  const mapping = findMappingByTarget(mappings, targetFieldId);
+  if (mapping === null) {
+    return null;
+  }
+
+  const rawValue = record.values[mapping.sourceKey] ?? '';
+  return rawValue.trim() === '' ? null : rawValue;
+}
+
+function normalizeMetadataDifficulty(raw: string | null): SharedDifficulty {
+  if (raw === null) {
+    return 'intermediate';
+  }
+
+  const value = raw.trim().toLowerCase();
+  if (
+    value === 'beginner' ||
+    value === 'elementary' ||
+    value === 'intermediate' ||
+    value === 'advanced' ||
+    value === 'expert'
+  ) {
+    return value;
+  }
+
+  const numeric = Number.parseFloat(value);
+  if (Number.isNaN(numeric)) {
+    return 'intermediate';
+  }
+  if (numeric <= 0.2) return 'beginner';
+  if (numeric <= 0.4) return 'elementary';
+  if (numeric <= 0.6) return 'intermediate';
+  if (numeric <= 0.8) return 'advanced';
+  return 'expert';
+}
+
+function normalizeMetadataState(raw: string | null): SharedState {
+  if (raw === null) {
+    return 'draft';
+  }
+
+  const value = raw.trim().toLowerCase();
+  if (value === 'active' || value === 'published' || value === 'ready') {
+    return 'active';
+  }
+
+  return 'draft';
+}
+
+function getRecordPreview(
+  record: ICardImportPreviewResult['records'][number],
+  mappings: readonly ICardImportFieldMapping[]
+): {
+  front: string;
+  back: string;
+  hint: string | null;
+  explanation: string | null;
+} {
+  const front =
+    getMappedRecordValue(record, mappings, 'front') ??
+    record.values['front'] ??
+    record.values['question'] ??
+    record.values['prompt'] ??
+    'Untitled front';
+  const back =
+    getMappedRecordValue(record, mappings, 'back') ??
+    record.values['back'] ??
+    record.values['answer'] ??
+    record.values['definition'] ??
+    'Untitled back';
+
+  return {
+    front,
+    back,
+    hint: getMappedRecordValue(record, mappings, 'hint'),
+    explanation: getMappedRecordValue(record, mappings, 'explanation'),
+  };
+}
+
+function createDefaultRecordMetadata(
+  preview: ICardImportPreviewResult,
+  mappings: readonly ICardImportFieldMapping[]
+): ICardMetadataState[] {
+  return preview.records.map((record) => ({
+    tags: parseCommaSeparated(getMappedRecordValue(record, mappings, 'tags') ?? '').join(', '),
+    knowledgeNodeIds: parseCommaSeparated(
+      getMappedRecordValue(record, mappings, 'knowledgeNodeIds') ?? ''
+    ).join(', '),
+    difficulty: normalizeMetadataDifficulty(getMappedRecordValue(record, mappings, 'difficulty')),
+    state: normalizeMetadataState(getMappedRecordValue(record, mappings, 'state')),
+  }));
+}
+
+function toRecordMetadataInput(
+  metadata: readonly ICardMetadataState[]
+): ICardImportRecordMetadataPayload[] {
+  return metadata.map((item, index) => ({
+    index,
+    tags: parseCommaSeparated(item.tags),
+    knowledgeNodeIds: normalizeKnowledgeNodeIds(item.knowledgeNodeIds),
+    difficulty: item.difficulty,
+    state: item.state,
+  }));
 }
 
 function BatchDetailsPanel({ batchId }: { batchId: JobId }): React.JSX.Element {
@@ -319,12 +454,13 @@ function StepIndicator({ current }: { current: WizardStep }): React.JSX.Element 
     1: 'File Type',
     2: 'Format',
     3: 'Mapping',
-    4: 'Done',
+    4: 'Metadata',
+    5: 'Done',
   };
 
   return (
     <nav aria-label="Batch import steps" className="flex items-center gap-2">
-      {[1, 2, 3, 4].map((step, index) => {
+      {[1, 2, 3, 4, 5].map((step, index) => {
         const stepNumber = step as WizardStep;
         const complete = current > stepNumber;
         const active = current === stepNumber;
@@ -404,6 +540,8 @@ export default function BatchOperationsPage(): React.JSX.Element {
   const router = useRouter();
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const { user } = useAuth();
+  const userId = (user?.id ?? '') as UserId;
   const activeStudyMode = useActiveStudyMode();
 
   const [step, setStep] = React.useState<WizardStep>(1);
@@ -413,10 +551,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
   const [selectedSheetName, setSelectedSheetName] = React.useState('');
   const [preview, setPreview] = React.useState<ICardImportPreviewResult | null>(null);
   const [mappings, setMappings] = React.useState<ICardImportFieldMapping[]>([]);
-  const [sharedTags, setSharedTags] = React.useState('');
-  const [sharedKnowledgeNodeIds, setSharedKnowledgeNodeIds] = React.useState('');
-  const [sharedDifficulty, setSharedDifficulty] = React.useState<SharedDifficulty>('intermediate');
-  const [sharedState, setSharedState] = React.useState<SharedState>('draft');
+  const [recordMetadata, setRecordMetadata] = React.useState<ICardMetadataState[]>([]);
+  const [recordMetadataTouched, setRecordMetadataTouched] = React.useState<boolean[]>([]);
+  const [currentMetadataIndex, setCurrentMetadataIndex] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<ICardImportExecuteResult | null>(null);
   const [expandedBatchId, setExpandedBatchId] = React.useState<JobId | null>(null);
@@ -430,7 +567,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
       setResult(response.data);
       void queryClient.invalidateQueries({ queryKey: contentKeys.recentBatches() });
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
-      setStep(4);
+      setStep(5);
     },
   });
   const rollbackMutation = useRollbackBatch({
@@ -458,6 +595,11 @@ export default function BatchOperationsPage(): React.JSX.Element {
     selectedFileType !== null ? getBatchImportFileTypeDefinition(selectedFileType) : null;
   const selectedFormat =
     selectedFileTypeDefinition?.formats.find((format) => format.id === selectedFormatId) ?? null;
+  const currentPreviewRecord =
+    preview !== null ? (preview.records[currentMetadataIndex] ?? null) : null;
+  const currentRecordPreview =
+    currentPreviewRecord !== null ? getRecordPreview(currentPreviewRecord, mappings) : null;
+  const currentRecordMetadata = recordMetadata[currentMetadataIndex] ?? null;
 
   async function handlePreview(file: File, overrideSheetName?: string): Promise<void> {
     if (selectedFileType === null || selectedFormatId === null) return;
@@ -477,6 +619,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
     setSelectedFile(file);
     setPreview(response.data);
     setMappings(response.data.suggestedMappings);
+    setRecordMetadata([]);
+    setRecordMetadataTouched([]);
+    setCurrentMetadataIndex(0);
     if (response.data.sheetNames !== undefined && response.data.sheetNames.length > 0) {
       setSelectedSheetName(overrideSheetName ?? response.data.sheetNames[0] ?? '');
     }
@@ -500,6 +645,98 @@ export default function BatchOperationsPage(): React.JSX.Element {
     }
   }
 
+  function validateMappings(): boolean {
+    const mappedTargets = new Set(
+      mappings
+        .filter((mapping) => mapping.targetFieldId !== 'dump')
+        .map((mapping) => mapping.targetFieldId)
+    );
+    if (!mappedTargets.has('front') || !mappedTargets.has('back')) {
+      setError(
+        'Map one source field to Front side and one source field to Back side before importing.'
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  function handleMetadataStepStart(): void {
+    if (preview === null) {
+      setError('Choose a file and preview it before reviewing card metadata.');
+      return;
+    }
+
+    if (!validateMappings()) {
+      return;
+    }
+
+    if (recordMetadata.length !== preview.records.length) {
+      const defaults = createDefaultRecordMetadata(preview, mappings);
+      setRecordMetadata(defaults);
+      setRecordMetadataTouched(defaults.map(() => false));
+      setCurrentMetadataIndex(0);
+    }
+
+    setError(null);
+    setStep(4);
+  }
+
+  function updateCurrentRecordMetadata(
+    patch: Partial<ICardMetadataState>,
+    index = currentMetadataIndex
+  ): void {
+    setRecordMetadata((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item))
+    );
+    setRecordMetadataTouched((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? true : item))
+    );
+    setError(null);
+  }
+
+  function validateRecordMetadataAt(index: number): boolean {
+    const metadata = recordMetadata[index];
+    if (metadata === undefined) {
+      setError('We could not find metadata for the current card.');
+      return false;
+    }
+
+    const nodeError = validateKnowledgeNodeIds(
+      normalizeKnowledgeNodeIds(metadata.knowledgeNodeIds)
+    );
+    if (nodeError !== null) {
+      setError(nodeError);
+      return false;
+    }
+
+    return true;
+  }
+
+  function handleMetadataNext(): void {
+    if (!validateRecordMetadataAt(currentMetadataIndex)) {
+      return;
+    }
+
+    const nextIndex = currentMetadataIndex + 1;
+    if (nextIndex >= recordMetadata.length) {
+      void handleExecute();
+      return;
+    }
+
+    setRecordMetadata((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === nextIndex &&
+        recordMetadataTouched[nextIndex] !== true &&
+        current[currentMetadataIndex] !== undefined
+          ? { ...current[currentMetadataIndex] }
+          : item
+      )
+    );
+    setCurrentMetadataIndex(nextIndex);
+    setError(null);
+  }
+
   async function handleExecute(): Promise<void> {
     if (
       selectedFileType === null ||
@@ -511,46 +748,38 @@ export default function BatchOperationsPage(): React.JSX.Element {
       return;
     }
 
-    const nodeIds = normalizeKnowledgeNodeIds(sharedKnowledgeNodeIds);
-    const nodeError = validateKnowledgeNodeIds(nodeIds);
-    if (nodeError !== null) {
-      setError(nodeError);
+    if (!validateMappings()) {
       return;
     }
 
-    const mappedTargets = new Set(
-      mappings
-        .filter((mapping) => mapping.targetFieldId !== 'dump')
-        .map((mapping) => mapping.targetFieldId)
-    );
-    if (!mappedTargets.has('front') || !mappedTargets.has('back')) {
-      setError(
-        'Map one source field to Front side and one source field to Back side before importing.'
-      );
-      return;
+    for (let index = 0; index < recordMetadata.length; index += 1) {
+      if (!validateRecordMetadataAt(index)) {
+        setCurrentMetadataIndex(index);
+        return;
+      }
     }
 
     try {
       const payload = await fileToPayload(selectedFile, selectedFileType);
-      await executeImport.mutateAsync({
+      const executeInput = {
         fileName: selectedFile.name,
         fileType: selectedFileType,
         formatId: selectedFormatId,
         payload,
         mappings,
-        sharedTags: parseCommaSeparated(sharedTags),
-        sharedKnowledgeNodeIds: nodeIds,
-        sharedDifficulty,
-        sharedState,
+        recordMetadata: toRecordMetadataInput(recordMetadata),
         supportedStudyModes: [activeStudyMode],
         ...(selectedSheetName !== '' ? { sheetName: selectedSheetName } : {}),
-      });
+      } as Parameters<typeof executeImport.mutateAsync>[0] & {
+        recordMetadata: ICardImportRecordMetadataPayload[];
+      };
+      await executeImport.mutateAsync(executeInput);
     } catch (executeError) {
       setError(
         formatCardImportError(
           executeError,
           'import these cards',
-          'We could not import these cards. Review the mapping and shared defaults, then try again.'
+          'We could not import these cards. Review the mapping and per-card metadata, then try again.'
         )
       );
     }
@@ -564,10 +793,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
     setSelectedSheetName('');
     setPreview(null);
     setMappings([]);
-    setSharedTags('');
-    setSharedKnowledgeNodeIds('');
-    setSharedDifficulty('intermediate');
-    setSharedState('draft');
+    setRecordMetadata([]);
+    setRecordMetadataTouched([]);
+    setCurrentMetadataIndex(0);
     setError(null);
     setResult(null);
     previewImport.reset();
@@ -646,6 +874,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
                     setSelectedFormatId(null);
                     setPreview(null);
                     setMappings([]);
+                    setRecordMetadata([]);
+                    setRecordMetadataTouched([]);
+                    setCurrentMetadataIndex(0);
                     setError(null);
                     setStep(2);
                   }}
@@ -687,6 +918,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
                     type="button"
                     onClick={() => {
                       setSelectedFormatId(format.id);
+                      setRecordMetadata([]);
+                      setRecordMetadataTouched([]);
+                      setCurrentMetadataIndex(0);
                       setError(null);
                       setStep(3);
                     }}
@@ -854,6 +1088,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
                           type="button"
                           onClick={() => {
                             setMappings(preview.suggestedMappings);
+                            setRecordMetadata([]);
+                            setRecordMetadataTouched([]);
+                            setCurrentMetadataIndex(0);
                           }}
                           className={secondaryBtnClass}
                         >
@@ -914,6 +1151,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
                                               : item
                                           )
                                         );
+                                        setRecordMetadata([]);
+                                        setRecordMetadataTouched([]);
+                                        setCurrentMetadataIndex(0);
                                       }}
                                       className={selectClass}
                                     >
@@ -938,6 +1178,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
                                               : item
                                           )
                                         );
+                                        setRecordMetadata([]);
+                                        setRecordMetadataTouched([]);
+                                        setCurrentMetadataIndex(0);
                                       }}
                                       placeholder={field.key}
                                       className={inputClass}
@@ -953,67 +1196,16 @@ export default function BatchOperationsPage(): React.JSX.Element {
 
                     <div className="rounded-xl border border-border bg-muted/10 p-4">
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Shared defaults</p>
+                        <p className="text-sm font-semibold text-foreground">Next: card metadata</p>
                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                          These defaults apply when the source does not already map a field
-                          explicitly.
+                          After mapping, you will review tags, PKG links, difficulty, and state for
+                          each card individually. Each next card starts prefilled with the values
+                          from the previous one so you can move quickly when the metadata repeats.
                         </p>
                       </div>
 
-                      <div className="mt-4 flex flex-col gap-4">
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-sm font-medium">Shared tags</span>
-                          <input
-                            type="text"
-                            value={sharedTags}
-                            onChange={(event) => {
-                              setSharedTags(event.target.value);
-                            }}
-                            placeholder="biology, imported, chapter-3"
-                            className={inputClass}
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-sm font-medium">Shared knowledge node IDs</span>
-                          <input
-                            type="text"
-                            value={sharedKnowledgeNodeIds}
-                            onChange={(event) => {
-                              setSharedKnowledgeNodeIds(event.target.value);
-                            }}
-                            placeholder="node_abcdefghijklmnopqrstu"
-                            className={inputClass}
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-sm font-medium">Default difficulty</span>
-                          <select
-                            value={sharedDifficulty}
-                            onChange={(event) => {
-                              setSharedDifficulty(event.target.value as SharedDifficulty);
-                            }}
-                            className={selectClass}
-                          >
-                            <option value="beginner">Beginner</option>
-                            <option value="elementary">Elementary</option>
-                            <option value="intermediate">Intermediate</option>
-                            <option value="advanced">Advanced</option>
-                            <option value="expert">Expert</option>
-                          </select>
-                        </label>
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-sm font-medium">Default state</span>
-                          <select
-                            value={sharedState}
-                            onChange={(event) => {
-                              setSharedState(event.target.value as SharedState);
-                            }}
-                            className={selectClass}
-                          >
-                            <option value="draft">Draft</option>
-                            <option value="active">Active</option>
-                          </select>
-                        </label>
+                      <div className="mt-4 rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
+                        {String(preview.records.length)} cards are ready for metadata review.
                       </div>
 
                       {preview.warnings.length > 0 && (
@@ -1031,16 +1223,10 @@ export default function BatchOperationsPage(): React.JSX.Element {
                       <div className="mt-5 flex flex-wrap gap-3">
                         <button
                           type="button"
-                          onClick={() => void handleExecute()}
-                          disabled={executeImport.isPending}
+                          onClick={handleMetadataStepStart}
                           className={primaryBtnClass}
                         >
-                          {executeImport.isPending ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Check className="h-4 w-4" />
-                          )}
-                          Import Cards
+                          Next: Card Metadata
                         </button>
                         <button
                           type="button"
@@ -1075,7 +1261,188 @@ export default function BatchOperationsPage(): React.JSX.Element {
             </div>
           )}
 
-          {step === 4 && result !== null && (
+          {step === 4 &&
+            preview !== null &&
+            currentRecordPreview !== null &&
+            currentRecordMetadata !== null && (
+              <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr),minmax(320px,0.9fr)]">
+                <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Card metadata review</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Card {String(currentMetadataIndex + 1)} of {String(preview.records.length)}.
+                        Front and back are shown here so you always know which card you are editing.
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                      {String(currentMetadataIndex + 1)} / {String(preview.records.length)}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border border-border bg-muted/20 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Front
+                      </p>
+                      <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-foreground">
+                        {currentRecordPreview.front}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border bg-muted/20 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Back
+                      </p>
+                      <p className="mt-3 whitespace-pre-wrap text-base leading-relaxed text-foreground">
+                        {currentRecordPreview.back}
+                      </p>
+                    </div>
+                  </div>
+
+                  {(currentRecordPreview.hint !== null ||
+                    currentRecordPreview.explanation !== null) && (
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {currentRecordPreview.hint !== null && (
+                        <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Hint
+                          </p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                            {currentRecordPreview.hint}
+                          </p>
+                        </div>
+                      )}
+                      {currentRecordPreview.explanation !== null && (
+                        <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Explanation
+                          </p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                            {currentRecordPreview.explanation}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-border bg-muted/10 p-5">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Metadata for this card</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      The next card starts with these same values unless you already changed it.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 flex flex-col gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Tags</span>
+                      <input
+                        type="text"
+                        value={currentRecordMetadata.tags}
+                        onChange={(event) => {
+                          updateCurrentRecordMetadata({ tags: event.target.value });
+                        }}
+                        placeholder="biology, imported, chapter-3"
+                        className={inputClass}
+                      />
+                    </label>
+                    <PkgNodeAuthoringPanel
+                      userId={userId}
+                      studyMode={activeStudyMode}
+                      value={currentRecordMetadata.knowledgeNodeIds}
+                      onChange={(nextValue) => {
+                        updateCurrentRecordMetadata({ knowledgeNodeIds: nextValue });
+                      }}
+                      title="PKG node focus"
+                      description="Attach or create the local PKG node for this imported card, then add local relations around that selected node."
+                    />
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Difficulty</span>
+                      <select
+                        value={currentRecordMetadata.difficulty}
+                        onChange={(event) => {
+                          updateCurrentRecordMetadata({
+                            difficulty: event.target.value as SharedDifficulty,
+                          });
+                        }}
+                        className={selectClass}
+                      >
+                        <option value="beginner">Beginner</option>
+                        <option value="elementary">Elementary</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                        <option value="expert">Expert</option>
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Initial state</span>
+                      <select
+                        value={currentRecordMetadata.state}
+                        onChange={(event) => {
+                          updateCurrentRecordMetadata({
+                            state: event.target.value as SharedState,
+                          });
+                        }}
+                        className={selectClass}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {error !== null && (
+                    <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep(3);
+                      }}
+                      className={secondaryBtnClass}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to Mapping
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (currentMetadataIndex > 0) {
+                          setCurrentMetadataIndex((current) => current - 1);
+                          setError(null);
+                        }
+                      }}
+                      disabled={currentMetadataIndex === 0}
+                      className={secondaryBtnClass}
+                    >
+                      Previous Card
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMetadataNext}
+                      disabled={executeImport.isPending}
+                      className={primaryBtnClass}
+                    >
+                      {executeImport.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : currentMetadataIndex === preview.records.length - 1 ? (
+                        <Check className="h-4 w-4" />
+                      ) : null}
+                      {currentMetadataIndex === preview.records.length - 1
+                        ? 'Import Cards'
+                        : 'Next Card'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {step === 5 && result !== null && (
             <div className="flex flex-col gap-5">
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">

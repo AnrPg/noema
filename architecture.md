@@ -437,6 +437,21 @@ Responsibilities:
 - store attempts with mode context
 - ensure sessions do not silently mix active modes
 
+### Current Rollout Snapshot
+
+The repository now has a stable first implementation of the dual-use design:
+
+- the authenticated shell owns the active study-mode toggle and shares that
+  state with settings and learner-facing pages
+- content creation, batch import, knowledge-map reads, scheduler read models,
+  misconceptions, and structural analytics all accept or derive a `studyMode`
+  lens
+- the scheduler exposes list-shaped guidance with ordered recommendations rather
+  than a single forced next step
+- the graph enum and KG edge policies now include an initial language-edge pack
+  (`translation_equivalent`, `false_friend_of`, `minimal_pair_with`,
+  `collocates_with`, `governs`, `inflected_form_of`)
+
 ### Analytics / Metacognition
 
 Responsibilities:
