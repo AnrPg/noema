@@ -610,6 +610,23 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           enum: ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'],
         },
         sharedState: { type: 'string', enum: ['draft', 'active'] },
+        recordMetadata: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['index'],
+            properties: {
+              index: { type: 'integer', minimum: 0 },
+              tags: { type: 'array', items: { type: 'string' } },
+              knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
+              difficulty: {
+                type: 'string',
+                enum: ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'],
+              },
+              state: { type: 'string', enum: ['draft', 'active'] },
+            },
+          },
+        },
         mappings: {
           type: 'array',
           items: {

@@ -145,6 +145,32 @@ Recommended batch metadata:
 - graph-linking strategy summary
 - unresolved warnings
 
+## Current Implementation Notes
+
+The current batch-import rollout now supports a dedicated per-record metadata
+review step before execution.
+
+At the API level this is expressed as optional `recordMetadata`, indexed by the
+preview row, and applied after mapping/shared defaults are resolved.
+
+That allows the frontend and agent tools to:
+
+- keep server-side parsing and mapping intact
+- review cards one by one before execution
+- vary tags, difficulty, state, and graph links per record
+- preserve inferred import context while still allowing local overrides
+
+Graph-link review is also richer than the original import flow:
+
+- the reviewer can attach an existing PKG node
+- search canonical CKG suggestions with typo-tolerant matching
+- copy or upsert a canonical node into the local PKG
+- create a brand-new local node when no canonical suggestion is chosen
+- add local relation edges around the current card node
+
+The flow intentionally warns when the user is about to create a new local node
+or copy a canonical node into the PKG so graph growth remains explicit.
+
 ## Graph-Linking Guidance by Batch Type
 
 ## Vocabulary import

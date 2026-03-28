@@ -24,6 +24,7 @@ export * from './scheduler/index.js';
 
 // Content Service
 export * from './content/index.js';
+export type * from './content/types.js';
 
 // Session Service
 export * from './session/index.js';

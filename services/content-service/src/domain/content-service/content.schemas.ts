@@ -185,6 +185,16 @@ export const CardImportFieldMappingSchema = z.object({
   dumpKey: z.string().min(1).optional(),
 });
 
+export const CardImportRecordMetadataSchema = z
+  .object({
+    index: z.number().int().min(0),
+    tags: z.array(TagSchema).max(30).optional(),
+    knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
+    difficulty: DifficultyLevelSchema.optional(),
+    state: z.enum([CardState.DRAFT, CardState.ACTIVE]).optional(),
+  })
+  .strict();
+
 export const CardImportExecuteInputSchema = CardImportPreviewInputSchema.extend({
   mappings: z
     .array(CardImportFieldMappingSchema)
@@ -193,6 +203,7 @@ export const CardImportExecuteInputSchema = CardImportPreviewInputSchema.extend(
   sharedKnowledgeNodeIds: z.array(NodeIdItemSchema).max(50).default([]),
   sharedDifficulty: DifficultyLevelSchema.optional(),
   sharedState: z.enum([CardState.DRAFT, CardState.ACTIVE]).default(CardState.DRAFT),
+  recordMetadata: z.array(CardImportRecordMetadataSchema).max(100).optional(),
 });
 
 /**

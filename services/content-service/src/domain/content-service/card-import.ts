@@ -70,6 +70,15 @@ export interface ICardImportExecuteInput extends ICardImportPreviewInput {
   sharedKnowledgeNodeIds?: string[];
   sharedDifficulty?: DifficultyLevel;
   sharedState?: Extract<CardState, 'draft' | 'active'>;
+  recordMetadata?: ICardImportRecordMetadataInput[];
+}
+
+export interface ICardImportRecordMetadataInput {
+  index: number;
+  tags?: string[];
+  knowledgeNodeIds?: string[];
+  difficulty?: DifficultyLevel;
+  state?: Extract<CardState, 'draft' | 'active'>;
 }
 
 export interface IPreparedCardImport {
@@ -120,13 +129,25 @@ export function prepareImportedCards(
     | 'sharedKnowledgeNodeIds'
     | 'sharedState'
     | 'sharedTags'
+    | 'recordMetadata'
     | 'supportedStudyModes'
   >
 ): IPreparedCardImport {
   const warnings = [...preview.warnings];
   const mappingBySource = new Map(input.mappings.map((mapping) => [mapping.sourceKey, mapping]));
+  const metadataByIndex = new Map<number, ICardImportRecordMetadataInput>();
   const requiredTargets = new Set<CardImportTargetFieldId>(['front', 'back']);
   const assignedTargets = new Set<CardImportTargetFieldId>();
+
+  for (const metadata of input.recordMetadata ?? []) {
+    if (metadata.index < 0 || metadata.index >= preview.records.length) {
+      throw new Error(`Record metadata index ${String(metadata.index)} is out of range.`);
+    }
+    if (metadataByIndex.has(metadata.index)) {
+      throw new Error(`Record metadata for row ${String(metadata.index + 1)} is duplicated.`);
+    }
+    metadataByIndex.set(metadata.index, metadata);
+  }
 
   for (const field of preview.sourceFields) {
     if (!mappingBySource.has(field.key)) {
@@ -158,8 +179,8 @@ export function prepareImportedCards(
 
     const content: Record<string, JsonValue> = {};
     const dump: Record<string, string> = {};
-    const recordTags = new Set<string>(input.sharedTags ?? []);
-    const recordNodeIds = new Set<string>(input.sharedKnowledgeNodeIds ?? []);
+    let recordTags = new Set<string>(input.sharedTags ?? []);
+    let recordNodeIds = new Set<string>(input.sharedKnowledgeNodeIds ?? []);
     let difficulty = input.sharedDifficulty ?? DifficultyLevelEnum.INTERMEDIATE;
     let state = input.sharedState ?? 'draft';
 
@@ -216,6 +237,20 @@ export function prepareImportedCards(
           break;
         }
       }
+    }
+
+    const manualMetadata = metadataByIndex.get(index);
+    if (manualMetadata?.tags !== undefined) {
+      recordTags = new Set(manualMetadata.tags);
+    }
+    if (manualMetadata?.knowledgeNodeIds !== undefined) {
+      recordNodeIds = new Set(manualMetadata.knowledgeNodeIds);
+    }
+    if (manualMetadata?.difficulty !== undefined) {
+      difficulty = manualMetadata.difficulty;
+    }
+    if (manualMetadata?.state !== undefined) {
+      state = manualMetadata.state;
     }
 
     if (typeof content['front'] !== 'string' || content['front'].trim() === '') {

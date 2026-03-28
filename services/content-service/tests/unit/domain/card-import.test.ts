@@ -97,4 +97,53 @@ describe('card import execution prep', () => {
     });
     expect(prepared.desiredStates).toEqual(['active']);
   });
+
+  it('applies per-record metadata overrides on top of import mapping', () => {
+    const preview = previewCardImport({
+      fileName: 'cards.csv',
+      fileType: 'csv',
+      formatId: 'csv-front-back',
+      payload: {
+        encoding: 'text',
+        content: [
+          'Front,Back,Tags,Difficulty,State',
+          'Q1,A1,alpha,beginner,draft',
+          'Q2,A2,beta,advanced,active',
+        ].join('\n'),
+      },
+    });
+
+    const prepared = prepareImportedCards(preview, {
+      mappings: [
+        { sourceKey: 'Front', targetFieldId: 'front' },
+        { sourceKey: 'Back', targetFieldId: 'back' },
+        { sourceKey: 'Tags', targetFieldId: 'tags' },
+        { sourceKey: 'Difficulty', targetFieldId: 'difficulty' },
+        { sourceKey: 'State', targetFieldId: 'state' },
+      ],
+      sharedDifficulty: 'intermediate',
+      sharedKnowledgeNodeIds: ['node_abcdefghijklmnopqrstu'],
+      sharedState: 'draft',
+      sharedTags: ['imported'],
+      recordMetadata: [
+        {
+          index: 0,
+          tags: ['custom-tag'],
+          knowledgeNodeIds: ['node_bcdefghijklmnopqrstuv'],
+          difficulty: 'expert',
+          state: 'active',
+        },
+      ],
+    });
+
+    expect(prepared.cards[0]?.tags).toEqual(['custom-tag']);
+    expect(prepared.cards[0]?.knowledgeNodeIds).toEqual(['node_bcdefghijklmnopqrstuv']);
+    expect(prepared.cards[0]?.difficulty).toBe('expert');
+    expect(prepared.desiredStates[0]).toBe('active');
+
+    expect(prepared.cards[1]?.tags).toEqual(expect.arrayContaining(['imported', 'beta']));
+    expect(prepared.cards[1]?.knowledgeNodeIds).toEqual(['node_abcdefghijklmnopqrstu']);
+    expect(prepared.cards[1]?.difficulty).toBe('advanced');
+    expect(prepared.desiredStates[1]).toBe('active');
+  });
 });

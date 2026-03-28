@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AnyCardTypeSchema,
+  CardImportExecuteInputSchema,
   ChangeCardStateInputSchema,
   CreateCardInputSchema,
   DeckQuerySchema,
@@ -189,6 +190,39 @@ describe('UpdateCardInputSchema', () => {
 
   it('accepts empty object', () => {
     const result = UpdateCardInputSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
+});
+
+// ============================================================================
+// CardImportExecuteInputSchema
+// ============================================================================
+
+describe('CardImportExecuteInputSchema', () => {
+  it('accepts per-record metadata overrides', () => {
+    const result = CardImportExecuteInputSchema.safeParse({
+      fileName: 'cards.csv',
+      fileType: 'csv',
+      formatId: 'csv-front-back',
+      payload: {
+        encoding: 'text',
+        content: 'Front,Back\nQ,A',
+      },
+      mappings: [
+        { sourceKey: 'Front', targetFieldId: 'front' },
+        { sourceKey: 'Back', targetFieldId: 'back' },
+      ],
+      recordMetadata: [
+        {
+          index: 0,
+          tags: ['imported'],
+          knowledgeNodeIds: ['node_abcdefghijklmnopqrstu'],
+          difficulty: 'advanced',
+          state: 'active',
+        },
+      ],
+    });
+
     expect(result.success).toBe(true);
   });
 });

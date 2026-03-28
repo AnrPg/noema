@@ -454,6 +454,15 @@ export interface ICardImportExecuteInput extends ICardImportPreviewInput {
   sharedKnowledgeNodeIds?: NodeId[];
   sharedDifficulty?: DifficultyLevel;
   sharedState?: Extract<CardState, 'draft' | 'active'>;
+  recordMetadata?: ICardImportRecordMetadataInput[];
+}
+
+export interface ICardImportRecordMetadataInput {
+  index: number;
+  tags?: string[];
+  knowledgeNodeIds?: NodeId[];
+  difficulty?: DifficultyLevel;
+  state?: Extract<CardState, 'draft' | 'active'>;
 }
 
 export interface ICardImportExecuteResult extends IBatchCreateResult {

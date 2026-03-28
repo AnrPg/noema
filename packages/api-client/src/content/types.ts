@@ -781,6 +781,15 @@ export interface ICardImportExecuteInput extends ICardImportPreviewInput {
   sharedKnowledgeNodeIds?: string[];
   sharedDifficulty?: 'beginner' | 'elementary' | 'intermediate' | 'advanced' | 'expert';
   sharedState?: 'draft' | 'active';
+  recordMetadata?: ICardImportRecordMetadataInput[];
+}
+
+export interface ICardImportRecordMetadataInput {
+  index: number;
+  tags?: string[];
+  knowledgeNodeIds?: string[];
+  difficulty?: 'beginner' | 'elementary' | 'intermediate' | 'advanced' | 'expert';
+  state?: 'draft' | 'active';
 }
 
 export interface ICardImportExecuteResult {

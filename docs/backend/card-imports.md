@@ -34,8 +34,12 @@ batch-created cards through `content-service`.
 - `front` and `back` are required destinations before execution.
 - Every discovered source field must be mapped explicitly.
 - Extra source fields can be preserved under `metadata.dump`.
-- Shared defaults fill gaps for tags, linked knowledge nodes, difficulty, and
-  initial active-vs-draft intent.
+- Import mappings can still populate tags, linked knowledge nodes, difficulty,
+  and initial active-vs-draft intent from source columns.
+- `execute` also accepts `recordMetadata`, a per-record override array keyed by
+  preview row index.
+- Per-record metadata overrides are applied after mapping so the UI and agents
+  can review each card individually without losing import-time inference.
 
 ## Agent Surface
 
@@ -53,5 +57,7 @@ re-implementing format logic in prompts or clients.
   `services/content-service/src/domain/content-service/card-import.ts`.
 - Import execution reuses the existing batch-create path, so rollback continues
   to work through batch history and `metadata._batchId`.
+- The API remains backward-compatible with callers that only send mapped data or
+  shared defaults. Per-record metadata is optional.
 - Workbook parsing uses `xlsx` inside `content-service`, keeping spreadsheet
   support in the service layer rather than the browser.
