@@ -6,7 +6,14 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CardState, DifficultyLevel, MediaId, TemplateId } from '@noema/types';
+import type {
+  CardId,
+  CardState,
+  DifficultyLevel,
+  MediaId,
+  StudyMode,
+  TemplateId,
+} from '@noema/types';
 import type { CardType, RemediationCardType } from '@noema/types';
 
 // ============================================================================
@@ -584,6 +591,7 @@ export interface ICardDto {
   content: Record<string, unknown>;
   knowledgeNodeIds: string[];
   tags: string[];
+  supportedStudyModes?: StudyMode[];
   source?: string;
   metadata: Record<string, unknown>;
   contentHash?: string;
@@ -608,6 +616,7 @@ export interface ICardSummaryDto {
   state: CardState;
   tags: string[];
   knowledgeNodeIds: string[];
+  supportedStudyModes?: StudyMode[];
   difficulty: number;
   createdAt: string;
   updatedAt: string;
@@ -631,6 +640,7 @@ export interface IDeckQueryInput {
   states?: CardState[];
   tags?: string[];
   knowledgeNodeIds?: string[];
+  supportedStudyModes?: StudyMode[];
   sources?: string[];
   source?: string;
   difficulty?: { min?: number; max?: number };
@@ -654,6 +664,7 @@ export interface ICreateCardInput {
   knowledgeNodeIds?: string[];
   source?: string;
   difficulty?: DifficultyLevel;
+  supportedStudyModes?: StudyMode[];
   metadata?: Record<string, unknown>;
 }
 
@@ -662,6 +673,7 @@ export interface IUpdateCardInput {
   tags?: string[];
   knowledgeNodeIds?: string[];
   source?: string;
+  supportedStudyModes?: StudyMode[];
   metadata?: Record<string, unknown>;
   version: number;
 }
@@ -734,6 +746,7 @@ export interface ICardImportPreviewInput {
   formatId: string;
   payload: ICardImportPayload;
   sheetName?: string;
+  supportedStudyModes?: StudyMode[];
 }
 
 export interface ICardImportSourceField {
@@ -828,6 +841,7 @@ export interface ISessionSeedQuery {
   strategy?: 'due' | 'new' | 'mixed';
   cardTypes?: string[];
   tags?: string[];
+  supportedStudyModes?: StudyMode[];
 }
 
 // ============================================================================
@@ -905,6 +919,7 @@ export type CardsCursorResponse = IApiResponse<{
 export type CardCountResponse = IApiResponse<{ count: number }>;
 export type CardStatsResponse = IApiResponse<ICardStatsDto>;
 export type BatchCreateResponse = IApiResponse<IBatchCreateResult>;
+export type BatchCardsResponse = IApiResponse<ICardDto[]>;
 export type BatchSummariesResponse = IApiResponse<IBatchSummaryDto[]>;
 export type CardImportPreviewResponse = IApiResponse<ICardImportPreviewResult>;
 export type CardImportExecuteResponse = IApiResponse<ICardImportExecuteResult>;

@@ -28,13 +28,15 @@ import {
   usePKGNodes,
 } from '@noema/api-client';
 import { useAuth } from '@noema/auth';
-import type { DifficultyLevel, UserId } from '@noema/types';
+import type { DifficultyLevel, StudyMode, UserId } from '@noema/types';
 import { CardType, RemediationCardType } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react';
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
 // ============================================================================
 // Types
@@ -337,8 +339,30 @@ const CARD_TYPE_INFO: ICardTypeInfo[] = [
   },
 ];
 
+const LANGUAGE_RECOMMENDED_CARD_TYPES = new Set<string>([
+  CardType.ATOMIC,
+  CardType.AUDIO,
+  RemediationCardType.MINIMAL_PAIR,
+  RemediationCardType.FALSE_FRIEND,
+  RemediationCardType.RULE_SCOPE,
+  RemediationCardType.CONTRASTIVE_PAIR,
+  RemediationCardType.CONFUSABLE_SET_DRILL,
+]);
+
+const KNOWLEDGE_RECOMMENDED_CARD_TYPES = new Set<string>([
+  CardType.DEFINITION,
+  CardType.COMPARISON,
+  CardType.CAUSE_EFFECT,
+  CardType.ORDERING,
+  CardType.CONCEPT_GRAPH,
+  CardType.TRUE_FALSE,
+  RemediationCardType.BOUNDARY_CASE,
+  RemediationCardType.COUNTEREXAMPLE,
+]);
+
 const NODE_TYPE_OPTIONS: INodeTypeOption[] = [
   { value: 'concept', label: 'Concept', description: 'General topic or idea' },
+  { value: 'occupation', label: 'Occupation', description: 'Professional role or vocation' },
   { value: 'skill', label: 'Skill', description: 'Something the learner can do' },
   { value: 'fact', label: 'Fact', description: 'Specific information to recall' },
   { value: 'procedure', label: 'Procedure', description: 'Step-by-step method' },
@@ -542,20 +566,54 @@ function labelForType(value: string): string {
   return CARD_TYPE_INFO.find((t) => t.value === value)?.label ?? value;
 }
 
+function prioritizeCardTypes(types: ICardTypeInfo[], activeStudyMode: StudyMode): ICardTypeInfo[] {
+  const recommended =
+    activeStudyMode === 'language_learning'
+      ? LANGUAGE_RECOMMENDED_CARD_TYPES
+      : KNOWLEDGE_RECOMMENDED_CARD_TYPES;
+
+  return [...types].sort((left, right) => {
+    const leftRecommended = recommended.has(left.value) ? 0 : 1;
+    const rightRecommended = recommended.has(right.value) ? 0 : 1;
+
+    if (leftRecommended !== rightRecommended) {
+      return leftRecommended - rightRecommended;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
+}
+
 // ============================================================================
 // Step 1 — Type Selection
 // ============================================================================
 
 interface IStep1Props {
+  activeStudyMode: StudyMode;
   onSelect: (cardType: string) => void;
 }
 
-function Step1TypeSelection({ onSelect }: IStep1Props): React.JSX.Element {
-  const standardTypes = CARD_TYPE_INFO.filter((t) => t.group === 'Standard');
-  const remediationTypes = CARD_TYPE_INFO.filter((t) => t.group === 'Remediation');
+function Step1TypeSelection({ activeStudyMode, onSelect }: IStep1Props): React.JSX.Element {
+  const standardTypes = prioritizeCardTypes(
+    CARD_TYPE_INFO.filter((t) => t.group === 'Standard'),
+    activeStudyMode
+  );
+  const remediationTypes = prioritizeCardTypes(
+    CARD_TYPE_INFO.filter((t) => t.group === 'Remediation'),
+    activeStudyMode
+  );
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+        <p className="text-sm font-medium text-foreground">
+          Active mode: {getStudyModeLabel(activeStudyMode)}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {getStudyModeDescription(activeStudyMode)} Recommended card families rise to the top, but
+          the full catalog remains available.
+        </p>
+      </div>
       <TypeGroup label="Standard Types (22)" types={standardTypes} onSelect={onSelect} />
       <TypeGroup label="Remediation Types (20)" types={remediationTypes} onSelect={onSelect} />
     </div>
@@ -1589,7 +1647,10 @@ export default function NewCardPage(): React.JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
-  const { data: pkgNodesData, isLoading: kgNodesLoading } = usePKGNodes(userId);
+  const activeStudyMode = useActiveStudyMode();
+  const { data: pkgNodesData, isLoading: kgNodesLoading } = usePKGNodes(userId, {
+    studyMode: activeStudyMode,
+  });
   const pkgNodes = ensureNodeList(pkgNodesData);
 
   // --------------------------------------------------------------------------
@@ -1665,7 +1726,10 @@ export default function NewCardPage(): React.JSX.Element {
     setNodeCreateError(null);
 
     try {
-      const response = await createNode.mutateAsync(input);
+      const response = await createNode.mutateAsync({
+        ...input,
+        supportedStudyModes: [activeStudyMode],
+      });
       return response.data;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Knowledge node creation failed.';
@@ -1707,6 +1771,7 @@ export default function NewCardPage(): React.JSX.Element {
     const input: ICreateCardInput = {
       cardType: selectedType,
       content,
+      supportedStudyModes: [activeStudyMode],
       ...(difficulty !== undefined ? { difficulty } : {}),
       metadata: { state },
     };
@@ -1762,6 +1827,9 @@ export default function NewCardPage(): React.JSX.Element {
         <p className="mt-1 text-muted-foreground">
           Choose a card type, enter content, configure settings, and save.
         </p>
+        <div className="mt-3 inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+          Mode-aware defaults: {getStudyModeLabel(activeStudyMode)}
+        </div>
       </div>
 
       {/* Step indicator */}
@@ -1769,7 +1837,9 @@ export default function NewCardPage(): React.JSX.Element {
 
       {/* Step content */}
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        {step === 1 && <Step1TypeSelection onSelect={handleTypeSelect} />}
+        {step === 1 && (
+          <Step1TypeSelection activeStudyMode={activeStudyMode} onSelect={handleTypeSelect} />
+        )}
 
         {step === 2 && selectedType !== '' && (
           <Step2ContentEntry

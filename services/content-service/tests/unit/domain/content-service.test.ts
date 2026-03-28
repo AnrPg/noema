@@ -4,7 +4,7 @@
  * Tests all business logic in ContentService with mocked dependencies.
  */
 
-import type { CardState } from '@noema/types';
+import type { CardState, NodeId } from '@noema/types';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ContentService } from '../../../src/domain/content-service/content.service.js';
 import {
@@ -97,7 +97,9 @@ describe('ContentService', () => {
     it('generates a card_ prefixed ID', async () => {
       const input = createCardInput();
       const ctx = executionContext();
-      repo.create.mockImplementation(async (data) => card({ id: data.id, userId: data.userId }));
+      repo.create.mockImplementation((data) =>
+        Promise.resolve(card({ id: data.id, userId: data.userId }))
+      );
 
       await service.create(input, ctx);
 
@@ -135,7 +137,9 @@ describe('ContentService', () => {
     it('passes contentHash to repository on create', async () => {
       const input = createCardInput();
       const ctx = executionContext();
-      repo.create.mockImplementation(async (data) => card({ id: data.id, userId: data.userId }));
+      repo.create.mockImplementation((data) =>
+        Promise.resolve(card({ id: data.id, userId: data.userId }))
+      );
 
       await service.create(input, ctx);
 
@@ -153,11 +157,15 @@ describe('ContentService', () => {
         } as any,
       });
       const ctx = executionContext();
-      repo.create.mockImplementation(async (data) => card({ id: data.id, userId: data.userId, content: data.content }));
+      repo.create.mockImplementation((data) =>
+        Promise.resolve(card({ id: data.id, userId: data.userId, content: data.content }))
+      );
 
       await service.create(input, ctx);
 
-      const createCall = repo.create.mock.calls[0]![0] as { content: { front: string; back: string } };
+      const createCall = repo.create.mock.calls[0]![0] as {
+        content: { front: string; back: string };
+      };
       expect(createCall.content.front).not.toContain('<script>');
       expect(createCall.content.back).toContain('<b>4</b>');
     });
@@ -310,16 +318,18 @@ describe('ContentService', () => {
 
     it('rejects invalid query parameters', async () => {
       const ctx = executionContext();
-      const query = { limit: -1 }; // Invalid
+      const query: Parameters<ContentService['query']>[0] = { limit: -1 }; // Invalid
 
-      await expect(service.query(query as any, ctx)).rejects.toThrow(ValidationError);
+      await expect(service.query(query, ctx)).rejects.toThrow(ValidationError);
     });
 
     it('non-admins can only query their own cards', async () => {
       const ctx = executionContext();
       repo.query.mockResolvedValue({ items: [], total: 0, hasMore: false });
 
-      await service.query({ userId: 'other_user' } as any, ctx);
+      const requestedQuery: Parameters<ContentService['query']>[0] = { userId: 'other_user' };
+
+      await service.query(requestedQuery, ctx);
 
       // Should use context.userId, not the requested userId
       expect(repo.query).toHaveBeenCalledWith(expect.anything(), ctx.userId);
@@ -364,7 +374,7 @@ describe('ContentService', () => {
         ctx.userId,
         'my_cursor',
         10,
-        'backward',
+        'backward'
       );
     });
 
@@ -539,7 +549,7 @@ describe('ContentService', () => {
       const ctx = executionContext();
       const existing = card({ userId: ctx.userId! });
       repo.findById.mockResolvedValue(existing);
-      const tooManyTags = Array.from({ length: 31 }, (_, i) => `tag-${i}`);
+      const tooManyTags = Array.from({ length: 31 }, (_, i) => `tag-${String(i)}`);
 
       await expect(service.updateTags(existing.id, tooManyTags, 1, ctx)).rejects.toThrow(
         ValidationError
@@ -555,8 +565,8 @@ describe('ContentService', () => {
     it('updates node IDs and publishes event', async () => {
       const ctx = executionContext();
       const existing = card({ userId: ctx.userId! });
-      const nid = 'node_aaaaaaaaaaaaaaaaaaaaa';
-      const updated = card({ ...existing, knowledgeNodeIds: [nid as any] });
+      const nid = 'node_aaaaaaaaaaaaaaaaaaaaa' as NodeId;
+      const updated = card({ ...existing, knowledgeNodeIds: [nid] });
       repo.findById.mockResolvedValue(existing);
       repo.updateKnowledgeNodeIds.mockResolvedValue(updated);
 
@@ -589,25 +599,25 @@ describe('ContentService', () => {
   // ==========================================================================
 
   describe('validateContent()', () => {
-    it('returns valid: true for correct atomic content', async () => {
+    it('returns valid: true for correct atomic content', () => {
       const ctx = executionContext();
-      const result = await service.validateContent('atomic', atomicContent(), ctx);
+      const result = service.validateContent('atomic', atomicContent(), ctx);
 
       expect(result.data.valid).toBe(true);
       expect(result.data.errors).toBeUndefined();
     });
 
-    it('returns valid: false with error details for invalid content', async () => {
+    it('returns valid: false with error details for invalid content', () => {
       const ctx = executionContext();
-      const result = await service.validateContent('cloze', atomicContent(), ctx);
+      const result = service.validateContent('cloze', atomicContent(), ctx);
 
       expect(result.data.valid).toBe(false);
       expect(result.data.errors!.length).toBeGreaterThan(0);
     });
 
-    it('returns error for unknown card type', async () => {
+    it('returns error for unknown card type', () => {
       const ctx = executionContext();
-      const result = await service.validateContent('nonexistent', atomicContent(), ctx);
+      const result = service.validateContent('nonexistent', atomicContent(), ctx);
 
       expect(result.data.valid).toBe(false);
     });
@@ -693,7 +703,11 @@ describe('ContentService', () => {
 
       await service.delete(existing.id, true, ctx);
 
-      expect(repo.softDelete).toHaveBeenCalledWith(existing.id, existing.version, ctx.userId ?? undefined);
+      expect(repo.softDelete).toHaveBeenCalledWith(
+        existing.id,
+        existing.version,
+        ctx.userId ?? undefined
+      );
       expect(events.publish).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: 'card.deleted' })
       );
@@ -741,6 +755,30 @@ describe('ContentService', () => {
     it('requires authentication', async () => {
       const ctx = unauthenticatedContext();
       await expect(service.restore(cardId(), ctx)).rejects.toThrow(AuthorizationError);
+    });
+  });
+
+  // ==========================================================================
+  // Batch recovery
+  // ==========================================================================
+
+  describe('findByBatchId()', () => {
+    it('returns cards from the repository for the authenticated user', async () => {
+      const ctx = executionContext();
+      const batchId = 'batch_example123';
+      const cards = [card({ userId: ctx.userId! }), card({ userId: ctx.userId! })];
+      repo.findByBatchId.mockResolvedValue(cards);
+
+      const result = await service.findByBatchId(batchId, ctx);
+
+      expect(repo.findByBatchId).toHaveBeenCalledWith(batchId, ctx.userId ?? undefined);
+      expect(result.data).toEqual(cards);
+    });
+
+    it('requires authentication', async () => {
+      await expect(
+        service.findByBatchId('batch_example123', unauthenticatedContext())
+      ).rejects.toThrow(AuthorizationError);
     });
   });
 

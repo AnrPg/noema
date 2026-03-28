@@ -37,6 +37,9 @@ import {
   getBatchImportFileTypeDefinition,
   type BatchImportFileType,
 } from '@/lib/cards/batch-import';
+import { formatApiErrorMessage } from '@/lib/api-errors';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
 type WizardStep = 1 | 2 | 3 | 4;
 type SharedDifficulty = 'beginner' | 'elementary' | 'intermediate' | 'advanced' | 'expert';
@@ -54,6 +57,41 @@ const TARGET_OPTIONS: { value: ICardImportFieldMapping['targetFieldId']; label: 
   { value: 'state', label: 'State' },
   { value: 'dump', label: 'Dump metadata' },
 ];
+
+const CARD_IMPORT_ERROR_FIELDS = {
+  fileName: 'Uploaded file',
+  fileType: 'File type',
+  formatId: 'Import format',
+  mappings: 'Field mapping',
+  payload: 'Uploaded file',
+  sharedKnowledgeNodeIds: 'Shared knowledge node IDs',
+  sharedTags: 'Shared tags',
+  sheetName: 'Workbook sheet',
+} satisfies Record<string, string>;
+
+const CARD_IMPORT_ERROR_HINTS = {
+  sharedKnowledgeNodeIds: 'Use IDs like node_abcdefghijklmnopqrstu.',
+  sheetName: 'Choose one of the sheets detected in the workbook.',
+} satisfies Record<string, string>;
+
+function formatCardImportError(error: unknown, action: string, fallback: string): string {
+  return formatApiErrorMessage(error, {
+    action,
+    fallback,
+    fieldLabels: CARD_IMPORT_ERROR_FIELDS,
+    fieldHints: CARD_IMPORT_ERROR_HINTS,
+    fieldFormatters: {
+      sharedTags: (messages) => {
+        const combined = messages.join(' ').toLowerCase();
+        if (combined.includes('lowercase alphanumeric with hyphens')) {
+          return 'Shared tags must use lowercase letters, numbers, and hyphens only, with no leading or trailing hyphen. Try values like biology-basics or chapter-3';
+        }
+
+        return `Shared tags: ${messages.join(' ')}`;
+      },
+    },
+  });
+}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -114,9 +152,44 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function getStringField(
+  content: Record<string, unknown>,
+  candidates: readonly string[]
+): string | null {
+  for (const candidate of candidates) {
+    const value = content[candidate];
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function truncatePreview(value: string, maxLength = 20): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+function getBatchCardPreview(card: { content: Record<string, unknown> }): {
+  front: string;
+  back: string;
+} {
+  const front =
+    getStringField(card.content, ['front', 'term', 'statement', 'question', 'targetConcept']) ??
+    'Untitled front';
+  const back =
+    getStringField(card.content, ['back', 'definition', 'analysis', 'correctAnswer']) ??
+    'Untitled back';
+
+  return {
+    front: truncatePreview(front),
+    back: truncatePreview(back),
+  };
+}
+
 function BatchDetailsPanel({ batchId }: { batchId: JobId }): React.JSX.Element {
   const { data, isLoading, isError } = useBatch(batchId);
-  const result = data?.data;
+  const cards = data?.data;
 
   if (isLoading) {
     return (
@@ -127,25 +200,33 @@ function BatchDetailsPanel({ batchId }: { batchId: JobId }): React.JSX.Element {
     );
   }
 
-  if (isError || result === undefined) {
+  if (isError || cards === undefined) {
     return <div className="px-4 py-3 text-sm text-destructive">Failed to load batch details.</div>;
   }
 
   return (
     <div className="divide-y divide-border/50">
-      {result.created.map((card) => (
-        <div key={card.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
-            {card.cardType}
-          </span>
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-            {card.id}
-          </span>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {card.state}
-          </span>
-        </div>
-      ))}
+      {cards.map((card) => {
+        const preview = getBatchCardPreview(card);
+
+        return (
+          <div key={card.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+              {card.cardType}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="truncate text-sm text-foreground">{preview.front}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">→</span>
+                <span className="truncate text-sm text-muted-foreground">{preview.back}</span>
+              </div>
+            </div>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {card.state}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -323,6 +404,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
   const router = useRouter();
   const queryClient = useQueryClient();
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const activeStudyMode = useActiveStudyMode();
 
   const [step, setStep] = React.useState<WizardStep>(1);
   const [selectedFileType, setSelectedFileType] = React.useState<BatchImportFileType | null>(null);
@@ -360,7 +442,13 @@ export default function BatchOperationsPage(): React.JSX.Element {
     },
     onError: (mutationError) => {
       setRollingBackId(null);
-      setRollbackError(mutationError instanceof Error ? mutationError.message : 'Rollback failed.');
+      setRollbackError(
+        formatCardImportError(
+          mutationError,
+          'roll back this batch',
+          'We could not roll back this batch. Please try again.'
+        )
+      );
     },
   });
   const { data, isLoading, isError, error: historyError } = useRecentBatches();
@@ -382,6 +470,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
       fileType: selectedFileType,
       formatId: selectedFormatId,
       payload,
+      supportedStudyModes: [activeStudyMode],
       ...(overrideSheetName !== undefined ? { sheetName: overrideSheetName } : {}),
     });
 
@@ -401,7 +490,13 @@ export default function BatchOperationsPage(): React.JSX.Element {
     } catch (previewError) {
       setPreview(null);
       setMappings([]);
-      setError(previewError instanceof Error ? previewError.message : 'Import preview failed.');
+      setError(
+        formatCardImportError(
+          previewError,
+          'preview this import',
+          'We could not preview this import. Check the file format and try again.'
+        )
+      );
     }
   }
 
@@ -447,10 +542,17 @@ export default function BatchOperationsPage(): React.JSX.Element {
         sharedKnowledgeNodeIds: nodeIds,
         sharedDifficulty,
         sharedState,
+        supportedStudyModes: [activeStudyMode],
         ...(selectedSheetName !== '' ? { sheetName: selectedSheetName } : {}),
       });
     } catch (executeError) {
-      setError(executeError instanceof Error ? executeError.message : 'Import execution failed.');
+      setError(
+        formatCardImportError(
+          executeError,
+          'import these cards',
+          'We could not import these cards. Review the mapping and shared defaults, then try again.'
+        )
+      );
     }
   }
 
@@ -495,6 +597,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
               Import card-shaped data through an explicit, mapping-first wizard backed by the
               content import API.
             </p>
+            <div className="mt-3 inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+              Active import mode: {getStudyModeLabel(activeStudyMode)}
+            </div>
           </div>
         </div>
       </div>
@@ -520,6 +625,16 @@ export default function BatchOperationsPage(): React.JSX.Element {
         </div>
 
         <div className="mt-6">
+          <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+            <p className="text-sm font-medium text-foreground">
+              {getStudyModeLabel(activeStudyMode)} defaults are active
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {getStudyModeDescription(activeStudyMode)} Imported cards created from this wizard
+              will carry the active mode as their initial membership.
+            </p>
+          </div>
+
           {step === 1 && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {BATCH_IMPORT_FILE_TYPES.map((fileType) => (
@@ -696,9 +811,11 @@ export default function BatchOperationsPage(): React.JSX.Element {
                               void handlePreview(selectedFile, nextSheet).catch(
                                 (previewError: unknown) => {
                                   setError(
-                                    previewError instanceof Error
-                                      ? previewError.message
-                                      : 'Failed to switch sheets.'
+                                    formatCardImportError(
+                                      previewError,
+                                      'load that workbook sheet',
+                                      'We could not load that workbook sheet. Please try again.'
+                                    )
                                   );
                                 }
                               );
@@ -998,7 +1115,11 @@ export default function BatchOperationsPage(): React.JSX.Element {
 
       {isError && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {historyError instanceof Error ? historyError.message : 'Failed to load batch history.'}
+          {formatCardImportError(
+            historyError,
+            'load batch history',
+            'We could not load batch history. Please try again.'
+          )}
         </div>
       )}
 

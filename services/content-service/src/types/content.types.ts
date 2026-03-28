@@ -21,6 +21,7 @@ import type {
   MediaId,
   NodeId,
   RemediationCardType,
+  StudyMode,
   TemplateId,
   UserId,
 } from '@noema/types';
@@ -90,6 +91,9 @@ export interface ICard extends IAuditedEntity {
 
   /** User-defined tags for filtering */
   tags: string[];
+
+  /** Optional study-mode membership for the dual-use learning architecture */
+  supportedStudyModes?: StudyMode[];
 
   /** How this card was created */
   source: EventSource;
@@ -162,6 +166,7 @@ export interface ICardSummary {
   preview: string;
   knowledgeNodeIds: NodeId[];
   tags: string[];
+  supportedStudyModes?: StudyMode[];
   source: EventSource;
   createdAt: string;
   updatedAt: string;
@@ -181,6 +186,7 @@ export interface ICreateCardInput {
   difficulty?: DifficultyLevel;
   knowledgeNodeIds?: NodeId[];
   tags?: string[];
+  supportedStudyModes?: StudyMode[];
   source?: EventSource;
   metadata?: Record<string, JsonValue>;
 }
@@ -200,6 +206,7 @@ export interface IUpdateCardInput {
   difficulty?: DifficultyLevel;
   knowledgeNodeIds?: NodeId[];
   tags?: string[];
+  supportedStudyModes?: StudyMode[];
   metadata?: Record<string, JsonValue>;
 }
 
@@ -239,6 +246,8 @@ export interface IDeckQuery {
   states?: CardState[];
   /** Filter by difficulty levels */
   difficulties?: DifficultyLevel[];
+  /** Filter by study-mode membership stored on the card metadata */
+  supportedStudyModes?: StudyMode[];
   /** Filter by PKG node IDs (cards linked to ANY of these nodes) */
   knowledgeNodeIds?: NodeId[];
   /**
@@ -410,6 +419,7 @@ export interface ICardImportPreviewInput {
   formatId: string;
   payload: ICardImportPayload;
   sheetName?: string;
+  supportedStudyModes?: StudyMode[];
 }
 
 export interface ICardImportSourceField {

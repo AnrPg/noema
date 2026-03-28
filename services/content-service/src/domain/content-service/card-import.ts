@@ -1,4 +1,4 @@
-import type { CardState, DifficultyLevel, JsonValue, NodeId } from '@noema/types';
+import type { CardState, DifficultyLevel, JsonValue, NodeId, StudyMode } from '@noema/types';
 import { DifficultyLevel as DifficultyLevelEnum } from '@noema/types';
 import { read, utils } from 'xlsx';
 import type { ICreateCardInput } from '../../types/content.types.js';
@@ -50,6 +50,7 @@ export interface ICardImportPreviewInput {
     content: string;
   };
   sheetName?: string;
+  supportedStudyModes?: StudyMode[];
 }
 
 export interface ICardImportPreviewResult {
@@ -114,7 +115,12 @@ export function prepareImportedCards(
   preview: ICardImportPreviewResult,
   input: Pick<
     ICardImportExecuteInput,
-    'mappings' | 'sharedDifficulty' | 'sharedKnowledgeNodeIds' | 'sharedState' | 'sharedTags'
+    | 'mappings'
+    | 'sharedDifficulty'
+    | 'sharedKnowledgeNodeIds'
+    | 'sharedState'
+    | 'sharedTags'
+    | 'supportedStudyModes'
   >
 ): IPreparedCardImport {
   const warnings = [...preview.warnings];
@@ -237,6 +243,9 @@ export function prepareImportedCards(
       difficulty,
       knowledgeNodeIds: Array.from(recordNodeIds) as NodeId[],
       tags: Array.from(recordTags),
+      ...(input.supportedStudyModes !== undefined
+        ? { supportedStudyModes: input.supportedStudyModes }
+        : {}),
       source: 'import',
       metadata,
     });

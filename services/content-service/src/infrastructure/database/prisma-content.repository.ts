@@ -14,6 +14,7 @@ import type {
   JsonValue,
   NodeId,
   RemediationCardType,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import { Prisma } from '../../../generated/prisma/index.js';
@@ -83,6 +84,49 @@ interface IRawCardRow {
 
 export class PrismaContentRepository implements IContentRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  private mergeMetadata(
+    metadata: Record<string, JsonValue> | undefined,
+    supportedStudyModes: StudyMode[] | undefined
+  ): Prisma.JsonObject {
+    const nextMetadata = { ...(metadata ?? {}) };
+
+    if (supportedStudyModes !== undefined) {
+      nextMetadata['supportedStudyModes'] = supportedStudyModes;
+    }
+
+    return nextMetadata as unknown as Prisma.JsonObject;
+  }
+
+  private extractSupportedStudyModes(metadata: unknown): StudyMode[] | undefined {
+    if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+      return undefined;
+    }
+
+    const value = (metadata as Record<string, unknown>)['supportedStudyModes'];
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    const supportedStudyModes = value.filter(
+      (entry): entry is StudyMode => entry === 'language_learning' || entry === 'knowledge_gaining'
+    );
+
+    return supportedStudyModes.length > 0 ? supportedStudyModes : undefined;
+  }
+
+  private buildSupportedStudyModesMetadataFilter(
+    supportedStudyModes: StudyMode[] | undefined
+  ): Prisma.JsonFilter<'Card'> | undefined {
+    if (supportedStudyModes === undefined || supportedStudyModes.length === 0) {
+      return undefined;
+    }
+
+    return {
+      path: ['supportedStudyModes'],
+      array_contains: supportedStudyModes,
+    };
+  }
 
   // ============================================================================
   // Read Operations
@@ -218,7 +262,7 @@ export class PrismaContentRepository implements IContentRepository {
         knowledgeNodeIds: input.knowledgeNodeIds as string[],
         tags: input.tags ?? [],
         source: this.toDbSource(input.source ?? 'user'),
-        metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
+        metadata: this.mergeMetadata(input.metadata, input.supportedStudyModes),
         contentHash: input.contentHash ?? null,
         createdBy: input.userId,
         version: 1,
@@ -255,7 +299,7 @@ export class PrismaContentRepository implements IContentRepository {
               knowledgeNodeIds: input.knowledgeNodeIds as string[],
               tags: input.tags ?? [],
               source: this.toDbSource(input.source ?? 'user'),
-              metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
+              metadata: this.mergeMetadata(input.metadata, input.supportedStudyModes),
               contentHash: input.contentHash ?? null,
               createdBy: input.userId,
               version: 1,
@@ -295,11 +339,17 @@ export class PrismaContentRepository implements IContentRepository {
   ): Promise<ICard> {
     // For metadata merge we need the current record
     let mergedMetadata: Prisma.JsonObject | undefined;
-    if (input.metadata !== undefined) {
+    if (input.metadata !== undefined || input.supportedStudyModes !== undefined) {
       const existing = await this.prisma.card.findUnique({ where: { id } });
       if (existing) {
-        const currentMeta = existing.metadata as Record<string, unknown>;
-        mergedMetadata = { ...currentMeta, ...input.metadata } as unknown as Prisma.JsonObject;
+        const currentMeta = existing.metadata as Record<string, JsonValue>;
+        mergedMetadata = this.mergeMetadata(
+          {
+            ...currentMeta,
+            ...(input.metadata ?? {}),
+          },
+          input.supportedStudyModes
+        );
       }
     }
 
@@ -547,17 +597,33 @@ export class PrismaContentRepository implements IContentRepository {
   // ============================================================================
 
   async findByBatchId(batchId: string, userId: UserId): Promise<ICard[]> {
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT id
+      FROM cards
+      WHERE
+        user_id = ${userId}
+        AND deleted_at IS NULL
+        AND metadata @> ${`{"_batchId":"${batchId}"}`}::jsonb
+      ORDER BY created_at ASC
+    `);
+
+    if (rows.length === 0) {
+      return [];
+    }
+
     const cards = await this.prisma.card.findMany({
       where: {
+        id: { in: rows.map((row) => row.id) },
         userId,
         deletedAt: null,
-        metadata: {
-          path: ['_batchId'],
-          equals: batchId,
-        },
       },
     });
-    return cards.map((c) => this.toDomain(c));
+
+    const cardMap = new Map(cards.map((card) => [card.id, card]));
+    return rows
+      .map((row) => cardMap.get(row.id))
+      .filter((card): card is PrismaCard => card !== undefined)
+      .map((card) => this.toDomain(card));
   }
 
   async softDeleteByBatchId(batchId: string, userId: UserId): Promise<number> {
@@ -745,6 +811,11 @@ export class PrismaContentRepository implements IContentRepository {
       params.push(dbDiffs);
       paramIdx++;
     }
+    if (query.supportedStudyModes && query.supportedStudyModes.length > 0) {
+      conditions.push(`("metadata"->'supportedStudyModes') @> $${paramIdx.toString()}::jsonb`);
+      params.push(JSON.stringify(query.supportedStudyModes));
+      paramIdx++;
+    }
     if (query.tags && query.tags.length > 0) {
       conditions.push(`"tags" && $${paramIdx.toString()}::text[]`);
       params.push(query.tags);
@@ -850,6 +921,7 @@ export class PrismaContentRepository implements IContentRepository {
       typeof row.content === 'string' ? JSON.parse(row.content) : row.content
     ) as ICardContent;
     const front = typeof content.front === 'string' ? content.front : '';
+    const supportedStudyModes = this.extractSupportedStudyModes(row.metadata);
 
     return {
       id: row.id as CardId,
@@ -860,6 +932,7 @@ export class PrismaContentRepository implements IContentRepository {
       preview: generatePreview(front),
       knowledgeNodeIds: row.knowledge_node_ids as NodeId[],
       tags: row.tags,
+      ...(supportedStudyModes !== undefined ? { supportedStudyModes } : {}),
       source: row.source.toLowerCase() as EventSource,
       createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
       updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
@@ -982,6 +1055,12 @@ export class PrismaContentRepository implements IContentRepository {
     if (query.difficulties && query.difficulties.length > 0) {
       where.difficulty = { in: query.difficulties.map((d) => this.toDbDifficulty(d)) };
     }
+    const supportedStudyModesFilter = this.buildSupportedStudyModesMetadataFilter(
+      query.supportedStudyModes
+    );
+    if (supportedStudyModesFilter !== undefined) {
+      where.metadata = supportedStudyModesFilter;
+    }
     if (query.knowledgeNodeIds && query.knowledgeNodeIds.length > 0) {
       const mode = query.knowledgeNodeIdMode ?? 'any';
       const ids = query.knowledgeNodeIds as string[];
@@ -1070,6 +1149,7 @@ export class PrismaContentRepository implements IContentRepository {
 
   private toDomain(card: PrismaCard): ICard {
     const content = card.content as unknown as ICardContent;
+    const supportedStudyModes = this.extractSupportedStudyModes(card.metadata);
 
     return {
       id: card.id as CardId,
@@ -1080,6 +1160,7 @@ export class PrismaContentRepository implements IContentRepository {
       content,
       knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
       tags: card.tags,
+      ...(supportedStudyModes !== undefined ? { supportedStudyModes } : {}),
       source: card.source.toLowerCase() as EventSource,
       metadata: card.metadata as Record<string, JsonValue>,
       contentHash: card.contentHash ?? null,
@@ -1095,6 +1176,7 @@ export class PrismaContentRepository implements IContentRepository {
   private toSummary(card: PrismaCard): ICardSummary {
     const content = card.content as unknown as ICardContent;
     const front = typeof content.front === 'string' ? content.front : '';
+    const supportedStudyModes = this.extractSupportedStudyModes(card.metadata);
 
     return {
       id: card.id as CardId,
@@ -1105,6 +1187,7 @@ export class PrismaContentRepository implements IContentRepository {
       preview: generatePreview(front),
       knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
       tags: card.tags,
+      ...(supportedStudyModes !== undefined ? { supportedStudyModes } : {}),
       source: card.source.toLowerCase() as EventSource,
       createdAt: card.createdAt.toISOString(),
       updatedAt: card.updatedAt.toISOString(),

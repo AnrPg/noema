@@ -105,6 +105,10 @@ export function registerContentRoutes(
             difficulty: { type: 'string' },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
             tags: { type: 'array', items: { type: 'string' } },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
             source: { type: 'string' },
             metadata: { type: 'object' },
           },
@@ -151,6 +155,10 @@ export function registerContentRoutes(
                   difficulty: { type: 'string' },
                   knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
                   tags: { type: 'array', items: { type: 'string' } },
+                  supportedStudyModes: {
+                    type: 'array',
+                    items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+                  },
                   source: { type: 'string' },
                   metadata: { type: 'object' },
                 },
@@ -205,6 +213,10 @@ export function registerContentRoutes(
                 content: { type: 'string' },
               },
             },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
           },
         },
       },
@@ -255,6 +267,10 @@ export function registerContentRoutes(
               enum: ['beginner', 'elementary', 'intermediate', 'advanced', 'expert'],
             },
             sharedState: { type: 'string', enum: ['draft', 'active'] },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
             mappings: {
               type: 'array',
               items: {
@@ -376,6 +392,10 @@ export function registerContentRoutes(
             cardTypes: { type: 'array', items: { type: 'string' } },
             states: { type: 'array', items: { type: 'string' } },
             difficulties: { type: 'array', items: { type: 'string' } },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
             knowledgeNodeIdMode: {
               type: 'string',
@@ -428,6 +448,7 @@ export function registerContentRoutes(
       cardTypes?: string;
       states?: string;
       difficulties?: string;
+      supportedStudyModes?: string;
       tags?: string;
       sources?: string;
       sortBy?: string;
@@ -451,6 +472,10 @@ export function registerContentRoutes(
             cardTypes: { type: 'string', description: 'Comma-separated card types' },
             states: { type: 'string', description: 'Comma-separated states' },
             difficulties: { type: 'string', description: 'Comma-separated difficulties' },
+            supportedStudyModes: {
+              type: 'string',
+              description: 'Comma-separated supported study modes',
+            },
             tags: { type: 'string', description: 'Comma-separated tags' },
             sources: { type: 'string', description: 'Comma-separated sources' },
             sortBy: {
@@ -481,6 +506,14 @@ export function registerContentRoutes(
         if (queryParams.difficulties !== undefined && queryParams.difficulties !== '') {
           deckQuery.difficulties = queryParams.difficulties.split(',') as NonNullable<
             IDeckQuery['difficulties']
+          >;
+        }
+        if (
+          queryParams.supportedStudyModes !== undefined &&
+          queryParams.supportedStudyModes !== ''
+        ) {
+          deckQuery.supportedStudyModes = queryParams.supportedStudyModes.split(',') as NonNullable<
+            IDeckQuery['supportedStudyModes']
           >;
         }
         if (queryParams.tags !== undefined && queryParams.tags !== '') {
@@ -801,6 +834,10 @@ export function registerContentRoutes(
             cardTypes: { type: 'array', items: { type: 'string' } },
             states: { type: 'array', items: { type: 'string' } },
             difficulties: { type: 'array', items: { type: 'string' } },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
             knowledgeNodeIdMode: {
               type: 'string',

@@ -8,6 +8,7 @@ import type { CardId, JobId, MediaId, TemplateId } from '@noema/types';
 
 import { http } from '../client.js';
 import type {
+  BatchCardsResponse,
   BatchCreateResponse,
   CardImportExecuteResponse,
   CardImportPreviewResponse,
@@ -53,6 +54,9 @@ function normalizeDeckQuery(query: IDeckQueryInput): Record<string, unknown> {
   }
   if (query.states !== undefined && query.states.length > 0) {
     normalized['states'] = query.states.map(normalizeCardState);
+  }
+  if (query.supportedStudyModes !== undefined && query.supportedStudyModes.length > 0) {
+    normalized['supportedStudyModes'] = query.supportedStudyModes;
   }
   if (query.tags !== undefined && query.tags.length > 0) normalized['tags'] = query.tags;
   if (query.knowledgeNodeIds !== undefined && query.knowledgeNodeIds.length > 0) {
@@ -158,8 +162,7 @@ export const cardsApi = {
     http.post('/v1/cards/import/execute', data),
 
   /** Poll a batch creation job by jobId. */
-  getBatch: (batchId: JobId): Promise<BatchCreateResponse> =>
-    http.get(`/v1/cards/batch/${batchId}`),
+  getBatch: (batchId: JobId): Promise<BatchCardsResponse> => http.get(`/v1/cards/batch/${batchId}`),
 
   /** Cancel a pending batch creation job. */
   deleteBatch: (batchId: JobId): Promise<void> => http.delete(`/v1/cards/batch/${batchId}`),

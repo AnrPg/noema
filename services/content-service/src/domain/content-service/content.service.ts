@@ -10,7 +10,14 @@
  */
 
 import type { IAgentHints } from '@noema/contracts';
-import type { CardId, CardState, CorrelationId, IPaginatedResponse, UserId } from '@noema/types';
+import type {
+  CardId,
+  CardState,
+  CorrelationId,
+  IPaginatedResponse,
+  StudyMode,
+  UserId,
+} from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
@@ -1038,6 +1045,9 @@ export class ContentService {
       ...(parseResult.data.sheetName !== undefined
         ? { sheetName: parseResult.data.sheetName }
         : {}),
+      ...(parseResult.data.supportedStudyModes !== undefined
+        ? { supportedStudyModes: parseResult.data.supportedStudyModes as StudyMode[] }
+        : {}),
     };
 
     const preview = previewCardImport(previewInput);
@@ -1095,6 +1105,9 @@ export class ContentService {
       ...(parseResult.data.sheetName !== undefined
         ? { sheetName: parseResult.data.sheetName }
         : {}),
+      ...(parseResult.data.supportedStudyModes !== undefined
+        ? { supportedStudyModes: parseResult.data.supportedStudyModes as StudyMode[] }
+        : {}),
     };
     const preview = previewCardImport(previewInput);
     const prepared = prepareImportedCards(preview, {
@@ -1107,10 +1120,19 @@ export class ContentService {
               dumpKey: mapping.dumpKey,
             }
       ),
-      sharedDifficulty: parseResult.data.sharedDifficulty,
-      sharedKnowledgeNodeIds: parseResult.data.sharedKnowledgeNodeIds,
+      ...(parseResult.data.sharedDifficulty !== undefined
+        ? { sharedDifficulty: parseResult.data.sharedDifficulty }
+        : {}),
+      ...(parseResult.data.sharedKnowledgeNodeIds.length > 0
+        ? { sharedKnowledgeNodeIds: parseResult.data.sharedKnowledgeNodeIds }
+        : {}),
       sharedState: parseResult.data.sharedState,
-      sharedTags: parseResult.data.sharedTags,
+      ...(parseResult.data.sharedTags.length > 0
+        ? { sharedTags: parseResult.data.sharedTags }
+        : {}),
+      ...(parseResult.data.supportedStudyModes !== undefined
+        ? { supportedStudyModes: parseResult.data.supportedStudyModes as StudyMode[] }
+        : {}),
     });
     const batchResult = await this.createBatch(prepared.cards, context);
 

@@ -4,6 +4,8 @@
  * TanStack Query hooks for Content Service.
  */
 
+/* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types */
+
 import {
   useInfiniteQuery,
   useMutation,
@@ -19,6 +21,7 @@ import type { CardId, JobId, MediaId, TemplateId } from '@noema/types';
 
 import { cardsApi, mediaApi, templatesApi } from './api.js';
 import type {
+  BatchCardsResponse,
   BatchCreateResponse,
   BatchSummariesResponse,
   CardCountResponse,
@@ -203,7 +206,7 @@ export function useCardCount(
 
 export function useBatch(
   batchId: JobId,
-  options?: Omit<UseQueryOptions<BatchCreateResponse>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<BatchCardsResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
     queryKey: contentKeys.batch(batchId),

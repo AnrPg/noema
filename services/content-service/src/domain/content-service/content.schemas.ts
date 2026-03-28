@@ -10,6 +10,7 @@ import {
   DifficultyLevel,
   EventSource,
   RemediationCardType,
+  StudyMode,
 } from '@noema/types';
 import { z } from 'zod';
 import { CardContentSchemaRegistry } from './card-content.schemas.js';
@@ -57,6 +58,8 @@ export const EventSourceSchema = z.enum([
   EventSource.IMPORT,
 ]);
 
+export const StudyModeSchema = z.enum(Object.values(StudyMode) as [string, ...string[]]);
+
 // ============================================================================
 // Card Content Schema (Base)
 // ============================================================================
@@ -102,6 +105,7 @@ export const CreateCardInputSchema = z
     difficulty: DifficultyLevelSchema.default(DifficultyLevel.INTERMEDIATE),
     knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).default([]),
     tags: z.array(TagSchema).max(30).default([]),
+    supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
     source: EventSourceSchema.default(EventSource.USER),
     metadata: z.record(z.unknown()).default({}),
   })
@@ -172,6 +176,7 @@ export const CardImportPreviewInputSchema = z.object({
   formatId: z.string().min(1),
   payload: CardImportPayloadSchema,
   sheetName: z.string().min(1).optional(),
+  supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
 });
 
 export const CardImportFieldMappingSchema = z.object({
@@ -202,6 +207,7 @@ export const UpdateCardInputSchema = z
     difficulty: DifficultyLevelSchema.optional(),
     knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
     tags: z.array(TagSchema).max(30).optional(),
+    supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
     metadata: z.record(z.unknown()).optional(),
   })
   .strict();
@@ -221,6 +227,7 @@ export const DeckQuerySchema = z.object({
   cardTypes: z.array(AnyCardTypeSchema).optional(),
   states: z.array(CardStateSchema).optional(),
   difficulties: z.array(DifficultyLevelSchema).optional(),
+  supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
   knowledgeNodeIds: z.array(NodeIdItemSchema).optional(),
   knowledgeNodeIdMode: z
     .enum(['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'])
