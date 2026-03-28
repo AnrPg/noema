@@ -98,6 +98,7 @@ const UpdateMasteryInputSchema = z.object({
   nodeId: z.string().min(1),
   masteryLevel: z.number().min(0).max(1),
   source: z.string().min(1),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
 });
 
 const GetNodeMasterySummaryInputSchema = z.object({
@@ -124,19 +125,27 @@ const GetCanonicalStructureInputSchema = z.object({
 
 const MutationIdInputSchema = z.object({ mutationId: z.string().min(1) });
 
-const DomainInputSchema = z.object({ domain: z.string().min(1) });
+const DomainInputSchema = z.object({
+  domain: z.string().min(1),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+});
 
-const OptionalDomainInputSchema = z.object({ domain: z.string().optional() });
+const OptionalDomainInputSchema = z.object({
+  domain: z.string().optional(),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+});
 
 const SuggestInterventionInputSchema = z.object({
   misconceptionType: z.string().min(1),
   affectedNodeIds: z.array(z.string().min(1)).min(1),
   domain: z.string().optional(),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
 });
 
 const DomainFocusNodeInputSchema = z.object({
   domain: z.string().min(1),
   focusNodeId: z.string().optional(),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
 });
 
 // ============================================================================
@@ -423,6 +432,7 @@ export function createUpdateMasteryHandler(service: IKnowledgeGraphService) {
         body.nodeId as NodeId,
         {
           masteryLevel: body.masteryLevel as MasteryLevel,
+          ...(body.studyMode !== undefined ? { studyMode: body.studyMode as StudyMode } : {}),
           properties: {
             lastMasterySource: body.source,
             lastMasteryUpdate: new Date().toISOString(),
@@ -608,10 +618,11 @@ export function createComputeStructuralMetricsHandler(service: IKnowledgeGraphSe
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainInputSchema.parse(input);
+      const studyMode = body.studyMode ?? 'knowledge_gaining';
       const result = await service.computeMetrics(
         userId as UserId,
         body.domain,
-        'knowledge_gaining',
+        studyMode,
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
@@ -630,10 +641,11 @@ export function createGetStructuralHealthHandler(service: IKnowledgeGraphService
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainInputSchema.parse(input);
+      const studyMode = body.studyMode ?? 'knowledge_gaining';
       const result = await service.getStructuralHealth(
         userId as UserId,
         body.domain,
-        'knowledge_gaining',
+        studyMode,
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
@@ -652,13 +664,14 @@ export function createDetectMisconceptionsHandler(service: IKnowledgeGraphServic
     try {
       const context = buildContext(userId, correlationId);
       const body = OptionalDomainInputSchema.parse(input);
+      const studyMode = body.studyMode ?? 'knowledge_gaining';
       // If domain is provided, run detection for that domain; otherwise
       // getMisconceptions returns all active misconceptions across domains.
       if (body.domain !== undefined && body.domain !== '') {
         const result = await service.detectMisconceptions(
           userId as UserId,
           body.domain,
-          'knowledge_gaining',
+          studyMode,
           context
         );
         return { success: true, data: result.data, agentHints: result.agentHints };
@@ -666,7 +679,7 @@ export function createDetectMisconceptionsHandler(service: IKnowledgeGraphServic
       const result = await service.getMisconceptions(
         userId as UserId,
         undefined,
-        'knowledge_gaining',
+        studyMode,
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
@@ -687,17 +700,13 @@ export function createSuggestInterventionHandler(service: IKnowledgeGraphService
     try {
       const context = buildContext(userId, correlationId);
       const body = SuggestInterventionInputSchema.parse(input);
+      const studyMode = body.studyMode ?? 'knowledge_gaining';
 
       // Compose: get misconceptions + metacognitive stage in parallel
       const [misconceptionsResult, stageResult] = await Promise.all([
-        service.getMisconceptions(userId as UserId, body.domain, 'knowledge_gaining', context),
+        service.getMisconceptions(userId as UserId, body.domain, studyMode, context),
         body.domain !== undefined && body.domain !== ''
-          ? service.getMetacognitiveStage(
-              userId as UserId,
-              body.domain,
-              'knowledge_gaining',
-              context
-            )
+          ? service.getMetacognitiveStage(userId as UserId, body.domain, studyMode, context)
           : Promise.resolve(null),
       ]);
 
@@ -753,10 +762,11 @@ export function createGetMetacognitiveStageHandler(service: IKnowledgeGraphServi
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainInputSchema.parse(input);
+      const studyMode = body.studyMode ?? 'knowledge_gaining';
       const result = await service.getMetacognitiveStage(
         userId as UserId,
         body.domain,
-        'knowledge_gaining',
+        studyMode,
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
@@ -777,6 +787,7 @@ export function createGetLearningPathContextHandler(service: IKnowledgeGraphServ
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainFocusNodeInputSchema.parse(input);
+      const studyMode = body.studyMode ?? 'knowledge_gaining';
 
       // Build traversal options for focus subgraph
       const focusTraversal = TraversalOptions.create({
@@ -788,15 +799,10 @@ export function createGetLearningPathContextHandler(service: IKnowledgeGraphServ
       // Run all context-gathering calls in parallel for efficiency
       const [metricsResult, misconceptionsResult, stageResult, healthResult, subgraphResult] =
         await Promise.all([
-          service.getMetrics(userId as UserId, body.domain, 'knowledge_gaining', context),
-          service.getMisconceptions(userId as UserId, body.domain, 'knowledge_gaining', context),
-          service.getMetacognitiveStage(
-            userId as UserId,
-            body.domain,
-            'knowledge_gaining',
-            context
-          ),
-          service.getStructuralHealth(userId as UserId, body.domain, 'knowledge_gaining', context),
+          service.getMetrics(userId as UserId, body.domain, studyMode, context),
+          service.getMisconceptions(userId as UserId, body.domain, studyMode, context),
+          service.getMetacognitiveStage(userId as UserId, body.domain, studyMode, context),
+          service.getStructuralHealth(userId as UserId, body.domain, studyMode, context),
           body.focusNodeId !== undefined
             ? service.getSubgraph(
                 userId as UserId,
@@ -821,6 +827,7 @@ export function createGetLearningPathContextHandler(service: IKnowledgeGraphServ
       return {
         success: true,
         data: {
+          studyMode,
           structuralMetrics: metricsResult.data,
           misconceptions: misconceptionsResult.data,
           metacognitiveStage: stageResult.data,
@@ -844,7 +851,7 @@ export function createGetLearningPathContextHandler(service: IKnowledgeGraphServ
           },
           preferenceAlignment: allHints.flatMap((h) => h.preferenceAlignment),
           reasoning:
-            `Comprehensive learning context for domain "${body.domain}". ` +
+            `Comprehensive learning context for domain "${body.domain}" in ${studyMode} mode. ` +
             `Metacognitive stage: ${stageResult.data.currentStage}. ` +
             `Active misconceptions: ${String(misconceptionsResult.data.length)}. ` +
             (body.focusNodeId !== undefined
@@ -1015,6 +1022,12 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'number',
           description: 'New mastery level (0.0 to 1.0)',
         },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description:
+            'Optional study mode for mode-scoped mastery writes. If omitted, the service falls back to the node’s single supported mode or legacy global mastery.',
+        },
         source: {
           type: 'string',
           description:
@@ -1167,6 +1180,11 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       required: ['domain'],
       properties: {
         domain: { type: 'string', description: 'Knowledge domain to compute metrics for' },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study mode lens for structural analysis',
+        },
       },
     },
   },
@@ -1184,6 +1202,11 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       required: ['domain'],
       properties: {
         domain: { type: 'string', description: 'Knowledge domain to assess health for' },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study mode lens for structural health analysis',
+        },
       },
     },
   },
@@ -1201,6 +1224,11 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
         domain: {
           type: 'string',
           description: 'Optional domain filter (all domains if omitted)',
+        },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study mode lens for misconception analysis',
         },
       },
     },
@@ -1231,6 +1259,11 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'string',
           description: 'Optional domain to scope the metacognitive stage lookup',
         },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study mode lens for intervention planning',
+        },
       },
     },
   },
@@ -1251,6 +1284,11 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
         domain: {
           type: 'string',
           description: 'Knowledge domain to assess metacognitive stage for',
+        },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study mode lens for metacognitive assessment',
         },
       },
     },
@@ -1276,6 +1314,11 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'string',
           description:
             'Optional focus concept node ID — if provided, includes a subgraph centered on this node',
+        },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study mode lens for the returned learning context',
         },
       },
     },

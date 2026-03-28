@@ -31,6 +31,7 @@ import type {
   ICreateOntologyImportRunInput,
   ICreateNodeInput,
   ICancelOntologyImportRunInput,
+  IGraphNodeQueryParams,
   IRegisterOntologyImportSourceInput,
   ISubmitOntologyImportRunPreviewInput,
   IUpdateOntologyImportSourceInput,
@@ -80,22 +81,15 @@ export const pkgNodesApi = {
   create: (userId: UserId, data: ICreateNodeInput): Promise<NodeResponse> =>
     http.post(`${pkgBase(userId)}/nodes`, data),
 
-  list: (
-    userId: UserId,
-    params?: {
-      page?: number;
-      pageSize?: number;
-      nodeType?: string;
-      domain?: string;
-      search?: string;
-      sortBy?: string;
-      sortOrder?: string;
-      studyMode?: StudyMode;
-    }
-  ): Promise<NodesListResponse> =>
+  list: (userId: UserId, params?: IGraphNodeQueryParams): Promise<NodesListResponse> =>
     params === undefined
       ? http.get(`${pkgBase(userId)}/nodes`)
-      : http.get(`${pkgBase(userId)}/nodes`, { params }),
+      : http.get(`${pkgBase(userId)}/nodes`, {
+          params: params as unknown as Record<
+            string,
+            string | number | boolean | readonly string[] | undefined
+          >,
+        }),
 
   get: (userId: UserId, nodeId: NodeId): Promise<NodeResponse> =>
     http.get(`${pkgBase(userId)}/nodes/${nodeId}`),
@@ -163,14 +157,24 @@ export const pkgTraversalApi = {
   getTopology: (userId: UserId): Promise<TopologyResponse> =>
     http.get(`${pkgBase(userId)}/traversal/topology`),
 
-  getFrontier: (userId: UserId, domain: string): Promise<FrontierResponse> =>
+  getFrontier: (userId: UserId, domain: string, studyMode?: StudyMode): Promise<FrontierResponse> =>
     http.get(`${pkgBase(userId)}/traversal/frontier`, {
-      params: { domain },
+      params: {
+        domain,
+        ...(studyMode !== undefined ? { studyMode } : {}),
+      },
     }),
 
-  getBridges: (userId: UserId, domain: string): Promise<BridgeNodesResponse> =>
+  getBridges: (
+    userId: UserId,
+    domain: string,
+    studyMode?: StudyMode
+  ): Promise<BridgeNodesResponse> =>
     http.get(`${pkgBase(userId)}/traversal/bridges`, {
-      params: { domain },
+      params: {
+        domain,
+        ...(studyMode !== undefined ? { studyMode } : {}),
+      },
     }),
 
   getCentrality: (userId: UserId): Promise<CentralityResponse> =>
@@ -199,15 +203,15 @@ export const pkgOperationsApi = {
 // ============================================================================
 
 export const ckgNodesApi = {
-  list: (params?: {
-    page?: number;
-    pageSize?: number;
-    nodeType?: string;
-    domain?: string;
-    search?: string;
-    studyMode?: StudyMode;
-  }): Promise<NodesListResponse> =>
-    params === undefined ? http.get(`${ckgBase}/nodes`) : http.get(`${ckgBase}/nodes`, { params }),
+  list: (params?: IGraphNodeQueryParams): Promise<NodesListResponse> =>
+    params === undefined
+      ? http.get(`${ckgBase}/nodes`)
+      : http.get(`${ckgBase}/nodes`, {
+          params: params as unknown as Record<
+            string,
+            string | number | boolean | readonly string[] | undefined
+          >,
+        }),
 
   get: (nodeId: NodeId): Promise<NodeResponse> => http.get(`${ckgBase}/nodes/${nodeId}`),
 

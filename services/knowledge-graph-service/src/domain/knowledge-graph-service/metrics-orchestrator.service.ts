@@ -198,6 +198,16 @@ export class MetricsOrchestrator {
 
       kgCounters.increment(KG_COUNTERS.METRICS_COMPUTED, { domain });
 
+      const currentStageAssessment = assessMetacognitiveStage(
+        metrics,
+        previousSnapshot?.metrics ?? null,
+        domain
+      );
+      const previousStageAssessment =
+        previousSnapshot?.metrics !== undefined
+          ? assessMetacognitiveStage(previousSnapshot.metrics, null, domain)
+          : null;
+
       // Publish event only when metrics changed significantly
       const hasSignificantChange = detectSignificantMetricChange(
         metrics,
@@ -210,6 +220,33 @@ export class MetricsOrchestrator {
           aggregateType: 'PersonalKnowledgeGraph',
           aggregateId: userId,
           payload: { userId, domain, studyMode, metrics },
+          metadata: {
+            correlationId: context.correlationId,
+            userId: context.userId,
+          },
+        });
+      }
+
+      if (
+        previousStageAssessment !== null &&
+        previousStageAssessment.currentStage !== currentStageAssessment.currentStage
+      ) {
+        const rationale = currentStageAssessment.regressionDetected
+          ? `Structural signals regressed from ${previousStageAssessment.currentStage} to ${currentStageAssessment.currentStage}.`
+          : `Structural signals advanced from ${previousStageAssessment.currentStage} to ${currentStageAssessment.currentStage}.`;
+
+        await this.eventPublisher.publish({
+          eventType: KnowledgeGraphEventType.METACOGNITIVE_STAGE_TRANSITIONED,
+          aggregateType: 'MetacognitiveStage',
+          aggregateId: userId,
+          payload: {
+            userId,
+            domain,
+            previousStage: previousStageAssessment.currentStage,
+            newStage: currentStageAssessment.currentStage,
+            triggeringMetrics: metrics,
+            rationale,
+          },
           metadata: {
             correlationId: context.correlationId,
             userId: context.userId,

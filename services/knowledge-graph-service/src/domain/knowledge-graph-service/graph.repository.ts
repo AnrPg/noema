@@ -98,6 +98,7 @@ export interface IUpdateNodeInput {
   readonly sourceCoverage?: ISourceCoverageSummary | null;
   readonly properties?: Record<string, unknown>;
   readonly masteryLevel?: MasteryLevel;
+  readonly studyMode?: StudyMode;
 }
 
 /**
@@ -376,6 +377,7 @@ export interface ITraversalRepository {
   getDomainSubgraph(
     domain: string,
     edgeTypes?: readonly GraphEdgeType[],
+    studyMode?: StudyMode,
     userId?: string
   ): Promise<ISubgraph>;
 
@@ -390,6 +392,7 @@ export interface ITraversalRepository {
   findArticulationPointsNative(
     domain: string,
     edgeTypes?: readonly GraphEdgeType[],
+    studyMode?: StudyMode,
     userId?: string
   ): Promise<NodeId[] | null>;
 

@@ -165,8 +165,8 @@ export default function KnowledgePage(): React.JSX.Element {
   const { data: edgesData, isLoading: edgesLoading } = usePKGEdges(userId, {
     studyMode: activeStudyMode,
   });
-  const { data: frontierData } = useKnowledgeFrontier(userId, selectedDomain);
-  const { data: bridgesData } = useBridgeNodes(userId, selectedDomain);
+  const { data: frontierData } = useKnowledgeFrontier(userId, selectedDomain, activeStudyMode);
+  const { data: bridgesData } = useBridgeNodes(userId, selectedDomain, activeStudyMode);
   const { data: comparisonData, isLoading: comparisonLoading } = usePKGCKGComparison(userId, {
     domain: selectedDomain ?? 'general',
     scopeMode: 'engagement_hops',

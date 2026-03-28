@@ -13,12 +13,81 @@
  * - EdgeFilterSchema      → IEdgeFilter
  */
 
+import { CkgNodeStatus } from '@noema/types';
 import { GraphEdgeTypeSchema, NodeIdSchema, StudyModeSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
 // Node Input Schemas
 // ============================================================================
+
+const ConfidenceBandSchema = z.enum(['low', 'medium', 'high']);
+
+const CanonicalExternalRefSchema = z.object({
+  sourceId: z.string().min(1),
+  externalId: z.string().min(1),
+  iri: z.string().min(1).nullable().optional(),
+  refType: z.string().min(1).nullable().optional(),
+  sourceVersion: z.string().min(1).nullable().optional(),
+  url: z.string().min(1).nullable().optional(),
+  isCanonical: z.boolean().optional(),
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
+});
+
+const OntologyMappingSchema = z.object({
+  sourceId: z.string().min(1),
+  externalId: z.string().min(1),
+  mappingKind: z.string().min(1),
+  targetExternalId: z.string().min(1).nullable().optional(),
+  targetIri: z.string().min(1).nullable().optional(),
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
+  confidenceBand: ConfidenceBandSchema.nullable().optional(),
+  conflictFlags: z.array(z.string().min(1)).default([]).optional(),
+});
+
+const NodeProvenanceEntrySchema = z.object({
+  sourceId: z.string().min(1),
+  sourceVersion: z.string().min(1).nullable().optional(),
+  runId: z.string().min(1).nullable().optional(),
+  artifactId: z.string().min(1).nullable().optional(),
+  harvestedAt: z.string().datetime().nullable().optional(),
+  license: z.string().min(1).nullable().optional(),
+  requestUrl: z.string().url().nullable().optional(),
+  recordKind: z.string().min(1).nullable().optional(),
+});
+
+const NodeReviewMetadataSchema = z.object({
+  confidenceScore: z.number().min(0).max(1).nullable().optional(),
+  confidenceBand: ConfidenceBandSchema.nullable().optional(),
+  conflictFlags: z.array(z.string().min(1)).default([]).optional(),
+  reviewState: z
+    .enum(['ready', 'blocked', 'reviewer_overridden', 'endpoint_unresolved'])
+    .nullable()
+    .optional(),
+  notes: z.array(z.string().min(1)).default([]).optional(),
+  overridden: z.boolean().optional(),
+});
+
+const SourceCoverageSummarySchema = z.object({
+  contributingSourceIds: z.array(z.string().min(1)).default([]),
+  sourceCount: z.number().int().nonnegative(),
+  hasBackboneSource: z.boolean().optional(),
+  hasEnhancementSource: z.boolean().optional(),
+  lastEnrichedAt: z.string().datetime().nullable().optional(),
+});
+
+const NodeEnrichmentSchema = {
+  status: z.enum(Object.values(CkgNodeStatus) as [string, ...string[]]).optional(),
+  aliases: z.array(z.string().min(1)).default([]).optional(),
+  languages: z.array(z.string().min(1)).default([]).optional(),
+  tags: z.array(z.string().min(1)).default([]).optional(),
+  semanticHints: z.array(z.string().min(1)).default([]).optional(),
+  canonicalExternalRefs: z.array(CanonicalExternalRefSchema).default([]).optional(),
+  ontologyMappings: z.array(OntologyMappingSchema).default([]).optional(),
+  provenance: z.array(NodeProvenanceEntrySchema).default([]).optional(),
+  reviewMetadata: NodeReviewMetadataSchema.nullable().optional(),
+  sourceCoverage: SourceCoverageSummarySchema.nullable().optional(),
+} as const;
 
 /**
  * Schema for creating a new graph node.
@@ -29,6 +98,7 @@ export const CreateNodeInputSchema = z.object({
   nodeType: z.string().min(1, 'Node type is required'),
   domain: z.string().min(1, 'Domain is required').max(200, 'Domain too long'),
   description: z.string().max(2000, 'Description too long').optional(),
+  ...NodeEnrichmentSchema,
   supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
   properties: z.record(z.unknown()).optional(),
   masteryLevel: z.number().min(0).max(1).optional(),
@@ -41,8 +111,11 @@ export const CreateNodeInputSchema = z.object({
 export const UpdateNodeInputSchema = z
   .object({
     label: z.string().min(1).max(500).optional(),
+    nodeType: z.string().min(1).optional(),
     description: z.string().max(2000).optional(),
     domain: z.string().min(1).max(200).optional(),
+    ...NodeEnrichmentSchema,
+    studyMode: StudyModeSchema.optional(),
     supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
     properties: z.record(z.unknown()).optional(),
     masteryLevel: z.number().min(0).max(1).optional(),
@@ -50,13 +123,28 @@ export const UpdateNodeInputSchema = z
   .refine(
     (data) =>
       data.label !== undefined ||
+      data.nodeType !== undefined ||
       data.description !== undefined ||
       data.domain !== undefined ||
+      data.status !== undefined ||
+      data.aliases !== undefined ||
+      data.languages !== undefined ||
+      data.tags !== undefined ||
+      data.semanticHints !== undefined ||
+      data.canonicalExternalRefs !== undefined ||
+      data.ontologyMappings !== undefined ||
+      data.provenance !== undefined ||
+      data.reviewMetadata !== undefined ||
+      data.sourceCoverage !== undefined ||
+      data.studyMode !== undefined ||
       data.supportedStudyModes !== undefined ||
       data.properties !== undefined ||
       data.masteryLevel !== undefined,
     { message: 'At least one field must be provided for update' }
-  );
+  )
+  .refine((data) => data.studyMode === undefined || data.masteryLevel !== undefined, {
+    message: 'studyMode can only be provided when masteryLevel is also provided',
+  });
 
 // ============================================================================
 // Edge Input Schemas

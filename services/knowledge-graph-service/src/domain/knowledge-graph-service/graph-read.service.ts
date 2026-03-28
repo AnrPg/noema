@@ -310,12 +310,14 @@ export class GraphReadService {
     const subgraph = await this.graphRepository.getDomainSubgraph(
       query.domain,
       query.edgeTypes,
+      query.studyMode,
       userId
     );
 
     const nativeApIds = await this.graphRepository.findArticulationPointsNative(
       query.domain,
       query.edgeTypes,
+      query.studyMode,
       userId
     );
 
@@ -405,6 +407,7 @@ export class GraphReadService {
     const subgraph = await this.graphRepository.getDomainSubgraph(
       query.domain,
       query.edgeTypes,
+      undefined,
       userId
     );
 
@@ -460,6 +463,7 @@ export class GraphReadService {
     const subgraph = await this.graphRepository.getDomainSubgraph(
       query.domain,
       query.edgeTypes,
+      undefined,
       userId
     );
 

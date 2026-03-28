@@ -12,6 +12,10 @@ import {
   UserIdSchema,
 } from '@noema/validation';
 import { z } from 'zod';
+import {
+  CreateNodeInputSchema,
+  UpdateNodeInputSchema,
+} from '../../domain/knowledge-graph-service/knowledge-graph.schemas.js';
 
 // ============================================================================
 // URL Parameters
@@ -34,10 +38,13 @@ export const NodeQueryParamsSchema = z.object({
   nodeType: GraphNodeTypeSchema.optional(),
   domain: z.string().min(1).max(200).optional(),
   search: z.string().min(1).max(200).optional(),
+  searchMode: z.enum(['substring', 'fulltext']).optional(),
   studyMode: StudyModeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
-  sortBy: z.enum(['label', 'createdAt', 'updatedAt', 'masteryLevel']).default('createdAt'),
+  sortBy: z
+    .enum(['label', 'createdAt', 'updatedAt', 'masteryLevel', 'relevance'])
+    .default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 
@@ -50,36 +57,35 @@ export const NodeQueryParamsSchema = z.object({
  * Identical to the domain CreateNodeInputSchema but defined here for
  * clear separation between API and domain validation.
  */
-export const CreateNodeRequestSchema = z.object({
-  label: z.string().min(1, 'Node label is required').max(200, 'Node label too long'),
-  nodeType: GraphNodeTypeSchema,
-  domain: z.string().min(1, 'Domain is required').max(200, 'Domain too long'),
-  description: z.string().max(2000, 'Description too long').optional(),
-  supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
-  properties: z.record(z.unknown()).optional(),
-});
+export const CreateNodeRequestSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    ...record,
+    nodeType: record['nodeType'] ?? record['type'],
+    properties: record['properties'] ?? record['metadata'],
+  };
+}, CreateNodeInputSchema);
 
 /**
  * API-layer update node request.
  * At least one field must be provided.
  */
-export const UpdateNodeRequestSchema = z
-  .object({
-    label: z.string().min(1).max(200).optional(),
-    description: z.string().max(2000).optional(),
-    supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
-    properties: z.record(z.unknown()).optional(),
-    masteryLevel: z.number().min(0).max(1).optional(),
-  })
-  .refine(
-    (data) =>
-      data.label !== undefined ||
-      data.description !== undefined ||
-      data.supportedStudyModes !== undefined ||
-      data.properties !== undefined ||
-      data.masteryLevel !== undefined,
-    { message: 'At least one field must be provided for update' }
-  );
+export const UpdateNodeRequestSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    ...record,
+    nodeType: record['nodeType'] ?? record['type'],
+    properties: record['properties'] ?? record['metadata'],
+  };
+}, UpdateNodeInputSchema);
 
 // ============================================================================
 // Type Inference

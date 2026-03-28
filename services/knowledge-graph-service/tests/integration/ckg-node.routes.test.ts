@@ -9,6 +9,7 @@
 import type { NodeId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { ICkgNodeBatchAuthoringService } from '../../src/application/knowledge-graph/node-authoring/contracts.js';
 import { registerCkgNodeRoutes } from '../../src/api/rest/ckg-node.routes.js';
 import { NodeNotFoundError } from '../../src/domain/knowledge-graph-service/errors/graph.errors.js';
 import { graphNode, resetIdCounter, serviceResult, TEST_DOMAIN } from '../fixtures/index.js';
@@ -21,10 +22,36 @@ import { buildTestApp, buildUnauthenticatedTestApp } from './test-app.js';
 
 let app: FastifyInstance;
 let service: ReturnType<typeof mockKnowledgeGraphService>;
+const nodeAuthoringService: ICkgNodeBatchAuthoringService = {
+  preview: () =>
+    Promise.reject(new Error('CKG node authoring preview not configured for this test')),
+};
+const registerCkgNodeRoutesForTest = (
+  fastify: FastifyInstance,
+  graphService: ReturnType<typeof mockKnowledgeGraphService>,
+  authMiddleware: Parameters<typeof buildTestApp>[0]['registerRoutes'] extends (
+    fastify: FastifyInstance,
+    service: ReturnType<typeof mockKnowledgeGraphService>,
+    authMiddleware: infer TAuthMiddleware,
+    options?: infer TOptions
+  ) => void
+    ? TAuthMiddleware
+    : never,
+  options?: Parameters<typeof buildTestApp>[0]['registerRoutes'] extends (
+    fastify: FastifyInstance,
+    service: ReturnType<typeof mockKnowledgeGraphService>,
+    authMiddleware: unknown,
+    options?: infer TOptions
+  ) => void
+    ? TOptions
+    : never
+) => {
+  registerCkgNodeRoutes(fastify, graphService, nodeAuthoringService, authMiddleware, options);
+};
 
 beforeAll(async () => {
   service = mockKnowledgeGraphService();
-  app = buildTestApp({ service, registerRoutes: registerCkgNodeRoutes });
+  app = buildTestApp({ service, registerRoutes: registerCkgNodeRoutesForTest });
   await app.ready();
 });
 
@@ -68,7 +95,7 @@ describe('GET /ckg/nodes', () => {
   it('returns 401 without auth', async () => {
     const unauthApp = buildUnauthenticatedTestApp({
       service,
-      registerRoutes: registerCkgNodeRoutes,
+      registerRoutes: registerCkgNodeRoutesForTest,
     });
     await unauthApp.ready();
 
@@ -79,6 +106,36 @@ describe('GET /ckg/nodes', () => {
 
     expect(res.statusCode).toBe(401);
     await unauthApp.close();
+  });
+
+  it('passes full-text search params through the CKG node filter', async () => {
+    service.listCkgNodes.mockResolvedValue(
+      serviceResult({
+        items: [],
+        total: 0,
+        hasMore: false,
+      })
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${BASE}?search=algbra&searchMode=fulltext&sortBy=relevance&studyMode=knowledge_gaining`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.listCkgNodes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labelContains: 'algbra',
+        searchMode: 'fulltext',
+        sortBy: 'relevance',
+        studyMode: 'knowledge_gaining',
+      }),
+      expect.objectContaining({
+        limit: 20,
+        offset: 0,
+      }),
+      expect.any(Object)
+    );
   });
 });
 

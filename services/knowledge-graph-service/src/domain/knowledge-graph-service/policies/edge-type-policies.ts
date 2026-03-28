@@ -57,7 +57,7 @@ const CONCEPT_BEARING_TYPES: readonly GraphNodeType[] = [
  * metadata (category, symmetry, description) in addition to structural
  * validation rules (acyclicity, node type constraints, weight).
  *
- * The 25 edge types span 6 ontological categories:
+ * The 31 edge types span 6 ontological categories:
  *
  * | Category               | Edge Types                                                 |
  * |------------------------|------------------------------------------------------------|
@@ -65,8 +65,11 @@ const CONCEPT_BEARING_TYPES: readonly GraphNodeType[] = [
  * | Mereological           | part_of, constituted_by                                    |
  * | Logical                | equivalent_to, entails, disjoint_with, contradicts         |
  * | Causal/Temporal        | causes, precedes, depends_on                               |
- * | Associative            | related_to, analogous_to, contrasts_with, confusable_with |
- * | Structural/Pedagogical | prerequisite, derived_from, has_property, subskill_of,    |
+ * | Associative            | related_to, analogous_to, contrasts_with, confusable_with,|
+ * |                        | translation_equivalent, false_friend_of,                  |
+ * |                        | minimal_pair_with, collocates_with                        |
+ * | Structural/Pedagogical | prerequisite, derived_from, has_property, governs,        |
+ * |                        | inflected_form_of, subskill_of,                           |
  * |                        | has_subskill, essential_for_occupation,                   |
  * |                        | occupation_requires_essential_skill,                      |
  * |                        | optional_for_occupation,                                  |
@@ -339,6 +342,71 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
       'assessment, or transfer.',
   }),
 
+  // ── translation_equivalent ─────────────────────────────────────────────
+  // Acyclic: NO — translation equivalence is typically symmetric.
+  [GraphEdgeType.TRANSLATION_EQUIVALENT]: EdgePolicy.create({
+    edgeType: GraphEdgeType.TRANSLATION_EQUIVALENT,
+    category: EdgeOntologicalCategory.ASSOCIATIVE,
+    requiresAcyclicity: false,
+    isSymmetric: true,
+    allowedSourceTypes: CONCEPT_BEARING_TYPES,
+    allowedTargetTypes: CONCEPT_BEARING_TYPES,
+    maxWeight: 1.0,
+    defaultWeight: 0.9,
+    description:
+      'Cross-language lexical or phrasal equivalence: "A translates to B". ' +
+      'Use when two nodes are close enough in meaning to support recall, production, ' +
+      'or transfer practice across languages.',
+  }),
+
+  // ── false_friend_of ────────────────────────────────────────────────────
+  // Acyclic: NO — false-friend confusion is symmetric.
+  [GraphEdgeType.FALSE_FRIEND_OF]: EdgePolicy.create({
+    edgeType: GraphEdgeType.FALSE_FRIEND_OF,
+    category: EdgeOntologicalCategory.ASSOCIATIVE,
+    requiresAcyclicity: false,
+    isSymmetric: true,
+    allowedSourceTypes: CONCEPT_BEARING_TYPES,
+    allowedTargetTypes: CONCEPT_BEARING_TYPES,
+    maxWeight: 1.0,
+    defaultWeight: 0.8,
+    description:
+      'Surface similarity with divergent meaning: "A is a false friend of B". ' +
+      'Use for cross-language traps that look related but should trigger a contrastive warning.',
+  }),
+
+  // ── minimal_pair_with ──────────────────────────────────────────────────
+  // Acyclic: NO — minimal-pair contrast is symmetric.
+  [GraphEdgeType.MINIMAL_PAIR_WITH]: EdgePolicy.create({
+    edgeType: GraphEdgeType.MINIMAL_PAIR_WITH,
+    category: EdgeOntologicalCategory.ASSOCIATIVE,
+    requiresAcyclicity: false,
+    isSymmetric: true,
+    allowedSourceTypes: CONCEPT_BEARING_TYPES,
+    allowedTargetTypes: CONCEPT_BEARING_TYPES,
+    maxWeight: 1.0,
+    defaultWeight: 0.8,
+    description:
+      'Phonological contrast relation: "A forms a minimal pair with B". ' +
+      'Use for pronunciation-sensitive contrasts where a small sound change carries meaning.',
+  }),
+
+  // ── collocates_with ────────────────────────────────────────────────────
+  // Acyclic: NO — collocation can be modelled symmetrically for retrieval and practice.
+  [GraphEdgeType.COLLOCATES_WITH]: EdgePolicy.create({
+    edgeType: GraphEdgeType.COLLOCATES_WITH,
+    category: EdgeOntologicalCategory.ASSOCIATIVE,
+    requiresAcyclicity: false,
+    isSymmetric: true,
+    allowedSourceTypes: CONCEPT_BEARING_TYPES,
+    allowedTargetTypes: CONCEPT_BEARING_TYPES,
+    maxWeight: 1.0,
+    defaultWeight: 0.7,
+    description:
+      'Authentic co-occurrence relation: "A typically collocates with B". ' +
+      'Use for lexical partnerships and formulaic combinations that should be practised together.',
+  }),
+
   // ── analogous_to ────────────────────────────────────────────────────────
   // Acyclic: NO — analogy is symmetric. "A ~ B" implies "B ~ A".
   [GraphEdgeType.ANALOGOUS_TO]: EdgePolicy.create({
@@ -453,6 +521,38 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
       'A quality or attribute inheres in its bearer — e.g., ' +
       '"Bubble Sort has_property O(n²) Time Complexity", ' +
       '"Photon has_property Wave–Particle Duality".',
+  }),
+
+  // ── governs ────────────────────────────────────────────────────────────
+  // Acyclic: YES — governance should point from controller to governed pattern.
+  [GraphEdgeType.GOVERNS]: EdgePolicy.create({
+    edgeType: GraphEdgeType.GOVERNS,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: true,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL, GraphNodeType.PROCEDURE],
+    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL, GraphNodeType.PROCEDURE],
+    maxWeight: 1.0,
+    defaultWeight: 0.8,
+    description:
+      'Constructional or case governance: "A governs B". ' +
+      'Use for grammar and syntax relations where one pattern constrains the form or role of another.',
+  }),
+
+  // ── inflected_form_of ──────────────────────────────────────────────────
+  // Acyclic: YES — inflected forms resolve toward a base lemma, not vice versa.
+  [GraphEdgeType.INFLECTED_FORM_OF]: EdgePolicy.create({
+    edgeType: GraphEdgeType.INFLECTED_FORM_OF,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: true,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.EXAMPLE],
+    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
+    maxWeight: 1.0,
+    defaultWeight: 1.0,
+    description:
+      'Inflectional back-link: "A is an inflected form of B". ' +
+      'Use to connect surface word forms back to their canonical lemma or governing pattern.',
   }),
 
   // ── subskill_of ────────────────────────────────────────────────────────

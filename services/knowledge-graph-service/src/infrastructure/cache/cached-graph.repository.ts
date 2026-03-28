@@ -23,6 +23,7 @@ import type {
   MasteryLevel,
   ISubgraph,
   NodeId,
+  StudyMode,
 } from '@noema/types';
 
 import type {
@@ -339,25 +340,28 @@ export class CachedGraphRepository implements IGraphRepository {
   async getDomainSubgraph(
     domain: string,
     edgeTypes?: readonly GraphEdgeType[],
+    studyMode?: StudyMode,
     userId?: string
   ): Promise<ISubgraph> {
     const etKey =
       edgeTypes !== undefined && edgeTypes.length > 0 ? [...edgeTypes].sort().join(',') : 'all';
     const userKey = userId ?? 'ckg';
-    const cacheKey = `domain-subgraph:${userKey}:${domain}:${etKey}`;
+    const modeKey = studyMode ?? 'all';
+    const cacheKey = `domain-subgraph:${userKey}:${domain}:${etKey}:${modeKey}`;
 
     return this.cache.getOrLoad(cacheKey, this.queryTtl, () =>
-      this.inner.getDomainSubgraph(domain, edgeTypes, userId)
+      this.inner.getDomainSubgraph(domain, edgeTypes, studyMode, userId)
     );
   }
 
   async findArticulationPointsNative(
     domain: string,
     edgeTypes?: readonly GraphEdgeType[],
+    studyMode?: StudyMode,
     userId?: string
   ): Promise<NodeId[] | null> {
     // GDS detection is already cached inside the Neo4j repo; pass through.
-    return this.inner.findArticulationPointsNative(domain, edgeTypes, userId);
+    return this.inner.findArticulationPointsNative(domain, edgeTypes, studyMode, userId);
   }
 
   async getKnowledgeFrontier(

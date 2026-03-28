@@ -8,6 +8,7 @@ import {
   GraphEdgeTypeSchema,
   GraphNodeTypeSchema,
   NodeIdSchema,
+  StudyModeSchema,
   UserIdSchema,
 } from '@noema/validation';
 import { z } from 'zod';
@@ -150,6 +151,7 @@ export const NeighborhoodQueryParamsSchema = z.object({
  */
 export const BridgeQueryParamsSchema = z.object({
   domain: z.string().min(1),
+  studyMode: StudyModeSchema.optional(),
   edgeTypes: z.string().optional(),
   minComponentSize: z.coerce.number().int().min(1).max(1000).default(2),
 });
@@ -164,6 +166,7 @@ export const BridgeQueryParamsSchema = z.object({
  */
 export const FrontierQueryParamsSchema = z.object({
   domain: z.string().min(1),
+  studyMode: StudyModeSchema.optional(),
   masteryThreshold: z.coerce.number().min(0).max(1).default(0.7),
   maxResults: z.coerce.number().int().min(1).max(100).default(20),
   sortBy: z.enum(['readiness', 'centrality', 'depth']).default('readiness'),

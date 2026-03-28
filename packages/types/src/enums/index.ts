@@ -311,7 +311,7 @@ export type GraphNodeType = (typeof GraphNodeType)[keyof typeof GraphNodeType];
 /**
  * Knowledge graph edge types.
  *
- * 25 edge types organized into 6 ontological categories covering the
+ * 31 edge types organized into 6 ontological categories covering the
  * full spectrum of epistemological relations needed for a pedagogical
  * knowledge graph:
  *
@@ -319,9 +319,10 @@ export type GraphNodeType = (typeof GraphNodeType)[keyof typeof GraphNodeType];
  * - **Mereological**: part_of, constituted_by
  * - **Logical**: equivalent_to, entails, disjoint_with, contradicts
  * - **Causal/Temporal**: causes, precedes, depends_on
- * - **Associative**: related_to, analogous_to, contrasts_with, confusable_with
+ * - **Associative**: related_to, analogous_to, contrasts_with, confusable_with,
+ *   translation_equivalent, false_friend_of, minimal_pair_with, collocates_with
  * - **Structural/Pedagogical**: prerequisite, derived_from, has_property,
- *   subskill_of, has_subskill, essential_for_occupation,
+ *   governs, inflected_form_of, subskill_of, has_subskill, essential_for_occupation,
  *   occupation_requires_essential_skill, optional_for_occupation,
  *   occupation_benefits_from_optional_skill, transferable_to
  *
@@ -368,6 +369,14 @@ export const GraphEdgeType = {
   CONTRASTS_WITH: 'contrasts_with',
   /** Two skills are commonly mistaken for one another by learners (symmetric) */
   CONFUSABLE_WITH: 'confusable_with',
+  /** Cross-language lexical or phrasal equivalence used for recall/transfer (symmetric) */
+  TRANSLATION_EQUIVALENT: 'translation_equivalent',
+  /** Surface similarity with divergent meaning across languages (symmetric) */
+  FALSE_FRIEND_OF: 'false_friend_of',
+  /** Phonological contrast where small changes matter for meaning (symmetric) */
+  MINIMAL_PAIR_WITH: 'minimal_pair_with',
+  /** Typical co-occurrence or lexical partnership in authentic usage */
+  COLLOCATES_WITH: 'collocates_with',
 
   // ── Structural / Pedagogical ──────────────────────────────────────────
   /** Learning dependency: "A requires B to be learned first" */
@@ -376,6 +385,10 @@ export const GraphEdgeType = {
   DERIVED_FROM: 'derived_from',
   /** Inherence: "A has property/quality B" (attribute inheres in bearer) */
   HAS_PROPERTY: 'has_property',
+  /** Constructional or case governance: "A governs/frames B" */
+  GOVERNS: 'governs',
+  /** Inflectional relationship from a surface form back to its lemma */
+  INFLECTED_FORM_OF: 'inflected_form_of',
   /** Skill hierarchy: "A is a narrower or more specific skill than B" */
   SUBSKILL_OF: 'subskill_of',
   /** Skill hierarchy inverse: "A contains B as a narrower skill" */

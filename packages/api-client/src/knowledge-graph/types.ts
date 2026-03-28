@@ -87,11 +87,25 @@ export type OntologyMergeConflictKind =
   | 'mapping_conflict'
   | 'weak_mapping_only';
 export type MasteryBand = 'untracked' | 'emerging' | 'developing' | 'mastered';
+export type NodeSearchMode = 'substring' | 'fulltext';
+export type NodeSortBy = 'label' | 'createdAt' | 'updatedAt' | 'masteryLevel' | 'relevance';
 
 export interface IOntologyImportRunConfigurationDto {
   mode: string | null;
   language: string | null;
   seedNodes: string[];
+}
+
+export interface IGraphNodeQueryParams {
+  page?: number;
+  pageSize?: number;
+  nodeType?: string;
+  domain?: string;
+  search?: string;
+  searchMode?: NodeSearchMode;
+  sortBy?: NodeSortBy;
+  sortOrder?: 'asc' | 'desc';
+  studyMode?: StudyMode;
 }
 
 // ============================================================================
@@ -146,6 +160,7 @@ export interface IUpdateNodeInput {
   description?: string | null;
   domain?: string | null;
   status?: CkgNodeStatus | null;
+  studyMode?: StudyMode;
   aliases?: string[];
   languages?: string[];
   tags?: string[];

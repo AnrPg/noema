@@ -84,6 +84,33 @@ describe('POST /users/:userId/pkg/nodes', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('accepts frontend aliases for type and metadata', async () => {
+    const node = graphNode({ userId: TEST_USER_ID });
+    service.createNode.mockResolvedValue(serviceResult(node));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: BASE,
+      payload: {
+        label: 'Abstract algebra',
+        type: 'concept',
+        domain: TEST_DOMAIN,
+        metadata: { copiedFromWorkflow: 'card-node-authoring-panel' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(service.createNode).toHaveBeenCalledWith(
+      TEST_USER_ID,
+      expect.objectContaining({
+        label: 'Abstract algebra',
+        nodeType: 'concept',
+        properties: { copiedFromWorkflow: 'card-node-authoring-panel' },
+      }),
+      expect.any(Object)
+    );
+  });
+
   it('returns 401 without auth', async () => {
     const unauthApp = buildUnauthenticatedTestApp({
       service,
@@ -142,6 +169,30 @@ describe('GET /users/:userId/pkg/nodes', () => {
     expect(service.listNodes).toHaveBeenCalledOnce();
     const [userId] = service.listNodes.mock.calls[0] as [UserId];
     expect(userId).toBe(TEST_USER_ID);
+  });
+
+  it('passes full-text search params through the node filter', async () => {
+    service.listNodes.mockResolvedValue(serviceResult({ items: [], total: 0, hasMore: false }));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${BASE}?search=algbra&searchMode=fulltext&sortBy=relevance`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.listNodes).toHaveBeenCalledWith(
+      TEST_USER_ID,
+      expect.objectContaining({
+        labelContains: 'algbra',
+        searchMode: 'fulltext',
+        sortBy: 'relevance',
+      }),
+      expect.objectContaining({
+        limit: 20,
+        offset: 0,
+      }),
+      expect.any(Object)
+    );
   });
 
   it('passes sort fields through the node filter', async () => {

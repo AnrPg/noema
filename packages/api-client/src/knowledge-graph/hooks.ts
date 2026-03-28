@@ -49,6 +49,7 @@ import type {
   ICreateNodeInput,
   IGraphEdgeDto,
   IGraphNodeDto,
+  IMetacognitiveStageAssessmentDto,
   INodeMasterySummaryDto,
   IListOntologyImportRunsParams,
   IOntologyImportRunDetailDto,
@@ -56,8 +57,10 @@ import type {
   IOntologyImportSourceDto,
   IOntologyImportsSystemStatusDto,
   IOntologyImportArtifactContentDto,
+  IStructuralMetricsDto,
   IUpdateOntologyImportSourceInput,
   IPkgCkgComparisonDto,
+  IGraphNodeQueryParams,
   ISubgraphParams,
   IUpdateMisconceptionStatusInput,
   IUpdateNodeInput,
@@ -871,19 +874,8 @@ function normalizeMutationAuditLogResponse(
 export const kgKeys = {
   all: ['kg'] as const,
   pkg: (userId: UserId) => [...kgKeys.all, 'pkg', userId] as const,
-  pkgNodes: (
-    userId: UserId,
-    params?: {
-      page?: number;
-      pageSize?: number;
-      nodeType?: string;
-      domain?: string;
-      search?: string;
-      sortBy?: string;
-      sortOrder?: string;
-      studyMode?: StudyMode;
-    }
-  ) => [...kgKeys.pkg(userId), 'nodes', ...(params !== undefined ? [params] : [])] as const,
+  pkgNodes: (userId: UserId, params?: IGraphNodeQueryParams) =>
+    [...kgKeys.pkg(userId), 'nodes', ...(params !== undefined ? [params] : [])] as const,
   pkgNode: (userId: UserId, nodeId: NodeId) => [...kgKeys.pkgNodes(userId), nodeId] as const,
   pkgEdges: (userId: UserId, studyMode?: StudyMode) =>
     [...kgKeys.pkg(userId), 'edges', studyMode ?? null] as const,
@@ -898,7 +890,8 @@ export const kgKeys = {
   pkgTopology: (userId: UserId) => [...kgKeys.pkg(userId), 'topology'] as const,
   pkgOps: (userId: UserId) => [...kgKeys.pkg(userId), 'operations'] as const,
   ckg: () => [...kgKeys.all, 'ckg'] as const,
-  ckgNodes: () => [...kgKeys.ckg(), 'nodes'] as const,
+  ckgNodes: (params?: IGraphNodeQueryParams) =>
+    [...kgKeys.ckg(), 'nodes', ...(params !== undefined ? [params] : [])] as const,
   ckgEdges: () => [...kgKeys.ckg(), 'edges'] as const,
   ckgMutations: (filters?: ICkgMutationFilters) => [...kgKeys.ckg(), 'mutations', filters] as const,
   ckgMutation: (id: MutationId) => [...kgKeys.ckg(), 'mutations', id] as const,
@@ -935,16 +928,8 @@ export function usePKGNodes(
   options?: Omit<
     UseQueryOptions<NodesListResponse, Error, IGraphNodeDto[]>,
     'queryKey' | 'queryFn'
-  > & {
-    page?: number;
-    pageSize?: number;
-    nodeType?: string;
-    domain?: string;
-    search?: string;
-    sortBy?: string;
-    sortOrder?: string;
-    studyMode?: StudyMode;
-  }
+  > &
+    IGraphNodeQueryParams
 ) {
   const {
     page,
@@ -952,6 +937,7 @@ export function usePKGNodes(
     nodeType,
     domain,
     search,
+    searchMode,
     sortBy,
     sortOrder,
     studyMode,
@@ -963,6 +949,7 @@ export function usePKGNodes(
     nodeType !== undefined ||
     domain !== undefined ||
     search !== undefined ||
+    searchMode !== undefined ||
     sortBy !== undefined ||
     sortOrder !== undefined ||
     studyMode !== undefined
@@ -972,6 +959,7 @@ export function usePKGNodes(
           ...(nodeType !== undefined ? { nodeType } : {}),
           ...(domain !== undefined ? { domain } : {}),
           ...(search !== undefined ? { search } : {}),
+          ...(searchMode !== undefined ? { searchMode } : {}),
           ...(sortBy !== undefined ? { sortBy } : {}),
           ...(sortOrder !== undefined ? { sortOrder } : {}),
           ...(studyMode !== undefined ? { studyMode } : {}),
@@ -1135,11 +1123,12 @@ export function usePKGPrerequisites(
 export function useKnowledgeFrontier(
   userId: UserId,
   domain?: string,
+  studyMode?: StudyMode,
   options?: Omit<UseQueryOptions<FrontierResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
-    queryKey: [...kgKeys.pkgFrontier(userId), domain] as const,
-    queryFn: () => pkgTraversalApi.getFrontier(userId, domain ?? ''),
+    queryKey: [...kgKeys.pkgFrontier(userId), domain, studyMode ?? null] as const,
+    queryFn: () => pkgTraversalApi.getFrontier(userId, domain ?? '', studyMode),
     enabled: userId !== '' && domain !== undefined && domain !== '',
     staleTime: 2 * 60 * 1000,
     ...options,
@@ -1149,11 +1138,12 @@ export function useKnowledgeFrontier(
 export function useBridgeNodes(
   userId: UserId,
   domain?: string,
+  studyMode?: StudyMode,
   options?: Omit<UseQueryOptions<BridgeNodesResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({
-    queryKey: [...kgKeys.pkgBridges(userId), domain] as const,
-    queryFn: () => pkgTraversalApi.getBridges(userId, domain ?? ''),
+    queryKey: [...kgKeys.pkgBridges(userId), domain, studyMode ?? null] as const,
+    queryFn: () => pkgTraversalApi.getBridges(userId, domain ?? '', studyMode),
     enabled: userId !== '' && domain !== undefined && domain !== '',
     ...options,
   });
@@ -1199,8 +1189,47 @@ export function usePKGOperations(
 // ============================================================================
 
 export function useCKGNodes(
-  options?: Omit<UseQueryOptions<NodesListResponse, Error, IGraphNodeDto[]>, 'queryKey' | 'queryFn'>
+  options?: Omit<
+    UseQueryOptions<NodesListResponse, Error, IGraphNodeDto[]>,
+    'queryKey' | 'queryFn'
+  > &
+    IGraphNodeQueryParams
 ) {
+  const {
+    page,
+    pageSize,
+    nodeType,
+    domain,
+    search,
+    searchMode,
+    sortBy,
+    sortOrder,
+    studyMode,
+    ...queryOptions
+  } = options ?? {};
+  const params =
+    page !== undefined ||
+    pageSize !== undefined ||
+    nodeType !== undefined ||
+    domain !== undefined ||
+    search !== undefined ||
+    searchMode !== undefined ||
+    sortBy !== undefined ||
+    sortOrder !== undefined ||
+    studyMode !== undefined
+      ? {
+          ...(page !== undefined ? { page } : {}),
+          ...(pageSize !== undefined ? { pageSize } : {}),
+          ...(nodeType !== undefined ? { nodeType } : {}),
+          ...(domain !== undefined ? { domain } : {}),
+          ...(search !== undefined ? { search } : {}),
+          ...(searchMode !== undefined ? { searchMode } : {}),
+          ...(sortBy !== undefined ? { sortBy } : {}),
+          ...(sortOrder !== undefined ? { sortOrder } : {}),
+          ...(studyMode !== undefined ? { studyMode } : {}),
+        }
+      : undefined;
+
   async function fetchAllNodes(): Promise<NodesListResponse> {
     let response = await ckgNodesApi.list({ page: 1, pageSize: 200 });
     if (response.pagination?.hasMore !== true) {
@@ -1233,12 +1262,20 @@ export function useCKGNodes(
     };
   }
 
+  async function fetchNodes(): Promise<NodesListResponse> {
+    if (params !== undefined) {
+      return ckgNodesApi.list(params);
+    }
+
+    return fetchAllNodes();
+  }
+
   return useQuery({
-    queryKey: kgKeys.ckgNodes(),
-    queryFn: fetchAllNodes,
+    queryKey: kgKeys.ckgNodes(params),
+    queryFn: fetchNodes,
     select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphNodeEntry),
     staleTime: 10 * 60 * 1000,
-    ...options,
+    ...queryOptions,
   });
 }
 
@@ -1775,6 +1812,44 @@ export function useSubmitOntologyImportRunPreview(
 // ============================================================================
 // Metrics + Health Hooks
 // ============================================================================
+
+export function useRefreshKnowledgeGraphAnalytics(
+  userId: UserId,
+  options?: UseMutationOptions<
+    {
+      metrics: IStructuralMetricsDto;
+      stage: IMetacognitiveStageAssessmentDto;
+    },
+    Error,
+    { studyMode?: StudyMode }
+  >
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ studyMode }) => {
+      const [metricsResponse, stageResponse] = await Promise.all([
+        metricsApi.compute(userId, studyMode),
+        healthApi.getStage(userId, studyMode),
+      ]);
+
+      return {
+        metrics: metricsResponse.data,
+        stage: stageResponse.data,
+      };
+    },
+    onSuccess: async (_result, variables) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.metrics(userId, variables.studyMode) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.health(userId, variables.studyMode) }),
+        queryClient.invalidateQueries({
+          queryKey: kgKeys.healthStage(userId, variables.studyMode),
+        }),
+      ]);
+    },
+    ...options,
+  });
+}
 
 export function useStructuralMetrics(
   userId: UserId,

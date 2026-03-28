@@ -497,6 +497,7 @@ export function buildNodeUpdateProperties(updates: {
   aliases?: string[];
   languages?: string[];
   tags?: string[];
+  studyMode?: StudyMode;
   supportedStudyModes?: StudyMode[];
   semanticHints?: string[];
   canonicalExternalRefs?: ICanonicalExternalRef[];

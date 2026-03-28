@@ -275,6 +275,9 @@ export interface INodeFilter {
   /** Filter by label substring (case-insensitive) */
   readonly labelContains?: string;
 
+  /** Search strategy for label queries */
+  readonly searchMode?: 'substring' | 'fulltext';
+
   /** Filter nodes that explicitly support a given study mode */
   readonly studyMode?: StudyMode;
 
@@ -285,7 +288,7 @@ export interface INodeFilter {
   readonly graphType?: GraphType;
 
   /** Sort column for list reads */
-  readonly sortBy?: 'label' | 'createdAt' | 'updatedAt' | 'masteryLevel';
+  readonly sortBy?: 'label' | 'createdAt' | 'updatedAt' | 'masteryLevel' | 'relevance';
 
   /** Sort direction for list reads */
   readonly sortOrder?: 'asc' | 'desc';
@@ -311,6 +314,7 @@ export const NodeFilter = {
       ...(input.nodeType !== undefined && { nodeType: input.nodeType }),
       ...(input.domain !== undefined && { domain: input.domain }),
       ...(input.labelContains !== undefined && { labelContains: input.labelContains }),
+      ...(input.searchMode !== undefined && { searchMode: input.searchMode }),
       ...(input.studyMode !== undefined && { studyMode: input.studyMode }),
       ...(input.userId !== undefined && { userId: input.userId }),
       ...(input.graphType !== undefined && { graphType: input.graphType }),
@@ -639,6 +643,9 @@ export interface IBridgeQuery {
   /** Only consider these edge types for connectivity (undefined = all) */
   readonly edgeTypes?: readonly GraphEdgeType[];
 
+  /** Optional study-mode lens for domain membership */
+  readonly studyMode?: StudyMode;
+
   /** Minimum downstream component size for a node to qualify as a bridge */
   readonly minComponentSize: number;
 }
@@ -650,6 +657,7 @@ export const BridgeQuery = {
   create(input: {
     domain: string;
     edgeTypes?: readonly GraphEdgeType[];
+    studyMode?: StudyMode;
     minComponentSize?: number;
   }): DeepReadonly<IBridgeQuery> {
     if (input.domain.length === 0 || input.domain.trim().length === 0) {
@@ -668,6 +676,7 @@ export const BridgeQuery = {
     const query: IBridgeQuery = {
       domain: input.domain.trim(),
       ...(input.edgeTypes !== undefined ? { edgeTypes: [...input.edgeTypes] } : {}),
+      ...(input.studyMode !== undefined ? { studyMode: input.studyMode } : {}),
       minComponentSize,
     };
 
@@ -722,6 +731,9 @@ export interface IFrontierQuery {
   /** Knowledge domain */
   readonly domain: string;
 
+  /** Optional study-mode lens for node inclusion and mastery lookup */
+  readonly studyMode?: StudyMode;
+
   /** Mastery level above which a node is considered "mastered" */
   readonly masteryThreshold: MasteryLevel;
 
@@ -741,6 +753,7 @@ export interface IFrontierQuery {
 export const FrontierQuery = {
   create(input: {
     domain: string;
+    studyMode?: StudyMode;
     masteryThreshold?: number;
     maxResults?: number;
     sortBy?: FrontierSortBy;
@@ -768,6 +781,7 @@ export const FrontierQuery = {
 
     const query: IFrontierQuery = {
       domain: input.domain.trim(),
+      ...(input.studyMode !== undefined ? { studyMode: input.studyMode } : {}),
       masteryThreshold: masteryThreshold as MasteryLevel,
       maxResults,
       sortBy: input.sortBy ?? 'readiness',

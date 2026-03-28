@@ -8,9 +8,13 @@
  * user matches the :userId parameter (or has agent/admin role).
  */
 
-import type { GraphNodeType, NodeId, StudyMode, UserId } from '@noema/types';
+import type { CkgNodeStatus, GraphNodeType, NodeId, StudyMode, UserId } from '@noema/types';
 import { MasteryLevel } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
+import type {
+  ICreateNodeInput,
+  IUpdateNodeInput,
+} from '../../domain/knowledge-graph-service/graph.repository.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import { NodeFilter } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
@@ -70,17 +74,29 @@ export function registerPkgNodeRoutes(
         },
         body: {
           type: 'object',
-          required: ['label', 'nodeType', 'domain'],
+          required: ['label', 'domain'],
           properties: {
             label: { type: 'string', minLength: 1, maxLength: 200 },
             nodeType: { type: 'string' },
+            type: { type: 'string' },
             domain: { type: 'string', minLength: 1, maxLength: 200 },
             description: { type: 'string', maxLength: 2000 },
+            status: { type: 'string' },
+            aliases: { type: 'array', items: { type: 'string' } },
+            languages: { type: 'array', items: { type: 'string' } },
+            tags: { type: 'array', items: { type: 'string' } },
+            semanticHints: { type: 'array', items: { type: 'string' } },
             supportedStudyModes: {
               type: 'array',
               items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             },
+            canonicalExternalRefs: { type: 'array', items: { type: 'object' } },
+            ontologyMappings: { type: 'array', items: { type: 'object' } },
+            provenance: { type: 'array', items: { type: 'object' } },
+            reviewMetadata: { type: 'object' },
+            sourceCoverage: { type: 'object' },
             properties: { type: 'object' },
+            metadata: { type: 'object' },
           },
         },
       },
@@ -93,14 +109,50 @@ export function registerPkgNodeRoutes(
         const parsed = CreateNodeRequestSchema.parse(request.body);
         const context = buildContext(request);
 
-        const input = {
+        const input: ICreateNodeInput = {
           label: parsed.label,
           nodeType: parsed.nodeType,
           domain: parsed.domain,
           ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(parsed.status !== undefined ? { status: parsed.status as CkgNodeStatus } : {}),
+          ...(parsed.aliases !== undefined ? { aliases: parsed.aliases } : {}),
+          ...(parsed.languages !== undefined ? { languages: parsed.languages } : {}),
+          ...(parsed.tags !== undefined ? { tags: parsed.tags } : {}),
+          ...(parsed.semanticHints !== undefined ? { semanticHints: parsed.semanticHints } : {}),
           ...(parsed.supportedStudyModes !== undefined
             ? {
                 supportedStudyModes: parsed.supportedStudyModes as StudyMode[],
+              }
+            : {}),
+          ...(parsed.canonicalExternalRefs !== undefined
+            ? {
+                canonicalExternalRefs: parsed.canonicalExternalRefs as NonNullable<
+                  ICreateNodeInput['canonicalExternalRefs']
+                >,
+              }
+            : {}),
+          ...(parsed.ontologyMappings !== undefined
+            ? {
+                ontologyMappings: parsed.ontologyMappings as NonNullable<
+                  ICreateNodeInput['ontologyMappings']
+                >,
+              }
+            : {}),
+          ...(parsed.provenance !== undefined
+            ? { provenance: parsed.provenance as NonNullable<ICreateNodeInput['provenance']> }
+            : {}),
+          ...(parsed.reviewMetadata !== undefined
+            ? {
+                reviewMetadata: parsed.reviewMetadata as NonNullable<
+                  ICreateNodeInput['reviewMetadata']
+                >,
+              }
+            : {}),
+          ...(parsed.sourceCoverage !== undefined
+            ? {
+                sourceCoverage: parsed.sourceCoverage as NonNullable<
+                  ICreateNodeInput['sourceCoverage']
+                >,
               }
             : {}),
           ...(parsed.properties !== undefined ? { properties: parsed.properties } : {}),
@@ -137,10 +189,14 @@ export function registerPkgNodeRoutes(
             nodeType: { type: 'string' },
             domain: { type: 'string' },
             search: { type: 'string' },
+            searchMode: { type: 'string', enum: ['substring', 'fulltext'] },
             studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             page: { type: 'number' },
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
-            sortBy: { type: 'string', enum: ['label', 'createdAt', 'updatedAt', 'masteryLevel'] },
+            sortBy: {
+              type: 'string',
+              enum: ['label', 'createdAt', 'updatedAt', 'masteryLevel', 'relevance'],
+            },
             sortOrder: { type: 'string', enum: ['asc', 'desc'] },
           },
         },
@@ -158,6 +214,7 @@ export function registerPkgNodeRoutes(
           ...(query.nodeType !== undefined ? { nodeType: query.nodeType as GraphNodeType } : {}),
           ...(query.domain !== undefined ? { domain: query.domain } : {}),
           ...(query.search !== undefined ? { labelContains: query.search } : {}),
+          ...(query.searchMode !== undefined ? { searchMode: query.searchMode } : {}),
           ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
           sortBy: query.sortBy,
           sortOrder: query.sortOrder,
@@ -246,8 +303,27 @@ export function registerPkgNodeRoutes(
           type: 'object',
           properties: {
             label: { type: 'string', minLength: 1, maxLength: 200 },
+            nodeType: { type: 'string' },
+            type: { type: 'string' },
             description: { type: 'string', maxLength: 2000 },
+            domain: { type: 'string', minLength: 1, maxLength: 200 },
+            status: { type: 'string' },
+            aliases: { type: 'array', items: { type: 'string' } },
+            languages: { type: 'array', items: { type: 'string' } },
+            tags: { type: 'array', items: { type: 'string' } },
+            semanticHints: { type: 'array', items: { type: 'string' } },
+            canonicalExternalRefs: { type: 'array', items: { type: 'object' } },
+            ontologyMappings: { type: 'array', items: { type: 'object' } },
+            provenance: { type: 'array', items: { type: 'object' } },
+            reviewMetadata: { type: 'object' },
+            sourceCoverage: { type: 'object' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
             properties: { type: 'object' },
+            metadata: { type: 'object' },
             masteryLevel: { type: 'number', minimum: 0, maximum: 1 },
           },
         },
@@ -261,9 +337,51 @@ export function registerPkgNodeRoutes(
         const parsed = UpdateNodeRequestSchema.parse(request.body);
         const context = buildContext(request);
 
-        const updates = {
+        const updates: IUpdateNodeInput = {
           ...(parsed.label !== undefined ? { label: parsed.label } : {}),
+          ...(parsed.nodeType !== undefined ? { nodeType: parsed.nodeType as GraphNodeType } : {}),
           ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(parsed.domain !== undefined ? { domain: parsed.domain } : {}),
+          ...(parsed.status !== undefined ? { status: parsed.status as CkgNodeStatus } : {}),
+          ...(parsed.aliases !== undefined ? { aliases: parsed.aliases } : {}),
+          ...(parsed.languages !== undefined ? { languages: parsed.languages } : {}),
+          ...(parsed.tags !== undefined ? { tags: parsed.tags } : {}),
+          ...(parsed.semanticHints !== undefined ? { semanticHints: parsed.semanticHints } : {}),
+          ...(parsed.canonicalExternalRefs !== undefined
+            ? {
+                canonicalExternalRefs: parsed.canonicalExternalRefs as NonNullable<
+                  IUpdateNodeInput['canonicalExternalRefs']
+                >,
+              }
+            : {}),
+          ...(parsed.ontologyMappings !== undefined
+            ? {
+                ontologyMappings: parsed.ontologyMappings as NonNullable<
+                  IUpdateNodeInput['ontologyMappings']
+                >,
+              }
+            : {}),
+          ...(parsed.provenance !== undefined
+            ? { provenance: parsed.provenance as NonNullable<IUpdateNodeInput['provenance']> }
+            : {}),
+          ...(parsed.reviewMetadata !== undefined
+            ? {
+                reviewMetadata: parsed.reviewMetadata as NonNullable<
+                  IUpdateNodeInput['reviewMetadata']
+                >,
+              }
+            : {}),
+          ...(parsed.sourceCoverage !== undefined
+            ? {
+                sourceCoverage: parsed.sourceCoverage as NonNullable<
+                  IUpdateNodeInput['sourceCoverage']
+                >,
+              }
+            : {}),
+          ...(parsed.studyMode !== undefined ? { studyMode: parsed.studyMode as StudyMode } : {}),
+          ...(parsed.supportedStudyModes !== undefined
+            ? { supportedStudyModes: parsed.supportedStudyModes as StudyMode[] }
+            : {}),
           ...(parsed.properties !== undefined ? { properties: parsed.properties } : {}),
           ...(parsed.masteryLevel !== undefined
             ? { masteryLevel: MasteryLevel.create(parsed.masteryLevel) }

@@ -2,7 +2,7 @@
  * @noema/knowledge-graph-service — MCP Tool Contract Tests
  *
  * Verifies that each tool definition conforms to the MCP tool contract standard:
- * 1. All 18 tools are registered with unique, kebab-case names
+ * 1. All 19 tools are registered with unique, kebab-case names
  * 2. Every tool has a valid inputSchema with `type: 'object'`
  * 3. Required fields are present: name, version, description, service, priority
  * 4. scopeRequirement and capabilities are populated by withContractDefaults
@@ -20,8 +20,8 @@ import type { IToolDefinition } from '../../src/agents/tools/tool.types.js';
 // ============================================================================
 
 describe('KG_TOOL_DEFINITIONS registry', () => {
-  it('exports exactly 18 tool definitions', () => {
-    expect(KG_TOOL_DEFINITIONS).toHaveLength(18);
+  it('exports exactly 19 tool definitions', () => {
+    expect(KG_TOOL_DEFINITIONS).toHaveLength(19);
   });
 
   it('all tool names are unique', () => {

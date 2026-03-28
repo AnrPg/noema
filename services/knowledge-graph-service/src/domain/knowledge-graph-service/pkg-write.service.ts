@@ -20,6 +20,7 @@ import type {
   IGraphNode,
   IPaginatedResponse,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import { EdgeWeight, GraphType } from '@noema/types';
@@ -72,6 +73,28 @@ import type {
   IPkgNodeUpdatedOp,
 } from './value-objects/operation-log.js';
 import { PkgOperationType } from './value-objects/operation-log.js';
+
+function masteryPropertyKey(studyMode: StudyMode): string {
+  return `studyModeMastery_${studyMode}`;
+}
+
+function masterySourcePropertyKey(studyMode: StudyMode): string {
+  return `studyModeMasterySource_${studyMode}`;
+}
+
+function masteryUpdatedAtPropertyKey(studyMode: StudyMode): string {
+  return `studyModeMasteryUpdatedAt_${studyMode}`;
+}
+
+function resolveMasteryWriteMode(
+  explicitStudyMode: StudyMode | undefined,
+  supportedStudyModes: readonly StudyMode[] | undefined
+): StudyMode | undefined {
+  if (explicitStudyMode !== undefined) {
+    return explicitStudyMode;
+  }
+  return supportedStudyModes?.length === 1 ? supportedStudyModes[0] : undefined;
+}
 
 /**
  * PKG write operations sub-service.
@@ -193,11 +216,36 @@ export class PkgWriteService {
       throw new NodeNotFoundError(nodeId, GraphType.PKG);
     }
 
+    const masteryWriteMode = resolveMasteryWriteMode(
+      updates.studyMode,
+      existingNode.supportedStudyModes
+    );
+    const normalizedUpdates: IUpdateNodeInput =
+      updates.masteryLevel === undefined
+        ? updates
+        : {
+            ...updates,
+            properties: {
+              ...(updates.properties ?? {}),
+              ...(masteryWriteMode !== undefined
+                ? {
+                    [masteryPropertyKey(masteryWriteMode)]: updates.masteryLevel,
+                    [masterySourcePropertyKey(masteryWriteMode)]:
+                      updates.properties?.['lastMasterySource'] ??
+                      existingNode.properties['lastMasterySource'] ??
+                      'manual_update',
+                    [masteryUpdatedAtPropertyKey(masteryWriteMode)]:
+                      updates.properties?.['lastMasteryUpdate'] ?? new Date().toISOString(),
+                  }
+                : {}),
+            },
+          };
+
     // Compute changed fields with before/after values
-    const changedFields = computeNodeChangedFields(existingNode, updates);
+    const changedFields = computeNodeChangedFields(existingNode, normalizedUpdates);
 
     // Update node in Neo4j
-    const updatedNode = await this.graphRepository.updateNode(nodeId, updates, userId);
+    const updatedNode = await this.graphRepository.updateNode(nodeId, normalizedUpdates, userId);
 
     // Log operation with before/after tracking
     if (changedFields.length > 0) {
@@ -231,7 +279,10 @@ export class PkgWriteService {
       ];
 
       // If domain changed, also mark the old domain as stale
-      if (updates.domain !== undefined && updates.domain !== existingNode.domain) {
+      if (
+        normalizedUpdates.domain !== undefined &&
+        normalizedUpdates.domain !== existingNode.domain
+      ) {
         postWrites.push(this.markMetricsStale(userId, existingNode.domain, 'node_updated'));
       }
 

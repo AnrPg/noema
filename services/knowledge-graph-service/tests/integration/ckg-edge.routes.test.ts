@@ -9,6 +9,7 @@
 import type { EdgeId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { ICkgEdgeAuthoringService } from '../../src/application/knowledge-graph/edge-authoring/contracts.js';
 import { registerCkgEdgeRoutes } from '../../src/api/rest/ckg-edge.routes.js';
 import { EdgeNotFoundError } from '../../src/domain/knowledge-graph-service/errors/graph.errors.js';
 import { graphEdge, resetIdCounter, serviceResult } from '../fixtures/index.js';
@@ -21,10 +22,36 @@ import { buildTestApp, buildUnauthenticatedTestApp } from './test-app.js';
 
 let app: FastifyInstance;
 let service: ReturnType<typeof mockKnowledgeGraphService>;
+const edgeAuthoringService: ICkgEdgeAuthoringService = {
+  preview: () =>
+    Promise.reject(new Error('CKG edge authoring preview not configured for this test')),
+};
+const registerCkgEdgeRoutesForTest = (
+  fastify: FastifyInstance,
+  graphService: ReturnType<typeof mockKnowledgeGraphService>,
+  authMiddleware: Parameters<typeof buildTestApp>[0]['registerRoutes'] extends (
+    fastify: FastifyInstance,
+    service: ReturnType<typeof mockKnowledgeGraphService>,
+    authMiddleware: infer TAuthMiddleware,
+    options?: infer TOptions
+  ) => void
+    ? TAuthMiddleware
+    : never,
+  options?: Parameters<typeof buildTestApp>[0]['registerRoutes'] extends (
+    fastify: FastifyInstance,
+    service: ReturnType<typeof mockKnowledgeGraphService>,
+    authMiddleware: unknown,
+    options?: infer TOptions
+  ) => void
+    ? TOptions
+    : never
+) => {
+  registerCkgEdgeRoutes(fastify, graphService, edgeAuthoringService, authMiddleware, options);
+};
 
 beforeAll(async () => {
   service = mockKnowledgeGraphService();
-  app = buildTestApp({ service, registerRoutes: registerCkgEdgeRoutes });
+  app = buildTestApp({ service, registerRoutes: registerCkgEdgeRoutesForTest });
   await app.ready();
 });
 
@@ -68,7 +95,7 @@ describe('GET /ckg/edges', () => {
   it('returns 401 without auth', async () => {
     const unauthApp = buildUnauthenticatedTestApp({
       service,
-      registerRoutes: registerCkgEdgeRoutes,
+      registerRoutes: registerCkgEdgeRoutesForTest,
     });
     await unauthApp.ready();
 

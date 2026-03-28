@@ -7,7 +7,7 @@
  * Prefix: /api/v1/users/:userId/pkg/traversal
  */
 
-import type { GraphEdgeType, GraphNodeType, NodeId, UserId } from '@noema/types';
+import type { GraphEdgeType, GraphNodeType, NodeId, StudyMode, UserId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { IFrontierQuery } from '../../domain/knowledge-graph-service/value-objects/graph.value-objects.js';
@@ -512,6 +512,7 @@ export function registerPkgTraversalRoutes(
           required: ['domain'],
           properties: {
             domain: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             edgeTypes: { type: 'string', description: 'Comma-separated edge types' },
             minComponentSize: { type: 'number', minimum: 1, maximum: 1000, default: 2 },
           },
@@ -530,6 +531,7 @@ export function registerPkgTraversalRoutes(
 
         const query = BridgeQuery.create({
           domain: parsed.domain,
+          ...(parsed.studyMode !== undefined ? { studyMode: parsed.studyMode as StudyMode } : {}),
           ...(edgeTypes !== undefined ? { edgeTypes } : {}),
           minComponentSize: parsed.minComponentSize,
         });
@@ -565,6 +567,7 @@ export function registerPkgTraversalRoutes(
           required: ['domain'],
           properties: {
             domain: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             masteryThreshold: { type: 'number', minimum: 0, maximum: 1 },
             maxResults: { type: 'number', minimum: 1, maximum: 100 },
             sortBy: { type: 'string', enum: ['readiness', 'centrality', 'depth'] },
@@ -583,6 +586,7 @@ export function registerPkgTraversalRoutes(
 
         const query = FrontierQuery.create({
           domain: parsed.domain,
+          ...(parsed.studyMode !== undefined ? { studyMode: parsed.studyMode as StudyMode } : {}),
           masteryThreshold: parsed.masteryThreshold,
           maxResults: parsed.maxResults,
           sortBy: parsed.sortBy,

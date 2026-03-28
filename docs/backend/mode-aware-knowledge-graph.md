@@ -307,6 +307,35 @@ This graph architecture is behaving correctly when:
 - learner-facing graph reads change meaningfully by mode
 - admin or neutral surfaces can still inspect the full structure
 
+## Current Implementation Notes
+
+The current rollout now includes a first concrete language-edge pack in the
+shared graph enum and KG validation policies:
+
+- `translation_equivalent`
+- `false_friend_of`
+- `minimal_pair_with`
+- `collocates_with`
+- `governs`
+- `inflected_form_of`
+
+That means the documentation is no longer only aspirational here. The graph can
+already represent several language-native relationships as first-class edges
+instead of hiding them inside node metadata.
+
+Agent-facing KG tools are also mode-aware on the structural and metacognitive
+paths. In particular:
+
+- `compute-structural-metrics`
+- `get-structural-health`
+- `detect-misconceptions`
+- `suggest-intervention`
+- `get-metacognitive-stage`
+- `get-learning-path-context`
+
+all accept an optional `studyMode` lens, defaulting to `knowledge_gaining` only
+for backwards compatibility.
+
 ## Related Documents
 
 - `architecture.md`

@@ -24,10 +24,11 @@ export const CkgNodeQueryParamsSchema = z.object({
   nodeType: GraphNodeTypeSchema.optional(),
   domain: z.string().min(1).max(200).optional(),
   search: z.string().min(1).max(200).optional(),
+  searchMode: z.enum(['substring', 'fulltext']).optional(),
   studyMode: StudyModeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
-  sortBy: z.enum(['label', 'createdAt', 'updatedAt']).default('createdAt'),
+  sortBy: z.enum(['label', 'createdAt', 'updatedAt', 'relevance']).default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
 

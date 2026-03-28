@@ -62,10 +62,11 @@ export function registerCkgNodeRoutes(
             nodeType: { type: 'string' },
             domain: { type: 'string' },
             search: { type: 'string' },
+            searchMode: { type: 'string', enum: ['substring', 'fulltext'] },
             studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             page: { type: 'number' },
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
-            sortBy: { type: 'string', enum: ['label', 'createdAt', 'updatedAt'] },
+            sortBy: { type: 'string', enum: ['label', 'createdAt', 'updatedAt', 'relevance'] },
             sortOrder: { type: 'string', enum: ['asc', 'desc'] },
           },
         },
@@ -80,7 +81,10 @@ export function registerCkgNodeRoutes(
           ...(query.nodeType !== undefined ? { nodeType: query.nodeType as GraphNodeType } : {}),
           ...(query.domain !== undefined ? { domain: query.domain } : {}),
           ...(query.search !== undefined ? { labelContains: query.search } : {}),
+          ...(query.searchMode !== undefined ? { searchMode: query.searchMode } : {}),
           ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
+          sortBy: query.sortBy,
+          sortOrder: query.sortOrder,
           graphType: 'ckg',
         });
 

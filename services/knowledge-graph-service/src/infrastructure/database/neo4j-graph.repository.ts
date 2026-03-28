@@ -30,6 +30,7 @@ import type {
   MasteryLevel,
   ISubgraph,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
@@ -114,8 +115,73 @@ function buildPaginationClause(limit: number, offset: number): string {
   return ` SKIP ${String(safeOffset)} LIMIT ${String(safeLimit)}`;
 }
 
+function escapeLuceneTerm(value: string): string {
+  return value.replace(/([+\-!(){}[\]^"~*?:\\/]|&&|\|\|)/g, '\\$1');
+}
+
+function buildFullTextSearchQuery(raw: string): string {
+  const normalized = raw.trim().replace(/\s+/g, ' ');
+  if (normalized === '') {
+    return '""';
+  }
+
+  const terms = normalized
+    .split(' ')
+    .map((term) => term.trim())
+    .filter((term) => term !== '')
+    .slice(0, 8);
+  const clauses = new Set<string>();
+
+  clauses.add(`"${escapeLuceneTerm(normalized)}"^8`);
+
+  for (const term of terms) {
+    const escapedTerm = escapeLuceneTerm(term);
+    const fuzziness = term.length >= 8 ? 2 : 1;
+    clauses.add(`${escapedTerm}~${String(fuzziness)}`);
+    clauses.add(`${escapedTerm}*`);
+  }
+
+  return [...clauses].join(' OR ');
+}
+
 function normalizeIdentityToken(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function studyModeMasteryPropertyKey(studyMode: StudyMode): string {
+  return `studyModeMastery_${studyMode}`;
+}
+
+function buildNodeMasteryExpression(alias: string, studyMode?: StudyMode): string {
+  if (studyMode === undefined) {
+    return `${alias}.masteryLevel`;
+  }
+  return `coalesce(${alias}.${studyModeMasteryPropertyKey(studyMode)}, ${alias}.masteryLevel)`;
+}
+
+function resolveNodeMasteryLevel(
+  node: IGraphNode,
+  studyMode?: StudyMode
+): MasteryLevel | undefined {
+  if (studyMode === undefined) {
+    return node.masteryLevel;
+  }
+  const modeScopedValue = node.properties[studyModeMasteryPropertyKey(studyMode)];
+  if (typeof modeScopedValue === 'number') {
+    return modeScopedValue as MasteryLevel;
+  }
+  return node.masteryLevel;
+}
+
+function withResolvedNodeMastery(node: IGraphNode, studyMode?: StudyMode): IGraphNode {
+  if (studyMode === undefined) {
+    return node;
+  }
+  const masteryLevel = resolveNodeMasteryLevel(node, studyMode);
+  return {
+    ...node,
+    ...(masteryLevel !== undefined ? { masteryLevel } : {}),
+  };
 }
 
 function uniqueIdentityKeys(keys: readonly string[]): string[] {
@@ -468,6 +534,10 @@ export class Neo4jGraphRepository implements IGraphRepository {
   }
 
   async findNodes(filter: INodeFilter, limit: number, offset: number): Promise<IGraphNode[]> {
+    if (this.shouldUseFullTextNodeSearch(filter)) {
+      return this.findNodesFullText(filter, limit, offset);
+    }
+
     const { whereClauses, params } = this.buildNodeFilterClauses(filter);
     const labelFilter = this.buildLabelFilter(filter);
     const orderClause = this.buildNodeSortClause(filter);
@@ -486,13 +556,19 @@ export class Neo4jGraphRepository implements IGraphRepository {
         );
       });
 
-      return result.records.map((r) => mapNodeToGraphNode(r.get('n') as neo4j.Node));
+      return result.records.map((r) =>
+        withResolvedNodeMastery(mapNodeToGraphNode(r.get('n') as neo4j.Node), filter.studyMode)
+      );
     } finally {
       await session.close();
     }
   }
 
   async countNodes(filter: INodeFilter): Promise<number> {
+    if (this.shouldUseFullTextNodeSearch(filter)) {
+      return this.countNodesFullText(filter);
+    }
+
     const { whereClauses, params } = this.buildNodeFilterClauses(filter);
     const labelFilter = this.buildLabelFilter(filter);
 
@@ -527,6 +603,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const labelFilter = this.buildLabelFilter(filter);
     const session = this.neo4j.getSession();
     const threshold = masteryThreshold as number;
+    const masteryExpr = buildNodeMasteryExpression('n', filter.studyMode);
     const baseParams = {
       ...params,
       masteryThreshold: threshold,
@@ -541,25 +618,25 @@ export class Neo4jGraphRepository implements IGraphRepository {
              ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
              RETURN
                count(n) AS totalNodes,
-               count(CASE WHEN n.masteryLevel IS NOT NULL THEN 1 END) AS trackedNodes,
-               count(CASE WHEN n.masteryLevel >= $masteryThreshold THEN 1 END) AS masteredNodes,
+               count(CASE WHEN ${masteryExpr} IS NOT NULL THEN 1 END) AS trackedNodes,
+               count(CASE WHEN ${masteryExpr} >= $masteryThreshold THEN 1 END) AS masteredNodes,
                count(
                  CASE
-                   WHEN n.masteryLevel IS NOT NULL
-                    AND n.masteryLevel < $masteryThreshold
-                    AND n.masteryLevel >= $developingThreshold
+                   WHEN ${masteryExpr} IS NOT NULL
+                    AND ${masteryExpr} < $masteryThreshold
+                    AND ${masteryExpr} >= $developingThreshold
                    THEN 1
                  END
                ) AS developingNodes,
                count(
                  CASE
-                   WHEN n.masteryLevel IS NOT NULL
-                    AND n.masteryLevel < $developingThreshold
+                   WHEN ${masteryExpr} IS NOT NULL
+                    AND ${masteryExpr} < $developingThreshold
                    THEN 1
                  END
                ) AS emergingNodes,
-               count(CASE WHEN n.masteryLevel IS NULL THEN 1 END) AS untrackedNodes,
-               coalesce(avg(n.masteryLevel), 0.0) AS averageMastery`,
+               count(CASE WHEN ${masteryExpr} IS NULL THEN 1 END) AS untrackedNodes,
+               coalesce(avg(${masteryExpr}), 0.0) AS averageMastery`,
             baseParams
           )
         ),
@@ -569,9 +646,9 @@ export class Neo4jGraphRepository implements IGraphRepository {
              ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
              WITH coalesce(n.domain, 'general') AS domain,
                   count(n) AS nodeCount,
-                  count(CASE WHEN n.masteryLevel IS NOT NULL THEN 1 END) AS trackedNodes,
-                  count(CASE WHEN n.masteryLevel >= $masteryThreshold THEN 1 END) AS masteredNodes,
-                  coalesce(avg(n.masteryLevel), 0.0) AS averageMastery
+                  count(CASE WHEN ${masteryExpr} IS NOT NULL THEN 1 END) AS trackedNodes,
+                  count(CASE WHEN ${masteryExpr} >= $masteryThreshold THEN 1 END) AS masteredNodes,
+                  coalesce(avg(${masteryExpr}), 0.0) AS averageMastery
              RETURN domain, nodeCount, trackedNodes, masteredNodes, averageMastery`,
             baseParams
           )
@@ -1629,12 +1706,21 @@ export class Neo4jGraphRepository implements IGraphRepository {
   async getDomainSubgraph(
     domain: string,
     edgeTypes?: readonly GraphEdgeType[],
+    studyMode?: StudyMode,
     userId?: string
   ): Promise<ISubgraph> {
     const relPattern = buildRelTypePattern(edgeTypes);
     const userFilter = userId !== undefined ? 'AND n.userId = $userId' : '';
     const edgeUserFilter =
       userId !== undefined ? 'AND a.userId = $userId AND b.userId = $userId' : '';
+    const studyModeNodeFilter =
+      studyMode !== undefined
+        ? 'AND (n.supportedStudyModes IS NULL OR size(n.supportedStudyModes) = 0 OR $studyMode IN n.supportedStudyModes)'
+        : '';
+    const studyModeEdgeFilter =
+      studyMode !== undefined
+        ? 'AND (a.supportedStudyModes IS NULL OR size(a.supportedStudyModes) = 0 OR $studyMode IN a.supportedStudyModes) AND (b.supportedStudyModes IS NULL OR size(b.supportedStudyModes) = 0 OR $studyMode IN b.supportedStudyModes)'
+        : '';
 
     const session = this.neo4j.getSession();
     try {
@@ -1642,13 +1728,19 @@ export class Neo4jGraphRepository implements IGraphRepository {
       const nodesResult = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH (n {domain: $domain})
-           WHERE n.isDeleted = false ${userFilter}
+           WHERE n.isDeleted = false ${userFilter} ${studyModeNodeFilter}
            RETURN n`,
-          { domain, ...(userId !== undefined ? { userId } : {}) }
+          {
+            domain,
+            ...(userId !== undefined ? { userId } : {}),
+            ...(studyMode !== undefined ? { studyMode } : {}),
+          }
         );
       });
 
-      const nodes = nodesResult.records.map((r) => mapNodeToGraphNode(r.get('n') as neo4j.Node));
+      const nodes = nodesResult.records.map((r) =>
+        withResolvedNodeMastery(mapNodeToGraphNode(r.get('n') as neo4j.Node), studyMode)
+      );
 
       if (nodes.length === 0) {
         return { nodes: [], edges: [] };
@@ -1665,12 +1757,14 @@ export class Neo4jGraphRepository implements IGraphRepository {
              AND coalesce(r.isDeleted, false) = false
              AND a.nodeId IN $nodeIds AND b.nodeId IN $nodeIds
              ${edgeUserFilter}
+             ${studyModeEdgeFilter}
            RETURN r, a.nodeId AS sourceId, b.nodeId AS targetId,
                   CASE WHEN any(l IN labels(a) WHERE l STARTS WITH 'Pkg') THEN 'pkg' ELSE 'ckg' END AS graphType`,
           {
             domain,
             nodeIds,
             ...(userId !== undefined ? { userId } : {}),
+            ...(studyMode !== undefined ? { studyMode } : {}),
           }
         );
       });
@@ -1693,6 +1787,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
   async findArticulationPointsNative(
     domain: string,
     edgeTypes?: readonly GraphEdgeType[],
+    studyMode?: StudyMode,
     userId?: string
   ): Promise<NodeId[] | null> {
     const gdsAvailable = await this.checkGdsAvailability();
@@ -1700,23 +1795,32 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
     const relPattern = buildRelTypePattern(edgeTypes);
     const userFilter = userId !== undefined ? 'AND n.userId = $userId' : '';
+    const studyModeNodeFilter =
+      studyMode !== undefined
+        ? 'AND (n.supportedStudyModes IS NULL OR size(n.supportedStudyModes) = 0 OR $studyMode IN n.supportedStudyModes)'
+        : '';
+    const studyModeRelFilter =
+      studyMode !== undefined
+        ? 'AND (a.supportedStudyModes IS NULL OR size(a.supportedStudyModes) = 0 OR $studyMode IN a.supportedStudyModes) AND (b.supportedStudyModes IS NULL OR size(b.supportedStudyModes) = 0 OR $studyMode IN b.supportedStudyModes)'
+        : '';
 
     const session = this.neo4j.getSession();
     const graphName = `bridge_analysis_${domain}_${String(Date.now())}`;
 
     try {
       // Project the domain subgraph into GDS
-      const nodeQuery = `MATCH (n {domain: $domain}) WHERE n.isDeleted = false ${userFilter} RETURN id(n) AS id`;
+      const nodeQuery = `MATCH (n {domain: $domain}) WHERE n.isDeleted = false ${userFilter} ${studyModeNodeFilter} RETURN id(n) AS id`;
       const relQuery = `MATCH (a {domain: $domain})-[r:${relPattern}]->(b {domain: $domain})
                         WHERE a.isDeleted = false AND b.isDeleted = false
                           AND coalesce(r.isDeleted, false) = false
                           ${userId !== undefined ? 'AND a.userId = $userId AND b.userId = $userId' : ''}
+                          ${studyModeRelFilter}
                         RETURN id(a) AS source, id(b) AS target`;
 
       await session.executeWrite(async (tx: ManagedTransaction) => {
         return tx.run(
           `CALL gds.graph.project.cypher($graphName, $nodeQuery, $relQuery, {
-             parameters: { domain: $domain ${userId !== undefined ? ', userId: $userId' : ''} }
+             parameters: { domain: $domain ${userId !== undefined ? ', userId: $userId' : ''}${studyMode !== undefined ? ', studyMode: $studyMode' : ''} }
            })`,
           {
             graphName,
@@ -1724,6 +1828,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
             relQuery,
             domain,
             ...(userId !== undefined ? { userId } : {}),
+            ...(studyMode !== undefined ? { studyMode } : {}),
           }
         );
       });
@@ -1766,18 +1871,30 @@ export class Neo4jGraphRepository implements IGraphRepository {
     userId: string
   ): Promise<IKnowledgeFrontierResult> {
     const session = this.neo4j.getSession();
+    const nodeMasteryExpr = buildNodeMasteryExpression('node', query.studyMode);
+    const prereqMasteryExpr = buildNodeMasteryExpression('prereq', query.studyMode);
+    const studyModeNodeFilter =
+      query.studyMode !== undefined
+        ? 'AND (node.supportedStudyModes IS NULL OR size(node.supportedStudyModes) = 0 OR $studyMode IN node.supportedStudyModes)'
+        : '';
+    const studyModePrereqFilter =
+      query.studyMode !== undefined
+        ? 'AND (prereq.supportedStudyModes IS NULL OR size(prereq.supportedStudyModes) = 0 OR $studyMode IN prereq.supportedStudyModes)'
+        : '';
     try {
       // Main frontier query: find unmastered nodes with at least one mastered prerequisite
       const frontierResult = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH (node:PkgNode {userId: $userId, domain: $domain})
            WHERE node.isDeleted = false
-             AND (node.masteryLevel IS NULL OR node.masteryLevel < $threshold)
+             ${studyModeNodeFilter}
+             AND (${nodeMasteryExpr} IS NULL OR ${nodeMasteryExpr} < $threshold)
            OPTIONAL MATCH (node)-[:PREREQUISITE]->(prereq:PkgNode {userId: $userId})
            WHERE prereq.isDeleted = false
+             ${studyModePrereqFilter}
            WITH node,
                 collect(prereq) AS prereqs,
-                [p IN collect(prereq) WHERE p.masteryLevel >= $threshold] AS masteredPrereqs
+                [p IN collect(prereq) WHERE ${prereqMasteryExpr.replaceAll('prereq', 'p')} >= $threshold] AS masteredPrereqs
            WHERE size(masteredPrereqs) > 0 OR size(prereqs) = 0
            RETURN node,
                   masteredPrereqs,
@@ -1793,19 +1910,25 @@ export class Neo4jGraphRepository implements IGraphRepository {
             domain: query.domain,
             threshold: query.masteryThreshold,
             maxResults: neo4j.int(query.maxResults),
+            ...(query.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
           }
         );
       });
 
       // Build frontier nodes
       const frontier = frontierResult.records.map((rec) => {
-        const node = mapNodeToGraphNode(rec.get('node') as neo4j.Node);
+        const node = withResolvedNodeMastery(
+          mapNodeToGraphNode(rec.get('node') as neo4j.Node),
+          query.studyMode
+        );
         const masteredCount = (rec.get('masteredCount') as Integer).toNumber();
         const totalPrereqs = (rec.get('totalPrereqs') as Integer).toNumber();
         const readinessScore = rec.get('readinessScore') as number;
 
         const masteredPrereqNodes = query.includePrerequisites
-          ? (rec.get('masteredPrereqs') as neo4j.Node[]).map(mapNodeToGraphNode)
+          ? (rec.get('masteredPrereqs') as neo4j.Node[]).map((entry) =>
+              withResolvedNodeMastery(mapNodeToGraphNode(entry), query.studyMode)
+            )
           : undefined;
 
         // Compute average mastery of prerequisites
@@ -1813,7 +1936,11 @@ export class Neo4jGraphRepository implements IGraphRepository {
         const avgMastery =
           masteredPrereqs.length > 0
             ? masteredPrereqs.reduce((sum, p) => {
-                const ml: unknown = p.properties['masteryLevel'];
+                const ml: unknown =
+                  query.studyMode !== undefined
+                    ? (p.properties[studyModeMasteryPropertyKey(query.studyMode)] ??
+                      p.properties['masteryLevel'])
+                    : p.properties['masteryLevel'];
                 return sum + (typeof ml === 'number' ? ml : 0);
               }, 0) / masteredPrereqs.length
             : 0;
@@ -1835,13 +1962,14 @@ export class Neo4jGraphRepository implements IGraphRepository {
           `MATCH (n:PkgNode {userId: $userId, domain: $domain})
            WHERE n.isDeleted = false
            WITH count(n) AS total,
-                sum(CASE WHEN n.masteryLevel >= $threshold THEN 1 ELSE 0 END) AS mastered,
-                sum(CASE WHEN n.masteryLevel IS NULL OR n.masteryLevel < $threshold THEN 1 ELSE 0 END) AS unmastered
+                sum(CASE WHEN ${buildNodeMasteryExpression('n', query.studyMode)} >= $threshold THEN 1 ELSE 0 END) AS mastered,
+                sum(CASE WHEN ${buildNodeMasteryExpression('n', query.studyMode)} IS NULL OR ${buildNodeMasteryExpression('n', query.studyMode)} < $threshold THEN 1 ELSE 0 END) AS unmastered
            RETURN total, mastered, unmastered`,
           {
             userId,
             domain: query.domain,
             threshold: query.masteryThreshold,
+            ...(query.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
           }
         );
       });
@@ -2275,10 +2403,103 @@ export class Neo4jGraphRepository implements IGraphRepository {
   // Private helpers
   // ==========================================================================
 
+  private shouldUseFullTextNodeSearch(filter: INodeFilter): boolean {
+    return filter.searchMode === 'fulltext' && filter.labelContains !== undefined;
+  }
+
+  private getNodeFullTextIndexName(filter: INodeFilter): string | null {
+    if (filter.graphType === 'pkg') return 'pkgnode_fulltext';
+    if (filter.graphType === 'ckg') return 'ckgnode_fulltext';
+    return null;
+  }
+
+  private async findNodesFullText(
+    filter: INodeFilter,
+    limit: number,
+    offset: number
+  ): Promise<IGraphNode[]> {
+    const indexName = this.getNodeFullTextIndexName(filter);
+    const searchTerm = filter.labelContains;
+    if (indexName === null || searchTerm === undefined) {
+      return [];
+    }
+
+    const { whereClauses, params } = this.buildNodeFilterClauses(filter, {
+      includeLabelContains: false,
+    });
+    const orderClause = this.buildNodeSortClause(filter, { scoreAlias: 'score' });
+    const paginationClause = buildPaginationClause(limit, offset);
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `CALL db.index.fulltext.queryNodes($indexName, $searchQuery) YIELD node AS n, score
+           ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
+           RETURN n, score
+           ORDER BY ${orderClause}
+           ${paginationClause}`,
+          {
+            ...params,
+            indexName,
+            searchQuery: buildFullTextSearchQuery(searchTerm),
+          }
+        );
+      });
+
+      return result.records.map((record) => mapNodeToGraphNode(record.get('n') as neo4j.Node));
+    } finally {
+      await session.close();
+    }
+  }
+
+  private async countNodesFullText(filter: INodeFilter): Promise<number> {
+    const indexName = this.getNodeFullTextIndexName(filter);
+    const searchTerm = filter.labelContains;
+    if (indexName === null || searchTerm === undefined) {
+      return 0;
+    }
+
+    const { whereClauses, params } = this.buildNodeFilterClauses(filter, {
+      includeLabelContains: false,
+    });
+
+    const session = this.neo4j.getSession();
+    try {
+      const result = await session.executeRead(async (tx: ManagedTransaction) => {
+        return tx.run(
+          `CALL db.index.fulltext.queryNodes($indexName, $searchQuery) YIELD node AS n, score
+           ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
+           RETURN count(DISTINCT n) AS total`,
+          {
+            ...params,
+            indexName,
+            searchQuery: buildFullTextSearchQuery(searchTerm),
+          }
+        );
+      });
+
+      const record = result.records[0];
+      if (record === undefined) return 0;
+
+      const count: unknown = record.get('total');
+      return typeof count === 'object' && count !== null && 'toNumber' in count
+        ? (count as { toNumber(): number }).toNumber()
+        : Number(count);
+    } finally {
+      await session.close();
+    }
+  }
+
   /**
    * Build dynamic WHERE clauses and parameters from an INodeFilter.
    */
-  private buildNodeFilterClauses(filter: INodeFilter): {
+  private buildNodeFilterClauses(
+    filter: INodeFilter,
+    options: {
+      includeLabelContains?: boolean;
+    } = {}
+  ): {
     whereClauses: string[];
     params: Record<string, unknown>;
   } {
@@ -2304,7 +2525,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
       params['userId'] = filter.userId;
     }
 
-    if (filter.labelContains !== undefined) {
+    if (options.includeLabelContains !== false && filter.labelContains !== undefined) {
       whereClauses.push('toLower(n.label) CONTAINS toLower($labelContains)');
       params['labelContains'] = filter.labelContains;
     }
@@ -2332,18 +2553,30 @@ export class Neo4jGraphRepository implements IGraphRepository {
    * Build an ORDER BY fragment from an INodeFilter.
    * Keeps null mastery values at the end for mastery-centric ordering.
    */
-  private buildNodeSortClause(filter: INodeFilter): string {
+  private buildNodeSortClause(
+    filter: INodeFilter,
+    options: {
+      scoreAlias?: string;
+    } = {}
+  ): string {
     const direction = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    const masteryExpr = buildNodeMasteryExpression('n', filter.studyMode);
+    const scoreAlias = options.scoreAlias ?? 'score';
 
     switch (filter.sortBy) {
+      case 'relevance':
+        return `${scoreAlias} ${direction}, n.updatedAt DESC, n.createdAt DESC`;
       case 'label':
         return `toLower(n.label) ${direction}, n.createdAt DESC`;
       case 'updatedAt':
         return `n.updatedAt ${direction}, n.createdAt DESC`;
       case 'masteryLevel':
-        return `CASE WHEN n.masteryLevel IS NULL THEN 1 ELSE 0 END ASC, n.masteryLevel ${direction}, n.updatedAt DESC`;
+        return `CASE WHEN ${masteryExpr} IS NULL THEN 1 ELSE 0 END ASC, ${masteryExpr} ${direction}, n.updatedAt DESC`;
       case 'createdAt':
       default:
+        if (filter.searchMode === 'fulltext') {
+          return `${scoreAlias} DESC, n.createdAt ${direction}`;
+        }
         return `n.createdAt ${direction}`;
     }
   }
@@ -2927,6 +3160,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
   getDomainSubgraph(
     _domain: string,
     _edgeTypes?: readonly GraphEdgeType[],
+    _studyMode?: StudyMode,
     _userId?: string
   ): Promise<ISubgraph> {
     throw new Error('getDomainSubgraph is not supported inside transactions');
@@ -2935,6 +3169,7 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
   findArticulationPointsNative(
     _domain: string,
     _edgeTypes?: readonly GraphEdgeType[],
+    _studyMode?: StudyMode,
     _userId?: string
   ): Promise<NodeId[] | null> {
     throw new Error('findArticulationPointsNative is not supported inside transactions');
