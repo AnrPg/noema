@@ -2,22 +2,27 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { SCHEDULER_TOOL_DEFINITIONS } from '../../../src/agents/tools/scheduler.tools.js';
 import { createToolRegistry, ToolRegistry } from '../../../src/agents/tools/tool.registry.js';
+import type { SchedulerReadService } from '../../../src/domain/scheduler-service/scheduler-read.service.js';
 import type { IToolDefinition } from '../../../src/agents/tools/tool.types.js';
 import type { SchedulerService } from '../../../src/domain/scheduler-service/scheduler.service.js';
 
 describe('tool registry phase 4', () => {
   it('registers full scheduler tool surface', () => {
     const service = {} as SchedulerService;
-    const registry = createToolRegistry(service);
+    const readService = {} as SchedulerReadService;
+    const registry = createToolRegistry(service, readService);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(10);
+    expect(definitions).toHaveLength(13);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
       expect.arrayContaining([
         'plan-dual-lane',
         'get-srs-schedule',
+        'get-progress-summary',
+        'get-card-focus-summary',
+        'get-study-guidance',
         'predict-retention',
         'get-card-projection',
         'propose-review-windows',
@@ -28,6 +33,137 @@ describe('tool registry phase 4', () => {
         'batch-update-card-scheduling',
       ])
     );
+  });
+
+  it('executes the progress summary tool against the read service', async () => {
+    const service = {} as SchedulerService;
+    const readService = {
+      getProgressSummary: vi.fn().mockResolvedValue({
+        data: {
+          userId: 'usr_1',
+          studyMode: 'language_learning',
+          totalCards: 10,
+          trackedCards: 7,
+          dueNow: 2,
+          dueToday: 3,
+          overdueCards: 1,
+          newCards: 3,
+          learningCards: 2,
+          matureCards: 4,
+          suspendedCards: 1,
+          retentionCards: 6,
+          calibrationCards: 4,
+          fsrsCards: 6,
+          hlrCards: 4,
+          sm2Cards: 0,
+          averageRecallProbability: 0.72,
+          strongRecallCards: 3,
+          fragileCards: 2,
+        },
+        agentHints: {
+          suggestedNextActions: [],
+          relatedResources: [],
+          confidence: 1,
+          sourceQuality: 'high',
+          validityPeriod: 'short',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3 },
+          preferenceAlignment: [],
+          reasoning: 'summary ready',
+        },
+      }),
+    } as unknown as SchedulerReadService;
+    const registry = createToolRegistry(service, readService);
+
+    const result = await registry.execute(
+      'get-progress-summary',
+      { userId: 'usr_1', studyMode: 'language_learning' },
+      'usr_1',
+      'cor_1'
+    );
+
+    expect(result.success).toBe(true);
+    expect(readService.getProgressSummary).toHaveBeenCalledWith('usr_1', 'language_learning');
+  });
+
+  it('executes the card focus summary tool against the read service', async () => {
+    const service = {} as SchedulerService;
+    const readService = {
+      getCardFocusSummary: vi.fn().mockResolvedValue({
+        data: {
+          userId: 'usr_1',
+          studyMode: 'knowledge_gaining',
+          weakestCards: [],
+          strongestCards: [],
+        },
+        agentHints: {
+          suggestedNextActions: [],
+          relatedResources: [],
+          confidence: 1,
+          sourceQuality: 'high',
+          validityPeriod: 'short',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3 },
+          preferenceAlignment: [],
+          reasoning: 'focus ready',
+        },
+      }),
+    } as unknown as SchedulerReadService;
+    const registry = createToolRegistry(service, readService);
+
+    const result = await registry.execute(
+      'get-card-focus-summary',
+      { userId: 'usr_1', studyMode: 'knowledge_gaining', limit: 4 },
+      'usr_1',
+      'cor_1'
+    );
+
+    expect(result.success).toBe(true);
+    expect(readService.getCardFocusSummary).toHaveBeenCalledWith('usr_1', 'knowledge_gaining', 4);
+  });
+
+  it('executes the study guidance tool against the read service', async () => {
+    const service = {} as SchedulerService;
+    const readService = {
+      getStudyGuidanceSummary: vi.fn().mockResolvedValue({
+        data: {
+          userId: 'usr_1',
+          studyMode: 'knowledge_gaining',
+          recommendations: [],
+        },
+        agentHints: {
+          suggestedNextActions: [],
+          relatedResources: [],
+          confidence: 1,
+          sourceQuality: 'high',
+          validityPeriod: 'short',
+          contextNeeded: [],
+          assumptions: [],
+          riskFactors: [],
+          dependencies: [],
+          estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3 },
+          preferenceAlignment: [],
+          reasoning: 'guidance ready',
+        },
+      }),
+    } as unknown as SchedulerReadService;
+    const registry = createToolRegistry(service, readService);
+
+    const result = await registry.execute(
+      'get-study-guidance',
+      { userId: 'usr_1', studyMode: 'knowledge_gaining' },
+      'usr_1',
+      'cor_1'
+    );
+
+    expect(result.success).toBe(true);
+    expect(readService.getStudyGuidanceSummary).toHaveBeenCalledWith('usr_1', 'knowledge_gaining');
   });
 
   it('returns TOOL_NOT_FOUND metadata for unknown tool', async () => {

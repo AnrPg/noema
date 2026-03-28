@@ -16,8 +16,18 @@ import type {
   ForecastResponse,
   PredictRetentionInput,
   RetentionPredictionResponse,
+  ReviewListParams,
+  SchedulerCardFocusSummaryParams,
+  SchedulerCardFocusSummaryResponse,
+  SchedulerProgressSummaryParams,
+  SchedulerProgressSummaryResponse,
+  SchedulerStudyGuidanceSummaryParams,
+  SchedulerStudyGuidanceSummaryResponse,
   ReviewQueueParams,
   ReviewQueueResponse,
+  ReviewHistoryListResponse,
+  ReviewStatsParams,
+  ReviewStatsResponse,
   ReviewWindowInput,
   ReviewWindowsResponse,
   ScheduleCommitInput,
@@ -41,6 +51,54 @@ export const reviewQueueApi = {
    */
   getReviewQueue: (params?: ReviewQueueParams): Promise<ReviewQueueResponse> =>
     http.get('/v1/scheduler/review-queue', { params: params as Record<string, string> }),
+};
+
+export const reviewHistoryApi = {
+  /**
+   * List historical reviews with scheduler-native filters.
+   */
+  listReviews: (params: ReviewListParams): Promise<ReviewHistoryListResponse> =>
+    http.get('/v1/scheduler/reviews', { params: params as unknown as Record<string, string> }),
+
+  /**
+   * Fetch aggregate review analytics for the current filter scope.
+   */
+  getReviewStats: (params: ReviewStatsParams): Promise<ReviewStatsResponse> =>
+    http.get('/v1/scheduler/reviews/stats', {
+      params: params as unknown as Record<string, string>,
+    }),
+};
+
+export const progressApi = {
+  /**
+   * Fetch the authenticated learner's mode-scoped scheduler progress summary.
+   */
+  getSummary: (
+    params?: SchedulerProgressSummaryParams
+  ): Promise<SchedulerProgressSummaryResponse> =>
+    http.get('/v1/scheduler/progress/summary', {
+      params: params as unknown as Record<string, string>,
+    }),
+
+  /**
+   * Fetch the authenticated learner's card-level focus summary.
+   */
+  getCardFocus: (
+    params?: SchedulerCardFocusSummaryParams
+  ): Promise<SchedulerCardFocusSummaryResponse> =>
+    http.get('/v1/scheduler/progress/focus', {
+      params: params as unknown as Record<string, string>,
+    }),
+
+  /**
+   * Fetch the authenticated learner's study-guidance summary.
+   */
+  getGuidance: (
+    params?: SchedulerStudyGuidanceSummaryParams
+  ): Promise<SchedulerStudyGuidanceSummaryResponse> =>
+    http.get('/v1/scheduler/progress/guidance', {
+      params: params as unknown as Record<string, string>,
+    }),
 };
 
 // ============================================================================

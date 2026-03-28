@@ -19,6 +19,7 @@ model SchedulerCard {
     id     String @id @db.VarChar(50) // Surrogate key
     cardId String @map("card_id") @db.VarChar(50) // CardId from content-service
     userId String @map("user_id") @db.VarChar(50)
+    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
 
     // Lane assignment
     lane SchedulerLane @default(RETENTION)
@@ -62,12 +63,15 @@ model SchedulerCard {
     reviews         Review[]
     calibrationData CalibrationData[]
 
-    @@unique([userId, cardId])
+    @@unique([userId, cardId, studyMode])
     // Indexes
     @@index([userId, nextReviewDate])
+    @@index([userId, studyMode, nextReviewDate])
     @@index([cardId])
     @@index([userId, lane])
+    @@index([userId, studyMode, lane])
     @@index([userId, state, nextReviewDate])
+    @@index([userId, studyMode, state, nextReviewDate])
     @@index([nextReviewDate])
     @@index([lane, state])
     @@map("scheduler_cards")
@@ -83,6 +87,7 @@ model Review {
     // References
     cardId    String @map("card_id") @db.VarChar(50)
     userId    String @map("user_id") @db.VarChar(50)
+    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
     sessionId String @map("session_id") @db.VarChar(50)
     attemptId String @map("attempt_id") @db.VarChar(50)
 
@@ -115,12 +120,13 @@ model Review {
     createdAt DateTime @default(now()) @map("created_at")
 
     // Relation
-    schedulerCard SchedulerCard @relation(fields: [userId, cardId], references: [userId, cardId])
+    schedulerCard SchedulerCard @relation(fields: [userId, cardId, studyMode], references: [userId, cardId, studyMode])
 
     @@unique([attemptId])
     // Indexes
     @@index([cardId, reviewedAt])
     @@index([userId, reviewedAt])
+    @@index([userId, studyMode, reviewedAt])
     @@index([sessionId])
     @@index([rating])
     @@index([lane, rating])
@@ -136,6 +142,7 @@ model CalibrationData {
 
     // Scope: per-user, per-card OR per-cardType
     userId   String  @map("user_id") @db.VarChar(50)
+    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
     cardId   String? @map("card_id") @db.VarChar(50) // null for type-level calibration
     cardType String? @map("card_type") @db.VarChar(50)
 
@@ -152,12 +159,12 @@ model CalibrationData {
     updatedAt DateTime @updatedAt @map("updated_at")
 
     // Relation (optional foreign key)
-    card SchedulerCard? @relation(fields: [userId, cardId], references: [userId, cardId])
+    card SchedulerCard? @relation(fields: [userId, cardId, studyMode], references: [userId, cardId, studyMode])
 
     // Indexes
-    @@unique([userId, cardId])
-    @@index([userId, cardType])
-    @@index([userId, lastTrainedAt])
+    @@unique([userId, cardId, studyMode])
+    @@index([userId, studyMode, cardType])
+    @@index([userId, studyMode, lastTrainedAt])
     @@map("calibration_data")
 }
 
@@ -170,6 +177,7 @@ model ScheduleProposal {
 
     decisionId    String  @map("decision_id") @db.VarChar(50)
     userId        String  @map("user_id") @db.VarChar(50)
+    studyMode     StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
     policyVersion String  @map("policy_version") @db.VarChar(100)
     correlationId String  @map("correlation_id") @db.VarChar(100)
     sessionId     String? @map("session_id") @db.VarChar(50)
@@ -179,7 +187,7 @@ model ScheduleProposal {
 
     createdAt DateTime @default(now()) @map("created_at")
 
-    @@index([userId, createdAt])
+    @@index([userId, studyMode, createdAt])
     @@index([decisionId])
     @@index([sessionId, sessionRevision])
     @@map("schedule_proposals")
@@ -191,6 +199,7 @@ model ScheduleCommit {
     proposalId    String? @map("proposal_id") @db.VarChar(50)
     decisionId    String  @map("decision_id") @db.VarChar(50)
     userId        String  @map("user_id") @db.VarChar(50)
+    studyMode     StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
     policyVersion String  @map("policy_version") @db.VarChar(100)
     correlationId String  @map("correlation_id") @db.VarChar(100)
     sessionId     String? @map("session_id") @db.VarChar(50)
@@ -202,7 +211,7 @@ model ScheduleCommit {
 
     createdAt DateTime @default(now()) @map("created_at")
 
-    @@index([userId, createdAt])
+    @@index([userId, studyMode, createdAt])
     @@index([proposalId])
     @@index([decisionId])
     @@index([sessionId, sessionRevision])
@@ -213,6 +222,7 @@ model ScheduleCohortLineage {
     id String @id @db.VarChar(50)
 
     userId         String  @map("user_id") @db.VarChar(50)
+    studyMode      StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
     proposalId     String? @map("proposal_id") @db.VarChar(50)
     decisionId     String  @map("decision_id") @db.VarChar(50)
     sessionId      String? @map("session_id") @db.VarChar(50)
@@ -224,7 +234,7 @@ model ScheduleCohortLineage {
 
     createdAt DateTime @default(now()) @map("created_at")
 
-    @@index([userId, createdAt])
+    @@index([userId, studyMode, createdAt])
     @@index([proposalId])
     @@index([decisionId])
     @@index([sessionId, sessionRevision])
@@ -239,6 +249,7 @@ model SchedulerEventInbox {
 
     correlationId  String?  @map("correlation_id") @db.VarChar(100)
     userId         String?  @map("user_id") @db.VarChar(50)
+    studyMode      StudyMode? @map("study_mode")
     proposalId     String?  @map("proposal_id") @db.VarChar(50)
     decisionId     String?  @map("decision_id") @db.VarChar(50)
     sessionId      String?  @map("session_id") @db.VarChar(50)
@@ -256,6 +267,11 @@ model SchedulerEventInbox {
     @@index([sessionId, proposalId, sessionRevision])
     @@index([lastSeenAt])
     @@map("scheduler_event_inbox")
+}
+
+enum StudyMode {
+    LANGUAGE_LEARNING
+    KNOWLEDGE_GAINING
 }
 
 model SchedulerHandshakeState {

@@ -2,12 +2,13 @@
  * @noema/scheduler-service - Prisma Calibration Data Repository
  */
 
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import { randomUUID } from 'node:crypto';
 import type {
   Prisma,
   CalibrationData as PrismaCalibrationData,
   PrismaClient,
+  StudyMode as PrismaStudyMode,
 } from '../../../generated/prisma/index.js';
 import type { ICalibrationDataRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type { ICalibrationData } from '../../types/scheduler.types.js';
@@ -16,6 +17,7 @@ function toDomain(row: PrismaCalibrationData): ICalibrationData {
   return {
     id: row.id,
     userId: row.userId as UserId,
+    studyMode: row.studyMode.toLowerCase() as StudyMode,
     cardId: row.cardId as CardId | null,
     cardType: row.cardType,
     parameters: row.parameters as Record<string, unknown>,
@@ -42,6 +44,14 @@ function buildCalibrationId(): string {
   return `cal_${randomUUID()}`;
 }
 
+function toPrismaStudyMode(studyMode: StudyMode): PrismaStudyMode {
+  return studyMode.toUpperCase() as PrismaStudyMode;
+}
+
+function normalizeStudyMode(studyMode?: StudyMode): StudyMode {
+  return studyMode ?? 'knowledge_gaining';
+}
+
 export class PrismaCalibrationDataRepository implements ICalibrationDataRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
@@ -50,22 +60,46 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
     return data ? toDomain(data) : null;
   }
 
-  async findByCard(userId: UserId, cardId: CardId): Promise<ICalibrationData | null> {
+  async findByCard(
+    userId: UserId,
+    cardId: CardId,
+    studyMode?: StudyMode
+  ): Promise<ICalibrationData | null> {
     const data = await this.prisma.calibrationData.findUnique({
-      where: { userId_cardId: { userId, cardId } },
+      where: {
+        userId_cardId_studyMode: {
+          userId,
+          cardId,
+          studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        },
+      },
     });
     return data ? toDomain(data) : null;
   }
 
-  async findByCardType(userId: UserId, cardType: string): Promise<ICalibrationData | null> {
+  async findByCardType(
+    userId: UserId,
+    cardType: string,
+    studyMode?: StudyMode
+  ): Promise<ICalibrationData | null> {
     const data = await this.prisma.calibrationData.findFirst({
-      where: { userId, cardType, cardId: null },
+      where: {
+        userId,
+        studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        cardType,
+        cardId: null,
+      },
     });
     return data ? toDomain(data) : null;
   }
 
-  async findByUser(userId: UserId): Promise<ICalibrationData[]> {
-    const data = await this.prisma.calibrationData.findMany({ where: { userId } });
+  async findByUser(userId: UserId, studyMode?: StudyMode): Promise<ICalibrationData[]> {
+    const data = await this.prisma.calibrationData.findMany({
+      where: {
+        userId,
+        studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+      },
+    });
     return data.map(toDomain);
   }
 
@@ -73,6 +107,7 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
     const createData: Prisma.CalibrationDataUncheckedCreateInput = {
       id: data.id,
       userId: data.userId,
+      studyMode: toPrismaStudyMode(data.studyMode),
       cardId: data.cardId,
       cardType: data.cardType,
       parameters: toInputJsonValue(data.parameters),
@@ -120,6 +155,7 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
     userId: UserId,
     cardId: CardId | null,
     cardType: string | null,
+    studyMode: StudyMode,
     data: Partial<
       Pick<ICalibrationData, 'parameters' | 'sampleCount' | 'confidenceScore' | 'lastTrainedAt'>
     >
@@ -129,6 +165,7 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
       const upsertCreateData: Prisma.CalibrationDataUncheckedCreateInput = {
         id: buildCalibrationId(),
         userId,
+        studyMode: toPrismaStudyMode(studyMode),
         cardId,
         cardType,
         parameters: toInputJsonValue(data.parameters ?? {}),
@@ -152,7 +189,13 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
       }
 
       const upserted = await this.prisma.calibrationData.upsert({
-        where: { userId_cardId: { userId, cardId } },
+        where: {
+          userId_cardId_studyMode: {
+            userId,
+            cardId,
+            studyMode: toPrismaStudyMode(studyMode),
+          },
+        },
         create: upsertCreateData,
         update: upsertUpdateData,
       });
@@ -161,7 +204,7 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
 
     // For type-level, find or create
     const existing = await this.prisma.calibrationData.findFirst({
-      where: { userId, cardType, cardId: null },
+      where: { userId, studyMode: toPrismaStudyMode(studyMode), cardType, cardId: null },
     });
 
     if (existing) {
@@ -171,6 +214,7 @@ export class PrismaCalibrationDataRepository implements ICalibrationDataReposito
     return this.create({
       id: buildCalibrationId(),
       userId,
+      studyMode,
       cardId: null,
       cardType,
       parameters: data.parameters ?? {},

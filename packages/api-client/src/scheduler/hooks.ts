@@ -4,6 +4,8 @@
  * TanStack Query hooks for Scheduler Service (all endpoints).
  */
 
+/* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types */
+
 import {
   useMutation,
   useQuery,
@@ -16,8 +18,10 @@ import {
   commitsApi,
   dualLanePlanApi,
   forecastApi,
+  progressApi,
   proposalsApi,
   retentionApi,
+  reviewHistoryApi,
   reviewQueueApi,
   schedulerCardsApi,
   simulationsApi,
@@ -31,8 +35,18 @@ import type {
   ForecastResponse,
   PredictRetentionInput,
   RetentionPredictionResponse,
+  ReviewListParams,
+  SchedulerCardFocusSummaryParams,
+  SchedulerCardFocusSummaryResponse,
+  SchedulerProgressSummaryParams,
+  SchedulerProgressSummaryResponse,
+  SchedulerStudyGuidanceSummaryParams,
+  SchedulerStudyGuidanceSummaryResponse,
   ReviewQueueParams,
   ReviewQueueResponse,
+  ReviewHistoryListResponse,
+  ReviewStatsParams,
+  ReviewStatsResponse,
   ReviewWindowInput,
   ReviewWindowsResponse,
   ScheduleCommitInput,
@@ -52,8 +66,17 @@ import type {
 
 export const schedulerKeys = {
   all: ['scheduler'] as const,
+  studyGuidanceSummary: (params?: SchedulerStudyGuidanceSummaryParams) =>
+    [...schedulerKeys.all, 'study-guidance-summary', params] as const,
+  cardFocusSummary: (params?: SchedulerCardFocusSummaryParams) =>
+    [...schedulerKeys.all, 'card-focus-summary', params] as const,
+  progressSummary: (params?: SchedulerProgressSummaryParams) =>
+    [...schedulerKeys.all, 'progress-summary', params] as const,
   reviewQueue: (params?: ReviewQueueParams) =>
     [...schedulerKeys.all, 'review-queue', params] as const,
+  reviews: (params: ReviewListParams) => [...schedulerKeys.all, 'reviews', params] as const,
+  reviewStats: (params: ReviewStatsParams) =>
+    [...schedulerKeys.all, 'review-stats', params] as const,
   cards: () => [...schedulerKeys.all, 'cards'] as const,
   card: (cardId: CardId) => [...schedulerKeys.cards(), cardId] as const,
   cardList: (params?: SchedulerCardListParams) =>
@@ -70,6 +93,42 @@ export const schedulerKeys = {
 // ============================================================================
 // Existing Hooks (migrated from hooks/scheduler.ts)
 // ============================================================================
+
+export function useSchedulerProgressSummary(
+  params?: SchedulerProgressSummaryParams,
+  options?: Omit<UseQueryOptions<SchedulerProgressSummaryResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: schedulerKeys.progressSummary(params),
+    queryFn: () => progressApi.getSummary(params),
+    staleTime: 60 * 1000,
+    ...options,
+  });
+}
+
+export function useSchedulerCardFocusSummary(
+  params?: SchedulerCardFocusSummaryParams,
+  options?: Omit<UseQueryOptions<SchedulerCardFocusSummaryResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: schedulerKeys.cardFocusSummary(params),
+    queryFn: () => progressApi.getCardFocus(params),
+    staleTime: 60 * 1000,
+    ...options,
+  });
+}
+
+export function useSchedulerStudyGuidanceSummary(
+  params?: SchedulerStudyGuidanceSummaryParams,
+  options?: Omit<UseQueryOptions<SchedulerStudyGuidanceSummaryResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: schedulerKeys.studyGuidanceSummary(params),
+    queryFn: () => progressApi.getGuidance(params),
+    staleTime: 60 * 1000,
+    ...options,
+  });
+}
 
 export function useReviewQueue(
   params?: ReviewQueueParams,
@@ -88,6 +147,30 @@ export function usePredictRetention(
 ) {
   return useMutation({
     mutationFn: retentionApi.predictRetention,
+    ...options,
+  });
+}
+
+export function useReviews(
+  params: ReviewListParams,
+  options?: Omit<UseQueryOptions<ReviewHistoryListResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: schedulerKeys.reviews(params),
+    queryFn: () => reviewHistoryApi.listReviews(params),
+    staleTime: 60 * 1000,
+    ...options,
+  });
+}
+
+export function useReviewStats(
+  params: ReviewStatsParams,
+  options?: Omit<UseQueryOptions<ReviewStatsResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: schedulerKeys.reviewStats(params),
+    queryFn: () => reviewHistoryApi.getReviewStats(params),
+    staleTime: 60 * 1000,
     ...options,
   });
 }

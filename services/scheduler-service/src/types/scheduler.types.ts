@@ -2,7 +2,7 @@
  * @noema/scheduler-service - Scheduler Domain Types
  */
 
-import type { CardId, CorrelationId, UserId } from '@noema/types';
+import type { CardId, CorrelationId, StudyMode, UserId } from '@noema/types';
 
 export type { CardId, CorrelationId, UserId };
 
@@ -18,6 +18,7 @@ export interface IExecutionContext {
 
 export interface IDualLanePlanInput {
   userId: UserId;
+  studyMode?: StudyMode;
   retentionCardIds: CardId[];
   calibrationCardIds: CardId[];
   targetMix?: ISchedulerLaneMix;
@@ -99,6 +100,7 @@ export interface ICardScheduleDecision {
 
 export interface IReviewWindowProposalInput {
   userId: UserId;
+  studyMode?: StudyMode;
   cards: ICardScheduleInput[];
   asOf?: string | null;
 }
@@ -134,6 +136,7 @@ export interface ICandidateScore {
 
 export interface ISessionCandidateProposalInput {
   userId: UserId;
+  studyMode?: StudyMode;
   cards: ISessionCandidateCard[];
   constraints: ISessionConstraints;
   sourceDeckId?: string | null;
@@ -155,6 +158,7 @@ export interface ISessionCandidateProposal {
 
 export interface ISessionCandidateSimulationInput {
   userId: UserId;
+  studyMode?: StudyMode;
   cards: ISessionCandidateCard[];
   constraints: ISessionConstraints;
   whatIfAdjustments?: Record<string, unknown> | null;
@@ -175,6 +179,7 @@ export interface ISessionCandidateSimulation {
 
 export interface ICardScheduleCommitInput {
   userId: UserId;
+  studyMode?: StudyMode;
   decision: ICardScheduleDecision;
   policyVersion: IPolicyVersion;
   orchestration: IOrchestrationMetadata;
@@ -191,6 +196,7 @@ export interface ICardScheduleCommitResult {
 
 export interface IBatchScheduleCommitInput {
   userId: UserId;
+  studyMode?: StudyMode;
   decisions: ICardScheduleDecision[];
   source: 'agent' | 'session-service' | 'scheduler-service';
   policyVersion: IPolicyVersion;
@@ -216,6 +222,7 @@ export interface IBatchScheduleCommitResult {
  */
 export interface IReviewQueueInput {
   userId: UserId;
+  studyMode?: StudyMode;
   lane?: SchedulerLane;
   limit?: number;
   asOf?: string;
@@ -247,6 +254,7 @@ export interface IRetentionPredictionRequest {
  */
 export interface IRetentionPredictionInput {
   userId: UserId;
+  studyMode?: StudyMode;
   cards: IRetentionPredictionRequest[];
 }
 
@@ -345,6 +353,7 @@ export interface ISessionAdjustmentResult {
 export interface ISchedulerCardResponse {
   cardId: CardId;
   userId: UserId;
+  studyMode: StudyMode;
   lane: SchedulerLane;
   state: SchedulerCardState;
   schedulingAlgorithm: 'fsrs' | 'hlr' | 'sm2';
@@ -380,6 +389,7 @@ export interface ISchedulerCardListResponse {
  */
 export interface ISchedulerCardQueryFilters {
   userId: UserId;
+  studyMode?: StudyMode;
   lane?: SchedulerLane;
   state?: SchedulerCardState;
   algorithm?: 'fsrs' | 'hlr' | 'sm2';
@@ -398,6 +408,7 @@ export interface IReviewResponse {
   id: string;
   cardId: CardId;
   userId: UserId;
+  studyMode: StudyMode;
   sessionId: string;
   attemptId: string;
   rating: Rating;
@@ -421,6 +432,7 @@ export interface IReviewResponse {
  */
 export interface IReviewQueryFilters {
   userId: UserId;
+  studyMode?: StudyMode;
   cardId?: CardId;
   sessionId?: string;
   lane?: SchedulerLane;
@@ -463,6 +475,7 @@ export interface IReviewStatsResponse {
  */
 export interface IForecastInput {
   userId: UserId;
+  studyMode?: StudyMode;
   /** Number of days to forecast (default 7, max 90) */
   days?: number;
   /** Include already-overdue cards in day 0 (default true) */
@@ -497,6 +510,79 @@ export interface IForecastResponse {
   generatedAt: string;
   model: 'consumed';
   averageSecondsPerCard: number;
+}
+
+/**
+ * Mode-scoped scheduler progress/readiness summary for dashboard and agent use.
+ */
+export interface ISchedulerProgressSummary {
+  userId: UserId;
+  studyMode: StudyMode;
+  totalCards: number;
+  trackedCards: number;
+  dueNow: number;
+  dueToday: number;
+  overdueCards: number;
+  newCards: number;
+  learningCards: number;
+  matureCards: number;
+  suspendedCards: number;
+  retentionCards: number;
+  calibrationCards: number;
+  fsrsCards: number;
+  hlrCards: number;
+  sm2Cards: number;
+  averageRecallProbability: number | null;
+  strongRecallCards: number;
+  fragileCards: number;
+}
+
+export type SchedulerDueStatus = 'overdue' | 'due_today' | 'upcoming';
+export type SchedulerReadinessBand = 'untracked' | 'fragile' | 'recovering' | 'stable';
+
+export interface ISchedulerCardFocusEntry {
+  cardId: CardId;
+  studyMode: StudyMode;
+  lane: SchedulerLane;
+  state: SchedulerCardState;
+  schedulingAlgorithm: 'fsrs' | 'hlr' | 'sm2';
+  nextReviewDate: string;
+  reviewCount: number;
+  cardType: string | null;
+  difficulty: string | null;
+  dueStatus: SchedulerDueStatus;
+  daysUntilDue: number;
+  recallProbability: number | null;
+  readinessBand: SchedulerReadinessBand;
+  focusReason: string;
+}
+
+export interface ISchedulerCardFocusSummary {
+  userId: UserId;
+  studyMode: StudyMode;
+  weakestCards: ISchedulerCardFocusEntry[];
+  strongestCards: ISchedulerCardFocusEntry[];
+}
+
+export type SchedulerGuidanceAction =
+  | 'clear_overdue'
+  | 'reinforce_fragile_cards'
+  | 'do_scheduled_reviews'
+  | 'build_coverage'
+  | 'expand_confidently';
+
+export interface ISchedulerGuidanceRecommendation {
+  action: SchedulerGuidanceAction;
+  headline: string;
+  explanation: string;
+  suggestedCardCount: number;
+  relatedCardIds: CardId[];
+}
+
+export interface ISchedulerStudyGuidanceSummary {
+  userId: UserId;
+  studyMode: StudyMode;
+  recommendations: ISchedulerGuidanceRecommendation[];
 }
 
 /**
@@ -541,6 +627,7 @@ export interface ISchedulerCard {
   id: string;
   cardId: CardId;
   userId: UserId;
+  studyMode: StudyMode;
   lane: SchedulerLane;
   stability: number | null;
   difficultyParameter: number | null;
@@ -567,6 +654,7 @@ export interface IReview {
   id: string;
   cardId: CardId;
   userId: UserId;
+  studyMode: StudyMode;
   sessionId: string;
   attemptId: string;
   rating: Rating;
@@ -588,6 +676,7 @@ export interface IReview {
 export interface ICalibrationData {
   id: string;
   userId: UserId;
+  studyMode: StudyMode;
   cardId: CardId | null;
   cardType: string | null;
   parameters: Record<string, unknown>;
@@ -603,6 +692,7 @@ export interface ICalibrationData {
 // ============================================================================
 
 export interface ISchedulerCardFilters {
+  studyMode?: StudyMode;
   lane?: SchedulerLane;
   state?: SchedulerCardState;
   dueBefore?: Date;
@@ -610,6 +700,7 @@ export interface ISchedulerCardFilters {
 }
 
 export interface IReviewFilters {
+  studyMode?: StudyMode;
   startDate?: Date;
   endDate?: Date;
   lane?: SchedulerLane;
@@ -632,6 +723,7 @@ export interface ISortParams<T extends string = string> {
 }
 
 export interface ISchedulerCardExtendedFilters {
+  studyMode?: StudyMode;
   lane?: SchedulerLane;
   state?: SchedulerCardState;
   schedulingAlgorithm?: string;
@@ -640,6 +732,7 @@ export interface ISchedulerCardExtendedFilters {
 }
 
 export interface IReviewExtendedFilters {
+  studyMode?: StudyMode;
   cardId?: CardId;
   sessionId?: string;
   lane?: SchedulerLane;

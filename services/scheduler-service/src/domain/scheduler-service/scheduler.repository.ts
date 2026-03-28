@@ -5,7 +5,7 @@
  * Covers SchedulerCard, Review, and CalibrationData entities.
  */
 
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import type {
   ICalibrationData,
   IPaginationParams,
@@ -76,10 +76,10 @@ export interface ISchedulerCardRepository {
   // ---------- Read ----------
 
   /** Find a scheduler card by user/card identity. Returns null if not found. */
-  findByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard | null>;
+  findByCard(userId: UserId, cardId: CardId, studyMode?: StudyMode): Promise<ISchedulerCard | null>;
 
   /** Find a scheduler card by user/card identity, throws if not found. */
-  getByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard>;
+  getByCard(userId: UserId, cardId: CardId, studyMode?: StudyMode): Promise<ISchedulerCard>;
 
   /** Find scheduler cards for a user. */
   findByUser(userId: UserId, filters?: ISchedulerCardFilters): Promise<ISchedulerCard[]>;
@@ -89,20 +89,36 @@ export interface ISchedulerCardRepository {
     userId: UserId,
     beforeDate: Date,
     limit?: number,
-    lane?: SchedulerLane
+    lane?: SchedulerLane,
+    studyMode?: StudyMode
   ): Promise<ISchedulerCard[]>;
 
   /** Find cards by lane. */
-  findByLane(userId: UserId, lane: SchedulerLane, limit?: number): Promise<ISchedulerCard[]>;
+  findByLane(
+    userId: UserId,
+    lane: SchedulerLane,
+    limit?: number,
+    studyMode?: StudyMode
+  ): Promise<ISchedulerCard[]>;
 
   /** Find cards by state. */
-  findByState(userId: UserId, state: SchedulerCardState, limit?: number): Promise<ISchedulerCard[]>;
+  findByState(
+    userId: UserId,
+    state: SchedulerCardState,
+    limit?: number,
+    studyMode?: StudyMode
+  ): Promise<ISchedulerCard[]>;
 
   /** Count scheduler cards for a user. */
   count(userId: UserId, filters?: ISchedulerCardFilters): Promise<number>;
 
   /** Count cards due for review. */
-  countDue(userId: UserId, beforeDate: Date, lane?: SchedulerLane): Promise<number>;
+  countDue(
+    userId: UserId,
+    beforeDate: Date,
+    lane?: SchedulerLane,
+    studyMode?: StudyMode
+  ): Promise<number>;
 
   // ---------- Write ----------
 
@@ -132,11 +148,12 @@ export interface ISchedulerCardRepository {
         | 'suspendedReason'
       >
     >,
-    expectedVersion: number
+    expectedVersion: number,
+    studyMode?: StudyMode
   ): Promise<ISchedulerCard>;
 
   /** Delete a scheduler card. */
-  delete(userId: UserId, cardId: CardId): Promise<void>;
+  delete(userId: UserId, cardId: CardId, studyMode?: StudyMode): Promise<void>;
 
   /** Delete all scheduler cards for a user (GDPR erasure). */
   deleteByUser(userId: UserId): Promise<number>;
@@ -240,13 +257,21 @@ export interface ICalibrationDataRepository {
   findById(id: string): Promise<ICalibrationData | null>;
 
   /** Find calibration data for a specific card. */
-  findByCard(userId: UserId, cardId: CardId): Promise<ICalibrationData | null>;
+  findByCard(
+    userId: UserId,
+    cardId: CardId,
+    studyMode?: StudyMode
+  ): Promise<ICalibrationData | null>;
 
   /** Find calibration data for a card type (type-level calibration). */
-  findByCardType(userId: UserId, cardType: string): Promise<ICalibrationData | null>;
+  findByCardType(
+    userId: UserId,
+    cardType: string,
+    studyMode?: StudyMode
+  ): Promise<ICalibrationData | null>;
 
   /** Find all calibration data for a user. */
-  findByUser(userId: UserId): Promise<ICalibrationData[]>;
+  findByUser(userId: UserId, studyMode?: StudyMode): Promise<ICalibrationData[]>;
 
   // ---------- Write ----------
 
@@ -266,6 +291,7 @@ export interface ICalibrationDataRepository {
     userId: UserId,
     cardId: CardId | null,
     cardType: string | null,
+    studyMode: StudyMode,
     data: Partial<
       Pick<ICalibrationData, 'parameters' | 'sampleCount' | 'confidenceScore' | 'lastTrainedAt'>
     >

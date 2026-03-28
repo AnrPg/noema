@@ -2,13 +2,14 @@
  * @noema/scheduler-service - Prisma Review Repository
  */
 
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import {
   Prisma,
   type PrismaClient,
   type Rating as PrismaRating,
   type Review as PrismaReview,
   type SchedulerLane as PrismaSchedulerLane,
+  type StudyMode as PrismaStudyMode,
 } from '../../../generated/prisma/index.js';
 import type { IReviewRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type {
@@ -38,11 +39,20 @@ function fromPrismaLane(lane: PrismaSchedulerLane): SchedulerLane {
   return lane.toLowerCase() as SchedulerLane;
 }
 
+function toPrismaStudyMode(studyMode: StudyMode): PrismaStudyMode {
+  return studyMode.toUpperCase() as PrismaStudyMode;
+}
+
+function fromPrismaStudyMode(studyMode: PrismaStudyMode): StudyMode {
+  return studyMode.toLowerCase() as StudyMode;
+}
+
 function toDomain(row: PrismaReview): IReview {
   return {
     id: row.id,
     cardId: row.cardId as CardId,
     userId: row.userId as UserId,
+    studyMode: fromPrismaStudyMode(row.studyMode),
     sessionId: row.sessionId,
     attemptId: row.attemptId,
     rating: fromPrismaRating(row.rating),
@@ -82,12 +92,16 @@ export class PrismaReviewRepository implements IReviewRepository {
   async findByUser(userId: UserId, filters?: IReviewFilters): Promise<IReview[]> {
     const where: {
       userId: string;
+      studyMode?: PrismaStudyMode;
       reviewedAt?: { gte?: Date; lte?: Date };
       lane?: PrismaSchedulerLane;
       rating?: PrismaRating;
       sessionId?: string;
     } = { userId };
 
+    if (filters?.studyMode !== undefined) {
+      where.studyMode = toPrismaStudyMode(filters.studyMode);
+    }
     if (filters?.startDate !== undefined || filters?.endDate !== undefined) {
       where.reviewedAt = {};
       if (filters.startDate !== undefined) {
@@ -148,6 +162,7 @@ export class PrismaReviewRepository implements IReviewRepository {
         id: review.id,
         cardId: review.cardId,
         userId: review.userId,
+        studyMode: toPrismaStudyMode(review.studyMode),
         sessionId: review.sessionId,
         attemptId: review.attemptId,
         rating: toPrismaRating(review.rating),
@@ -294,6 +309,7 @@ export class PrismaReviewRepository implements IReviewRepository {
       WHERE user_id = ${userId}
         ${filters.startDate !== undefined ? Prisma.sql`AND reviewed_at >= ${filters.startDate}` : Prisma.empty}
         ${filters.endDate !== undefined ? Prisma.sql`AND reviewed_at <= ${filters.endDate}` : Prisma.empty}
+        ${filters.studyMode !== undefined ? Prisma.sql`AND study_mode = CAST(${filters.studyMode.toUpperCase()} AS "study_mode")` : Prisma.empty}
         ${filters.cardId !== undefined ? Prisma.sql`AND card_id = ${filters.cardId}` : Prisma.empty}
         ${filters.lane !== undefined ? Prisma.sql`AND lane = CAST(${filters.lane.toUpperCase()} AS "scheduler_lane")` : Prisma.empty}
         ${filters.rating !== undefined ? Prisma.sql`AND rating = CAST(${filters.rating.toUpperCase()} AS "Rating")` : Prisma.empty}
@@ -318,6 +334,9 @@ export class PrismaReviewRepository implements IReviewRepository {
   ): Prisma.ReviewWhereInput {
     const where: Prisma.ReviewWhereInput = { userId };
 
+    if (filters.studyMode !== undefined) {
+      where.studyMode = toPrismaStudyMode(filters.studyMode);
+    }
     if (filters.cardId !== undefined) {
       where.cardId = filters.cardId;
     }

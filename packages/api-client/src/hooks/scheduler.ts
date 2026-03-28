@@ -12,8 +12,13 @@
 
 export {
   useForecast,
+  useSchedulerCardFocusSummary,
+  useSchedulerProgressSummary,
+  useSchedulerStudyGuidanceSummary,
   schedulerKeys,
   usePredictRetention,
+  useReviews,
+  useReviewStats,
   useReviewQueue,
   useSchedulerCard,
   useSchedulerCards,

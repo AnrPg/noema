@@ -37,3 +37,5 @@ export * from './hlr/index.js';
 
 // React Query Hooks (user + scheduler - for backward compat)
 export * from './hooks/index.js';
+export { useSchedulerCardFocusSummary } from './scheduler/hooks.js';
+export { useSchedulerStudyGuidanceSummary } from './scheduler/hooks.js';

@@ -1,9 +1,13 @@
+import type { SchedulerReadService } from '../../domain/scheduler-service/scheduler-read.service.js';
 import type { SchedulerService } from '../../domain/scheduler-service/scheduler.service.js';
 import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';
 import {
   createApplySessionAdjustmentsHandler,
   createBatchUpdateCardSchedulingHandler,
   createGetCardProjectionHandler,
+  createGetCardFocusSummaryHandler,
+  createGetProgressSummaryHandler,
+  createGetStudyGuidanceHandler,
   createGetSRSScheduleHandler,
   createPlanDualLaneHandler,
   createPredictRetentionHandler,
@@ -396,12 +400,15 @@ export class ToolRegistry {
   }
 }
 
-export function createToolRegistry(service: SchedulerService): ToolRegistry {
+export function createToolRegistry(
+  service: SchedulerService,
+  readService: SchedulerReadService
+): ToolRegistry {
   const registry = new ToolRegistry();
 
-  if (SCHEDULER_TOOL_DEFINITIONS.length !== 10) {
+  if (SCHEDULER_TOOL_DEFINITIONS.length !== 13) {
     throw new Error(
-      `Expected 10 scheduler tool definitions, found ${String(SCHEDULER_TOOL_DEFINITIONS.length)}`
+      `Expected 13 scheduler tool definitions, found ${String(SCHEDULER_TOOL_DEFINITIONS.length)}`
     );
   }
 
@@ -418,6 +425,18 @@ export function createToolRegistry(service: SchedulerService): ToolRegistry {
 
   registry.register(requireDefinition('plan-dual-lane'), createPlanDualLaneHandler(service));
   registry.register(requireDefinition('get-srs-schedule'), createGetSRSScheduleHandler(service));
+  registry.register(
+    requireDefinition('get-progress-summary'),
+    createGetProgressSummaryHandler(readService)
+  );
+  registry.register(
+    requireDefinition('get-card-focus-summary'),
+    createGetCardFocusSummaryHandler(readService)
+  );
+  registry.register(
+    requireDefinition('get-study-guidance'),
+    createGetStudyGuidanceHandler(readService)
+  );
   registry.register(requireDefinition('predict-retention'), createPredictRetentionHandler(service));
   registry.register(
     requireDefinition('get-card-projection'),

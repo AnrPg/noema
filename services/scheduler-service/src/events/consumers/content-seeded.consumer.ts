@@ -9,7 +9,7 @@
  */
 
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -49,6 +49,8 @@ const ContentSeededPayloadSchema = z
     cardIds: z.array(z.string().min(1)).optional(),
     cardId: z.string().min(1).optional(),
     lane: z.string().optional(),
+    studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+    supportedStudyModes: z.array(z.enum(['language_learning', 'knowledge_gaining'])).optional(),
   })
   .passthrough();
 
@@ -96,6 +98,9 @@ export class ContentSeededConsumer extends SchedulerBaseConsumer {
     }
 
     const userId = parsed.data.userId as UserId;
+    const studyModes = (parsed.data.supportedStudyModes ?? [
+      parsed.data.studyMode ?? 'knowledge_gaining',
+    ]) as StudyMode[];
     const cardIds: CardId[] = [
       ...(this.readCardIds(parsed.data.cardIds) as CardId[]),
       ...(parsed.data.cardId !== undefined ? [parsed.data.cardId as CardId] : []),
@@ -107,34 +112,41 @@ export class ContentSeededConsumer extends SchedulerBaseConsumer {
 
     await Promise.all(
       cardIds.map(async (cardId) => {
-        const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
-        if (existing !== null) {
-          return;
-        }
+        for (const studyMode of studyModes) {
+          const existing = await this.dependencies.schedulerCardRepository.findByCard(
+            userId,
+            cardId,
+            studyMode
+          );
+          if (existing !== null) {
+            continue;
+          }
 
-        await this.dependencies.schedulerCardRepository.create({
-          id: `sc_${crypto.randomUUID()}`,
-          cardId,
-          userId,
-          lane,
-          stability: null,
-          difficultyParameter: null,
-          halfLife: null,
-          interval: 0,
-          nextReviewDate: new Date().toISOString(),
-          lastReviewedAt: null,
-          reviewCount: 0,
-          lapseCount: 0,
-          consecutiveCorrect: 0,
-          schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
-          cardType: null,
-          difficulty: null,
-          knowledgeNodeIds: [],
-          state: 'new',
-          suspendedUntil: null,
-          suspendedReason: null,
-          version: 1,
-        });
+          await this.dependencies.schedulerCardRepository.create({
+            id: `sc_${crypto.randomUUID()}`,
+            cardId,
+            userId,
+            studyMode,
+            lane,
+            stability: null,
+            difficultyParameter: null,
+            halfLife: null,
+            interval: 0,
+            nextReviewDate: new Date().toISOString(),
+            lastReviewedAt: null,
+            reviewCount: 0,
+            lapseCount: 0,
+            consecutiveCorrect: 0,
+            schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+            cardType: null,
+            difficulty: null,
+            knowledgeNodeIds: [],
+            state: 'new',
+            suspendedUntil: null,
+            suspendedReason: null,
+            version: 1,
+          });
+        }
       })
     );
   }

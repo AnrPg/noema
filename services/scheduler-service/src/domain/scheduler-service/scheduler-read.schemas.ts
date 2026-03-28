@@ -5,7 +5,7 @@
  * Uses z.coerce for numeric params (GET query strings arrive as strings).
  */
 
-import { CardIdSchema, UserIdSchema } from '@noema/validation';
+import { CardIdSchema, StudyModeSchema, UserIdSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -40,6 +40,7 @@ const PaginationOffsetSchema = z.coerce.number().int().min(0).default(0);
  */
 export const SchedulerCardListQuerySchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   lane: SchedulerLaneEnum.optional(),
   state: SchedulerCardStateEnum.optional(),
   algorithm: SchedulerAlgorithmEnum.optional(),
@@ -69,6 +70,7 @@ export const SchedulerCardParamsSchema = z.object({
  */
 export const ReviewListQuerySchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   cardId: CardIdSchema.optional(),
   sessionId: z.string().min(1).optional(),
   lane: SchedulerLaneEnum.optional(),
@@ -89,6 +91,7 @@ export const ReviewListQuerySchema = z.object({
  */
 export const ReviewStatsQuerySchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   cardId: CardIdSchema.optional(),
   sessionId: z.string().min(1).optional(),
   lane: SchedulerLaneEnum.optional(),
@@ -97,6 +100,28 @@ export const ReviewStatsQuerySchema = z.object({
   outcome: z.string().min(1).optional(),
   reviewedAfter: z.string().datetime().optional(),
   reviewedBefore: z.string().datetime().optional(),
+});
+
+/**
+ * GET /v1/scheduler/progress/summary — mode-scoped readiness summary.
+ */
+export const ProgressSummaryQuerySchema = z.object({
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
+});
+
+/**
+ * GET /v1/scheduler/progress/focus — mode-scoped card focus summary.
+ */
+export const ProgressFocusQuerySchema = z.object({
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
+  limit: z.coerce.number().int().min(1).max(12).default(5),
+});
+
+/**
+ * GET /v1/scheduler/progress/guidance — mode-scoped study guidance summary.
+ */
+export const ProgressGuidanceQuerySchema = z.object({
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
 });
 
 // ============================================================================
@@ -108,6 +133,7 @@ export const ReviewStatsQuerySchema = z.object({
  */
 export const ForecastInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   days: z.number().int().min(1).max(90).default(7),
   includeOverdue: z.boolean().default(true),
 });

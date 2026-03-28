@@ -1,8 +1,9 @@
-import { CardIdSchema, UserIdSchema } from '@noema/validation';
+import { CardIdSchema, StudyModeSchema, UserIdSchema } from '@noema/validation';
 import { z } from 'zod';
 
 export const DualLanePlanInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   retentionCardIds: z.array(CardIdSchema).default([]),
   calibrationCardIds: z.array(CardIdSchema).default([]),
   targetMix: z
@@ -60,12 +61,14 @@ export const SessionCandidateCardSchema = z.object({
 
 export const ReviewWindowProposalInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   cards: z.array(CardScheduleInputSchema).min(1).max(500),
   asOf: z.string().datetime().nullable().optional(),
 });
 
 export const SessionCandidateProposalInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   cards: z.array(SessionCandidateCardSchema).min(1).max(2000),
   constraints: SessionConstraintsSchema,
   sourceDeckId: z.string().nullable().optional(),
@@ -74,6 +77,7 @@ export const SessionCandidateProposalInputSchema = z.object({
 
 export const SessionCandidateSimulationInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   cards: z.array(SessionCandidateCardSchema).min(1).max(2000),
   constraints: SessionConstraintsSchema,
   whatIfAdjustments: z.record(z.string(), z.unknown()).nullable().optional(),
@@ -95,6 +99,7 @@ const OrchestrationMetadataSchema = z.object({
 
 export const CardScheduleCommitInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   decision: CardScheduleDecisionSchema,
   policyVersion: PolicyVersionSchema,
   orchestration: OrchestrationMetadataSchema,
@@ -103,6 +108,7 @@ export const CardScheduleCommitInputSchema = z.object({
 
 export const BatchScheduleCommitInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   decisions: z.array(CardScheduleDecisionSchema).min(1).max(500),
   source: z.enum(['agent', 'session-service', 'scheduler-service']),
   policyVersion: PolicyVersionSchema,
@@ -116,6 +122,7 @@ export const BatchScheduleCommitInputSchema = z.object({
 
 export const ReviewQueueInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   lane: SchedulerLaneSchema.optional(),
   limit: z.number().int().min(1).max(500).optional(),
   asOf: z.string().datetime().optional(),
@@ -135,6 +142,7 @@ export const RetentionPredictionRequestSchema = z.object({
 
 export const RetentionPredictionInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   cards: z.array(RetentionPredictionRequestSchema).min(1).max(500),
 });
 
@@ -147,6 +155,7 @@ export const SessionCardAdjustmentSchema = z.object({
 
 export const SessionAdjustmentInputSchema = z.object({
   userId: UserIdSchema,
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
   sessionId: z.string().min(1),
   adjustments: z.array(SessionCardAdjustmentSchema).min(1).max(100),
   orchestration: OrchestrationMetadataSchema,

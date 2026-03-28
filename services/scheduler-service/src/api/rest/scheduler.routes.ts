@@ -1,9 +1,12 @@
 import type { IApiResponse } from '@noema/contracts';
-import type { CardId, CorrelationId, UserId } from '@noema/types';
+import type { CardId, CorrelationId, StudyMode, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
   ForecastInputSchema,
+  ProgressFocusQuerySchema,
+  ProgressGuidanceQuerySchema,
+  ProgressSummaryQuerySchema,
   ReviewListQuerySchema,
   ReviewStatsQuerySchema,
   SchedulerCardListQuerySchema,
@@ -357,6 +360,7 @@ export function registerSchedulerRoutes(
       const userId = q.userId as UserId;
 
       const filters: ISchedulerCardExtendedFilters = {
+        studyMode: q.studyMode as StudyMode,
         ...(q.lane !== undefined && { lane: q.lane }),
         ...(q.state !== undefined && { state: q.state }),
         ...(q.algorithm !== undefined && { schedulingAlgorithm: q.algorithm }),
@@ -413,6 +417,7 @@ export function registerSchedulerRoutes(
       const userId = q.userId as UserId;
 
       const filters: IReviewExtendedFilters = {
+        studyMode: q.studyMode as StudyMode,
         ...(q.cardId !== undefined && { cardId: q.cardId as CardId }),
         ...(q.sessionId !== undefined && { sessionId: q.sessionId }),
         ...(q.lane !== undefined && { lane: q.lane }),
@@ -472,6 +477,7 @@ export function registerSchedulerRoutes(
       const userId = q.userId as UserId;
 
       const filters: IReviewExtendedFilters = {
+        studyMode: q.studyMode as StudyMode,
         ...(q.cardId !== undefined && { cardId: q.cardId as CardId }),
         ...(q.sessionId !== undefined && { sessionId: q.sessionId }),
         ...(q.lane !== undefined && { lane: q.lane }),
@@ -483,6 +489,112 @@ export function registerSchedulerRoutes(
       };
 
       const result = await schedulerReadService.getReviewStats(userId, filters);
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // T6.2 — GET /v1/scheduler/progress/summary
+  const progressSummaryHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:read', 'scheduler:plan'],
+      match: 'any',
+    });
+    if (!authorized) return;
+
+    try {
+      const parsed = ProgressSummaryQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_QUERY',
+          message: `Invalid query params: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const result = await schedulerReadService.getProgressSummary(
+        userId,
+        parsed.data.studyMode as StudyMode
+      );
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // T6.3 — GET /v1/scheduler/progress/focus
+  const progressFocusHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:read', 'scheduler:plan'],
+      match: 'any',
+    });
+    if (!authorized) return;
+
+    try {
+      const parsed = ProgressFocusQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_QUERY',
+          message: `Invalid query params: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const result = await schedulerReadService.getCardFocusSummary(
+        userId,
+        parsed.data.studyMode as StudyMode,
+        parsed.data.limit
+      );
+      reply.send(wrapResponse(request, result.data, result.agentHints));
+    } catch (error) {
+      handleError(error, request, reply);
+    }
+  };
+
+  // T6.4 — GET /v1/scheduler/progress/guidance
+  const progressGuidanceHandler = async (
+    request: FastifyRequest<{ Querystring: Record<string, string> }>,
+    reply: FastifyReply
+  ): Promise<void> => {
+    const authorized = await requireScopes(request, reply, {
+      requiredScopes: ['scheduler:read', 'scheduler:plan'],
+      match: 'any',
+    });
+    if (!authorized) return;
+
+    try {
+      const parsed = ProgressGuidanceQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        await sendErrorEnvelope(reply, request, {
+          statusCode: 400,
+          code: 'INVALID_QUERY',
+          message: `Invalid query params: ${parsed.error.message}`,
+          category: 'validation',
+          retryable: false,
+        });
+        return;
+      }
+
+      const userId = (request.user?.sub ?? 'anonymous') as UserId;
+      const result = await schedulerReadService.getStudyGuidanceSummary(
+        userId,
+        parsed.data.studyMode as StudyMode
+      );
       reply.send(wrapResponse(request, result.data, result.agentHints));
     } catch (error) {
       handleError(error, request, reply);
@@ -514,6 +626,7 @@ export function registerSchedulerRoutes(
       const result = await schedulerReadService.generateForecast({
         ...parsed.data,
         userId: parsed.data.userId as UserId,
+        studyMode: parsed.data.studyMode as StudyMode,
       });
       reply.send(wrapResponse(request, result.data, result.agentHints));
     } catch (error) {
@@ -542,6 +655,21 @@ export function registerSchedulerRoutes(
     authPreHandler,
     reviewStatsHandler
   );
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/progress/summary',
+    authPreHandler,
+    progressSummaryHandler
+  );
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/progress/focus',
+    authPreHandler,
+    progressFocusHandler
+  );
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/scheduler/progress/guidance',
+    authPreHandler,
+    progressGuidanceHandler
+  );
   fastify.post<{ Body: unknown }>('/v1/scheduler/forecast', authPreHandler, forecastHandler);
 
   // ==========================================================================
@@ -565,6 +693,7 @@ export function registerSchedulerRoutes(
 
       const input = {
         userId,
+        studyMode: query['studyMode'],
         lane: query['lane'],
         limit: query['limit'] !== undefined ? parseInt(query['limit'], 10) : undefined,
         asOf: query['asOf'],

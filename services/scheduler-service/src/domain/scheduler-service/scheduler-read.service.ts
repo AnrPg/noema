@@ -12,7 +12,7 @@
  */
 
 import type { IAgentHints } from '@noema/contracts';
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 
 import type {
   IForecastDay,
@@ -24,9 +24,16 @@ import type {
   IReviewExtendedFilters,
   IReviewStatsResponse,
   ISchedulerCard,
+  ISchedulerCardFocusEntry,
+  ISchedulerCardFocusSummary,
   ISchedulerCardExtendedFilters,
+  ISchedulerGuidanceRecommendation,
+  ISchedulerProgressSummary,
   ISchedulerCardResponse,
+  ISchedulerStudyGuidanceSummary,
   ISortParams,
+  SchedulerDueStatus,
+  SchedulerReadinessBand,
 } from '../../types/scheduler.types.js';
 import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from './algorithms/fsrs.js';
 import type { IReviewRepository, ISchedulerCardRepository } from './scheduler.repository.js';
@@ -178,6 +185,63 @@ export class SchedulerReadService {
   }
 
   // --------------------------------------------------------------------------
+  // T6.2 — Mode-scoped scheduler progress summary
+  // --------------------------------------------------------------------------
+
+  async getProgressSummary(
+    userId: UserId,
+    studyMode: StudyMode = 'knowledge_gaining'
+  ): Promise<IServiceResult<ISchedulerProgressSummary>> {
+    const cards = await this.repos.schedulerCardRepository.findByUser(userId, { studyMode });
+    const summary = this.buildProgressSummary(userId, studyMode, cards);
+
+    return {
+      data: summary,
+      agentHints: this.hints(
+        'scheduler_progress_summary_retrieved',
+        `Mode ${studyMode}: ${String(summary.dueNow)} due now, ${String(summary.matureCards)} mature, ${String(summary.totalCards)} total cards`
+      ),
+    };
+  }
+
+  async getCardFocusSummary(
+    userId: UserId,
+    studyMode: StudyMode = 'knowledge_gaining',
+    limit = 5
+  ): Promise<IServiceResult<ISchedulerCardFocusSummary>> {
+    const cards = await this.repos.schedulerCardRepository.findByUser(userId, { studyMode });
+    const summary = this.buildCardFocusSummary(userId, studyMode, cards, limit);
+
+    return {
+      data: summary,
+      agentHints: this.hints(
+        'scheduler_card_focus_summary_retrieved',
+        `Mode ${studyMode}: ${String(summary.weakestCards.length)} fragile cards and ${String(summary.strongestCards.length)} strong cards highlighted`
+      ),
+    };
+  }
+
+  async getStudyGuidanceSummary(
+    userId: UserId,
+    studyMode: StudyMode = 'knowledge_gaining'
+  ): Promise<IServiceResult<ISchedulerStudyGuidanceSummary>> {
+    const cards = await this.repos.schedulerCardRepository.findByUser(userId, { studyMode });
+    const progress = this.buildProgressSummary(userId, studyMode, cards);
+    const focus = this.buildCardFocusSummary(userId, studyMode, cards, 3);
+    const summary = this.buildStudyGuidanceSummary(userId, studyMode, progress, focus);
+
+    return {
+      data: summary,
+      agentHints: this.hints(
+        'scheduler_study_guidance_retrieved',
+        summary.recommendations.length > 0
+          ? `${summary.recommendations[0]?.headline}: ${summary.recommendations[0]?.explanation}`
+          : 'No study guidance available'
+      ),
+    };
+  }
+
+  // --------------------------------------------------------------------------
   // T3.3 — Multi-day forecast (consumed-card model)
   // --------------------------------------------------------------------------
 
@@ -187,6 +251,10 @@ export class SchedulerReadService {
 
     // 1. Fetch all reviewable cards for the user
     const cards = await this.repos.schedulerCardRepository.findReviewableByUser(input.userId);
+    const filteredCards =
+      input.studyMode !== undefined
+        ? cards.filter((card) => card.studyMode === input.studyMode)
+        : cards;
 
     // 2. Derive per-user average seconds per card from recent review stats
     const averageSecondsPerCard = await this.deriveAverageSecondsPerCard(input.userId);
@@ -195,7 +263,7 @@ export class SchedulerReadService {
     //    The consumed-card model simulates the user reviewing each due card on
     //    its due day and projecting the next review forward by the card's interval.
     const projected = new Map<string, { nextDue: Date; interval: number; lane: string }>();
-    for (const card of cards) {
+    for (const card of filteredCards) {
       projected.set(card.cardId, {
         nextDue: new Date(card.nextReviewDate),
         interval: Math.max(1, card.interval),
@@ -273,7 +341,7 @@ export class SchedulerReadService {
       },
       agentHints: this.hints(
         'forecast_generated',
-        `${String(days)}-day forecast across ${String(cards.length)} reviewable cards`
+        `${String(days)}-day forecast across ${String(filteredCards.length)} reviewable cards`
       ),
     };
   }
@@ -300,6 +368,7 @@ export class SchedulerReadService {
     return {
       cardId: card.cardId,
       userId: card.userId,
+      studyMode: card.studyMode,
       lane: card.lane,
       state: card.state,
       schedulingAlgorithm: card.schedulingAlgorithm as 'fsrs' | 'hlr' | 'sm2',
@@ -371,6 +440,312 @@ export class SchedulerReadService {
     // Convert ms → seconds, clamp to reasonable bounds [5s, 600s]
     const avgSeconds = stats.averageResponseTimeMs / 1000;
     return Math.max(5, Math.min(600, avgSeconds));
+  }
+
+  private buildProgressSummary(
+    userId: UserId,
+    studyMode: StudyMode,
+    cards: ISchedulerCard[]
+  ): ISchedulerProgressSummary {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(startOfToday.getTime() + 86_400_000 - 1);
+
+    const activeCards = cards.filter((card) => !this.isCardSuspended(card, now));
+    const trackedCards = cards.filter(
+      (card) => card.reviewCount > 0 || card.lastReviewedAt !== null
+    ).length;
+    const dueNow = activeCards.filter((card) => new Date(card.nextReviewDate) <= now).length;
+    const dueToday = activeCards.filter(
+      (card) => new Date(card.nextReviewDate) <= endOfToday
+    ).length;
+    const overdueCards = activeCards.filter(
+      (card) => new Date(card.nextReviewDate) < startOfToday
+    ).length;
+    const newCards = cards.filter((card) => card.state === 'new').length;
+    const learningCards = cards.filter(
+      (card) => card.state === 'learning' || card.state === 'relearning'
+    ).length;
+    const matureCards = cards.filter(
+      (card) => card.state === 'review' || card.state === 'graduated'
+    ).length;
+    const suspendedCards = cards.filter((card) => this.isCardSuspended(card, now)).length;
+    const retentionCards = cards.filter((card) => card.lane === 'retention').length;
+    const calibrationCards = cards.filter((card) => card.lane === 'calibration').length;
+    const fsrsCards = cards.filter((card) => card.schedulingAlgorithm === 'fsrs').length;
+    const hlrCards = cards.filter((card) => card.schedulingAlgorithm === 'hlr').length;
+    const sm2Cards = cards.filter((card) => card.schedulingAlgorithm === 'sm2').length;
+
+    const recallProbabilities = activeCards
+      .map((card) => this.computeRecallProbability(card))
+      .filter((value): value is number => value !== null);
+
+    const averageRecallProbability =
+      recallProbabilities.length > 0
+        ? recallProbabilities.reduce((sum, value) => sum + value, 0) / recallProbabilities.length
+        : null;
+
+    return {
+      userId,
+      studyMode,
+      totalCards: cards.length,
+      trackedCards,
+      dueNow,
+      dueToday,
+      overdueCards,
+      newCards,
+      learningCards,
+      matureCards,
+      suspendedCards,
+      retentionCards,
+      calibrationCards,
+      fsrsCards,
+      hlrCards,
+      sm2Cards,
+      averageRecallProbability,
+      strongRecallCards: recallProbabilities.filter((value) => value >= 0.85).length,
+      fragileCards: recallProbabilities.filter((value) => value < 0.5).length,
+    };
+  }
+
+  private buildCardFocusSummary(
+    userId: UserId,
+    studyMode: StudyMode,
+    cards: ISchedulerCard[],
+    limit: number
+  ): ISchedulerCardFocusSummary {
+    const now = new Date();
+    const focusEntries = cards
+      .filter((card) => !this.isCardSuspended(card, now))
+      .map((card) => this.toFocusEntry(card, now));
+    const trackedEntries = focusEntries.filter(
+      (entry) => entry.reviewCount > 0 || entry.readinessBand !== 'untracked'
+    );
+
+    const weakestCards = [...trackedEntries]
+      .sort((left, right) => this.compareWeakestFocusEntries(left, right))
+      .slice(0, limit);
+
+    const strongestCards = [...trackedEntries]
+      .filter((entry) => entry.recallProbability !== null)
+      .sort((left, right) => this.compareStrongestFocusEntries(left, right))
+      .slice(0, limit);
+
+    return {
+      userId,
+      studyMode,
+      weakestCards,
+      strongestCards,
+    };
+  }
+
+  private buildStudyGuidanceSummary(
+    userId: UserId,
+    studyMode: StudyMode,
+    progress: ISchedulerProgressSummary,
+    focus: ISchedulerCardFocusSummary
+  ): ISchedulerStudyGuidanceSummary {
+    const recommendations: ISchedulerGuidanceRecommendation[] = [];
+
+    if (progress.overdueCards > 0) {
+      recommendations.push({
+        action: 'clear_overdue',
+        headline: 'Clear the overdue backlog first',
+        explanation: 'Overdue cards are the main source of memory drift in this mode right now.',
+        suggestedCardCount: Math.min(progress.overdueCards, 12),
+        relatedCardIds: focus.weakestCards.map((card) => card.cardId),
+      });
+    }
+
+    if (progress.fragileCards >= 3 || focus.weakestCards.length >= 3) {
+      recommendations.push({
+        action: 'reinforce_fragile_cards',
+        headline: 'Reinforce fragile cards',
+        explanation: 'Your biggest risk is low-confidence retention, not lack of coverage.',
+        suggestedCardCount: Math.min(Math.max(progress.fragileCards, 3), 10),
+        relatedCardIds: focus.weakestCards.map((card) => card.cardId),
+      });
+    }
+
+    if (progress.dueToday > 0) {
+      recommendations.push({
+        action: 'do_scheduled_reviews',
+        headline: 'Finish today’s planned reviews',
+        explanation: 'The mode is healthy enough that staying on schedule is the best next step.',
+        suggestedCardCount: Math.min(progress.dueToday, 10),
+        relatedCardIds: focus.weakestCards.map((card) => card.cardId),
+      });
+    }
+
+    if (progress.newCards > progress.matureCards || progress.totalCards === 0) {
+      recommendations.push({
+        action: 'build_coverage',
+        headline: 'Build more tracked coverage',
+        explanation:
+          'You need more meaningful exposure in this mode before deeper optimization matters.',
+        suggestedCardCount: Math.max(3, Math.min(progress.newCards || 5, 8)),
+        relatedCardIds: [],
+      });
+    }
+
+    if (recommendations.length === 0) {
+      recommendations.push({
+        action: 'expand_confidently',
+        headline: 'You have room to expand',
+        explanation: 'Your current mode looks stable enough to add new material.',
+        suggestedCardCount: Math.max(3, Math.min(8, progress.newCards || 3)),
+        relatedCardIds: focus.strongestCards.slice(0, 2).map((card) => card.cardId),
+      });
+    }
+
+    return {
+      userId,
+      studyMode,
+      recommendations,
+    };
+  }
+
+  private toFocusEntry(card: ISchedulerCard, now: Date): ISchedulerCardFocusEntry {
+    const recallProbability = this.computeRecallProbability(card);
+    const nextReviewDate = new Date(card.nextReviewDate);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(startOfToday.getTime() + 86_400_000 - 1);
+    const dueStatus: SchedulerDueStatus =
+      nextReviewDate < startOfToday
+        ? 'overdue'
+        : nextReviewDate <= endOfToday
+          ? 'due_today'
+          : 'upcoming';
+    const daysUntilDue = Math.round((nextReviewDate.getTime() - now.getTime()) / 86_400_000);
+    const readinessBand = this.classifyReadinessBand(card, recallProbability);
+
+    return {
+      cardId: card.cardId,
+      studyMode: card.studyMode,
+      lane: card.lane,
+      state: card.state,
+      schedulingAlgorithm: card.schedulingAlgorithm as 'fsrs' | 'hlr' | 'sm2',
+      nextReviewDate: card.nextReviewDate,
+      reviewCount: card.reviewCount,
+      cardType: card.cardType,
+      difficulty: card.difficulty,
+      dueStatus,
+      daysUntilDue,
+      recallProbability,
+      readinessBand,
+      focusReason: this.describeFocusReason(card, recallProbability, dueStatus, readinessBand),
+    };
+  }
+
+  private classifyReadinessBand(
+    card: ISchedulerCard,
+    recallProbability: number | null
+  ): SchedulerReadinessBand {
+    if (card.reviewCount === 0 || card.lastReviewedAt === null) {
+      return 'untracked';
+    }
+
+    if (recallProbability === null) {
+      return card.state === 'learning' || card.state === 'relearning' ? 'recovering' : 'fragile';
+    }
+
+    if (recallProbability < 0.5) {
+      return 'fragile';
+    }
+
+    if (recallProbability < 0.8) {
+      return 'recovering';
+    }
+
+    return 'stable';
+  }
+
+  private describeFocusReason(
+    card: ISchedulerCard,
+    recallProbability: number | null,
+    dueStatus: SchedulerDueStatus,
+    readinessBand: SchedulerReadinessBand
+  ): string {
+    if (dueStatus === 'overdue' && readinessBand === 'fragile') {
+      return 'Overdue and fragile';
+    }
+
+    if (dueStatus === 'overdue') {
+      return 'Overdue for review';
+    }
+
+    if (dueStatus === 'due_today') {
+      return 'Due today';
+    }
+
+    if (readinessBand === 'untracked') {
+      return 'Needs first meaningful review';
+    }
+
+    if (readinessBand === 'fragile') {
+      return 'Low recall confidence';
+    }
+
+    if (readinessBand === 'recovering') {
+      return card.state === 'learning' || card.state === 'relearning'
+        ? 'Still consolidating'
+        : 'Retention improving';
+    }
+
+    if (recallProbability !== null && recallProbability >= 0.9) {
+      return 'Strong retention';
+    }
+
+    return 'Stable recall';
+  }
+
+  private compareWeakestFocusEntries(
+    left: ISchedulerCardFocusEntry,
+    right: ISchedulerCardFocusEntry
+  ): number {
+    const duePriority = { overdue: 0, due_today: 1, upcoming: 2 };
+    const leftDue = duePriority[left.dueStatus];
+    const rightDue = duePriority[right.dueStatus];
+    if (leftDue !== rightDue) {
+      return leftDue - rightDue;
+    }
+
+    const leftRecall = left.recallProbability ?? Number.POSITIVE_INFINITY;
+    const rightRecall = right.recallProbability ?? Number.POSITIVE_INFINITY;
+    if (leftRecall !== rightRecall) {
+      return leftRecall - rightRecall;
+    }
+
+    return new Date(left.nextReviewDate).getTime() - new Date(right.nextReviewDate).getTime();
+  }
+
+  private compareStrongestFocusEntries(
+    left: ISchedulerCardFocusEntry,
+    right: ISchedulerCardFocusEntry
+  ): number {
+    const leftRecall = left.recallProbability ?? -1;
+    const rightRecall = right.recallProbability ?? -1;
+    if (leftRecall !== rightRecall) {
+      return rightRecall - leftRecall;
+    }
+
+    if (left.reviewCount !== right.reviewCount) {
+      return right.reviewCount - left.reviewCount;
+    }
+
+    return new Date(right.nextReviewDate).getTime() - new Date(left.nextReviewDate).getTime();
+  }
+
+  private isCardSuspended(card: ISchedulerCard, now: Date): boolean {
+    if (card.state === 'suspended') {
+      return true;
+    }
+
+    if (card.suspendedUntil === null) {
+      return false;
+    }
+
+    return new Date(card.suspendedUntil) > now;
   }
 
   /**

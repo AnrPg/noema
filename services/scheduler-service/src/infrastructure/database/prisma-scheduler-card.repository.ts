@@ -5,13 +5,14 @@
  * Handles mapping between Prisma enum values (UPPERCASE) and domain enum values (lowercase).
  */
 
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import { randomUUID } from 'node:crypto';
 import type {
   PrismaClient,
   SchedulerCard as PrismaSchedulerCard,
   SchedulerCardState as PrismaSchedulerCardState,
   SchedulerLane as PrismaSchedulerLane,
+  StudyMode as PrismaStudyMode,
 } from '../../../generated/prisma/index.js';
 import type { ISchedulerCardRepository } from '../../domain/scheduler-service/scheduler.repository.js';
 import type {
@@ -44,6 +45,18 @@ function fromPrismaState(state: PrismaSchedulerCardState): SchedulerCardState {
   return state.toLowerCase() as SchedulerCardState;
 }
 
+function toPrismaStudyMode(studyMode: StudyMode): PrismaStudyMode {
+  return studyMode.toUpperCase() as PrismaStudyMode;
+}
+
+function fromPrismaStudyMode(studyMode: PrismaStudyMode): StudyMode {
+  return studyMode.toLowerCase() as StudyMode;
+}
+
+function normalizeStudyMode(studyMode?: StudyMode): StudyMode {
+  return studyMode ?? 'knowledge_gaining';
+}
+
 // ============================================================================
 // Domain Mapping
 // ============================================================================
@@ -53,6 +66,7 @@ function toDomain(row: PrismaSchedulerCard): ISchedulerCard {
     id: row.id,
     cardId: row.cardId as CardId,
     userId: row.userId as UserId,
+    studyMode: fromPrismaStudyMode(row.studyMode),
     lane: fromPrismaLane(row.lane),
     stability: row.stability,
     difficultyParameter: row.difficultyParameter,
@@ -83,15 +97,25 @@ function toDomain(row: PrismaSchedulerCard): ISchedulerCard {
 export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async findByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard | null> {
+  async findByCard(
+    userId: UserId,
+    cardId: CardId,
+    studyMode?: StudyMode
+  ): Promise<ISchedulerCard | null> {
     const card = await this.prisma.schedulerCard.findUnique({
-      where: { userId_cardId: { userId, cardId } },
+      where: {
+        userId_cardId_studyMode: {
+          userId,
+          cardId,
+          studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        },
+      },
     });
     return card ? toDomain(card) : null;
   }
 
-  async getByCard(userId: UserId, cardId: CardId): Promise<ISchedulerCard> {
-    const card = await this.findByCard(userId, cardId);
+  async getByCard(userId: UserId, cardId: CardId, studyMode?: StudyMode): Promise<ISchedulerCard> {
+    const card = await this.findByCard(userId, cardId, studyMode);
     if (!card) {
       throw new Error(`SchedulerCard not found: user=${userId}, card=${cardId}`);
     }
@@ -101,12 +125,16 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   async findByUser(userId: UserId, filters?: ISchedulerCardFilters): Promise<ISchedulerCard[]> {
     const where: {
       userId: string;
+      studyMode?: PrismaStudyMode;
       lane?: PrismaSchedulerLane;
       state?: PrismaSchedulerCardState;
       nextReviewDate?: { lte: Date };
       schedulingAlgorithm?: string;
     } = { userId };
 
+    if (filters?.studyMode !== undefined) {
+      where.studyMode = toPrismaStudyMode(filters.studyMode);
+    }
     if (filters?.lane !== undefined) {
       where.lane = toPrismaLane(filters.lane);
     }
@@ -128,15 +156,18 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     userId: UserId,
     beforeDate: Date,
     limit?: number,
-    lane?: SchedulerLane
+    lane?: SchedulerLane,
+    studyMode?: StudyMode
   ): Promise<ISchedulerCard[]> {
     const where: {
       userId: string;
+      studyMode: PrismaStudyMode;
       nextReviewDate: { lte: Date };
       state: { not: PrismaSchedulerCardState };
       lane?: PrismaSchedulerLane;
     } = {
       userId,
+      studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
       nextReviewDate: { lte: beforeDate },
       state: { not: 'SUSPENDED' },
     };
@@ -154,9 +185,18 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     return cards.map(toDomain);
   }
 
-  async findByLane(userId: UserId, lane: SchedulerLane, limit?: number): Promise<ISchedulerCard[]> {
+  async findByLane(
+    userId: UserId,
+    lane: SchedulerLane,
+    limit?: number,
+    studyMode?: StudyMode
+  ): Promise<ISchedulerCard[]> {
     const cards = await this.prisma.schedulerCard.findMany({
-      where: { userId, lane: toPrismaLane(lane) },
+      where: {
+        userId,
+        studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        lane: toPrismaLane(lane),
+      },
       orderBy: { nextReviewDate: 'asc' },
       ...(limit !== undefined && { take: limit }),
     });
@@ -166,10 +206,15 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   async findByState(
     userId: UserId,
     state: SchedulerCardState,
-    limit?: number
+    limit?: number,
+    studyMode?: StudyMode
   ): Promise<ISchedulerCard[]> {
     const cards = await this.prisma.schedulerCard.findMany({
-      where: { userId, state: toPrismaState(state) },
+      where: {
+        userId,
+        studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        state: toPrismaState(state),
+      },
       ...(limit !== undefined && { take: limit }),
     });
     return cards.map(toDomain);
@@ -178,12 +223,16 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   async count(userId: UserId, filters?: ISchedulerCardFilters): Promise<number> {
     const where: {
       userId: string;
+      studyMode?: PrismaStudyMode;
       lane?: PrismaSchedulerLane;
       state?: PrismaSchedulerCardState;
       nextReviewDate?: { lte: Date };
       schedulingAlgorithm?: string;
     } = { userId };
 
+    if (filters?.studyMode !== undefined) {
+      where.studyMode = toPrismaStudyMode(filters.studyMode);
+    }
     if (filters?.lane !== undefined) {
       where.lane = toPrismaLane(filters.lane);
     }
@@ -200,14 +249,21 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     return this.prisma.schedulerCard.count({ where });
   }
 
-  async countDue(userId: UserId, beforeDate: Date, lane?: SchedulerLane): Promise<number> {
+  async countDue(
+    userId: UserId,
+    beforeDate: Date,
+    lane?: SchedulerLane,
+    studyMode?: StudyMode
+  ): Promise<number> {
     const where: {
       userId: string;
+      studyMode: PrismaStudyMode;
       nextReviewDate: { lte: Date };
       state: { not: PrismaSchedulerCardState };
       lane?: PrismaSchedulerLane;
     } = {
       userId,
+      studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
       nextReviewDate: { lte: beforeDate },
       state: { not: 'SUSPENDED' },
     };
@@ -225,6 +281,7 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
         id: card.id !== '' ? card.id : `sc_${randomUUID()}`,
         cardId: card.cardId,
         userId: card.userId,
+        studyMode: toPrismaStudyMode(card.studyMode),
         lane: toPrismaLane(card.lane),
         stability: card.stability,
         difficultyParameter: card.difficultyParameter,
@@ -277,11 +334,18 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
         | 'suspendedReason'
       >
     >,
-    expectedVersion: number
+    expectedVersion: number,
+    studyMode?: StudyMode
   ): Promise<ISchedulerCard> {
     // First check version
     const existing = await this.prisma.schedulerCard.findUnique({
-      where: { userId_cardId: { userId, cardId } },
+      where: {
+        userId_cardId_studyMode: {
+          userId,
+          cardId,
+          studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        },
+      },
     });
 
     if (!existing) {
@@ -372,9 +436,15 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     return toDomain(updated);
   }
 
-  async delete(userId: UserId, cardId: CardId): Promise<void> {
+  async delete(userId: UserId, cardId: CardId, studyMode?: StudyMode): Promise<void> {
     const existing = await this.prisma.schedulerCard.findUnique({
-      where: { userId_cardId: { userId, cardId } },
+      where: {
+        userId_cardId_studyMode: {
+          userId,
+          cardId,
+          studyMode: toPrismaStudyMode(normalizeStudyMode(studyMode)),
+        },
+      },
       select: { id: true },
     });
     if (!existing) {
@@ -447,6 +517,7 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
     filters: ISchedulerCardExtendedFilters
   ): {
     userId: string;
+    studyMode?: PrismaStudyMode;
     lane?: PrismaSchedulerLane;
     state?: PrismaSchedulerCardState;
     schedulingAlgorithm?: string;
@@ -454,12 +525,16 @@ export class PrismaSchedulerCardRepository implements ISchedulerCardRepository {
   } {
     const where: {
       userId: string;
+      studyMode?: PrismaStudyMode;
       lane?: PrismaSchedulerLane;
       state?: PrismaSchedulerCardState;
       schedulingAlgorithm?: string;
       nextReviewDate?: { lte?: Date; gte?: Date };
     } = { userId };
 
+    if (filters.studyMode !== undefined) {
+      where.studyMode = toPrismaStudyMode(filters.studyMode);
+    }
     if (filters.lane !== undefined) {
       where.lane = toPrismaLane(filters.lane);
     }

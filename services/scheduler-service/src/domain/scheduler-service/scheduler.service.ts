@@ -136,6 +136,7 @@ export class SchedulerService {
     if (this.repositories !== undefined && data.commit === true) {
       await this.persistPlannedCards(
         data.userId,
+        data.studyMode ?? 'knowledge_gaining',
         data.retentionCardIds,
         data.calibrationCardIds,
         selectedCardIds
@@ -483,7 +484,7 @@ export class SchedulerService {
       throw new Error('userId in payload must match authenticated user');
     }
 
-    await this.persistDecision(data.userId, data.decision);
+    await this.persistDecision(data.userId, data.decision, data.studyMode);
 
     const commitId = `com_${randomUUID()}`;
 
@@ -574,7 +575,7 @@ export class SchedulerService {
 
     for (const decision of data.decisions) {
       try {
-        await this.persistDecision(data.userId, decision);
+        await this.persistDecision(data.userId, decision, data.studyMode);
         updatedCardIds.push(decision.cardId);
       } catch {
         rejected += 1;
@@ -691,7 +692,8 @@ export class SchedulerService {
       data.userId,
       beforeDate,
       limit,
-      data.lane
+      data.lane,
+      data.studyMode
     );
 
     const retentionDue = cards.filter((card: ISchedulerCard) => card.lane === 'retention').length;
@@ -762,7 +764,8 @@ export class SchedulerService {
     for (const req of data.cards) {
       const card = await this.repositories.schedulerCardRepository.findByCard(
         data.userId,
-        req.cardId
+        req.cardId,
+        data.studyMode
       );
 
       if (!card) {
@@ -872,7 +875,8 @@ export class SchedulerService {
 
     // Determine time since last review in days
     const lastReviewMs = card.lastReviewedAt !== null ? new Date(card.lastReviewedAt).getTime() : 0;
-    const deltaDays = lastReviewMs > 0 ? (asOfDate.getTime() - lastReviewMs) / (1000 * 60 * 60 * 24) : 0;
+    const deltaDays =
+      lastReviewMs > 0 ? (asOfDate.getTime() - lastReviewMs) / (1000 * 60 * 60 * 24) : 0;
 
     const algorithm = (card.schedulingAlgorithm ?? 'fsrs') as 'fsrs' | 'hlr' | 'sm2';
     const stability = card.stability ?? 1.0;
@@ -880,17 +884,11 @@ export class SchedulerService {
     let retentionProbability: number;
     if (algorithm === 'fsrs') {
       const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
-      retentionProbability = deltaDays > 0
-        ? fsrs.forgettingCurve(deltaDays, stability)
-        : 1.0;
+      retentionProbability = deltaDays > 0 ? fsrs.forgettingCurve(deltaDays, stability) : 1.0;
     } else if (algorithm === 'hlr') {
-      retentionProbability = deltaDays > 0
-        ? Math.pow(2, -deltaDays / stability)
-        : 1.0;
+      retentionProbability = deltaDays > 0 ? Math.pow(2, -deltaDays / stability) : 1.0;
     } else {
-      retentionProbability = deltaDays > 0
-        ? Math.exp(-deltaDays / (stability * 3))
-        : 1.0;
+      retentionProbability = deltaDays > 0 ? Math.exp(-deltaDays / (stability * 3)) : 1.0;
     }
     retentionProbability = this.clamp01(retentionProbability);
     const forgettingRisk = this.clamp01(1 - retentionProbability);
@@ -899,8 +897,7 @@ export class SchedulerService {
     const recommendedLane: SchedulerLane = retentionProbability < 0.6 ? 'calibration' : 'retention';
 
     const nextReviewDate = new Date(card.nextReviewDate);
-    const daysUntilDue =
-      (nextReviewDate.getTime() - asOfDate.getTime()) / (1000 * 60 * 60 * 24);
+    const daysUntilDue = (nextReviewDate.getTime() - asOfDate.getTime()) / (1000 * 60 * 60 * 24);
 
     const projection: ICardProjection = {
       cardId: card.cardId,
@@ -942,7 +939,7 @@ export class SchedulerService {
       throw new Error('Invalid session adjustment input');
     }
 
-    const data = parsed.data as ISessionAdjustmentInput;
+    const data = parsed.data as unknown as ISessionAdjustmentInput;
     if (data.userId !== ctx.userId) {
       throw new Error('userId in payload must match authenticated user');
     }
@@ -1191,20 +1188,26 @@ export class SchedulerService {
     };
   }
 
-  private async persistDecision(userId: UserId, decision: ICardScheduleDecision): Promise<void> {
+  private async persistDecision(
+    userId: UserId,
+    decision: ICardScheduleDecision,
+    studyMode: import('@noema/types').StudyMode = 'knowledge_gaining'
+  ): Promise<void> {
     if (this.repositories === undefined) {
       return;
     }
 
     const existing = await this.repositories.schedulerCardRepository.findByCard(
       userId,
-      decision.cardId
+      decision.cardId,
+      studyMode
     );
     if (!existing) {
       await this.repositories.schedulerCardRepository.create({
         id: `sc_${randomUUID()}`,
         cardId: decision.cardId,
         userId,
+        studyMode,
         lane: decision.lane,
         stability: null,
         difficultyParameter: null,
@@ -1236,7 +1239,8 @@ export class SchedulerService {
         nextReviewDate: decision.nextReviewAt,
         schedulingAlgorithm: decision.algorithm,
       },
-      existing.version
+      existing.version,
+      studyMode
     );
   }
 
@@ -1489,6 +1493,7 @@ export class SchedulerService {
 
   private async persistPlannedCards(
     userId: UserId,
+    studyMode: import('@noema/types').StudyMode,
     retentionCardIds: CardId[],
     calibrationCardIds: CardId[],
     selectedCardIds: CardId[]
@@ -1511,13 +1516,18 @@ export class SchedulerService {
             ? 'calibration'
             : 'retention';
 
-        const existing = await repositories.schedulerCardRepository.findByCard(userId, cardId);
+        const existing = await repositories.schedulerCardRepository.findByCard(
+          userId,
+          cardId,
+          studyMode
+        );
 
         if (existing === null) {
           await repositories.schedulerCardRepository.create({
             id: `sc_${randomUUID()}`,
             cardId,
             userId,
+            studyMode,
             lane,
             stability: null,
             difficultyParameter: null,
@@ -1548,7 +1558,8 @@ export class SchedulerService {
             nextReviewDate: now.toISOString(),
             schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
           },
-          existing.version
+          existing.version,
+          studyMode
         );
       })
     );

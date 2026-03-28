@@ -1,4 +1,5 @@
-import type { CorrelationId, UserId } from '@noema/types';
+import type { CorrelationId, StudyMode, UserId } from '@noema/types';
+import type { SchedulerReadService } from '../../domain/scheduler-service/scheduler-read.service.js';
 import type { SchedulerService } from '../../domain/scheduler-service/scheduler.service.js';
 import { buildExecutionContext } from '../../domain/scheduler-service/scheduler.service.js';
 import { schedulerObservability } from '../../infrastructure/observability/scheduler-observability.js';
@@ -27,6 +28,26 @@ function withContractDefaults(definition: IBaseToolDefinition): IToolDefinition 
 
 function toContext(userId: string, correlationId: string): IExecutionContext {
   return buildExecutionContext(userId as UserId, correlationId as CorrelationId);
+}
+
+function readStudyMode(input: unknown): StudyMode | undefined {
+  if (typeof input !== 'object' || input === null) {
+    return undefined;
+  }
+
+  const maybeStudyMode = (input as Record<string, unknown>)['studyMode'];
+  return typeof maybeStudyMode === 'string' ? (maybeStudyMode as StudyMode) : undefined;
+}
+
+function ensureUserIdMatch(input: unknown, userId: string): void {
+  if (typeof input !== 'object' || input === null) {
+    throw new Error('Invalid tool input');
+  }
+
+  const payloadUserId = (input as Record<string, unknown>)['userId'];
+  if (typeof payloadUserId !== 'string' || payloadUserId !== userId) {
+    throw new Error('userId in payload must match authenticated user');
+  }
 }
 
 function errorResult(error: unknown): IToolResult {
@@ -106,6 +127,63 @@ export function createGetSRSScheduleHandler(service: SchedulerService): ToolHand
       try {
         const ctx = toContext(userId, correlationId);
         const result = await service.getReviewQueue(input, ctx);
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
+  };
+}
+
+export function createGetProgressSummaryHandler(readService: SchedulerReadService): ToolHandler {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    return executeObserved(`domain.scheduler.getProgressSummary`, correlationId, async () => {
+      try {
+        ensureUserIdMatch(input, userId);
+        const result = await readService.getProgressSummary(userId as UserId, readStudyMode(input));
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
+  };
+}
+
+export function createGetCardFocusSummaryHandler(readService: SchedulerReadService): ToolHandler {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    return executeObserved(`domain.scheduler.getCardFocusSummary`, correlationId, async () => {
+      try {
+        ensureUserIdMatch(input, userId);
+        const inputRecord =
+          typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : null;
+
+        const limit =
+          inputRecord !== null && typeof inputRecord['limit'] === 'number'
+            ? inputRecord['limit']
+            : undefined;
+
+        const result = await readService.getCardFocusSummary(
+          userId as UserId,
+          readStudyMode(input),
+          limit
+        );
+        return { success: true, data: result.data, agentHints: result.agentHints };
+      } catch (error) {
+        return errorResult(error);
+      }
+    });
+  };
+}
+
+export function createGetStudyGuidanceHandler(readService: SchedulerReadService): ToolHandler {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    return executeObserved(`domain.scheduler.getStudyGuidanceSummary`, correlationId, async () => {
+      try {
+        ensureUserIdMatch(input, userId);
+        const result = await readService.getStudyGuidanceSummary(
+          userId as UserId,
+          readStudyMode(input)
+        );
         return { success: true, data: result.data, agentHints: result.agentHints };
       } catch (error) {
         return errorResult(error);
@@ -326,6 +404,84 @@ const SCHEDULER_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
         lane: { type: 'string', enum: ['retention', 'calibration'] },
         limit: { type: 'number', minimum: 1, maximum: 500 },
         asOf: { type: 'string', format: 'date-time' },
+      },
+    },
+  },
+  {
+    name: 'get-progress-summary',
+    description:
+      'Return a mode-scoped scheduler readiness summary for the authenticated learner. ' +
+      'Includes due workload, tracked coverage, lane mix, algorithm mix, and recall fragility signals.',
+    service: 'scheduler-service',
+    priority: 'P0',
+    scopeRequirement: {
+      match: 'all',
+      requiredScopes: ['scheduler:read', 'scheduler:tools:execute'],
+    },
+    capabilities: {
+      idempotent: true,
+      sideEffects: false,
+      timeoutMs: 3000,
+      costClass: 'low',
+    },
+    inputSchema: {
+      type: 'object',
+      required: ['userId'],
+      properties: {
+        userId: { type: 'string' },
+        studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+      },
+    },
+  },
+  {
+    name: 'get-card-focus-summary',
+    description:
+      "Return the most fragile and strongest cards in the authenticated learner's current mode. " +
+      'Useful for reinforcement planning, coaching, and goal-setting agents.',
+    service: 'scheduler-service',
+    priority: 'P1',
+    scopeRequirement: {
+      match: 'all',
+      requiredScopes: ['scheduler:read', 'scheduler:tools:execute'],
+    },
+    capabilities: {
+      idempotent: true,
+      sideEffects: false,
+      timeoutMs: 3000,
+      costClass: 'low',
+    },
+    inputSchema: {
+      type: 'object',
+      required: ['userId'],
+      properties: {
+        userId: { type: 'string' },
+        studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+        limit: { type: 'number', minimum: 1, maximum: 12 },
+      },
+    },
+  },
+  {
+    name: 'get-study-guidance',
+    description:
+      'Return an ordered list of simple study recommendations for the authenticated learner in the current mode.',
+    service: 'scheduler-service',
+    priority: 'P1',
+    scopeRequirement: {
+      match: 'all',
+      requiredScopes: ['scheduler:read', 'scheduler:tools:execute'],
+    },
+    capabilities: {
+      idempotent: true,
+      sideEffects: false,
+      timeoutMs: 3000,
+      costClass: 'low',
+    },
+    inputSchema: {
+      type: 'object',
+      required: ['userId'],
+      properties: {
+        userId: { type: 'string' },
+        studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
       },
     },
   },

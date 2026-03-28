@@ -13,7 +13,7 @@
  */
 
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import type { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
@@ -70,6 +70,13 @@ const AttemptRecordedPayloadSchema = z
     confidenceAfter: z.number().optional(),
     hintRequestCount: z.number().optional(),
     lane: z.string().optional(),
+    studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+    contextSnapshot: z
+      .object({
+        studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+      })
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 
@@ -147,6 +154,9 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
       const userId = parsed.data.userId as UserId;
       const cardId = parsed.data.cardId as CardId;
       const attemptId = parsed.data.attemptId;
+      const studyMode = (parsed.data.studyMode ??
+        parsed.data.contextSnapshot?.studyMode ??
+        'knowledge_gaining') as StudyMode;
 
       // Domain-level idempotency check (belt-and-suspenders in addition to inbox dedup)
       const existingReview = await this.dependencies.reviewRepository.findByAttemptId(attemptId);
@@ -161,6 +171,7 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
           id: `rev_${attemptId}`,
           cardId,
           userId,
+          studyMode,
           sessionId: parsed.data.sessionId,
           attemptId,
           rating,
@@ -186,15 +197,19 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
         throw error;
       }
 
-      const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
+      const existing = await this.dependencies.schedulerCardRepository.findByCard(
+        userId,
+        cardId,
+        studyMode
+      );
       if (existing === null) {
-        await this.createNewSchedulerCard(userId, cardId, rating, lane);
+        await this.createNewSchedulerCard(userId, cardId, rating, lane, studyMode);
         spanSuccess = true;
         schedulerObservability.recordRecomputeLatency(Date.now() - startedAt);
         return;
       }
 
-      await this.updateExistingSchedulerCard(existing, userId, cardId, rating, lane, {
+      await this.updateExistingSchedulerCard(existing, userId, cardId, rating, lane, studyMode, {
         deltaDays: parsed.data.deltaDays,
       });
       spanSuccess = true;
@@ -212,7 +227,8 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
     userId: UserId,
     cardId: CardId,
     rating: Rating,
-    lane: SchedulerLane
+    lane: SchedulerLane,
+    studyMode: StudyMode
   ): Promise<void> {
     const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
     let initialStability: number | null = null;
@@ -251,6 +267,7 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
       id: `sc_${crypto.randomUUID()}`,
       cardId,
       userId,
+      studyMode,
       lane,
       stability: initialStability,
       difficultyParameter: initialDifficulty,
@@ -294,6 +311,7 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
     cardId: CardId,
     rating: Rating,
     lane: SchedulerLane,
+    studyMode: StudyMode,
     parsedData: { deltaDays?: number | undefined }
   ): Promise<void> {
     const schedulingAlgorithm = lane === 'retention' ? 'fsrs' : 'hlr';
@@ -355,6 +373,7 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
           userId,
           cardIdForCalibration,
           cardTypeValue,
+          studyMode,
           {
             parameters: hlr.getWeights(),
             sampleCount: newReviewCount,
@@ -393,7 +412,8 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
         schedulingAlgorithm,
         state: nextState,
       },
-      existing.version
+      existing.version,
+      studyMode
     );
   }
 

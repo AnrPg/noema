@@ -15,7 +15,7 @@
  */
 
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import { RemediationCardType } from '@noema/types';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
@@ -57,6 +57,7 @@ function buildConfig(overrides: {
  * All other card types go to the RETENTION lane (FSRS).
  */
 const REMEDIATION_CARD_TYPES = new Set<string>(Object.values(RemediationCardType));
+const DEFAULT_STUDY_MODES: StudyMode[] = ['knowledge_gaining'];
 
 function assignLane(cardType: string | null | undefined): SchedulerLane {
   if (cardType !== null && cardType !== undefined && REMEDIATION_CARD_TYPES.has(cardType)) {
@@ -79,6 +80,9 @@ const CardCreatedPayloadSchema = z
         state: z.string().optional(),
         difficulty: z.string().optional(),
         knowledgeNodeIds: z.array(z.string()).default([]),
+        supportedStudyModes: z
+          .array(z.enum(['language_learning', 'knowledge_gaining']))
+          .default(['knowledge_gaining']),
         tags: z.array(z.string()).default([]),
       })
       .passthrough(),
@@ -157,37 +161,48 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
     const userId = entity.userId as UserId;
     const cardId = entity.id as CardId;
     const lane = assignLane(entity.cardType);
+    const studyModes =
+      (entity.supportedStudyModes as StudyMode[] | undefined) ?? DEFAULT_STUDY_MODES;
 
-    // Idempotency — skip if scheduler card already exists
-    const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
-    if (existing !== null) {
-      this.logger.debug({ cardId }, 'SchedulerCard already exists for card.created; skipping');
-      return;
+    for (const studyMode of studyModes) {
+      const existing = await this.dependencies.schedulerCardRepository.findByCard(
+        userId,
+        cardId,
+        studyMode
+      );
+      if (existing !== null) {
+        this.logger.debug(
+          { cardId, studyMode },
+          'SchedulerCard already exists for card.created; skipping'
+        );
+        continue;
+      }
+
+      await this.dependencies.schedulerCardRepository.create({
+        id: `sc_${crypto.randomUUID()}`,
+        cardId,
+        userId,
+        studyMode,
+        lane,
+        stability: null,
+        difficultyParameter: null,
+        halfLife: null,
+        interval: 0,
+        nextReviewDate: new Date().toISOString(),
+        lastReviewedAt: null,
+        reviewCount: 0,
+        lapseCount: 0,
+        consecutiveCorrect: 0,
+        schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
+        cardType: entity.cardType,
+        difficulty: entity.difficulty ?? null,
+        knowledgeNodeIds: entity.knowledgeNodeIds,
+        state: 'new',
+        suspendedUntil: null,
+        suspendedReason: null,
+        version: 1,
+      });
     }
-
-    await this.dependencies.schedulerCardRepository.create({
-      id: `sc_${crypto.randomUUID()}`,
-      cardId,
-      userId,
-      lane,
-      stability: null,
-      difficultyParameter: null,
-      halfLife: null,
-      interval: 0,
-      nextReviewDate: new Date().toISOString(),
-      lastReviewedAt: null,
-      reviewCount: 0,
-      lapseCount: 0,
-      consecutiveCorrect: 0,
-      schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
-      cardType: entity.cardType,
-      difficulty: entity.difficulty ?? null,
-      knowledgeNodeIds: entity.knowledgeNodeIds,
-      state: 'new',
-      suspendedUntil: null,
-      suspendedReason: null,
-      version: 1,
-    });
 
     this.logger.info(
       { cardId, userId, lane, cardType: entity.cardType },
@@ -214,29 +229,31 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
       return;
     }
 
-    const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
-    if (existing === null) {
-      this.logger.debug({ cardId }, 'No SchedulerCard found for card.deleted; skipping');
-      return;
-    }
-
-    if (parsed.data.soft) {
-      // Soft delete → Suspend indefinitely with reason
-      await this.dependencies.schedulerCardRepository.update(
+    for (const studyMode of ['knowledge_gaining', 'language_learning'] as StudyMode[]) {
+      const existing = await this.dependencies.schedulerCardRepository.findByCard(
         userId,
         cardId,
-        {
-          suspendedUntil: new Date('9999-12-31T23:59:59.999Z').toISOString(),
-          suspendedReason: 'card_soft_deleted',
-          state: 'suspended',
-        },
-        existing.version
+        studyMode
       );
-      this.logger.info({ cardId, userId }, 'Suspended SchedulerCard (soft-deleted content card)');
-    } else {
-      // Hard delete → Remove scheduler card entirely
-      await this.dependencies.schedulerCardRepository.delete(userId, cardId);
-      this.logger.info({ cardId, userId }, 'Hard-deleted SchedulerCard');
+      if (existing === null) {
+        continue;
+      }
+
+      if (parsed.data.soft) {
+        await this.dependencies.schedulerCardRepository.update(
+          userId,
+          cardId,
+          {
+            suspendedUntil: new Date('9999-12-31T23:59:59.999Z').toISOString(),
+            suspendedReason: 'card_soft_deleted',
+            state: 'suspended',
+          },
+          existing.version,
+          studyMode
+        );
+      } else {
+        await this.dependencies.schedulerCardRepository.delete(userId, cardId, studyMode);
+      }
     }
   }
 
@@ -262,50 +279,48 @@ export class CardLifecycleConsumer extends SchedulerBaseConsumer {
       return;
     }
 
-    const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
-    if (existing === null) {
-      this.logger.debug({ cardId }, 'No SchedulerCard found for card.state.changed; skipping');
-      return;
-    }
-
-    // Only update state if the content-service newState is a valid scheduler state.
-    // Content "active" → scheduler keeps its own state. Content "suspended" → scheduler
-    // suspends. Content "archived" → scheduler suspends with reason.
     const newState = parsed.data.newState.toLowerCase();
-    const stateUpdate: Record<string, unknown> = {};
 
-    if (newState === 'suspended') {
-      stateUpdate['state'] = 'suspended';
-      stateUpdate['suspendedReason'] = parsed.data.reason ?? 'content_state_changed';
-      stateUpdate['suspendedUntil'] = new Date('9999-12-31T23:59:59.999Z').toISOString();
-    } else if (newState === 'archived') {
-      stateUpdate['state'] = 'suspended';
-      stateUpdate['suspendedReason'] = 'content_archived';
-      stateUpdate['suspendedUntil'] = new Date('9999-12-31T23:59:59.999Z').toISOString();
-    } else if (newState === 'active' && existing.state === 'suspended') {
-      // Reactivate: clear suspension, revert to last scheduling state
-      stateUpdate['state'] = 'new';
-      stateUpdate['suspendedUntil'] = null;
-      stateUpdate['suspendedReason'] = null;
-    }
-
-    if (Object.keys(stateUpdate).length === 0) {
-      this.logger.debug(
-        { cardId, newState },
-        'card.state.changed has no scheduler-relevant state transition; skipping'
+    for (const studyMode of ['knowledge_gaining', 'language_learning'] as StudyMode[]) {
+      const existing = await this.dependencies.schedulerCardRepository.findByCard(
+        userId,
+        cardId,
+        studyMode
       );
-      return;
-    }
+      if (existing === null) {
+        continue;
+      }
 
-    await this.dependencies.schedulerCardRepository.update(
-      userId,
-      cardId,
-      stateUpdate,
-      existing.version
-    );
+      const stateUpdate: Record<string, unknown> = {};
+      if (newState === 'suspended') {
+        stateUpdate['state'] = 'suspended';
+        stateUpdate['suspendedReason'] = parsed.data.reason ?? 'content_state_changed';
+        stateUpdate['suspendedUntil'] = new Date('9999-12-31T23:59:59.999Z').toISOString();
+      } else if (newState === 'archived') {
+        stateUpdate['state'] = 'suspended';
+        stateUpdate['suspendedReason'] = 'content_archived';
+        stateUpdate['suspendedUntil'] = new Date('9999-12-31T23:59:59.999Z').toISOString();
+      } else if (newState === 'active' && existing.state === 'suspended') {
+        stateUpdate['state'] = 'new';
+        stateUpdate['suspendedUntil'] = null;
+        stateUpdate['suspendedReason'] = null;
+      }
+
+      if (Object.keys(stateUpdate).length === 0) {
+        continue;
+      }
+
+      await this.dependencies.schedulerCardRepository.update(
+        userId,
+        cardId,
+        stateUpdate,
+        existing.version,
+        studyMode
+      );
+    }
 
     this.logger.info(
-      { cardId, userId, contentState: newState, schedulerUpdate: stateUpdate },
+      { cardId, userId, contentState: newState },
       'Updated SchedulerCard state from card.state.changed'
     );
   }

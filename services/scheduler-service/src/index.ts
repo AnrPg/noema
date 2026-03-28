@@ -213,7 +213,7 @@ async function bootstrap(): Promise<void> {
     logger.info({ consumerCount: consumers.length }, 'Event consumers started');
   }
 
-  const toolRegistry = createToolRegistry(schedulerService);
+  const toolRegistry = createToolRegistry(schedulerService, schedulerReadService);
 
   const fastify = Fastify({
     loggerInstance: logger,

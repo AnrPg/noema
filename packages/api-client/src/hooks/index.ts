@@ -11,7 +11,10 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from '@tanstack/react-query';
+import type { StudyMode } from '@noema/types';
 
+import { useSchedulerProgressSummary } from '../scheduler/hooks.js';
+import type { SchedulerProgressSummaryResponse } from '../scheduler/types.js';
 import { authApi, meApi, usersApi } from '../user/api.js';
 import type {
   AuthResponse,
@@ -188,13 +191,27 @@ export function useDeleteAccount(options?: UseMutationOptions<void>) {
   });
 }
 
-export function useMyProgress(options?: Omit<UseQueryOptions, 'queryKey' | 'queryFn'>) {
-  // Placeholder for future learning progress API
-  return useQuery({
-    queryKey: ['me', 'progress'],
-    queryFn: () => Promise.resolve({ data: null }),
-    ...options,
-  });
+type MyProgressOptions = Omit<
+  UseQueryOptions<SchedulerProgressSummaryResponse>,
+  'queryKey' | 'queryFn'
+>;
+
+export function useMyProgress(
+  studyMode?: StudyMode,
+  options?: MyProgressOptions
+): ReturnType<typeof useSchedulerProgressSummary>;
+export function useMyProgress(
+  options?: MyProgressOptions
+): ReturnType<typeof useSchedulerProgressSummary>;
+export function useMyProgress(
+  studyModeOrOptions?: StudyMode | MyProgressOptions,
+  maybeOptions?: MyProgressOptions
+): ReturnType<typeof useSchedulerProgressSummary> {
+  if (typeof studyModeOrOptions === 'string') {
+    return useSchedulerProgressSummary({ studyMode: studyModeOrOptions }, maybeOptions);
+  }
+
+  return useSchedulerProgressSummary(undefined, studyModeOrOptions);
 }
 
 // ============================================================================
@@ -309,6 +326,8 @@ export {
   useForecast,
   schedulerKeys,
   usePredictRetention,
+  useReviews,
+  useReviewStats,
   useReviewQueue,
   useSchedulerCard,
   useSchedulerCards,

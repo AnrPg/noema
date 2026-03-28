@@ -9,7 +9,7 @@
  */
 
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
-import type { CardId, UserId } from '@noema/types';
+import type { CardId, StudyMode, UserId } from '@noema/types';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -48,6 +48,7 @@ const SessionStartedPayloadSchema = z
     userId: z.string().min(1),
     initialQueueSize: z.number().int().nonnegative(),
     initialCardIds: z.array(z.string().min(1)).optional(),
+    studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
   })
   .passthrough();
 
@@ -86,6 +87,7 @@ export class SessionStartedConsumer extends SchedulerBaseConsumer {
     }
 
     const userId = parsed.data.userId as UserId;
+    const studyMode = (parsed.data.studyMode ?? 'knowledge_gaining') as StudyMode;
     const cardIds = this.readCardIds(parsed.data.initialCardIds);
     if (cardIds.length === 0) {
       this.logger.debug(
@@ -98,7 +100,11 @@ export class SessionStartedConsumer extends SchedulerBaseConsumer {
     await Promise.all(
       cardIds.map(async (rawCardId) => {
         const cardId = rawCardId as CardId;
-        const existing = await this.dependencies.schedulerCardRepository.findByCard(userId, cardId);
+        const existing = await this.dependencies.schedulerCardRepository.findByCard(
+          userId,
+          cardId,
+          studyMode
+        );
         if (existing !== null) {
           return;
         }
@@ -107,6 +113,7 @@ export class SessionStartedConsumer extends SchedulerBaseConsumer {
           id: `sc_${crypto.randomUUID()}`,
           cardId,
           userId,
+          studyMode,
           lane: 'retention',
           stability: null,
           difficultyParameter: null,
