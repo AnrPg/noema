@@ -83,6 +83,10 @@ export interface IServiceConfig {
      *  When false, proof stage auto-approves (Phase 6 behavior). */
     proofStageEnabled: boolean;
   };
+  ontologyImports: {
+    /** Which YAGO archive variant to fetch by default. */
+    yagoVariant: 'tiny' | 'full';
+  };
   cors: {
     enabled: boolean;
     origin: string[];
@@ -124,6 +128,20 @@ function optionalEnvBool(name: string, defaultValue: boolean): boolean {
   const value = process.env[name];
   if (value === undefined || value === '') return defaultValue;
   return value.toLowerCase() === 'true';
+}
+
+function optionalYagoVariant(name: string, defaultValue: 'tiny' | 'full'): 'tiny' | 'full' {
+  const value = process.env[name];
+  if (value === undefined || value === '') {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'tiny' || normalized === 'full') {
+    return normalized;
+  }
+
+  throw new Error(`Invalid YAGO variant for ${name}: ${value}`);
 }
 
 /**
@@ -206,6 +224,9 @@ export function loadConfig(): IServiceConfig {
     },
     mutation: {
       proofStageEnabled: optionalEnvBool('MUTATION_PROOF_STAGE_ENABLED', false),
+    },
+    ontologyImports: {
+      yagoVariant: optionalYagoVariant('YAGO_VARIANT', 'full'),
     },
     cors: {
       enabled: optionalEnvBool('CORS_ENABLED', false),

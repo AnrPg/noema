@@ -91,6 +91,59 @@ function buildRun(version = '4.5.0.2'): IOntologyImportRun {
 }
 
 describe('YagoSourceFetcher', () => {
+  it('defaults to the full YAGO archive when no variant is configured', async () => {
+    const artifactRootDirectory = await mkdtemp(path.join(os.tmpdir(), 'noema-yago-default-'));
+    cleanupPaths.push(artifactRootDirectory);
+
+    const calls: { url: string; method: string }[] = [];
+    const fetchImplementation: typeof fetch = (input, init) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const method = init?.method ?? 'GET';
+      calls.push({ url, method });
+
+      if (method === 'HEAD') {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+
+      return Promise.resolve(
+        new Response(Buffer.from('yago'), {
+          status: 200,
+          headers: {
+            'content-type': 'application/zip',
+          },
+        })
+      );
+    };
+
+    const extractImplementation = async (_archivePath: string, targetDirectory: string) => {
+      await writeFile(
+        path.join(targetDirectory, 'facts.tsv'),
+        'subject\tpredicate\tobject\n',
+        'utf8'
+      );
+    };
+
+    const fetcher = new YagoSourceFetcher(new InMemoryRawArtifactStore(), {
+      artifactRootDirectory,
+      fetchImplementation,
+      extractImplementation,
+    });
+
+    await fetcher.fetch(buildRun());
+
+    expect(calls).toEqual([
+      {
+        method: 'HEAD',
+        url: 'https://yago-knowledge.org/data/yago4.5/yago-4.5.0.2.zip',
+      },
+      {
+        method: 'GET',
+        url: 'https://yago-knowledge.org/data/yago4.5/yago-4.5.0.2.zip',
+      },
+    ]);
+  });
+
   it('downloads the configured YAGO snapshot and emits a manifest', async () => {
     const artifactRootDirectory = await mkdtemp(path.join(os.tmpdir(), 'noema-yago-'));
     cleanupPaths.push(artifactRootDirectory);

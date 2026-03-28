@@ -71,7 +71,7 @@ export class YagoSourceFetcher implements ISourceFetcher {
     this.artifactRootDirectory = config.artifactRootDirectory;
     this.baseUrl = ensureTrailingSlash(config.baseUrl ?? DEFAULT_YAGO_BASE_URL);
     this.defaultReleaseVersion = config.defaultReleaseVersion ?? DEFAULT_YAGO_RELEASE_VERSION;
-    this.variant = config.variant ?? 'tiny';
+    this.variant = config.variant ?? 'full';
     this.fetchImplementation = config.fetchImplementation ?? fetch;
     this.extractImplementation = config.extractImplementation ?? extractZipArchive;
   }

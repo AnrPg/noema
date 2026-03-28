@@ -25,6 +25,7 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit",
+    "ckg:reset": "tsx --env-file=.env src/scripts/reset-ckg.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:push": "prisma db push",
