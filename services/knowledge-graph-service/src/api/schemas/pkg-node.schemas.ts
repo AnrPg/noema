@@ -5,7 +5,12 @@
  * and query strings. Response schemas use the domain types directly.
  */
 
-import { GraphNodeTypeSchema, NodeIdSchema, UserIdSchema } from '@noema/validation';
+import {
+  GraphNodeTypeSchema,
+  NodeIdSchema,
+  StudyModeSchema,
+  UserIdSchema,
+} from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -29,6 +34,7 @@ export const NodeQueryParamsSchema = z.object({
   nodeType: GraphNodeTypeSchema.optional(),
   domain: z.string().min(1).max(200).optional(),
   search: z.string().min(1).max(200).optional(),
+  studyMode: StudyModeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
   sortBy: z.enum(['label', 'createdAt', 'updatedAt', 'masteryLevel']).default('createdAt'),
@@ -49,6 +55,7 @@ export const CreateNodeRequestSchema = z.object({
   nodeType: GraphNodeTypeSchema,
   domain: z.string().min(1, 'Domain is required').max(200, 'Domain too long'),
   description: z.string().max(2000, 'Description too long').optional(),
+  supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
   properties: z.record(z.unknown()).optional(),
 });
 
@@ -60,6 +67,7 @@ export const UpdateNodeRequestSchema = z
   .object({
     label: z.string().min(1).max(200).optional(),
     description: z.string().max(2000).optional(),
+    supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
     properties: z.record(z.unknown()).optional(),
     masteryLevel: z.number().min(0).max(1).optional(),
   })
@@ -67,6 +75,7 @@ export const UpdateNodeRequestSchema = z
     (data) =>
       data.label !== undefined ||
       data.description !== undefined ||
+      data.supportedStudyModes !== undefined ||
       data.properties !== undefined ||
       data.masteryLevel !== undefined,
     { message: 'At least one field must be provided for update' }

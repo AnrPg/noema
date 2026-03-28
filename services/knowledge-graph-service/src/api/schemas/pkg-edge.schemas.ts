@@ -5,7 +5,13 @@
  * and query strings.
  */
 
-import { EdgeIdSchema, GraphEdgeTypeSchema, NodeIdSchema, UserIdSchema } from '@noema/validation';
+import {
+  EdgeIdSchema,
+  GraphEdgeTypeSchema,
+  NodeIdSchema,
+  StudyModeSchema,
+  UserIdSchema,
+} from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -24,6 +30,7 @@ export const EdgeIdParamsSchema = z.object({
 export const EdgeQueryParamsSchema = z.object({
   edgeType: GraphEdgeTypeSchema.optional(),
   nodeId: NodeIdSchema.optional(),
+  studyMode: StudyModeSchema.optional(),
   direction: z.enum(['inbound', 'outbound', 'both']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),

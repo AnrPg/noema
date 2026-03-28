@@ -4,7 +4,7 @@
  * Zod validation schemas for misconception route parameters.
  */
 
-import { MisconceptionStatusSchema, UserIdSchema } from '@noema/validation';
+import { MisconceptionStatusSchema, StudyModeSchema, UserIdSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -27,6 +27,7 @@ export const DetectionIdParamsSchema = z.object({
 export const MisconceptionQueryParamsSchema = z.object({
   domain: z.string().min(1).max(200).optional(),
   status: MisconceptionStatusSchema.optional(),
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
 });
 
 // ============================================================================
@@ -35,6 +36,7 @@ export const MisconceptionQueryParamsSchema = z.object({
 
 export const DetectMisconceptionsRequestSchema = z.object({
   domain: z.string().min(1, 'Domain is required').max(200),
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
 });
 
 export const UpdateMisconceptionStatusRequestSchema = z.object({

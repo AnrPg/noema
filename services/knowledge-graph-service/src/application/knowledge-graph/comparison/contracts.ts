@@ -4,6 +4,8 @@
  * Transport-safe DTOs for the PKG↔CKG comparison API.
  */
 
+import type { StudyMode } from '@noema/types';
+
 export type ComparisonScopeModeDto = 'domain' | 'engagement_hops';
 
 export interface IComparisonRequestDto {
@@ -11,6 +13,7 @@ export interface IComparisonRequestDto {
   scopeMode: ComparisonScopeModeDto;
   hopCount: number;
   bootstrapWhenUnseeded: boolean;
+  studyMode?: StudyMode;
 }
 
 export interface IComparisonScopeDto {

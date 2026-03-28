@@ -16,6 +16,7 @@ import { CopilotSuggestions } from '@/components/dashboard/copilot-suggestions';
 import { KnowledgePulse } from '@/components/dashboard/knowledge-pulse';
 import { RecentSessions } from '@/components/dashboard/recent-sessions';
 import { ReviewForecast } from '@/components/dashboard/review-forecast';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 // ============================================================================
 // Helpers
@@ -34,6 +35,7 @@ function getGreeting(): string {
 
 export default function DashboardPage(): React.JSX.Element | null {
   const { user } = useAuth();
+  const activeStudyMode = useActiveStudyMode();
 
   // user is null during the brief window between mount and the auth store hydrating.
   // The authenticated layout handles the full loading skeleton; returning null here
@@ -56,14 +58,14 @@ export default function DashboardPage(): React.JSX.Element | null {
       {/* Vitals row */}
       <div className="animate-fade-slide-in" style={{ animationDelay: '100ms' }}>
         <SectionErrorBoundary>
-          <CognitiveVitals userId={userId} />
+          <CognitiveVitals userId={userId} studyMode={activeStudyMode} />
         </SectionErrorBoundary>
       </div>
 
       {/* Review Forecast */}
       <div className="animate-fade-slide-in" style={{ animationDelay: '200ms' }}>
         <SectionErrorBoundary>
-          <ReviewForecast userId={userId} />
+          <ReviewForecast userId={userId} studyMode={activeStudyMode} />
         </SectionErrorBoundary>
       </div>
 
@@ -73,10 +75,10 @@ export default function DashboardPage(): React.JSX.Element | null {
         style={{ animationDelay: '300ms' }}
       >
         <SectionErrorBoundary>
-          <KnowledgePulse userId={userId} />
+          <KnowledgePulse userId={userId} studyMode={activeStudyMode} />
         </SectionErrorBoundary>
         <SectionErrorBoundary>
-          <RecentSessions userId={userId} />
+          <RecentSessions userId={userId} studyMode={activeStudyMode} />
         </SectionErrorBoundary>
       </div>
 

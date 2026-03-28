@@ -151,6 +151,9 @@ model StructuralMetricSnapshot {
     // Optional scope: metrics can be global or domain-specific
     domain String? @db.VarChar(200)
 
+    // Study mode lens these metrics were computed under
+    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
+
     // The computed metrics as a JSON object
     // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, SSG, BSI }
     metrics Json
@@ -175,8 +178,10 @@ model StructuralMetricSnapshot {
     // Indexes
     @@index([userId])
     @@index([userId, domain])
+    @@index([userId, domain, studyMode])
     @@index([userId, createdAt])
     @@index([domain])
+    @@index([studyMode])
     @@index([createdAt])
     @@index([metacognitiveStage])
     @@map("structural_metric_snapshots")
@@ -364,6 +369,9 @@ model MisconceptionDetection {
     userId                 String @map("user_id") @db.VarChar(50)
     misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
 
+    // Study mode lens in which this misconception was detected
+    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
+
     // Which misconception type was detected (denormalized from pattern for querying)
     misconceptionType String @map("misconception_type") @db.VarChar(100)
 
@@ -403,14 +411,16 @@ model MisconceptionDetection {
     pattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id])
 
     // Composite unique for upsert dedup (one active detection per user+pattern)
-    @@unique([userId, misconceptionPatternId, status], name: "uq_user_pattern_status")
+    @@unique([userId, misconceptionPatternId, studyMode, status], name: "uq_user_pattern_mode_status")
 
     // Indexes
     @@index([userId])
     @@index([userId, status])
+    @@index([userId, studyMode])
     @@index([misconceptionType])
     @@index([misconceptionPatternId])
     @@index([status])
+    @@index([studyMode])
     @@index([severity])
     @@index([family])
     @@index([affectedNodeIds], type: Gin)
@@ -479,6 +489,9 @@ model MetricsStaleness {
     // Knowledge domain the staleness applies to
     domain String @db.VarChar(200)
 
+    // Study mode lens
+    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
+
     // When the last structural change occurred (PKG node/edge mutation)
     lastStructuralChangeAt DateTime @map("last_structural_change_at")
 
@@ -490,9 +503,11 @@ model MetricsStaleness {
     updatedAt DateTime @updatedAt @map("updated_at")
 
     // Constraints — one staleness record per user+domain
-    @@unique([userId, domain])
+    @@unique([userId, domain, studyMode])
     @@index([userId])
     @@index([userId, domain])
+    @@index([userId, domain, studyMode])
+    @@index([studyMode])
     @@index([lastStructuralChangeAt])
     @@map("metrics_staleness")
 }
@@ -648,4 +663,11 @@ enum MisconceptionSeverity {
     CRITICAL
 
     @@map("misconception_severity")
+}
+
+enum StudyMode {
+    LANGUAGE_LEARNING
+    KNOWLEDGE_GAINING
+
+    @@map("study_mode")
 }

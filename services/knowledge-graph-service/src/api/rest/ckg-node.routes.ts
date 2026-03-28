@@ -7,7 +7,7 @@
  * Prefix: /api/v1/ckg/nodes
  */
 
-import type { GraphNodeType, NodeId } from '@noema/types';
+import type { GraphNodeType, NodeId, StudyMode } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { ICkgNodeBatchAuthoringService } from '../../application/knowledge-graph/node-authoring/index.js';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
@@ -62,6 +62,7 @@ export function registerCkgNodeRoutes(
             nodeType: { type: 'string' },
             domain: { type: 'string' },
             search: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             page: { type: 'number' },
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
             sortBy: { type: 'string', enum: ['label', 'createdAt', 'updatedAt'] },
@@ -79,6 +80,7 @@ export function registerCkgNodeRoutes(
           ...(query.nodeType !== undefined ? { nodeType: query.nodeType as GraphNodeType } : {}),
           ...(query.domain !== undefined ? { domain: query.domain } : {}),
           ...(query.search !== undefined ? { labelContains: query.search } : {}),
+          ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
           graphType: 'ckg',
         });
 

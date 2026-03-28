@@ -25,9 +25,12 @@ import { useGraphStore } from '@/stores/graph-store';
 import { GraphCanvas } from '@/components/graph/graph-canvas';
 import { GraphControls } from '@/components/graph/graph-controls';
 import { NodeDetailPanel } from '@/components/graph/node-detail-panel';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
 const NODE_TYPE_OPTIONS: { value: NodeType; label: string }[] = [
   { value: 'concept', label: 'Concept' },
+  { value: 'occupation', label: 'Occupation' },
   { value: 'skill', label: 'Skill' },
   { value: 'fact', label: 'Fact' },
   { value: 'procedure', label: 'Procedure' },
@@ -36,7 +39,21 @@ const NODE_TYPE_OPTIONS: { value: NodeType; label: string }[] = [
 ];
 
 const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string }[] = [
+  { value: 'subskill_of', label: 'Subskill of' },
+  { value: 'has_subskill', label: 'Has subskill' },
   { value: 'prerequisite', label: 'Prerequisite' },
+  { value: 'transferable_to', label: 'Transferable to' },
+  { value: 'confusable_with', label: 'Confusable with' },
+  { value: 'essential_for_occupation', label: 'Essential for occupation' },
+  {
+    value: 'occupation_requires_essential_skill',
+    label: 'Occupation requires essential skill',
+  },
+  { value: 'optional_for_occupation', label: 'Optional for occupation' },
+  {
+    value: 'occupation_benefits_from_optional_skill',
+    label: 'Occupation benefits from optional skill',
+  },
   { value: 'related_to', label: 'Related' },
   { value: 'part_of', label: 'Part of' },
   { value: 'exemplifies', label: 'Example of' },
@@ -140,9 +157,14 @@ export default function KnowledgePage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
   const selectedDomain = searchParams.get('domain') ?? undefined;
+  const activeStudyMode = useActiveStudyMode();
 
-  const { data: nodesData, isLoading: nodesLoading } = usePKGNodes(userId);
-  const { data: edgesData, isLoading: edgesLoading } = usePKGEdges(userId);
+  const { data: nodesData, isLoading: nodesLoading } = usePKGNodes(userId, {
+    studyMode: activeStudyMode,
+  });
+  const { data: edgesData, isLoading: edgesLoading } = usePKGEdges(userId, {
+    studyMode: activeStudyMode,
+  });
   const { data: frontierData } = useKnowledgeFrontier(userId, selectedDomain);
   const { data: bridgesData } = useBridgeNodes(userId, selectedDomain);
   const { data: comparisonData, isLoading: comparisonLoading } = usePKGCKGComparison(userId, {
@@ -150,6 +172,7 @@ export default function KnowledgePage(): React.JSX.Element {
     scopeMode: 'engagement_hops',
     hopCount: 2,
     bootstrapWhenUnseeded: true,
+    studyMode: activeStudyMode,
   });
 
   const nodes: IGraphNodeDto[] = nodesData ?? [];
@@ -231,6 +254,20 @@ export default function KnowledgePage(): React.JSX.Element {
   const visibleNodes = React.useMemo(
     () => nodes.filter((n) => !hiddenTypes.has(n.type)),
     [nodes, hiddenTypes]
+  );
+
+  const visibleNodeIds = React.useMemo(
+    () => new Set(visibleNodes.map((node) => String(node.id))),
+    [visibleNodes]
+  );
+
+  const visibleEdges = React.useMemo(
+    () =>
+      edges.filter(
+        (edge) =>
+          visibleNodeIds.has(String(edge.sourceId)) && visibleNodeIds.has(String(edge.targetId))
+      ),
+    [edges, visibleNodeIds]
   );
 
   const highlightedNodeIds = React.useMemo(() => {
@@ -339,6 +376,8 @@ export default function KnowledgePage(): React.JSX.Element {
         type: node.type,
         ...(node.description !== null ? { description: node.description } : {}),
         ...(node.tags.length > 0 ? { tags: node.tags } : {}),
+        supportedStudyModes:
+          node.supportedStudyModes.length > 0 ? node.supportedStudyModes : [activeStudyMode],
         ...(Object.keys(node.metadata).length > 0 ? { metadata: node.metadata } : {}),
       });
       selectNode(String(response.data.id));
@@ -358,6 +397,8 @@ export default function KnowledgePage(): React.JSX.Element {
           type: node.type,
           ...(node.description !== null ? { description: node.description } : {}),
           ...(node.tags.length > 0 ? { tags: node.tags } : {}),
+          supportedStudyModes:
+            node.supportedStudyModes.length > 0 ? node.supportedStudyModes : [activeStudyMode],
           ...(Object.keys(node.metadata).length > 0 ? { metadata: node.metadata } : {}),
         });
       }
@@ -386,6 +427,7 @@ export default function KnowledgePage(): React.JSX.Element {
         ...(parseTags(createNodeForm.tags).length > 0
           ? { tags: parseTags(createNodeForm.tags) }
           : {}),
+        supportedStudyModes: [activeStudyMode],
       });
       setCreateNodeForm(defaultCreateNodeForm());
       selectNode(String(response.data.id));
@@ -682,7 +724,7 @@ export default function KnowledgePage(): React.JSX.Element {
       <div className="relative flex-1 overflow-hidden">
         <GraphCanvas
           nodes={visibleNodes}
-          edges={edges}
+          edges={visibleEdges}
           selectedNodeId={selectedNodeId}
           hoveredNodeId={hoveredNodeId}
           activeOverlays={activeOverlaysArray}
@@ -699,8 +741,8 @@ export default function KnowledgePage(): React.JSX.Element {
           <div className="absolute bottom-4 left-4 w-[480px] max-w-[calc(100%-2rem)]">
             <NodeDetailPanel
               node={selectedNode}
-              allNodes={nodes}
-              allEdges={edges}
+              allNodes={visibleNodes}
+              allEdges={visibleEdges}
               onClose={deselectNode}
               onViewPrerequisites={handleViewPrerequisites}
             />
@@ -791,6 +833,14 @@ export default function KnowledgePage(): React.JSX.Element {
         )}
       </div>
       <aside className="flex h-full w-[360px] flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-muted/10 p-4">
+        <Section
+          title="Active Lens"
+          subtitle={`${getStudyModeLabel(activeStudyMode)} is shaping which nodes and suggestions appear by default.`}
+        >
+          <p className="text-sm text-muted-foreground">
+            {getStudyModeDescription(activeStudyMode)}
+          </p>
+        </Section>
         <Section
           title="System-Guided Review"
           subtitle="The system proposes structure from the canonical graph; you review and adopt what fits."

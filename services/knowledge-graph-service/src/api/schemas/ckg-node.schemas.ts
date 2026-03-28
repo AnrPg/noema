@@ -5,7 +5,7 @@
  * CKG routes do not have a userId URL parameter (CKG is shared).
  */
 
-import { GraphNodeTypeSchema, NodeIdSchema } from '@noema/validation';
+import { GraphNodeTypeSchema, NodeIdSchema, StudyModeSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -24,6 +24,7 @@ export const CkgNodeQueryParamsSchema = z.object({
   nodeType: GraphNodeTypeSchema.optional(),
   domain: z.string().min(1).max(200).optional(),
   search: z.string().min(1).max(200).optional(),
+  studyMode: StudyModeSchema.optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
   sortBy: z.enum(['label', 'createdAt', 'updatedAt']).default('createdAt'),

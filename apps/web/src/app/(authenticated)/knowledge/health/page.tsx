@@ -18,6 +18,8 @@ import { AlertTriangle, ArrowRight, Loader2, Sparkles, TrendingDown } from 'luci
 import { MetricDrillDown } from '@/components/knowledge/metric-drill-down';
 import { RadarChart } from '@/components/knowledge/radar-chart';
 import type { IRadarMetric } from '@/components/knowledge/radar-chart';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
 type MetricKey =
   | 'abstractionDrift'
@@ -172,11 +174,18 @@ function prettifyStage(stage: string): string {
 export default function KnowledgeHealthPage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
+  const activeStudyMode = useActiveStudyMode();
   const [selectedMetricKey, setSelectedMetricKey] = React.useState<MetricKey | null>(null);
 
-  const { data: healthResponse, isLoading: healthLoading } = useStructuralHealth(userId);
-  const { data: stageResponse, isLoading: stageLoading } = useMetacognitiveStage(userId);
-  const { data: historyResponse, isLoading: historyLoading } = useMetricHistory(userId);
+  const { data: healthResponse, isLoading: healthLoading } = useStructuralHealth(userId, {
+    studyMode: activeStudyMode,
+  });
+  const { data: stageResponse, isLoading: stageLoading } = useMetacognitiveStage(userId, {
+    studyMode: activeStudyMode,
+  });
+  const { data: historyResponse, isLoading: historyLoading } = useMetricHistory(userId, {
+    studyMode: activeStudyMode,
+  });
 
   const isLoading = healthLoading || stageLoading || historyLoading;
   const health = healthResponse?.data ?? null;
@@ -249,7 +258,11 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
         <div>
           <h1 className="text-3xl font-bold">Structural Health</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            How well-structured and internally consistent your knowledge graph is.
+            How well-structured and internally consistent your knowledge graph is in{' '}
+            {getStudyModeLabel(activeStudyMode)}.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {getStudyModeDescription(activeStudyMode)}
           </p>
         </div>
         <div className="flex items-center justify-center rounded-lg border border-dashed border-border py-16 text-sm text-muted-foreground">
@@ -267,7 +280,11 @@ export default function KnowledgeHealthPage(): React.JSX.Element {
       <div>
         <h1 className="text-3xl font-bold">Structural Health</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          How well-structured and internally consistent your knowledge graph is.
+          How well-structured and internally consistent your knowledge graph is in{' '}
+          {getStudyModeLabel(activeStudyMode)}.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {getStudyModeDescription(activeStudyMode)}
         </p>
       </div>
 

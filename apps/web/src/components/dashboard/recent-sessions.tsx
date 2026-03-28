@@ -9,6 +9,7 @@
 
 import { useSessions } from '@noema/api-client';
 import type { ISessionDto, SessionMode, UserDto } from '@noema/api-client';
+import type { StudyMode } from '@noema/types';
 import {
   Card,
   CardContent,
@@ -156,6 +157,7 @@ function SessionRowSkeleton(): React.JSX.Element {
 
 interface IRecentSessionsProps {
   userId: UserId;
+  studyMode: StudyMode;
 }
 
 /**
@@ -164,9 +166,12 @@ interface IRecentSessionsProps {
  * reserved for when the API adds per-user scoped access (e.g. admin view of another
  * user's sessions). Until then the underscore prefix suppresses the unused-variable lint rule.
  */
-export function RecentSessions({ userId: _userId }: IRecentSessionsProps): React.JSX.Element {
+export function RecentSessions({
+  userId: _userId,
+  studyMode,
+}: IRecentSessionsProps): React.JSX.Element {
   const router = useRouter();
-  const { data, isLoading } = useSessions({ limit: 5 });
+  const { data, isLoading } = useSessions({ limit: 5, studyMode });
 
   const sessions: ISessionDto[] = [...ensureSessions(data?.data)]
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())

@@ -18,6 +18,7 @@ import type {
   IGraphNode,
   MasteryLevel,
   NodeId,
+  StudyMode,
 } from '@noema/types';
 
 import { ValidationError } from '../errors/base.errors.js';
@@ -274,11 +275,20 @@ export interface INodeFilter {
   /** Filter by label substring (case-insensitive) */
   readonly labelContains?: string;
 
+  /** Filter nodes that explicitly support a given study mode */
+  readonly studyMode?: StudyMode;
+
   /** Filter by owning user (PKG only) */
   readonly userId?: string;
 
   /** Filter by graph type (pkg or ckg) */
   readonly graphType?: GraphType;
+
+  /** Sort column for list reads */
+  readonly sortBy?: 'label' | 'createdAt' | 'updatedAt' | 'masteryLevel';
+
+  /** Sort direction for list reads */
+  readonly sortOrder?: 'asc' | 'desc';
 
   /** Whether to include soft-deleted nodes */
   readonly includeDeleted: boolean;
@@ -301,8 +311,11 @@ export const NodeFilter = {
       ...(input.nodeType !== undefined && { nodeType: input.nodeType }),
       ...(input.domain !== undefined && { domain: input.domain }),
       ...(input.labelContains !== undefined && { labelContains: input.labelContains }),
+      ...(input.studyMode !== undefined && { studyMode: input.studyMode }),
       ...(input.userId !== undefined && { userId: input.userId }),
       ...(input.graphType !== undefined && { graphType: input.graphType }),
+      ...(input.sortBy !== undefined && { sortBy: input.sortBy }),
+      ...(input.sortOrder !== undefined && { sortOrder: input.sortOrder }),
       includeDeleted: input.includeDeleted ?? false,
     };
 

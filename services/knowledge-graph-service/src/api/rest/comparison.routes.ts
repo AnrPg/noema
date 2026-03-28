@@ -7,7 +7,7 @@
  * Prefix: /api/v1/users/:userId/comparison
  */
 
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import {
   toComparisonResponseDto,
@@ -69,6 +69,7 @@ export function registerComparisonRoutes(
             scopeMode: { type: 'string', enum: ['domain', 'engagement_hops'] },
             hopCount: { type: 'number', minimum: 0, maximum: 5 },
             bootstrapWhenUnseeded: { type: 'boolean' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
           },
         },
       },
@@ -88,11 +89,16 @@ export function registerComparisonRoutes(
             hopCount: query.hopCount,
             bootstrapWhenUnseeded: query.bootstrapWhenUnseeded,
             ...(query.domain !== undefined ? { domain: query.domain } : {}),
+            ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
           }),
           context
         );
         reply.send(
-          wrapResponse(toComparisonResponseDto(userId as UserId, result.data), result.agentHints, request)
+          wrapResponse(
+            toComparisonResponseDto(userId as UserId, result.data),
+            result.agentHints,
+            request
+          )
         );
       } catch (error) {
         handleError(error, request, reply, fastify.log);

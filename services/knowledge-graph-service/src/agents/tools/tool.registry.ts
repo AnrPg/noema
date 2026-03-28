@@ -27,6 +27,7 @@ import {
   createGetCanonicalStructureHandler,
   createGetConceptNodeHandler,
   createGetLearningPathContextHandler,
+  createGetNodeMasterySummaryHandler,
   createGetMetacognitiveStageHandler,
   createGetMutationStatusHandler,
   createGetStructuralHealthHandler,
@@ -476,6 +477,10 @@ export function createToolRegistry(service: IKnowledgeGraphService): ToolRegistr
   registry.register(requireDefinition('add-concept-node'), createAddConceptNodeHandler(service));
   registry.register(requireDefinition('add-edge'), createAddEdgeHandler(service));
   registry.register(requireDefinition('update-mastery'), createUpdateMasteryHandler(service));
+  registry.register(
+    requireDefinition('get-node-mastery-summary'),
+    createGetNodeMasterySummaryHandler(service)
+  );
   registry.register(requireDefinition('remove-node'), createRemoveNodeHandler(service));
   registry.register(requireDefinition('remove-edge'), createRemoveEdgeHandler(service));
 

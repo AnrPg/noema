@@ -5,7 +5,7 @@
  * stage route parameters.
  */
 
-import { UserIdSchema } from '@noema/validation';
+import { StudyModeSchema, UserIdSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -22,10 +22,12 @@ export const HealthUserIdParamsSchema = z.object({
 
 export const HealthQueryParamsSchema = z.object({
   domain: z.string().min(1).max(200).default('general'),
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
 });
 
 export const StageQueryParamsSchema = z.object({
   domain: z.string().min(1).max(200).default('general'),
+  studyMode: StudyModeSchema.default('knowledge_gaining'),
 });
 
 // ============================================================================

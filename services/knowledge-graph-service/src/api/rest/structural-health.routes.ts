@@ -7,7 +7,7 @@
  * Prefix: /api/v1/users/:userId/health
  */
 
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
@@ -64,6 +64,7 @@ export function registerStructuralHealthRoutes(
           type: 'object',
           properties: {
             domain: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
           },
         },
       },
@@ -76,7 +77,12 @@ export function registerStructuralHealthRoutes(
         const query = HealthQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
-        const result = await service.getStructuralHealth(userId as UserId, query.domain, context);
+        const result = await service.getStructuralHealth(
+          userId as UserId,
+          query.domain,
+          query.studyMode as StudyMode,
+          context
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
@@ -107,6 +113,7 @@ export function registerStructuralHealthRoutes(
           type: 'object',
           properties: {
             domain: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
           },
         },
       },
@@ -119,7 +126,12 @@ export function registerStructuralHealthRoutes(
         const query = StageQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
-        const result = await service.getMetacognitiveStage(userId as UserId, query.domain, context);
+        const result = await service.getMetacognitiveStage(
+          userId as UserId,
+          query.domain,
+          query.studyMode as StudyMode,
+          context
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

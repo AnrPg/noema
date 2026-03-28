@@ -8,7 +8,7 @@
  * user matches the :userId parameter (or has agent/admin role).
  */
 
-import type { GraphNodeType, NodeId, UserId } from '@noema/types';
+import type { GraphNodeType, NodeId, StudyMode, UserId } from '@noema/types';
 import { MasteryLevel } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
@@ -76,6 +76,10 @@ export function registerPkgNodeRoutes(
             nodeType: { type: 'string' },
             domain: { type: 'string', minLength: 1, maxLength: 200 },
             description: { type: 'string', maxLength: 2000 },
+            supportedStudyModes: {
+              type: 'array',
+              items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            },
             properties: { type: 'object' },
           },
         },
@@ -94,6 +98,11 @@ export function registerPkgNodeRoutes(
           nodeType: parsed.nodeType,
           domain: parsed.domain,
           ...(parsed.description !== undefined ? { description: parsed.description } : {}),
+          ...(parsed.supportedStudyModes !== undefined
+            ? {
+                supportedStudyModes: parsed.supportedStudyModes as StudyMode[],
+              }
+            : {}),
           ...(parsed.properties !== undefined ? { properties: parsed.properties } : {}),
         };
 
@@ -128,6 +137,7 @@ export function registerPkgNodeRoutes(
             nodeType: { type: 'string' },
             domain: { type: 'string' },
             search: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             page: { type: 'number' },
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
             sortBy: { type: 'string', enum: ['label', 'createdAt', 'updatedAt', 'masteryLevel'] },
@@ -148,6 +158,9 @@ export function registerPkgNodeRoutes(
           ...(query.nodeType !== undefined ? { nodeType: query.nodeType as GraphNodeType } : {}),
           ...(query.domain !== undefined ? { domain: query.domain } : {}),
           ...(query.search !== undefined ? { labelContains: query.search } : {}),
+          ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
+          sortBy: query.sortBy,
+          sortOrder: query.sortOrder,
           userId,
           graphType: 'pkg',
         });

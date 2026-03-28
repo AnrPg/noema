@@ -10,6 +10,7 @@
 
 import { useMisconceptions, usePKGEdges, usePKGNodes } from '@noema/api-client';
 import type { IGraphEdgeDto, IGraphNodeDto, IMisconceptionDto, UserDto } from '@noema/api-client';
+import type { StudyMode } from '@noema/types';
 import { Card, CardContent, CardHeader, CardTitle, EmptyState, Skeleton } from '@noema/ui';
 import { Network } from 'lucide-react';
 import { useMemo } from 'react';
@@ -129,12 +130,18 @@ function computeForceLayout(
 // Component
 // ============================================================================
 
-export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Element {
+export function KnowledgePulse({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
   const router = useRouter();
   const enabled = userId !== '';
-  const nodes = usePKGNodes(userId, { enabled });
-  const edges = usePKGEdges(userId, { enabled });
-  const { data: miscData, isError: miscError } = useMisconceptions(userId, { enabled });
+  const nodes = usePKGNodes(userId, { enabled, studyMode });
+  const edges = usePKGEdges(userId, { enabled, studyMode });
+  const { data: miscData, isError: miscError } = useMisconceptions(userId, { enabled, studyMode });
 
   const isLoading = nodes.isLoading || edges.isLoading;
   const nodeList = useMemo(() => ensureArray<IGraphNodeDto>(nodes.data), [nodes.data]);
@@ -149,10 +156,7 @@ export function KnowledgePulse({ userId }: { userId: UserId }): React.JSX.Elemen
   const visibleNodeIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
 
   const visibleEdges = useMemo(
-    () =>
-      edgeList.filter(
-        (e) => visibleNodeIds.has(e.sourceId) && visibleNodeIds.has(e.targetId)
-      ),
+    () => edgeList.filter((e) => visibleNodeIds.has(e.sourceId) && visibleNodeIds.has(e.targetId)),
     [edgeList, visibleNodeIds]
   );
 

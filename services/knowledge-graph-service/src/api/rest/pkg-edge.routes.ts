@@ -5,7 +5,7 @@
  * Prefix: /api/v1/users/:userId/pkg/edges
  */
 
-import type { EdgeId, GraphEdgeType, NodeId, UserId } from '@noema/types';
+import type { EdgeId, GraphEdgeType, NodeId, StudyMode, UserId } from '@noema/types';
 import { EdgeWeight } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IEdgeFilter } from '../../domain/knowledge-graph-service/graph.repository.js';
@@ -139,6 +139,7 @@ export function registerPkgEdgeRoutes(
           properties: {
             edgeType: { type: 'string' },
             nodeId: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             direction: { type: 'string', enum: ['inbound', 'outbound', 'both'] },
             page: { type: 'number' },
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
@@ -157,6 +158,7 @@ export function registerPkgEdgeRoutes(
         const filter: IEdgeFilter = {
           ...(query.edgeType !== undefined ? { edgeType: query.edgeType as GraphEdgeType } : {}),
           userId,
+          ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
           ...(query.nodeId !== undefined && query.nodeId !== '' && query.direction === 'outbound'
             ? { sourceNodeId: query.nodeId as NodeId }
             : {}),

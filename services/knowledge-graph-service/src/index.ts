@@ -33,6 +33,7 @@ import {
   registerMisconceptionRoutes,
   registerOntologyImportRoutes,
   registerPkgEdgeRoutes,
+  registerPkgMasteryRoutes,
   registerPkgNodeRoutes,
   registerPkgOperationLogRoutes,
   registerPkgTraversalRoutes,
@@ -400,6 +401,7 @@ async function bootstrap(): Promise<void> {
     [
       new YagoSourceFetcher(rawArtifactStore, {
         artifactRootDirectory: ontologyArtifactRootDirectory,
+        variant: config.ontologyImports.yagoVariant,
       }),
       new EscoSourceFetcher(rawArtifactStore, {
         artifactRootDirectory: ontologyArtifactRootDirectory,
@@ -416,6 +418,7 @@ async function bootstrap(): Promise<void> {
     [new YagoSourceNormalizer(), new EscoSourceNormalizer(), new ConceptNetSourceNormalizer()],
     {
       canonicalNodeResolver: new GraphCanonicalNodeResolver(graphRepository),
+      edgeRepository: graphRepository,
       mutationSubmissionPort: {
         async submitProposal(proposal, context) {
           const proposerId = (context.userId ?? 'agent_unknown') as Parameters<
@@ -468,6 +471,7 @@ async function bootstrap(): Promise<void> {
   // PKG routes (user-scoped)
   registerPkgNodeRoutes(app, service, authMiddleware, routeOptions);
   registerPkgEdgeRoutes(app, service, authMiddleware, routeOptions);
+  registerPkgMasteryRoutes(app, service, authMiddleware, routeOptions);
   registerPkgTraversalRoutes(app, service, authMiddleware, routeOptions);
 
   // CKG routes (shared graph)

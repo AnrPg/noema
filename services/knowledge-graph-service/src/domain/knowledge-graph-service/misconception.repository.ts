@@ -22,6 +22,7 @@ import type {
   MisconceptionStatus,
   MisconceptionType,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 
@@ -119,6 +120,9 @@ export interface IMisconceptionRecord {
   /** Detection confidence (0–1) */
   readonly confidence: ConfidenceScore;
 
+  /** Study mode lens */
+  readonly studyMode: StudyMode;
+
   // --- Severity (per-detection) ---
 
   /** Assessed severity of this detection instance */
@@ -191,6 +195,7 @@ export interface IRecordDetectionInput {
   readonly misconceptionType: MisconceptionType;
   readonly affectedNodeIds: readonly NodeId[];
   readonly confidence: ConfidenceScore;
+  readonly studyMode: StudyMode;
   readonly severity: MisconceptionSeverity;
   readonly severityScore: number;
   readonly family: string;
@@ -270,7 +275,11 @@ export interface IMisconceptionRepository {
    * Get active (non-resolved) misconceptions for a user.
    * @param domain Optional domain filter.
    */
-  getActiveMisconceptions(userId: UserId, domain?: string): Promise<IMisconceptionRecord[]>;
+  getActiveMisconceptions(
+    userId: UserId,
+    domain?: string,
+    studyMode?: StudyMode
+  ): Promise<IMisconceptionRecord[]>;
 
   /**
    * Update a misconception's lifecycle status.

@@ -16,6 +16,7 @@ import type {
   MisconceptionStatus,
   MisconceptionType,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
@@ -42,9 +43,7 @@ import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 /**
  * Map domain severity ('low' | 'moderate' | ...) to Prisma enum (uppercase).
  */
-function toDbSeverity(
-  severity: MisconceptionSeverity
-): 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' {
+function toDbSeverity(severity: MisconceptionSeverity): 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' {
   return severity.toUpperCase() as 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
 }
 
@@ -65,6 +64,10 @@ function generateInterventionId(): InterventionId {
 
 function generateDetectionId(): string {
   return `det_${nanoid()}`;
+}
+
+function toPrismaStudyMode(studyMode: StudyMode): 'LANGUAGE_LEARNING' | 'KNOWLEDGE_GAINING' {
+  return studyMode === 'language_learning' ? 'LANGUAGE_LEARNING' : 'KNOWLEDGE_GAINING';
 }
 
 // ============================================================================
@@ -228,6 +231,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
       data: {
         id,
         userId: input.userId as string,
+        studyMode: toPrismaStudyMode(input.studyMode),
         misconceptionPatternId: input.patternId as string,
         misconceptionType: input.misconceptionType as string,
         affectedNodeIds: [...input.affectedNodeIds] as string[],
@@ -251,6 +255,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
     const existing = await this.prisma.misconceptionDetection.findFirst({
       where: {
         userId: input.userId as string,
+        studyMode: toPrismaStudyMode(input.studyMode),
         misconceptionPatternId: input.patternId as string,
         status: { not: 'resolved' },
       },
@@ -267,7 +272,9 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
           severity: toDbSeverity(input.severity),
           severityScore: input.severityScore,
           family: input.family,
-          ...(input.description ? { description: input.description } : {}),
+          ...(input.description !== null && input.description !== ''
+            ? { description: input.description }
+            : {}),
           // Merge affected node IDs (union)
           affectedNodeIds: [
             ...new Set([
@@ -288,11 +295,16 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
     return this.recordDetection(input);
   }
 
-  async getActiveMisconceptions(userId: UserId, domain?: string): Promise<IMisconceptionRecord[]> {
+  async getActiveMisconceptions(
+    userId: UserId,
+    domain?: string,
+    studyMode?: StudyMode
+  ): Promise<IMisconceptionRecord[]> {
     try {
       const records = await this.prisma.misconceptionDetection.findMany({
         where: {
           userId: userId as string,
+          ...(studyMode !== undefined ? { studyMode: toPrismaStudyMode(studyMode) } : {}),
           status: { not: 'resolved' },
           ...(domain !== undefined
             ? {
@@ -391,6 +403,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
     misconceptionType: string;
     affectedNodeIds: string[];
     confidence: number;
+    studyMode: 'LANGUAGE_LEARNING' | 'KNOWLEDGE_GAINING';
     severity: string;
     severityScore: number;
     family: string;
@@ -408,6 +421,8 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
       misconceptionType: record.misconceptionType as MisconceptionType,
       affectedNodeIds: record.affectedNodeIds as NodeId[],
       confidence: record.confidence as ConfidenceScore,
+      studyMode:
+        record.studyMode === 'LANGUAGE_LEARNING' ? 'language_learning' : 'knowledge_gaining',
       severity: fromDbSeverity(record.severity),
       severityScore: record.severityScore,
       family: record.family,

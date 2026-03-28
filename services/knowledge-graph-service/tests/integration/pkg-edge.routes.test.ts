@@ -133,6 +133,31 @@ describe('GET /users/:userId/pkg/edges', () => {
     expect(res.json().data).toBeDefined();
     expect(service.listEdges).toHaveBeenCalledOnce();
   });
+
+  it('passes studyMode through the edge filter', async () => {
+    service.listEdges.mockResolvedValue(
+      serviceResult({ items: [graphEdge()], total: 1, hasMore: false })
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${BASE}?studyMode=language_learning`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.listEdges).toHaveBeenCalledWith(
+      TEST_USER_ID,
+      expect.objectContaining({
+        userId: TEST_USER_ID,
+        studyMode: 'language_learning',
+      }),
+      expect.objectContaining({
+        limit: 20,
+        offset: 0,
+      }),
+      expect.any(Object)
+    );
+  });
 });
 
 // ============================================================================

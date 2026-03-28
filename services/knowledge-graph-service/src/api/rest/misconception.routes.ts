@@ -7,7 +7,7 @@
  * Prefix: /api/v1/users/:userId/misconceptions
  */
 
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-service/knowledge-graph.service.js';
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
@@ -70,6 +70,7 @@ export function registerMisconceptionRoutes(
           properties: {
             domain: { type: 'string' },
             status: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
           },
         },
       },
@@ -82,7 +83,12 @@ export function registerMisconceptionRoutes(
         const query = MisconceptionQueryParamsSchema.parse(request.query);
         const context = buildContext(request);
 
-        const result = await service.getMisconceptions(userId as UserId, query.domain, context);
+        const result = await service.getMisconceptions(
+          userId as UserId,
+          query.domain,
+          query.studyMode as StudyMode,
+          context
+        );
 
         // Client-side status filtering (service returns all for domain)
         const data =
@@ -122,6 +128,7 @@ export function registerMisconceptionRoutes(
           required: ['domain'],
           properties: {
             domain: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
           },
         },
       },
@@ -134,7 +141,12 @@ export function registerMisconceptionRoutes(
         const parsed = DetectMisconceptionsRequestSchema.parse(request.body);
         const context = buildContext(request);
 
-        const result = await service.detectMisconceptions(userId as UserId, parsed.domain, context);
+        const result = await service.detectMisconceptions(
+          userId as UserId,
+          parsed.domain,
+          parsed.studyMode as StudyMode,
+          context
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

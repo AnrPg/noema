@@ -24,6 +24,7 @@ import type {
   MutationId,
   NodeId,
   ProposerId,
+  StudyMode,
   StructuralMetricType,
   TrendDirection,
   UserId,
@@ -85,6 +86,7 @@ export type OntologyMergeConflictKind =
   | 'domain_mismatch'
   | 'mapping_conflict'
   | 'weak_mapping_only';
+export type MasteryBand = 'untracked' | 'emerging' | 'developing' | 'mastered';
 
 export interface IOntologyImportRunConfigurationDto {
   mode: string | null;
@@ -107,12 +109,14 @@ export interface IGraphNodeDto {
   languages: string[];
   tags: string[];
   semanticHints: string[];
+  supportedStudyModes: StudyMode[];
   canonicalExternalRefs: ICanonicalExternalRef[];
   ontologyMappings: IOntologyMapping[];
   provenance: INodeProvenanceEntry[];
   reviewMetadata: INodeReviewMetadata | null;
   sourceCoverage: ISourceCoverageSummary | null;
   metadata: Record<string, unknown>;
+  masteryLevel?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +131,7 @@ export interface ICreateNodeInput {
   languages?: string[];
   tags?: string[];
   semanticHints?: string[];
+  supportedStudyModes?: StudyMode[];
   canonicalExternalRefs?: ICanonicalExternalRef[];
   ontologyMappings?: IOntologyMapping[];
   provenance?: INodeProvenanceEntry[];
@@ -145,6 +150,7 @@ export interface IUpdateNodeInput {
   languages?: string[];
   tags?: string[];
   semanticHints?: string[];
+  supportedStudyModes?: StudyMode[];
   canonicalExternalRefs?: ICanonicalExternalRef[];
   ontologyMappings?: IOntologyMapping[];
   provenance?: INodeProvenanceEntry[];
@@ -179,6 +185,7 @@ export interface ICkgEdgeAuthoringBlockedReasonDto {
   code:
     | 'duplicate_edge'
     | 'duplicate_symmetric_edge'
+    | 'inverse_edge_exists'
     | 'invalid_source_type'
     | 'invalid_target_type'
     | 'self_reference'
@@ -286,6 +293,7 @@ export interface IComparisonQueryParams {
   scopeMode?: ComparisonScopeMode;
   hopCount?: number;
   bootstrapWhenUnseeded?: boolean;
+  studyMode?: StudyMode;
 }
 
 export interface ISubgraphParams {
@@ -323,6 +331,30 @@ export interface ITopologyDto {
   edgeCount: number;
   isAcyclic: boolean;
   stronglyConnectedComponents: number;
+}
+
+export interface IMasteryDomainBreakdownEntryDto {
+  domain: string;
+  nodeCount: number;
+  trackedNodes: number;
+  masteredNodes: number;
+  averageMastery: number;
+}
+
+export interface INodeMasterySummaryDto {
+  userId: UserId;
+  studyMode: StudyMode;
+  domain?: string;
+  masteryThreshold: number;
+  totalNodes: number;
+  trackedNodes: number;
+  masteredNodes: number;
+  developingNodes: number;
+  emergingNodes: number;
+  untrackedNodes: number;
+  averageMastery: number;
+  strongestDomains: IMasteryDomainBreakdownEntryDto[];
+  weakestDomains: IMasteryDomainBreakdownEntryDto[];
 }
 
 export interface ICommonAncestorsInput {
@@ -914,6 +946,7 @@ export type CkgNodeBatchAuthoringPreviewResponse = IApiResponse<ICkgNodeBatchAut
 export type SubgraphResponse = IApiResponse<ISubgraphDto>;
 export type PrerequisiteChainResponse = IApiResponse<IPrerequisiteChainDto>;
 export type FrontierResponse = IApiResponse<IKnowledgeFrontierDto>;
+export type NodeMasterySummaryResponse = IApiResponse<INodeMasterySummaryDto>;
 export type BridgeNodesResponse = IApiResponse<IBridgeNodesDto>;
 export type CentralityResponse = IApiResponse<ICentralityDto>;
 export type TopologyResponse = IApiResponse<ITopologyDto>;

@@ -6,6 +6,8 @@
  *   structural metrics, health, misconceptions, PKG/CKG comparison.
  */
 
+/* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types */
+
 import {
   useMutation,
   useQuery,
@@ -13,13 +15,14 @@ import {
   type UseMutationOptions,
   type UseQueryOptions,
 } from '@tanstack/react-query';
-import type { EdgeId, MutationId, NodeId, UserId } from '@noema/types';
+import type { EdgeId, MutationId, NodeId, StudyMode, UserId } from '@noema/types';
 import {
   ckgEdgesApi,
   ckgMutationsApi,
   ckgNodesApi,
   comparisonApi,
   healthApi,
+  masteryApi,
   metricsApi,
   misconceptionsApi,
   ontologyImportsApi,
@@ -46,6 +49,7 @@ import type {
   ICreateNodeInput,
   IGraphEdgeDto,
   IGraphNodeDto,
+  INodeMasterySummaryDto,
   IListOntologyImportRunsParams,
   IOntologyImportRunDetailDto,
   IOntologyImportRunDto,
@@ -73,6 +77,7 @@ import type {
   HealthResponse,
   MetricHistoryResponse,
   MetricsResponse,
+  NodeMasterySummaryResponse,
   MisconceptionDetectionResponse,
   MisconceptionResponse,
   MisconceptionsResponse,
@@ -236,6 +241,8 @@ function inferNormalizedGraphNodeType(
 ): IGraphNodeDto['type'] {
   const explicitType = stringValue(entry['type'], stringValue(entry['nodeType'], ''));
   if (
+    explicitType === 'concept' ||
+    explicitType === 'occupation' ||
     explicitType === 'skill' ||
     explicitType === 'fact' ||
     explicitType === 'procedure' ||
@@ -248,6 +255,9 @@ function inferNormalizedGraphNodeType(
   }
 
   const lexicalSignals = collectMetadataSourceTypes(metadata).join(' ').toLowerCase();
+  if (lexicalSignals.includes('occupation')) {
+    return 'occupation';
+  }
   if (lexicalSignals.includes('skill')) {
     return 'skill';
   }
@@ -473,6 +483,14 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
       : domain !== ''
         ? [domain]
         : [];
+  const supportedStudyModes = stringArrayValue(parsedValue(entry['supportedStudyModes']));
+  const masteryLevelRaw = entry['masteryLevel'];
+  const masteryLevel =
+    typeof masteryLevelRaw === 'number' && Number.isFinite(masteryLevelRaw)
+      ? masteryLevelRaw
+      : masteryLevelRaw === null
+        ? null
+        : undefined;
 
   return {
     id: stringValue(entry['id'], stringValue(entry['nodeId'])) as NodeId,
@@ -488,6 +506,7 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
     languages,
     tags,
     semanticHints,
+    supportedStudyModes: supportedStudyModes as StudyMode[],
     canonicalExternalRefs: normalizeCanonicalExternalRefs(entry, metadata),
     ontologyMappings: recordArrayValue(
       entry['ontologyMappings']
@@ -501,6 +520,7 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
     reviewMetadata: normalizeNodeReviewMetadata(entry),
     sourceCoverage: normalizeNodeSourceCoverage(entry, metadata),
     metadata,
+    ...(masteryLevel !== undefined ? { masteryLevel } : {}),
     createdAt: pickIsoDate(entry['createdAt'], metadata['createdAt']),
     updatedAt: pickIsoDate(
       entry['updatedAt'],
@@ -851,9 +871,22 @@ function normalizeMutationAuditLogResponse(
 export const kgKeys = {
   all: ['kg'] as const,
   pkg: (userId: UserId) => [...kgKeys.all, 'pkg', userId] as const,
-  pkgNodes: (userId: UserId) => [...kgKeys.pkg(userId), 'nodes'] as const,
+  pkgNodes: (
+    userId: UserId,
+    params?: {
+      page?: number;
+      pageSize?: number;
+      nodeType?: string;
+      domain?: string;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: string;
+      studyMode?: StudyMode;
+    }
+  ) => [...kgKeys.pkg(userId), 'nodes', ...(params !== undefined ? [params] : [])] as const,
   pkgNode: (userId: UserId, nodeId: NodeId) => [...kgKeys.pkgNodes(userId), nodeId] as const,
-  pkgEdges: (userId: UserId) => [...kgKeys.pkg(userId), 'edges'] as const,
+  pkgEdges: (userId: UserId, studyMode?: StudyMode) =>
+    [...kgKeys.pkg(userId), 'edges', studyMode ?? null] as const,
   pkgEdge: (userId: UserId, edgeId: EdgeId) => [...kgKeys.pkgEdges(userId), edgeId] as const,
   pkgSubgraph: (userId: UserId, params: ISubgraphParams) =>
     [...kgKeys.pkg(userId), 'subgraph', params] as const,
@@ -875,11 +908,20 @@ export const kgKeys = {
   ontologyImportRuns: (filters?: IListOntologyImportRunsParams) =>
     [...kgKeys.ontologyImports(), 'runs', filters] as const,
   ontologyImportRun: (runId: string) => [...kgKeys.ontologyImports(), 'runs', runId] as const,
-  metrics: (userId: UserId) => [...kgKeys.all, 'metrics', userId] as const,
-  metricHistory: (userId: UserId) => [...kgKeys.metrics(userId), 'history'] as const,
-  health: (userId: UserId) => [...kgKeys.all, 'health', userId] as const,
-  healthStage: (userId: UserId) => [...kgKeys.health(userId), 'stage'] as const,
-  misconceptions: (userId: UserId) => [...kgKeys.all, 'misconceptions', userId] as const,
+  metrics: (userId: UserId, studyMode?: StudyMode) =>
+    [...kgKeys.all, 'metrics', userId, studyMode ?? null] as const,
+  masterySummary: (
+    userId: UserId,
+    params: { studyMode: StudyMode; domain?: string; masteryThreshold?: number }
+  ) => [...kgKeys.pkg(userId), 'mastery-summary', params] as const,
+  metricHistory: (userId: UserId, studyMode?: StudyMode) =>
+    [...kgKeys.metrics(userId, studyMode), 'history'] as const,
+  health: (userId: UserId, studyMode?: StudyMode) =>
+    [...kgKeys.all, 'health', userId, studyMode ?? null] as const,
+  healthStage: (userId: UserId, studyMode?: StudyMode) =>
+    [...kgKeys.health(userId, studyMode), 'stage'] as const,
+  misconceptions: (userId: UserId, studyMode?: StudyMode) =>
+    [...kgKeys.all, 'misconceptions', userId, studyMode ?? null] as const,
   comparison: (userId: UserId, params?: IComparisonQueryParams) =>
     [...kgKeys.all, 'comparison', userId, params] as const,
 };
@@ -890,14 +932,58 @@ export const kgKeys = {
 
 export function usePKGNodes(
   userId: UserId,
-  options?: Omit<UseQueryOptions<NodesListResponse, Error, IGraphNodeDto[]>, 'queryKey' | 'queryFn'>
+  options?: Omit<
+    UseQueryOptions<NodesListResponse, Error, IGraphNodeDto[]>,
+    'queryKey' | 'queryFn'
+  > & {
+    page?: number;
+    pageSize?: number;
+    nodeType?: string;
+    domain?: string;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    studyMode?: StudyMode;
+  }
 ) {
+  const {
+    page,
+    pageSize,
+    nodeType,
+    domain,
+    search,
+    sortBy,
+    sortOrder,
+    studyMode,
+    ...queryOptions
+  } = options ?? {};
+  const params =
+    page !== undefined ||
+    pageSize !== undefined ||
+    nodeType !== undefined ||
+    domain !== undefined ||
+    search !== undefined ||
+    sortBy !== undefined ||
+    sortOrder !== undefined ||
+    studyMode !== undefined
+      ? {
+          ...(page !== undefined ? { page } : {}),
+          ...(pageSize !== undefined ? { pageSize } : {}),
+          ...(nodeType !== undefined ? { nodeType } : {}),
+          ...(domain !== undefined ? { domain } : {}),
+          ...(search !== undefined ? { search } : {}),
+          ...(sortBy !== undefined ? { sortBy } : {}),
+          ...(sortOrder !== undefined ? { sortOrder } : {}),
+          ...(studyMode !== undefined ? { studyMode } : {}),
+        }
+      : undefined;
+
   return useQuery({
-    queryKey: kgKeys.pkgNodes(userId),
-    queryFn: () => pkgNodesApi.list(userId),
+    queryKey: kgKeys.pkgNodes(userId, params),
+    queryFn: () => pkgNodesApi.list(userId, params),
     select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphNodeEntry),
     enabled: userId !== '',
-    ...options,
+    ...queryOptions,
   });
 }
 
@@ -969,14 +1055,21 @@ export function useDeletePKGNode(
 
 export function usePKGEdges(
   userId: UserId,
-  options?: Omit<UseQueryOptions<EdgesListResponse, Error, IGraphEdgeDto[]>, 'queryKey' | 'queryFn'>
+  options?: Omit<
+    UseQueryOptions<EdgesListResponse, Error, IGraphEdgeDto[]>,
+    'queryKey' | 'queryFn'
+  > & {
+    studyMode?: StudyMode;
+  }
 ) {
+  const { studyMode, ...queryOptions } = options ?? {};
+
   return useQuery({
-    queryKey: kgKeys.pkgEdges(userId),
-    queryFn: () => pkgEdgesApi.list(userId),
+    queryKey: kgKeys.pkgEdges(userId, studyMode),
+    queryFn: () => pkgEdgesApi.list(userId, studyMode !== undefined ? { studyMode } : undefined),
     select: (r) => extractListData<Record<string, unknown>>(r).map(normalizeGraphEdgeEntry),
     enabled: userId !== '',
-    ...options,
+    ...queryOptions,
   });
 }
 
@@ -1685,52 +1778,96 @@ export function useSubmitOntologyImportRunPreview(
 
 export function useStructuralMetrics(
   userId: UserId,
-  options?: Omit<UseQueryOptions<MetricsResponse>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<MetricsResponse>, 'queryKey' | 'queryFn'> & {
+    studyMode?: StudyMode;
+  }
 ) {
+  const { studyMode, ...queryOptions } = options ?? {};
+
   return useQuery({
-    queryKey: kgKeys.metrics(userId),
-    queryFn: () => metricsApi.get(userId),
+    queryKey: kgKeys.metrics(userId, studyMode),
+    queryFn: () => metricsApi.get(userId, studyMode),
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,
-    ...options,
+    ...queryOptions,
+  });
+}
+
+export function useNodeMasterySummary(
+  userId: UserId,
+  options: Omit<
+    UseQueryOptions<NodeMasterySummaryResponse, Error, INodeMasterySummaryDto>,
+    'queryKey' | 'queryFn'
+  > & {
+    studyMode: StudyMode;
+    domain?: string;
+    masteryThreshold?: number;
+  }
+) {
+  const { studyMode, domain, masteryThreshold, ...queryOptions } = options;
+  const params = {
+    studyMode,
+    ...(domain !== undefined ? { domain } : {}),
+    ...(masteryThreshold !== undefined ? { masteryThreshold } : {}),
+  };
+
+  return useQuery({
+    queryKey: kgKeys.masterySummary(userId, params),
+    queryFn: () => masteryApi.getSummary(userId, params),
+    select: (response) => response.data,
+    enabled: userId !== '',
+    staleTime: 5 * 60 * 1000,
+    ...queryOptions,
   });
 }
 
 export function useMetricHistory(
   userId: UserId,
-  options?: Omit<UseQueryOptions<MetricHistoryResponse>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<MetricHistoryResponse>, 'queryKey' | 'queryFn'> & {
+    studyMode?: StudyMode;
+  }
 ) {
+  const { studyMode, ...queryOptions } = options ?? {};
+
   return useQuery({
-    queryKey: kgKeys.metricHistory(userId),
-    queryFn: () => metricsApi.getHistory(userId),
+    queryKey: kgKeys.metricHistory(userId, studyMode),
+    queryFn: () => metricsApi.getHistory(userId, studyMode),
     enabled: userId !== '',
-    ...options,
+    ...queryOptions,
   });
 }
 
 export function useStructuralHealth(
   userId: UserId,
-  options?: Omit<UseQueryOptions<HealthResponse>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<HealthResponse>, 'queryKey' | 'queryFn'> & {
+    studyMode?: StudyMode;
+  }
 ) {
+  const { studyMode, ...queryOptions } = options ?? {};
+
   return useQuery({
-    queryKey: kgKeys.health(userId),
-    queryFn: () => healthApi.get(userId),
+    queryKey: kgKeys.health(userId, studyMode),
+    queryFn: () => healthApi.get(userId, studyMode),
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,
-    ...options,
+    ...queryOptions,
   });
 }
 
 export function useMetacognitiveStage(
   userId: UserId,
-  options?: Omit<UseQueryOptions<StageResponse>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<StageResponse>, 'queryKey' | 'queryFn'> & {
+    studyMode?: StudyMode;
+  }
 ) {
+  const { studyMode, ...queryOptions } = options ?? {};
+
   return useQuery({
-    queryKey: kgKeys.healthStage(userId),
-    queryFn: () => healthApi.getStage(userId),
+    queryKey: kgKeys.healthStage(userId, studyMode),
+    queryFn: () => healthApi.getStage(userId, studyMode),
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,
-    ...options,
+    ...queryOptions,
   });
 }
 
@@ -1740,29 +1877,35 @@ export function useMetacognitiveStage(
 
 export function useMisconceptions(
   userId: UserId,
-  options?: Omit<UseQueryOptions<MisconceptionsResponse>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<MisconceptionsResponse>, 'queryKey' | 'queryFn'> & {
+    studyMode?: StudyMode;
+  }
 ) {
+  const { studyMode, ...queryOptions } = options ?? {};
+
   return useQuery({
-    queryKey: kgKeys.misconceptions(userId),
-    queryFn: () => misconceptionsApi.list(userId),
+    queryKey: kgKeys.misconceptions(userId, studyMode),
+    queryFn: () => misconceptionsApi.list(userId, studyMode),
     select: (response) => ({
       ...response,
       data: extractListData<Record<string, unknown>>(response).map(normalizeMisconceptionEntry),
     }),
     enabled: userId !== '',
-    ...options,
+    ...queryOptions,
   });
 }
 
 export function useDetectMisconceptions(
   userId: UserId,
-  options?: UseMutationOptions<MisconceptionDetectionResponse>
+  options?: UseMutationOptions<MisconceptionDetectionResponse, Error, { studyMode?: StudyMode }>
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => misconceptionsApi.detect(userId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: kgKeys.misconceptions(userId) });
+    mutationFn: (variables) => misconceptionsApi.detect(userId, variables.studyMode),
+    onSuccess: (_response, variables) => {
+      void queryClient.invalidateQueries({
+        queryKey: kgKeys.misconceptions(userId, variables.studyMode),
+      });
     },
     ...options,
   });
@@ -1780,7 +1923,9 @@ export function useUpdateMisconceptionStatus(
   return useMutation({
     mutationFn: ({ id, data }) => misconceptionsApi.updateStatus(userId, id, data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: kgKeys.misconceptions(userId) });
+      void queryClient.invalidateQueries({
+        queryKey: [...kgKeys.all, 'misconceptions', userId],
+      });
     },
     ...options,
   });

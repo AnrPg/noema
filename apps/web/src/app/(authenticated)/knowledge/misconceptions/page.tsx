@@ -22,6 +22,7 @@ import { Button, ConfidenceMeter } from '@noema/ui';
 import { AlertTriangle, ArrowUpDown, Loader2, ScanSearch } from 'lucide-react';
 import { MisconceptionPipeline } from '@/components/knowledge/misconception-pipeline';
 import { MisconceptionSubgraph } from '@/components/knowledge/misconception-subgraph';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 type MisconceptionStatus =
   | 'detected'
@@ -153,6 +154,7 @@ function sortMisconceptions(items: IMisconceptionDto[], sort: SortValue): IMisco
 export default function MisconceptionsPage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
+  const activeStudyMode = useActiveStudyMode();
 
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [statusFilter, setStatusFilter] = React.useState<FilterValue>('');
@@ -160,7 +162,9 @@ export default function MisconceptionsPage(): React.JSX.Element {
   const [detectError, setDetectError] = React.useState<string | null>(null);
   const [updateError, setUpdateError] = React.useState<string | null>(null);
 
-  const { data: misconceptionsResponse, isLoading } = useMisconceptions(userId);
+  const { data: misconceptionsResponse, isLoading } = useMisconceptions(userId, {
+    studyMode: activeStudyMode,
+  });
   const detectMutation = useDetectMisconceptions(userId);
   const updateStatus = useUpdateMisconceptionStatus(userId);
 
@@ -207,11 +211,14 @@ export default function MisconceptionsPage(): React.JSX.Element {
         <Button
           onClick={() => {
             setDetectError(null);
-            detectMutation.mutate(undefined, {
-              onError: (error) => {
-                setDetectError(error.message);
-              },
-            });
+            detectMutation.mutate(
+              { studyMode: activeStudyMode },
+              {
+                onError: (error) => {
+                  setDetectError(error.message);
+                },
+              }
+            );
           }}
           disabled={detectMutation.isPending}
           variant="outline"

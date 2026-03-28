@@ -4,7 +4,7 @@
  * Zod validation schemas for the comparison route parameters.
  */
 
-import { UserIdSchema } from '@noema/validation';
+import { StudyModeSchema, UserIdSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -30,6 +30,7 @@ export const ComparisonQueryParamsSchema = z.object({
   scopeMode: z.enum(['domain', 'engagement_hops']).default('engagement_hops'),
   hopCount: z.coerce.number().int().min(0).max(5).default(2),
   bootstrapWhenUnseeded: z.coerce.boolean().default(false),
+  studyMode: StudyModeSchema.optional(),
 });
 
 // ============================================================================

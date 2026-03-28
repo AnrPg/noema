@@ -9,7 +9,7 @@
  * recomputation is needed.
  */
 
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 
 // ============================================================================
 // Staleness Record
@@ -27,6 +27,9 @@ export interface IMetricsStalenessRecord {
 
   /** Knowledge domain */
   readonly domain: string;
+
+  /** Study mode lens */
+  readonly studyMode: StudyMode;
 
   /** When the last structural change occurred (ISO 8601) */
   readonly lastStructuralChangeAt: string;
@@ -59,7 +62,12 @@ export interface IMetricsStalenessRepository {
    * @param domain The knowledge domain affected.
    * @param mutationType What type of mutation caused staleness.
    */
-  markStale(userId: UserId, domain: string, mutationType: string): Promise<void>;
+  markStale(
+    userId: UserId,
+    domain: string,
+    mutationType: string,
+    studyMode?: StudyMode
+  ): Promise<void>;
 
   /**
    * Check if metrics are stale for a user+domain.
@@ -69,11 +77,20 @@ export interface IMetricsStalenessRepository {
    * @param lastComputedAt The timestamp of the last metric snapshot.
    * @returns True if there have been structural changes since lastComputedAt.
    */
-  isStale(userId: UserId, domain: string, lastComputedAt: string): Promise<boolean>;
+  isStale(
+    userId: UserId,
+    domain: string,
+    studyMode: StudyMode,
+    lastComputedAt: string
+  ): Promise<boolean>;
 
   /**
    * Get the staleness record for a user+domain.
    * @returns The record, or null if no mutations have occurred.
    */
-  getStalenessRecord(userId: UserId, domain: string): Promise<IMetricsStalenessRecord | null>;
+  getStalenessRecord(
+    userId: UserId,
+    domain: string,
+    studyMode: StudyMode
+  ): Promise<IMetricsStalenessRecord | null>;
 }

@@ -1,11 +1,12 @@
 /**
  * @noema/knowledge-graph-service - Knowledge Graph MCP Tool Handlers
  *
- * 18 MCP tools for the knowledge-graph-service (Phase 9):
+ * 19 MCP tools for the knowledge-graph-service (Phase 9):
  *
  * Task 1 — PKG tools (P0):
  *   get-concept-node, get-subgraph, find-prerequisites, find-related-concepts,
- *   add-concept-node, add-edge, update-mastery, remove-node, remove-edge
+ *   add-concept-node, add-edge, update-mastery, get-node-mastery-summary,
+ *   remove-node, remove-edge
  *
  * Task 2 — CKG tools (P0):
  *   get-canonical-structure, propose-mutation, get-mutation-status
@@ -31,6 +32,7 @@ import type {
   MasteryLevel,
   MutationId,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 
@@ -96,6 +98,12 @@ const UpdateMasteryInputSchema = z.object({
   nodeId: z.string().min(1),
   masteryLevel: z.number().min(0).max(1),
   source: z.string().min(1),
+});
+
+const GetNodeMasterySummaryInputSchema = z.object({
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']),
+  domain: z.string().min(1).optional(),
+  masteryThreshold: z.number().min(0).max(1).optional(),
 });
 
 const NodeIdReasonInputSchema = z.object({
@@ -430,6 +438,34 @@ export function createUpdateMasteryHandler(service: IKnowledgeGraphService) {
 }
 
 /**
+ * get-node-mastery-summary — Retrieve the explicit mastery read model for the
+ * active study mode.
+ */
+export function createGetNodeMasterySummaryHandler(service: IKnowledgeGraphService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = GetNodeMasterySummaryInputSchema.parse(input);
+      const filter = NodeFilter.create({
+        userId,
+        graphType: 'pkg',
+        studyMode: body.studyMode as StudyMode,
+        ...(body.domain !== undefined ? { domain: body.domain } : {}),
+      });
+      const result = await service.getNodeMasterySummary(
+        userId as UserId,
+        filter,
+        body.masteryThreshold ?? 0.7,
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
  * remove-node — Soft-delete a node from the user's PKG.
  * P1 tool used by Governance Agent for cleanup.
  */
@@ -572,7 +608,12 @@ export function createComputeStructuralMetricsHandler(service: IKnowledgeGraphSe
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainInputSchema.parse(input);
-      const result = await service.computeMetrics(userId as UserId, body.domain, context);
+      const result = await service.computeMetrics(
+        userId as UserId,
+        body.domain,
+        'knowledge_gaining',
+        context
+      );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
@@ -589,7 +630,12 @@ export function createGetStructuralHealthHandler(service: IKnowledgeGraphService
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainInputSchema.parse(input);
-      const result = await service.getStructuralHealth(userId as UserId, body.domain, context);
+      const result = await service.getStructuralHealth(
+        userId as UserId,
+        body.domain,
+        'knowledge_gaining',
+        context
+      );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
@@ -609,10 +655,20 @@ export function createDetectMisconceptionsHandler(service: IKnowledgeGraphServic
       // If domain is provided, run detection for that domain; otherwise
       // getMisconceptions returns all active misconceptions across domains.
       if (body.domain !== undefined && body.domain !== '') {
-        const result = await service.detectMisconceptions(userId as UserId, body.domain, context);
+        const result = await service.detectMisconceptions(
+          userId as UserId,
+          body.domain,
+          'knowledge_gaining',
+          context
+        );
         return { success: true, data: result.data, agentHints: result.agentHints };
       }
-      const result = await service.getMisconceptions(userId as UserId, undefined, context);
+      const result = await service.getMisconceptions(
+        userId as UserId,
+        undefined,
+        'knowledge_gaining',
+        context
+      );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
@@ -634,9 +690,14 @@ export function createSuggestInterventionHandler(service: IKnowledgeGraphService
 
       // Compose: get misconceptions + metacognitive stage in parallel
       const [misconceptionsResult, stageResult] = await Promise.all([
-        service.getMisconceptions(userId as UserId, body.domain, context),
+        service.getMisconceptions(userId as UserId, body.domain, 'knowledge_gaining', context),
         body.domain !== undefined && body.domain !== ''
-          ? service.getMetacognitiveStage(userId as UserId, body.domain, context)
+          ? service.getMetacognitiveStage(
+              userId as UserId,
+              body.domain,
+              'knowledge_gaining',
+              context
+            )
           : Promise.resolve(null),
       ]);
 
@@ -692,7 +753,12 @@ export function createGetMetacognitiveStageHandler(service: IKnowledgeGraphServi
     try {
       const context = buildContext(userId, correlationId);
       const body = DomainInputSchema.parse(input);
-      const result = await service.getMetacognitiveStage(userId as UserId, body.domain, context);
+      const result = await service.getMetacognitiveStage(
+        userId as UserId,
+        body.domain,
+        'knowledge_gaining',
+        context
+      );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
@@ -722,10 +788,15 @@ export function createGetLearningPathContextHandler(service: IKnowledgeGraphServ
       // Run all context-gathering calls in parallel for efficiency
       const [metricsResult, misconceptionsResult, stageResult, healthResult, subgraphResult] =
         await Promise.all([
-          service.getMetrics(userId as UserId, body.domain, context),
-          service.getMisconceptions(userId as UserId, body.domain, context),
-          service.getMetacognitiveStage(userId as UserId, body.domain, context),
-          service.getStructuralHealth(userId as UserId, body.domain, context),
+          service.getMetrics(userId as UserId, body.domain, 'knowledge_gaining', context),
+          service.getMisconceptions(userId as UserId, body.domain, 'knowledge_gaining', context),
+          service.getMetacognitiveStage(
+            userId as UserId,
+            body.domain,
+            'knowledge_gaining',
+            context
+          ),
+          service.getStructuralHealth(userId as UserId, body.domain, 'knowledge_gaining', context),
           body.focusNodeId !== undefined
             ? service.getSubgraph(
                 userId as UserId,
@@ -948,6 +1019,34 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'string',
           description:
             'Evidence source for this mastery update (e.g., "session_performance", "quiz_result", "calibration_update")',
+        },
+      },
+    },
+  },
+  {
+    name: 'get-node-mastery-summary',
+    description:
+      'Get the explicit mode-scoped mastery summary for the user. Returns tracked vs. untracked counts, ' +
+      'mastery band totals, average mastery, and strongest/weakest domains. Use this tool when planning ' +
+      'goals, campaign focus, or agent interventions without reconstructing progress from raw reviews.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['studyMode'],
+      properties: {
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Active study mode to scope the mastery summary.',
+        },
+        domain: {
+          type: 'string',
+          description: 'Optional domain filter for narrower mastery planning.',
+        },
+        masteryThreshold: {
+          type: 'number',
+          description: 'Optional threshold used to classify nodes as mastered.',
         },
       },
     },

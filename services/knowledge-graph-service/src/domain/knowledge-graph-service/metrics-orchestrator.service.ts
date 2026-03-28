@@ -23,6 +23,7 @@ import type {
   ISubgraph,
   MisconceptionPatternId,
   MisconceptionStatus,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import { ConfidenceScore as ConfidenceScoreFactory, GraphType } from '@noema/types';
@@ -91,17 +92,18 @@ export class MetricsOrchestrator {
   async computeMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
     // Single-flight: coalesce concurrent computations for the same userId+domain
-    const flightKey = `${userId as string}:${domain}`;
+    const flightKey = `${userId as string}:${domain}:${studyMode}`;
     const inflight = this.inflightMetrics.get(flightKey);
     if (inflight) {
       this.logger.debug({ userId, domain }, 'Coalescing duplicate metrics computation');
       return inflight;
     }
 
-    const promise = this.doComputeMetrics(userId, domain, context);
+    const promise = this.doComputeMetrics(userId, domain, studyMode, context);
     this.inflightMetrics.set(flightKey, promise);
     try {
       return await promise;
@@ -113,21 +115,28 @@ export class MetricsOrchestrator {
   private async doComputeMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
     return withSpan('kg.computeMetrics', async (span) => {
       span.setAttribute('kg.userId', userId as string);
       span.setAttribute('kg.domain', domain);
+      span.setAttribute('kg.studyMode', studyMode);
 
       requireAuth(context);
-      this.logger.info({ userId, domain }, 'Computing structural metrics');
+      this.logger.info({ userId, domain, studyMode }, 'Computing structural metrics');
 
       // I-1: Staleness guard — return cached metrics if they are still fresh
-      const existingSnapshot = await this.metricsRepository.getLatestSnapshot(userId, domain);
+      const existingSnapshot = await this.metricsRepository.getLatestSnapshot(
+        userId,
+        domain,
+        studyMode
+      );
       if (existingSnapshot) {
         const isStale = await this.metricsStalenessRepository.isStale(
           userId,
           domain,
+          studyMode,
           existingSnapshot.computedAt
         );
         if (!isStale) {
@@ -142,8 +151,8 @@ export class MetricsOrchestrator {
 
       // Fetch subgraphs in parallel
       const [pkgSubgraph, ckgSubgraph] = await Promise.all([
-        this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
-        this.fetchDomainSubgraph(GraphType.CKG, domain),
+        this.fetchDomainSubgraph(GraphType.PKG, domain, studyMode, userId),
+        this.fetchDomainSubgraph(GraphType.CKG, domain, studyMode),
       ]);
 
       span.setAttribute('kg.metrics.pkgNodeCount', pkgSubgraph.nodes.length);
@@ -185,7 +194,7 @@ export class MetricsOrchestrator {
       }
 
       // Save snapshot
-      await this.metricsRepository.saveSnapshot(userId, domain, metrics);
+      await this.metricsRepository.saveSnapshot(userId, domain, studyMode, metrics);
 
       kgCounters.increment(KG_COUNTERS.METRICS_COMPUTED, { domain });
 
@@ -200,7 +209,7 @@ export class MetricsOrchestrator {
           eventType: KnowledgeGraphEventType.PKG_STRUCTURAL_METRICS_UPDATED,
           aggregateType: 'PersonalKnowledgeGraph',
           aggregateId: userId,
-          payload: { userId, domain, metrics },
+          payload: { userId, domain, studyMode, metrics },
           metadata: {
             correlationId: context.correlationId,
             userId: context.userId,
@@ -233,24 +242,26 @@ export class MetricsOrchestrator {
   async getMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
     requireAuth(context);
 
-    const snapshot = await this.metricsRepository.getLatestSnapshot(userId, domain);
+    const snapshot = await this.metricsRepository.getLatestSnapshot(userId, domain, studyMode);
     if (!snapshot) {
       // No cached snapshot — compute fresh
-      return this.computeMetrics(userId, domain, context);
+      return this.computeMetrics(userId, domain, studyMode, context);
     }
 
     // Check staleness — compare snapshot.computedAt against last structural change
     const isStale = await this.metricsStalenessRepository.isStale(
       userId,
       domain,
+      studyMode,
       snapshot.computedAt
     );
     if (isStale) {
-      return this.computeMetrics(userId, domain, context);
+      return this.computeMetrics(userId, domain, studyMode, context);
     }
 
     return {
@@ -262,12 +273,18 @@ export class MetricsOrchestrator {
   async getMetricsHistory(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     options: IMetricsHistoryOptions,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics[]>> {
     requireAuth(context);
 
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, options);
+    const snapshots = await this.metricsRepository.getSnapshotHistory(
+      userId,
+      domain,
+      studyMode,
+      options
+    );
     const metricsList = snapshots.map((s) => s.metrics);
 
     return {
@@ -287,19 +304,21 @@ export class MetricsOrchestrator {
   async detectMisconceptions(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>> {
     return withSpan('kg.detectMisconceptions', async (span) => {
       span.setAttribute('kg.userId', userId as string);
       span.setAttribute('kg.domain', domain);
+      span.setAttribute('kg.studyMode', studyMode);
 
       requireAuth(context);
-      this.logger.info({ userId, domain }, 'Running misconception detection');
+      this.logger.info({ userId, domain, studyMode }, 'Running misconception detection');
 
       // Fetch subgraphs
       const [pkgSubgraph, ckgSubgraph] = await Promise.all([
-        this.fetchDomainSubgraph(GraphType.PKG, domain, userId),
-        this.fetchDomainSubgraph(GraphType.CKG, domain),
+        this.fetchDomainSubgraph(GraphType.PKG, domain, studyMode, userId),
+        this.fetchDomainSubgraph(GraphType.CKG, domain, studyMode),
       ]);
 
       const comparison = buildGraphComparison(pkgSubgraph, ckgSubgraph);
@@ -350,6 +369,7 @@ export class MetricsOrchestrator {
 
         const record = await this.misconceptionRepository.upsertDetection({
           userId,
+          studyMode,
           patternId: result.patternId as MisconceptionPatternId,
           misconceptionType: pattern.misconceptionType,
           affectedNodeIds: result.affectedNodeIds,
@@ -392,6 +412,7 @@ export class MetricsOrchestrator {
             evidence: {
               detectionMethod: pattern.kind,
               domain,
+              studyMode,
             } satisfies Record<string, string>,
           },
           metadata: {
@@ -414,11 +435,16 @@ export class MetricsOrchestrator {
   async getMisconceptions(
     userId: UserId,
     domain: string | undefined,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>> {
     requireAuth(context);
 
-    const records = await this.misconceptionRepository.getActiveMisconceptions(userId, domain);
+    const records = await this.misconceptionRepository.getActiveMisconceptions(
+      userId,
+      domain,
+      studyMode
+    );
 
     const detections: IMisconceptionDetection[] = records.map((r) => {
       const family = resolveFamily(r.misconceptionType);
@@ -485,22 +511,24 @@ export class MetricsOrchestrator {
   async getStructuralHealth(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralHealthReport>> {
     requireAuth(context);
 
     // Get or compute metrics
-    const { data: metrics } = await this.getMetrics(userId, domain, context);
+    const { data: metrics } = await this.getMetrics(userId, domain, studyMode, context);
 
     // Get recent snapshots for trend
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, {
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, studyMode, {
       limit: MetricsOrchestrator.HEALTH_SNAPSHOT_HISTORY_DEPTH,
     });
 
     // Get misconception count
     const misconceptions = await this.misconceptionRepository.getActiveMisconceptions(
       userId,
-      domain
+      domain,
+      studyMode
     );
 
     // Get metacognitive stage
@@ -526,15 +554,16 @@ export class MetricsOrchestrator {
   async getMetacognitiveStage(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMetacognitiveStageAssessment>> {
     requireAuth(context);
 
     // Get or compute metrics
-    const { data: metrics } = await this.getMetrics(userId, domain, context);
+    const { data: metrics } = await this.getMetrics(userId, domain, studyMode, context);
 
     // Get previous metrics for regression detection
-    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, {
+    const snapshots = await this.metricsRepository.getSnapshotHistory(userId, domain, studyMode, {
       limit: MetricsOrchestrator.METACOGNITIVE_STAGE_HISTORY_DEPTH,
     });
     const prevSnapshot = snapshots.length > 1 ? snapshots[1] : undefined;
@@ -561,8 +590,8 @@ export class MetricsOrchestrator {
     this.logger.info({ userId, request }, 'Comparing PKG with CKG');
 
     const [pkgSubgraph, ckgSubgraph] = await Promise.all([
-      this.fetchComparisonSubgraph(GraphType.PKG, request.domain, userId),
-      this.fetchComparisonSubgraph(GraphType.CKG, request.domain),
+      this.fetchComparisonSubgraph(GraphType.PKG, request.domain, userId, request.studyMode),
+      this.fetchComparisonSubgraph(GraphType.CKG, request.domain, undefined, request.studyMode),
     ]);
 
     const comparison = buildScopedGraphComparison(pkgSubgraph, ckgSubgraph, request);
@@ -584,11 +613,13 @@ export class MetricsOrchestrator {
   private async fetchDomainSubgraph(
     graphType: GraphType,
     domain: string,
+    studyMode: StudyMode,
     userId?: UserId
   ): Promise<ISubgraph> {
     const filter: INodeFilter = {
       graphType,
       domain,
+      studyMode,
       ...(userId !== undefined && { userId: userId as string }),
       includeDeleted: false,
     };
@@ -641,12 +672,14 @@ export class MetricsOrchestrator {
   private async fetchComparisonSubgraph(
     graphType: GraphType,
     domain?: string,
-    userId?: UserId
+    userId?: UserId,
+    studyMode?: StudyMode
   ): Promise<ISubgraph> {
     const filter: INodeFilter = {
       graphType,
       ...(domain !== undefined ? { domain } : {}),
       ...(userId !== undefined ? { userId: userId as string } : {}),
+      ...(studyMode !== undefined ? { studyMode } : {}),
       includeDeleted: false,
     };
 

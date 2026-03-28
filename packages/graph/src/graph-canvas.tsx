@@ -640,11 +640,13 @@ export function GraphCanvas({
         onLinkClick: handleEdgeClick,
         onNodeHover: handleNodeHover,
         onNodeRightClick: handleNodeRightClick,
-        onBackgroundClick,
+        ...(onBackgroundClick !== undefined ? { onBackgroundClick } : {}),
         backgroundColor: '#0a0a12',
-        dagMode:
-          layoutMode === 'hierarchical' ? 'td' : layoutMode === 'radial' ? 'radialout' : undefined,
-        dagLevelDistance: layoutMode === 'hierarchical' ? 80 : undefined,
+        ...(layoutMode === 'hierarchical'
+          ? { dagMode: 'td' as const, dagLevelDistance: 80 }
+          : layoutMode === 'radial'
+            ? { dagMode: 'radialout' as const }
+            : {}),
         cooldownTicks: layoutMode === 'force' ? 260 : 80,
         d3AlphaDecay: layoutMode === 'radial' ? 0.05 : 0.03,
         d3VelocityDecay: 0.22,

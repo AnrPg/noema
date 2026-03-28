@@ -8,7 +8,7 @@
  */
 
 import { http } from '../client.js';
-import type { EdgeId, MutationId, NodeId, UserId } from '@noema/types';
+import type { EdgeId, MutationId, NodeId, StudyMode, UserId } from '@noema/types';
 import type {
   BridgeNodesResponse,
   CentralityResponse,
@@ -41,6 +41,7 @@ import type {
   IListOntologyImportRunsParams,
   MetricHistoryResponse,
   MetricsResponse,
+  NodeMasterySummaryResponse,
   MisconceptionDetectionResponse,
   MisconceptionResponse,
   MisconceptionsResponse,
@@ -64,11 +65,11 @@ import type {
   IUpdateNodeInput,
 } from './types.js';
 
-const pkgBase = (userId: UserId) => `/api/v1/users/${userId}/pkg`;
+const pkgBase = (userId: UserId): string => `/api/v1/users/${userId}/pkg`;
 const ckgBase = '/api/v1/ckg';
 const ontologyImportsBase = '/api/v1/ckg/imports';
-const metricsBase = (userId: UserId) => `/api/v1/users/${userId}/metrics`;
-const miscBase = (userId: UserId) => `/api/v1/users/${userId}/misconceptions`;
+const metricsBase = (userId: UserId): string => `/api/v1/users/${userId}/metrics`;
+const miscBase = (userId: UserId): string => `/api/v1/users/${userId}/misconceptions`;
 const DEFAULT_DOMAIN = 'general';
 
 // ============================================================================
@@ -79,7 +80,22 @@ export const pkgNodesApi = {
   create: (userId: UserId, data: ICreateNodeInput): Promise<NodeResponse> =>
     http.post(`${pkgBase(userId)}/nodes`, data),
 
-  list: (userId: UserId): Promise<NodesListResponse> => http.get(`${pkgBase(userId)}/nodes`),
+  list: (
+    userId: UserId,
+    params?: {
+      page?: number;
+      pageSize?: number;
+      nodeType?: string;
+      domain?: string;
+      search?: string;
+      sortBy?: string;
+      sortOrder?: string;
+      studyMode?: StudyMode;
+    }
+  ): Promise<NodesListResponse> =>
+    params === undefined
+      ? http.get(`${pkgBase(userId)}/nodes`)
+      : http.get(`${pkgBase(userId)}/nodes`, { params }),
 
   get: (userId: UserId, nodeId: NodeId): Promise<NodeResponse> =>
     http.get(`${pkgBase(userId)}/nodes/${nodeId}`),
@@ -99,13 +115,33 @@ export const pkgEdgesApi = {
   create: (userId: UserId, data: ICreateEdgeInput): Promise<EdgeResponse> =>
     http.post(`${pkgBase(userId)}/edges`, data),
 
-  list: (userId: UserId): Promise<EdgesListResponse> => http.get(`${pkgBase(userId)}/edges`),
+  list: (
+    userId: UserId,
+    params?: {
+      studyMode?: StudyMode;
+    }
+  ): Promise<EdgesListResponse> =>
+    params === undefined
+      ? http.get(`${pkgBase(userId)}/edges`)
+      : http.get(`${pkgBase(userId)}/edges`, { params }),
 
   get: (userId: UserId, edgeId: EdgeId): Promise<EdgeResponse> =>
     http.get(`${pkgBase(userId)}/edges/${edgeId}`),
 
   delete: (userId: UserId, edgeId: EdgeId): Promise<void> =>
     http.delete(`${pkgBase(userId)}/edges/${edgeId}`),
+};
+
+export const masteryApi = {
+  getSummary: (
+    userId: UserId,
+    params: {
+      studyMode: StudyMode;
+      domain?: string;
+      masteryThreshold?: number;
+    }
+  ): Promise<NodeMasterySummaryResponse> =>
+    http.get(`${pkgBase(userId)}/mastery/summary`, { params }),
 };
 
 // ============================================================================
@@ -163,7 +199,14 @@ export const pkgOperationsApi = {
 // ============================================================================
 
 export const ckgNodesApi = {
-  list: (params?: { page?: number; pageSize?: number }): Promise<NodesListResponse> =>
+  list: (params?: {
+    page?: number;
+    pageSize?: number;
+    nodeType?: string;
+    domain?: string;
+    search?: string;
+    studyMode?: StudyMode;
+  }): Promise<NodesListResponse> =>
     params === undefined ? http.get(`${ckgBase}/nodes`) : http.get(`${ckgBase}/nodes`, { params }),
 
   get: (nodeId: NodeId): Promise<NodeResponse> => http.get(`${ckgBase}/nodes/${nodeId}`),
@@ -341,14 +384,27 @@ export const ckgTraversalApi = {
 // ============================================================================
 
 export const metricsApi = {
-  get: (userId: UserId): Promise<MetricsResponse> =>
-    http.get(metricsBase(userId), { params: { domain: DEFAULT_DOMAIN } }),
+  get: (userId: UserId, studyMode?: StudyMode): Promise<MetricsResponse> =>
+    http.get(metricsBase(userId), {
+      params: {
+        domain: DEFAULT_DOMAIN,
+        ...(studyMode !== undefined ? { studyMode } : {}),
+      },
+    }),
 
-  compute: (userId: UserId): Promise<MetricsResponse> =>
-    http.post(`${metricsBase(userId)}/compute`, { domain: DEFAULT_DOMAIN }),
+  compute: (userId: UserId, studyMode?: StudyMode): Promise<MetricsResponse> =>
+    http.post(`${metricsBase(userId)}/compute`, {
+      domain: DEFAULT_DOMAIN,
+      ...(studyMode !== undefined ? { studyMode } : {}),
+    }),
 
-  getHistory: (userId: UserId): Promise<MetricHistoryResponse> =>
-    http.get(`${metricsBase(userId)}/history`, { params: { domain: DEFAULT_DOMAIN } }),
+  getHistory: (userId: UserId, studyMode?: StudyMode): Promise<MetricHistoryResponse> =>
+    http.get(`${metricsBase(userId)}/history`, {
+      params: {
+        domain: DEFAULT_DOMAIN,
+        ...(studyMode !== undefined ? { studyMode } : {}),
+      },
+    }),
 };
 
 // ============================================================================
@@ -356,11 +412,21 @@ export const metricsApi = {
 // ============================================================================
 
 export const healthApi = {
-  get: (userId: UserId): Promise<HealthResponse> =>
-    http.get(`/api/v1/users/${userId}/health`, { params: { domain: DEFAULT_DOMAIN } }),
+  get: (userId: UserId, studyMode?: StudyMode): Promise<HealthResponse> =>
+    http.get(`/api/v1/users/${userId}/health`, {
+      params: {
+        domain: DEFAULT_DOMAIN,
+        ...(studyMode !== undefined ? { studyMode } : {}),
+      },
+    }),
 
-  getStage: (userId: UserId): Promise<StageResponse> =>
-    http.get(`/api/v1/users/${userId}/health/stage`, { params: { domain: DEFAULT_DOMAIN } }),
+  getStage: (userId: UserId, studyMode?: StudyMode): Promise<StageResponse> =>
+    http.get(`/api/v1/users/${userId}/health/stage`, {
+      params: {
+        domain: DEFAULT_DOMAIN,
+        ...(studyMode !== undefined ? { studyMode } : {}),
+      },
+    }),
 };
 
 // ============================================================================
@@ -368,10 +434,16 @@ export const healthApi = {
 // ============================================================================
 
 export const misconceptionsApi = {
-  list: (userId: UserId): Promise<MisconceptionsResponse> => http.get(miscBase(userId)),
+  list: (userId: UserId, studyMode?: StudyMode): Promise<MisconceptionsResponse> =>
+    studyMode !== undefined
+      ? http.get(miscBase(userId), { params: { studyMode } })
+      : http.get(miscBase(userId)),
 
-  detect: (userId: UserId): Promise<MisconceptionDetectionResponse> =>
-    http.post(`${miscBase(userId)}/detect`, { domain: DEFAULT_DOMAIN }),
+  detect: (userId: UserId, studyMode?: StudyMode): Promise<MisconceptionDetectionResponse> =>
+    http.post(`${miscBase(userId)}/detect`, {
+      domain: DEFAULT_DOMAIN,
+      ...(studyMode !== undefined ? { studyMode } : {}),
+    }),
 
   updateStatus: (
     userId: UserId,
@@ -398,6 +470,7 @@ export const comparisonApi = {
         ...(params?.bootstrapWhenUnseeded !== undefined
           ? { bootstrapWhenUnseeded: params.bootstrapWhenUnseeded }
           : {}),
+        ...(params?.studyMode !== undefined ? { studyMode: params.studyMode } : {}),
       },
     }),
 };

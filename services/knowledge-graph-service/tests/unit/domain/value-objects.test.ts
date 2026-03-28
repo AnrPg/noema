@@ -233,9 +233,17 @@ describe('CreateEdgeInputSchema', () => {
       'related_to',
       'analogous_to',
       'contrasts_with',
+      'confusable_with',
       'prerequisite',
       'derived_from',
       'has_property',
+      'subskill_of',
+      'has_subskill',
+      'essential_for_occupation',
+      'occupation_requires_essential_skill',
+      'optional_for_occupation',
+      'occupation_benefits_from_optional_skill',
+      'transferable_to',
     ];
     for (const t of validTypes) {
       const result = CreateEdgeInputSchema.safeParse({ ...validEdge, edgeType: t });

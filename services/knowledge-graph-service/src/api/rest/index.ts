@@ -10,6 +10,7 @@ export { registerHealthRoutes } from './health.routes.js';
 
 // PKG operations
 export { registerPkgEdgeRoutes } from './pkg-edge.routes.js';
+export { registerPkgMasteryRoutes } from './pkg-mastery.routes.js';
 export { registerPkgNodeRoutes } from './pkg-node.routes.js';
 export { registerPkgTraversalRoutes } from './pkg-traversal.routes.js';
 

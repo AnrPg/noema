@@ -5,7 +5,7 @@
  * Stores structural metric snapshots for trend analysis and agent reasoning.
  */
 
-import type { IStructuralMetrics, UserId } from '@noema/types';
+import type { IStructuralMetrics, StudyMode, UserId } from '@noema/types';
 import { nanoid } from 'nanoid';
 import type { Prisma, PrismaClient } from '../../../../generated/prisma/index.js';
 
@@ -27,6 +27,10 @@ import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
  */
 const CURRENT_METRICS_SCHEMA_VERSION = 1;
 
+function toPrismaStudyMode(studyMode: StudyMode): 'LANGUAGE_LEARNING' | 'KNOWLEDGE_GAINING' {
+  return studyMode === 'language_learning' ? 'LANGUAGE_LEARNING' : 'KNOWLEDGE_GAINING';
+}
+
 // ============================================================================
 // PrismaMetricsRepository
 // ============================================================================
@@ -37,6 +41,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
   async saveSnapshot(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     metrics: IStructuralMetrics
   ): Promise<IMetricSnapshot> {
     const id = `snap_${nanoid()}`;
@@ -46,6 +51,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
         id,
         userId: userId as string,
         domain,
+        studyMode: toPrismaStudyMode(studyMode),
         metrics: toPrismaJson(metrics),
         schemaVersion: CURRENT_METRICS_SCHEMA_VERSION,
       },
@@ -54,11 +60,16 @@ export class PrismaMetricsRepository implements IMetricsRepository {
     return this.toDomain(record);
   }
 
-  async getLatestSnapshot(userId: UserId, domain: string): Promise<IMetricSnapshot | null> {
+  async getLatestSnapshot(
+    userId: UserId,
+    domain: string,
+    studyMode: StudyMode
+  ): Promise<IMetricSnapshot | null> {
     const record = await this.prisma.structuralMetricSnapshot.findFirst({
       where: {
         userId: userId as string,
         domain,
+        studyMode: toPrismaStudyMode(studyMode),
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -70,11 +81,13 @@ export class PrismaMetricsRepository implements IMetricsRepository {
   async getSnapshotHistory(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     options?: IMetricsHistoryOptions
   ): Promise<IMetricSnapshot[]> {
     const where: Prisma.StructuralMetricSnapshotWhereInput = {
       userId: userId as string,
       domain,
+      studyMode: toPrismaStudyMode(studyMode),
     };
 
     if (options?.since !== undefined || options?.until !== undefined) {
@@ -122,6 +135,7 @@ export class PrismaMetricsRepository implements IMetricsRepository {
     id: string;
     userId: string;
     domain: string | null;
+    studyMode: 'LANGUAGE_LEARNING' | 'KNOWLEDGE_GAINING';
     metrics: Prisma.JsonValue;
     schemaVersion: number;
     createdAt: Date;
@@ -130,6 +144,8 @@ export class PrismaMetricsRepository implements IMetricsRepository {
       id: record.id,
       userId: record.userId as UserId,
       domain: record.domain ?? '',
+      studyMode:
+        record.studyMode === 'LANGUAGE_LEARNING' ? 'language_learning' : 'knowledge_gaining',
       metrics: fromPrismaJson<IStructuralMetrics>(record.metrics),
       computedAt: record.createdAt.toISOString(),
       schemaVersion: record.schemaVersion,

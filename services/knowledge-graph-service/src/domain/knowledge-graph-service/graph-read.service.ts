@@ -18,7 +18,9 @@ import type {
   EdgeId,
   IGraphEdge,
   IGraphNode,
+  INodeMasterySummary,
   IPaginatedResponse,
+  MasteryLevel,
   ISubgraph,
   NodeId,
   UserId,
@@ -26,7 +28,7 @@ import type {
 import { GraphType } from '@noema/types';
 import type { Logger } from 'pino';
 
-import type { AgentHintsFactory } from './agent-hints.factory.js';
+import { AgentHintsBuilder, type AgentHintsFactory } from './agent-hints.factory.js';
 import { EdgeNotFoundError, NodeNotFoundError } from './errors/graph.errors.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import {
@@ -188,7 +190,12 @@ export class GraphReadService {
       if (!toNode) throw new NodeNotFoundError(toNodeId, GraphType.PKG);
     }
 
-    const path = await this.graphRepository.findShortestPath(fromNodeId, toNodeId, userId, maxDepth);
+    const path = await this.graphRepository.findShortestPath(
+      fromNodeId,
+      toNodeId,
+      userId,
+      maxDepth
+    );
 
     return {
       data: path,
@@ -670,6 +677,44 @@ export class GraphReadService {
     };
   }
 
+  async getNodeMasterySummary(
+    userId: UserId,
+    filters: INodeFilter,
+    masteryThreshold: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INodeMasterySummary>> {
+    requireAuth(context);
+    this.logger.debug(
+      {
+        userId,
+        studyMode: filters.studyMode,
+        domain: filters.domain,
+        masteryThreshold,
+      },
+      'Getting PKG node mastery summary'
+    );
+
+    const scopedFilter: INodeFilter = {
+      ...filters,
+      userId,
+      graphType: GraphType.PKG,
+    };
+    const summary = await this.graphRepository.getNodeMasterySummary(
+      scopedFilter,
+      masteryThreshold as MasteryLevel
+    );
+
+    return {
+      data: summary,
+      agentHints: AgentHintsBuilder.create()
+        .withConfidence(0.9)
+        .withValidityPeriod('short')
+        .withEstimatedImpact(0.8, 0.1, 8)
+        .withReasoning('Mode-scoped mastery summary derived from explicit PKG node mastery state.')
+        .build(),
+    };
+  }
+
   getCommonAncestors(
     userId: UserId,
     nodeIdA: NodeId,
@@ -871,11 +916,7 @@ export class GraphReadService {
 
     return {
       data: result,
-      agentHints: this.hintsFactory.createListHints(
-        'CKG edges',
-        edges.length,
-        result.total ?? 0
-      ),
+      agentHints: this.hintsFactory.createListHints('CKG edges', edges.length, result.total ?? 0),
     };
   }
 
@@ -905,7 +946,15 @@ export class GraphReadService {
     context: IExecutionContext,
     maxDepth?: number
   ): Promise<IServiceResult<IGraphNode[]>> {
-    return this.doFindPath(fromNodeId, toNodeId, context, 'CKG', GraphType.CKG, undefined, maxDepth);
+    return this.doFindPath(
+      fromNodeId,
+      toNodeId,
+      context,
+      'CKG',
+      GraphType.CKG,
+      undefined,
+      maxDepth
+    );
   }
 
   getCkgSiblings(

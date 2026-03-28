@@ -10,6 +10,7 @@ import { NODE_TYPE_COLOR } from './graph-node.js';
 
 const NODE_TYPES: string[] = [
   'concept',
+  'occupation',
   'skill',
   'fact',
   'procedure',

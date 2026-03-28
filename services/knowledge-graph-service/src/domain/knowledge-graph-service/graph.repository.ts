@@ -22,6 +22,7 @@ import type {
   ICanonicalExternalRef,
   IGraphEdge,
   IGraphNode,
+  INodeMasterySummary,
   INodeProvenanceEntry,
   INodeReviewMetadata,
   IOntologyMapping,
@@ -29,6 +30,7 @@ import type {
   ISourceCoverageSummary,
   MasteryLevel,
   NodeId,
+  StudyMode,
 } from '@noema/types';
 
 import type {
@@ -64,6 +66,7 @@ export interface ICreateNodeInput {
   readonly aliases?: string[];
   readonly languages?: string[];
   readonly tags?: string[];
+  readonly supportedStudyModes?: StudyMode[];
   readonly semanticHints?: string[];
   readonly canonicalExternalRefs?: ICanonicalExternalRef[];
   readonly ontologyMappings?: IOntologyMapping[];
@@ -86,6 +89,7 @@ export interface IUpdateNodeInput {
   readonly aliases?: string[];
   readonly languages?: string[];
   readonly tags?: string[];
+  readonly supportedStudyModes?: StudyMode[];
   readonly semanticHints?: string[];
   readonly canonicalExternalRefs?: ICanonicalExternalRef[];
   readonly ontologyMappings?: IOntologyMapping[];
@@ -129,6 +133,7 @@ export interface IEdgeFilter {
    */
   readonly nodeId?: NodeId;
   readonly userId?: string;
+  readonly studyMode?: StudyMode;
 }
 
 /**
@@ -186,6 +191,14 @@ export interface INodeRepository {
    * Count nodes matching filter criteria (for pagination metadata).
    */
   countNodes(filter: INodeFilter): Promise<number>;
+
+  /**
+   * Compute a mode-scoped mastery summary for the nodes matching the filter.
+   */
+  getNodeMasterySummary(
+    filter: INodeFilter,
+    masteryThreshold: MasteryLevel
+  ): Promise<INodeMasterySummary>;
 }
 
 // ============================================================================

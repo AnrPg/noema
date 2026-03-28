@@ -6,7 +6,7 @@
  * aggregation pipeline.
  */
 
-import type { ISubgraph, NodeId } from '@noema/types';
+import type { ISubgraph, NodeId, StudyMode } from '@noema/types';
 
 // ============================================================================
 // Divergence Types
@@ -148,6 +148,7 @@ export interface IComparisonRequest {
   readonly scopeMode: ComparisonScopeMode;
   readonly hopCount: number;
   readonly bootstrapWhenUnseeded: boolean;
+  readonly studyMode?: StudyMode;
 }
 
 export interface IComparisonScopeMetadata {

@@ -19,6 +19,8 @@ import type {
   GraphEdgeType,
   IGraphEdge,
   IGraphNode,
+  INodeMasterySummary,
+  MasteryLevel,
   ISubgraph,
   NodeId,
 } from '@noema/types';
@@ -138,6 +140,13 @@ export class CachedGraphRepository implements IGraphRepository {
 
   async countNodes(filter: INodeFilter): Promise<number> {
     return this.inner.countNodes(filter);
+  }
+
+  async getNodeMasterySummary(
+    filter: INodeFilter,
+    masteryThreshold: MasteryLevel
+  ): Promise<INodeMasterySummary> {
+    return this.inner.getNodeMasterySummary(filter, masteryThreshold);
   }
 
   // ==========================================================================

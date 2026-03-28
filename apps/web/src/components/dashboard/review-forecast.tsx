@@ -9,6 +9,7 @@
 
 import { useForecast } from '@noema/api-client';
 import type { UserDto } from '@noema/api-client';
+import type { StudyMode } from '@noema/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@noema/ui';
 import { useState } from 'react';
 
@@ -58,9 +59,7 @@ function buildDayData(
   });
 }
 
-function ensureForecastDays(
-  value: unknown
-): {
+function ensureForecastDays(value: unknown): {
   date: string;
   retention: { total: number };
   calibration: { total: number };
@@ -74,8 +73,17 @@ function ensureForecastDays(
     : [];
 }
 
-export function ReviewForecast({ userId }: { userId: UserId }): React.JSX.Element {
-  const forecast = useForecast({ userId, days: 7, includeOverdue: true }, { enabled: userId !== '' });
+export function ReviewForecast({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
+  const forecast = useForecast(
+    { userId, days: 7, includeOverdue: true, studyMode },
+    { enabled: userId !== '' }
+  );
   const [hoveredDay, setHoveredDay] = useState<IDayData | null>(null);
 
   if (forecast.isLoading) {

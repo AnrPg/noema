@@ -22,10 +22,15 @@ import type pino from 'pino';
 import type {
   EdgeId,
   GraphEdgeType,
+  ICanonicalExternalRef,
   IGraphEdge,
   IGraphNode,
+  INodeMasterySummary,
+  IOntologyMapping,
+  MasteryLevel,
   ISubgraph,
   NodeId,
+  UserId,
 } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 
@@ -109,6 +114,127 @@ function buildPaginationClause(limit: number, offset: number): string {
   return ` SKIP ${String(safeOffset)} LIMIT ${String(safeLimit)}`;
 }
 
+function normalizeIdentityToken(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function uniqueIdentityKeys(keys: readonly string[]): string[] {
+  return [...new Set(keys.filter((key) => key.trim() !== ''))];
+}
+
+function buildCanonicalExternalRefIdentityKeys(
+  refs: readonly ICanonicalExternalRef[] | undefined
+): string[] {
+  if (refs === undefined) {
+    return [];
+  }
+
+  return uniqueIdentityKeys(
+    refs.map((ref) => {
+      const sourceId = normalizeIdentityToken(ref.sourceId);
+      const externalId = normalizeIdentityToken(ref.externalId);
+      return `external_ref|${sourceId}|${externalId}`;
+    })
+  );
+}
+
+function buildOntologyMappingIdentityKeys(
+  mappings: readonly IOntologyMapping[] | undefined
+): string[] {
+  if (mappings === undefined) {
+    return [];
+  }
+
+  return uniqueIdentityKeys(
+    mappings.flatMap((mapping) => {
+      const sourceId = normalizeIdentityToken(mapping.sourceId);
+      const externalId = normalizeIdentityToken(mapping.externalId);
+      const mappingKind = normalizeIdentityToken(mapping.mappingKind);
+      const keys = [`mapping|${sourceId}|${externalId}|${mappingKind}`];
+
+      if (mapping.targetExternalId !== undefined && mapping.targetExternalId !== null) {
+        keys.push(
+          `mapping_target_external|${sourceId}|${mappingKind}|${normalizeIdentityToken(mapping.targetExternalId)}`
+        );
+      }
+
+      if (mapping.targetIri !== undefined && mapping.targetIri !== null) {
+        keys.push(
+          `mapping_target_iri|${sourceId}|${mappingKind}|${normalizeIdentityToken(mapping.targetIri)}`
+        );
+      }
+
+      return keys;
+    })
+  );
+}
+
+function buildFallbackNodeIdentityKey(
+  graphType: string,
+  input: Pick<ICreateNodeInput, 'label' | 'nodeType' | 'domain'>,
+  userId?: string
+): string | null {
+  if (graphType !== 'ckg') {
+    return null;
+  }
+
+  return [
+    'fallback',
+    graphType,
+    normalizeIdentityToken(input.nodeType),
+    normalizeIdentityToken(input.domain),
+    normalizeIdentityToken(input.label),
+    userId !== undefined ? normalizeIdentityToken(userId) : '',
+  ].join('|');
+}
+
+function buildNodeIdentityKeys(
+  graphType: string,
+  input: Pick<
+    ICreateNodeInput,
+    'label' | 'nodeType' | 'domain' | 'canonicalExternalRefs' | 'ontologyMappings'
+  >,
+  userId?: string
+): string[] {
+  const explicitKeys = uniqueIdentityKeys([
+    ...buildCanonicalExternalRefIdentityKeys(input.canonicalExternalRefs),
+    ...buildOntologyMappingIdentityKeys(input.ontologyMappings),
+  ]);
+
+  if (explicitKeys.length > 0) {
+    return explicitKeys;
+  }
+
+  const fallbackKey = buildFallbackNodeIdentityKey(graphType, input, userId);
+  return fallbackKey === null ? [] : [fallbackKey];
+}
+
+function buildNodeUpsertUpdateInput(input: ICreateNodeInput): IUpdateNodeInput {
+  return {
+    label: input.label,
+    nodeType: input.nodeType as NonNullable<IUpdateNodeInput['nodeType']>,
+    domain: input.domain,
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.status !== undefined ? { status: input.status } : {}),
+    ...(input.aliases !== undefined ? { aliases: input.aliases } : {}),
+    ...(input.languages !== undefined ? { languages: input.languages } : {}),
+    ...(input.tags !== undefined ? { tags: input.tags } : {}),
+    ...(input.supportedStudyModes !== undefined
+      ? { supportedStudyModes: input.supportedStudyModes }
+      : {}),
+    ...(input.semanticHints !== undefined ? { semanticHints: input.semanticHints } : {}),
+    ...(input.canonicalExternalRefs !== undefined
+      ? { canonicalExternalRefs: input.canonicalExternalRefs }
+      : {}),
+    ...(input.ontologyMappings !== undefined ? { ontologyMappings: input.ontologyMappings } : {}),
+    ...(input.provenance !== undefined ? { provenance: input.provenance } : {}),
+    ...(input.reviewMetadata !== undefined ? { reviewMetadata: input.reviewMetadata } : {}),
+    ...(input.sourceCoverage !== undefined ? { sourceCoverage: input.sourceCoverage } : {}),
+    ...(input.properties !== undefined ? { properties: input.properties } : {}),
+    ...(input.masteryLevel !== undefined ? { masteryLevel: input.masteryLevel } : {}),
+  };
+}
+
 // ============================================================================
 // Neo4jGraphRepository
 // ============================================================================
@@ -135,18 +261,54 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const primaryLabel = graphTypeToLabel(graphType);
     const secondaryLabel = nodeTypeToLabel(input.nodeType);
     const props = buildNodeProperties(input, nodeId, graphType, userId);
+    const upsertProps = buildNodeUpdateProperties(buildNodeUpsertUpdateInput(input));
+    const identityKeys = buildNodeIdentityKeys(graphType, input, userId);
+
+    if (identityKeys.length > 0) {
+      props['identityKeys'] = identityKeys;
+      upsertProps['identityKeys'] = identityKeys;
+    }
+
+    upsertProps['isDeleted'] = false;
+    upsertProps['deletedAt'] = null;
 
     const session = this.neo4j.getSession();
     try {
       const result = await session.executeWrite(async (tx: ManagedTransaction) => {
         return tx.run(
-          `CREATE (n:${primaryLabel}:${secondaryLabel} $props)
-           RETURN n`,
-          { props }
+          `OPTIONAL MATCH (existing:${primaryLabel})
+           WHERE existing.nodeType = $nodeType
+             AND ${
+               identityKeys.length > 0
+                 ? 'any(key IN $identityKeys WHERE key IN coalesce(existing.identityKeys, []))'
+                 : 'existing.nodeId = $nodeId'
+             }
+             ${userId !== undefined ? 'AND existing.userId = $userId' : ''}
+           WITH existing
+           CALL {
+             WITH existing
+             WHERE existing IS NULL
+             CREATE (created:${primaryLabel}:${secondaryLabel} $props)
+             RETURN created AS node
+             UNION
+             WITH existing
+             SET existing += $upsertProps
+             SET existing:${secondaryLabel}
+             RETURN existing AS node
+           }
+           RETURN node`,
+          {
+            props,
+            upsertProps,
+            nodeId,
+            nodeType: input.nodeType,
+            ...(identityKeys.length > 0 ? { identityKeys } : {}),
+            ...(userId !== undefined ? { userId } : {}),
+          }
         );
       });
 
-      const node = result.records[0]?.get('n') as neo4j.Node | undefined;
+      const node = result.records[0]?.get('node') as neo4j.Node | undefined;
       if (node === undefined) {
         throw new GraphConsistencyError(
           'node_creation_failed',
@@ -203,6 +365,38 @@ export class Neo4jGraphRepository implements IGraphRepository {
       'Counterexample',
       'Misconception',
     ].join(':');
+
+    const existingNode = await this.getNode(nodeId, userId);
+    if (existingNode === null) {
+      throw new NodeNotFoundError(nodeId);
+    }
+
+    const nextCanonicalExternalRefs =
+      updates.canonicalExternalRefs ?? existingNode.canonicalExternalRefs;
+    const nextOntologyMappings = updates.ontologyMappings ?? existingNode.ontologyMappings;
+    const nextNodeIdentityInput = {
+      label: updates.label ?? existingNode.label,
+      nodeType: updates.nodeType ?? existingNode.nodeType,
+      domain: updates.domain ?? existingNode.domain,
+      ...(nextCanonicalExternalRefs !== undefined
+        ? { canonicalExternalRefs: nextCanonicalExternalRefs }
+        : {}),
+      ...(nextOntologyMappings !== undefined ? { ontologyMappings: nextOntologyMappings } : {}),
+    };
+    const identityKeys = buildNodeIdentityKeys(
+      existingNode.graphType,
+      nextNodeIdentityInput,
+      userId
+    );
+    if (
+      updates.label !== undefined ||
+      updates.nodeType !== undefined ||
+      updates.domain !== undefined ||
+      updates.canonicalExternalRefs !== undefined ||
+      updates.ontologyMappings !== undefined
+    ) {
+      updateProps['identityKeys'] = identityKeys;
+    }
 
     const session = this.neo4j.getSession();
     try {
@@ -276,6 +470,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
   async findNodes(filter: INodeFilter, limit: number, offset: number): Promise<IGraphNode[]> {
     const { whereClauses, params } = this.buildNodeFilterClauses(filter);
     const labelFilter = this.buildLabelFilter(filter);
+    const orderClause = this.buildNodeSortClause(filter);
     const paginationClause = buildPaginationClause(limit, offset);
 
     const session = this.neo4j.getSession();
@@ -285,7 +480,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
           `MATCH (n${labelFilter})
            ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
            RETURN n
-           ORDER BY n.createdAt DESC
+           ORDER BY ${orderClause}
            ${paginationClause}`,
           params
         );
@@ -324,6 +519,118 @@ export class Neo4jGraphRepository implements IGraphRepository {
     }
   }
 
+  async getNodeMasterySummary(
+    filter: INodeFilter,
+    masteryThreshold: MasteryLevel
+  ): Promise<INodeMasterySummary> {
+    const { whereClauses, params } = this.buildNodeFilterClauses(filter);
+    const labelFilter = this.buildLabelFilter(filter);
+    const session = this.neo4j.getSession();
+    const threshold = masteryThreshold as number;
+    const baseParams = {
+      ...params,
+      masteryThreshold: threshold,
+      developingThreshold: 0.4,
+    };
+
+    try {
+      const [summaryResult, domainResult] = await Promise.all([
+        session.executeRead(async (tx: ManagedTransaction) =>
+          tx.run(
+            `MATCH (n${labelFilter})
+             ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
+             RETURN
+               count(n) AS totalNodes,
+               count(CASE WHEN n.masteryLevel IS NOT NULL THEN 1 END) AS trackedNodes,
+               count(CASE WHEN n.masteryLevel >= $masteryThreshold THEN 1 END) AS masteredNodes,
+               count(
+                 CASE
+                   WHEN n.masteryLevel IS NOT NULL
+                    AND n.masteryLevel < $masteryThreshold
+                    AND n.masteryLevel >= $developingThreshold
+                   THEN 1
+                 END
+               ) AS developingNodes,
+               count(
+                 CASE
+                   WHEN n.masteryLevel IS NOT NULL
+                    AND n.masteryLevel < $developingThreshold
+                   THEN 1
+                 END
+               ) AS emergingNodes,
+               count(CASE WHEN n.masteryLevel IS NULL THEN 1 END) AS untrackedNodes,
+               coalesce(avg(n.masteryLevel), 0.0) AS averageMastery`,
+            baseParams
+          )
+        ),
+        session.executeRead(async (tx: ManagedTransaction) =>
+          tx.run(
+            `MATCH (n${labelFilter})
+             ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
+             WITH coalesce(n.domain, 'general') AS domain,
+                  count(n) AS nodeCount,
+                  count(CASE WHEN n.masteryLevel IS NOT NULL THEN 1 END) AS trackedNodes,
+                  count(CASE WHEN n.masteryLevel >= $masteryThreshold THEN 1 END) AS masteredNodes,
+                  coalesce(avg(n.masteryLevel), 0.0) AS averageMastery
+             RETURN domain, nodeCount, trackedNodes, masteredNodes, averageMastery`,
+            baseParams
+          )
+        ),
+      ]);
+
+      const summaryRecord = summaryResult.records[0];
+      const domainBreakdown = domainResult.records.map((record) => ({
+        domain: String(record.get('domain')),
+        nodeCount: toJsNumber(record.get('nodeCount')),
+        trackedNodes: toJsNumber(record.get('trackedNodes')),
+        masteredNodes: toJsNumber(record.get('masteredNodes')),
+        averageMastery: toJsNumber(record.get('averageMastery')),
+      }));
+      const strongestDomains = [...domainBreakdown]
+        .sort((a, b) => {
+          const masteryDifference = b.averageMastery - a.averageMastery;
+          if (masteryDifference !== 0) {
+            return masteryDifference;
+          }
+          return b.nodeCount - a.nodeCount;
+        })
+        .slice(0, 3);
+      const weakestDomains = [...domainBreakdown]
+        .sort((a, b) => {
+          const masteryDifference = a.averageMastery - b.averageMastery;
+          if (masteryDifference !== 0) {
+            return masteryDifference;
+          }
+          return b.nodeCount - a.nodeCount;
+        })
+        .slice(0, 3);
+
+      return {
+        userId: (filter.userId ?? '') as UserId,
+        studyMode: filter.studyMode ?? 'knowledge_gaining',
+        ...(filter.domain !== undefined ? { domain: filter.domain } : {}),
+        masteryThreshold,
+        totalNodes: summaryRecord !== undefined ? toJsNumber(summaryRecord.get('totalNodes')) : 0,
+        trackedNodes:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('trackedNodes')) : 0,
+        masteredNodes:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('masteredNodes')) : 0,
+        developingNodes:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('developingNodes')) : 0,
+        emergingNodes:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('emergingNodes')) : 0,
+        untrackedNodes:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('untrackedNodes')) : 0,
+        averageMastery:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('averageMastery')) : 0,
+        strongestDomains,
+        weakestDomains,
+      };
+    } finally {
+      await session.close();
+    }
+  }
+
   // ==========================================================================
   // IEdgeRepository
   // ==========================================================================
@@ -336,21 +643,38 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const edgeId = generateEdgeId();
     const relType = edgeTypeToRelType(input.edgeType);
     const edgeProps = buildEdgeProperties(input, edgeId, userId);
+    const edgeUpsertProps: Record<string, unknown> = {
+      ...edgeProps,
+      updatedAt: new Date().toISOString(),
+      isDeleted: false,
+      deletedAt: null,
+    };
+    delete edgeUpsertProps['edgeId'];
+    delete edgeUpsertProps['createdAt'];
 
     const session = this.neo4j.getSession();
     try {
       const result = await session.executeWrite(async (tx: ManagedTransaction) => {
-        // Match source and target nodes, create typed relationship
         return tx.run(
           `MATCH (source {nodeId: $sourceNodeId, isDeleted: false})
            MATCH (target {nodeId: $targetNodeId, isDeleted: false})
-           CREATE (source)-[r:${relType} $edgeProps]->(target)
+           MERGE (source)-[r:${relType}]->(target)
+           ON CREATE SET r = $edgeProps,
+                         r.updatedAt = $updatedAt,
+                         r.isDeleted = false
+           ON MATCH SET r += $edgeUpsertProps
+           SET r.edgeId = coalesce(r.edgeId, $edgeId)
+           SET r.createdAt = coalesce(r.createdAt, $createdAt)
            RETURN r, source.nodeId AS sourceId, target.nodeId AS targetId,
                   source.graphType AS sourceGraphType`,
           {
             sourceNodeId: input.sourceNodeId,
             targetNodeId: input.targetNodeId,
             edgeProps,
+            edgeUpsertProps,
+            edgeId,
+            createdAt: edgeProps['createdAt'],
+            updatedAt: edgeUpsertProps['updatedAt'],
           }
         );
       });
@@ -512,6 +836,15 @@ export class Neo4jGraphRepository implements IGraphRepository {
       whereClauses.push('r.userId = $userId');
       params['userId'] = filter.userId;
     }
+    if (filter.studyMode !== undefined) {
+      whereClauses.push(
+        '(source.supportedStudyModes IS NULL OR size(source.supportedStudyModes) = 0 OR $studyMode IN source.supportedStudyModes)'
+      );
+      whereClauses.push(
+        '(target.supportedStudyModes IS NULL OR size(target.supportedStudyModes) = 0 OR $studyMode IN target.supportedStudyModes)'
+      );
+      params['studyMode'] = filter.studyMode;
+    }
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
@@ -626,6 +959,15 @@ export class Neo4jGraphRepository implements IGraphRepository {
       whereClauses.push('r.userId = $userId');
       params['userId'] = filter.userId;
     }
+    if (filter.studyMode !== undefined) {
+      whereClauses.push(
+        '(source.supportedStudyModes IS NULL OR size(source.supportedStudyModes) = 0 OR $studyMode IN source.supportedStudyModes)'
+      );
+      whereClauses.push(
+        '(target.supportedStudyModes IS NULL OR size(target.supportedStudyModes) = 0 OR $studyMode IN target.supportedStudyModes)'
+      );
+      params['studyMode'] = filter.studyMode;
+    }
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
@@ -673,6 +1015,15 @@ export class Neo4jGraphRepository implements IGraphRepository {
     if (userId !== undefined) {
       whereClauses.push('r.userId = $userId');
       params['userId'] = userId;
+    }
+    if (filter?.studyMode !== undefined) {
+      whereClauses.push(
+        '(source.supportedStudyModes IS NULL OR size(source.supportedStudyModes) = 0 OR $studyMode IN source.supportedStudyModes)'
+      );
+      whereClauses.push(
+        '(target.supportedStudyModes IS NULL OR size(target.supportedStudyModes) = 0 OR $studyMode IN target.supportedStudyModes)'
+      );
+      params['studyMode'] = filter.studyMode;
     }
 
     const whereStr = `WHERE ${whereClauses.join(' AND ')}`;
@@ -1958,6 +2309,13 @@ export class Neo4jGraphRepository implements IGraphRepository {
       params['labelContains'] = filter.labelContains;
     }
 
+    if (filter.studyMode !== undefined) {
+      whereClauses.push(
+        '(n.supportedStudyModes IS NULL OR size(n.supportedStudyModes) = 0 OR $studyMode IN n.supportedStudyModes)'
+      );
+      params['studyMode'] = filter.studyMode;
+    }
+
     return { whereClauses, params };
   }
 
@@ -1968,6 +2326,26 @@ export class Neo4jGraphRepository implements IGraphRepository {
     if (filter.graphType === 'pkg') return ':PkgNode';
     if (filter.graphType === 'ckg') return ':CkgNode';
     return ''; // Match all nodes
+  }
+
+  /**
+   * Build an ORDER BY fragment from an INodeFilter.
+   * Keeps null mastery values at the end for mastery-centric ordering.
+   */
+  private buildNodeSortClause(filter: INodeFilter): string {
+    const direction = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
+    switch (filter.sortBy) {
+      case 'label':
+        return `toLower(n.label) ${direction}, n.createdAt DESC`;
+      case 'updatedAt':
+        return `n.updatedAt ${direction}, n.createdAt DESC`;
+      case 'masteryLevel':
+        return `CASE WHEN n.masteryLevel IS NULL THEN 1 ELSE 0 END ASC, n.masteryLevel ${direction}, n.updatedAt DESC`;
+      case 'createdAt':
+      default:
+        return `n.createdAt ${direction}`;
+    }
   }
 
   // ==========================================================================
@@ -2130,13 +2508,50 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     const primaryLabel = graphTypeToLabel(graphType);
     const secondaryLabel = nodeTypeToLabel(input.nodeType);
     const props = buildNodeProperties(input, nodeId, graphType, userId);
+    const upsertProps = buildNodeUpdateProperties(buildNodeUpsertUpdateInput(input));
+    const identityKeys = buildNodeIdentityKeys(graphType, input, userId);
+
+    if (identityKeys.length > 0) {
+      props['identityKeys'] = identityKeys;
+      upsertProps['identityKeys'] = identityKeys;
+    }
+
+    upsertProps['isDeleted'] = false;
+    upsertProps['deletedAt'] = null;
 
     const result = await this.tx.run(
-      `CREATE (n:${primaryLabel}:${secondaryLabel} $props) RETURN n`,
-      { props }
+      `OPTIONAL MATCH (existing:${primaryLabel})
+       WHERE existing.nodeType = $nodeType
+         AND ${
+           identityKeys.length > 0
+             ? 'any(key IN $identityKeys WHERE key IN coalesce(existing.identityKeys, []))'
+             : 'existing.nodeId = $nodeId'
+         }
+         ${userId !== undefined ? 'AND existing.userId = $userId' : ''}
+       WITH existing
+       CALL {
+         WITH existing
+         WHERE existing IS NULL
+         CREATE (created:${primaryLabel}:${secondaryLabel} $props)
+         RETURN created AS node
+         UNION
+         WITH existing
+         SET existing += $upsertProps
+         SET existing:${secondaryLabel}
+         RETURN existing AS node
+       }
+       RETURN node`,
+      {
+        props,
+        upsertProps,
+        nodeId,
+        nodeType: input.nodeType,
+        ...(identityKeys.length > 0 ? { identityKeys } : {}),
+        ...(userId !== undefined ? { userId } : {}),
+      }
     );
 
-    const node = result.records[0]?.get('n') as neo4j.Node | undefined;
+    const node = result.records[0]?.get('node') as neo4j.Node | undefined;
     if (!node) {
       throw new GraphConsistencyError('node_creation_failed', `Failed to create node ${nodeId}`);
     }
@@ -2162,6 +2577,37 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphNode> {
     const updateProps = buildNodeUpdateProperties(updates);
+    const existingNode = await this.getNode(nodeId, userId);
+    if (existingNode === null) {
+      throw new NodeNotFoundError(nodeId);
+    }
+
+    const nextCanonicalExternalRefs =
+      updates.canonicalExternalRefs ?? existingNode.canonicalExternalRefs;
+    const nextOntologyMappings = updates.ontologyMappings ?? existingNode.ontologyMappings;
+    const nextNodeIdentityInput = {
+      label: updates.label ?? existingNode.label,
+      nodeType: updates.nodeType ?? existingNode.nodeType,
+      domain: updates.domain ?? existingNode.domain,
+      ...(nextCanonicalExternalRefs !== undefined
+        ? { canonicalExternalRefs: nextCanonicalExternalRefs }
+        : {}),
+      ...(nextOntologyMappings !== undefined ? { ontologyMappings: nextOntologyMappings } : {}),
+    };
+    if (
+      updates.label !== undefined ||
+      updates.nodeType !== undefined ||
+      updates.domain !== undefined ||
+      updates.canonicalExternalRefs !== undefined ||
+      updates.ontologyMappings !== undefined
+    ) {
+      updateProps['identityKeys'] = buildNodeIdentityKeys(
+        existingNode.graphType,
+        nextNodeIdentityInput,
+        userId
+      );
+    }
+
     const result = await this.tx.run(
       `MATCH (n {nodeId: $nodeId, isDeleted: false})
        ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
@@ -2203,6 +2649,13 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     throw new Error('countNodes is not supported within a transaction context');
   }
 
+  getNodeMasterySummary(
+    _filter: INodeFilter,
+    _masteryThreshold: MasteryLevel
+  ): Promise<INodeMasterySummary> {
+    throw new Error('getNodeMasterySummary is not supported within a transaction context');
+  }
+
   // ── Edge CRUD ─────────────────────────────────────────────────────────
 
   async createEdge(
@@ -2213,14 +2666,36 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     const edgeId = generateEdgeId();
     const relType = edgeTypeToRelType(input.edgeType);
     const edgeProps = buildEdgeProperties(input, edgeId, userId);
+    const edgeUpsertProps: Record<string, unknown> = {
+      ...edgeProps,
+      updatedAt: new Date().toISOString(),
+      isDeleted: false,
+      deletedAt: null,
+    };
+    delete edgeUpsertProps['edgeId'];
+    delete edgeUpsertProps['createdAt'];
 
     const result = await this.tx.run(
       `MATCH (source {nodeId: $sourceNodeId, isDeleted: false})
        MATCH (target {nodeId: $targetNodeId, isDeleted: false})
-       CREATE (source)-[r:${relType} $edgeProps]->(target)
+       MERGE (source)-[r:${relType}]->(target)
+       ON CREATE SET r = $edgeProps,
+                     r.updatedAt = $updatedAt,
+                     r.isDeleted = false
+       ON MATCH SET r += $edgeUpsertProps
+       SET r.edgeId = coalesce(r.edgeId, $edgeId)
+       SET r.createdAt = coalesce(r.createdAt, $createdAt)
        RETURN r, source.nodeId AS sourceId, target.nodeId AS targetId,
               source.graphType AS sourceGraphType`,
-      { sourceNodeId: input.sourceNodeId, targetNodeId: input.targetNodeId, edgeProps }
+      {
+        sourceNodeId: input.sourceNodeId,
+        targetNodeId: input.targetNodeId,
+        edgeProps,
+        edgeUpsertProps,
+        edgeId,
+        createdAt: edgeProps['createdAt'],
+        updatedAt: edgeUpsertProps['updatedAt'],
+      }
     );
 
     const record = result.records[0];

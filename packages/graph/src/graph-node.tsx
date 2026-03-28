@@ -14,6 +14,7 @@ import type { NodeType } from '@noema/api-client';
 // ── Node type → fill color (Phase 0 palette CSS vars resolved to hex) ─────────
 export const NODE_TYPE_COLOR: Record<string, string> = {
   concept: '#7c6ee6', // synapse-400
+  occupation: '#fb923c', // solar-400
   skill: '#a78bfa', // synapse-300
   fact: '#e2e8f0', // axon-100
   procedure: '#22d3ee', // neuron-400

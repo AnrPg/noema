@@ -7,7 +7,7 @@
  * over the last week").
  */
 
-import type { IStructuralMetrics, UserId } from '@noema/types';
+import type { IStructuralMetrics, StudyMode, UserId } from '@noema/types';
 
 // ============================================================================
 // Snapshot Types
@@ -25,6 +25,9 @@ export interface IMetricSnapshot {
 
   /** Knowledge domain these metrics apply to */
   readonly domain: string;
+
+  /** Study mode lens these metrics apply to */
+  readonly studyMode: StudyMode;
 
   /** The full set of structural health metrics */
   readonly metrics: IStructuralMetrics;
@@ -68,6 +71,7 @@ export interface IMetricsRepository {
   saveSnapshot(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     metrics: IStructuralMetrics
   ): Promise<IMetricSnapshot>;
 
@@ -75,7 +79,11 @@ export interface IMetricsRepository {
    * Get the latest snapshot for a user-domain combination.
    * @returns The most recent snapshot, or null if none exist.
    */
-  getLatestSnapshot(userId: UserId, domain: string): Promise<IMetricSnapshot | null>;
+  getLatestSnapshot(
+    userId: UserId,
+    domain: string,
+    studyMode: StudyMode
+  ): Promise<IMetricSnapshot | null>;
 
   /**
    * Get snapshot history for a user-domain pair (for trend visualization).
@@ -84,6 +92,7 @@ export interface IMetricsRepository {
   getSnapshotHistory(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     options?: IMetricsHistoryOptions
   ): Promise<IMetricSnapshot[]>;
 

@@ -143,6 +143,30 @@ describe('GET /users/:userId/pkg/nodes', () => {
     const [userId] = service.listNodes.mock.calls[0] as [UserId];
     expect(userId).toBe(TEST_USER_ID);
   });
+
+  it('passes sort fields through the node filter', async () => {
+    service.listNodes.mockResolvedValue(serviceResult({ items: [], total: 0, hasMore: false }));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${BASE}?sortBy=masteryLevel&sortOrder=asc&studyMode=language_learning`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.listNodes).toHaveBeenCalledWith(
+      TEST_USER_ID,
+      expect.objectContaining({
+        sortBy: 'masteryLevel',
+        sortOrder: 'asc',
+        studyMode: 'language_learning',
+      }),
+      expect.objectContaining({
+        limit: 20,
+        offset: 0,
+      }),
+      expect.any(Object)
+    );
+  });
 });
 
 // ============================================================================

@@ -31,6 +31,7 @@ import type {
   MasteryLevel,
   Metadata,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import type { Node, Relationship } from 'neo4j-driver';
@@ -132,6 +133,16 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function serializeStructuredValue(value: unknown): string | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  return JSON.stringify(value);
 }
 
 // ============================================================================
@@ -246,12 +257,14 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     aliases,
     languages,
     tags,
+    supportedStudyModes,
     semanticHints,
     canonicalExternalRefs,
     ontologyMappings,
     provenance,
     reviewMetadata,
     sourceCoverage,
+    identityKeys: _identityKeys,
     masteryLevel,
     createdAt,
     updatedAt,
@@ -263,17 +276,20 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
   const nodeAliases = asStringArray(aliases);
   const nodeLanguages = asStringArray(languages);
   const nodeTags = asStringArray(tags);
+  const nodeSupportedStudyModes = asStringArray(supportedStudyModes) as StudyMode[] | undefined;
   const nodeSemanticHints = asStringArray(semanticHints);
-  const nodeExternalRefs = asRecordArray<ICanonicalExternalRef>(canonicalExternalRefs);
-  const nodeOntologyMappings = asRecordArray<IOntologyMapping>(ontologyMappings);
-  const nodeProvenance = asRecordArray<INodeProvenanceEntry>(provenance);
+  const nodeExternalRefs = asRecordArray(canonicalExternalRefs) as
+    | ICanonicalExternalRef[]
+    | undefined;
+  const nodeOntologyMappings = asRecordArray(ontologyMappings) as IOntologyMapping[] | undefined;
+  const nodeProvenance = asRecordArray(provenance) as INodeProvenanceEntry[] | undefined;
   const nodeReviewMetadata =
     reviewMetadata !== undefined
-      ? (asRecord<INodeReviewMetadata>(reviewMetadata) ?? null)
+      ? ((asRecord(reviewMetadata) as INodeReviewMetadata | undefined) ?? null)
       : undefined;
   const nodeSourceCoverage =
     sourceCoverage !== undefined
-      ? (asRecord<ISourceCoverageSummary>(sourceCoverage) ?? null)
+      ? ((asRecord(sourceCoverage) as ISourceCoverageSummary | undefined) ?? null)
       : undefined;
 
   return {
@@ -288,6 +304,9 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     ...(nodeAliases !== undefined ? { aliases: nodeAliases } : {}),
     ...(nodeLanguages !== undefined ? { languages: nodeLanguages } : {}),
     ...(nodeTags !== undefined ? { tags: nodeTags } : {}),
+    ...(nodeSupportedStudyModes !== undefined
+      ? { supportedStudyModes: nodeSupportedStudyModes }
+      : {}),
     ...(nodeSemanticHints !== undefined ? { semanticHints: nodeSemanticHints } : {}),
     ...(nodeExternalRefs !== undefined ? { canonicalExternalRefs: nodeExternalRefs } : {}),
     ...(nodeOntologyMappings !== undefined ? { ontologyMappings: nodeOntologyMappings } : {}),
@@ -406,6 +425,7 @@ export function buildNodeProperties(
     aliases?: string[];
     languages?: string[];
     tags?: string[];
+    supportedStudyModes?: StudyMode[];
     semanticHints?: string[];
     canonicalExternalRefs?: ICanonicalExternalRef[];
     ontologyMappings?: IOntologyMapping[];
@@ -433,14 +453,29 @@ export function buildNodeProperties(
     ...(input.aliases !== undefined ? { aliases: input.aliases } : {}),
     ...(input.languages !== undefined ? { languages: input.languages } : {}),
     ...(input.tags !== undefined ? { tags: input.tags } : {}),
+    ...(input.supportedStudyModes !== undefined
+      ? { supportedStudyModes: input.supportedStudyModes }
+      : {}),
     ...(input.semanticHints !== undefined ? { semanticHints: input.semanticHints } : {}),
     ...(input.canonicalExternalRefs !== undefined
-      ? { canonicalExternalRefs: input.canonicalExternalRefs }
+      ? {
+          canonicalExternalRefs: serializeStructuredValue(input.canonicalExternalRefs),
+        }
       : {}),
-    ...(input.ontologyMappings !== undefined ? { ontologyMappings: input.ontologyMappings } : {}),
-    ...(input.provenance !== undefined ? { provenance: input.provenance } : {}),
-    ...(input.reviewMetadata !== undefined ? { reviewMetadata: input.reviewMetadata } : {}),
-    ...(input.sourceCoverage !== undefined ? { sourceCoverage: input.sourceCoverage } : {}),
+    ...(input.ontologyMappings !== undefined
+      ? {
+          ontologyMappings: serializeStructuredValue(input.ontologyMappings),
+        }
+      : {}),
+    ...(input.provenance !== undefined
+      ? { provenance: serializeStructuredValue(input.provenance) }
+      : {}),
+    ...(input.reviewMetadata !== undefined
+      ? { reviewMetadata: serializeStructuredValue(input.reviewMetadata) }
+      : {}),
+    ...(input.sourceCoverage !== undefined
+      ? { sourceCoverage: serializeStructuredValue(input.sourceCoverage) }
+      : {}),
     ...(input.masteryLevel !== undefined ? { masteryLevel: input.masteryLevel as number } : {}),
     ...flattenProperties(input.properties),
     createdAt: now,
@@ -462,6 +497,7 @@ export function buildNodeUpdateProperties(updates: {
   aliases?: string[];
   languages?: string[];
   tags?: string[];
+  supportedStudyModes?: StudyMode[];
   semanticHints?: string[];
   canonicalExternalRefs?: ICanonicalExternalRef[];
   ontologyMappings?: IOntologyMapping[];
@@ -483,14 +519,25 @@ export function buildNodeUpdateProperties(updates: {
   if (updates.aliases !== undefined) props['aliases'] = updates.aliases;
   if (updates.languages !== undefined) props['languages'] = updates.languages;
   if (updates.tags !== undefined) props['tags'] = updates.tags;
+  if (updates.supportedStudyModes !== undefined) {
+    props['supportedStudyModes'] = updates.supportedStudyModes;
+  }
   if (updates.semanticHints !== undefined) props['semanticHints'] = updates.semanticHints;
   if (updates.canonicalExternalRefs !== undefined) {
-    props['canonicalExternalRefs'] = updates.canonicalExternalRefs;
+    props['canonicalExternalRefs'] = serializeStructuredValue(updates.canonicalExternalRefs);
   }
-  if (updates.ontologyMappings !== undefined) props['ontologyMappings'] = updates.ontologyMappings;
-  if (updates.provenance !== undefined) props['provenance'] = updates.provenance;
-  if (updates.reviewMetadata !== undefined) props['reviewMetadata'] = updates.reviewMetadata;
-  if (updates.sourceCoverage !== undefined) props['sourceCoverage'] = updates.sourceCoverage;
+  if (updates.ontologyMappings !== undefined) {
+    props['ontologyMappings'] = serializeStructuredValue(updates.ontologyMappings);
+  }
+  if (updates.provenance !== undefined) {
+    props['provenance'] = serializeStructuredValue(updates.provenance);
+  }
+  if (updates.reviewMetadata !== undefined) {
+    props['reviewMetadata'] = serializeStructuredValue(updates.reviewMetadata);
+  }
+  if (updates.sourceCoverage !== undefined) {
+    props['sourceCoverage'] = serializeStructuredValue(updates.sourceCoverage);
+  }
   if (updates.masteryLevel !== undefined) props['masteryLevel'] = updates.masteryLevel as number;
   if (updates.properties !== undefined) {
     Object.assign(props, flattenProperties(updates.properties));

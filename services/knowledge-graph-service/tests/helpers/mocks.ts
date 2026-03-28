@@ -39,6 +39,7 @@ export function mockKnowledgeGraphService(): {
     updateNode: vi.fn().mockImplementation(notConfigured),
     deleteNode: vi.fn().mockImplementation(notConfigured),
     listNodes: vi.fn().mockImplementation(notConfigured),
+    getNodeMasterySummary: vi.fn().mockImplementation(notConfigured),
     createEdge: vi.fn().mockImplementation(notConfigured),
     getEdge: vi.fn().mockImplementation(notConfigured),
     updateEdge: vi.fn().mockImplementation(notConfigured),
