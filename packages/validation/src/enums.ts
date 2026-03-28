@@ -42,6 +42,7 @@ import {
   SessionState,
   SessionTerminationReason,
   StreakType,
+  StudyMode,
   StructuralMetricType,
   TeachingApproach,
   TeachingApproachCategory,
@@ -77,6 +78,7 @@ export const AttemptOutcomeSchema = createEnumSchema(AttemptOutcome, 'Attempt ou
 export const EnvironmentSchema = createEnumSchema(Environment, 'Environment');
 export const LoadoutArchetypeSchema = createEnumSchema(LoadoutArchetype, 'Loadout archetype');
 export const LearningModeSchema = createEnumSchema(LearningMode, 'Learning mode');
+export const StudyModeSchema = createEnumSchema(StudyMode, 'Study mode');
 export const ForceLevelSchema = createEnumSchema(ForceLevel, 'Force level');
 export const SchedulingAlgorithmSchema = createEnumSchema(
   SchedulingAlgorithm,
@@ -144,6 +146,7 @@ export type AttemptOutcomeInput = z.input<typeof AttemptOutcomeSchema>;
 export type EnvironmentInput = z.input<typeof EnvironmentSchema>;
 export type LoadoutArchetypeInput = z.input<typeof LoadoutArchetypeSchema>;
 export type LearningModeInput = z.input<typeof LearningModeSchema>;
+export type StudyModeInput = z.input<typeof StudyModeSchema>;
 export type ForceLevelInput = z.input<typeof ForceLevelSchema>;
 export type SchedulingAlgorithmInput = z.input<typeof SchedulingAlgorithmSchema>;
 export type GraphNodeTypeInput = z.input<typeof GraphNodeTypeSchema>;

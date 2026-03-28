@@ -5,7 +5,7 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 
 // ============================================================================
 // Auth Types
@@ -84,6 +84,7 @@ export interface IUserSettingsDto {
   reminderTime: string | null;
   soundEnabled: boolean;
   hapticEnabled: boolean;
+  activeStudyMode?: StudyMode;
   version: number;
 }
 
@@ -109,6 +110,7 @@ export interface IUpdateSettingsInput {
   reminderTime?: string | null;
   soundEnabled?: boolean;
   hapticEnabled?: boolean;
+  activeStudyMode?: StudyMode;
 }
 
 export interface IChangePasswordInput {

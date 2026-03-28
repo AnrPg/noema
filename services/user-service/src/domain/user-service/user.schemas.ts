@@ -5,7 +5,14 @@
  */
 
 import { z } from 'zod';
-import { AuthProvider, Language, Theme, UserRole, UserStatus } from '../../types/user.types.js';
+import {
+  AuthProvider,
+  Language,
+  StudyMode,
+  Theme,
+  UserRole,
+  UserStatus,
+} from '../../types/user.types.js';
 import {
   DisplayNameSchema,
   EmailSchema,
@@ -96,6 +103,9 @@ export const UserSettingsSchema = z.object({
   emailAchievements: z.boolean().default(true),
   pushNotificationsEnabled: z.boolean().default(true),
   analyticsEnabled: z.boolean().default(true),
+  activeStudyMode: z
+    .enum(Object.values(StudyMode) as [string, ...string[]])
+    .default(StudyMode.KNOWLEDGE_GAINING),
   cognitivePolicy: z
     .object({
       pacingPolicy: z.object({
@@ -197,6 +207,7 @@ export const UpdateSettingsInputSchema = z
     emailAchievements: z.boolean().optional(),
     pushNotificationsEnabled: z.boolean().optional(),
     analyticsEnabled: z.boolean().optional(),
+    activeStudyMode: z.enum(Object.values(StudyMode) as [string, ...string[]]).optional(),
     cognitivePolicy: z
       .object({
         pacingPolicy: z

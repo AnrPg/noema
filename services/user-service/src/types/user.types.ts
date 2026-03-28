@@ -120,6 +120,16 @@ export const Language = {
 
 export type Language = (typeof Language)[keyof typeof Language];
 
+/**
+ * Domain-oriented study modes used by the dual-use learning architecture.
+ */
+export const StudyMode = {
+  LANGUAGE_LEARNING: 'language_learning',
+  KNOWLEDGE_GAINING: 'knowledge_gaining',
+} as const;
+
+export type StudyMode = (typeof StudyMode)[keyof typeof StudyMode];
+
 // ============================================================================
 // History Entry Interfaces
 // ============================================================================
@@ -233,6 +243,9 @@ export interface IUserSettings {
 
   /** Analytics and telemetry consent */
   analyticsEnabled: boolean;
+
+  /** Global active study mode used by the authenticated app shell */
+  activeStudyMode: StudyMode;
 
   /** Cognitive control policy snapshot used by session/content/scheduler orchestration */
   cognitivePolicy: ICognitivePolicySettings;
@@ -382,6 +395,7 @@ export interface IUpdateSettingsInput {
   emailAchievements?: boolean;
   pushNotificationsEnabled?: boolean;
   analyticsEnabled?: boolean;
+  activeStudyMode?: StudyMode;
   cognitivePolicy?: Partial<ICognitivePolicySettings>;
 }
 

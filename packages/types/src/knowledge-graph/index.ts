@@ -18,6 +18,7 @@ import type {
   MisconceptionSeverity,
   MisconceptionStatus,
   MisconceptionType,
+  StudyMode,
   StructuralMetricType,
   TrendDirection,
 } from '../enums/index.js';
@@ -181,6 +182,9 @@ export interface IGraphNode {
   /** Lightweight classification labels for filtering and ranking */
   tags?: string[];
 
+  /** Optional membership in the domain-oriented study-mode model */
+  supportedStudyModes?: StudyMode[];
+
   /** Source-derived semantic descriptors useful for triage and agents */
   semanticHints?: string[];
 
@@ -262,6 +266,82 @@ export interface ISubgraph {
 
   /** Optional root node that anchored the traversal */
   readonly rootNodeId?: NodeId;
+}
+
+// ============================================================================
+// Mastery Read Model
+// ============================================================================
+
+/**
+ * Coarse mastery classification used by learner-facing dashboards, goals, and
+ * agent tools. Bands are intentionally stable and mode-scoped.
+ */
+export type MasteryBand = 'untracked' | 'emerging' | 'developing' | 'mastered';
+
+/**
+ * Domain-level mastery rollup used for prioritisation and reporting.
+ */
+export interface IMasteryDomainBreakdownEntry {
+  /** Domain represented by this rollup */
+  readonly domain: string;
+
+  /** Total nodes in this domain for the active filter */
+  readonly nodeCount: number;
+
+  /** Nodes that have explicit mastery evidence */
+  readonly trackedNodes: number;
+
+  /** Nodes at or above the active mastery threshold */
+  readonly masteredNodes: number;
+
+  /** Mean mastery across tracked nodes in the domain */
+  readonly averageMastery: number;
+}
+
+/**
+ * Mode-scoped mastery summary for a user's PKG.
+ *
+ * This is an explicit read model, not an inferred UI-only calculation.
+ */
+export interface INodeMasterySummary {
+  /** User whose mastery state is being summarized */
+  readonly userId: UserId;
+
+  /** Study mode used to scope the summary */
+  readonly studyMode: StudyMode;
+
+  /** Domain filter applied to the summary, if any */
+  readonly domain?: string;
+
+  /** Threshold at or above which nodes are considered mastered */
+  readonly masteryThreshold: MasteryLevel;
+
+  /** Total nodes in scope */
+  readonly totalNodes: number;
+
+  /** Nodes with explicit mastery evidence */
+  readonly trackedNodes: number;
+
+  /** Nodes at or above the mastery threshold */
+  readonly masteredNodes: number;
+
+  /** Nodes with low but non-zero mastery evidence */
+  readonly developingNodes: number;
+
+  /** Nodes with very early mastery evidence */
+  readonly emergingNodes: number;
+
+  /** Nodes without explicit mastery evidence */
+  readonly untrackedNodes: number;
+
+  /** Mean mastery across tracked nodes */
+  readonly averageMastery: number;
+
+  /** Strongest domain slices in the active scope */
+  readonly strongestDomains: readonly IMasteryDomainBreakdownEntry[];
+
+  /** Weakest domain slices in the active scope */
+  readonly weakestDomains: readonly IMasteryDomainBreakdownEntry[];
 }
 
 // ============================================================================

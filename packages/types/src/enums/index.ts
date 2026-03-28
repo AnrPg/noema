@@ -226,6 +226,21 @@ export const LearningMode = {
 export type LearningMode = (typeof LearningMode)[keyof typeof LearningMode];
 
 /**
+ * Domain-oriented study modes used by the dual-use learning architecture.
+ *
+ * This is intentionally distinct from the strategy-oriented `LearningMode`
+ * enum above, which models exploration and goal framing.
+ */
+export const StudyMode = {
+  /** Language-focused study workflows, graph lenses, and card generation */
+  LANGUAGE_LEARNING: 'language_learning',
+  /** Facts, sciences, and concept-centric knowledge-building workflows */
+  KNOWLEDGE_GAINING: 'knowledge_gaining',
+} as const;
+
+export type StudyMode = (typeof StudyMode)[keyof typeof StudyMode];
+
+/**
  * Intervention force levels (from Strategy spec).
  */
 export const ForceLevel = {
@@ -275,6 +290,8 @@ export const GraphNodeType = {
   CONCEPT: 'concept',
   /** Skill or competency */
   SKILL: 'skill',
+  /** Role or job family */
+  OCCUPATION: 'occupation',
   /** Specific fact */
   FACT: 'fact',
   /** Procedural knowledge */
@@ -294,7 +311,7 @@ export type GraphNodeType = (typeof GraphNodeType)[keyof typeof GraphNodeType];
 /**
  * Knowledge graph edge types.
  *
- * 17 edge types organized into 6 ontological categories covering the
+ * 25 edge types organized into 6 ontological categories covering the
  * full spectrum of epistemological relations needed for a pedagogical
  * knowledge graph:
  *
@@ -302,8 +319,11 @@ export type GraphNodeType = (typeof GraphNodeType)[keyof typeof GraphNodeType];
  * - **Mereological**: part_of, constituted_by
  * - **Logical**: equivalent_to, entails, disjoint_with, contradicts
  * - **Causal/Temporal**: causes, precedes, depends_on
- * - **Associative**: related_to, analogous_to, contrasts_with
- * - **Structural/Pedagogical**: prerequisite, derived_from, has_property
+ * - **Associative**: related_to, analogous_to, contrasts_with, confusable_with
+ * - **Structural/Pedagogical**: prerequisite, derived_from, has_property,
+ *   subskill_of, has_subskill, essential_for_occupation,
+ *   occupation_requires_essential_skill, optional_for_occupation,
+ *   occupation_benefits_from_optional_skill, transferable_to
  *
  * @see EdgeOntologicalCategory for the category groupings
  * @see EDGE_TYPE_POLICIES in knowledge-graph-service for per-type validation rules
@@ -346,6 +366,8 @@ export const GraphEdgeType = {
   ANALOGOUS_TO: 'analogous_to',
   /** Opposition without contradiction: gradable antonymy (symmetric) */
   CONTRASTS_WITH: 'contrasts_with',
+  /** Two skills are commonly mistaken for one another by learners (symmetric) */
+  CONFUSABLE_WITH: 'confusable_with',
 
   // ── Structural / Pedagogical ──────────────────────────────────────────
   /** Learning dependency: "A requires B to be learned first" */
@@ -354,6 +376,20 @@ export const GraphEdgeType = {
   DERIVED_FROM: 'derived_from',
   /** Inherence: "A has property/quality B" (attribute inheres in bearer) */
   HAS_PROPERTY: 'has_property',
+  /** Skill hierarchy: "A is a narrower or more specific skill than B" */
+  SUBSKILL_OF: 'subskill_of',
+  /** Skill hierarchy inverse: "A contains B as a narrower skill" */
+  HAS_SUBSKILL: 'has_subskill',
+  /** Skill-to-occupation fit: "A skill is essential for an occupation" */
+  ESSENTIAL_FOR_OCCUPATION: 'essential_for_occupation',
+  /** Occupation-to-skill inverse: "An occupation requires this essential skill" */
+  OCCUPATION_REQUIRES_ESSENTIAL_SKILL: 'occupation_requires_essential_skill',
+  /** Skill-to-occupation fit: "A skill is optional but valuable for an occupation" */
+  OPTIONAL_FOR_OCCUPATION: 'optional_for_occupation',
+  /** Occupation-to-skill inverse: "An occupation benefits from this optional skill" */
+  OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL: 'occupation_benefits_from_optional_skill',
+  /** Skill transfer: "Mastery of A transfers meaningfully to B" */
+  TRANSFERABLE_TO: 'transferable_to',
 } as const;
 
 export type GraphEdgeType = (typeof GraphEdgeType)[keyof typeof GraphEdgeType];
@@ -375,9 +411,9 @@ export const EdgeOntologicalCategory = {
   LOGICAL: 'logical',
   /** Causation, temporal ordering, existential dependence: causes, precedes, depends_on */
   CAUSAL_TEMPORAL: 'causal_temporal',
-  /** Similarity, analogy, opposition, generic association: related_to, analogous_to, contrasts_with */
+  /** Similarity, analogy, opposition, confusion, generic association */
   ASSOCIATIVE: 'associative',
-  /** Learning-specific structural relations: prerequisite, derived_from, has_property */
+  /** Learning-specific structural and skill-ontology relations */
   STRUCTURAL_PEDAGOGICAL: 'structural_pedagogical',
 } as const;
 

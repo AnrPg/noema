@@ -6,8 +6,10 @@
 
 'use client';
 
+import * as React from 'react';
 import type { JSX, ReactNode } from 'react';
-import { AuthGuard, useAuth } from '@noema/auth';
+import { meApi } from '@noema/api-client/user';
+import { AuthGuard, useAuth, useAuthStore } from '@noema/auth';
 import { getUserDisplayName, getUserInitials } from '@noema/auth/user-display';
 import {
   Avatar,
@@ -36,6 +38,7 @@ import {
   CalendarClock,
   ChevronDown,
   ClipboardList,
+  Languages,
   GitCompare,
   LayoutDashboard,
   LibraryBig,
@@ -51,6 +54,9 @@ import { SessionExpiryModal } from '@/components/session-expiry-modal';
 import { ShortcutReferencePanel } from '@/components/shortcut-reference-panel';
 import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
 import { CopilotSidebar, CopilotToggle } from '@/components/copilot';
+import { DEFAULT_STUDY_MODE, isStudyMode, STUDY_MODE_STORAGE_KEY } from '@/lib/study-mode';
+
+type AppStudyMode = 'language_learning' | 'knowledge_gaining';
 
 const navItems = [
   {
@@ -145,13 +151,67 @@ function UserMenu(): JSX.Element {
 export default function AuthenticatedLayout({ children }: { children: ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
+  const authSettings = useAuthStore((state) => state.settings);
+  const setAuthSettings = useAuthStore((state) => state.setSettings);
+  const [activeStudyMode, setActiveStudyMode] = React.useState<AppStudyMode>(DEFAULT_STUDY_MODE);
+  const [isUpdatingStudyMode, setIsUpdatingStudyMode] = React.useState(false);
+  const authSettingsStudyMode =
+    typeof authSettings === 'object' &&
+    authSettings !== null &&
+    'activeStudyMode' in authSettings &&
+    isStudyMode((authSettings as { activeStudyMode?: string }).activeStudyMode ?? null)
+      ? (authSettings as { activeStudyMode: AppStudyMode }).activeStudyMode
+      : undefined;
 
   useAgentHintsInterceptor();
+
+  React.useEffect(() => {
+    const persistedStudyMode = globalThis.localStorage.getItem(STUDY_MODE_STORAGE_KEY);
+
+    if (isStudyMode(persistedStudyMode)) {
+      setActiveStudyMode(persistedStudyMode);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const persistedStudyMode = authSettingsStudyMode;
+    if (persistedStudyMode !== undefined && persistedStudyMode !== activeStudyMode) {
+      setActiveStudyMode(persistedStudyMode);
+      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, persistedStudyMode);
+    }
+  }, [activeStudyMode, authSettingsStudyMode]);
+
+  const handleStudyModeChange = React.useCallback(
+    async (nextStudyMode: AppStudyMode): Promise<void> => {
+      const previousStudyMode = activeStudyMode;
+      setActiveStudyMode(nextStudyMode);
+      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, nextStudyMode);
+
+      if (authSettings === null) {
+        return;
+      }
+
+      setIsUpdatingStudyMode(true);
+      try {
+        const response = await meApi.updateSettings(
+          { activeStudyMode: nextStudyMode },
+          authSettings.version
+        );
+        setAuthSettings(response.data);
+      } catch {
+        setActiveStudyMode(previousStudyMode);
+        globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, previousStudyMode);
+      } finally {
+        setIsUpdatingStudyMode(false);
+      }
+    },
+    [activeStudyMode, authSettings, setAuthSettings]
+  );
 
   return (
     <AuthGuard
       onUnauthenticated={() => {
-        router.push((`/login?redirect=${encodeURIComponent(pathname)}` as Route));
+        router.push(`/login?redirect=${encodeURIComponent(pathname)}` as Route);
       }}
     >
       <CommandPalette />
@@ -186,7 +246,31 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
 
         <DashboardMain>
           <DashboardHeader>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-3">
+              <div className="hidden items-center gap-1 rounded-full border border-border/70 bg-background/80 p-1 md:flex">
+                <Button
+                  variant={activeStudyMode === 'knowledge_gaining' ? 'default' : 'ghost'}
+                  size="sm"
+                  disabled={isUpdatingStudyMode}
+                  onClick={() => {
+                    void handleStudyModeChange('knowledge_gaining');
+                  }}
+                >
+                  <Brain className="mr-1.5 h-3.5 w-3.5" />
+                  Knowledge
+                </Button>
+                <Button
+                  variant={activeStudyMode === 'language_learning' ? 'default' : 'ghost'}
+                  size="sm"
+                  disabled={isUpdatingStudyMode}
+                  onClick={() => {
+                    void handleStudyModeChange('language_learning');
+                  }}
+                >
+                  <Languages className="mr-1.5 h-3.5 w-3.5" />
+                  Language
+                </Button>
+              </div>
               <UserMenu />
             </div>
           </DashboardHeader>

@@ -16,7 +16,7 @@ import {
   useMySettings,
   useUpdateSettings,
 } from '@noema/api-client';
-import { useAuth } from '@noema/auth';
+import { useAuth, useAuthStore } from '@noema/auth';
 import {
   Button,
   Card,
@@ -37,6 +37,9 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { toast } from '@/hooks/use-toast';
+import { DEFAULT_STUDY_MODE, isStudyMode, STUDY_MODE_STORAGE_KEY } from '@/lib/study-mode';
+
+type AppStudyMode = 'language_learning' | 'knowledge_gaining';
 
 // ============================================================================
 // Schemas
@@ -129,15 +132,41 @@ const DEFAULT_DAILY_GOAL = 20;
 function StudyPreferencesSection(): React.JSX.Element {
   const { data: settings, isLoading } = useMySettings();
   const updateSettings = useUpdateSettings();
+  const authSettings = useAuthStore((state) => state.settings);
+  const setAuthSettings = useAuthStore((state) => state.setSettings);
+  const [activeStudyMode, setActiveStudyMode] = useState<AppStudyMode>(DEFAULT_STUDY_MODE);
+  const [isUpdatingStudyMode, setIsUpdatingStudyMode] = useState(false);
+  const authSettingsStudyMode =
+    typeof authSettings === 'object' &&
+    authSettings !== null &&
+    'activeStudyMode' in authSettings &&
+    isStudyMode((authSettings as { activeStudyMode?: string }).activeStudyMode ?? null)
+      ? (authSettings as { activeStudyMode: AppStudyMode }).activeStudyMode
+      : undefined;
   // Controlled local state so the slider label stays in sync after re-fetches
   const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoal ?? DEFAULT_DAILY_GOAL);
+
+  useEffect(() => {
+    const persistedStudyMode = globalThis.localStorage.getItem(STUDY_MODE_STORAGE_KEY);
+    if (isStudyMode(persistedStudyMode)) {
+      setActiveStudyMode(persistedStudyMode);
+    }
+  }, []);
 
   // Sync controlled value when server data arrives or cache updates
   useEffect(() => {
     if (settings !== undefined) {
-      setDailyGoal(settings.dailyGoal ?? DEFAULT_DAILY_GOAL);
+      setDailyGoal(settings.dailyGoal);
     }
   }, [settings]);
+
+  useEffect(() => {
+    const persistedStudyMode = authSettingsStudyMode;
+    if (persistedStudyMode !== undefined && persistedStudyMode !== activeStudyMode) {
+      setActiveStudyMode(persistedStudyMode);
+      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, persistedStudyMode);
+    }
+  }, [activeStudyMode, authSettingsStudyMode]);
 
   const handleDailyGoalChange = async (value: number): Promise<void> => {
     try {
@@ -163,6 +192,32 @@ function StudyPreferencesSection(): React.JSX.Element {
     }
   };
 
+  const handleStudyModeChange = async (nextStudyMode: AppStudyMode): Promise<void> => {
+    const previousStudyMode = activeStudyMode;
+    setActiveStudyMode(nextStudyMode);
+    globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, nextStudyMode);
+
+    if (settings === undefined) {
+      return;
+    }
+
+    setIsUpdatingStudyMode(true);
+    try {
+      const response = await updateSettings.mutateAsync({
+        data: { activeStudyMode: nextStudyMode },
+        version: settings.version,
+      });
+      setAuthSettings(response.data);
+      toast.success('Study mode updated.');
+    } catch {
+      setActiveStudyMode(previousStudyMode);
+      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, previousStudyMode);
+      toast.error('Failed to update study mode.');
+    } finally {
+      setIsUpdatingStudyMode(false);
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -177,6 +232,39 @@ function StudyPreferencesSection(): React.JSX.Element {
           </div>
         ) : (
           <>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Active study mode</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Switch the app between language-learning and knowledge-gaining defaults.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant={activeStudyMode === 'knowledge_gaining' ? 'default' : 'outline'}
+                    size="sm"
+                    disabled={isUpdatingStudyMode}
+                    onClick={() => {
+                      void handleStudyModeChange('knowledge_gaining');
+                    }}
+                  >
+                    Knowledge
+                  </Button>
+                  <Button
+                    variant={activeStudyMode === 'language_learning' ? 'default' : 'outline'}
+                    size="sm"
+                    disabled={isUpdatingStudyMode}
+                    onClick={() => {
+                      void handleStudyModeChange('language_learning');
+                    }}
+                  >
+                    Language
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <hr className="border-border" />
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div>
