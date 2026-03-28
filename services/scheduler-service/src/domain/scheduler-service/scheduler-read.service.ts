@@ -35,6 +35,28 @@ import type {
   SchedulerDueStatus,
   SchedulerReadinessBand,
 } from '../../types/scheduler.types.js';
+
+function resolveTimezone(timezone?: string): string {
+  if (timezone === undefined || timezone.trim().length === 0) {
+    return 'UTC';
+  }
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return timezone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function toLocalDateKey(timestamp: string, timezone: string): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(new Date(timestamp));
+}
 import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from './algorithms/fsrs.js';
 import type { IReviewRepository, ISchedulerCardRepository } from './scheduler.repository.js';
 
@@ -190,10 +212,11 @@ export class SchedulerReadService {
 
   async getProgressSummary(
     userId: UserId,
-    studyMode: StudyMode = 'knowledge_gaining'
+    studyMode: StudyMode = 'knowledge_gaining',
+    timezone?: string
   ): Promise<IServiceResult<ISchedulerProgressSummary>> {
     const cards = await this.repos.schedulerCardRepository.findByUser(userId, { studyMode });
-    const summary = this.buildProgressSummary(userId, studyMode, cards);
+    const summary = this.buildProgressSummary(userId, studyMode, cards, resolveTimezone(timezone));
 
     return {
       data: summary,
@@ -207,10 +230,17 @@ export class SchedulerReadService {
   async getCardFocusSummary(
     userId: UserId,
     studyMode: StudyMode = 'knowledge_gaining',
-    limit = 5
+    limit = 5,
+    timezone?: string
   ): Promise<IServiceResult<ISchedulerCardFocusSummary>> {
     const cards = await this.repos.schedulerCardRepository.findByUser(userId, { studyMode });
-    const summary = this.buildCardFocusSummary(userId, studyMode, cards, limit);
+    const summary = this.buildCardFocusSummary(
+      userId,
+      studyMode,
+      cards,
+      limit,
+      resolveTimezone(timezone)
+    );
 
     return {
       data: summary,
@@ -223,12 +253,21 @@ export class SchedulerReadService {
 
   async getStudyGuidanceSummary(
     userId: UserId,
-    studyMode: StudyMode = 'knowledge_gaining'
+    studyMode: StudyMode = 'knowledge_gaining',
+    timezone?: string
   ): Promise<IServiceResult<ISchedulerStudyGuidanceSummary>> {
     const cards = await this.repos.schedulerCardRepository.findByUser(userId, { studyMode });
-    const progress = this.buildProgressSummary(userId, studyMode, cards);
-    const focus = this.buildCardFocusSummary(userId, studyMode, cards, 3);
-    const summary = this.buildStudyGuidanceSummary(userId, studyMode, progress, focus);
+    const resolvedTimezone = resolveTimezone(timezone);
+    const progress = this.buildProgressSummary(userId, studyMode, cards, resolvedTimezone);
+    const focus = this.buildCardFocusSummary(userId, studyMode, cards, 3, resolvedTimezone);
+    const focusEntries = this.buildFocusEntries(cards, resolvedTimezone);
+    const summary = this.buildStudyGuidanceSummary(
+      userId,
+      studyMode,
+      progress,
+      focus,
+      focusEntries
+    );
 
     return {
       data: summary,
@@ -445,11 +484,11 @@ export class SchedulerReadService {
   private buildProgressSummary(
     userId: UserId,
     studyMode: StudyMode,
-    cards: ISchedulerCard[]
+    cards: ISchedulerCard[],
+    timezone: string
   ): ISchedulerProgressSummary {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(startOfToday.getTime() + 86_400_000 - 1);
+    const todayKey = toLocalDateKey(now.toISOString(), timezone);
 
     const activeCards = cards.filter((card) => !this.isCardSuspended(card, now));
     const trackedCards = cards.filter(
@@ -457,10 +496,10 @@ export class SchedulerReadService {
     ).length;
     const dueNow = activeCards.filter((card) => new Date(card.nextReviewDate) <= now).length;
     const dueToday = activeCards.filter(
-      (card) => new Date(card.nextReviewDate) <= endOfToday
+      (card) => toLocalDateKey(card.nextReviewDate, timezone) <= todayKey
     ).length;
     const overdueCards = activeCards.filter(
-      (card) => new Date(card.nextReviewDate) < startOfToday
+      (card) => toLocalDateKey(card.nextReviewDate, timezone) < todayKey
     ).length;
     const newCards = cards.filter((card) => card.state === 'new').length;
     const learningCards = cards.filter(
@@ -512,12 +551,10 @@ export class SchedulerReadService {
     userId: UserId,
     studyMode: StudyMode,
     cards: ISchedulerCard[],
-    limit: number
+    limit: number,
+    timezone: string
   ): ISchedulerCardFocusSummary {
-    const now = new Date();
-    const focusEntries = cards
-      .filter((card) => !this.isCardSuspended(card, now))
-      .map((card) => this.toFocusEntry(card, now));
+    const focusEntries = this.buildFocusEntries(cards, timezone);
     const trackedEntries = focusEntries.filter(
       (entry) => entry.reviewCount > 0 || entry.readinessBand !== 'untracked'
     );
@@ -543,56 +580,99 @@ export class SchedulerReadService {
     userId: UserId,
     studyMode: StudyMode,
     progress: ISchedulerProgressSummary,
-    focus: ISchedulerCardFocusSummary
+    focus: ISchedulerCardFocusSummary,
+    focusEntries: ISchedulerCardFocusEntry[]
   ): ISchedulerStudyGuidanceSummary {
     const recommendations: ISchedulerGuidanceRecommendation[] = [];
+    const weakestEntries = [...focusEntries].sort((left, right) =>
+      this.compareWeakestFocusEntries(left, right)
+    );
+    const overdueEntries = weakestEntries.filter((entry) => entry.dueStatus === 'overdue');
+    const dueTodayEntries = weakestEntries.filter((entry) => entry.dueStatus === 'due_today');
+    const fragileEntries = weakestEntries.filter(
+      (entry) => entry.readinessBand === 'fragile' || entry.readinessBand === 'recovering'
+    );
+    const untrackedEntries = weakestEntries.filter((entry) => entry.readinessBand === 'untracked');
+    const languageTheme = this.detectLanguageFocusTheme(focusEntries);
 
-    if (progress.overdueCards > 0) {
+    if (overdueEntries.length > 0) {
       recommendations.push({
         action: 'clear_overdue',
-        headline: 'Clear the overdue backlog first',
-        explanation: 'Overdue cards are the main source of memory drift in this mode right now.',
-        suggestedCardCount: Math.min(progress.overdueCards, 12),
-        relatedCardIds: focus.weakestCards.map((card) => card.cardId),
+        headline:
+          studyMode === 'language_learning'
+            ? `Clear overdue ${languageTheme} reps first`
+            : 'Clear the overdue backlog first',
+        explanation:
+          studyMode === 'language_learning'
+            ? `Overdue ${languageTheme} reviews are the fastest way to lose retrieval sharpness in this mode.`
+            : 'Overdue cards are the main source of memory drift in this mode right now.',
+        suggestedCardCount: Math.min(overdueEntries.length, 12),
+        relatedCardIds: overdueEntries.slice(0, 12).map((card) => card.cardId),
       });
     }
 
     if (progress.fragileCards >= 3 || focus.weakestCards.length >= 3) {
       recommendations.push({
         action: 'reinforce_fragile_cards',
-        headline: 'Reinforce fragile cards',
-        explanation: 'Your biggest risk is low-confidence retention, not lack of coverage.',
+        headline:
+          studyMode === 'language_learning'
+            ? `Reinforce fragile ${languageTheme} patterns`
+            : 'Reinforce fragile cards',
+        explanation:
+          studyMode === 'language_learning'
+            ? `Your biggest risk is shaky recall on ${languageTheme} material, not lack of breadth.`
+            : 'Your biggest risk is low-confidence retention, not lack of coverage.',
         suggestedCardCount: Math.min(Math.max(progress.fragileCards, 3), 10),
-        relatedCardIds: focus.weakestCards.map((card) => card.cardId),
+        relatedCardIds: fragileEntries.slice(0, 10).map((card) => card.cardId),
       });
     }
 
-    if (progress.dueToday > 0) {
+    if (dueTodayEntries.length > 0) {
       recommendations.push({
         action: 'do_scheduled_reviews',
-        headline: 'Finish today’s planned reviews',
-        explanation: 'The mode is healthy enough that staying on schedule is the best next step.',
-        suggestedCardCount: Math.min(progress.dueToday, 10),
-        relatedCardIds: focus.weakestCards.map((card) => card.cardId),
+        headline:
+          studyMode === 'language_learning'
+            ? `Finish today’s scheduled ${languageTheme} reviews`
+            : 'Finish today’s planned reviews',
+        explanation:
+          studyMode === 'language_learning'
+            ? `This mode is stable enough that staying current on ${languageTheme} repetition is the best next move.`
+            : 'The mode is healthy enough that staying on schedule is the best next step.',
+        suggestedCardCount: Math.min(Math.max(dueTodayEntries.length, 1), 10),
+        relatedCardIds: dueTodayEntries.slice(0, 10).map((card) => card.cardId),
       });
     }
 
     if (progress.newCards > progress.matureCards || progress.totalCards === 0) {
       recommendations.push({
         action: 'build_coverage',
-        headline: 'Build more tracked coverage',
+        headline:
+          studyMode === 'language_learning'
+            ? `Build more tracked ${languageTheme} coverage`
+            : 'Build more tracked coverage',
         explanation:
-          'You need more meaningful exposure in this mode before deeper optimization matters.',
-        suggestedCardCount: Math.max(3, Math.min(progress.newCards || 5, 8)),
-        relatedCardIds: [],
+          studyMode === 'language_learning'
+            ? `You need more repeated exposure to ${languageTheme} targets before fine-grained optimization matters.`
+            : 'You need more meaningful exposure in this mode before deeper optimization matters.',
+        suggestedCardCount: Math.max(
+          3,
+          Math.min(untrackedEntries.length || progress.newCards || 5, 8)
+        ),
+        relatedCardIds: untrackedEntries.slice(0, 8).map((card) => card.cardId),
       });
     }
 
     if (recommendations.length === 0) {
       recommendations.push({
         action: 'expand_confidently',
-        headline: 'You have room to expand',
-        explanation: 'Your current mode looks stable enough to add new material.',
+        headline:
+          studyMode === 'language_learning'
+            ? `You have room to add fresh ${languageTheme} material`
+            : 'You have room to expand',
+        explanation:
+          studyMode === 'language_learning'
+            ? `Your current ${languageTheme} stack looks stable enough to add a fresh batch.`
+            : 'Your current mode looks stable enough to add new material.',
         suggestedCardCount: Math.max(3, Math.min(8, progress.newCards || 3)),
         relatedCardIds: focus.strongestCards.slice(0, 2).map((card) => card.cardId),
       });
@@ -605,17 +685,24 @@ export class SchedulerReadService {
     };
   }
 
-  private toFocusEntry(card: ISchedulerCard, now: Date): ISchedulerCardFocusEntry {
+  private buildFocusEntries(cards: ISchedulerCard[], timezone: string): ISchedulerCardFocusEntry[] {
+    const now = new Date();
+    return cards
+      .filter((card) => !this.isCardSuspended(card, now))
+      .map((card) => this.toFocusEntry(card, now, timezone));
+  }
+
+  private toFocusEntry(
+    card: ISchedulerCard,
+    now: Date,
+    timezone: string
+  ): ISchedulerCardFocusEntry {
     const recallProbability = this.computeRecallProbability(card);
     const nextReviewDate = new Date(card.nextReviewDate);
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(startOfToday.getTime() + 86_400_000 - 1);
+    const todayKey = toLocalDateKey(now.toISOString(), timezone);
+    const dueDateKey = toLocalDateKey(card.nextReviewDate, timezone);
     const dueStatus: SchedulerDueStatus =
-      nextReviewDate < startOfToday
-        ? 'overdue'
-        : nextReviewDate <= endOfToday
-          ? 'due_today'
-          : 'upcoming';
+      dueDateKey < todayKey ? 'overdue' : dueDateKey <= todayKey ? 'due_today' : 'upcoming';
     const daysUntilDue = Math.round((nextReviewDate.getTime() - now.getTime()) / 86_400_000);
     const readinessBand = this.classifyReadinessBand(card, recallProbability);
 
@@ -658,6 +745,47 @@ export class SchedulerReadService {
     }
 
     return 'stable';
+  }
+
+  private detectLanguageFocusTheme(entries: ISchedulerCardFocusEntry[]): string {
+    const buckets = new Map<string, number>([
+      ['vocabulary', 0],
+      ['grammar', 0],
+      ['pronunciation', 0],
+      ['listening', 0],
+    ]);
+
+    for (const entry of entries) {
+      const cardType = (entry.cardType ?? '').toLowerCase();
+      if (
+        cardType.includes('grammar') ||
+        cardType.includes('cloze') ||
+        cardType.includes('transformation')
+      ) {
+        buckets.set('grammar', (buckets.get('grammar') ?? 0) + 1);
+      } else if (
+        cardType.includes('listen') ||
+        cardType.includes('audio') ||
+        cardType.includes('dictation')
+      ) {
+        buckets.set('listening', (buckets.get('listening') ?? 0) + 1);
+      } else if (
+        cardType.includes('pronunciation') ||
+        cardType.includes('phon') ||
+        cardType.includes('minimal_pair')
+      ) {
+        buckets.set('pronunciation', (buckets.get('pronunciation') ?? 0) + 1);
+      } else {
+        buckets.set('vocabulary', (buckets.get('vocabulary') ?? 0) + 1);
+      }
+    }
+
+    const [theme, count] = [...buckets.entries()].sort((left, right) => right[1] - left[1])[0] ?? [
+      'vocabulary',
+      0,
+    ];
+
+    return count > 0 ? theme : 'language';
   }
 
   private describeFocusReason(

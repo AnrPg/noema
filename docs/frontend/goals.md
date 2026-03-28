@@ -32,6 +32,8 @@ explicit mastery read model.
 - The page now also shows an ordered list of simple recommendations from the
   scheduler guidance summary so goal setting can stay practical and
   action-oriented.
+- Missing scheduler guidance falls back to an empty recommendation list instead
+  of breaking the goals surface while the query is still unresolved.
 
 ## Why This Matters
 

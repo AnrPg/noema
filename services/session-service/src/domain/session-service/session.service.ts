@@ -128,6 +128,8 @@ export interface IExecutionContext {
   clientIp?: string;
   /** User agent */
   userAgent?: string;
+  /** User timezone when available */
+  timezone?: string;
 }
 
 /**
@@ -1116,7 +1118,12 @@ export class SessionService {
 
     // Phase 5 — Inline streak update (non-critical, errors are logged and swallowed)
     if (this.streakService) {
-      await this.streakService.updateStreakOnCompletion(ctx.userId, now, 'UTC', session.studyMode);
+      await this.streakService.updateStreakOnCompletion(
+        ctx.userId,
+        now,
+        ctx.timezone ?? 'UTC',
+        session.studyMode
+      );
     }
 
     return {

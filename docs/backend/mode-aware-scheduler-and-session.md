@@ -307,6 +307,34 @@ The scheduler/session architecture is correct when:
 - planner can vary policy by mode
 - dashboards and due queues do not silently merge unlike contexts
 
+## Current Implementation Notes
+
+The scheduler read layer now exposes three complementary mode-aware read models:
+
+- progress summary
+- card focus summary
+- study guidance summary
+
+The study guidance summary intentionally exposes an ordered `recommendations[]`
+list instead of a single recommendation. Each entry is meant to stay simple
+enough for UI chips, agent planning, or future workflow composition.
+
+The current implementation also improved recommendation precision:
+
+- `relatedCardIds` point at the relevant slice of the deck, not a generic weak
+  card list
+- language mode guidance uses slightly different framing from knowledge mode
+- day-boundary calculations read the learner timezone from the API request
+  instead of assuming server-local midnight
+
+Session completion and streak writes now use the learner timezone as well, so
+readiness, streaks, and daily guidance all align around the same user-local day.
+
+The current client and REST flow propagate timezone through an explicit
+`x-user-timezone` request header when available. Invalid or missing values fall
+back to `UTC`, keeping the contract backward-compatible while allowing learner-
+local day boundaries for due, overdue, streak, and guidance calculations.
+
 ## Related Documents
 
 - `docs/architecture/decisions/ADR-0055-mode-scoped-scheduling-sessions-and-mastery.md`

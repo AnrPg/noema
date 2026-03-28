@@ -62,6 +62,26 @@ In the current implementation, this already reaches:
 
 The UI should not require the user to rediscover this on each page.
 
+## Current Implementation Notes
+
+The current implementation now uses one shared study-mode controller between:
+
+- the authenticated shell toggle
+- the Settings page study-mode picker
+- downstream pages that only need the current active mode
+
+That means the shell and Settings page no longer maintain separate local copies
+of mode-selection logic.
+
+Supporting utilities now centralize:
+
+- reading the stored mode from local storage
+- persisting the chosen mode
+- deriving the mode from authenticated settings when available
+
+This reduces drift between shell state and settings state while keeping the same
+two-tier persistence model.
+
 ## Screen-Level Indicators
 
 Beyond the shell toggle itself, critical flows should reinforce active mode:

@@ -51,6 +51,19 @@ function handleError(error: unknown, request: FastifyRequest, reply: FastifyRepl
   });
 }
 
+function readUserTimezone(request: FastifyRequest): string | undefined {
+  const raw = request.headers['x-user-timezone'];
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return undefined;
+  }
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: raw });
+    return raw;
+  } catch {
+    return undefined;
+  }
+}
+
 export function registerSchedulerRoutes(
   fastify: FastifyInstance,
   schedulerService: SchedulerService,
@@ -520,10 +533,18 @@ export function registerSchedulerRoutes(
       }
 
       const userId = (request.user?.sub ?? 'anonymous') as UserId;
-      const result = await schedulerReadService.getProgressSummary(
-        userId,
-        parsed.data.studyMode as StudyMode
-      );
+      const timezone = readUserTimezone(request);
+      const result =
+        timezone === undefined
+          ? await schedulerReadService.getProgressSummary(
+              userId,
+              parsed.data.studyMode as StudyMode
+            )
+          : await schedulerReadService.getProgressSummary(
+              userId,
+              parsed.data.studyMode as StudyMode,
+              timezone
+            );
       reply.send(wrapResponse(request, result.data, result.agentHints));
     } catch (error) {
       handleError(error, request, reply);
@@ -555,11 +576,20 @@ export function registerSchedulerRoutes(
       }
 
       const userId = (request.user?.sub ?? 'anonymous') as UserId;
-      const result = await schedulerReadService.getCardFocusSummary(
-        userId,
-        parsed.data.studyMode as StudyMode,
-        parsed.data.limit
-      );
+      const timezone = readUserTimezone(request);
+      const result =
+        timezone === undefined
+          ? await schedulerReadService.getCardFocusSummary(
+              userId,
+              parsed.data.studyMode as StudyMode,
+              parsed.data.limit
+            )
+          : await schedulerReadService.getCardFocusSummary(
+              userId,
+              parsed.data.studyMode as StudyMode,
+              parsed.data.limit,
+              timezone
+            );
       reply.send(wrapResponse(request, result.data, result.agentHints));
     } catch (error) {
       handleError(error, request, reply);
@@ -591,10 +621,18 @@ export function registerSchedulerRoutes(
       }
 
       const userId = (request.user?.sub ?? 'anonymous') as UserId;
-      const result = await schedulerReadService.getStudyGuidanceSummary(
-        userId,
-        parsed.data.studyMode as StudyMode
-      );
+      const timezone = readUserTimezone(request);
+      const result =
+        timezone === undefined
+          ? await schedulerReadService.getStudyGuidanceSummary(
+              userId,
+              parsed.data.studyMode as StudyMode
+            )
+          : await schedulerReadService.getStudyGuidanceSummary(
+              userId,
+              parsed.data.studyMode as StudyMode,
+              timezone
+            );
       reply.send(wrapResponse(request, result.data, result.agentHints));
     } catch (error) {
       handleError(error, request, reply);

@@ -36,8 +36,8 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { useStudyModeController } from '@/hooks/use-active-study-mode';
 import { toast } from '@/hooks/use-toast';
-import { DEFAULT_STUDY_MODE, isStudyMode, STUDY_MODE_STORAGE_KEY } from '@/lib/study-mode';
 
 type AppStudyMode = 'language_learning' | 'knowledge_gaining';
 
@@ -132,26 +132,11 @@ const DEFAULT_DAILY_GOAL = 20;
 function StudyPreferencesSection(): React.JSX.Element {
   const { data: settings, isLoading } = useMySettings();
   const updateSettings = useUpdateSettings();
-  const authSettings = useAuthStore((state) => state.settings);
   const setAuthSettings = useAuthStore((state) => state.setSettings);
-  const [activeStudyMode, setActiveStudyMode] = useState<AppStudyMode>(DEFAULT_STUDY_MODE);
+  const { activeStudyMode, setActiveStudyMode } = useStudyModeController();
   const [isUpdatingStudyMode, setIsUpdatingStudyMode] = useState(false);
-  const authSettingsStudyMode =
-    typeof authSettings === 'object' &&
-    authSettings !== null &&
-    'activeStudyMode' in authSettings &&
-    isStudyMode((authSettings as { activeStudyMode?: string }).activeStudyMode ?? null)
-      ? (authSettings as { activeStudyMode: AppStudyMode }).activeStudyMode
-      : undefined;
   // Controlled local state so the slider label stays in sync after re-fetches
   const [dailyGoal, setDailyGoal] = useState(settings?.dailyGoal ?? DEFAULT_DAILY_GOAL);
-
-  useEffect(() => {
-    const persistedStudyMode = globalThis.localStorage.getItem(STUDY_MODE_STORAGE_KEY);
-    if (isStudyMode(persistedStudyMode)) {
-      setActiveStudyMode(persistedStudyMode);
-    }
-  }, []);
 
   // Sync controlled value when server data arrives or cache updates
   useEffect(() => {
@@ -159,14 +144,6 @@ function StudyPreferencesSection(): React.JSX.Element {
       setDailyGoal(settings.dailyGoal);
     }
   }, [settings]);
-
-  useEffect(() => {
-    const persistedStudyMode = authSettingsStudyMode;
-    if (persistedStudyMode !== undefined && persistedStudyMode !== activeStudyMode) {
-      setActiveStudyMode(persistedStudyMode);
-      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, persistedStudyMode);
-    }
-  }, [activeStudyMode, authSettingsStudyMode]);
 
   const handleDailyGoalChange = async (value: number): Promise<void> => {
     try {
@@ -195,7 +172,6 @@ function StudyPreferencesSection(): React.JSX.Element {
   const handleStudyModeChange = async (nextStudyMode: AppStudyMode): Promise<void> => {
     const previousStudyMode = activeStudyMode;
     setActiveStudyMode(nextStudyMode);
-    globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, nextStudyMode);
 
     if (settings === undefined) {
       return;
@@ -211,7 +187,6 @@ function StudyPreferencesSection(): React.JSX.Element {
       toast.success('Study mode updated.');
     } catch {
       setActiveStudyMode(previousStudyMode);
-      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, previousStudyMode);
       toast.error('Failed to update study mode.');
     } finally {
       setIsUpdatingStudyMode(false);

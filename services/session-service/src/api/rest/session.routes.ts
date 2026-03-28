@@ -68,15 +68,30 @@ export function registerSessionRoutes(
   // Helpers
   // ==========================================================================
 
+  function readUserTimezone(request: FastifyRequest): string | undefined {
+    const raw = request.headers['x-user-timezone'];
+    if (typeof raw !== 'string' || raw.trim().length === 0) {
+      return undefined;
+    }
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: raw });
+      return raw;
+    } catch {
+      return undefined;
+    }
+  }
+
   function buildContext(request: FastifyRequest): IExecutionContext {
     const user = request.user as { sub?: string } | undefined;
     const ua = request.headers['user-agent'];
+    const timezone = readUserTimezone(request);
     return {
       userId: (user?.sub ?? 'anonymous') as UserId,
       correlationId:
         (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
       clientIp: request.ip,
       ...(ua !== undefined ? { userAgent: ua } : {}),
+      ...(timezone !== undefined ? { timezone } : {}),
     };
   }
 

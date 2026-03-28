@@ -7,9 +7,9 @@ import {
   useNodeMasterySummary,
   usePKGNodes,
   useSchedulerCardFocusSummary,
+  useSchedulerStudyGuidanceSummary,
 } from '@noema/api-client';
 import type { IGraphNodeDto } from '@noema/api-client';
-import { useSchedulerStudyGuidanceSummary } from '@noema/api-client/scheduler';
 import type { UserId } from '@noema/types';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@noema/ui';
 import { BarChart3, CalendarClock, Flag, Loader2, Sparkles, Target } from 'lucide-react';
@@ -73,6 +73,8 @@ export default function GoalsPage(): React.JSX.Element {
     [weakestNodeQuery.data]
   );
   const focusData = cardFocus.data?.data;
+  const studyGuidanceData = studyGuidance.data?.data;
+  const schedulerRecommendations = studyGuidanceData?.recommendations ?? [];
   const dailyTarget =
     summaryData !== undefined ? Math.max(3, Math.min(12, summaryData.untrackedNodes)) : 5;
   const campaignTarget =
@@ -111,9 +113,9 @@ export default function GoalsPage(): React.JSX.Element {
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 Loading study guidance…
               </div>
-            ) : (studyGuidance.data?.data.recommendations.length ?? 0) > 0 ? (
-              studyGuidance.data.data.recommendations.map(
-                (recommendation: (typeof studyGuidance.data.data.recommendations)[number]) => (
+            ) : schedulerRecommendations.length > 0 ? (
+              schedulerRecommendations.map(
+                (recommendation: (typeof schedulerRecommendations)[number]) => (
                   <div
                     key={recommendation.action}
                     className="rounded-lg border border-border/70 bg-background/40 px-4 py-3"

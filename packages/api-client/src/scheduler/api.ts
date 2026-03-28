@@ -41,6 +41,24 @@ import type {
   SimulationResponse,
 } from './types.js';
 
+function createTimezoneHeaders(): HeadersInit | undefined {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof timezone === 'string' && timezone.length > 0
+      ? { 'x-user-timezone': timezone }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function withTimezoneHeaders<T extends Record<string, unknown>>(
+  config: T
+): T & { headers?: HeadersInit } {
+  const headers = createTimezoneHeaders();
+  return headers !== undefined ? { ...config, headers } : config;
+}
+
 // ============================================================================
 // Review Queue API (H5)
 // ============================================================================
@@ -76,9 +94,12 @@ export const progressApi = {
   getSummary: (
     params?: SchedulerProgressSummaryParams
   ): Promise<SchedulerProgressSummaryResponse> =>
-    http.get('/v1/scheduler/progress/summary', {
-      params: params as unknown as Record<string, string>,
-    }),
+    http.get(
+      '/v1/scheduler/progress/summary',
+      withTimezoneHeaders({
+        params: params as unknown as Record<string, string>,
+      })
+    ),
 
   /**
    * Fetch the authenticated learner's card-level focus summary.
@@ -86,9 +107,12 @@ export const progressApi = {
   getCardFocus: (
     params?: SchedulerCardFocusSummaryParams
   ): Promise<SchedulerCardFocusSummaryResponse> =>
-    http.get('/v1/scheduler/progress/focus', {
-      params: params as unknown as Record<string, string>,
-    }),
+    http.get(
+      '/v1/scheduler/progress/focus',
+      withTimezoneHeaders({
+        params: params as unknown as Record<string, string>,
+      })
+    ),
 
   /**
    * Fetch the authenticated learner's study-guidance summary.
@@ -96,9 +120,12 @@ export const progressApi = {
   getGuidance: (
     params?: SchedulerStudyGuidanceSummaryParams
   ): Promise<SchedulerStudyGuidanceSummaryResponse> =>
-    http.get('/v1/scheduler/progress/guidance', {
-      params: params as unknown as Record<string, string>,
-    }),
+    http.get(
+      '/v1/scheduler/progress/guidance',
+      withTimezoneHeaders({
+        params: params as unknown as Record<string, string>,
+      })
+    ),
 };
 
 // ============================================================================

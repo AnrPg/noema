@@ -39,6 +39,24 @@ import type {
   StreakResponse,
 } from './types.js';
 
+function createTimezoneHeaders(): HeadersInit | undefined {
+  try {
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof timezone === 'string' && timezone.length > 0
+      ? { 'x-user-timezone': timezone }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function withTimezoneHeaders<T extends Record<string, unknown>>(
+  config: T
+): T & { headers?: HeadersInit } {
+  const headers = createTimezoneHeaders();
+  return headers !== undefined ? { ...config, headers } : config;
+}
+
 // ============================================================================
 // Sessions API
 // ============================================================================
@@ -86,7 +104,9 @@ export const sessionsApi = {
 
   completeSession: (id: SessionId): Promise<SessionResponse> =>
     http
-      .post<SessionResponse | SessionEnvelopeResponse>(`/v1/sessions/${id}/complete`, {})
+      .post<
+        SessionResponse | SessionEnvelopeResponse
+      >(`/v1/sessions/${id}/complete`, {}, withTimezoneHeaders({}))
       .then(normalizeSessionResponse),
 
   expireSession: (id: SessionId): Promise<SessionResponse> =>

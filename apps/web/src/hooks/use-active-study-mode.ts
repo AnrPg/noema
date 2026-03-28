@@ -3,33 +3,46 @@
 import * as React from 'react';
 import { useAuthStore } from '@noema/auth';
 import type { StudyMode } from '@noema/types';
-import { DEFAULT_STUDY_MODE, isStudyMode, STUDY_MODE_STORAGE_KEY } from '@/lib/study-mode';
+import {
+  DEFAULT_STUDY_MODE,
+  getStudyModeFromSettings,
+  persistStudyMode,
+  readStoredStudyMode,
+} from '@/lib/study-mode';
+
+interface IStudyModeContextValue {
+  activeStudyMode: StudyMode;
+  setActiveStudyMode: (mode: StudyMode) => void;
+}
+
+const StudyModeContext = React.createContext<IStudyModeContextValue | null>(null);
+
+export function StudyModeProvider(props: {
+  value: IStudyModeContextValue;
+  children: React.ReactNode;
+}): React.ReactElement {
+  return React.createElement(StudyModeContext.Provider, props);
+}
+
+export function useStudyModeController(): IStudyModeContextValue {
+  const context = React.useContext(StudyModeContext);
+  const authSettings = useAuthStore((state) => state.settings);
+
+  if (context !== null) {
+    return context;
+  }
+
+  const fallbackStudyMode =
+    getStudyModeFromSettings(authSettings) ?? readStoredStudyMode() ?? DEFAULT_STUDY_MODE;
+
+  return {
+    activeStudyMode: fallbackStudyMode,
+    setActiveStudyMode: (mode) => {
+      persistStudyMode(mode);
+    },
+  };
+}
 
 export function useActiveStudyMode(): StudyMode {
-  const authSettings = useAuthStore((state) => state.settings);
-  const [activeStudyMode, setActiveStudyMode] = React.useState<StudyMode>(DEFAULT_STUDY_MODE);
-
-  const authSettingsStudyMode =
-    typeof authSettings === 'object' &&
-    authSettings !== null &&
-    'activeStudyMode' in authSettings &&
-    isStudyMode((authSettings as { activeStudyMode?: string }).activeStudyMode)
-      ? (authSettings as { activeStudyMode: StudyMode }).activeStudyMode
-      : undefined;
-
-  React.useEffect(() => {
-    const persistedStudyMode = globalThis.localStorage.getItem(STUDY_MODE_STORAGE_KEY);
-    if (isStudyMode(persistedStudyMode)) {
-      setActiveStudyMode(persistedStudyMode);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (authSettingsStudyMode !== undefined && authSettingsStudyMode !== activeStudyMode) {
-      setActiveStudyMode(authSettingsStudyMode);
-      globalThis.localStorage.setItem(STUDY_MODE_STORAGE_KEY, authSettingsStudyMode);
-    }
-  }, [activeStudyMode, authSettingsStudyMode]);
-
-  return activeStudyMode;
+  return useStudyModeController().activeStudyMode;
 }
