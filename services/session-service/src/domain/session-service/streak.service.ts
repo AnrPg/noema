@@ -16,14 +16,14 @@
 
 import type { IAgentHints, ISuggestedAction } from '@noema/contracts';
 import { createEmptyAgentHints } from '@noema/contracts';
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import type { Logger } from 'pino';
 
 import type {
-    IHeatmapEntry,
-    IStreakHistoryEntry,
-    IStreakQuery,
-    IStreakResponse
+  IHeatmapEntry,
+  IStreakHistoryEntry,
+  IStreakQuery,
+  IStreakResponse,
 } from '../../types/index.js';
 import type { IUserStreakRepository } from './streak.repository.js';
 
@@ -148,7 +148,7 @@ export class StreakService {
     const today = getTodayInTimezone(timezone);
 
     // 1. Read cached streak
-    const cached = await this.streakRepository.findByUserId(ctx.userId);
+    const cached = await this.streakRepository.findByUserId(ctx.userId, query.studyMode);
 
     let currentStreak = 0;
     let longestStreak = 0;
@@ -185,6 +185,7 @@ export class StreakService {
 
     const completedSessions = await this.streakRepository.findCompletedSessionsInRange(
       ctx.userId,
+      query.studyMode,
       afterDate,
       beforeDate
     );
@@ -233,12 +234,12 @@ export class StreakService {
     // Reverse heatmap so oldest date is first (chronological order)
     heatmapData.reverse();
 
-    const streakHint = currentStreak > 0
-      ? `${currentStreak}-day streak active`
-      : 'No active streak';
+    const streakHint =
+      currentStreak > 0 ? `${currentStreak}-day streak active` : 'No active streak';
 
     return {
       data: {
+        studyMode: query.studyMode,
         currentStreak,
         longestStreak,
         lastActiveDate,
@@ -248,7 +249,11 @@ export class StreakService {
       },
       agentHints: buildHints(
         [
-          { action: 'start_session', description: 'Start a study session to maintain streak', priority: 'high' },
+          {
+            action: 'start_session',
+            description: 'Start a study session to maintain streak',
+            priority: 'high',
+          },
         ],
         streakHint
       ),
@@ -268,11 +273,12 @@ export class StreakService {
     userId: UserId,
     completedAt: string,
     timezone: string,
+    studyMode: StudyMode,
     tx?: unknown // Prisma.TransactionClient
   ): Promise<void> {
     try {
       const sessionDate = toLocalDate(completedAt, timezone);
-      const cached = await this.streakRepository.findByUserId(userId);
+      const cached = await this.streakRepository.findByUserId(userId, studyMode);
 
       let newCurrentStreak: number;
       let newLongestStreak: number;
@@ -307,6 +313,7 @@ export class StreakService {
 
       await this.streakRepository.upsert(
         userId,
+        studyMode,
         {
           currentStreak: newCurrentStreak,
           longestStreak: newLongestStreak,

@@ -76,6 +76,7 @@ export interface ISessionRepository {
         ISession,
         | 'state'
         | 'learningMode'
+        | 'studyMode'
         | 'teachingApproach'
         | 'loadoutId'
         | 'loadoutArchetype'

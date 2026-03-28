@@ -4,6 +4,8 @@
  * TanStack Query hooks for Session Service (all endpoints).
  */
 
+/* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types */
+
 import {
   useMutation,
   useQuery,
@@ -43,6 +45,8 @@ import type {
   SessionQueueResponse,
   SessionResponse,
   SessionsListResponse,
+  StreakQuery,
+  StreakResponse,
 } from './types.js';
 
 // ============================================================================
@@ -55,6 +59,8 @@ export const sessionKeys = {
   detail: (id: SessionId) => [...sessionKeys.all, 'detail', id] as const,
   queue: (id: SessionId) => [...sessionKeys.detail(id), 'queue'] as const,
   attempts: (id: SessionId) => [...sessionKeys.detail(id), 'attempts'] as const,
+  streak: (query?: StreakQuery) => [...sessionKeys.all, 'streak', query] as const,
+  streakPrefix: () => [...sessionKeys.all, 'streak'] as const,
 };
 
 function matchesSessionFilters(
@@ -66,6 +72,10 @@ function matchesSessionFilters(
   }
 
   if (filters?.mode !== undefined && session.mode !== filters.mode) {
+    return false;
+  }
+
+  if (filters?.studyMode !== undefined && session.studyMode !== filters.studyMode) {
     return false;
   }
 
@@ -104,8 +114,7 @@ function updateCachedSessionLists(
               ...cachedResponse.pagination,
               total: Math.max(0, cachedResponse.pagination.total + lengthDelta),
               hasMore:
-                cachedResponse.pagination.offset +
-                  cachedResponse.pagination.limit <
+                cachedResponse.pagination.offset + cachedResponse.pagination.limit <
                 Math.max(0, cachedResponse.pagination.total + lengthDelta),
             },
           }
@@ -169,6 +178,18 @@ export function useSessionAttempts(
   });
 }
 
+export function useStudyStreak(
+  query?: StreakQuery,
+  options?: Omit<UseQueryOptions<StreakResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: sessionKeys.streak(query),
+    queryFn: () => sessionsApi.getStreak(query),
+    staleTime: 60 * 1000,
+    ...options,
+  });
+}
+
 // ============================================================================
 // Session Lifecycle Mutations
 // ============================================================================
@@ -197,6 +218,7 @@ export function usePauseSession(options?: UseMutationOptions<SessionResponse, Er
       queryClient.setQueryData(sessionKeys.detail(id), data);
       updateCachedSessionLists(queryClient, data.data);
       void queryClient.invalidateQueries({ queryKey: sessionKeys.list() });
+      void queryClient.invalidateQueries({ queryKey: sessionKeys.streakPrefix() });
     },
     ...options,
   });

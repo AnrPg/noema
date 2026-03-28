@@ -15,6 +15,7 @@ import type {
   LearningMode,
   Rating,
   SessionId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
@@ -28,6 +29,7 @@ import {
   type Rating as PrismaRating,
   type SessionCohortHandshakeStatus as PrismaSessionCohortHandshakeStatus,
   type SessionState as PrismaSessionState,
+  type StudyMode as PrismaStudyMode,
 } from '../../../generated/prisma/index.js';
 
 import {
@@ -69,6 +71,14 @@ function toPrismaLearningMode(s: string): PrismaLearningMode {
 
 function fromPrismaLearningMode(s: PrismaLearningMode): LearningMode {
   return s.toLowerCase() as LearningMode;
+}
+
+function toPrismaStudyMode(s: string): PrismaStudyMode {
+  return s.toUpperCase() as PrismaStudyMode;
+}
+
+function fromPrismaStudyMode(s: PrismaStudyMode): StudyMode {
+  return s.toLowerCase() as StudyMode;
 }
 
 function toPrismaAttemptOutcome(s: string): PrismaAttemptOutcome {
@@ -127,6 +137,7 @@ function toSessionDomain(row: any): ISession {
     deckQueryId: row.deckQueryId,
     state: fromPrismaSessionState(row.state),
     learningMode: fromPrismaLearningMode(row.learningMode),
+    studyMode: fromPrismaStudyMode(row.studyMode),
     teachingApproach: row.teachingApproach,
     schedulingAlgorithm: row.schedulingAlgorithm,
     loadoutId: row.loadoutId ?? null,
@@ -253,6 +264,9 @@ export class PrismaSessionRepository implements ISessionRepository {
     }
     if (filters?.learningMode) {
       where['learningMode'] = toPrismaLearningMode(filters.learningMode);
+    }
+    if (filters?.studyMode) {
+      where['studyMode'] = toPrismaStudyMode(filters.studyMode);
     }
     if (filters?.deckId) {
       where['deckQueryId'] = filters.deckId;
@@ -417,6 +431,7 @@ export class PrismaSessionRepository implements ISessionRepository {
         deckQueryId: session.deckQueryId,
         state: toPrismaSessionState(session.state),
         learningMode: toPrismaLearningMode(session.learningMode),
+        studyMode: toPrismaStudyMode(session.studyMode),
         teachingApproach: session.teachingApproach,
         schedulingAlgorithm: session.schedulingAlgorithm,
         loadoutId: session.loadoutId,
@@ -445,6 +460,7 @@ export class PrismaSessionRepository implements ISessionRepository {
         ISession,
         | 'state'
         | 'learningMode'
+        | 'studyMode'
         | 'teachingApproach'
         | 'loadoutId'
         | 'loadoutArchetype'
@@ -467,6 +483,7 @@ export class PrismaSessionRepository implements ISessionRepository {
     if (data.state !== undefined) update['state'] = toPrismaSessionState(data.state);
     if (data.learningMode !== undefined)
       update['learningMode'] = toPrismaLearningMode(data.learningMode);
+    if (data.studyMode !== undefined) update['studyMode'] = toPrismaStudyMode(data.studyMode);
     if (data.teachingApproach !== undefined) update['teachingApproach'] = data.teachingApproach;
     if (data.loadoutId !== undefined) update['loadoutId'] = data.loadoutId;
     if (data.loadoutArchetype !== undefined) update['loadoutArchetype'] = data.loadoutArchetype;

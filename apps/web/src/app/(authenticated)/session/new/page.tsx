@@ -21,6 +21,8 @@ import type { PhilosophicalMode } from '@/components/session/mode-selector';
 import { LaneMixSlider } from '@/components/session/lane-mix-slider';
 import { CardRenderer } from '@/components/card-renderers';
 import { DeckQueryFilter } from '@/components/deck-query-filter';
+import { formatApiErrorMessage } from '@/lib/api-errors';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 // ============================================================================
 // SessionNewPage
@@ -29,6 +31,7 @@ import { DeckQueryFilter } from '@/components/deck-query-filter';
 export default function SessionNewPage(): React.JSX.Element {
   const router = useRouter();
   const { user } = useAuth();
+  const activeStudyMode = useActiveStudyMode();
 
   // ── Section 1: Mode ──────────────────────────────────────────────────────
   const [mode, setMode] = React.useState<PhilosophicalMode>('exploration');
@@ -46,11 +49,11 @@ export default function SessionNewPage(): React.JSX.Element {
 
   // ── API hooks ────────────────────────────────────────────────────────────
   const reviewQueue = useReviewQueue(
-    { limit: sessionSize },
+    { limit: sessionSize, studyMode: activeStudyMode },
     { enabled: useQuickStart && user?.id !== undefined }
   );
   const sessionCandidates = useCards(
-    { ...customQuery, limit: sessionSize },
+    { ...customQuery, supportedStudyModes: [activeStudyMode], limit: sessionSize },
     { enabled: !useQuickStart && showCandidates && user?.id !== undefined }
   );
 
@@ -117,6 +120,7 @@ export default function SessionNewPage(): React.JSX.Element {
     try {
       const response = await startSession.mutateAsync({
         learningMode: mode,
+        studyMode: activeStudyMode,
         deckQueryId: createClientDeckQueryId(),
         config: {
           maxCards: sessionSize,
@@ -453,22 +457,17 @@ function formatDifficultyLabel(difficulty: unknown): string {
 }
 
 function formatStartSessionError(error: unknown): string {
-  if (typeof error === 'object' && error !== null) {
-    const message = 'message' in error && typeof error.message === 'string' ? error.message : '';
-    const code = 'code' in error && typeof error.code === 'string' ? error.code : '';
-    const status = 'status' in error && typeof error.status === 'number' ? error.status : undefined;
-
-    if (
-      code === 'VALIDATION_ERROR' ||
-      message.toLowerCase().includes('invalid start session input')
-    ) {
-      return 'We could not start the session because the app sent an incomplete session setup. Please refresh the page and try again; if you are using Custom Build, keep at least one candidate available.';
-    }
-
-    if (status === 400) {
-      return `We could not start the session because the request was rejected by the server. ${message !== '' ? message : 'Please review your filters and try again.'}`;
-    }
-  }
-
-  return error instanceof Error ? error.message : 'Failed to start session. Please try again.';
+  return formatApiErrorMessage(error, {
+    action: 'start the session',
+    fallback:
+      'We could not start the session. Review the selected mode and available cards, then try again.',
+    fieldLabels: {
+      deckQueryId: 'Session configuration',
+      initialCardIds: 'Selected cards',
+      learningMode: 'Learning mode',
+    },
+    fieldHints: {
+      initialCardIds: 'Keep at least one card available before starting.',
+    },
+  });
 }

@@ -60,7 +60,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
     prisma: PrismaClient,
     logger: Logger,
     consumerName: string,
-    sourceStreamKey = 'noema:events:user-service',
+    sourceStreamKey = 'noema:events:user-service'
   ) {
     super(redis, buildConfig({ sourceStreamKey, consumerName }), logger);
     this.prisma = prisma;
@@ -79,10 +79,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
 
     const isSoft = (envelope.payload as { soft?: boolean }).soft !== false;
 
-    this.logger.info(
-      { userId, soft: isSoft },
-      'Processing user.deleted — cleaning session data',
-    );
+    this.logger.info({ userId, soft: isSoft }, 'Processing user.deleted — cleaning session data');
 
     // Both soft and hard: abandon active sessions
     await this.abandonActiveSessions(userId);
@@ -118,7 +115,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
     if (result.count > 0) {
       this.logger.info(
         { userId, sessionsAbandoned: result.count },
-        'Active/paused sessions abandoned due to user deletion',
+        'Active/paused sessions abandoned due to user deletion'
       );
     }
   }
@@ -156,8 +153,12 @@ export class UserDeletedConsumer extends BaseEventConsumer {
       // SessionCohortHandshake may not yet be in generated client —
       // use runtime-safe access (model added in latest schema migration).
       'sessionCohortHandshake' in this.prisma
-        ? (this.prisma as unknown as Record<string, { deleteMany: (args: unknown) => Promise<{ count: number }> }>)
-            ['sessionCohortHandshake']!.deleteMany({ where: { sessionId: { in: sessionIds } } })
+        ? (
+            this.prisma as unknown as Record<
+              string,
+              { deleteMany: (args: unknown) => Promise<{ count: number }> }
+            >
+          )['sessionCohortHandshake']!.deleteMany({ where: { sessionId: { in: sessionIds } } })
         : Promise.resolve({ count: 0 }),
       this.prisma.eventOutbox.deleteMany({
         where: { aggregateId: { in: sessionIds } },
@@ -170,13 +171,8 @@ export class UserDeletedConsumer extends BaseEventConsumer {
     });
 
     // Step 4: Delete streak cache (Phase 5)
-    let streakDeleted = 0;
-    try {
-      await this.prisma.userStreak.delete({ where: { userId } });
-      streakDeleted = 1;
-    } catch {
-      // Row may not exist — that's fine
-    }
+    const streakResult = await this.prisma.userStreak.deleteMany({ where: { userId } });
+    const streakDeleted = streakResult.count;
 
     this.logger.info(
       {
@@ -188,7 +184,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
         outboxEventsDeleted: outboxResult.count,
         streakDeleted,
       },
-      'User session data hard-deleted (GDPR)',
+      'User session data hard-deleted (GDPR)'
     );
   }
 }

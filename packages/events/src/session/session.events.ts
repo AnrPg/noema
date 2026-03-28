@@ -31,6 +31,7 @@ import type {
   SchedulingAlgorithm,
   SessionId,
   SessionTerminationReason,
+  StudyMode,
   TeachingApproach,
   UserId,
 } from '@noema/types';
@@ -106,6 +107,7 @@ export interface ISessionStatsSnapshot {
 /** Snapshot of context at the time of an attempt. */
 export interface IAttemptContextSnapshot {
   learningMode: LearningMode;
+  studyMode?: StudyMode;
   teachingApproach: TeachingApproach;
   loadoutArchetype?: LoadoutArchetype;
   forceLevel?: ForceLevel;
@@ -139,6 +141,7 @@ export interface ISessionStartedPayload {
   userId: UserId;
   deckQueryId: DeckQueryLogId;
   learningMode: LearningMode;
+  studyMode?: StudyMode;
   teachingApproach: TeachingApproach;
   schedulingAlgorithm: SchedulingAlgorithm;
   loadoutId?: LoadoutId;
@@ -248,6 +251,7 @@ export interface IAttemptRecordedPayload {
   cardId: CardId;
   userId: UserId;
   sequenceNumber: number;
+  studyMode?: StudyMode;
 
   // Response
   outcome: AttemptOutcome;

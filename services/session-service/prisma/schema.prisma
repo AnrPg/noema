@@ -27,6 +27,7 @@ model Session {
 
     // Learning configuration
     learningMode        LearningMode
+    studyMode           StudyMode    @default(KNOWLEDGE_GAINING) @map("study_mode")
     teachingApproach    String       @map("teaching_approach") @db.VarChar(100)
     schedulingAlgorithm String       @map("scheduling_algorithm") @db.VarChar(50)
 
@@ -71,6 +72,7 @@ model Session {
 
     // Indexes
     @@index([userId])
+    @@index([userId, studyMode])
     @@index([userId, state])
     @@index([state])
     @@index([startedAt])
@@ -264,6 +266,11 @@ enum SessionState {
     @@map("session_state")
 }
 
+enum StudyMode {
+    LANGUAGE_LEARNING
+    KNOWLEDGE_GAINING
+}
+
 enum LearningMode {
     EXPLORATION
     GOAL_DRIVEN
@@ -336,7 +343,8 @@ enum OfflineIntentTokenReplayGuardStatus {
 // currentStreak returns 0.
 
 model UserStreak {
-    userId         String   @id @map("user_id") @db.VarChar(50)
+    userId         String   @map("user_id") @db.VarChar(50)
+    studyMode      StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
     currentStreak  Int      @default(0) @map("current_streak")
     longestStreak  Int      @default(0) @map("longest_streak")
     lastActiveDate DateTime @map("last_active_date") @db.Date
@@ -344,5 +352,7 @@ model UserStreak {
     createdAt      DateTime @default(now()) @map("created_at")
     updatedAt      DateTime @updatedAt @map("updated_at")
 
+    @@id([userId, studyMode])
+    @@index([userId])
     @@map("user_streaks")
 }

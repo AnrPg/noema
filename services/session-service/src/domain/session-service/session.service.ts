@@ -48,6 +48,7 @@ import type {
   SchedulingAlgorithm,
   SessionId,
   TeachingApproach,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import { ID_PREFIXES, SessionTerminationReason } from '@noema/types';
@@ -305,7 +306,8 @@ export class SessionService {
       deckQueryId: data.deckQueryId as DeckQueryLogId,
       state: States.ACTIVE,
       learningMode: data.learningMode as LearningMode,
-        teachingApproach: (data.teachingApproach ?? 'standard') as TeachingApproach,
+      studyMode: (data.studyMode ?? 'knowledge_gaining') as StudyMode,
+      teachingApproach: (data.teachingApproach ?? 'standard') as TeachingApproach,
       schedulingAlgorithm: (data.schedulingAlgorithm ?? 'fsrs') as SchedulingAlgorithm,
       loadoutId: (data.loadoutId as LoadoutId) ?? null,
       loadoutArchetype: (data.loadoutArchetype as LoadoutArchetype) ?? null,
@@ -368,6 +370,7 @@ export class SessionService {
             userId: ctx.userId,
             deckQueryId: data.deckQueryId as DeckQueryLogId,
             learningMode: data.learningMode as LearningMode,
+            studyMode: (data.studyMode ?? 'knowledge_gaining') as StudyMode,
             teachingApproach: createdSession.teachingApproach,
             schedulingAlgorithm: createdSession.schedulingAlgorithm,
             ...(data.loadoutId !== undefined ? { loadoutId: data.loadoutId as LoadoutId } : {}),
@@ -1113,7 +1116,7 @@ export class SessionService {
 
     // Phase 5 — Inline streak update (non-critical, errors are logged and swallowed)
     if (this.streakService) {
-      await this.streakService.updateStreakOnCompletion(ctx.userId, now, 'UTC');
+      await this.streakService.updateStreakOnCompletion(ctx.userId, now, 'UTC', session.studyMode);
     }
 
     return {
@@ -1419,8 +1422,10 @@ export class SessionService {
       revisionCount: data.revisionCount ?? 0,
       hintRequestCount: data.hintRequestCount ?? 0,
       hintDepthReached: data.hintDepthReached as HintDepth,
-      contextSnapshot:
-        data.contextSnapshot as unknown as import('../../types/index.js').IAttemptContext,
+      contextSnapshot: {
+        ...(data.contextSnapshot as unknown as import('../../types/index.js').IAttemptContext),
+        studyMode: (data.contextSnapshot.studyMode ?? session.studyMode) as StudyMode,
+      },
       priorSchedulingState:
         (data.priorSchedulingState as unknown as import('../../types/index.js').IPriorScheduling) ??
         null,
@@ -1479,6 +1484,7 @@ export class SessionService {
             cardId: data.cardId as CardId,
             userId: ctx.userId,
             sequenceNumber,
+            studyMode: session.studyMode,
             outcome: data.outcome as AttemptOutcome,
             rating: data.rating as Rating,
             ratingValue: data.ratingValue,
@@ -2182,9 +2188,7 @@ export class SessionService {
         nonce: registeredNonce,
       };
 
-      token = await new SignJWT(
-        registeredClaims as unknown as Record<string, unknown>
-      )
+      token = await new SignJWT(registeredClaims as unknown as Record<string, unknown>)
         .setProtectedHeader({ alg: 'HS256', typ: 'JWT', kid: this.activeTokenKeyId })
         .setIssuedAt(Math.floor(now.getTime() / 1000))
         .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))

@@ -6,6 +6,7 @@
 
 import {
   HintDepth,
+  type StudyMode,
   TeachingApproach as TeachingApproachValues,
   type CardId,
   type HintDepth as HintDepthValue,
@@ -27,6 +28,7 @@ import type {
   IOfflineIntentVerifyInput,
   IRequestHintInput,
   ISessionFilters,
+  IStreakQuery,
   IStartSessionInput,
   IUpdateStrategyInput,
   IUpdateTeachingInput,
@@ -34,6 +36,7 @@ import type {
   SessionQueueResponse,
   SessionResponse,
   SessionsListResponse,
+  StreakResponse,
 } from './types.js';
 
 // ============================================================================
@@ -58,6 +61,7 @@ export const sessionsApi = {
     const params: Record<string, string | number | boolean | undefined> = {};
     if (filters.state !== undefined) params['state'] = filters.state;
     if (filters.mode !== undefined) params['learningMode'] = filters.mode;
+    if (filters.studyMode !== undefined) params['studyMode'] = filters.studyMode;
     if (filters.limit !== undefined) params['limit'] = filters.limit;
     if (filters.offset !== undefined) params['offset'] = filters.offset;
     return http
@@ -94,6 +98,15 @@ export const sessionsApi = {
     http
       .post<SessionResponse | SessionEnvelopeResponse>(`/v1/sessions/${id}/abandon`, {})
       .then(normalizeSessionResponse),
+
+  getStreak: (query?: IStreakQuery): Promise<StreakResponse> =>
+    http.get('/v1/sessions/streak', {
+      params: {
+        ...(query?.days !== undefined ? { days: query.days } : {}),
+        ...(query?.timezone !== undefined ? { timezone: query.timezone } : {}),
+        ...(query?.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
+      },
+    }),
 };
 
 type SessionListEnvelopeResponse = Omit<SessionsListResponse, 'data'> & {
@@ -113,6 +126,7 @@ const LEGACY_MODE_TO_LEARNING_MODE = {
   test: 'exam_oriented',
   preview: 'synthesis',
 } as const;
+const DEFAULT_STUDY_MODE: StudyMode = 'knowledge_gaining';
 const VALID_TEACHING_APPROACHES = new Set<string>(Object.values(TeachingApproachValues));
 
 function normalizeStartSessionInput(data: IStartSessionInput): Record<string, unknown> {
@@ -124,6 +138,7 @@ function normalizeStartSessionInput(data: IStartSessionInput): Record<string, un
   return {
     deckQueryId: data.deckQueryId ?? createPrefixedId('deck_'),
     learningMode,
+    studyMode: data.studyMode ?? DEFAULT_STUDY_MODE,
     ...(data.teachingApproach !== undefined ? { teachingApproach: data.teachingApproach } : {}),
     ...(data.schedulingAlgorithm !== undefined
       ? { schedulingAlgorithm: data.schedulingAlgorithm }
@@ -223,6 +238,7 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       state: 'ACTIVE',
       mode: 'standard',
       learningMode: 'exploration',
+      studyMode: DEFAULT_STUDY_MODE,
       teachingApproach: 'standard',
       schedulingAlgorithm: 'fsrs',
       cardIds: [],
@@ -272,6 +288,7 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       ? Math.max(0, stats['uniqueCardsReviewed'])
       : 0;
   const learningMode = stringValue(session['learningMode'], 'exploration');
+  const studyMode = stringValue(session['studyMode'], DEFAULT_STUDY_MODE);
 
   return {
     id: stringValue(session['id']) as SessionId,
@@ -284,6 +301,7 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       learningMode === 'synthesis'
         ? learningMode
         : 'exploration',
+    studyMode: studyMode === 'language_learning' ? 'language_learning' : DEFAULT_STUDY_MODE,
     teachingApproach: normalizeTeachingApproach(session['teachingApproach']),
     schedulingAlgorithm: stringValue(session['schedulingAlgorithm'], 'fsrs') as
       | 'fsrs'
@@ -603,7 +621,9 @@ function normalizeSessionQueueResponse(
   const normalizedItems = Array.isArray(rawData)
     ? rawData.map((item, index) => normalizeSessionQueueItem(item, index))
     : [];
-  const items = normalizedItems.map(({ isPending: _isPending, sessionId: _sessionId, ...item }) => item);
+  const items = normalizedItems.map(
+    ({ isPending: _isPending, sessionId: _sessionId, ...item }) => item
+  );
 
   return {
     ...response,

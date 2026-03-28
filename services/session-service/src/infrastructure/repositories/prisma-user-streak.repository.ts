@@ -5,7 +5,7 @@
  * Manages the user_streaks materialized cache and completed-session queries.
  */
 
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import type { Logger } from 'pino';
 import type { Prisma, PrismaClient } from '../../../generated/prisma/index.js';
 
@@ -20,6 +20,7 @@ import type { ICompletedSessionSummary, IUserStreak } from '../../types/index.js
 function toStreakDomain(row: any): IUserStreak {
   return {
     userId: row.userId as string,
+    studyMode: row.studyMode.toLowerCase() as StudyMode,
     currentStreak: row.currentStreak,
     longestStreak: row.longestStreak,
     lastActiveDate: formatDate(row.lastActiveDate),
@@ -63,15 +64,25 @@ export class PrismaUserStreakRepository implements IUserStreakRepository {
     return tx ?? this.prisma;
   }
 
-  async findByUserId(userId: UserId): Promise<IUserStreak | null> {
+  private toPrismaStudyMode(studyMode: StudyMode): 'LANGUAGE_LEARNING' | 'KNOWLEDGE_GAINING' {
+    return studyMode.toUpperCase() as 'LANGUAGE_LEARNING' | 'KNOWLEDGE_GAINING';
+  }
+
+  async findByUserId(userId: UserId, studyMode: StudyMode): Promise<IUserStreak | null> {
     const row = await this.prisma.userStreak.findUnique({
-      where: { userId },
+      where: {
+        userId_studyMode: {
+          userId,
+          studyMode: this.toPrismaStudyMode(studyMode),
+        },
+      },
     });
     return row ? toStreakDomain(row) : null;
   }
 
   async upsert(
     userId: UserId,
+    studyMode: StudyMode,
     data: {
       currentStreak: number;
       longestStreak: number;
@@ -83,9 +94,15 @@ export class PrismaUserStreakRepository implements IUserStreakRepository {
     const lastActiveDate = parseDate(data.lastActiveDate);
 
     const row = await this.db(tx).userStreak.upsert({
-      where: { userId },
+      where: {
+        userId_studyMode: {
+          userId,
+          studyMode: this.toPrismaStudyMode(studyMode),
+        },
+      },
       create: {
         userId,
+        studyMode: this.toPrismaStudyMode(studyMode),
         currentStreak: data.currentStreak,
         longestStreak: data.longestStreak,
         lastActiveDate,
@@ -104,12 +121,14 @@ export class PrismaUserStreakRepository implements IUserStreakRepository {
 
   async findCompletedSessionsInRange(
     userId: UserId,
+    studyMode: StudyMode,
     afterDate: string,
     beforeDate: string
   ): Promise<ICompletedSessionSummary[]> {
     const rows = await this.prisma.session.findMany({
       where: {
         userId,
+        studyMode: this.toPrismaStudyMode(studyMode),
         state: 'COMPLETED',
         completedAt: {
           gte: new Date(afterDate),
@@ -129,14 +148,11 @@ export class PrismaUserStreakRepository implements IUserStreakRepository {
 
     return rows.map((row) => {
       const stats = (row.stats ?? {}) as Record<string, unknown>;
-      const totalAttempts =
-        typeof stats['totalAttempts'] === 'number' ? stats['totalAttempts'] : 0;
+      const totalAttempts = typeof stats['totalAttempts'] === 'number' ? stats['totalAttempts'] : 0;
 
       // Duration = lastActivityAt - startedAt - totalPausedDurationMs
       const startMs = row.startedAt.getTime();
-      const endMs = row.completedAt
-        ? row.completedAt.getTime()
-        : row.lastActivityAt.getTime();
+      const endMs = row.completedAt ? row.completedAt.getTime() : row.lastActivityAt.getTime();
       const durationMs = Math.max(0, endMs - startMs - row.totalPausedDurationMs);
 
       return {
@@ -150,7 +166,7 @@ export class PrismaUserStreakRepository implements IUserStreakRepository {
 
   async deleteByUserId(userId: UserId, tx?: Prisma.TransactionClient): Promise<void> {
     try {
-      await this.db(tx).userStreak.delete({ where: { userId } });
+      await this.db(tx).userStreak.deleteMany({ where: { userId } });
     } catch {
       // Row may not exist — that's fine
       this.logger.debug({ userId }, 'No streak record to delete');

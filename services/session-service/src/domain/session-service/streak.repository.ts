@@ -5,7 +5,7 @@
  * and completed-session queries needed for streak computation.
  */
 
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import type { Prisma } from '../../../generated/prisma/index.js';
 
 import type { ICompletedSessionSummary, IUserStreak } from '../../types/index.js';
@@ -19,7 +19,7 @@ export interface IUserStreakRepository {
    * Find the streak record for a user. Returns null if the user
    * has never completed a session (no row in user_streaks).
    */
-  findByUserId(userId: UserId): Promise<IUserStreak | null>;
+  findByUserId(userId: UserId, studyMode: StudyMode): Promise<IUserStreak | null>;
 
   /**
    * Create or update the streak record for a user (upsert).
@@ -27,6 +27,7 @@ export interface IUserStreakRepository {
    */
   upsert(
     userId: UserId,
+    studyMode: StudyMode,
     data: {
       currentStreak: number;
       longestStreak: number;
@@ -46,6 +47,7 @@ export interface IUserStreakRepository {
    */
   findCompletedSessionsInRange(
     userId: UserId,
+    studyMode: StudyMode,
     afterDate: string,
     beforeDate: string
   ): Promise<ICompletedSessionSummary[]>;

@@ -15,6 +15,7 @@ import { useSessions } from '@noema/api-client';
 import { useAbandonSession } from '@noema/api-client/session';
 import { toast } from '@/hooks/use-toast';
 import type { ISessionDto, SessionState } from '@noema/api-client';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 // ============================================================================
 // Helpers
@@ -93,13 +94,13 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 // Session row
 // ============================================================================
 
-interface SessionRowProps {
+interface ISessionRowProps {
   session: ISessionDto;
   onStop?: (sessionId: SessionId) => void;
   isStopping?: boolean;
 }
 
-function SessionRow({ session, onStop, isStopping }: SessionRowProps): React.JSX.Element {
+function SessionRow({ session, onStop, isStopping }: ISessionRowProps): React.JSX.Element {
   const sessionId = session.id;
   const state = session.state;
   const mode = session.mode;
@@ -125,10 +126,10 @@ function SessionRow({ session, onStop, isStopping }: SessionRowProps): React.JSX
         <span
           className={[
             'inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-            STATE_CLASSES[state] ?? 'bg-zinc-100 text-zinc-600',
+            STATE_CLASSES[state],
           ].join(' ')}
         >
-          {STATE_LABELS[state] ?? state}
+          {STATE_LABELS[state]}
         </span>
 
         {/* Mode */}
@@ -168,10 +169,10 @@ function SessionRow({ session, onStop, isStopping }: SessionRowProps): React.JSX
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onStop?.(sessionId);
+            onStop(sessionId);
           }}
         >
-          {isStopping ? 'Stopping…' : 'Stop session'}
+          {isStopping === true ? 'Stopping…' : 'Stop session'}
         </Button>
       )}
     </div>
@@ -184,9 +185,12 @@ function SessionRow({ session, onStop, isStopping }: SessionRowProps): React.JSX
 
 export default function SessionsPage(): React.JSX.Element {
   const [stateFilter, setStateFilter] = React.useState<FilterValue>('');
+  const activeStudyMode = useActiveStudyMode();
 
   const { data, isLoading, isError, error } = useSessions(
-    stateFilter !== '' ? { state: stateFilter as SessionState, limit: 50 } : { limit: 50 }
+    stateFilter !== ''
+      ? { state: stateFilter as SessionState, studyMode: activeStudyMode, limit: 50 }
+      : { studyMode: activeStudyMode, limit: 50 }
   );
 
   const sessions: ISessionDto[] = data?.data ?? [];

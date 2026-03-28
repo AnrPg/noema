@@ -4,12 +4,15 @@
  * Domain types for study streak computation and caching.
  */
 
+import type { StudyMode } from '@noema/types';
+
 // ============================================================================
 // User Streak (materialized cache row)
 // ============================================================================
 
 export interface IUserStreak {
   userId: string;
+  studyMode: StudyMode;
   currentStreak: number;
   longestStreak: number;
   lastActiveDate: string; // YYYY-MM-DD
@@ -42,6 +45,7 @@ export interface IHeatmapEntry {
 // ============================================================================
 
 export interface IStreakResponse {
+  studyMode: StudyMode;
   currentStreak: number;
   longestStreak: number;
   lastActiveDate: string | null; // YYYY-MM-DD or null if never studied
@@ -57,6 +61,7 @@ export interface IStreakResponse {
 export interface IStreakQuery {
   days: number;
   timezone: string;
+  studyMode: StudyMode;
 }
 
 // ============================================================================

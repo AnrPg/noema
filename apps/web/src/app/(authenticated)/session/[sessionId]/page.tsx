@@ -51,6 +51,7 @@ import { ResponseControls } from '@/components/session/response-controls';
 import type { Grade } from '@/components/session/response-controls';
 import { AdaptiveCheckpoint } from '@/components/session/adaptive-checkpoint';
 import { CardRenderer } from '@/components/card-renderers';
+import { formatApiErrorMessage } from '@/lib/api-errors';
 
 // ============================================================================
 // ActiveSessionPage
@@ -162,9 +163,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
     setIsPaused(true);
     setMutationError(null);
     pauseSession.mutate(sessionId, {
-      onError: () => {
+      onError: (error) => {
         setIsPaused(false);
-        setMutationError('Failed to pause session. Please try again.');
+        setMutationError(
+          formatApiErrorMessage(error, {
+            action: 'pause the session',
+            fallback: 'We could not pause the session. Please try again.',
+          })
+        );
       },
     });
   }, [setIsPaused, pauseSession, sessionId]);
@@ -173,9 +179,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
     setIsPaused(false);
     setMutationError(null);
     resumeSession.mutate(sessionId, {
-      onError: () => {
+      onError: (error) => {
         setIsPaused(true);
-        setMutationError('Failed to resume session. Please try again.');
+        setMutationError(
+          formatApiErrorMessage(error, {
+            action: 'resume the session',
+            fallback: 'We could not resume the session. Please try again.',
+          })
+        );
       },
     });
   }, [setIsPaused, resumeSession, sessionId]);
@@ -215,6 +226,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
         hintDepthReached: HintDepth.NONE,
         contextSnapshot: {
           learningMode: sessionDto.learningMode,
+          studyMode: sessionDto.studyMode,
           teachingApproach: normalizeTeachingApproach(sessionDto.teachingApproach),
           activeInterventionIds: [],
         },
@@ -239,7 +251,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
                 router.push(`/session/${sessionId}/summary`);
               },
               onError: (err) => {
-                setMutationError(err.message);
+                setMutationError(
+                  formatApiErrorMessage(err, {
+                    action: 'finish the session',
+                    fallback: 'We could not finish the session. Please try again.',
+                  })
+                );
               },
             });
           } else {
@@ -261,7 +278,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
           }
         },
         onError: (err) => {
-          setMutationError(formatMutationError(err));
+          setMutationError(
+            formatApiErrorMessage(err, {
+              action: 'save your answer',
+              fallback: 'We could not save your answer. Please try again.',
+            })
+          );
         },
       });
     },
@@ -290,7 +312,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
         router.push('/sessions');
       },
       onError: (err) => {
-        setMutationError(formatMutationError(err));
+        setMutationError(
+          formatApiErrorMessage(err, {
+            action: 'abandon the session',
+            fallback: 'We could not abandon the session. Please try again.',
+          })
+        );
       },
     });
   }, [abandonSession, sessionId, clear, router]);
@@ -641,15 +668,4 @@ function selectCheckpointDirective(
 
 function normalizeTeachingApproach(value: string): string {
   return value === 'socratic_questioning' ? 'standard' : value;
-}
-
-function formatMutationError(error: Error): string {
-  const candidate = error as Error & { fieldErrors?: Record<string, string[] | undefined> };
-  const fieldError = candidate.fieldErrors
-    ? Object.values(candidate.fieldErrors).find(
-        (messages): messages is string[] => Array.isArray(messages) && messages.length > 0
-      )
-    : undefined;
-
-  return fieldError?.[0] ?? error.message;
 }

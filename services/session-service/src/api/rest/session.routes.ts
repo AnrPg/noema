@@ -6,7 +6,7 @@
  */
 
 import type { IApiResponse } from '@noema/contracts';
-import type { CorrelationId, LearningMode, UserId } from '@noema/types';
+import type { CorrelationId, LearningMode, StudyMode, UserId } from '@noema/types';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import {
@@ -214,10 +214,13 @@ export function registerSessionRoutes(
             ...(query.learningMode !== undefined
               ? { learningMode: query.learningMode as LearningMode }
               : {}),
+            ...(query.studyMode !== undefined ? { studyMode: query.studyMode as StudyMode } : {}),
             ...(query.createdAfter !== undefined ? { createdAfter: query.createdAfter } : {}),
             ...(query.createdBefore !== undefined ? { createdBefore: query.createdBefore } : {}),
             ...(query.completedAfter !== undefined ? { completedAfter: query.completedAfter } : {}),
-            ...(query.completedBefore !== undefined ? { completedBefore: query.completedBefore } : {}),
+            ...(query.completedBefore !== undefined
+              ? { completedBefore: query.completedBefore }
+              : {}),
             ...(query.deckId !== undefined ? { deckId: query.deckId } : {}),
             ...(query.minAttempts !== undefined ? { minAttempts: query.minAttempts } : {}),
             ...(query.sortBy !== undefined ? { sortBy: query.sortBy as SessionSortBy } : {}),
@@ -249,7 +252,11 @@ export function registerSessionRoutes(
           const ctx = buildContext(request);
           const query = StreakQuerySchema.parse(request.query);
           const result = await streakService.getStreak(
-            { days: query.days, timezone: query.timezone },
+            {
+              days: query.days,
+              timezone: query.timezone,
+              studyMode: query.studyMode as import('@noema/types').StudyMode,
+            },
             { userId: ctx.userId }
           );
           reply.send(wrapResponse(result.data, result.agentHints, request));
@@ -536,7 +543,11 @@ export function registerSessionRoutes(
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
-        const result = await sessionService.proposeCohort(request.params.sessionId, request.body, ctx);
+        const result = await sessionService.proposeCohort(
+          request.params.sessionId,
+          request.body,
+          ctx
+        );
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
@@ -551,7 +562,11 @@ export function registerSessionRoutes(
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
-        const result = await sessionService.acceptCohort(request.params.sessionId, request.body, ctx);
+        const result = await sessionService.acceptCohort(
+          request.params.sessionId,
+          request.body,
+          ctx
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
@@ -566,7 +581,11 @@ export function registerSessionRoutes(
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
-        const result = await sessionService.reviseCohort(request.params.sessionId, request.body, ctx);
+        const result = await sessionService.reviseCohort(
+          request.params.sessionId,
+          request.body,
+          ctx
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
@@ -581,7 +600,11 @@ export function registerSessionRoutes(
     async (request, reply) => {
       try {
         const ctx = buildContext(request);
-        const result = await sessionService.commitCohort(request.params.sessionId, request.body, ctx);
+        const result = await sessionService.commitCohort(
+          request.params.sessionId,
+          request.body,
+          ctx
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);

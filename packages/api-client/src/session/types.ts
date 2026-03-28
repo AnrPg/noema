@@ -14,6 +14,7 @@ import type {
   SchedulingAlgorithm,
   SessionId,
   SessionTerminationReason,
+  StudyMode,
   TeachingApproach,
   UserId,
 } from '@noema/types';
@@ -37,6 +38,7 @@ export interface ISessionDto {
   state: SessionState;
   mode: SessionMode;
   learningMode: LearningMode;
+  studyMode: StudyMode;
   teachingApproach: TeachingApproach;
   schedulingAlgorithm: SchedulingAlgorithm;
   cardIds: CardId[];
@@ -108,6 +110,7 @@ export interface IRecordAttemptInput {
   hintDepthReached: HintDepth;
   contextSnapshot: {
     learningMode: LearningMode;
+    studyMode?: StudyMode;
     teachingApproach: string;
     loadoutArchetype?: string;
     forceLevel?: string;
@@ -251,6 +254,7 @@ export interface IStartSessionInput {
   blueprintId?: string;
   deckQueryId?: string;
   learningMode?: LearningMode;
+  studyMode?: StudyMode;
   teachingApproach?: string;
   schedulingAlgorithm?: 'fsrs' | 'hlr' | 'sm2';
   loadoutId?: string;
@@ -270,8 +274,36 @@ export interface IStartSessionInput {
 export interface ISessionFilters {
   state?: SessionState;
   mode?: SessionMode;
+  studyMode?: StudyMode;
   limit?: number;
   offset?: number;
+}
+
+export interface IStreakHistoryEntryDto {
+  sessionsCompleted: number;
+  totalAttempts: number;
+  totalMinutes: number;
+}
+
+export interface IHeatmapEntryDto {
+  date: string;
+  intensity: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface IStreakQuery {
+  days?: number;
+  timezone?: string;
+  studyMode?: StudyMode;
+}
+
+export interface IStreakDto {
+  studyMode: StudyMode;
+  currentStreak: number;
+  longestStreak: number;
+  lastActiveDate: string | null;
+  isActiveToday: boolean;
+  streakHistory: Record<string, IStreakHistoryEntryDto>;
+  heatmapData: IHeatmapEntryDto[];
 }
 
 // ============================================================================
@@ -298,6 +330,8 @@ export type OfflineIntentTokenDto = IOfflineIntentTokenDto;
 export type OfflineIntentVerifyInput = IOfflineIntentVerifyInput;
 export type StartSessionInput = IStartSessionInput;
 export type SessionFilters = ISessionFilters;
+export type StreakDto = IStreakDto;
+export type StreakQuery = IStreakQuery;
 
 // ============================================================================
 // Response aliases
@@ -313,3 +347,4 @@ export type CheckpointResponse = IApiResponse<IEvaluateCheckpointResultDto>;
 export type CohortResponse = IApiResponse<ICohortHandshakeDto>;
 export type BlueprintValidationResponse = IApiResponse<IBlueprintValidationResult>;
 export type OfflineTokenResponse = IApiResponse<IOfflineIntentTokenDto>;
+export type StreakResponse = IApiResponse<IStreakDto>;

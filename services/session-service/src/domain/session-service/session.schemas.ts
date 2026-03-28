@@ -20,6 +20,7 @@ import {
   RatingSchema,
   SchedulingAlgorithmSchema,
   SessionIdSchema,
+  StudyModeSchema,
   TeachingApproachSchema,
 } from '@noema/validation';
 import { z } from 'zod';
@@ -102,6 +103,7 @@ export type SessionConfigInput = z.input<typeof SessionConfigSchema>;
 export const StartSessionInputSchema = z.object({
   deckQueryId: DeckQueryLogIdSchema.describe('Deck query log that produced the card set'),
   learningMode: LearningModeSchema.describe('Active learning mode'),
+  studyMode: StudyModeSchema.default('knowledge_gaining').describe('Active study mode lens'),
   teachingApproach: TeachingApproachInputSchema.optional().describe('Initial teaching approach'),
   schedulingAlgorithm: SchedulingAlgorithmSchema.optional().describe('Scheduling algorithm to use'),
   loadoutId: LoadoutIdSchema.optional().describe('Active loadout ID'),
@@ -176,6 +178,7 @@ export type ValidateSessionBlueprintInput = z.input<typeof ValidateSessionBluepr
 
 export const AttemptContextSchema = z.object({
   learningMode: LearningModeSchema,
+  studyMode: StudyModeSchema.optional(),
   teachingApproach: TeachingApproachInputSchema,
   loadoutArchetype: LoadoutArchetypeSchema.optional(),
   forceLevel: ForceLevelSchema.optional(),
@@ -335,16 +338,37 @@ export type ChangeTeachingInput = z.input<typeof ChangeTeachingInputSchema>;
 export const SessionListQuerySchema = z.object({
   state: z.string().optional().describe('Filter by session state'),
   learningMode: z.string().optional().describe('Filter by learning mode'),
+  studyMode: StudyModeSchema.optional().describe('Filter by study mode'),
   limit: z.coerce.number().int().positive().max(100).default(20).describe('Page size'),
   offset: z.coerce.number().int().nonnegative().default(0).describe('Page offset'),
   // Phase 5 — Enhanced filters
-  createdAfter: z.string().datetime().optional().describe('Only sessions created after this ISO timestamp'),
-  createdBefore: z.string().datetime().optional().describe('Only sessions created before this ISO timestamp'),
-  completedAfter: z.string().datetime().optional().describe('Only sessions completed after this ISO timestamp'),
-  completedBefore: z.string().datetime().optional().describe('Only sessions completed before this ISO timestamp'),
+  createdAfter: z
+    .string()
+    .datetime()
+    .optional()
+    .describe('Only sessions created after this ISO timestamp'),
+  createdBefore: z
+    .string()
+    .datetime()
+    .optional()
+    .describe('Only sessions created before this ISO timestamp'),
+  completedAfter: z
+    .string()
+    .datetime()
+    .optional()
+    .describe('Only sessions completed after this ISO timestamp'),
+  completedBefore: z
+    .string()
+    .datetime()
+    .optional()
+    .describe('Only sessions completed before this ISO timestamp'),
   deckId: z.string().min(1).optional().describe('Filter to sessions for a specific deck'),
   minAttempts: z.coerce.number().int().nonnegative().optional().describe('Minimum total attempts'),
-  sortBy: z.enum(['createdAt', 'completedAt', 'totalAttempts', 'durationMs', 'retentionRate']).optional().default('createdAt').describe('Sort field'),
+  sortBy: z
+    .enum(['createdAt', 'completedAt', 'totalAttempts', 'durationMs', 'retentionRate'])
+    .optional()
+    .default('createdAt')
+    .describe('Sort field'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('Sort direction'),
 });
 
@@ -357,6 +381,9 @@ export type SessionListQuery = z.input<typeof SessionListQuerySchema>;
 export const StreakQuerySchema = z.object({
   days: z.coerce.number().int().min(1).max(365).default(90).describe('Days of history to return'),
   timezone: z.string().min(1).max(50).default('UTC').describe('IANA timezone string'),
+  studyMode: StudyModeSchema.default('knowledge_gaining').describe(
+    'Study mode to scope streak analytics to'
+  ),
 });
 
 export type StreakQuery = z.input<typeof StreakQuerySchema>;

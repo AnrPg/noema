@@ -23,6 +23,7 @@ import type {
   SchedulingAlgorithm,
   SessionId,
   SessionTerminationReason,
+  StudyMode,
   TeachingApproach,
   UserId,
 } from '@noema/types';
@@ -238,6 +239,7 @@ export interface ISession {
   deckQueryId: DeckQueryLogId;
   state: SessionState;
   learningMode: LearningMode;
+  studyMode: StudyMode;
   teachingApproach: TeachingApproach;
   schedulingAlgorithm: SchedulingAlgorithm;
   loadoutId: LoadoutId | null;
@@ -264,6 +266,7 @@ export interface ISession {
 
 export interface IAttemptContext {
   learningMode: LearningMode;
+  studyMode?: StudyMode;
   teachingApproach: TeachingApproach;
   loadoutArchetype?: LoadoutArchetype;
   forceLevel?: ForceLevel;
@@ -343,6 +346,7 @@ export interface ISessionQueueItem {
 export interface IStartSessionInput {
   deckQueryId: DeckQueryLogId;
   learningMode: LearningMode;
+  studyMode?: StudyMode;
   teachingApproach?: TeachingApproach;
   schedulingAlgorithm?: SchedulingAlgorithm;
   loadoutId?: LoadoutId;
@@ -442,6 +446,7 @@ export type SortOrder = 'asc' | 'desc';
 export interface ISessionFilters {
   state?: SessionState;
   learningMode?: LearningMode;
+  studyMode?: StudyMode;
   /** Only sessions created on or after this ISO timestamp */
   createdAfter?: string;
   /** Only sessions created on or before this ISO timestamp */
