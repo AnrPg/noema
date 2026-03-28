@@ -7,7 +7,7 @@
  */
 import * as React from 'react';
 import { useForecast } from '@noema/api-client';
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import { Loader2 } from 'lucide-react';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -105,13 +105,17 @@ function formatTime(iso: string): string {
 
 export interface IReviewForecastFullProps {
   userId: UserId;
+  studyMode: StudyMode;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function ReviewForecastFull({ userId }: IReviewForecastFullProps): React.JSX.Element {
+export function ReviewForecastFull({
+  userId,
+  studyMode,
+}: IReviewForecastFullProps): React.JSX.Element {
   const { data: forecastData, isLoading } = useForecast(
-    { userId, days: 7, includeOverdue: true },
+    { userId, days: 7, includeOverdue: true, studyMode },
     { enabled: userId !== '' }
   );
 

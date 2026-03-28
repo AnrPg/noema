@@ -8,16 +8,20 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useReviewQueue } from '@noema/api-client';
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import { Button } from '@noema/ui';
 import { Loader2, PlayCircle } from 'lucide-react';
 
 export interface ITodaysPlanProps {
   userId: UserId;
+  studyMode: StudyMode;
 }
 
-export function TodaysPlan({ userId }: ITodaysPlanProps): React.JSX.Element {
-  const { data: queueData, isLoading } = useReviewQueue({ limit: 500 }, { enabled: userId !== '' });
+export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.Element {
+  const { data: queueData, isLoading } = useReviewQueue(
+    { limit: 500, studyMode },
+    { enabled: userId !== '' }
+  );
 
   const queue = queueData?.data;
   const totalRetention = queue?.retentionDue ?? 0;

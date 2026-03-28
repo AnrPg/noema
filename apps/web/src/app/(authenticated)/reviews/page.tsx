@@ -13,12 +13,16 @@ import { useAuth } from '@noema/auth';
 import type { UserId } from '@noema/types';
 import { TodaysPlan } from '@/components/reviews/todays-plan';
 import { ReviewForecastFull } from '@/components/reviews/review-forecast-full';
+import { ReviewStatsSummary } from '@/components/reviews/review-stats-summary';
 import { ReviewWindows } from '@/components/reviews/review-windows';
 import { SchedulingSimulator } from '@/components/reviews/scheduling-simulator';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
 export default function ReviewsPage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
+  const activeStudyMode = useActiveStudyMode();
   const [showSimulator, setShowSimulator] = React.useState(false);
 
   return (
@@ -28,7 +32,11 @@ export default function ReviewsPage(): React.JSX.Element {
         <div>
           <h1 className="text-3xl font-bold">Reviews</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Your personalized review schedule and forecasts.
+            Your personalized review schedule and forecasts for {getStudyModeLabel(activeStudyMode)}
+            .
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {getStudyModeDescription(activeStudyMode)}
           </p>
         </div>
         <button
@@ -51,23 +59,28 @@ export default function ReviewsPage(): React.JSX.Element {
 
       {/* Section 1 — Today's Plan */}
       <section aria-label="Today's plan">
-        <TodaysPlan userId={userId} />
+        <TodaysPlan userId={userId} studyMode={activeStudyMode} />
       </section>
 
       {/* Section 2 — 7-Day Forecast */}
       <section aria-label="7-day review forecast">
-        <ReviewForecastFull userId={userId} />
+        <ReviewForecastFull userId={userId} studyMode={activeStudyMode} />
       </section>
 
-      {/* Section 3 — Review Windows */}
+      {/* Section 3 — Review Analytics */}
+      <section aria-label="Review analytics">
+        <ReviewStatsSummary userId={userId} studyMode={activeStudyMode} />
+      </section>
+
+      {/* Section 4 — Review Windows */}
       <section aria-label="Suggested review windows">
-        <ReviewWindows userId={userId} />
+        <ReviewWindows userId={userId} studyMode={activeStudyMode} />
       </section>
 
-      {/* Section 4 — Scheduling Simulator (toggle) */}
+      {/* Section 5 — Scheduling Simulator (toggle) */}
       {showSimulator && (
         <section aria-label="Scheduling simulator">
-          <SchedulingSimulator userId={userId} />
+          <SchedulingSimulator userId={userId} studyMode={activeStudyMode} />
         </section>
       )}
     </div>

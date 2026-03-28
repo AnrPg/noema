@@ -28,6 +28,16 @@ export interface IApiError extends Error {
   code: string;
   fieldErrors?: Record<string, string[]> | undefined;
   details?: unknown;
+  requestId?: string | undefined;
+  metadata?:
+    | {
+        requestId?: string;
+        timestamp?: string;
+        serviceName?: string;
+        serviceVersion?: string;
+        executionTime?: number;
+      }
+    | undefined;
 }
 
 // Backward-compatible aliases (used by index.ts re-exports)
@@ -44,13 +54,30 @@ export class ApiRequestError extends Error implements IApiError {
   code: string;
   fieldErrors: Record<string, string[]> | undefined;
   details: unknown;
+  requestId: string | undefined;
+  metadata:
+    | {
+        requestId?: string;
+        timestamp?: string;
+        serviceName?: string;
+        serviceVersion?: string;
+        executionTime?: number;
+      }
+    | undefined;
 
   constructor(
     message: string,
     status: number,
     code: string,
     fieldErrors?: Record<string, string[]>,
-    details?: unknown
+    details?: unknown,
+    metadata?: {
+      requestId?: string;
+      timestamp?: string;
+      serviceName?: string;
+      serviceVersion?: string;
+      executionTime?: number;
+    }
   ) {
     super(message);
     this.name = 'ApiRequestError';
@@ -58,6 +85,8 @@ export class ApiRequestError extends Error implements IApiError {
     this.code = code;
     this.fieldErrors = fieldErrors ?? undefined;
     this.details = details ?? undefined;
+    this.requestId = metadata?.requestId;
+    this.metadata = metadata ?? undefined;
   }
 }
 
@@ -118,7 +147,7 @@ function buildUrl(
 
       if (Array.isArray(value)) {
         value.forEach((entry) => {
-          url.searchParams.append(key, entry);
+          url.searchParams.append(key, String(entry));
         });
         return;
       }
@@ -139,6 +168,13 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
         fieldErrors?: Record<string, string[]>;
         details?: unknown;
       };
+      metadata?: {
+        requestId?: string;
+        timestamp?: string;
+        serviceName?: string;
+        serviceVersion?: string;
+        executionTime?: number;
+      };
     };
 
     return new ApiRequestError(
@@ -146,7 +182,8 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
       response.status,
       body.error?.code ?? 'UNKNOWN_ERROR',
       body.error?.fieldErrors,
-      body.error?.details
+      body.error?.details,
+      body.metadata
     );
   } catch {
     return new ApiRequestError(response.statusText, response.status, 'UNKNOWN_ERROR');

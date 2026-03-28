@@ -18,13 +18,21 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Button } from '@noema/ui';
-import type { SessionId } from '@noema/types';
+import type { SessionId, UserId } from '@noema/types';
 
-import { useSession, useSessionAttempts } from '@noema/api-client';
+import {
+  useMe,
+  useNodeMasterySummary,
+  useSchedulerProgressSummary,
+  useSession,
+  useSessionAttempts,
+} from '@noema/api-client';
 
 import { SessionSummaryVitals } from '@/components/session/session-summary-vitals';
 import { CardResultsTable } from '@/components/session/card-results-table';
 import { PostSessionReflection } from '@/components/session/post-session-reflection';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { getStudyModeShortLabel } from '@/lib/study-mode';
 
 // ============================================================================
 // Helpers
@@ -53,6 +61,9 @@ const PASSING_GRADE = 3;
 export default function SessionSummaryPage(): React.JSX.Element {
   const params = useParams<{ sessionId: string }>();
   const sessionId = params.sessionId as SessionId;
+  const activeStudyMode = useActiveStudyMode();
+  const { data: me } = useMe();
+  const currentUserId = (me?.id ?? '') as UserId;
 
   const {
     data: sessionData,
@@ -66,6 +77,15 @@ export default function SessionSummaryPage(): React.JSX.Element {
     isError: attemptsError,
     refetch: refetchAttempts,
   } = useSessionAttempts(sessionId);
+  const masterySummary = useNodeMasterySummary(currentUserId, {
+    enabled: currentUserId !== '',
+    studyMode: activeStudyMode,
+  });
+  const progressSummary = useSchedulerProgressSummary(
+    { studyMode: activeStudyMode },
+    { enabled: currentUserId !== '' }
+  );
+  const progressData = progressSummary.data?.data;
 
   const isLoading = sessionLoading || attemptsLoading;
 
@@ -151,8 +171,53 @@ export default function SessionSummaryPage(): React.JSX.Element {
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            This percentage reflects how many cards you marked as Good or Easy this session. Lane-specific
-            breakdowns will appear once each attempt is tagged with a lane on the server.
+            This percentage reflects how many cards you marked as Good or Easy this session.
+            Lane-specific breakdowns will appear once each attempt is tagged with a lane on the
+            server.
+          </p>
+        </div>
+      </section>
+
+      <section aria-label="Mode-scoped progress">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Mode Snapshot
+        </h2>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {getStudyModeShortLabel(activeStudyMode)} mode mastery
+            </span>
+            {masterySummary.isLoading ? (
+              <span className="text-sm text-muted-foreground">Loading…</span>
+            ) : (
+              <>
+                <span className="text-lg font-semibold">
+                  {masterySummary.data !== undefined
+                    ? `${String(masterySummary.data.masteredNodes)}/${String(masterySummary.data.totalNodes)} mastered`
+                    : '—'}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {masterySummary.data !== undefined
+                    ? `${String(masterySummary.data.untrackedNodes)} untracked, avg ${String(
+                        Math.round(masterySummary.data.averageMastery * 100)
+                      )}% mastery`
+                    : 'Mastery snapshot unavailable'}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {progressData !== undefined
+                    ? `${String(progressData.dueToday)} due today, ${String(
+                        progressData.fragileCards
+                      )} fragile cards, ${String(progressData.trackedCards)}/${String(
+                        progressData.totalCards
+                      )} tracked`
+                    : 'Scheduler snapshot unavailable'}
+                </span>
+              </>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            This snapshot uses the same mode-scoped mastery read model as Goals and the knowledge
+            graph, so post-session review stays aligned with your longer-term progress.
           </p>
         </div>
       </section>

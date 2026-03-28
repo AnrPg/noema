@@ -10,11 +10,12 @@
 import {
   useForecast,
   useMisconceptions,
-  useReviewQueue,
-  useSessions,
+  useSchedulerProgressSummary,
+  useStudyStreak,
   useStructuralHealth,
   type UserDto,
 } from '@noema/api-client';
+import type { StudyMode } from '@noema/types';
 import { MetricTile, NeuralGauge, Skeleton } from '@noema/ui';
 import { Flame } from 'lucide-react';
 import { SectionErrorBoundary } from '@/components/section-error-boundary';
@@ -25,31 +26,29 @@ function ensureArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
-// Returns YYYY-MM-DD in local timezone (not UTC) for consistent day bucketing
-function localDateStr(d: Date): string {
-  const y = String(d.getFullYear());
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-// Maximum look-back for streak calculation. Streak will be capped if exceeded.
-const STREAK_LOOKBACK_DAYS = 30;
-
 // ============================================================================
 // Sub-tile: Cards Due
 // ============================================================================
 
-function CardsDueTile({ userId }: { userId: UserId }): React.JSX.Element {
-  const queue = useReviewQueue({ limit: 500 }, { enabled: userId !== '' });
-  const forecast = useForecast({ userId, days: 7, includeOverdue: true }, { enabled: userId !== '' });
+function CardsDueTile({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
+  const progress = useSchedulerProgressSummary({ studyMode }, { enabled: userId !== '' });
+  const forecast = useForecast(
+    { userId, days: 7, includeOverdue: true, studyMode },
+    { enabled: userId !== '' }
+  );
 
-  if (queue.isLoading || forecast.isLoading) {
+  if (progress.isLoading || forecast.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const queueData = queue.data?.data;
-  const total = queueData?.totalDue ?? 0;
+  const summary = progress.data?.data;
+  const total = summary?.dueNow ?? 0;
 
   const forecastDays = ensureArray<{ combined: { total: number } }>(forecast.data?.data.days);
   const sparklineData = forecastDays.map((day) => day.combined.total);
@@ -60,6 +59,17 @@ function CardsDueTile({ userId }: { userId: UserId }): React.JSX.Element {
       value={total}
       colorFamily="synapse"
       sparklineData={sparklineData}
+      trend={
+        total > 0
+          ? {
+              direction: 'up',
+              delta: `${String(summary?.overdueCards ?? 0)} overdue`,
+            }
+          : {
+              direction: 'flat',
+              delta: `${String(summary?.matureCards ?? 0)} mature`,
+            }
+      }
     />
   );
 }
@@ -68,8 +78,14 @@ function CardsDueTile({ userId }: { userId: UserId }): React.JSX.Element {
 // Sub-tile: Knowledge Health
 // ============================================================================
 
-function KnowledgeHealthTile({ userId }: { userId: UserId }): React.JSX.Element {
-  const health = useStructuralHealth(userId);
+function KnowledgeHealthTile({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
+  const health = useStructuralHealth(userId, { studyMode });
 
   if (health.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
@@ -93,8 +109,14 @@ function KnowledgeHealthTile({ userId }: { userId: UserId }): React.JSX.Element 
 // Sub-tile: Active Misconceptions
 // ============================================================================
 
-function MisconceptionsTile({ userId }: { userId: UserId }): React.JSX.Element {
-  const misc = useMisconceptions(userId);
+function MisconceptionsTile({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
+  const misc = useMisconceptions(userId, { studyMode });
 
   if (misc.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
@@ -131,12 +153,19 @@ function MisconceptionsTile({ userId }: { userId: UserId }): React.JSX.Element {
 
 /**
  * userId is used only to ensure this tile renders only when auth is settled.
- * useSessions is auth-scoped server-side and does not accept a userId filter.
+ * Streaks are now read from the dedicated session-service streak endpoint so
+ * dashboard analytics stay aligned with mode-scoped scheduling state.
  */
-function StudyStreakTile({ userId }: { userId: UserId }): React.JSX.Element {
-  const sessions = useSessions({ state: 'COMPLETED', limit: STREAK_LOOKBACK_DAYS });
+function StudyStreakTile({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
+  const streak = useStudyStreak({ studyMode, days: 30 });
 
-  if (sessions.isLoading) {
+  if (streak.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
@@ -144,30 +173,19 @@ function StudyStreakTile({ userId }: { userId: UserId }): React.JSX.Element {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const list = ensureArray<{ startedAt: string }>(sessions.data?.data);
-
-  // Compute consecutive days with at least one completed session.
-  // If the user has not yet studied today, begin the check from yesterday so
-  // that a prior streak is not zeroed out before the first session of the day.
-  const completedDays = new Set(list.map((s) => localDateStr(new Date(s.startedAt))));
-  const check = new Date();
-  const today = localDateStr(check);
-  if (!completedDays.has(today)) {
-    check.setDate(check.getDate() - 1);
-  }
-  let streak = 0;
-  while (completedDays.has(localDateStr(check))) {
-    streak += 1;
-    check.setDate(check.getDate() - 1);
-  }
+  const streakDays = streak.data?.data.currentStreak ?? 0;
 
   return (
     <MetricTile
       label="Study Streak"
-      value={`${String(streak)}d`}
+      value={`${String(streakDays)}d`}
       colorFamily="myelin"
-      icon={streak > 7 ? <Flame className="h-4 w-4 text-myelin-400" /> : undefined}
-      trend={streak > 0 ? { direction: 'up', delta: 'Keep it up!' } : { direction: 'flat' }}
+      icon={streakDays > 7 ? <Flame className="h-4 w-4 text-myelin-400" /> : undefined}
+      trend={
+        streakDays > 0
+          ? { direction: 'up', delta: 'Keep it up!' }
+          : { direction: 'flat', delta: 'Start a streak' }
+      }
     />
   );
 }
@@ -176,20 +194,26 @@ function StudyStreakTile({ userId }: { userId: UserId }): React.JSX.Element {
 // Exported Row
 // ============================================================================
 
-export function CognitiveVitals({ userId }: { userId: UserId }): React.JSX.Element {
+export function CognitiveVitals({
+  userId,
+  studyMode,
+}: {
+  userId: UserId;
+  studyMode: StudyMode;
+}): React.JSX.Element {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <SectionErrorBoundary>
-        <CardsDueTile userId={userId} />
+        <CardsDueTile userId={userId} studyMode={studyMode} />
       </SectionErrorBoundary>
       <SectionErrorBoundary>
-        <KnowledgeHealthTile userId={userId} />
+        <KnowledgeHealthTile userId={userId} studyMode={studyMode} />
       </SectionErrorBoundary>
       <SectionErrorBoundary>
-        <MisconceptionsTile userId={userId} />
+        <MisconceptionsTile userId={userId} studyMode={studyMode} />
       </SectionErrorBoundary>
       <SectionErrorBoundary>
-        <StudyStreakTile userId={userId} />
+        <StudyStreakTile userId={userId} studyMode={studyMode} />
       </SectionErrorBoundary>
     </div>
   );

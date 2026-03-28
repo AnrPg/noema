@@ -9,7 +9,7 @@
 import * as React from 'react';
 import { useSimulateSession } from '@noema/api-client';
 import type { ISimulationResult, ISessionCandidateDto } from '@noema/api-client';
-import type { UserId } from '@noema/types';
+import type { StudyMode, UserId } from '@noema/types';
 import { Button } from '@noema/ui';
 import { Loader2, FlaskConical } from 'lucide-react';
 
@@ -17,6 +17,7 @@ import { Loader2, FlaskConical } from 'lucide-react';
 
 export interface ISchedulingSimulatorProps {
   userId: UserId;
+  studyMode: StudyMode;
 }
 
 type LaneFilter = 'all' | 'retention' | 'calibration';
@@ -25,7 +26,10 @@ const DURATION_OPTIONS = [15, 30, 45, 60, 90] as const;
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): React.JSX.Element {
+export function SchedulingSimulator({
+  userId,
+  studyMode,
+}: ISchedulingSimulatorProps): React.JSX.Element {
   const [durationMinutes, setDurationMinutes] = React.useState<number>(30);
   const [lane, setLane] = React.useState<LaneFilter>('all');
   const [result, setResult] = React.useState<ISimulationResult | null>(null);
@@ -39,6 +43,7 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
     try {
       const response = await simulateMutate({
         userId,
+        studyMode,
         sessionDurationMinutes: durationMinutes,
         ...(lane !== 'all' ? { lane } : {}),
       });
@@ -46,7 +51,7 @@ export function SchedulingSimulator({ userId }: ISchedulingSimulatorProps): Reac
     } catch (err) {
       setSimError(err instanceof Error ? err.message : 'Simulation failed. Please try again.');
     }
-  }, [simulateMutate, userId, durationMinutes, lane]);
+  }, [simulateMutate, userId, studyMode, durationMinutes, lane]);
 
   const simulatedCards: ISessionCandidateDto[] = result?.simulatedCards ?? [];
   const retentionGain: number = result?.projectedRetentionGain ?? 0;
