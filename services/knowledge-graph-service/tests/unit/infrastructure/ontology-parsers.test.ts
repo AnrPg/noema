@@ -75,7 +75,10 @@ describe('ontology source parsers', () => {
       absolutePath,
       [
         'https://yago-knowledge.org/resource/Leonhard_Euler\trdf:type\thttps://yago-knowledge.org/resource/Mathematician',
+        'https://yago-knowledge.org/resource/Mathematician\trdfs:subClassOf\thttps://yago-knowledge.org/resource/Person',
         'https://yago-knowledge.org/resource/Leonhard_Euler\towl:sameAs\thttps://www.wikidata.org/entity/Q927',
+        'https://yago-knowledge.org/resource/Leonhard_Euler\trdfs:label\t"Leonhard Euler"@en',
+        'https://yago-knowledge.org/resource/Leonhard_Euler\tschema:birthDate\t"1707-04-15"^^http://www.w3.org/2001/XMLSchema#date',
       ].join('\n'),
       'utf8'
     );
@@ -94,10 +97,27 @@ describe('ontology source parsers', () => {
         expect.objectContaining({
           recordKind: 'concept',
           externalId: 'https://yago-knowledge.org/resource/Leonhard_Euler',
+          preferredLabel: 'Leonhard Euler',
+          nodeKind: 'entity',
+          properties: expect.objectContaining({
+            yagoResourceKind: 'instance',
+            literalFacts: expect.objectContaining({
+              birthDate: [
+                expect.objectContaining({
+                  value: '1707-04-15',
+                  datatype: 'http://www.w3.org/2001/XMLSchema#date',
+                }),
+              ],
+            }),
+          }),
         }),
         expect.objectContaining({
           recordKind: 'relation',
           sourcePredicate: 'rdf:type',
+        }),
+        expect.objectContaining({
+          recordKind: 'relation',
+          sourcePredicate: 'rdfs:subClassOf',
         }),
         expect.objectContaining({
           recordKind: 'mapping',
@@ -107,6 +127,12 @@ describe('ontology source parsers', () => {
         }),
       ])
     );
+    expect(
+      parsed.records.some(
+        (record) =>
+          record.recordKind === 'relation' && record.sourcePredicate === 'schema:birthDate'
+      )
+    ).toBe(false);
   });
 
   it('parses ESCO payload pages into concept and alias records', async () => {

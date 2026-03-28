@@ -117,6 +117,60 @@ describe('OntologyImportNormalizationService', () => {
             requestUrl: null,
           },
         },
+        {
+          recordKind: 'relation',
+          externalId: 'rel_2',
+          iri: null,
+          sourcePredicate: 'rdfs:subClassOf',
+          predicateLabel: 'subClassOf',
+          subjectExternalId: 'yago:Mathematician',
+          objectExternalId: 'yago:Person',
+          direction: 'directed',
+          languages: ['en'],
+          properties: { relationFamily: 'taxonomy' },
+          provenance: {
+            sourceId: 'yago',
+            sourceVersion: '4.5.0.2',
+            runId: 'run_yago_001',
+            artifactId: 'artifact_001',
+            harvestedAt: '2026-03-24T12:00:00.000Z',
+            license: null,
+            requestUrl: null,
+          },
+        },
+        {
+          recordKind: 'concept',
+          externalId: 'yago:Euler',
+          iri: null,
+          nodeKind: 'entity',
+          preferredLabel: 'Leonhard Euler',
+          altLabels: ['Euler'],
+          description: null,
+          languages: ['en'],
+          sourceTypes: ['yago_instance'],
+          properties: {
+            yagoResourceKind: 'instance',
+            literalFacts: {
+              birthDate: [
+                {
+                  value: '1707-04-15',
+                  datatype: 'http://www.w3.org/2001/XMLSchema#date',
+                  language: null,
+                  sourcePredicate: 'schema:birthDate',
+                },
+              ],
+            },
+          },
+          provenance: {
+            sourceId: 'yago',
+            sourceVersion: '4.5.0.2',
+            runId: 'run_yago_001',
+            artifactId: 'artifact_001',
+            harvestedAt: '2026-03-24T12:00:00.000Z',
+            license: null,
+            requestUrl: null,
+          },
+        },
       ],
     };
 
@@ -134,6 +188,18 @@ describe('OntologyImportNormalizationService', () => {
     ]);
 
     expect(normalizedYago.relations[0]?.normalizedPredicate).toBe('instance_of');
+    expect(normalizedYago.relations[1]?.normalizedPredicate).toBe('subclass_of');
+    expect(normalizedYago.concepts[0]?.properties).toEqual(
+      expect.objectContaining({
+        literalFacts: expect.objectContaining({
+          birthDate: [
+            expect.objectContaining({
+              value: '1707-04-15',
+            }),
+          ],
+        }),
+      })
+    );
     expect(normalizedEsco.sourceId).toBe('esco');
   });
 

@@ -397,7 +397,7 @@ export class StructuralIntegrityStage implements IValidationStage {
         .map((candidate) => candidate.nodeId)
     );
 
-    const attachedEdges = await this.graphRepository.getEdgesForNode(op.nodeId, 'both');
+    const attachedEdges = await this.graphRepository.getEdgesForNode(op.nodeId as NodeId, 'both');
     const relevantEdges = attachedEdges.filter((edge) => {
       return (
         !removedEdgeIds.has(edge.edgeId) &&
@@ -411,9 +411,11 @@ export class StructuralIntegrityStage implements IValidationStage {
     }
 
     const nodeCache = new Map<NodeId, Awaited<ReturnType<IGraphRepository['getNode']>>>();
-    nodeCache.set(op.nodeId, node);
+    nodeCache.set(op.nodeId as NodeId, node);
 
-    const getCachedNode = async (nodeId: NodeId) => {
+    const getCachedNode = async (
+      nodeId: NodeId
+    ): Promise<Awaited<ReturnType<IGraphRepository['getNode']>>> => {
       if (!nodeCache.has(nodeId)) {
         nodeCache.set(nodeId, await this.graphRepository.getNode(nodeId));
       }
@@ -837,7 +839,7 @@ interface IOntologicalConflictPair {
 }
 
 /**
- * Data-driven table of the 10 ontological conflict pairs.
+ * Data-driven table of ontological conflict pairs.
  *
  * These represent fundamental ontological incompatibilities: if A IS_A B,
  * then A cannot simultaneously be PART_OF B (you classify OR compose,
@@ -913,6 +915,27 @@ const ONTOLOGICAL_CONFLICT_PAIRS: readonly IOntologicalConflictPair[] = Object.f
     edgeTypeB: 'contrasts_with' as GraphEdgeType,
     reason:
       'Equivalence (EQUIVALENT_TO) and contrast (CONTRASTS_WITH) are incompatible: equivalent concepts cannot be in opposition',
+  },
+  // 11. Skill hierarchy inverse duplication
+  {
+    edgeTypeA: 'subskill_of' as GraphEdgeType,
+    edgeTypeB: 'has_subskill' as GraphEdgeType,
+    reason:
+      'Skill hierarchy inverse pairs encode the same fact: store either SUBSKILL_OF or HAS_SUBSKILL, not both',
+  },
+  // 12. Essential occupation-skill inverse duplication
+  {
+    edgeTypeA: 'essential_for_occupation' as GraphEdgeType,
+    edgeTypeB: 'occupation_requires_essential_skill' as GraphEdgeType,
+    reason:
+      'Essential occupation-skill inverse pairs encode the same fact: store either ESSENTIAL_FOR_OCCUPATION or OCCUPATION_REQUIRES_ESSENTIAL_SKILL, not both',
+  },
+  // 13. Optional occupation-skill inverse duplication
+  {
+    edgeTypeA: 'optional_for_occupation' as GraphEdgeType,
+    edgeTypeB: 'occupation_benefits_from_optional_skill' as GraphEdgeType,
+    reason:
+      'Optional occupation-skill inverse pairs encode the same fact: store either OPTIONAL_FOR_OCCUPATION or OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL, not both',
   },
 ]);
 

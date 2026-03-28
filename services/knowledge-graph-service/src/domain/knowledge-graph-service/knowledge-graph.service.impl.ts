@@ -29,6 +29,7 @@ import type {
   ICanonicalExternalRef,
   IMetacognitiveStageAssessment,
   IMisconceptionDetection,
+  INodeMasterySummary,
   INodeProvenanceEntry,
   INodeReviewMetadata,
   IOntologyMapping,
@@ -43,6 +44,7 @@ import type {
   MutationState,
   NodeId,
   ProposerId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
@@ -117,11 +119,11 @@ function toJsonValue(value: unknown): JsonValue {
     return value.toString();
   }
 
-  return value;
+  return null;
 }
 
 function toMetadata(value: Record<string, unknown>): Metadata {
-  const record: Metadata = {};
+  const record = {} as Metadata;
   for (const [key, entry] of Object.entries(value)) {
     if (entry !== undefined) {
       record[key] = toJsonValue(entry);
@@ -538,6 +540,15 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     return this.pkgWrite.listNodes(userId, filters, pagination, context);
   }
 
+  getNodeMasterySummary(
+    userId: UserId,
+    filters: INodeFilter,
+    masteryThreshold: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INodeMasterySummary>> {
+    return this.graphRead.getNodeMasterySummary(userId, filters, masteryThreshold, context);
+  }
+
   // ========================================================================
   // PKG Edge Operations → PkgWriteService
   // ========================================================================
@@ -835,26 +846,29 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   computeMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
-    return this.metricsOrch.computeMetrics(userId, domain, context);
+    return this.metricsOrch.computeMetrics(userId, domain, studyMode, context);
   }
 
   getMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>> {
-    return this.metricsOrch.getMetrics(userId, domain, context);
+    return this.metricsOrch.getMetrics(userId, domain, studyMode, context);
   }
 
   getMetricsHistory(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     options: IMetricsHistoryOptions,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics[]>> {
-    return this.metricsOrch.getMetricsHistory(userId, domain, options, context);
+    return this.metricsOrch.getMetricsHistory(userId, domain, studyMode, options, context);
   }
 
   // ========================================================================
@@ -864,17 +878,19 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   detectMisconceptions(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>> {
-    return this.metricsOrch.detectMisconceptions(userId, domain, context);
+    return this.metricsOrch.detectMisconceptions(userId, domain, studyMode, context);
   }
 
   getMisconceptions(
     userId: UserId,
     domain: string | undefined,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>> {
-    return this.metricsOrch.getMisconceptions(userId, domain, context);
+    return this.metricsOrch.getMisconceptions(userId, domain, studyMode, context);
   }
 
   updateMisconceptionStatus(
@@ -892,17 +908,19 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   getStructuralHealth(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralHealthReport>> {
-    return this.metricsOrch.getStructuralHealth(userId, domain, context);
+    return this.metricsOrch.getStructuralHealth(userId, domain, studyMode, context);
   }
 
   getMetacognitiveStage(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMetacognitiveStageAssessment>> {
-    return this.metricsOrch.getMetacognitiveStage(userId, domain, context);
+    return this.metricsOrch.getMetacognitiveStage(userId, domain, studyMode, context);
   }
 
   // ========================================================================

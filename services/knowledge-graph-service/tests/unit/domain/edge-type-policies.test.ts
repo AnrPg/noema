@@ -1,8 +1,8 @@
 /**
  * @noema/knowledge-graph-service — Edge Type Policies Unit Tests
  *
- * Exhaustive tests for the 17 epistemological edge-type policies:
- * - Policy completeness (every GraphEdgeType has a policy)
+ * Exhaustive coverage for the canonical 25-edge repertoire:
+ * - Policy completeness
  * - Acyclicity rules
  * - Symmetry properties
  * - Ontological category assignment
@@ -20,19 +20,11 @@ import {
   getEdgePolicy,
 } from '../../../src/domain/knowledge-graph-service/policies/edge-type-policies.js';
 
-// ============================================================================
-// All 17 edge types
-// ============================================================================
-
 const ALL_EDGE_TYPES = Object.values(GraphEdgeType);
 
-// ============================================================================
-// Completeness
-// ============================================================================
-
 describe('EDGE_TYPE_POLICIES completeness', () => {
-  it('defines a policy for every GraphEdgeType (17 total)', () => {
-    expect(Object.keys(EDGE_TYPE_POLICIES)).toHaveLength(17);
+  it('defines a policy for every GraphEdgeType (25 total)', () => {
+    expect(Object.keys(EDGE_TYPE_POLICIES)).toHaveLength(25);
     for (const edgeType of ALL_EDGE_TYPES) {
       expect(EDGE_TYPE_POLICIES[edgeType]).toBeDefined();
     }
@@ -43,24 +35,15 @@ describe('EDGE_TYPE_POLICIES completeness', () => {
   });
 });
 
-// ============================================================================
-// getEdgePolicy() Lookup
-// ============================================================================
-
 describe('getEdgePolicy()', () => {
-  it.each(ALL_EDGE_TYPES.map((t) => [t]))('returns a policy for %s', (edgeType) => {
+  it.each(ALL_EDGE_TYPES.map((edgeType) => [edgeType]))('returns a policy for %s', (edgeType) => {
     const policy = getEdgePolicy(edgeType);
     expect(policy).toBeDefined();
     expect(policy.edgeType).toBe(edgeType);
   });
 });
 
-// ============================================================================
-// Acyclicity Rules
-// ============================================================================
-
 describe('Acyclicity rules', () => {
-  // 11 edge types that require acyclicity
   const ACYCLIC_TYPES = [
     GraphEdgeType.IS_A,
     GraphEdgeType.EXEMPLIFIES,
@@ -73,65 +56,69 @@ describe('Acyclicity rules', () => {
     GraphEdgeType.PREREQUISITE,
     GraphEdgeType.DERIVED_FROM,
     GraphEdgeType.HAS_PROPERTY,
+    GraphEdgeType.SUBSKILL_OF,
+    GraphEdgeType.HAS_SUBSKILL,
   ];
 
-  // 6 edge types that allow cycles
   const NON_ACYCLIC_TYPES = [
     GraphEdgeType.EQUIVALENT_TO,
     GraphEdgeType.DISJOINT_WITH,
     GraphEdgeType.CONTRADICTS,
     GraphEdgeType.RELATED_TO,
+    GraphEdgeType.CONFUSABLE_WITH,
     GraphEdgeType.ANALOGOUS_TO,
     GraphEdgeType.CONTRASTS_WITH,
+    GraphEdgeType.ESSENTIAL_FOR_OCCUPATION,
+    GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL,
+    GraphEdgeType.OPTIONAL_FOR_OCCUPATION,
+    GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL,
+    GraphEdgeType.TRANSFERABLE_TO,
   ];
 
-  it.each(ACYCLIC_TYPES.map((t) => [t]))('%s requires acyclicity', (edgeType) => {
+  it.each(ACYCLIC_TYPES.map((edgeType) => [edgeType]))('%s requires acyclicity', (edgeType) => {
     expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(true);
   });
 
-  it.each(NON_ACYCLIC_TYPES.map((t) => [t]))('%s does NOT require acyclicity', (edgeType) => {
-    expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(false);
-  });
+  it.each(NON_ACYCLIC_TYPES.map((edgeType) => [edgeType]))(
+    '%s does NOT require acyclicity',
+    (edgeType) => {
+      expect(getEdgePolicy(edgeType).requiresAcyclicity).toBe(false);
+    }
+  );
 
-  it('11 acyclic + 6 non-acyclic = 17 total', () => {
-    expect(ACYCLIC_TYPES.length + NON_ACYCLIC_TYPES.length).toBe(17);
+  it('13 acyclic + 12 non-acyclic = 25 total', () => {
+    expect(ACYCLIC_TYPES.length + NON_ACYCLIC_TYPES.length).toBe(25);
   });
 });
 
-// ============================================================================
-// Symmetry Properties
-// ============================================================================
-
 describe('Symmetry properties', () => {
-  // 6 symmetric edge types
   const SYMMETRIC_TYPES = [
     GraphEdgeType.EQUIVALENT_TO,
     GraphEdgeType.DISJOINT_WITH,
     GraphEdgeType.CONTRADICTS,
     GraphEdgeType.RELATED_TO,
+    GraphEdgeType.CONFUSABLE_WITH,
     GraphEdgeType.ANALOGOUS_TO,
     GraphEdgeType.CONTRASTS_WITH,
   ];
 
-  it.each(SYMMETRIC_TYPES.map((t) => [t]))('%s is symmetric', (edgeType) => {
+  it.each(SYMMETRIC_TYPES.map((edgeType) => [edgeType]))('%s is symmetric', (edgeType) => {
     expect(getEdgePolicy(edgeType).isSymmetric).toBe(true);
   });
 
   it('non-symmetric types are asymmetric', () => {
-    const asymmetric = ALL_EDGE_TYPES.filter((t) => !SYMMETRIC_TYPES.includes(t));
-    expect(asymmetric).toHaveLength(11);
-    for (const t of asymmetric) {
-      expect(getEdgePolicy(t).isSymmetric).toBe(false);
+    const asymmetricTypes = ALL_EDGE_TYPES.filter(
+      (edgeType) => !SYMMETRIC_TYPES.includes(edgeType)
+    );
+    expect(asymmetricTypes).toHaveLength(18);
+    for (const edgeType of asymmetricTypes) {
+      expect(getEdgePolicy(edgeType).isSymmetric).toBe(false);
     }
   });
 });
 
-// ============================================================================
-// Ontological Categories
-// ============================================================================
-
 describe('Ontological categories', () => {
-  const CATEGORY_MAP: Record<string, string[]> = {
+  const CATEGORY_MAP: Record<string, GraphEdgeType[]> = {
     [EdgeOntologicalCategory.TAXONOMIC]: [GraphEdgeType.IS_A, GraphEdgeType.EXEMPLIFIES],
     [EdgeOntologicalCategory.MEREOLOGICAL]: [GraphEdgeType.PART_OF, GraphEdgeType.CONSTITUTED_BY],
     [EdgeOntologicalCategory.LOGICAL]: [
@@ -147,6 +134,7 @@ describe('Ontological categories', () => {
     ],
     [EdgeOntologicalCategory.ASSOCIATIVE]: [
       GraphEdgeType.RELATED_TO,
+      GraphEdgeType.CONFUSABLE_WITH,
       GraphEdgeType.ANALOGOUS_TO,
       GraphEdgeType.CONTRASTS_WITH,
     ],
@@ -154,12 +142,19 @@ describe('Ontological categories', () => {
       GraphEdgeType.PREREQUISITE,
       GraphEdgeType.DERIVED_FROM,
       GraphEdgeType.HAS_PROPERTY,
+      GraphEdgeType.SUBSKILL_OF,
+      GraphEdgeType.HAS_SUBSKILL,
+      GraphEdgeType.ESSENTIAL_FOR_OCCUPATION,
+      GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL,
+      GraphEdgeType.OPTIONAL_FOR_OCCUPATION,
+      GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL,
+      GraphEdgeType.TRANSFERABLE_TO,
     ],
   };
 
   for (const [category, edgeTypes] of Object.entries(CATEGORY_MAP)) {
-    it.each(edgeTypes.map((t) => [t]))(`%s belongs to ${category}`, (edgeType) => {
-      expect(getEdgePolicy(edgeType as GraphEdgeType).category).toBe(category);
+    it.each(edgeTypes.map((edgeType) => [edgeType]))(`%s belongs to ${category}`, (edgeType) => {
+      expect(getEdgePolicy(edgeType).category).toBe(category);
     });
   }
 
@@ -167,61 +162,107 @@ describe('Ontological categories', () => {
     expect(Object.keys(CATEGORY_MAP)).toHaveLength(6);
   });
 
-  it('all 17 edge types are assigned to a category', () => {
-    const totalMapped = Object.values(CATEGORY_MAP).reduce((sum, arr) => sum + arr.length, 0);
-    expect(totalMapped).toBe(17);
+  it('all 25 edge types are assigned to a category', () => {
+    const totalMapped = Object.values(CATEGORY_MAP).reduce(
+      (sum, edgeTypes) => sum + edgeTypes.length,
+      0
+    );
+    expect(totalMapped).toBe(25);
   });
 });
 
-// ============================================================================
-// Node Type Constraints
-// ============================================================================
-
 describe('Node type constraints', () => {
-  it('is_a restricts to concept → concept', () => {
+  it('is_a restricts to concept and occupation taxonomy nodes', () => {
     const policy = getEdgePolicy(GraphEdgeType.IS_A);
-    expect(policy.allowedSourceTypes).toEqual([GraphNodeType.CONCEPT]);
-    expect(policy.allowedTargetTypes).toEqual([GraphNodeType.CONCEPT]);
+    expect(policy.allowedSourceTypes).toEqual([GraphNodeType.CONCEPT, GraphNodeType.OCCUPATION]);
+    expect(policy.allowedTargetTypes).toEqual([GraphNodeType.CONCEPT, GraphNodeType.OCCUPATION]);
+    expect(policy.allowedSourceTypes).not.toContain(GraphNodeType.SKILL);
   });
 
-  it('exemplifies restricts source to example/counterexample', () => {
+  it('exemplifies allows example, counterexample, and procedure sources', () => {
     const policy = getEdgePolicy(GraphEdgeType.EXEMPLIFIES);
     expect(policy.allowedSourceTypes).toContain(GraphNodeType.EXAMPLE);
     expect(policy.allowedSourceTypes).toContain(GraphNodeType.COUNTEREXAMPLE);
+    expect(policy.allowedSourceTypes).toContain(GraphNodeType.PROCEDURE);
     expect(policy.allowedSourceTypes).not.toContain(GraphNodeType.CONCEPT);
   });
 
-  it('exemplifies restricts target to concept/principle/fact', () => {
+  it('exemplifies allows concept, skill, principle, and fact targets', () => {
     const policy = getEdgePolicy(GraphEdgeType.EXEMPLIFIES);
     expect(policy.allowedTargetTypes).toContain(GraphNodeType.CONCEPT);
+    expect(policy.allowedTargetTypes).toContain(GraphNodeType.SKILL);
     expect(policy.allowedTargetTypes).toContain(GraphNodeType.PRINCIPLE);
     expect(policy.allowedTargetTypes).toContain(GraphNodeType.FACT);
   });
 
-  it('prerequisite allows concept-bearing source and target types', () => {
+  it('prerequisite allows skill participation on both sides', () => {
     const policy = getEdgePolicy(GraphEdgeType.PREREQUISITE);
-    // At minimum, concepts should be in both source and target
-    expect(policy.allowedSourceTypes).toContain(GraphNodeType.CONCEPT);
+    expect(policy.allowedSourceTypes).toContain(GraphNodeType.SKILL);
+    expect(policy.allowedTargetTypes).toContain(GraphNodeType.SKILL);
+  });
+
+  it('derived_from allows a skill as source and target', () => {
+    const policy = getEdgePolicy(GraphEdgeType.DERIVED_FROM);
+    expect(policy.allowedSourceTypes).toContain(GraphNodeType.SKILL);
+    expect(policy.allowedTargetTypes).toContain(GraphNodeType.SKILL);
+  });
+
+  it('has_property allows a skill as source', () => {
+    const policy = getEdgePolicy(GraphEdgeType.HAS_PROPERTY);
+    expect(policy.allowedSourceTypes).toContain(GraphNodeType.SKILL);
     expect(policy.allowedTargetTypes).toContain(GraphNodeType.CONCEPT);
   });
 
-  it('related_to allows broad node types', () => {
+  it('subskill_of and has_subskill are skill-only hierarchy edges', () => {
+    const subskillPolicy = getEdgePolicy(GraphEdgeType.SUBSKILL_OF);
+    const hasSubskillPolicy = getEdgePolicy(GraphEdgeType.HAS_SUBSKILL);
+
+    expect(subskillPolicy.allowedSourceTypes).toEqual([GraphNodeType.SKILL]);
+    expect(subskillPolicy.allowedTargetTypes).toEqual([GraphNodeType.SKILL]);
+    expect(hasSubskillPolicy.allowedSourceTypes).toEqual([GraphNodeType.SKILL]);
+    expect(hasSubskillPolicy.allowedTargetTypes).toEqual([GraphNodeType.SKILL]);
+  });
+
+  it('occupation-skill edges are directionally constrained', () => {
+    const essentialPolicy = getEdgePolicy(GraphEdgeType.ESSENTIAL_FOR_OCCUPATION);
+    const essentialInversePolicy = getEdgePolicy(GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL);
+    const optionalPolicy = getEdgePolicy(GraphEdgeType.OPTIONAL_FOR_OCCUPATION);
+    const optionalInversePolicy = getEdgePolicy(
+      GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL
+    );
+
+    expect(essentialPolicy.allowedSourceTypes).toEqual([GraphNodeType.SKILL]);
+    expect(essentialPolicy.allowedTargetTypes).toEqual([GraphNodeType.OCCUPATION]);
+    expect(essentialInversePolicy.allowedSourceTypes).toEqual([GraphNodeType.OCCUPATION]);
+    expect(essentialInversePolicy.allowedTargetTypes).toEqual([GraphNodeType.SKILL]);
+    expect(optionalPolicy.allowedSourceTypes).toEqual([GraphNodeType.SKILL]);
+    expect(optionalPolicy.allowedTargetTypes).toEqual([GraphNodeType.OCCUPATION]);
+    expect(optionalInversePolicy.allowedSourceTypes).toEqual([GraphNodeType.OCCUPATION]);
+    expect(optionalInversePolicy.allowedTargetTypes).toEqual([GraphNodeType.SKILL]);
+  });
+
+  it('transferable_to allows skill to skill, concept, or procedure targets', () => {
+    const policy = getEdgePolicy(GraphEdgeType.TRANSFERABLE_TO);
+    expect(policy.allowedSourceTypes).toEqual([GraphNodeType.SKILL]);
+    expect(policy.allowedTargetTypes).toEqual([
+      GraphNodeType.SKILL,
+      GraphNodeType.CONCEPT,
+      GraphNodeType.PROCEDURE,
+    ]);
+  });
+
+  it('confusable_with is restricted to skill pairs', () => {
+    const policy = getEdgePolicy(GraphEdgeType.CONFUSABLE_WITH);
+    expect(policy.allowedSourceTypes).toEqual([GraphNodeType.SKILL]);
+    expect(policy.allowedTargetTypes).toEqual([GraphNodeType.SKILL]);
+  });
+
+  it('related_to remains broadly permissive', () => {
     const policy = getEdgePolicy(GraphEdgeType.RELATED_TO);
-    // Associative links are the broadest — all types
-    expect(policy.allowedSourceTypes.length).toBeGreaterThanOrEqual(4);
-    expect(policy.allowedTargetTypes.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it('disjoint_with allows concept → concept at minimum', () => {
-    const policy = getEdgePolicy(GraphEdgeType.DISJOINT_WITH);
-    expect(policy.allowedSourceTypes).toContain(GraphNodeType.CONCEPT);
-    expect(policy.allowedTargetTypes).toContain(GraphNodeType.CONCEPT);
+    expect(policy.allowedSourceTypes.length).toBeGreaterThanOrEqual(5);
+    expect(policy.allowedTargetTypes.length).toBeGreaterThanOrEqual(5);
   });
 });
-
-// ============================================================================
-// Weight Constraints
-// ============================================================================
 
 describe('Weight constraints', () => {
   it('all policies have maxWeight in range (0, 1]', () => {
@@ -239,11 +280,20 @@ describe('Weight constraints', () => {
       expect(policy.defaultWeight).toBeLessThanOrEqual(policy.maxWeight);
     }
   });
-});
 
-// ============================================================================
-// Descriptions & Metadata
-// ============================================================================
+  it('assigns the expected defaults for the new skill-centric edges', () => {
+    expect(getEdgePolicy(GraphEdgeType.SUBSKILL_OF).defaultWeight).toBe(1);
+    expect(getEdgePolicy(GraphEdgeType.HAS_SUBSKILL).defaultWeight).toBe(1);
+    expect(getEdgePolicy(GraphEdgeType.ESSENTIAL_FOR_OCCUPATION).defaultWeight).toBe(1);
+    expect(getEdgePolicy(GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL).defaultWeight).toBe(1);
+    expect(getEdgePolicy(GraphEdgeType.OPTIONAL_FOR_OCCUPATION).defaultWeight).toBe(0.8);
+    expect(getEdgePolicy(GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL).defaultWeight).toBe(
+      0.8
+    );
+    expect(getEdgePolicy(GraphEdgeType.TRANSFERABLE_TO).defaultWeight).toBe(0.8);
+    expect(getEdgePolicy(GraphEdgeType.CONFUSABLE_WITH).defaultWeight).toBe(0.6);
+  });
+});
 
 describe('Policy descriptions', () => {
   it('every policy has a non-empty description', () => {

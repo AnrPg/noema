@@ -27,6 +27,7 @@ import { EdgePolicy, type IEdgePolicy } from '../value-objects/graph.value-objec
 const ALL_NODE_TYPES: readonly GraphNodeType[] = [
   GraphNodeType.CONCEPT,
   GraphNodeType.SKILL,
+  GraphNodeType.OCCUPATION,
   GraphNodeType.FACT,
   GraphNodeType.PROCEDURE,
   GraphNodeType.PRINCIPLE,
@@ -45,7 +46,7 @@ const CONCEPT_BEARING_TYPES: readonly GraphNodeType[] = [
 ] as const;
 
 // ============================================================================
-// EDGE_TYPE_POLICIES — 17 epistemological edge types
+// EDGE_TYPE_POLICIES — 25 epistemological edge types
 // ============================================================================
 
 /**
@@ -56,7 +57,7 @@ const CONCEPT_BEARING_TYPES: readonly GraphNodeType[] = [
  * metadata (category, symmetry, description) in addition to structural
  * validation rules (acyclicity, node type constraints, weight).
  *
- * The 17 edge types span 6 ontological categories:
+ * The 25 edge types span 6 ontological categories:
  *
  * | Category               | Edge Types                                                 |
  * |------------------------|------------------------------------------------------------|
@@ -64,8 +65,12 @@ const CONCEPT_BEARING_TYPES: readonly GraphNodeType[] = [
  * | Mereological           | part_of, constituted_by                                    |
  * | Logical                | equivalent_to, entails, disjoint_with, contradicts         |
  * | Causal/Temporal        | causes, precedes, depends_on                               |
- * | Associative            | related_to, analogous_to, contrasts_with                   |
- * | Structural/Pedagogical | prerequisite, derived_from, has_property                   |
+ * | Associative            | related_to, analogous_to, contrasts_with, confusable_with |
+ * | Structural/Pedagogical | prerequisite, derived_from, has_property, subskill_of,    |
+ * |                        | has_subskill, essential_for_occupation,                   |
+ * |                        | occupation_requires_essential_skill,                      |
+ * |                        | optional_for_occupation,                                  |
+ * |                        | occupation_benefits_from_optional_skill, transferable_to  |
  */
 export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = Object.freeze({
   // ═══════════════════════════════════════════════════════════════════════════
@@ -74,14 +79,14 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
 
   // ── is_a ────────────────────────────────────────────────────────────────
   // Acyclic: YES — taxonomic inheritance cannot be circular.
-  // Restricted to concept → concept.
+  // Restricted to taxonomic concept/occupation categories.
   [GraphEdgeType.IS_A]: EdgePolicy.create({
     edgeType: GraphEdgeType.IS_A,
     category: EdgeOntologicalCategory.TAXONOMIC,
     requiresAcyclicity: true,
     isSymmetric: false,
-    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
-    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.SKILL],
+    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.OCCUPATION],
+    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.OCCUPATION],
     maxWeight: 1.0,
     defaultWeight: 1.0,
     description:
@@ -98,8 +103,17 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     category: EdgeOntologicalCategory.TAXONOMIC,
     requiresAcyclicity: true,
     isSymmetric: false,
-    allowedSourceTypes: [GraphNodeType.EXAMPLE, GraphNodeType.COUNTEREXAMPLE],
-    allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.PRINCIPLE, GraphNodeType.FACT],
+    allowedSourceTypes: [
+      GraphNodeType.EXAMPLE,
+      GraphNodeType.COUNTEREXAMPLE,
+      GraphNodeType.PROCEDURE,
+    ],
+    allowedTargetTypes: [
+      GraphNodeType.CONCEPT,
+      GraphNodeType.SKILL,
+      GraphNodeType.PRINCIPLE,
+      GraphNodeType.FACT,
+    ],
     maxWeight: 1.0,
     defaultWeight: 1.0,
     description:
@@ -308,6 +322,23 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
       'whenever the nature of the relationship is known.',
   }),
 
+  // ── confusable_with ─────────────────────────────────────────────────────
+  // Acyclic: NO — learner confusion is naturally symmetric and may cluster.
+  [GraphEdgeType.CONFUSABLE_WITH]: EdgePolicy.create({
+    edgeType: GraphEdgeType.CONFUSABLE_WITH,
+    category: EdgeOntologicalCategory.ASSOCIATIVE,
+    requiresAcyclicity: false,
+    isSymmetric: true,
+    allowedSourceTypes: [GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.SKILL],
+    maxWeight: 1.0,
+    defaultWeight: 0.6,
+    description:
+      'Learner-confusion relation: "A is commonly confused with B". ' +
+      'Use for near-neighbor skills that learners mix up during acquisition, ' +
+      'assessment, or transfer.',
+  }),
+
   // ── analogous_to ────────────────────────────────────────────────────────
   // Acyclic: NO — analogy is symmetric. "A ~ B" implies "B ~ A".
   [GraphEdgeType.ANALOGOUS_TO]: EdgePolicy.create({
@@ -356,9 +387,15 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
     requiresAcyclicity: true,
     isSymmetric: false,
-    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.PROCEDURE, GraphNodeType.PRINCIPLE],
+    allowedSourceTypes: [
+      GraphNodeType.CONCEPT,
+      GraphNodeType.SKILL,
+      GraphNodeType.PROCEDURE,
+      GraphNodeType.PRINCIPLE,
+    ],
     allowedTargetTypes: [
       GraphNodeType.CONCEPT,
+      GraphNodeType.SKILL,
       GraphNodeType.PROCEDURE,
       GraphNodeType.PRINCIPLE,
       GraphNodeType.FACT,
@@ -380,7 +417,12 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
     requiresAcyclicity: true,
     isSymmetric: false,
-    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.PROCEDURE, GraphNodeType.PRINCIPLE],
+    allowedSourceTypes: [
+      GraphNodeType.CONCEPT,
+      GraphNodeType.SKILL,
+      GraphNodeType.PROCEDURE,
+      GraphNodeType.PRINCIPLE,
+    ],
     allowedTargetTypes: ALL_NODE_TYPES,
     maxWeight: 1.0,
     defaultWeight: 1.0,
@@ -397,7 +439,12 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
     requiresAcyclicity: true,
     isSymmetric: false,
-    allowedSourceTypes: [GraphNodeType.CONCEPT, GraphNodeType.PROCEDURE, GraphNodeType.PRINCIPLE],
+    allowedSourceTypes: [
+      GraphNodeType.CONCEPT,
+      GraphNodeType.SKILL,
+      GraphNodeType.PROCEDURE,
+      GraphNodeType.PRINCIPLE,
+    ],
     allowedTargetTypes: [GraphNodeType.CONCEPT, GraphNodeType.FACT, GraphNodeType.PRINCIPLE],
     maxWeight: 1.0,
     defaultWeight: 0.8,
@@ -406,6 +453,114 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
       'A quality or attribute inheres in its bearer — e.g., ' +
       '"Bubble Sort has_property O(n²) Time Complexity", ' +
       '"Photon has_property Wave–Particle Duality".',
+  }),
+
+  // ── subskill_of ────────────────────────────────────────────────────────
+  // Acyclic: YES — skill hierarchies are strict DAGs.
+  [GraphEdgeType.SUBSKILL_OF]: EdgePolicy.create({
+    edgeType: GraphEdgeType.SUBSKILL_OF,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: true,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.SKILL],
+    maxWeight: 1.0,
+    defaultWeight: 1.0,
+    description:
+      'Skill hierarchy: "A is a narrower or more specific skill than B". ' +
+      'Use this instead of generic taxonomy edges for skill-to-skill structure.',
+  }),
+
+  // ── has_subskill ───────────────────────────────────────────────────────
+  // Acyclic: YES — inverse view of the skill hierarchy.
+  [GraphEdgeType.HAS_SUBSKILL]: EdgePolicy.create({
+    edgeType: GraphEdgeType.HAS_SUBSKILL,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: true,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.SKILL],
+    maxWeight: 1.0,
+    defaultWeight: 1.0,
+    description:
+      'Skill hierarchy inverse: "A contains B as a narrower skill". ' +
+      'Semantically equivalent to the inverse of subskill_of.',
+  }),
+
+  // ── essential_for_occupation ───────────────────────────────────────────
+  [GraphEdgeType.ESSENTIAL_FOR_OCCUPATION]: EdgePolicy.create({
+    edgeType: GraphEdgeType.ESSENTIAL_FOR_OCCUPATION,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: false,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.OCCUPATION],
+    maxWeight: 1.0,
+    defaultWeight: 1.0,
+    description:
+      'Occupation fit: "A skill is essential for an occupation". ' +
+      'Use when the occupation cannot be performed competently without the skill.',
+  }),
+
+  // ── occupation_requires_essential_skill ────────────────────────────────
+  [GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL]: EdgePolicy.create({
+    edgeType: GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: false,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.OCCUPATION],
+    allowedTargetTypes: [GraphNodeType.SKILL],
+    maxWeight: 1.0,
+    defaultWeight: 1.0,
+    description:
+      'Occupation fit inverse: "An occupation requires this essential skill". ' +
+      'Semantically equivalent to the inverse of essential_for_occupation.',
+  }),
+
+  // ── optional_for_occupation ────────────────────────────────────────────
+  [GraphEdgeType.OPTIONAL_FOR_OCCUPATION]: EdgePolicy.create({
+    edgeType: GraphEdgeType.OPTIONAL_FOR_OCCUPATION,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: false,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.OCCUPATION],
+    maxWeight: 1.0,
+    defaultWeight: 0.8,
+    description:
+      'Occupation fit: "A skill is optional but valuable for an occupation". ' +
+      'Use when the skill improves performance or opportunity without being strictly required.',
+  }),
+
+  // ── occupation_benefits_from_optional_skill ────────────────────────────
+  [GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL]: EdgePolicy.create({
+    edgeType: GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: false,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.OCCUPATION],
+    allowedTargetTypes: [GraphNodeType.SKILL],
+    maxWeight: 1.0,
+    defaultWeight: 0.8,
+    description:
+      'Occupation fit inverse: "An occupation benefits from this optional skill". ' +
+      'Semantically equivalent to the inverse of optional_for_occupation.',
+  }),
+
+  // ── transferable_to ────────────────────────────────────────────────────
+  // Acyclicity is not enforced because transfer relations may form networks.
+  [GraphEdgeType.TRANSFERABLE_TO]: EdgePolicy.create({
+    edgeType: GraphEdgeType.TRANSFERABLE_TO,
+    category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
+    requiresAcyclicity: false,
+    isSymmetric: false,
+    allowedSourceTypes: [GraphNodeType.SKILL],
+    allowedTargetTypes: [GraphNodeType.SKILL, GraphNodeType.CONCEPT, GraphNodeType.PROCEDURE],
+    maxWeight: 1.0,
+    defaultWeight: 0.8,
+    description:
+      'Skill transfer: "Mastery of A transfers meaningfully to B". ' +
+      'Use when prior skill acquisition improves performance or comprehension in the target area.',
   }),
 });
 

@@ -1,5 +1,9 @@
 import type { IExecutionContext } from '../../../domain/knowledge-graph-service/execution-context.js';
 import type {
+  IEdgeFilter,
+  IEdgeRepository,
+} from '../../../domain/knowledge-graph-service/graph.repository.js';
+import type {
   ICancelOntologyImportRunInput,
   ICanonicalNodeResolver,
   ICreateOntologyImportRunInput,
@@ -7,6 +11,7 @@ import type {
   IImportCheckpointRepository,
   IImportRunRepository,
   INormalizationPublisher,
+  INormalizedOntologyGraphBatch,
   INormalizedOntologyBatchSummary,
   IOntologyImportArtifact,
   IOntologyImportCapabilitySummary,
@@ -89,6 +94,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
   private readonly normalizationService: OntologyImportNormalizationService;
   private readonly mutationGenerationService: OntologyImportMutationGenerationService;
   private readonly mutationSubmissionPort: IOntologyMutationSubmissionPort | undefined;
+  private readonly edgeRepository: Pick<IEdgeRepository, 'findEdges'> | undefined;
 
   constructor(
     private readonly sourceRepository: ISourceCatalogRepository,
@@ -104,6 +110,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     options?: {
       canonicalNodeResolver?: ICanonicalNodeResolver;
       mutationSubmissionPort?: IOntologyMutationSubmissionPort;
+      edgeRepository?: Pick<IEdgeRepository, 'findEdges'>;
     }
   ) {
     this.sourceFetchersById = new Map(sourceFetchers.map((fetcher) => [fetcher.sourceId, fetcher]));
@@ -115,6 +122,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       options?.canonicalNodeResolver
     );
     this.mutationSubmissionPort = options?.mutationSubmissionPort;
+    this.edgeRepository = options?.edgeRepository;
   }
 
   async ensureDefaultSources(): Promise<void> {
@@ -471,14 +479,9 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     }
 
     const artifacts = await this.artifactRepository.listByRunId(input.runId);
-    const mutationPreviewArtifact = findLatestArtifact(artifacts, 'mutation_preview');
-    if (mutationPreviewArtifact === null) {
-      throw new Error(`Run ${input.runId} does not have a mutation preview to submit.`);
-    }
-
-    const mutationPreview = await this.readMutationPreview(mutationPreviewArtifact);
+    const mutationPreview = await this.resolveCurrentMutationPreview(input.runId, artifacts);
     if (mutationPreview === null) {
-      throw new Error(`Run ${input.runId} has an unreadable mutation preview artifact.`);
+      throw new Error(`Run ${input.runId} does not have a readable mutation preview to submit.`);
     }
 
     const readyCandidates = mutationPreview.candidates.filter(
@@ -500,8 +503,9 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       );
     }
 
+    const idempotentCandidates = await this.filterAlreadyAppliedCandidates(candidatesToSubmit);
     const mutationIds: string[] = [];
-    for (const candidate of candidatesToSubmit) {
+    for (const candidate of idempotentCandidates) {
       if (candidate.proposal === null) {
         continue;
       }
@@ -514,6 +518,7 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
     }
 
     const submittedAt = new Date().toISOString();
+    const skippedAsExistingCount = candidatesToSubmit.length - idempotentCandidates.length;
     await this.checkpointRepository.create({
       runId: input.runId,
       step: 'validation',
@@ -522,8 +527,8 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       completedAt: submittedAt,
       detail:
         requestedCandidateIds.size === 0
-          ? `Submitted ${String(mutationIds.length)} mutation proposals to the CKG review queue from ${String(readyCandidates.length)} ready candidates.`
-          : `Submitted ${String(mutationIds.length)} selected mutation proposals to the CKG review queue from ${String(candidatesToSubmit.length)} ready candidates.`,
+          ? `Submitted ${String(mutationIds.length)} mutation proposals to the CKG review queue from ${String(readyCandidates.length)} ready candidates; skipped ${String(skippedAsExistingCount)} already-applied candidates.`
+          : `Submitted ${String(mutationIds.length)} selected mutation proposals to the CKG review queue from ${String(candidatesToSubmit.length)} ready candidates; skipped ${String(skippedAsExistingCount)} already-applied candidates.`,
     });
     await this.runRepository.recordSubmittedMutations(input.runId, mutationIds);
     await this.runRepository.updateStatus(input.runId, 'review_submitted', {
@@ -535,9 +540,71 @@ export class OntologyImportsApplicationService implements IOntologyImportsApplic
       runId: input.runId,
       submittedAt,
       submittedCount: mutationIds.length,
-      skippedCount: mutationPreview.candidates.length - candidatesToSubmit.length,
+      skippedCount:
+        mutationPreview.candidates.length - candidatesToSubmit.length + skippedAsExistingCount,
       mutationIds,
     };
+  }
+
+  private async resolveCurrentMutationPreview(
+    runId: string,
+    artifacts: IOntologyImportArtifact[]
+  ): Promise<IOntologyMutationPreviewBatch | null> {
+    const normalizedArtifact = findLatestArtifact(artifacts, 'normalized_batch');
+    if (normalizedArtifact !== null) {
+      const normalizedBatch = (await this.readValidatedJsonArtifact(
+        normalizedArtifact,
+        NormalizedOntologyGraphBatchSchema
+      )) as INormalizedOntologyGraphBatch;
+      return this.mutationGenerationService.generate(normalizedBatch);
+    }
+
+    const mutationPreviewArtifact = findLatestArtifact(artifacts, 'mutation_preview');
+    if (mutationPreviewArtifact === null) {
+      throw new Error(`Run ${runId} does not have a mutation preview to submit.`);
+    }
+
+    return this.readMutationPreview(mutationPreviewArtifact);
+  }
+
+  private async filterAlreadyAppliedCandidates(
+    candidates: IOntologyMutationPreviewBatch['candidates']
+  ): Promise<IOntologyMutationPreviewBatch['candidates']> {
+    if (this.edgeRepository === undefined) {
+      return candidates;
+    }
+
+    const filtered: IOntologyMutationPreviewBatch['candidates'] = [];
+    for (const candidate of candidates) {
+      if (!(await this.isAlreadyAppliedCandidate(candidate))) {
+        filtered.push(candidate);
+      }
+    }
+
+    return filtered;
+  }
+
+  private async isAlreadyAppliedCandidate(
+    candidate: IOntologyMutationPreviewBatch['candidates'][number]
+  ): Promise<boolean> {
+    const operation = candidate.proposal?.operations[0];
+    if (
+      operation === undefined ||
+      candidate.proposal?.operations.length !== 1 ||
+      operation.type !== 'add_edge'
+    ) {
+      return false;
+    }
+
+    const edgeFilter: IEdgeFilter = {
+      sourceNodeId: operation.sourceNodeId as NonNullable<IEdgeFilter['sourceNodeId']>,
+      targetNodeId: operation.targetNodeId as NonNullable<IEdgeFilter['targetNodeId']>,
+      edgeType: operation.edgeType,
+    };
+
+    const existingEdges = await this.edgeRepository?.findEdges(edgeFilter, 1, 0);
+
+    return (existingEdges?.length ?? 0) > 0;
   }
 
   private async readNormalizedBatchSummary(

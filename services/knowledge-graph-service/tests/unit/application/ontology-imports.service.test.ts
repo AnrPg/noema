@@ -3,6 +3,7 @@ import type {
   ICanonicalNodeResolver,
   ICancelOntologyImportRunInput,
   ICreateOntologyImportRunInput,
+  IEdgeFilter,
   IImportArtifactRepository,
   IImportCheckpointRepository,
   IImportRunRepository,
@@ -25,6 +26,7 @@ import type {
   IUpdateOntologySourceInput,
 } from '../../../src/domain/knowledge-graph-service/ontology-imports.contracts.js';
 import type { IExecutionContext } from '../../../src/domain/knowledge-graph-service/execution-context.js';
+import type { IEdgeRepository } from '../../../src/domain/knowledge-graph-service/graph.repository.js';
 import {
   NoopNormalizationPublisher,
   OntologyImportsApplicationService,
@@ -390,9 +392,15 @@ class StubCanonicalNodeResolver implements ICanonicalNodeResolver {
 
 class StubMutationSubmissionPort {
   readonly submissions: string[] = [];
+  readonly proposals: {
+    operations: unknown[];
+    rationale: string;
+    evidenceCount: number;
+    priority: number;
+  }[] = [];
 
   submitProposal(
-    _proposal: {
+    proposal: {
       operations: unknown[];
       rationale: string;
       evidenceCount: number;
@@ -401,8 +409,131 @@ class StubMutationSubmissionPort {
     _context: IExecutionContext
   ): Promise<{ mutationId: string }> {
     const mutationId = `mutation_${String(this.submissions.length + 1)}`;
+    this.proposals.push(proposal);
     this.submissions.push(mutationId);
     return Promise.resolve({ mutationId });
+  }
+}
+
+class FlippingCanonicalNodeResolver implements ICanonicalNodeResolver {
+  private callCount = 0;
+
+  resolveConcept(concept: { preferredLabel: string }): Promise<{
+    resolution: {
+      nodeId: string;
+      label: string;
+      nodeType: string;
+      domain: string;
+      strategy: 'label';
+      confidenceScore: number;
+      confidenceBand: 'high';
+      conflictFlags: [];
+    } | null;
+    conflictFlags: [];
+  }> {
+    this.callCount += 1;
+
+    if (concept.preferredLabel !== 'Leonhard Euler') {
+      return Promise.resolve({ resolution: null, conflictFlags: [] });
+    }
+
+    if (this.callCount === 1) {
+      return Promise.resolve({ resolution: null, conflictFlags: [] });
+    }
+
+    return Promise.resolve({
+      resolution: {
+        nodeId: 'node_euler',
+        label: 'Leonhard Euler',
+        nodeType: 'concept',
+        domain: 'world-knowledge',
+        strategy: 'label',
+        confidenceScore: 0.94,
+        confidenceBand: 'high',
+        conflictFlags: [],
+      },
+      conflictFlags: [],
+    });
+  }
+}
+
+class MapBasedResolver implements ICanonicalNodeResolver {
+  constructor(private readonly entries: Record<string, string>) {}
+
+  resolveConcept(concept: { preferredLabel: string }): Promise<{
+    resolution: {
+      nodeId: string;
+      label: string;
+      nodeType: string;
+      domain: string;
+      strategy: 'label';
+      confidenceScore: number;
+      confidenceBand: 'high';
+      conflictFlags: [];
+    } | null;
+    conflictFlags: [];
+  }> {
+    const nodeId = this.entries[concept.preferredLabel];
+    if (nodeId === undefined) {
+      return Promise.resolve({ resolution: null, conflictFlags: [] });
+    }
+
+    return Promise.resolve({
+      resolution: {
+        nodeId,
+        label: concept.preferredLabel,
+        nodeType: 'concept',
+        domain: 'world-knowledge',
+        strategy: 'label',
+        confidenceScore: 0.93,
+        confidenceBand: 'high',
+        conflictFlags: [],
+      },
+      conflictFlags: [],
+    });
+  }
+}
+
+class InMemoryEdgeRepository implements Pick<IEdgeRepository, 'findEdges'> {
+  constructor(
+    private readonly edges: {
+      edgeType: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+    }[] = []
+  ) {}
+
+  findEdges(filter: IEdgeFilter): Promise<
+    {
+      edgeId: string;
+      edgeType: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+      weight: number;
+      createdAt: string;
+      updatedAt: string;
+      properties: Record<string, unknown>;
+    }[]
+  > {
+    return Promise.resolve(
+      this.edges
+        .filter(
+          (edge) =>
+            (filter.edgeType === undefined || edge.edgeType === filter.edgeType) &&
+            (filter.sourceNodeId === undefined || edge.sourceNodeId === filter.sourceNodeId) &&
+            (filter.targetNodeId === undefined || edge.targetNodeId === filter.targetNodeId)
+        )
+        .map((edge, index) => ({
+          edgeId: `edge_${String(index + 1)}`,
+          edgeType: edge.edgeType,
+          sourceNodeId: edge.sourceNodeId,
+          targetNodeId: edge.targetNodeId,
+          weight: 1,
+          createdAt: '2026-03-24T12:00:00.000Z',
+          updatedAt: '2026-03-24T12:00:00.000Z',
+          properties: {},
+        }))
+    );
   }
 }
 
@@ -524,6 +655,7 @@ function createService(
   options?: {
     canonicalNodeResolver?: ICanonicalNodeResolver;
     mutationSubmissionPort?: StubMutationSubmissionPort;
+    edgeRepository?: Pick<IEdgeRepository, 'findEdges'>;
   }
 ): {
   service: OntologyImportsApplicationService;
@@ -554,6 +686,7 @@ function createService(
       sourceNormalizers,
       {
         canonicalNodeResolver: options?.canonicalNodeResolver,
+        edgeRepository: options?.edgeRepository,
         mutationSubmissionPort,
       }
     ),
@@ -579,7 +712,7 @@ describe('OntologyImportsApplicationService.startImportRun', () => {
 
     const run = await service.startImportRun({ runId: 'run_test_001' });
 
-    expect(run.status).toBe('ready_for_normalization');
+    expect(run.status).toBe('ready_for_review');
     await expect(parsedBatchRepository.getByRunId()).resolves.toEqual(
       expect.objectContaining({
         runId: 'run_test_001',
@@ -688,6 +821,156 @@ describe('OntologyImportsApplicationService.submitMutationPreview', () => {
 
     const detail = await service.getImportRun('run_test_001');
     expect(detail?.run.submittedMutationIds).toEqual(['mutation_1']);
+  });
+
+  it('regenerates the preview at submission time so existing nodes turn add_node proposals into updates', async () => {
+    const mutationSubmissionPort = new StubMutationSubmissionPort();
+    const { service } = createService(
+      createRun('yago'),
+      createSource('yago'),
+      [new StubSourceFetcher()],
+      [new StubSourceParser()],
+      [new StubSourceNormalizer()],
+      {
+        canonicalNodeResolver: new FlippingCanonicalNodeResolver(),
+        mutationSubmissionPort,
+      }
+    );
+
+    await service.startImportRun({ runId: 'run_test_001' });
+    await service.submitMutationPreview({
+      runId: 'run_test_001',
+      context: {
+        userId: 'user_admin',
+        correlationId: 'cor_test',
+        roles: ['admin'],
+        clientIp: '127.0.0.1',
+      },
+    });
+
+    expect(mutationSubmissionPort.proposals[0]?.operations[0]).toEqual(
+      expect.objectContaining({
+        type: 'update_node',
+        nodeId: 'node_euler',
+      })
+    );
+  });
+
+  it('skips already-existing edges so ontology relation submission behaves idempotently', async () => {
+    const relationNormalizer: ISourceNormalizer = {
+      sourceId: 'yago',
+      normalize(batch) {
+        return Promise.resolve({
+          runId: batch.runId,
+          sourceId: batch.sourceId,
+          sourceVersion: batch.sourceVersion,
+          generatedAt: '2026-03-24T12:02:00.000Z',
+          rawRecordCount: batch.records.length,
+          conceptCount: 2,
+          relationCount: 1,
+          mappingCount: 0,
+          concepts: [
+            {
+              externalId: 'https://yago-knowledge.org/resource/Leonhard_Euler',
+              iri: 'https://yago-knowledge.org/resource/Leonhard_Euler',
+              nodeKind: 'entity',
+              preferredLabel: 'Leonhard Euler',
+              aliases: [],
+              description: null,
+              languages: ['en'],
+              sourceTypes: ['yago_resource'],
+              properties: {},
+              provenance: [],
+            },
+            {
+              externalId: 'https://yago-knowledge.org/resource/Mathematics',
+              iri: 'https://yago-knowledge.org/resource/Mathematics',
+              nodeKind: 'concept',
+              preferredLabel: 'Mathematics',
+              aliases: [],
+              description: null,
+              languages: ['en'],
+              sourceTypes: ['yago_resource'],
+              properties: {},
+              provenance: [],
+            },
+          ],
+          relations: [
+            {
+              externalId: 'relation_001',
+              iri: null,
+              normalizedPredicate: 'related_to',
+              predicateLabel: 'related to',
+              subjectExternalId: 'https://yago-knowledge.org/resource/Leonhard_Euler',
+              objectExternalId: 'https://yago-knowledge.org/resource/Mathematics',
+              direction: 'directed',
+              sourcePredicates: ['http://schema.org/relatedTo'],
+              properties: {},
+              provenance: [
+                {
+                  sourceId: 'yago',
+                  sourceVersion: null,
+                  runId: 'run_test_001',
+                  artifactId: 'artifact_001',
+                  harvestedAt: '2026-03-24T12:00:00.000Z',
+                  license: null,
+                  requestUrl: null,
+                },
+              ],
+            },
+          ],
+          mappings: [],
+        });
+      },
+    };
+
+    const mutationSubmissionPort = new StubMutationSubmissionPort();
+    const { service } = createService(
+      createRun('yago'),
+      createSource('yago'),
+      [new StubSourceFetcher()],
+      [new StubSourceParser()],
+      [relationNormalizer],
+      {
+        canonicalNodeResolver: new MapBasedResolver({
+          'Leonhard Euler': 'node_euler',
+          Mathematics: 'node_mathematics',
+        }),
+        edgeRepository: new InMemoryEdgeRepository([
+          {
+            edgeType: 'related_to',
+            sourceNodeId: 'node_euler',
+            targetNodeId: 'node_mathematics',
+          },
+        ]),
+        mutationSubmissionPort,
+      }
+    );
+
+    await service.startImportRun({ runId: 'run_test_001' });
+    const submission = await service.submitMutationPreview({
+      runId: 'run_test_001',
+      context: {
+        userId: 'user_admin',
+        correlationId: 'cor_test',
+        roles: ['admin'],
+        clientIp: '127.0.0.1',
+      },
+    });
+
+    expect(submission.submittedCount).toBe(2);
+    expect(mutationSubmissionPort.proposals).toHaveLength(2);
+    expect(
+      mutationSubmissionPort.proposals.some((proposal) =>
+        proposal.operations.some(
+          (operation) =>
+            typeof operation === 'object' &&
+            operation !== null &&
+            'type' in operation &&
+            operation.type === 'add_edge'
+        )
+      )
+    ).toBe(false);
   });
 });
 

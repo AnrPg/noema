@@ -17,16 +17,22 @@ import type {
   IGraphNode,
   IMetacognitiveStageAssessment,
   IMisconceptionDetection,
+  INodeMasterySummary,
   IPaginatedResponse,
   IStructuralHealthReport,
   IStructuralMetrics,
   ISubgraph,
   MutationId,
   NodeId,
+  StudyMode,
   UserId,
 } from '@noema/types';
 
-import type { CkgMutationOperation, IMutationFilter, IMutationProposal } from './ckg-mutation-dsl.js';
+import type {
+  CkgMutationOperation,
+  IMutationFilter,
+  IMutationProposal,
+} from './ckg-mutation-dsl.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -130,6 +136,16 @@ export interface IKnowledgeGraphService {
     pagination: { limit: number; offset: number },
     context: IExecutionContext
   ): Promise<IServiceResult<IPaginatedResponse<IGraphNode>>>;
+
+  /**
+   * Get a mode-scoped mastery summary for the user's PKG nodes.
+   */
+  getNodeMasterySummary(
+    userId: UserId,
+    filters: INodeFilter,
+    masteryThreshold: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<INodeMasterySummary>>;
 
   /**
    * Create an edge in the user's PKG.
@@ -489,6 +505,7 @@ export interface IKnowledgeGraphService {
   computeMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>>;
 
@@ -499,6 +516,7 @@ export interface IKnowledgeGraphService {
   getMetrics(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics>>;
 
@@ -508,6 +526,7 @@ export interface IKnowledgeGraphService {
   getMetricsHistory(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     options: IMetricsHistoryOptions,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralMetrics[]>>;
@@ -523,6 +542,7 @@ export interface IKnowledgeGraphService {
   detectMisconceptions(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>>;
 
@@ -533,6 +553,7 @@ export interface IKnowledgeGraphService {
   getMisconceptions(
     userId: UserId,
     domain: string | undefined,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMisconceptionDetection[]>>;
 
@@ -558,6 +579,7 @@ export interface IKnowledgeGraphService {
   getStructuralHealth(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IStructuralHealthReport>>;
 
@@ -571,6 +593,7 @@ export interface IKnowledgeGraphService {
   getMetacognitiveStage(
     userId: UserId,
     domain: string,
+    studyMode: StudyMode,
     context: IExecutionContext
   ): Promise<IServiceResult<IMetacognitiveStageAssessment>>;
 
@@ -790,15 +813,9 @@ export interface IPipelineHealthResult {
 
 export interface IMutationRecoveryCheckResult {
   readonly mutationId: MutationId;
-  readonly check:
-    | 'safe_retry'
-    | 'reconcile_commit';
+  readonly check: 'safe_retry' | 'reconcile_commit';
   readonly eligible: boolean;
-  readonly recommendedAction:
-    | 'recover_reject'
-    | 'reconcile_commit'
-    | 'wait'
-    | 'none';
+  readonly recommendedAction: 'recover_reject' | 'reconcile_commit' | 'wait' | 'none';
   readonly mutationState: string;
   readonly summary: string;
   readonly details: readonly string[];

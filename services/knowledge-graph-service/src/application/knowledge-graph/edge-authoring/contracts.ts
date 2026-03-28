@@ -20,6 +20,7 @@ export interface ICkgEdgeAuthoringBlockedReason {
   code:
     | 'duplicate_edge'
     | 'duplicate_symmetric_edge'
+    | 'inverse_edge_exists'
     | 'invalid_source_type'
     | 'invalid_target_type'
     | 'self_reference'

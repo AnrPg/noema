@@ -25,6 +25,14 @@ const ACYCLICITY_TRAVERSAL_OPTIONS: ITraversalOptions = {
 };
 
 const BLOCKED_NODE_STATUSES = new Set<CkgNodeStatus>(['deprecated', 'merged', 'split']);
+const INVERSE_EQUIVALENT_EDGE_TYPES = new Map<GraphEdgeType, readonly GraphEdgeType[]>([
+  [GraphEdgeType.SUBSKILL_OF, [GraphEdgeType.HAS_SUBSKILL]],
+  [GraphEdgeType.HAS_SUBSKILL, [GraphEdgeType.SUBSKILL_OF]],
+  [GraphEdgeType.ESSENTIAL_FOR_OCCUPATION, [GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL]],
+  [GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL, [GraphEdgeType.ESSENTIAL_FOR_OCCUPATION]],
+  [GraphEdgeType.OPTIONAL_FOR_OCCUPATION, [GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL]],
+  [GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL, [GraphEdgeType.OPTIONAL_FOR_OCCUPATION]],
+]);
 
 export class CkgEdgeAuthoringService implements ICkgEdgeAuthoringService {
   constructor(private readonly graphRepository: IGraphRepository) {}
@@ -53,9 +61,10 @@ export class CkgEdgeAuthoringService implements ICkgEdgeAuthoringService {
         ? options.find((option) => option.edgeType === input.edgeType)
         : undefined;
     const selectedEdgeTypeEnabled = selectedEdgeType?.enabled ?? false;
-    const proposal = selectedEdgeTypeEnabled
-      ? buildProposal(sourceNode.nodeId, targetNode.nodeId, selectedEdgeType, input.rationale)
-      : null;
+    const proposal =
+      selectedEdgeTypeEnabled && selectedEdgeType !== undefined
+        ? buildProposal(sourceNode.nodeId, targetNode.nodeId, selectedEdgeType, input.rationale)
+        : null;
 
     return {
       source: toNodeSummary(sourceNode),
@@ -138,6 +147,24 @@ export class CkgEdgeAuthoringService implements ICkgEdgeAuthoringService {
       }
     }
 
+    const inverseEquivalentTypes = INVERSE_EQUIVALENT_EDGE_TYPES.get(edgeType) ?? [];
+    if (inverseEquivalentTypes.length > 0) {
+      const inverseEdges = await this.graphRepository.findConflictingEdges(
+        sourceNode.nodeId,
+        targetNode.nodeId,
+        inverseEquivalentTypes
+      );
+
+      if (inverseEdges.length > 0) {
+        blockedReasons.push({
+          code: 'inverse_edge_exists',
+          message:
+            'An inverse-equivalent relation already exists for this node pair. Keep only one canonical direction for the same fact.',
+        });
+        existingEdges.push(...inverseEdges);
+      }
+    }
+
     if (
       policy.requiresAcyclicity &&
       blockedReasons.every((reason) => reason.code !== 'invalid_source_type') &&
@@ -167,7 +194,7 @@ export class CkgEdgeAuthoringService implements ICkgEdgeAuthoringService {
       defaultWeight: policy.defaultWeight,
       enabled: blockedReasons.length === 0,
       blockedReasons,
-      existingEdgeIds: existingEdges.map((edge) => edge.edgeId as string),
+      existingEdgeIds: [...new Set(existingEdges.map((edge) => edge.edgeId as string))],
       isSymmetric: policy.isSymmetric,
       requiresAcyclicity: policy.requiresAcyclicity,
     };

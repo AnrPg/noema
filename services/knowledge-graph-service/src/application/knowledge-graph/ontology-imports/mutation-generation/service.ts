@@ -31,6 +31,68 @@ const BLOCKING_CONFLICTS = new Set<OntologyMergeConflictKind>([
   'ambiguous_match',
   'mapping_conflict',
 ]);
+const QUALIFICATION_ACTION_LEADS = new Set([
+  'act',
+  'adapt',
+  'administer',
+  'advise',
+  'analyse',
+  'analyze',
+  'apply',
+  'assemble',
+  'assess',
+  'build',
+  'calibrate',
+  'coach',
+  'code',
+  'communicate',
+  'compile',
+  'conduct',
+  'configure',
+  'coordinate',
+  'create',
+  'deliver',
+  'design',
+  'develop',
+  'diagnose',
+  'document',
+  'draft',
+  'evaluate',
+  'execute',
+  'facilitate',
+  'follow',
+  'guide',
+  'implement',
+  'inspect',
+  'install',
+  'interpret',
+  'lead',
+  'maintain',
+  'manage',
+  'model',
+  'monitor',
+  'negotiate',
+  'operate',
+  'optimise',
+  'optimize',
+  'perform',
+  'plan',
+  'prepare',
+  'present',
+  'program',
+  'repair',
+  'report',
+  'research',
+  'review',
+  'solve',
+  'support',
+  'teach',
+  'test',
+  'troubleshoot',
+  'use',
+  'validate',
+  'write',
+]);
 
 const SOURCE_DOMAINS: Record<string, string> = {
   yago: 'world-knowledge',
@@ -275,9 +337,10 @@ function buildConceptAddProposal(
   const review = buildReviewSummary(unresolved(), conflictFlags);
   const reviewMetadata = buildReviewMetadata(review);
   const sourceCoverage = buildSourceCoverage(batch, concept);
+  const nodeTypeInference = inferNodeType(concept);
   const operation: IAddNodeOperation = {
     type: 'add_node',
-    nodeType: inferNodeType(concept),
+    nodeType: nodeTypeInference.nodeType,
     label: concept.preferredLabel,
     description: concept.description ?? '',
     domain: inferDomain(batch.sourceId, concept),
@@ -292,7 +355,10 @@ function buildConceptAddProposal(
     reviewMetadata: {
       ...review,
       reviewState: 'ready',
-      notes: [`Imported from ${batch.sourceId.toUpperCase()} concept normalization pipeline.`],
+      notes: [
+        `Imported from ${batch.sourceId.toUpperCase()} concept normalization pipeline.`,
+        ...nodeTypeInference.reviewNotes,
+      ],
     },
     sourceCoverage,
     properties: {
@@ -319,6 +385,7 @@ function buildConceptEnrichmentProposal(
   const review = buildReviewSummary(resolution, resolution.conflictFlags);
   const reviewMetadata = buildReviewMetadata(review);
   const sourceCoverage = buildSourceCoverage(batch, concept);
+  const nodeTypeInference = inferNodeType(concept);
   const operation: IUpdateNodeOperation = {
     type: 'update_node',
     nodeId: resolution.nodeId,
@@ -333,7 +400,10 @@ function buildConceptEnrichmentProposal(
       reviewMetadata: {
         ...review,
         reviewState: 'ready',
-        notes: [`Enriched from ${batch.sourceId.toUpperCase()} ontology import evidence.`],
+        notes: [
+          `Enriched from ${batch.sourceId.toUpperCase()} ontology import evidence.`,
+          ...nodeTypeInference.reviewNotes,
+        ],
       },
       sourceCoverage,
       properties: {
@@ -424,11 +494,12 @@ function buildOntologyImportProperties(
   };
 }
 
-function inferNodeType(
-  concept: INormalizedOntologyConceptCandidate
-): IAddNodeOperation['nodeType'] {
+function inferNodeType(concept: INormalizedOntologyConceptCandidate): {
+  nodeType: IAddNodeOperation['nodeType'];
+  reviewNotes: string[];
+} {
   if (concept.nodeKind === 'literal') {
-    return GraphNodeType.FACT;
+    return { nodeType: GraphNodeType.FACT, reviewNotes: [] };
   }
 
   const lexicalSignals = [concept.preferredLabel, ...concept.sourceTypes].join(' ').toLowerCase();
@@ -436,28 +507,78 @@ function inferNodeType(
     typeof concept.properties['className'] === 'string'
       ? concept.properties['className'].toLowerCase()
       : '';
+  const identifierSignals = [concept.externalId, concept.iri ?? ''].join(' ').toLowerCase();
   const hasSkillLinks =
     typeof concept.properties['_links'] === 'object' &&
     concept.properties['_links'] !== null &&
     Object.prototype.hasOwnProperty.call(concept.properties['_links'], 'hasSkillType');
+  const isOccupation =
+    className === 'occupation' ||
+    lexicalSignals.includes('occupation') ||
+    identifierSignals.includes('/occupation/') ||
+    identifierSignals.includes('/isco/');
+  const isQualification =
+    className === 'qualification' ||
+    lexicalSignals.includes('qualification') ||
+    identifierSignals.includes('/qualification/') ||
+    identifierSignals.includes('qualifications');
+
+  if (isOccupation) {
+    return { nodeType: GraphNodeType.OCCUPATION, reviewNotes: [] };
+  }
+  if (isQualification) {
+    return inferQualificationNodeType(concept.preferredLabel);
+  }
 
   if (lexicalSignals.includes('skill') || className === 'skill' || hasSkillLinks) {
-    return GraphNodeType.SKILL;
+    return { nodeType: GraphNodeType.SKILL, reviewNotes: [] };
   }
   if (lexicalSignals.includes('misconception')) {
-    return GraphNodeType.MISCONCEPTION;
+    return { nodeType: GraphNodeType.MISCONCEPTION, reviewNotes: [] };
   }
   if (lexicalSignals.includes('example')) {
-    return GraphNodeType.EXAMPLE;
+    return { nodeType: GraphNodeType.EXAMPLE, reviewNotes: [] };
   }
   if (lexicalSignals.includes('principle') || lexicalSignals.includes('law')) {
-    return GraphNodeType.PRINCIPLE;
+    return { nodeType: GraphNodeType.PRINCIPLE, reviewNotes: [] };
   }
   if (lexicalSignals.includes('procedure') || lexicalSignals.includes('method')) {
-    return GraphNodeType.PROCEDURE;
+    return { nodeType: GraphNodeType.PROCEDURE, reviewNotes: [] };
   }
 
-  return GraphNodeType.CONCEPT;
+  return { nodeType: GraphNodeType.CONCEPT, reviewNotes: [] };
+}
+
+function inferQualificationNodeType(label: string): {
+  nodeType: IAddNodeOperation['nodeType'];
+  reviewNotes: string[];
+} {
+  const normalized = label.trim().toLowerCase();
+  const firstToken = normalized.split(/[\s/-]+/u)[0] ?? '';
+  const competencyPhrase =
+    normalized.startsWith('ability to ') ||
+    normalized.startsWith('able to ') ||
+    normalized.startsWith('capacity to ') ||
+    normalized.startsWith('competence in ') ||
+    normalized.startsWith('competency in ');
+  const actionLike = competencyPhrase || QUALIFICATION_ACTION_LEADS.has(firstToken);
+
+  if (actionLike) {
+    return {
+      nodeType: GraphNodeType.SKILL,
+      reviewNotes: [
+        `Qualification heuristic mapped "${label}" to skill because the label reads as action-led or competency-like.`,
+      ],
+    };
+  }
+
+  return {
+    nodeType: GraphNodeType.CONCEPT,
+    reviewNotes: [
+      `Qualification heuristic mapped "${label}" to concept because the label was not confidently action-led.`,
+      'Reviewer confirmation recommended for this qualification classification.',
+    ],
+  };
 }
 
 function inferDomain(
@@ -475,16 +596,25 @@ function inferEdgeWeight(edgeType: GraphEdgeType): number {
     case GraphEdgeType.PART_OF:
     case GraphEdgeType.IS_A:
     case GraphEdgeType.EQUIVALENT_TO:
+    case GraphEdgeType.SUBSKILL_OF:
+    case GraphEdgeType.HAS_SUBSKILL:
+    case GraphEdgeType.ESSENTIAL_FOR_OCCUPATION:
+    case GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL:
       return 1;
     case GraphEdgeType.CONTRADICTS:
     case GraphEdgeType.DISJOINT_WITH:
     case GraphEdgeType.DEPENDS_ON:
-      return 0.9;
+    case GraphEdgeType.OPTIONAL_FOR_OCCUPATION:
+    case GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL:
+    case GraphEdgeType.TRANSFERABLE_TO:
+      return 0.8;
     case GraphEdgeType.CAUSES:
     case GraphEdgeType.DERIVED_FROM:
     case GraphEdgeType.HAS_PROPERTY:
     case GraphEdgeType.ENTAILS:
       return 0.8;
+    case GraphEdgeType.CONFUSABLE_WITH:
+      return 0.6;
     default:
       return 0.7;
   }
@@ -672,13 +802,51 @@ function inferRelationMapping(
 } {
   const inferenceReasons: IRelationInferenceReason[] = [];
   const blockingReasons: IRelationBlockingReason[] = [];
+  const sourceId = relation.provenance[0]?.sourceId ?? null;
   const sourceRelationType = relation.sourcePredicates[0] ?? relation.normalizedPredicate;
   const relationSignals = new Set(
     [relation.normalizedPredicate, ...relation.sourcePredicates].map(normalizeRelationSignal)
   );
   let candidateEdgeTypes: GraphEdgeType[] = [];
 
-  if (
+  if (hasAnyRelationSignal(relationSignals, ['broader_skill'])) {
+    candidateEdgeTypes = [GraphEdgeType.SUBSKILL_OF];
+    inferenceReasons.push({
+      code: 'hierarchy_signal',
+      message: 'The source predicate expresses a broader-skill hierarchy relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.24,
+    });
+  } else if (hasAnyRelationSignal(relationSignals, ['narrower_skill'])) {
+    candidateEdgeTypes = [GraphEdgeType.HAS_SUBSKILL];
+    inferenceReasons.push({
+      code: 'hierarchy_signal',
+      message: 'The source predicate expresses a narrower-skill hierarchy relation.',
+      sourceField: sourceRelationType,
+      evidence: relation.predicateLabel,
+      confidenceDelta: 0.24,
+    });
+  } else if (
+    hasAnyRelationSignal(relationSignals, [
+      'same_as',
+      'sameas',
+      'exact_match',
+      'close_match',
+      'broad_match',
+      'narrow_match',
+      'related_match',
+      'synonym',
+    ])
+  ) {
+    blockingReasons.push({
+      code: 'mapping_relation_requires_anchoring',
+      message:
+        'The source predicate expresses cross-source identity, mapping, or lexical equivalence. Keep it as ontology mapping or alias evidence instead of auto-promoting it to a canonical edge.',
+      blocking: true,
+      detail: sourceRelationType,
+    });
+  } else if (
     hasAnyRelationSignal(relationSignals, [
       'is_a',
       'subclass_of',
@@ -686,22 +854,23 @@ function inferRelationMapping(
       'instance_of',
       'type',
       'broader_concept',
-      'broader_skill',
       'broader_occupation',
       'broader_taxonomy',
       'narrower_concept',
-      'narrower_skill',
       'narrower_occupation',
       'narrower_taxonomy',
     ])
   ) {
-    candidateEdgeTypes = [GraphEdgeType.IS_A, GraphEdgeType.PART_OF];
+    candidateEdgeTypes = [GraphEdgeType.IS_A];
     inferenceReasons.push({
-      code: 'hierarchy_signal',
-      message: 'The source predicate expresses a hierarchical broader/narrower or type relation.',
+      code: 'taxonomy_signal',
+      message:
+        sourceId === 'yago'
+          ? 'The YAGO predicate expresses taxonomy or type membership, so it is treated as a canonical taxonomy hint first.'
+          : 'The source predicate expresses taxonomy or type membership, so it is treated as a canonical taxonomy hint.',
       sourceField: sourceRelationType,
       evidence: relation.predicateLabel,
-      confidenceDelta: 0.2,
+      confidenceDelta: 0.24,
     });
   } else if (hasAnyRelationSignal(relationSignals, ['part_of', 'has_part', 'component_of'])) {
     candidateEdgeTypes = [GraphEdgeType.PART_OF];
@@ -735,7 +904,10 @@ function inferRelationMapping(
       'essential_skill_for_occupation',
     ])
   ) {
-    candidateEdgeTypes = [GraphEdgeType.DEPENDS_ON, GraphEdgeType.PREREQUISITE];
+    candidateEdgeTypes = [
+      GraphEdgeType.ESSENTIAL_FOR_OCCUPATION,
+      GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL,
+    ];
     inferenceReasons.push({
       code: 'essential_skill_signal',
       message: 'The predicate expresses an essential occupation-skill dependency.',
@@ -750,7 +922,10 @@ function inferRelationMapping(
       'optional_skill_for_occupation',
     ])
   ) {
-    candidateEdgeTypes = [GraphEdgeType.RELATED_TO, GraphEdgeType.DEPENDS_ON];
+    candidateEdgeTypes = [
+      GraphEdgeType.OPTIONAL_FOR_OCCUPATION,
+      GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL,
+    ];
     inferenceReasons.push({
       code: 'optional_skill_signal',
       message: 'The predicate expresses an optional occupation-skill association.',
@@ -778,20 +953,12 @@ function inferRelationMapping(
       evidence: relation.predicateLabel,
       confidenceDelta: 0.2,
     });
-  } else if (
-    hasAnyRelationSignal(relationSignals, [
-      'equivalent_to',
-      'equivalent_class',
-      'same_as',
-      'sameas',
-      'exact_match',
-      'synonym',
-    ])
-  ) {
+  } else if (hasAnyRelationSignal(relationSignals, ['equivalent_to', 'equivalent_class'])) {
     candidateEdgeTypes = [GraphEdgeType.EQUIVALENT_TO];
     inferenceReasons.push({
       code: 'equivalence_signal',
-      message: 'The predicate expresses equivalence or an exact cross-source match.',
+      message:
+        'The predicate expresses semantic equivalence rather than cross-source identity mapping.',
       sourceField: sourceRelationType,
       evidence: relation.predicateLabel,
       confidenceDelta: 0.25,
@@ -970,26 +1137,76 @@ function choosePreferredEdgeType(
   const objectType = objectResolution.resolution?.nodeType ?? null;
 
   if (
+    candidateEdgeTypes.includes(GraphEdgeType.SUBSKILL_OF) &&
+    subjectType === GraphNodeType.SKILL &&
+    objectType === GraphNodeType.SKILL
+  ) {
+    return GraphEdgeType.SUBSKILL_OF;
+  }
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.HAS_SUBSKILL) &&
+    subjectType === GraphNodeType.SKILL &&
+    objectType === GraphNodeType.SKILL
+  ) {
+    return GraphEdgeType.HAS_SUBSKILL;
+  }
+
+  if (
     candidateEdgeTypes.includes(GraphEdgeType.IS_A) &&
-    (subjectType === 'concept' || subjectType === 'skill') &&
-    (objectType === 'concept' || objectType === 'skill')
+    (subjectType === GraphNodeType.CONCEPT || subjectType === GraphNodeType.OCCUPATION) &&
+    (objectType === GraphNodeType.CONCEPT || objectType === GraphNodeType.OCCUPATION)
   ) {
     return GraphEdgeType.IS_A;
   }
 
   if (
+    candidateEdgeTypes.includes(GraphEdgeType.ESSENTIAL_FOR_OCCUPATION) &&
+    subjectType === GraphNodeType.SKILL &&
+    objectType === GraphNodeType.OCCUPATION
+  ) {
+    return GraphEdgeType.ESSENTIAL_FOR_OCCUPATION;
+  }
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL) &&
+    subjectType === GraphNodeType.OCCUPATION &&
+    objectType === GraphNodeType.SKILL
+  ) {
+    return GraphEdgeType.OCCUPATION_REQUIRES_ESSENTIAL_SKILL;
+  }
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.OPTIONAL_FOR_OCCUPATION) &&
+    subjectType === GraphNodeType.SKILL &&
+    objectType === GraphNodeType.OCCUPATION
+  ) {
+    return GraphEdgeType.OPTIONAL_FOR_OCCUPATION;
+  }
+
+  if (
+    candidateEdgeTypes.includes(GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL) &&
+    subjectType === GraphNodeType.OCCUPATION &&
+    objectType === GraphNodeType.SKILL
+  ) {
+    return GraphEdgeType.OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL;
+  }
+
+  if (
     candidateEdgeTypes.includes(GraphEdgeType.HAS_PROPERTY) &&
-    (objectType === 'fact' || objectType === 'principle' || objectType === 'concept')
+    (objectType === GraphNodeType.FACT ||
+      objectType === GraphNodeType.PRINCIPLE ||
+      objectType === GraphNodeType.CONCEPT)
   ) {
     return GraphEdgeType.HAS_PROPERTY;
   }
 
   if (
     candidateEdgeTypes.includes(GraphEdgeType.DEPENDS_ON) &&
-    (subjectType === 'concept' ||
-      subjectType === 'skill' ||
-      subjectType === 'procedure' ||
-      subjectType === 'principle')
+    (subjectType === GraphNodeType.CONCEPT ||
+      subjectType === GraphNodeType.SKILL ||
+      subjectType === GraphNodeType.PROCEDURE ||
+      subjectType === GraphNodeType.PRINCIPLE)
   ) {
     return GraphEdgeType.DEPENDS_ON;
   }

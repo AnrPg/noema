@@ -13,7 +13,7 @@
  * - EdgeFilterSchema      → IEdgeFilter
  */
 
-import { GraphEdgeTypeSchema, NodeIdSchema } from '@noema/validation';
+import { GraphEdgeTypeSchema, NodeIdSchema, StudyModeSchema } from '@noema/validation';
 import { z } from 'zod';
 
 // ============================================================================
@@ -29,6 +29,7 @@ export const CreateNodeInputSchema = z.object({
   nodeType: z.string().min(1, 'Node type is required'),
   domain: z.string().min(1, 'Domain is required').max(200, 'Domain too long'),
   description: z.string().max(2000, 'Description too long').optional(),
+  supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
   properties: z.record(z.unknown()).optional(),
   masteryLevel: z.number().min(0).max(1).optional(),
 });
@@ -42,6 +43,7 @@ export const UpdateNodeInputSchema = z
     label: z.string().min(1).max(500).optional(),
     description: z.string().max(2000).optional(),
     domain: z.string().min(1).max(200).optional(),
+    supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
     properties: z.record(z.unknown()).optional(),
     masteryLevel: z.number().min(0).max(1).optional(),
   })
@@ -50,6 +52,7 @@ export const UpdateNodeInputSchema = z
       data.label !== undefined ||
       data.description !== undefined ||
       data.domain !== undefined ||
+      data.supportedStudyModes !== undefined ||
       data.properties !== undefined ||
       data.masteryLevel !== undefined,
     { message: 'At least one field must be provided for update' }

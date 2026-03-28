@@ -229,6 +229,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const NODE_TYPE_OPTIONS: IGraphNodeDto['type'][] = [
   'concept',
+  'occupation',
   'skill',
   'fact',
   'procedure',
@@ -243,8 +244,6 @@ type GraphNodeId = IGraphNodeDto['id'];
 interface IEdgeAuthoringMenuState {
   sourceNodeId: GraphNodeId;
   targetNodeId: GraphNodeId;
-  x: number;
-  y: number;
   preview: ICkgEdgeAuthoringPreviewDto | null;
   isLoading: boolean;
   error: string | null;
@@ -461,6 +460,13 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     () => nodes.find((node) => (node.id as string) === relationSourceNodeId) ?? null,
     [nodes, relationSourceNodeId]
   );
+  const edgeAuthoringTargetNode = React.useMemo(
+    () =>
+      edgeAuthoringMenu === null
+        ? null
+        : (nodes.find((node) => (node.id as string) === edgeAuthoringMenu.targetNodeId) ?? null),
+    [edgeAuthoringMenu, nodes]
+  );
   const selectedEdge = React.useMemo(
     () => edges.find((edge) => (edge.id as string) === selectedEdgeId) ?? null,
     [edges, selectedEdgeId]
@@ -494,7 +500,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
         } else {
           next.add(id);
         }
-        const nextPrimary = next.has(id) ? node.id : ([...next][0] ?? null);
+        const nextPrimary = (next.has(id) ? node.id : ([...next][0] ?? null)) as GraphNodeId | null;
         setSelectedNodeId(nextPrimary);
         setRelationSourceNodeId(nextPrimary);
         return next;
@@ -569,8 +575,6 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       const initialMenuState: IEdgeAuthoringMenuState = {
         sourceNodeId,
         targetNodeId,
-        x: event.clientX,
-        y: event.clientY,
         preview: null,
         isLoading: true,
         error: null,
@@ -988,193 +992,333 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
           </div>
         )}
 
-        {/* Canvas + overlaid panels */}
-        <div className="relative flex-1 overflow-hidden">
-          <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
-            {!isControlsOpen && (
+        {/* Canvas + side panels */}
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="relative flex-1 overflow-hidden">
+            <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
+              {!isControlsOpen && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsControlsOpen(true);
+                  }}
+                  className="rounded border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+                >
+                  Controls
+                </button>
+              )}
+            </div>
+
+            <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  setIsControlsOpen(true);
+                  setIsMinimapOpen((current) => !current);
                 }}
                 className="rounded border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
               >
-                Controls
+                {isMinimapOpen ? 'Hide map' : 'Show map'}
               </button>
-            )}
-          </div>
-
-          <div className="absolute right-4 top-4 z-10 flex flex-col items-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsMinimapOpen((current) => !current);
-              }}
-              className="rounded border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
-            >
-              {isMinimapOpen ? 'Hide map' : 'Show map'}
-            </button>
-            {isMinimapOpen && <GraphMinimap nodes={visibleNodes} selectedNodeId={selectedNodeId} />}
-          </div>
-
-          <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLegendOpen((current) => !current);
-              }}
-              className="rounded border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
-            >
-              {isLegendOpen ? 'Hide legend' : 'Show legend'}
-            </button>
-            {isLegendOpen && (
-              <div className="rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur">
-                <GraphLegend hiddenTypes={hiddenTypes} onToggleType={handleToggleType} />
-              </div>
-            )}
-          </div>
-
-          {pendingMutationsActive && pendingMutationsLoading && (
-            <div className="absolute left-2 top-2 z-10">
-              <span className="text-xs text-muted-foreground">(loading…)</span>
+              {isMinimapOpen && (
+                <GraphMinimap nodes={visibleNodes} selectedNodeId={selectedNodeId} />
+              )}
             </div>
-          )}
-          <GraphCanvas
-            nodes={visibleNodes}
-            edges={edges}
-            selectedNodeId={selectedNodeId}
-            selectedNodeIds={selectedNodeIds}
-            selectedEdgeId={selectedEdgeId}
-            hoveredNodeId={hoveredNodeId}
-            showLabels={showLabels}
-            activeOverlays={activeOverlaysArray}
-            layoutMode={layoutMode}
-            onNodeClick={handleNodeClick}
-            onEdgeClick={handleEdgeClick}
-            onNodeHover={handleNodeHover}
-            onNodeRightClick={handleNodeRightClick}
-            onBackgroundClick={handleBackgroundClick}
-            highlightedNodeIds={highlightedNodeIds.size > 0 ? highlightedNodeIds : EMPTY_SET}
-            className="h-full w-full"
-          />
 
-          {nodeBatchPreview !== null && nodeBatchPreviewMode !== null && (
-            <div className="absolute left-4 top-20 z-30 w-[28rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {nodeBatchPreviewMode === 'delete'
-                      ? 'Confirm node deletion'
-                      : 'Confirm batch node update'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {summarizeSelectedNodes(nodeBatchPreview.nodes.length)} ·{' '}
-                    {String(nodeBatchPreview.affectedEdgeCount)} attached edge(s)
-                  </p>
+            <div className="absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLegendOpen((current) => !current);
+                }}
+                className="rounded border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
+              >
+                {isLegendOpen ? 'Hide legend' : 'Show legend'}
+              </button>
+              {isLegendOpen && (
+                <div className="rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur">
+                  <GraphLegend hiddenTypes={hiddenTypes} onToggleType={handleToggleType} />
                 </div>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setNodeBatchPreviewState(null);
-                  }}
-                >
-                  Close
-                </button>
+              )}
+            </div>
+
+            {pendingMutationsActive && pendingMutationsLoading && (
+              <div className="absolute left-2 top-2 z-10">
+                <span className="text-xs text-muted-foreground">(loading…)</span>
               </div>
+            )}
+            <GraphCanvas
+              nodes={visibleNodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+              selectedNodeIds={selectedNodeIds}
+              selectedEdgeId={selectedEdgeId}
+              hoveredNodeId={hoveredNodeId}
+              showLabels={showLabels}
+              activeOverlays={activeOverlaysArray}
+              layoutMode={layoutMode}
+              onNodeClick={handleNodeClick}
+              onEdgeClick={handleEdgeClick}
+              onNodeHover={handleNodeHover}
+              onNodeRightClick={handleNodeRightClick}
+              onBackgroundClick={handleBackgroundClick}
+              highlightedNodeIds={highlightedNodeIds.size > 0 ? highlightedNodeIds : EMPTY_SET}
+              className="h-full w-full"
+            />
 
-              <div className="mt-4 space-y-3 text-sm">
-                {nodeBatchPreview.warnings.map((warning: string) => (
-                  <div
-                    key={warning}
-                    className="rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200"
-                  >
-                    {warning}
-                  </div>
-                ))}
-
-                {nodeBatchPreview.updates !== null && (
-                  <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                    {nodeBatchPreview.updates.nodeType !== undefined && (
-                      <p>Requested type: {nodeBatchPreview.updates.nodeType}</p>
-                    )}
-                    {nodeBatchPreview.updates.domain !== undefined && (
-                      <p>Requested domain: {nodeBatchPreview.updates.domain}</p>
-                    )}
-                    {nodeBatchPreview.updates.tags !== undefined && (
-                      <p>Requested tags: {nodeBatchPreview.updates.tags.join(', ')}</p>
-                    )}
-                  </div>
-                )}
-
-                {nodeBatchPreview.conflicts.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      Retyping conflicts
+            {nodeBatchPreview !== null && nodeBatchPreviewMode !== null && (
+              <div className="absolute left-4 top-20 z-30 w-[28rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {nodeBatchPreviewMode === 'delete'
+                        ? 'Confirm node deletion'
+                        : 'Confirm batch node update'}
                     </p>
-                    <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                      {nodeBatchPreview.conflicts.map(
-                        (conflict: ICkgNodeBatchAuthoringConflictDto) => (
-                          <div
-                            key={`${conflict.nodeId}-${conflict.edgeId}-${conflict.direction}`}
-                            className="rounded-md border border-destructive/30 bg-destructive/10 p-3"
-                          >
-                            <p className="text-xs font-medium text-foreground">
-                              {conflict.message}
-                            </p>
-                            <p className="mt-1 text-[11px] text-muted-foreground">
-                              Other endpoint: {conflict.otherNodeLabel} · Edge {conflict.edgeType} (
-                              {conflict.edgeId})
-                            </p>
-                            <div className="mt-2 space-y-1 text-[11px] text-amber-200">
-                              {conflict.suggestions.map((suggestion: string) => (
-                                <p key={suggestion}>{suggestion}</p>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {summarizeSelectedNodes(nodeBatchPreview.nodes.length)} ·{' '}
+                      {String(nodeBatchPreview.affectedEdgeCount)} attached edge(s)
+                    </p>
                   </div>
-                )}
-
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => {
                       setNodeBatchPreviewState(null);
                     }}
                   >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      void handleSubmitNodeBatchProposal();
-                    }}
-                    disabled={!nodeBatchPreview.canProceed || proposeCkgMutation.isPending}
-                  >
-                    Submit mutation proposal
-                  </Button>
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3 text-sm">
+                  {nodeBatchPreview.warnings.map((warning: string) => (
+                    <div
+                      key={warning}
+                      className="rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200"
+                    >
+                      {warning}
+                    </div>
+                  ))}
+
+                  {nodeBatchPreview.updates !== null && (
+                    <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                      {nodeBatchPreview.updates.nodeType !== undefined && (
+                        <p>Requested type: {nodeBatchPreview.updates.nodeType}</p>
+                      )}
+                      {nodeBatchPreview.updates.domain !== undefined && (
+                        <p>Requested domain: {nodeBatchPreview.updates.domain}</p>
+                      )}
+                      {nodeBatchPreview.updates.tags !== undefined && (
+                        <p>Requested tags: {nodeBatchPreview.updates.tags.join(', ')}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {nodeBatchPreview.conflicts.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Retyping conflicts
+                      </p>
+                      <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                        {nodeBatchPreview.conflicts.map(
+                          (conflict: ICkgNodeBatchAuthoringConflictDto) => (
+                            <div
+                              key={`${conflict.nodeId}-${conflict.edgeId}-${conflict.direction}`}
+                              className="rounded-md border border-destructive/30 bg-destructive/10 p-3"
+                            >
+                              <p className="text-xs font-medium text-foreground">
+                                {conflict.message}
+                              </p>
+                              <p className="mt-1 text-[11px] text-muted-foreground">
+                                Other endpoint: {conflict.otherNodeLabel} · Edge {conflict.edgeType}{' '}
+                                ({conflict.edgeId})
+                              </p>
+                              <div className="mt-2 space-y-1 text-[11px] text-amber-200">
+                                {conflict.suggestions.map((suggestion: string) => (
+                                  <p key={suggestion}>{suggestion}</p>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setNodeBatchPreviewState(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void handleSubmitNodeBatchProposal();
+                      }}
+                      disabled={!nodeBatchPreview.canProceed || proposeCkgMutation.isPending}
+                    >
+                      Submit mutation proposal
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {edgeProposalDraft !== null && (
+              <div className="absolute right-4 top-16 z-30 w-[26rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Confirm relation proposal
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {edgeProposalDraft.sourceLabel} {edgeProposalDraft.edgeType}{' '}
+                      {edgeProposalDraft.targetLabel}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setEdgeProposalDraft(null);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <label
+                    className="block text-xs font-medium text-muted-foreground"
+                    htmlFor="edge-rationale"
+                  >
+                    Rationale
+                  </label>
+                  <textarea
+                    id="edge-rationale"
+                    className="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
+                    value={edgeProposalRationale}
+                    onChange={(event) => {
+                      setEdgeProposalRationale(event.target.value);
+                    }}
+                    placeholder="Explain why this relation is semantically appropriate."
+                  />
+                  <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                    This will create a normal `add_edge` mutation proposal and send it to the
+                    canonical review queue. Nothing is written directly to the CKG from this screen.
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEdgeProposalDraft(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void handleSubmitEdgeProposal();
+                      }}
+                      disabled={proposeCkgMutation.isPending}
+                    >
+                      {proposeCkgMutation.isPending ? 'Submitting…' : 'Submit mutation'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedEdge !== null && (
+              <div className="absolute bottom-4 right-4 z-30 w-[24rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Selected relation</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedEdgeSource?.label ?? selectedEdge.sourceId} {selectedEdge.type}{' '}
+                      {selectedEdgeTarget?.label ?? selectedEdge.targetId}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSelectedEdgeId(null);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-3 text-sm">
+                  <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                    <p>Edge id: {selectedEdge.id}</p>
+                    <p>Weight: {selectedEdge.weight}</p>
+                    <p>Created: {new Date(selectedEdge.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                    To change this relation semantically, remove it first and then use the existing
+                    node-to-node relation authoring flow to propose the replacement edge.
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedEdgeId(null);
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        void handleSubmitEdgeRemovalProposal();
+                      }}
+                      disabled={proposeCkgMutation.isPending}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                      {proposeCkgMutation.isPending ? 'Submitting…' : 'Propose removal'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Node detail panel + "View pending mutations" link */}
+            {selectedNode !== null && (
+              <div
+                ref={detailPanelRef}
+                className="absolute bottom-4 left-4 top-4 z-20 flex w-[min(32rem,calc(100%-2rem))] max-w-[calc(100%-2rem)] flex-col"
+              >
+                <NodeDetailPanel
+                  node={selectedNode}
+                  allNodes={nodes}
+                  allEdges={edges}
+                  onClose={handleClose}
+                />
+                <div className="mt-1 flex flex-shrink-0 justify-end px-1">
+                  <Link
+                    href={`/dashboard/ckg/mutations?nodeId=${String(selectedNodeId)}`}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    View pending mutations for this node
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
 
           {edgeAuthoringMenu !== null && (
-            <div
-              className="absolute z-30 w-[24rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur"
-              style={{
-                left: Math.max(16, edgeAuthoringMenu.x - 40),
-                top: Math.max(72, edgeAuthoringMenu.y - 24),
-              }}
-            >
+            <aside className="noema-scrollbar z-20 flex h-full w-[24rem] flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Create relation</p>
                   <p className="text-xs text-muted-foreground">
                     {relationSourceNode?.label ?? edgeAuthoringMenu.sourceNodeId} →{' '}
-                    {nodes.find((entry) => (entry.id as string) === edgeAuthoringMenu.targetNodeId)
-                      ?.label ?? edgeAuthoringMenu.targetNodeId}
+                    {edgeAuthoringTargetNode?.label ?? edgeAuthoringMenu.targetNodeId}
                   </p>
                 </div>
                 <button
@@ -1188,15 +1332,20 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
                 </button>
               </div>
 
+              <div className="rounded-lg border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                Relation authoring stays pinned here while edge creation mode is active, so the full
+                relation menu remains visible beside the graph.
+              </div>
+
               {edgeAuthoringMenu.isLoading ? (
-                <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                   Loading relation options…
                 </div>
               ) : edgeAuthoringMenu.error !== null ? (
-                <p className="mt-4 text-sm text-destructive">{edgeAuthoringMenu.error}</p>
+                <p className="text-sm text-destructive">{edgeAuthoringMenu.error}</p>
               ) : edgeAuthoringMenu.preview !== null ? (
-                <div className="mt-4 space-y-4">
+                <div className="space-y-4">
                   {edgeAuthoringMenu.preview.warnings.length > 0 && (
                     <div className="rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200">
                       {edgeAuthoringMenu.preview.warnings.join(' ')}
@@ -1257,148 +1406,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
                   ))}
                 </div>
               ) : null}
-            </div>
-          )}
-
-          {edgeProposalDraft !== null && (
-            <div className="absolute right-4 top-16 z-30 w-[26rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Confirm relation proposal</p>
-                  <p className="text-xs text-muted-foreground">
-                    {edgeProposalDraft.sourceLabel} {edgeProposalDraft.edgeType}{' '}
-                    {edgeProposalDraft.targetLabel}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setEdgeProposalDraft(null);
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <label
-                  className="block text-xs font-medium text-muted-foreground"
-                  htmlFor="edge-rationale"
-                >
-                  Rationale
-                </label>
-                <textarea
-                  id="edge-rationale"
-                  className="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
-                  value={edgeProposalRationale}
-                  onChange={(event) => {
-                    setEdgeProposalRationale(event.target.value);
-                  }}
-                  placeholder="Explain why this relation is semantically appropriate."
-                />
-                <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                  This will create a normal `add_edge` mutation proposal and send it to the
-                  canonical review queue. Nothing is written directly to the CKG from this screen.
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setEdgeProposalDraft(null);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      void handleSubmitEdgeProposal();
-                    }}
-                    disabled={proposeCkgMutation.isPending}
-                  >
-                    {proposeCkgMutation.isPending ? 'Submitting…' : 'Submit mutation'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {selectedEdge !== null && (
-            <div className="absolute bottom-4 right-4 z-30 w-[24rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Selected relation</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedEdgeSource?.label ?? selectedEdge.sourceId} {selectedEdge.type}{' '}
-                    {selectedEdgeTarget?.label ?? selectedEdge.targetId}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setSelectedEdgeId(null);
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-3 text-sm">
-                <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                  <p>Edge id: {selectedEdge.id}</p>
-                  <p>Weight: {selectedEdge.weight}</p>
-                  <p>Created: {new Date(selectedEdge.createdAt).toLocaleString()}</p>
-                </div>
-                <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                  To change this relation semantically, remove it first and then use the existing
-                  node-to-node relation authoring flow to propose the replacement edge.
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedEdgeId(null);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      void handleSubmitEdgeRemovalProposal();
-                    }}
-                    disabled={proposeCkgMutation.isPending}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {proposeCkgMutation.isPending ? 'Submitting…' : 'Propose removal'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Node detail panel + "View pending mutations" link */}
-          {selectedNode !== null && (
-            <div
-              ref={detailPanelRef}
-              className="absolute bottom-4 left-4 top-4 z-20 flex w-[min(32rem,calc(100%-2rem))] max-w-[calc(100%-2rem)] flex-col"
-            >
-              <NodeDetailPanel
-                node={selectedNode}
-                allNodes={nodes}
-                allEdges={edges}
-                onClose={handleClose}
-              />
-              <div className="mt-1 flex flex-shrink-0 justify-end px-1">
-                <Link
-                  href={`/dashboard/ckg/mutations?nodeId=${String(selectedNodeId)}`}
-                  className="text-xs text-primary hover:underline"
-                >
-                  View pending mutations for this node
-                </Link>
-              </div>
-            </div>
+            </aside>
           )}
         </div>
       </div>

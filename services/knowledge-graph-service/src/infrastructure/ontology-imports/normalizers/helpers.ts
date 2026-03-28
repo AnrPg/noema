@@ -74,9 +74,11 @@ function upsertConceptCandidate(
 
   existing.iri ??= record.iri;
   existing.description ??= normalizeNullableString(record.description);
+  existing.nodeKind = pickNodeKind(existing.nodeKind, record.nodeKind);
   existing.aliases = dedupeStrings([...existing.aliases, ...record.altLabels]);
   existing.languages = dedupeStrings([...existing.languages, ...record.languages]);
   existing.sourceTypes = dedupeStrings([...existing.sourceTypes, ...record.sourceTypes]);
+  existing.properties = mergeProperties(existing.properties, record.properties);
   existing.provenance = dedupeProvenance([...existing.provenance, record.provenance]);
 }
 
@@ -410,6 +412,71 @@ function buildMappingKey(
 
 function dedupeStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function pickNodeKind(
+  current: INormalizedOntologyConceptCandidate['nodeKind'],
+  next: INormalizedOntologyConceptCandidate['nodeKind']
+): INormalizedOntologyConceptCandidate['nodeKind'] {
+  const priority: Record<INormalizedOntologyConceptCandidate['nodeKind'], number> = {
+    literal: 3,
+    concept: 2,
+    entity: 1,
+  };
+
+  return priority[next] > priority[current] ? next : current;
+}
+
+function mergeProperties(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...current };
+
+  for (const [key, nextValue] of Object.entries(next)) {
+    const currentValue = merged[key];
+    if (isPlainRecord(currentValue) && isPlainRecord(nextValue)) {
+      merged[key] = mergeProperties(currentValue, nextValue);
+      continue;
+    }
+
+    if (Array.isArray(currentValue) && Array.isArray(nextValue)) {
+      merged[key] = dedupeUnknownArray([...readArray(currentValue), ...readArray(nextValue)]);
+      continue;
+    }
+
+    merged[key] = currentValue ?? nextValue;
+  }
+
+  return merged;
+}
+
+function dedupeUnknownArray(values: unknown[]): unknown[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = JSON.stringify(value);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function readArray(value: unknown): unknown[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const entries: unknown[] = [];
+  for (const entry of value) {
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function dedupeProvenance(

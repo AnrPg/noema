@@ -1198,6 +1198,20 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
               nodeType: op.nodeType,
               domain: op.domain,
               description: op.description,
+              ...(op.status !== undefined ? { status: op.status } : {}),
+              ...(op.aliases !== undefined ? { aliases: op.aliases } : {}),
+              ...(op.languages !== undefined ? { languages: op.languages } : {}),
+              ...(op.tags !== undefined ? { tags: op.tags } : {}),
+              ...(op.semanticHints !== undefined ? { semanticHints: op.semanticHints } : {}),
+              ...(op.canonicalExternalRefs !== undefined
+                ? { canonicalExternalRefs: op.canonicalExternalRefs }
+                : {}),
+              ...(op.ontologyMappings !== undefined
+                ? { ontologyMappings: op.ontologyMappings }
+                : {}),
+              ...(op.provenance !== undefined ? { provenance: op.provenance } : {}),
+              ...(op.reviewMetadata !== undefined ? { reviewMetadata: op.reviewMetadata } : {}),
+              ...(op.sourceCoverage !== undefined ? { sourceCoverage: op.sourceCoverage } : {}),
               properties: op.properties,
             });
             createdNodeIds.push(node.nodeId as string);
@@ -1212,10 +1226,33 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
 
           case CkgOperationType.UPDATE_NODE: {
             const updateInput: Record<string, unknown> = {};
+            if (op.updates.nodeType !== undefined) updateInput['nodeType'] = op.updates.nodeType;
             if (op.updates.label !== undefined) updateInput['label'] = op.updates.label;
             if (op.updates.description !== undefined)
               updateInput['description'] = op.updates.description;
             if (op.updates.domain !== undefined) updateInput['domain'] = op.updates.domain;
+            if (op.updates.status !== undefined) updateInput['status'] = op.updates.status;
+            if (op.updates.aliases !== undefined) updateInput['aliases'] = op.updates.aliases;
+            if (op.updates.languages !== undefined) updateInput['languages'] = op.updates.languages;
+            if (op.updates.tags !== undefined) updateInput['tags'] = op.updates.tags;
+            if (op.updates.semanticHints !== undefined) {
+              updateInput['semanticHints'] = op.updates.semanticHints;
+            }
+            if (op.updates.canonicalExternalRefs !== undefined) {
+              updateInput['canonicalExternalRefs'] = op.updates.canonicalExternalRefs;
+            }
+            if (op.updates.ontologyMappings !== undefined) {
+              updateInput['ontologyMappings'] = op.updates.ontologyMappings;
+            }
+            if (op.updates.provenance !== undefined) {
+              updateInput['provenance'] = op.updates.provenance;
+            }
+            if (op.updates.reviewMetadata !== undefined) {
+              updateInput['reviewMetadata'] = op.updates.reviewMetadata;
+            }
+            if (op.updates.sourceCoverage !== undefined) {
+              updateInput['sourceCoverage'] = op.updates.sourceCoverage;
+            }
             if (op.updates.properties !== undefined)
               updateInput['properties'] = op.updates.properties;
             await txRepo.updateNode(op.nodeId as NodeId, updateInput as IUpdateNodeInput);
