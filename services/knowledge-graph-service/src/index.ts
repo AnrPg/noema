@@ -55,6 +55,11 @@ import {
   StructuralIntegrityStage,
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
+import {
+  OntologyReasoningService,
+  OntologyReasoningStage,
+  StaticOntologyArtifactProvider,
+} from './domain/knowledge-graph-service/ontology-reasoning.js';
 import { PkgAggregationConsumer, UserDeletedConsumer } from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
 import { CkgMaintenanceApplicationService } from './application/knowledge-graph/maintenance/index.js';
@@ -376,8 +381,14 @@ async function bootstrap(): Promise<void> {
 
   // 4. CKG validation pipeline (5 stages, ordered)
   const validationPipeline = new CkgValidationPipeline();
+  const ontologyReasoningService = new OntologyReasoningService(
+    new StaticOntologyArtifactProvider()
+  );
   validationPipeline.addStage(new SchemaValidationStage()); // order 100
   validationPipeline.addStage(new StructuralIntegrityStage(graphRepository)); // order 200
+  validationPipeline.addStage(
+    new OntologyReasoningStage(graphRepository, ontologyReasoningService)
+  ); // order 240
   validationPipeline.addStage(new OntologicalConsistencyStage(graphRepository)); // order 250
   validationPipeline.addStage(new ConflictDetectionStage(mutationRepository)); // order 300
   validationPipeline.addStage(new EvidenceSufficiencyStage(aggregationEvidenceRepository)); // order 400

@@ -348,6 +348,14 @@ export {
   getConflictingEdgeTypesForAdvisory,
 } from './ckg-validation-stages.js';
 
+export type { IOntologyArtifact, IOntologyArtifactProvider } from './ontology-reasoning.js';
+
+export {
+  OntologyReasoningService,
+  OntologyReasoningStage,
+  StaticOntologyArtifactProvider,
+} from './ontology-reasoning.js';
+
 // Validation pipeline: IValidationPipeline implementation
 export { CkgValidationPipeline } from './ckg-validation-pipeline.js';
 
