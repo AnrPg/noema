@@ -95,12 +95,13 @@ export function registerGraphSnapshotRoutes(
           pagination,
           context
         );
+        const total = result.data.total ?? result.data.items.length;
 
         reply.send(
           wrapResponse(result.data.items, result.agentHints, request, {
             page,
             pageSize,
-            total: result.data.total,
+            total,
           })
         );
       } catch (error) {

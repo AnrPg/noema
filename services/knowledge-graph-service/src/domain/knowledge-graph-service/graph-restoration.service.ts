@@ -187,18 +187,16 @@ export class GraphRestorationService {
       pagination.limit,
       pagination.offset
     );
+    const total = result.total ?? result.items.length;
+    const hasMore = result.hasMore;
 
     return {
       data: {
         items: result.items.map(toSummary),
-        total: result.total,
-        hasMore: result.hasMore,
+        total,
+        hasMore,
       },
-      agentHints: this.hintsFactory.createListHints(
-        'graph snapshots',
-        result.items.length,
-        result.total
-      ),
+      agentHints: this.hintsFactory.createListHints('graph snapshots', result.items.length, total),
     };
   }
 
