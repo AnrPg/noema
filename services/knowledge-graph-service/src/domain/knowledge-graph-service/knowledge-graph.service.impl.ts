@@ -61,6 +61,7 @@ import type {
 } from './ckg-mutation-dsl.js';
 import { CkgMutationOperationSchema, CkgOperationType } from './ckg-mutation-dsl.js';
 import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl.js';
+import type { IGraphCrdtStat, IGraphCrdtStatsRepository } from './crdt-stats.repository.js';
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import { GraphReadService } from './graph-read.service.js';
@@ -475,6 +476,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     private readonly graphRepository: IGraphRepository,
     graphRestorationRepository: IGraphRestorationRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
+    private readonly graphCrdtStatsRepository: IGraphCrdtStatsRepository,
     graphSnapshotRepository: IGraphSnapshotRepository,
     metricsStalenessRepository: IMetricsStalenessRepository,
     metricsRepository: IMetricsRepository,
@@ -1415,6 +1417,30 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   ): Promise<IServiceResult<IGraphRestorePreview>> {
     requireAuth(context);
     return this.graphRestore.executeRestore(snapshotId);
+  }
+
+  async listGraphCrdtStats(
+    filters: {
+      targetKind?: 'ckg_node' | 'proposed_label';
+      targetNodeId?: NodeId;
+      proposedLabel?: string;
+      evidenceType?: string;
+    },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphCrdtStat[]>> {
+    requireAuth(context);
+
+    const stats = await this.graphCrdtStatsRepository.listStats(filters);
+
+    return {
+      data: stats,
+      agentHints: AgentHintsBuilder.create()
+        .withValidityPeriod('short')
+        .withReasoning(
+          `Returned ${String(stats.length)} Layer 3 CRDT graph stat record(s) for operator inspection.`
+        )
+        .build(),
+    };
   }
 
   // ========================================================================

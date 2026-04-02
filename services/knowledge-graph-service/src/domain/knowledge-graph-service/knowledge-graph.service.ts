@@ -33,6 +33,7 @@ import type {
   IMutationFilter,
   IMutationProposal,
 } from './ckg-mutation-dsl.js';
+import type { GraphCrdtTargetKind, IGraphCrdtStat } from './crdt-stats.repository.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -839,6 +840,20 @@ export interface IKnowledgeGraphService {
     snapshotId: string,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphRestorePreview>>;
+
+  // ========================================================================
+  // Graph CRDT Stats (Phase I)
+  // ========================================================================
+
+  listGraphCrdtStats(
+    filters: {
+      targetKind?: GraphCrdtTargetKind;
+      targetNodeId?: NodeId;
+      proposedLabel?: string;
+      evidenceType?: string;
+    },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphCrdtStat[]>>;
 
   // ========================================================================
   // PKG Operation Log

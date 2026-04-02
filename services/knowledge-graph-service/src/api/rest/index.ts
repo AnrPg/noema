@@ -26,6 +26,7 @@ export { registerPkgOperationLogRoutes } from './pkg-operation-log.routes.js';
 
 // Metrics, misconceptions, health, comparison
 export { registerComparisonRoutes } from './comparison.routes.js';
+export { registerGraphCrdtRoutes } from './graph-crdt.routes.js';
 export { registerGraphSnapshotRoutes } from './graph-snapshot.routes.js';
 export { registerMetricsRoutes } from './metrics.routes.js';
 export { registerMisconceptionRoutes } from './misconception.routes.js';
