@@ -60,6 +60,7 @@ import {
   OntologyReasoningStage,
   StaticOntologyArtifactProvider,
 } from './domain/knowledge-graph-service/ontology-reasoning.js';
+import { UnityInvariantStage } from './domain/knowledge-graph-service/unity-invariants.js';
 import { PkgAggregationConsumer, UserDeletedConsumer } from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
 import { CkgMaintenanceApplicationService } from './application/knowledge-graph/maintenance/index.js';
@@ -379,7 +380,7 @@ async function bootstrap(): Promise<void> {
     logger
   );
 
-  // 4. CKG validation pipeline (5 stages, ordered)
+  // 4. CKG validation pipeline (7 stages, ordered)
   const validationPipeline = new CkgValidationPipeline();
   const ontologyReasoningService = new OntologyReasoningService(
     new StaticOntologyArtifactProvider()
@@ -390,6 +391,7 @@ async function bootstrap(): Promise<void> {
     new OntologyReasoningStage(graphRepository, ontologyReasoningService)
   ); // order 240
   validationPipeline.addStage(new OntologicalConsistencyStage(graphRepository)); // order 250
+  validationPipeline.addStage(new UnityInvariantStage(graphRepository)); // order 260
   validationPipeline.addStage(new ConflictDetectionStage(mutationRepository)); // order 300
   validationPipeline.addStage(new EvidenceSufficiencyStage(aggregationEvidenceRepository)); // order 400
 

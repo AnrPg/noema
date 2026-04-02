@@ -356,6 +356,10 @@ export {
   StaticOntologyArtifactProvider,
 } from './ontology-reasoning.js';
 
+export type { IInvariantDefinition } from './unity-invariants.js';
+
+export { UnityInvariantStage } from './unity-invariants.js';
+
 // Validation pipeline: IValidationPipeline implementation
 export { CkgValidationPipeline } from './ckg-validation-pipeline.js';
 
