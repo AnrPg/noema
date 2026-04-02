@@ -177,8 +177,12 @@ function normalizeStartSessionInput(data: IStartSessionInput): Record<string, un
         : {}),
       ...(data.config?.categoryIds !== undefined ? { categoryIds: data.config.categoryIds } : {}),
       ...(data.config?.cardTypes !== undefined ? { cardTypes: data.config.cardTypes } : {}),
+      ...(data.config?.presentation !== undefined
+        ? { presentation: data.config.presentation }
+        : {}),
     },
     initialCardIds,
+    ...(data.initialCardLanes !== undefined ? { initialCardLanes: data.initialCardLanes } : {}),
     ...(data.blueprint !== undefined ? { blueprint: data.blueprint } : {}),
     ...(data.offlineIntentToken !== undefined
       ? { offlineIntentToken: data.offlineIntentToken }
@@ -261,6 +265,9 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       studyMode: DEFAULT_STUDY_MODE,
       teachingApproach: 'standard',
       schedulingAlgorithm: 'fsrs',
+      config: {
+        sessionTimeoutHours: 24,
+      },
       cardIds: [],
       currentCardIndex: 0,
       stats: {
@@ -309,6 +316,10 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       : 0;
   const learningMode = stringValue(session['learningMode'], 'exploration');
   const studyMode = stringValue(session['studyMode'], DEFAULT_STUDY_MODE);
+  const config =
+    typeof session['config'] === 'object' && session['config'] !== null
+      ? (session['config'] as Record<string, unknown>)
+      : null;
 
   return {
     id: stringValue(session['id']) as SessionId,
@@ -327,6 +338,41 @@ function normalizeSessionDto(value: unknown): SessionResponse['data'] {
       | 'fsrs'
       | 'hlr'
       | 'sm2',
+    config: {
+      sessionTimeoutHours:
+        typeof config?.['sessionTimeoutHours'] === 'number' &&
+        Number.isFinite(config['sessionTimeoutHours'])
+          ? config['sessionTimeoutHours']
+          : 24,
+      ...(Array.isArray(config?.['categoryIds'])
+        ? {
+            categoryIds: config['categoryIds'].filter(
+              (value): value is string => typeof value === 'string'
+            ),
+          }
+        : {}),
+      ...(Array.isArray(config?.['cardTypes'])
+        ? {
+            cardTypes: config['cardTypes'].filter(
+              (value): value is string => typeof value === 'string'
+            ),
+          }
+        : {}),
+      ...(typeof config?.['maxCards'] === 'number' && Number.isFinite(config['maxCards'])
+        ? { maxCards: config['maxCards'] }
+        : {}),
+      ...(typeof config?.['maxDurationMinutes'] === 'number' &&
+      Number.isFinite(config['maxDurationMinutes'])
+        ? { maxDurationMinutes: config['maxDurationMinutes'] }
+        : {}),
+      ...(typeof config?.['presentation'] === 'object' && config['presentation'] !== null
+        ? {
+            presentation: normalizePresentationConfig(
+              config['presentation'] as Record<string, unknown>
+            ),
+          }
+        : {}),
+    },
     cardIds: Array.from({ length: queueSize }, () => '' as CardId),
     currentCardIndex: Math.min(reviewedCount, queueSize),
     stats: {
@@ -398,6 +444,22 @@ function normalizeTeachingApproach(value: unknown): SessionResponse['data']['tea
   return VALID_TEACHING_APPROACHES.has(candidate)
     ? (candidate as SessionResponse['data']['teachingApproach'])
     : 'standard';
+}
+
+function normalizePresentationConfig(
+  value: Record<string, unknown>
+): NonNullable<SessionResponse['data']['config']['presentation']> {
+  return {
+    ...(typeof value['promptSide'] === 'string' && value['promptSide'].trim() !== ''
+      ? { promptSide: value['promptSide'] }
+      : {}),
+    ...(typeof value['answerSide'] === 'string' && value['answerSide'].trim() !== ''
+      ? { answerSide: value['answerSide'] }
+      : {}),
+    ...(value['revealMode'] === 'all_at_once' || value['revealMode'] === 'one_then_more'
+      ? { revealMode: value['revealMode'] }
+      : {}),
+  };
 }
 
 function numberValue(value: unknown, fallback = 0): number {
@@ -628,42 +690,46 @@ function normalizeSessionQueueResponse(
   response: SessionQueueResponse | SessionQueueEnvelopeResponse
 ): SessionQueueResponse {
   const rawData = response.data;
-
-  if (
-    typeof rawData === 'object' &&
-    rawData !== null &&
-    'items' in rawData &&
-    Array.isArray((rawData as { items?: unknown }).items)
-  ) {
-    return response as SessionQueueResponse;
-  }
-
-  const normalizedItems = Array.isArray(rawData)
-    ? rawData.map((item, index) => normalizeSessionQueueItem(item, index))
-    : [];
+  const envelope =
+    typeof rawData === 'object' && rawData !== null ? (rawData as Record<string, unknown>) : null;
+  const rawItems = Array.isArray(rawData)
+    ? rawData
+    : Array.isArray(envelope?.['items'])
+      ? envelope['items']
+      : [];
+  const fallbackSessionId = stringValue(envelope?.['sessionId']) as SessionId;
+  const normalizedItems = rawItems.map((item, index) =>
+    normalizeSessionQueueItem(item, index, fallbackSessionId)
+  );
   const items = normalizedItems.map(
     ({ isPending: _isPending, sessionId: _sessionId, ...item }) => item
   );
+  const remaining =
+    typeof envelope?.['remaining'] === 'number' && Number.isFinite(envelope['remaining'])
+      ? Math.max(0, envelope['remaining'])
+      : normalizedItems.filter((item) => item.isPending).length;
 
   return {
     ...response,
     data: {
-      sessionId: normalizedItems[0]?.sessionId ?? ('' as SessionId),
+      sessionId: normalizedItems[0]?.sessionId ?? fallbackSessionId,
       items,
-      remaining: normalizedItems.filter((item) => item.isPending).length,
+      remaining,
     },
   };
 }
 
 function normalizeSessionQueueItem(
   value: unknown,
-  fallbackIndex: number
+  fallbackIndex: number,
+  fallbackSessionId = '' as SessionId
 ): SessionQueueResponse['data']['items'][number] & { isPending: boolean; sessionId: SessionId } {
   if (typeof value !== 'object' || value === null) {
     return {
       isPending: false,
-      sessionId: '' as SessionId,
+      sessionId: fallbackSessionId,
       cardId: '' as CardId,
+      lane: 'retention',
       position: fallbackIndex,
       injected: false,
     };
@@ -673,12 +739,24 @@ function normalizeSessionQueueItem(
   const status = stringValue(item['status']).toLowerCase();
 
   return {
-    isPending: status === 'pending',
-    sessionId: stringValue(item['sessionId']) as SessionId,
+    isPending: item['isPending'] === true || status === 'pending',
+    sessionId: (stringValue(item['sessionId']).trim() === ''
+      ? fallbackSessionId
+      : stringValue(item['sessionId'])) as SessionId,
     cardId: stringValue(item['cardId']) as CardId,
+    lane: normalizeSessionQueueLane(item['lane']),
     position: typeof item['position'] === 'number' ? item['position'] : fallbackIndex,
-    injected: status === 'injected' || item['injectedBy'] !== null,
+    injected:
+      item['injected'] === true ||
+      status === 'injected' ||
+      stringValue(item['injectedBy']).trim().length > 0,
   };
+}
+
+function normalizeSessionQueueLane(
+  value: unknown
+): SessionQueueResponse['data']['items'][number]['lane'] {
+  return value === 'calibration' ? 'calibration' : 'retention';
 }
 
 // ============================================================================

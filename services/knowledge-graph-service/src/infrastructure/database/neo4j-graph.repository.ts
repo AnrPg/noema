@@ -90,6 +90,17 @@ import { RELATIONSHIP_TYPES } from './neo4j-schema.js';
  * Single source of truth: imported from neo4j-schema.ts (C1 fix).
  */
 const ALL_REL_TYPES = RELATIONSHIP_TYPES;
+const REMOVABLE_NODE_LABELS = [
+  'Concept',
+  'Occupation',
+  'Skill',
+  'Fact',
+  'Procedure',
+  'Principle',
+  'Example',
+  'Counterexample',
+  'Misconception',
+].join(':');
 
 /** Build a Cypher relationship type pattern for given edge types */
 function buildRelTypePattern(edgeTypes?: readonly GraphEdgeType[]): string {
@@ -341,35 +352,51 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const session = this.neo4j.getSession();
     try {
       const result = await session.executeWrite(async (tx: ManagedTransaction) => {
-        return tx.run(
-          `OPTIONAL MATCH (existing:${primaryLabel})
+        const identityMatchClause =
+          identityKeys.length > 0
+            ? 'any(key IN $identityKeys WHERE key IN coalesce(existing.identityKeys, []))'
+            : 'existing.nodeId = $nodeId';
+        const sharedParams = {
+          nodeId,
+          nodeType: input.nodeType,
+          ...(identityKeys.length > 0 ? { identityKeys } : {}),
+          ...(userId !== undefined ? { userId } : {}),
+        };
+        const existingResult = await tx.run(
+          `MATCH (existing:${primaryLabel})
            WHERE existing.nodeType = $nodeType
-             AND ${
-               identityKeys.length > 0
-                 ? 'any(key IN $identityKeys WHERE key IN coalesce(existing.identityKeys, []))'
-                 : 'existing.nodeId = $nodeId'
-             }
+             AND ${identityMatchClause}
              ${userId !== undefined ? 'AND existing.userId = $userId' : ''}
-           WITH existing
-           CALL {
-             WITH existing
-             WHERE existing IS NULL
-             CREATE (created:${primaryLabel}:${secondaryLabel} $props)
-             RETURN created AS node
-             UNION
-             WITH existing
+           RETURN existing
+           LIMIT 1`,
+          sharedParams
+        );
+
+        // Neo4j's record.get() is typed as any; narrow immediately after retrieval.
+
+        const existingNodeValue = existingResult.records[0]?.get('existing') as unknown;
+        const existingNode = existingNodeValue as neo4j.Node | undefined;
+        if (existingNode !== undefined) {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const existingNodeId = existingNode.properties['nodeId'];
+          return tx.run(
+            `MATCH (existing:${primaryLabel} {nodeId: $existingNodeId})
+             ${userId !== undefined ? 'WHERE existing.userId = $userId' : ''}
              SET existing += $upsertProps
              SET existing:${secondaryLabel}
-             RETURN existing AS node
-           }
-           RETURN node`,
+             RETURN existing AS node`,
+            {
+              upsertProps,
+              existingNodeId: typeof existingNodeId === 'string' ? existingNodeId : nodeId,
+              ...(userId !== undefined ? { userId } : {}),
+            }
+          );
+        }
+
+        return tx.run(
+          `CREATE (created:${primaryLabel}:${secondaryLabel} $props) RETURN created AS node`,
           {
             props,
-            upsertProps,
-            nodeId,
-            nodeType: input.nodeType,
-            ...(identityKeys.length > 0 ? { identityKeys } : {}),
-            ...(userId !== undefined ? { userId } : {}),
           }
         );
       });
@@ -421,16 +448,6 @@ export class Neo4jGraphRepository implements IGraphRepository {
     const updateProps = buildNodeUpdateProperties(updates);
     const nextNodeTypeLabel =
       updates.nodeType !== undefined ? nodeTypeToLabel(updates.nodeType) : null;
-    const removableNodeLabels = [
-      'Concept',
-      'Skill',
-      'Fact',
-      'Procedure',
-      'Principle',
-      'Example',
-      'Counterexample',
-      'Misconception',
-    ].join(':');
 
     const existingNode = await this.getNode(nodeId, userId);
     if (existingNode === null) {
@@ -471,7 +488,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
           `MATCH (n {nodeId: $nodeId, isDeleted: false})
            ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
            SET n += $updateProps
-           ${nextNodeTypeLabel !== null ? `REMOVE n:${removableNodeLabels} SET n:${nextNodeTypeLabel}` : ''}
+           ${nextNodeTypeLabel !== null ? `REMOVE n:${REMOVABLE_NODE_LABELS} SET n:${nextNodeTypeLabel}` : ''}
            RETURN n`,
           { nodeId, updateProps, ...(userId !== undefined ? { userId } : {}) }
         );
@@ -601,7 +618,8 @@ export class Neo4jGraphRepository implements IGraphRepository {
   ): Promise<INodeMasterySummary> {
     const { whereClauses, params } = this.buildNodeFilterClauses(filter);
     const labelFilter = this.buildLabelFilter(filter);
-    const session = this.neo4j.getSession();
+    const summarySession = this.neo4j.getSession();
+    const domainSession = this.neo4j.getSession();
     const threshold = masteryThreshold as number;
     const masteryExpr = buildNodeMasteryExpression('n', filter.studyMode);
     const baseParams = {
@@ -612,7 +630,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
     try {
       const [summaryResult, domainResult] = await Promise.all([
-        session.executeRead(async (tx: ManagedTransaction) =>
+        summarySession.executeRead(async (tx: ManagedTransaction) =>
           tx.run(
             `MATCH (n${labelFilter})
              ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
@@ -640,7 +658,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
             baseParams
           )
         ),
-        session.executeRead(async (tx: ManagedTransaction) =>
+        domainSession.executeRead(async (tx: ManagedTransaction) =>
           tx.run(
             `MATCH (n${labelFilter})
              ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
@@ -704,7 +722,7 @@ export class Neo4jGraphRepository implements IGraphRepository {
         weakestDomains,
       };
     } finally {
-      await session.close();
+      await Promise.allSettled([summarySession.close(), domainSession.close()]);
     }
   }
 
@@ -2810,6 +2828,8 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     userId?: string
   ): Promise<IGraphNode> {
     const updateProps = buildNodeUpdateProperties(updates);
+    const nextNodeTypeLabel =
+      updates.nodeType !== undefined ? nodeTypeToLabel(updates.nodeType) : null;
     const existingNode = await this.getNode(nodeId, userId);
     if (existingNode === null) {
       throw new NodeNotFoundError(nodeId);
@@ -2844,7 +2864,9 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     const result = await this.tx.run(
       `MATCH (n {nodeId: $nodeId, isDeleted: false})
        ${userId !== undefined ? 'WHERE n.userId = $userId' : ''}
-       SET n += $updateProps RETURN n`,
+       SET n += $updateProps
+       ${nextNodeTypeLabel !== null ? `REMOVE n:${REMOVABLE_NODE_LABELS} SET n:${nextNodeTypeLabel}` : ''}
+       RETURN n`,
       { nodeId, updateProps, ...(userId !== undefined ? { userId } : {}) }
     );
 

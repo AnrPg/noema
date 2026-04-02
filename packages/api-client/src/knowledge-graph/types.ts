@@ -139,7 +139,7 @@ export interface ICreateNodeInput {
   type: NodeType;
   label: string;
   description?: string;
-  domain?: string;
+  domain: string;
   status?: CkgNodeStatus;
   aliases?: string[];
   languages?: string[];
@@ -624,6 +624,22 @@ export interface ICkgBulkReviewResult {
   }[];
 }
 
+export type CkgResetConfirmation = 'DELETE_ALL_CKG_CONTENTS';
+
+export interface ICkgResetInput {
+  confirmation: CkgResetConfirmation;
+  includeSources?: boolean;
+}
+
+export interface ICkgResetResultDto {
+  includeSources: boolean;
+  truncatedTables: string[];
+  deletedNeo4jCkgNodes: number;
+  clearedCachePatterns: string[];
+  artifactRootDirectory: string;
+  resetAt: string;
+}
+
 // ============================================================================
 // Ontology Imports
 // ============================================================================
@@ -928,6 +944,8 @@ export type CkgMutationProposalInput = ICkgMutationProposalInput;
 export type CkgMutationFilters = ICkgMutationFilters;
 export type CkgBulkReviewInput = ICkgBulkReviewInput;
 export type CkgBulkReviewResult = ICkgBulkReviewResult;
+export type CkgResetInput = ICkgResetInput;
+export type CkgResetResultDto = ICkgResetResultDto;
 export type PkgCkgComparisonDto = IPkgCkgComparisonDto;
 export type CkgMutationAuditEntry = ICkgMutationAuditEntry;
 export type CkgMutationAuditLogDto = ICkgMutationAuditLogDto;
@@ -978,6 +996,7 @@ export type CkgMutationsResponse = IApiResponse<ICkgMutationDto[]>;
 export type CkgMutationResponse = IApiResponse<ICkgMutationDto>;
 export type CkgMutationRecoveryCheckResponse = IApiResponse<ICkgMutationRecoveryCheckDto>;
 export type CkgBulkReviewResponse = IApiResponse<ICkgBulkReviewResult>;
+export type CkgResetResponse = IApiResponse<ICkgResetResultDto>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
 export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;
 export type OntologyImportSourceResponse = IApiResponse<IOntologyImportSourceDto>;
