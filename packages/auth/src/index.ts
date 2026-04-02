@@ -35,9 +35,14 @@ export {
   AuthGuard,
   GuestGuard,
   AdminGuard,
-  type AuthGuardProps,
-  type GuestGuardProps,
-  type AdminGuardProps,
+  type IAuthGuardProps,
+  type IGuestGuardProps,
+  type IAdminGuardProps,
+} from './guards.js';
+export type {
+  IAuthGuardProps as AuthGuardProps,
+  IGuestGuardProps as GuestGuardProps,
+  IAdminGuardProps as AdminGuardProps,
 } from './guards.js';
 
 // User display helpers

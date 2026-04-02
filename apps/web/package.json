@@ -6,8 +6,8 @@
     "dev": "node ../../scripts/ensure-next-middleware-manifest.cjs && next dev --port 3000",
     "build": "next build",
     "start": "node ../../scripts/ensure-next-middleware-manifest.cjs && next start",
-    "lint": "next lint",
-    "lint:fix": "next lint --fix",
+    "lint": "eslint --config ../../eslint.config.mjs \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint --config ../../eslint.config.mjs \"src/**/*.{ts,tsx}\" --fix",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

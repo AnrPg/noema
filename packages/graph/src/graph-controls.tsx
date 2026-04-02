@@ -64,7 +64,8 @@ export function GraphControls({
   onClose,
 }: IGraphControlsProps): React.JSX.Element {
   const getNodeKey = React.useCallback((node: IGraphNodeDto, index: number): string => {
-    const nodeId = typeof node.id === 'string' && node.id.length > 0 ? node.id : `node-${index}`;
+    const nodeId =
+      typeof node.id === 'string' && node.id.length > 0 ? node.id : `node-${String(index)}`;
     return `${nodeId}-${node.label}`;
   }, []);
 

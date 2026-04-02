@@ -39,7 +39,9 @@ function decodeEscapedText(value: string): string {
 function parseJsonRecord(value: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(value) as unknown;
-    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : null;
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
@@ -52,7 +54,10 @@ function extractLocalizedText(value: unknown): string | null {
       return null;
     }
 
-    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    if (
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))
+    ) {
       const parsed = parseJsonRecord(trimmed);
       if (parsed !== null) {
         return extractLocalizedText(parsed);
@@ -114,12 +119,12 @@ function deriveBadge(node: Record<string, unknown>): string {
     typeof node['id'] === 'string'
       ? node['id']
       : typeof metadata['uri'] === 'string'
-        ? (metadata['uri'] as string)
+        ? metadata['uri']
         : '';
 
-  const uriMatch = rawId.match(/\/esco\/([^/]+)\/([^/?#]+)$/u);
+  const uriMatch = /\/esco\/([^/]+)\/([^/?#]+)$/u.exec(rawId);
   if (uriMatch !== null) {
-    return `${String(uriMatch[1]).toUpperCase()} ${uriMatch[2]}`;
+    return `${uriMatch[1]?.toUpperCase() ?? ''} ${uriMatch[2] ?? ''}`;
   }
 
   const type = typeof node['type'] === 'string' ? node['type'] : '';
@@ -184,10 +189,13 @@ export function NodeDetailPanel({
   const mastery: number = masteryMap[String(nodeAny.id)] ?? 0;
   const titleText =
     extractLocalizedText(nodeAny.label) ??
-    (typeof nodeAny.label === 'string' && nodeAny.label !== '' ? nodeAny.label : String(nodeAny.id));
+    (typeof nodeAny.label === 'string' && nodeAny.label !== ''
+      ? nodeAny.label
+      : String(nodeAny.id));
   const badgeText = deriveBadge(nodeAny as Record<string, unknown>);
   const descriptionText = deriveDescription(nodeAny as Record<string, unknown>);
-  const connectedTitle = connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
+  const connectedTitle =
+    connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
 
   return (
     <div className="flex h-full min-h-0 max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
@@ -201,9 +209,7 @@ export function NodeDetailPanel({
           <span className="flex-shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {badgeText}
           </span>
-          <span className="truncate text-sm font-semibold text-foreground">
-            {titleText}
-          </span>
+          <span className="truncate text-sm font-semibold text-foreground">{titleText}</span>
         </div>
         <button
           type="button"
@@ -332,7 +338,8 @@ export function NodeDetailPanel({
                     >
                       <span className="truncate text-foreground">
                         {other !== undefined
-                          ? extractLocalizedText((other as any).label) ?? String((other as any).label)
+                          ? (extractLocalizedText((other as any).label) ??
+                            String((other as any).label))
                           : otherId}
                       </span>
                       <span className="ml-2 flex-shrink-0 tabular-nums text-muted-foreground">

@@ -23,8 +23,8 @@ import {
 const ALL_EDGE_TYPES = Object.values(GraphEdgeType);
 
 describe('EDGE_TYPE_POLICIES completeness', () => {
-  it('defines a policy for every GraphEdgeType (25 total)', () => {
-    expect(Object.keys(EDGE_TYPE_POLICIES)).toHaveLength(25);
+  it('defines a policy for every GraphEdgeType', () => {
+    expect(Object.keys(EDGE_TYPE_POLICIES)).toHaveLength(ALL_EDGE_TYPES.length);
     for (const edgeType of ALL_EDGE_TYPES) {
       expect(EDGE_TYPE_POLICIES[edgeType]).toBeDefined();
     }
@@ -56,6 +56,8 @@ describe('Acyclicity rules', () => {
     GraphEdgeType.PREREQUISITE,
     GraphEdgeType.DERIVED_FROM,
     GraphEdgeType.HAS_PROPERTY,
+    GraphEdgeType.GOVERNS,
+    GraphEdgeType.INFLECTED_FORM_OF,
     GraphEdgeType.SUBSKILL_OF,
     GraphEdgeType.HAS_SUBSKILL,
   ];
@@ -66,6 +68,10 @@ describe('Acyclicity rules', () => {
     GraphEdgeType.CONTRADICTS,
     GraphEdgeType.RELATED_TO,
     GraphEdgeType.CONFUSABLE_WITH,
+    GraphEdgeType.TRANSLATION_EQUIVALENT,
+    GraphEdgeType.FALSE_FRIEND_OF,
+    GraphEdgeType.MINIMAL_PAIR_WITH,
+    GraphEdgeType.COLLOCATES_WITH,
     GraphEdgeType.ANALOGOUS_TO,
     GraphEdgeType.CONTRASTS_WITH,
     GraphEdgeType.ESSENTIAL_FOR_OCCUPATION,
@@ -86,8 +92,8 @@ describe('Acyclicity rules', () => {
     }
   );
 
-  it('13 acyclic + 12 non-acyclic = 25 total', () => {
-    expect(ACYCLIC_TYPES.length + NON_ACYCLIC_TYPES.length).toBe(25);
+  it('acyclic and non-acyclic lists cover the full repertoire', () => {
+    expect(ACYCLIC_TYPES.length + NON_ACYCLIC_TYPES.length).toBe(ALL_EDGE_TYPES.length);
   });
 });
 
@@ -98,6 +104,10 @@ describe('Symmetry properties', () => {
     GraphEdgeType.CONTRADICTS,
     GraphEdgeType.RELATED_TO,
     GraphEdgeType.CONFUSABLE_WITH,
+    GraphEdgeType.TRANSLATION_EQUIVALENT,
+    GraphEdgeType.FALSE_FRIEND_OF,
+    GraphEdgeType.MINIMAL_PAIR_WITH,
+    GraphEdgeType.COLLOCATES_WITH,
     GraphEdgeType.ANALOGOUS_TO,
     GraphEdgeType.CONTRASTS_WITH,
   ];
@@ -110,7 +120,7 @@ describe('Symmetry properties', () => {
     const asymmetricTypes = ALL_EDGE_TYPES.filter(
       (edgeType) => !SYMMETRIC_TYPES.includes(edgeType)
     );
-    expect(asymmetricTypes).toHaveLength(18);
+    expect(asymmetricTypes).toHaveLength(ALL_EDGE_TYPES.length - SYMMETRIC_TYPES.length);
     for (const edgeType of asymmetricTypes) {
       expect(getEdgePolicy(edgeType).isSymmetric).toBe(false);
     }
@@ -135,6 +145,10 @@ describe('Ontological categories', () => {
     [EdgeOntologicalCategory.ASSOCIATIVE]: [
       GraphEdgeType.RELATED_TO,
       GraphEdgeType.CONFUSABLE_WITH,
+      GraphEdgeType.TRANSLATION_EQUIVALENT,
+      GraphEdgeType.FALSE_FRIEND_OF,
+      GraphEdgeType.MINIMAL_PAIR_WITH,
+      GraphEdgeType.COLLOCATES_WITH,
       GraphEdgeType.ANALOGOUS_TO,
       GraphEdgeType.CONTRASTS_WITH,
     ],
@@ -142,6 +156,8 @@ describe('Ontological categories', () => {
       GraphEdgeType.PREREQUISITE,
       GraphEdgeType.DERIVED_FROM,
       GraphEdgeType.HAS_PROPERTY,
+      GraphEdgeType.GOVERNS,
+      GraphEdgeType.INFLECTED_FORM_OF,
       GraphEdgeType.SUBSKILL_OF,
       GraphEdgeType.HAS_SUBSKILL,
       GraphEdgeType.ESSENTIAL_FOR_OCCUPATION,
@@ -162,12 +178,12 @@ describe('Ontological categories', () => {
     expect(Object.keys(CATEGORY_MAP)).toHaveLength(6);
   });
 
-  it('all 25 edge types are assigned to a category', () => {
+  it('all edge types are assigned to a category', () => {
     const totalMapped = Object.values(CATEGORY_MAP).reduce(
       (sum, edgeTypes) => sum + edgeTypes.length,
       0
     );
-    expect(totalMapped).toBe(25);
+    expect(totalMapped).toBe(ALL_EDGE_TYPES.length);
   });
 });
 

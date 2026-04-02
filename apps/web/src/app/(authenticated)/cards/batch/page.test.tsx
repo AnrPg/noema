@@ -88,7 +88,7 @@ vi.mock('@noema/api-client', () => ({
     reset: vi.fn(),
   }),
   useExecuteCardImport: (options?: { onSuccess?: (response: unknown) => void }) => ({
-    mutateAsync: async (input: unknown) => {
+    mutateAsync: (input: unknown) => {
       executeImportMock(input);
       const response = {
         data: {

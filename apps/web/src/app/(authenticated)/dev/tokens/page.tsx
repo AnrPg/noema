@@ -98,7 +98,7 @@ const animationTokens = [
 
 export default function TokenGalleryPage(): JSX.Element {
   // Dev-only route — return nothing in production; Next.js middleware handles 404
-  if (process.env['NODE_ENV'] === 'production') {
+  if (process.env.NODE_ENV === 'production') {
     return <></>;
   }
 

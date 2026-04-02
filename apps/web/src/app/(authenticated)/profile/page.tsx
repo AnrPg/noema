@@ -252,7 +252,7 @@ export default function ProfilePage(): React.JSX.Element {
                     name="languages"
                     control={control}
                     render={({ field }) => {
-                      const selectedLanguages = field.value ?? [];
+                      const selectedLanguages = field.value;
                       return (
                         <div className="grid gap-2 sm:grid-cols-2">
                           {LANGUAGES.map((lang) => {

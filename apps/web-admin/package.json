@@ -6,8 +6,8 @@
     "dev": "next dev --port 3100",
     "build": "next build",
     "start": "next start --port 3100",
-    "lint": "next lint",
-    "lint:fix": "next lint --fix",
+    "lint": "eslint --config ../../eslint.config.mjs \"src/**/*.{ts,tsx}\"",
+    "lint:fix": "eslint --config ../../eslint.config.mjs \"src/**/*.{ts,tsx}\" --fix",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

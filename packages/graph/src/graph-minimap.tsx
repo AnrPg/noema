@@ -60,8 +60,8 @@ export function GraphMinimap({
 
   const getNodeKey = React.useCallback((node: INodeWithPos, index: number): string => {
     const nodeId =
-      typeof node.id === 'string' && node.id.length > 0 ? node.id : `node-${index}`;
-    return `${nodeId}-${index}`;
+      typeof node.id === 'string' && node.id.length > 0 ? node.id : `node-${String(index)}`;
+    return `${nodeId}-${String(index)}`;
   }, []);
 
   return (

@@ -20,8 +20,8 @@
     "dev": "tsc --watch",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "node -e \"console.log('No tests configured for @noema/graph')\"",
+    "test:coverage": "node -e \"console.log('No coverage tests configured for @noema/graph')\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -378,7 +378,7 @@ function computeBfsDepth(subgraph: ISubgraph): Map<NodeId, number> {
   }
 
   // BFS from root
-  const queue: Array<{ nodeId: string; depth: number }> = [
+  const queue: { nodeId: string; depth: number }[] = [
     { nodeId: subgraph.rootNodeId as string, depth: 0 },
   ];
   const visited = new Set<string>();
@@ -386,7 +386,11 @@ function computeBfsDepth(subgraph: ISubgraph): Map<NodeId, number> {
   depthMap.set(subgraph.rootNodeId, 0);
 
   while (queue.length > 0) {
-    const { nodeId, depth } = queue.shift()!;
+    const current = queue.shift();
+    if (current === undefined) {
+      break;
+    }
+    const { nodeId, depth } = current;
     const neighbors = adjacency.get(nodeId);
     if (!neighbors) continue;
     for (const neighbor of neighbors) {

@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { useAuth } from './context.js';
 
 interface ILocationLike {
@@ -22,7 +22,7 @@ function redirectInBrowser(url: string): void {
 // Types
 // ============================================================================
 
-export interface AuthGuardProps {
+export interface IAuthGuardProps {
   children: ReactNode;
   /** Fallback while loading */
   fallback?: ReactNode;
@@ -36,7 +36,7 @@ export interface AuthGuardProps {
   onUnauthorized?: (() => void) | undefined;
 }
 
-export interface GuestGuardProps {
+export interface IGuestGuardProps {
   children: ReactNode;
   /** Fallback while loading */
   fallback?: ReactNode;
@@ -61,7 +61,7 @@ export function AuthGuard({
   onUnauthenticated,
   roles,
   onUnauthorized,
-}: AuthGuardProps) {
+}: IAuthGuardProps): ReactElement {
   const { isAuthenticated, isLoading, isInitialized, hasRole } = useAuth();
 
   useEffect(() => {
@@ -126,7 +126,7 @@ export function GuestGuard({
   fallback = null,
   redirectTo,
   onAuthenticated,
-}: GuestGuardProps) {
+}: IGuestGuardProps): ReactElement {
   return (
     <GuestGuardWithRedirect
       fallback={fallback}
@@ -143,7 +143,7 @@ function GuestGuardWithRedirect({
   fallback = null,
   redirectTo,
   onAuthenticated,
-}: GuestGuardProps) {
+}: IGuestGuardProps): ReactElement {
   const { isAuthenticated, isLoading, isInitialized } = useAuth();
 
   useEffect(() => {
@@ -175,7 +175,7 @@ function GuestGuardWithRedirect({
 // Admin Guard
 // ============================================================================
 
-export interface AdminGuardProps {
+export interface IAdminGuardProps {
   children: ReactNode;
   fallback?: ReactNode;
   onUnauthenticated?: () => void;
@@ -190,7 +190,7 @@ export function AdminGuard({
   fallback = null,
   onUnauthenticated,
   onUnauthorized,
-}: AdminGuardProps) {
+}: IAdminGuardProps): ReactElement {
   return (
     <AuthGuard
       fallback={fallback}

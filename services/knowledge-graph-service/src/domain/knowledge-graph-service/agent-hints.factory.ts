@@ -1108,11 +1108,12 @@ export class AgentHintsFactory {
       });
     }
 
-    const filterDescription = filters.state
-      ? ` (filtered by state: ${filters.state})`
-      : filters.proposedBy
-        ? ` (filtered by proposer: ${filters.proposedBy})`
-        : '';
+    const filterDescription =
+      filters.state !== undefined
+        ? ` (filtered by state: ${filters.state})`
+        : filters.proposedBy !== undefined && filters.proposedBy !== ''
+          ? ` (filtered by proposer: ${filters.proposedBy})`
+          : '';
 
     builder.withReasoning(
       `Found ${String(mutations.length)} mutation(s)${filterDescription}: ${stateBreakdown}`

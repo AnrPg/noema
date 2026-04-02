@@ -32,14 +32,14 @@ describe('ontology import graph contracts', () => {
       'parsed',
     ]);
     expect(TERMINAL_ONTOLOGY_IMPORT_STATUSES).toEqual([
-      'staging_validated',
-      'ready_for_normalization',
+      'review_submitted',
+      'ready_for_review',
       'failed',
       'cancelled',
     ]);
     expect(isActiveOntologyImportStatus('failed')).toBe(false);
     expect(isActiveOntologyImportStatus('fetching')).toBe(true);
-    expect(isTerminalOntologyImportStatus('ready_for_normalization')).toBe(true);
+    expect(isTerminalOntologyImportStatus('ready_for_review')).toBe(true);
     expect(isTerminalOntologyImportStatus('queued')).toBe(false);
   });
 

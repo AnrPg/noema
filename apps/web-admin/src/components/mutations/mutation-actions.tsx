@@ -22,7 +22,16 @@ import {
 import { useRetryMutation } from '@noema/api-client/knowledge-graph';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
-import { Check, Loader2, MessageSquare, RotateCcw, Search, ShieldAlert, Wrench, X } from 'lucide-react';
+import {
+  Check,
+  Loader2,
+  MessageSquare,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  Wrench,
+  X,
+} from 'lucide-react';
 import {
   getMutationWorkflowMeta,
   getMutationWorkflowState,
@@ -116,7 +125,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                         {
                           onSuccess: () => {
                             setMode('idle');
-                            void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                            void queryClient.invalidateQueries({
+                              queryKey: kgKeys.ckgMutation(id),
+                            });
                             void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                           },
                           onError: (err) => {
@@ -193,10 +204,6 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                     retry.mutate(id, {
                       onSuccess: (response) => {
                         const retriedMutationId = response.data.id;
-                        if (retriedMutationId === undefined || retriedMutationId === null) {
-                          setErrorMsg('Retry succeeded but the new mutation id was missing from the response.');
-                          return;
-                        }
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
                         void queryClient.invalidateQueries({
                           queryKey: kgKeys.ckgMutation(retriedMutationId),

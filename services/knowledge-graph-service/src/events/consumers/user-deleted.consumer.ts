@@ -51,6 +51,24 @@ function buildConfig(overrides: {
   };
 }
 
+function getNeo4jCount(record: { get: (key: string) => unknown } | undefined, key: string): number {
+  const value = record?.get(key);
+  if (hasToNumber(value)) {
+    return value.toNumber();
+  }
+
+  return 0;
+}
+
+function hasToNumber(value: unknown): value is { toNumber: () => number } {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'toNumber' in value &&
+    typeof (value as { toNumber?: unknown }).toNumber === 'function'
+  );
+}
+
 // ============================================================================
 // Consumer
 // ============================================================================
@@ -213,8 +231,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
          RETURN count(n) AS updated`,
         { userId, deletedAt: deletedAt.toISOString() }
       );
-      const record = result.records[0];
-      return record?.get('updated')?.toNumber?.() ?? 0;
+      return getNeo4jCount(result.records[0], 'updated');
     } finally {
       await session.close();
     }
@@ -237,8 +254,7 @@ export class UserDeletedConsumer extends BaseEventConsumer {
         { userId }
       );
 
-      const record = result.records[0];
-      const nodesDeleted = record?.get('nodesDeleted')?.toNumber?.() ?? 0;
+      const nodesDeleted = getNeo4jCount(result.records[0], 'nodesDeleted');
 
       // Neo4j's DETACH DELETE doesn't return relationship count,
       // so we report 0 as a conservative estimate.

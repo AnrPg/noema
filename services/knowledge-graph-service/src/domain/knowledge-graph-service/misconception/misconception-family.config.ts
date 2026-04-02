@@ -119,12 +119,8 @@ export const MISCONCEPTION_FAMILIES: readonly IMisconceptionFamily[] = [
   {
     key: 'metacognitive',
     label: 'Metacognitive',
-    description: 'Misconceptions about one\'s own learning state or strategy',
-    misconceptionTypes: [
-      'illusory_mastery',
-      'strategy_mismatch',
-      'transfer_blindness',
-    ],
+    description: "Misconceptions about one's own learning state or strategy",
+    misconceptionTypes: ['illusory_mastery', 'strategy_mismatch', 'transfer_blindness'],
   },
 
   // ── Catch-all ──────────────────────────────────────────────────────────
@@ -142,12 +138,13 @@ export const MISCONCEPTION_FAMILIES: readonly IMisconceptionFamily[] = [
 
 /** Index by family key for O(1) lookup */
 const FAMILY_BY_KEY = new Map<string, IMisconceptionFamily>(
-  MISCONCEPTION_FAMILIES.map((f) => [f.key, f]),
+  MISCONCEPTION_FAMILIES.map((f) => [f.key, f])
 );
 
 /** Reverse index: misconceptionType → family */
 const FAMILY_BY_TYPE = new Map<string, IMisconceptionFamily>();
 let fallbackFamily: IMisconceptionFamily | undefined;
+const lastFamily = MISCONCEPTION_FAMILIES.at(-1);
 
 for (const family of MISCONCEPTION_FAMILIES) {
   for (const mt of family.misconceptionTypes) {
@@ -164,7 +161,12 @@ for (const family of MISCONCEPTION_FAMILIES) {
  * Returns the matching family or the catch-all 'uncategorized' family.
  */
 export function resolveFamily(misconceptionType: MisconceptionType): IMisconceptionFamily {
-  return FAMILY_BY_TYPE.get(misconceptionType) ?? fallbackFamily ?? MISCONCEPTION_FAMILIES.at(-1)!;
+  const family = FAMILY_BY_TYPE.get(misconceptionType) ?? fallbackFamily ?? lastFamily;
+  if (family === undefined) {
+    throw new Error('MISCONCEPTION_FAMILIES must define at least one family');
+  }
+
+  return family;
 }
 
 /**
