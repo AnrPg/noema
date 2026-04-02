@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildNodeProperties,
   buildNodeUpdateProperties,
+  mapNodeToGraphNode,
 } from '../../../src/infrastructure/database/neo4j-mapper.js';
 
 describe('buildNodeProperties', () => {
@@ -165,5 +166,27 @@ describe('buildNodeUpdateProperties', () => {
         },
       ])
     );
+  });
+});
+
+describe('mapNodeToGraphNode', () => {
+  it('prefers the stored nodeType property when labels are stale', () => {
+    const node = {
+      labels: ['CkgNode', 'Concept'],
+      properties: {
+        nodeId: 'node_mapper_type_fix_0001',
+        graphType: 'ckg',
+        nodeType: 'skill',
+        label: 'Hand gestures',
+        domain: 'skills-and-occupations',
+        createdAt: '2026-03-28T10:00:00.000Z',
+        updatedAt: '2026-03-28T10:05:00.000Z',
+        isDeleted: false,
+      },
+    } as never;
+
+    const mappedNode = mapNodeToGraphNode(node);
+
+    expect(mappedNode.nodeType).toBe('skill');
   });
 });

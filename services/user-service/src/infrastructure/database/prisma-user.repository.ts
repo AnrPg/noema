@@ -13,6 +13,7 @@ import type {
   IFailedLoginHistoryEntry,
   ILoginHistoryEntry,
   IPasswordChangeHistoryEntry,
+  IPomodoroSettings,
   IUpdateProfileInput,
   IUpdateSettingsInput,
   IUser,
@@ -24,6 +25,8 @@ import {
   AuthProvider,
   Language,
   MAX_HISTORY_ITEMS,
+  PomodoroSoundscape,
+  StudyMode,
   Theme,
   UserRole,
   UserStatus,
@@ -56,6 +59,18 @@ const DEFAULT_SETTINGS: IUserSettings = {
   emailAchievements: true,
   pushNotificationsEnabled: true,
   analyticsEnabled: true,
+  activeStudyMode: StudyMode.KNOWLEDGE_GAINING,
+  pomodoro: {
+    focusMinutes: 25,
+    shortBreakMinutes: 5,
+    longBreakMinutes: 15,
+    cyclesBeforeLongBreak: 4,
+    dailyTargetCycles: 6,
+    autoStartBreaks: false,
+    autoStartFocus: false,
+    soundscape: PomodoroSoundscape.NONE,
+    soundscapeVolume: 35,
+  },
   cognitivePolicy: {
     pacingPolicy: {
       targetSecondsPerCard: 45,
@@ -77,6 +92,17 @@ const DEFAULT_SETTINGS: IUserSettings = {
     },
   },
 };
+
+function mergePomodoroSettings(
+  current: Partial<IPomodoroSettings> | undefined,
+  input: Partial<IPomodoroSettings> | undefined
+): IPomodoroSettings {
+  return {
+    ...DEFAULT_SETTINGS.pomodoro,
+    ...(current ?? {}),
+    ...(input ?? {}),
+  };
+}
 
 // ============================================================================
 // Repository Implementation
@@ -241,7 +267,37 @@ export class PrismaUserRepository implements IUserRepository {
     }
 
     const currentSettings = existing.settings as unknown as IUserSettings;
-    const newSettings = { ...currentSettings, ...input };
+    const newSettings: IUserSettings = {
+      ...DEFAULT_SETTINGS,
+      ...currentSettings,
+      ...input,
+      pomodoro: mergePomodoroSettings(currentSettings.pomodoro, input.pomodoro),
+      cognitivePolicy: {
+        ...DEFAULT_SETTINGS.cognitivePolicy,
+        ...(currentSettings.cognitivePolicy ?? {}),
+        ...(input.cognitivePolicy ?? {}),
+        pacingPolicy: {
+          ...DEFAULT_SETTINGS.cognitivePolicy.pacingPolicy,
+          ...(currentSettings.cognitivePolicy?.pacingPolicy ?? {}),
+          ...(input.cognitivePolicy?.pacingPolicy ?? {}),
+        },
+        hintPolicy: {
+          ...DEFAULT_SETTINGS.cognitivePolicy.hintPolicy,
+          ...(currentSettings.cognitivePolicy?.hintPolicy ?? {}),
+          ...(input.cognitivePolicy?.hintPolicy ?? {}),
+        },
+        commitPolicy: {
+          ...DEFAULT_SETTINGS.cognitivePolicy.commitPolicy,
+          ...(currentSettings.cognitivePolicy?.commitPolicy ?? {}),
+          ...(input.cognitivePolicy?.commitPolicy ?? {}),
+        },
+        reflectionPolicy: {
+          ...DEFAULT_SETTINGS.cognitivePolicy.reflectionPolicy,
+          ...(currentSettings.cognitivePolicy?.reflectionPolicy ?? {}),
+          ...(input.cognitivePolicy?.reflectionPolicy ?? {}),
+        },
+      },
+    };
 
     const user = await this.prisma.user.update({
       where: { id },
@@ -596,9 +652,8 @@ export class PrismaUserRepository implements IUserRepository {
   }
 
   private toDomain(user: PrismaUser): IUser {
-    const rawProfile = ((user.profile as unknown as Partial<IUserProfile> | null) ?? {}) as Partial<
-      IUserProfile
-    > & { language?: Language; languages?: Language[] };
+    const rawProfile = ((user.profile as unknown as Partial<IUserProfile> | null) ??
+      {}) as Partial<IUserProfile> & { language?: Language; languages?: Language[] };
     const normalizedLanguages =
       rawProfile.languages !== undefined && rawProfile.languages.length > 0
         ? rawProfile.languages

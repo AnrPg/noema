@@ -13,17 +13,50 @@ import * as React from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
 import type { IGraphNodeDto, IGraphEdgeDto } from '@noema/api-client';
-import { NeuralGauge } from '@noema/ui';
-import { NODE_TYPE_COLOR } from './graph-node.js';
+import { Button, NeuralGauge } from '@noema/ui';
+import { getNodeColor } from './graph-node.js';
+
+const ESCO_BADGE_PATTERN = /\/esco\/([^/]+)\/([^/?#]+)$/u;
+
+export interface INodeDetailPanelEditDraft {
+  label: string;
+  description: string;
+  nodeType: string;
+  domain: string;
+  tags: string;
+  aliases: string;
+  rationale: string;
+}
 
 export interface INodeDetailPanelProps {
   node: IGraphNodeDto;
   allNodes: IGraphNodeDto[];
   allEdges: IGraphEdgeDto[];
   masteryMap?: Record<string, number>;
+  isEditing?: boolean;
+  editDraft?: INodeDetailPanelEditDraft | null;
+  editError?: string | null;
+  pendingUpdateKeys?: string[];
+  isSubmittingEdit?: boolean;
+  onStartEdit?: () => void;
+  onCancelEdit?: () => void;
+  onEditDraftChange?: (draft: INodeDetailPanelEditDraft) => void;
+  onSubmitEdit?: () => void;
   onClose: () => void;
   onViewPrerequisites?: (nodeId: string) => void;
 }
+
+const NODE_TYPE_OPTIONS: IGraphNodeDto['type'][] = [
+  'concept',
+  'occupation',
+  'skill',
+  'fact',
+  'procedure',
+  'principle',
+  'example',
+  'counterexample',
+  'misconception',
+];
 
 function decodeEscapedText(value: string): string {
   return value
@@ -122,9 +155,10 @@ function deriveBadge(node: Record<string, unknown>): string {
         ? metadata['uri']
         : '';
 
-  const uriMatch = /\/esco\/([^/]+)\/([^/?#]+)$/u.exec(rawId);
+  const uriMatch = ESCO_BADGE_PATTERN.exec(rawId);
   if (uriMatch !== null) {
-    return `${uriMatch[1]?.toUpperCase() ?? ''} ${uriMatch[2] ?? ''}`;
+    const [, namespace = '', identifier = ''] = uriMatch;
+    return `${namespace.toUpperCase()} ${identifier}`;
   }
 
   const type = typeof node['type'] === 'string' ? node['type'] : '';
@@ -157,6 +191,15 @@ export function NodeDetailPanel({
   allNodes,
   allEdges,
   masteryMap = {},
+  isEditing = false,
+  editDraft = null,
+  editError = null,
+  pendingUpdateKeys = [],
+  isSubmittingEdit = false,
+  onStartEdit,
+  onCancelEdit,
+  onEditDraftChange,
+  onSubmitEdit,
   onClose,
   onViewPrerequisites,
 }: INodeDetailPanelProps): React.JSX.Element {
@@ -185,7 +228,14 @@ export function NodeDetailPanel({
   }, [connectedEdges]);
 
   const nodeAny = node as any;
-  const color: string = NODE_TYPE_COLOR[String(nodeAny.type)] ?? '#6b7280';
+  const metadata =
+    typeof nodeAny.metadata === 'object' && nodeAny.metadata !== null
+      ? (nodeAny.metadata as Record<string, unknown>)
+      : {};
+  const semanticHints = Array.isArray(nodeAny.semanticHints)
+    ? (nodeAny.semanticHints as string[])
+    : [];
+  const color: string = getNodeColor(nodeAny.type, metadata, semanticHints);
   const mastery: number = masteryMap[String(nodeAny.id)] ?? 0;
   const titleText =
     extractLocalizedText(nodeAny.label) ??
@@ -194,8 +244,26 @@ export function NodeDetailPanel({
       : String(nodeAny.id));
   const badgeText = deriveBadge(nodeAny as Record<string, unknown>);
   const descriptionText = deriveDescription(nodeAny as Record<string, unknown>);
-  const connectedTitle =
-    connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
+  const connectedTitle = connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
+  const editController =
+    isEditing && editDraft !== null && onEditDraftChange !== undefined
+      ? { draft: editDraft, setDraft: onEditDraftChange }
+      : null;
+  const isEditMode = editController !== null;
+
+  function updateEditDraft<K extends keyof INodeDetailPanelEditDraft>(
+    key: K,
+    value: INodeDetailPanelEditDraft[K]
+  ): void {
+    if (editController === null) {
+      return;
+    }
+
+    editController.setDraft({
+      ...editController.draft,
+      [key]: value,
+    });
+  }
 
   return (
     <div className="flex h-full min-h-0 max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
@@ -211,105 +279,254 @@ export function NodeDetailPanel({
           </span>
           <span className="truncate text-sm font-semibold text-foreground">{titleText}</span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="ml-2 flex-shrink-0 text-muted-foreground hover:text-foreground"
-          aria-label="Close node detail"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+          {!isEditMode && onStartEdit !== undefined && (
+            <Button variant="outline" size="sm" onClick={onStartEdit}>
+              Edit
+            </Button>
+          )}
+          {isEditMode && onCancelEdit !== undefined && (
+            <Button variant="outline" size="sm" onClick={onCancelEdit}>
+              Cancel
+            </Button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="Close node detail"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left: Description + mastery + actions */}
         <div className="noema-scrollbar flex min-h-0 w-1/2 flex-col gap-3 overflow-y-auto border-r border-border p-3">
-          {descriptionText !== null && descriptionText !== '' && (
-            <div className="space-y-2 text-xs text-muted-foreground">
-              {descriptionText
-                .split(/\n{2,}/)
-                .map((block) => block.trim())
-                .filter((block) => block !== '')
-                .map((block) => (
-                  <p key={block} className="whitespace-pre-line">
-                    {block}
-                  </p>
-                ))}
-            </div>
-          )}
+          {editController !== null ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block text-xs font-medium text-muted-foreground">
+                  Label
+                  <input
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    value={editController.draft.label}
+                    onChange={(event) => {
+                      updateEditDraft('label', event.target.value);
+                    }}
+                    placeholder="Canonical label"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-muted-foreground">
+                  Node type
+                  <select
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    value={editController.draft.nodeType}
+                    onChange={(event) => {
+                      updateEditDraft('nodeType', event.target.value);
+                    }}
+                  >
+                    {NODE_TYPE_OPTIONS.map((nodeType) => (
+                      <option key={nodeType} value={nodeType}>
+                        {nodeType}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Mastery</span>
-            <NeuralGauge value={mastery} size="sm" />
-            <span className="text-xs tabular-nums text-foreground">
-              {String(Math.round(mastery * 100))}%
-            </span>
-          </div>
+              <label className="block text-xs font-medium text-muted-foreground">
+                Description
+                <textarea
+                  className="mt-1 min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  value={editController.draft.description}
+                  onChange={(event) => {
+                    updateEditDraft('description', event.target.value);
+                  }}
+                  placeholder="Canonical description"
+                />
+              </label>
 
-          {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Domain:</span>
-              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                {String((nodeAny.tags as string[])[0])}
-              </span>
-            </div>
-          )}
-          {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 1 && (
-            <div className="flex flex-wrap gap-1">
-              {(nodeAny.tags as string[]).slice(1).map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                >
-                  {tag}
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block text-xs font-medium text-muted-foreground">
+                  Domain
+                  <input
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    value={editController.draft.domain}
+                    onChange={(event) => {
+                      updateEditDraft('domain', event.target.value);
+                    }}
+                    placeholder="knowledge-domain"
+                  />
+                </label>
+                <label className="block text-xs font-medium text-muted-foreground">
+                  Tags
+                  <input
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                    value={editController.draft.tags}
+                    onChange={(event) => {
+                      updateEditDraft('tags', event.target.value);
+                    }}
+                    placeholder="tag-one, tag-two"
+                  />
+                </label>
+              </div>
+
+              <label className="block text-xs font-medium text-muted-foreground">
+                Aliases
+                <input
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  value={editController.draft.aliases}
+                  onChange={(event) => {
+                    updateEditDraft('aliases', event.target.value);
+                  }}
+                  placeholder="alias-one, alias-two"
+                />
+              </label>
+
+              <label className="block text-xs font-medium text-muted-foreground">
+                Rationale
+                <textarea
+                  className="mt-1 min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                  value={editController.draft.rationale}
+                  onChange={(event) => {
+                    updateEditDraft('rationale', event.target.value);
+                  }}
+                  placeholder="Explain why this canonical node should change."
+                />
+              </label>
+
+              {editError !== null && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {editError}
+                </div>
+              )}
+
+              <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                {pendingUpdateKeys.length === 0 ? (
+                  <p>Make a change in the fields above to prepare a mutation proposal.</p>
+                ) : (
+                  <>
+                    <p className="font-medium text-foreground">Pending mutation fields</p>
+                    <p className="mt-1">{pendingUpdateKeys.join(', ')}</p>
+                  </>
+                )}
+              </div>
+
+              <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                This submits an `update_node` mutation into the canonical review queue. The node is
+                not edited directly from this panel.
+              </div>
+
+              <div className="flex justify-end gap-2">
+                {onCancelEdit !== undefined && (
+                  <Button variant="outline" onClick={onCancelEdit}>
+                    Cancel
+                  </Button>
+                )}
+                {onSubmitEdit !== undefined && (
+                  <Button
+                    onClick={onSubmitEdit}
+                    disabled={
+                      editError !== null || pendingUpdateKeys.length === 0 || isSubmittingEdit
+                    }
+                  >
+                    {isSubmittingEdit ? 'Submitting…' : 'Submit node mutation'}
+                  </Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {descriptionText !== null && descriptionText !== '' && (
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  {descriptionText
+                    .split(/\n{2,}/)
+                    .map((block) => block.trim())
+                    .filter((block) => block !== '')
+                    .map((block) => (
+                      <p key={block} className="whitespace-pre-line">
+                        {block}
+                      </p>
+                    ))}
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Mastery</span>
+                <NeuralGauge value={mastery} size="sm" />
+                <span className="text-xs tabular-nums text-foreground">
+                  {String(Math.round(mastery * 100))}%
                 </span>
-              ))}
-            </div>
-          )}
+              </div>
 
-          <div className="flex flex-col gap-1">
-            {onViewPrerequisites !== undefined && (
-              <button
-                type="button"
-                onClick={() => {
-                  onViewPrerequisites(String(nodeAny.id));
-                }}
-                className="text-left text-xs text-primary hover:underline"
-              >
-                View prerequisites
-              </button>
-            )}
-            <button
-              type="button"
-              disabled
-              className="cursor-not-allowed text-left text-xs text-muted-foreground line-through"
-            >
-              Find related concepts
-            </button>
-            <Link
-              href={'/knowledge/comparison' as never}
-              className="text-xs text-primary hover:underline"
-            >
-              Compare with CKG
-            </Link>
-          </div>
+              {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-muted-foreground">Domain:</span>
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                    {String((nodeAny.tags as string[])[0])}
+                  </span>
+                </div>
+              )}
+              {Array.isArray(nodeAny.tags) && (nodeAny.tags as string[]).length > 1 && (
+                <div className="flex flex-wrap gap-1">
+                  {(nodeAny.tags as string[]).slice(1).map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
 
-          {/* Linked cards (shown if metadata contains cardIds) */}
-          {Array.isArray(nodeAny.metadata?.cardIds) && (
-            <div className="mt-2">
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Linked Cards
-              </p>
-              {(nodeAny.metadata.cardIds as string[]).slice(0, 5).map((cardId: string) => (
-                <Link
-                  key={cardId}
-                  href={`/cards/${cardId}` as never}
-                  className="block truncate text-xs text-primary hover:underline"
+              <div className="flex flex-col gap-1">
+                {onViewPrerequisites !== undefined && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onViewPrerequisites(String(nodeAny.id));
+                    }}
+                    className="text-left text-xs text-primary hover:underline"
+                  >
+                    View prerequisites
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled
+                  className="cursor-not-allowed text-left text-xs text-muted-foreground line-through"
                 >
-                  {cardId}
+                  Find related concepts
+                </button>
+                <Link
+                  href={'/knowledge/comparison' as never}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Compare with CKG
                 </Link>
-              ))}
-            </div>
+              </div>
+
+              {/* Linked cards (shown if metadata contains cardIds) */}
+              {Array.isArray(nodeAny.metadata?.cardIds) && (
+                <div className="mt-2">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Linked Cards
+                  </p>
+                  {(nodeAny.metadata.cardIds as string[]).slice(0, 5).map((cardId: string) => (
+                    <Link
+                      key={cardId}
+                      href={`/cards/${cardId}` as never}
+                      className="block truncate text-xs text-primary hover:underline"
+                    >
+                      {cardId}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 

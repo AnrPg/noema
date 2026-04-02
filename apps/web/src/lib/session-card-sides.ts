@@ -211,6 +211,7 @@ function formatTimelineEvents(events: unknown): string | null {
         normalizeText(record['year']);
       const description = normalizeText(record['description']);
       const header = date !== null ? `${date} - ${title}` : title;
+      const header = date !== null ? `${date} - ${title}` : title;
       return description === null ? header : `${header}\n${description}`;
     })
     .filter((row): row is string => row !== null);
@@ -318,12 +319,7 @@ export function deriveSessionCardSides(card: ICardDto): ISessionCardSide[] {
     case 'exception':
       addSide(sides, 'rule', 'Rule', content['rule']);
       addSide(sides, 'generalPrinciple', 'General Principle', content['generalPrinciple']);
-      addFormattedSide(
-        sides,
-        'exceptions',
-        'Exceptions',
-        formatExceptionCases(content['exceptions'])
-      );
+      addFormattedSide(sides, 'exceptions', 'Exceptions', formatExceptionCases(content['exceptions']));
       addSide(sides, 'explanation', 'Explanation', content['explanation']);
       break;
     case 'error_spotting':

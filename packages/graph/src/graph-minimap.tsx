@@ -6,7 +6,7 @@
  */
 import * as React from 'react';
 import type { IGraphNodeDto } from '@noema/api-client';
-import { NODE_TYPE_COLOR } from './graph-node.js';
+import { getNodeColor } from './graph-node.js';
 
 // Local shape: IGraphNodeDto (any when unresolved) plus optional position fields
 interface INodeWithPos {
@@ -14,6 +14,8 @@ interface INodeWithPos {
   type?: string | null;
   x?: number;
   y?: number;
+  metadata?: Record<string, unknown> | null;
+  semanticHints?: string[] | null;
 }
 
 interface IGraphMinimapProps {
@@ -78,8 +80,9 @@ export function GraphMinimap({
             ? buildFallbackPosition(index, positioned.length, SIZE)
             : toSvg(n.x ?? 0, n.y ?? 0);
         const nodeId = typeof n.id === 'string' ? n.id : null;
-        const nodeType = typeof n.type === 'string' ? n.type : '';
-        const color: string = NODE_TYPE_COLOR[nodeType] ?? '#6b7280';
+        const metadata = typeof n.metadata === 'object' && n.metadata !== null ? n.metadata : {};
+        const semanticHints = Array.isArray(n.semanticHints) ? n.semanticHints : [];
+        const color: string = getNodeColor(n.type, metadata, semanticHints);
         const isSelected = nodeId === selectedNodeId;
         return (
           <circle

@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import type { ICardDto } from '@noema/api-client/content';
+import { deriveSessionCardSides } from '@/lib/session-card-sides';
 
 // ============================================================================
 // Types
@@ -39,27 +40,43 @@ function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength - 1) + '…';
 }
 
-function guessCardLabel(card: ICardDto): string {
-  const metadata = card.metadata;
-  const content = card.content;
+function getRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function getText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
+function guessCardLabel(card: Partial<ICardDto>): string {
+  const metadata = getRecord(card.metadata);
+  const content = getRecord(card.content);
   const candidates: (string | undefined)[] = [
-    content['front'] as string | undefined,
-    content['question'] as string | undefined,
-    content['scenario'] as string | undefined,
-    content['prompt'] as string | undefined,
-    content['title'] as string | undefined,
-    content['description'] as string | undefined,
-    metadata['title'] as string | undefined,
-    metadata['description'] as string | undefined,
+    getText(content['front']),
+    getText(content['question']),
+    getText(content['scenario']),
+    getText(content['prompt']),
+    getText(content['title']),
+    getText(content['description']),
+    getText(metadata['title']),
+    getText(metadata['description']),
   ];
 
   for (const candidate of candidates) {
-    if (typeof candidate === 'string' && candidate.trim() !== '') {
-      return candidate.trim();
+    if (candidate !== undefined) {
+      return candidate;
     }
   }
 
-  return card.id;
+  if (card.cardType !== undefined && card.content !== undefined) {
+    const derivedSides = deriveSessionCardSides(card as ICardDto);
+    const firstNonHintSide = derivedSides.find((side) => side.key !== 'hint');
+    if (firstNonHintSide !== undefined) {
+      return firstNonHintSide.value;
+    }
+  }
+
+  return getText(card.id) ?? 'Untitled card';
 }
 
 function CardQuestionLink({
@@ -70,7 +87,7 @@ function CardQuestionLink({
   fallbackLabel: string;
 }): React.JSX.Element {
   const queryClient = useQueryClient();
-  const cachedCard = queryClient.getQueryData<ICardDto>(contentKeys.detail(cardId));
+  const cachedCard = queryClient.getQueryData<Partial<ICardDto>>(contentKeys.detail(cardId));
   const label = React.useMemo(
     () => (cachedCard !== undefined ? guessCardLabel(cachedCard) : fallbackLabel),
     [cachedCard, fallbackLabel]

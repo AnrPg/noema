@@ -70,6 +70,7 @@ import type {
   ISessionCohortHandshake,
   ISessionFilters,
   ISessionQueueItem,
+  SessionSchedulerLane,
   ISessionStats,
   IValidateSessionBlueprintResult,
   SessionState,
@@ -182,6 +183,41 @@ function buildHints(
   };
 }
 
+function sanitizePresentationConfig(
+  presentation: {
+    promptSide?: string | undefined;
+    answerSide?: string | undefined;
+    revealMode?: 'all_at_once' | 'one_then_more' | undefined;
+  } | null | undefined
+): {
+  promptSide?: string;
+  answerSide?: string;
+  revealMode?: 'all_at_once' | 'one_then_more';
+} | null {
+  if (presentation == null) {
+    return null;
+  }
+
+  const normalized = {
+    ...(presentation.promptSide !== undefined ? { promptSide: presentation.promptSide } : {}),
+    ...(presentation.answerSide !== undefined ? { answerSide: presentation.answerSide } : {}),
+    ...(presentation.revealMode !== undefined ? { revealMode: presentation.revealMode } : {}),
+  };
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function normalizeCardLanes(
+  cardIds: readonly string[],
+  cardLanes?: Record<string, SessionSchedulerLane> | null
+): Record<string, SessionSchedulerLane> {
+  const normalized: Record<string, SessionSchedulerLane> = {};
+  for (const cardId of cardIds) {
+    normalized[cardId] = cardLanes?.[cardId] ?? 'retention';
+  }
+  return normalized;
+}
+
 // ============================================================================
 // Session Service
 // ============================================================================
@@ -290,7 +326,9 @@ export class SessionService {
     if (data.blueprint !== undefined) {
       const consistency = this.validateBlueprintConsistency(
         data.blueprint.initialCardIds,
-        data.initialCardIds
+        data.initialCardIds,
+        data.blueprint.cardLanes,
+        data.initialCardLanes
       );
       if (!consistency.valid) {
         throw new ValidationError('Invalid session blueprint', {
@@ -301,6 +339,8 @@ export class SessionService {
 
     const sessionId = `${ID_PREFIXES.SessionId}${nanoid()}` as SessionId;
     const now = new Date().toISOString();
+    const presentationConfig = sanitizePresentationConfig(data.config.presentation);
+    const initialCardLanes = normalizeCardLanes(data.initialCardIds, data.initialCardLanes);
 
     const sessionInput = {
       id: sessionId,
@@ -322,6 +362,7 @@ export class SessionService {
           : {}),
         ...(data.config.categoryIds !== undefined ? { categoryIds: data.config.categoryIds } : {}),
         ...(data.config.cardTypes !== undefined ? { cardTypes: data.config.cardTypes } : {}),
+        ...(presentationConfig !== null ? { presentation: presentationConfig } : {}),
       },
       stats: createEmptyStats(),
       initialQueueSize: data.initialCardIds.length,
@@ -340,6 +381,7 @@ export class SessionService {
       id: nanoid(),
       sessionId,
       cardId: cardId as CardId,
+      lane: initialCardLanes[cardId] ?? 'retention',
       position: idx,
       status: 'pending' as CardQueueStatus,
       injectedBy: null,
@@ -398,8 +440,20 @@ export class SessionService {
                     )[],
                   }
                 : {}),
+              ...(createdSession.config.presentation !== undefined
+                ? (() => {
+                    const normalizedPresentation = sanitizePresentationConfig(
+                      createdSession.config.presentation
+                    );
+                    return normalizedPresentation !== null
+                      ? { presentation: normalizedPresentation }
+                      : {};
+                  })()
+                : {}),
             },
             initialQueueSize: data.initialCardIds.length,
+            initialCardIds: data.initialCardIds as CardId[],
+            initialCardLanes: initialCardLanes as Record<CardId, SessionSchedulerLane>,
           } satisfies ISessionStartedPayload,
           metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
         },
@@ -1442,6 +1496,8 @@ export class SessionService {
 
     const attempt = await this.runInTransaction(async (tx) => {
       const createdAttempt = await this.repository.createAttempt(attemptInput, tx);
+      const queueItem = await this.repository.findQueueItemByCard(session.id, data.cardId as CardId);
+      const lane = queueItem?.lane ?? 'retention';
 
       const attemptsForCard = await this.repository.findAttemptsByCard(
         session.id,
@@ -1492,6 +1548,7 @@ export class SessionService {
             userId: ctx.userId,
             sequenceNumber,
             studyMode: session.studyMode,
+            lane,
             outcome: data.outcome as AttemptOutcome,
             rating: data.rating as Rating,
             ratingValue: data.ratingValue,
@@ -1799,11 +1856,12 @@ export class SessionService {
 
     const item = await this.runInTransaction(async (tx) => {
       const injected = await this.repository.injectQueueItem(
-        {
-          id: nanoid(),
-          sessionId: session.id,
-          cardId: data.cardId as CardId,
-          position: data.position,
+          {
+            id: nanoid(),
+            sessionId: session.id,
+            cardId: data.cardId as CardId,
+            lane: data.lane ?? 'retention',
+            position: data.position,
           status: 'pending' as CardQueueStatus,
           injectedBy: data.injectedBy ?? 'user',
           reason: data.reason,
@@ -2095,7 +2153,9 @@ export class SessionService {
 
   private validateBlueprintConsistency(
     blueprintCardIds: string[],
-    requestedCardIds: string[]
+    requestedCardIds: string[],
+    blueprintCardLanes?: Record<string, SessionSchedulerLane>,
+    requestedCardLanes?: Record<string, SessionSchedulerLane>
   ): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
     if (blueprintCardIds.length !== requestedCardIds.length) {
@@ -2110,6 +2170,20 @@ export class SessionService {
       if (blueprintCardId !== requestedCardId) {
         errors.push(
           `Blueprint card order mismatch at index ${String(index)}: expected ${requestedCardId}, got ${blueprintCardId}`
+        );
+      }
+    }
+
+    for (const [cardId, lane] of Object.entries(blueprintCardLanes ?? {})) {
+      if (!blueprintCardIds.includes(cardId)) {
+        errors.push(`Blueprint lane assignment references unknown card: ${cardId}`);
+        continue;
+      }
+
+      const requestedLane = requestedCardLanes?.[cardId];
+      if (requestedLane !== undefined && requestedLane !== lane) {
+        errors.push(
+          `Blueprint lane mismatch for ${cardId}: expected ${requestedLane}, got ${lane}`
         );
       }
     }

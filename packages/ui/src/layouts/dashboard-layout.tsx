@@ -80,7 +80,9 @@ export function DashboardSidebar({ children, header, footer, className }: Dashbo
         data-state={isOpen ? 'open' : 'closed'}
         className={cn(
           'fixed left-0 top-0 z-50 h-full border-r bg-card transition-[width,transform] duration-300 overflow-hidden',
-          isOpen ? 'w-64 translate-x-0 border-r' : 'w-0 -translate-x-full border-r-0 lg:translate-x-0',
+          isOpen
+            ? 'w-64 translate-x-0 border-r'
+            : 'w-0 -translate-x-full border-r-0 lg:translate-x-0',
           className
         )}
       >
@@ -115,7 +117,11 @@ export function DashboardMain({ children, className }: DashboardMainProps) {
   return (
     <main
       data-sidebar-state={isOpen ? 'open' : 'closed'}
-      className={cn('transition-[padding] duration-300', isOpen ? 'lg:pl-64' : 'lg:pl-14', className)}
+      className={cn(
+        'transition-[padding] duration-300',
+        isOpen ? 'lg:pl-64' : 'lg:pl-14',
+        className
+      )}
     >
       {children}
     </main>
@@ -134,7 +140,7 @@ export function DashboardHeader({ children, title, className }: DashboardHeaderP
   return (
     <header
       className={cn(
-        'sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4',
+        'sticky top-0 z-30 flex min-h-16 flex-nowrap items-center gap-3 border-b bg-background px-3 py-3 sm:gap-4 sm:px-4',
         className
       )}
     >
@@ -144,6 +150,7 @@ export function DashboardHeader({ children, title, className }: DashboardHeaderP
         aria-expanded={isOpen}
         onClick={toggle}
         className={cn(
+          'shrink-0',
           !isOpen &&
             'rounded-full border border-sky-400/40 bg-gradient-to-br from-sky-500 to-fuchsia-500 text-white shadow-[0_10px_24px_rgba(59,130,246,0.28)] hover:from-sky-400 hover:to-fuchsia-400 hover:text-white'
         )}

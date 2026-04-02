@@ -7,34 +7,13 @@
  * migration because it is destructive across multiple datastores.
  */
 
-import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Redis } from 'ioredis';
-import pino, { type Logger } from 'pino';
+import pino from 'pino';
 import { PrismaClient } from '../../generated/prisma/index.js';
 import { loadConfig } from '../config/index.js';
 import { Neo4jClient } from '../infrastructure/database/neo4j-client.js';
-
-const POSTGRES_CKG_TABLES = [
-  'aggregation_evidence',
-  'ckg_mutation_audit_log',
-  'ckg_mutations',
-  'ontology_parsed_batches',
-  'ontology_import_checkpoints',
-  'ontology_import_artifacts',
-  'ontology_import_runs',
-] as const;
-
-const ONTOLOGY_SOURCE_TABLE = 'ontology_import_sources';
-const CKG_CACHE_PATTERNS = [
-  'ckg:*',
-  'siblings:ckg:*',
-  'co-parents:ckg:*',
-  'neighborhood:ckg:*',
-  'domain-subgraph:ckg:*',
-  'common-ancestors:ckg:*',
-  'centrality-degree:ckg:*',
-] as const;
+import { CkgResetService } from '../infrastructure/maintenance/index.js';
 
 interface IResetFlags {
   force: boolean;
@@ -76,10 +55,16 @@ async function main(): Promise<void> {
     await neo4jClient.verifyConnectivity();
     await redis.connect();
 
-    await truncatePostgresState(prisma, flags.includeSources, logger);
-    await wipeNeo4jCkg(neo4jClient, logger);
-    await clearRedisCkgCache(redis, config.cache.prefix, logger);
-    await rm(ontologyArtifactRootDirectory, { recursive: true, force: true });
+    const resetService = new CkgResetService(
+      prisma,
+      neo4jClient,
+      redis,
+      config.cache.prefix,
+      ontologyArtifactRootDirectory,
+      logger
+    );
+
+    await resetService.reset({ includeSources: flags.includeSources });
 
     logger.info('CKG reset completed successfully');
   } finally {
@@ -92,57 +77,6 @@ function parseFlags(argv: string[]): IResetFlags {
     force: argv.includes('--force'),
     includeSources: argv.includes('--include-sources'),
   };
-}
-
-async function truncatePostgresState(
-  prisma: PrismaClient,
-  includeSources: boolean,
-  logger: Logger
-): Promise<void> {
-  const tables: string[] = [...POSTGRES_CKG_TABLES];
-  if (includeSources) {
-    tables.push(ONTOLOGY_SOURCE_TABLE);
-  }
-
-  const sql = `TRUNCATE TABLE ${tables.map((table) => `"${table}"`).join(', ')} RESTART IDENTITY CASCADE`;
-  await prisma.$executeRawUnsafe(sql);
-  logger.info({ tables }, 'Truncated PostgreSQL CKG tables');
-}
-
-async function wipeNeo4jCkg(neo4jClient: Neo4jClient, logger: Logger): Promise<void> {
-  const session = neo4jClient.getSession();
-  try {
-    await session.executeWrite(async (tx) => {
-      await tx.run('MATCH (n:CkgNode) DETACH DELETE n');
-    });
-    logger.info('Deleted Neo4j CKG nodes and relationships');
-  } finally {
-    await session.close();
-  }
-}
-
-async function clearRedisCkgCache(
-  redis: Redis,
-  cachePrefix: string,
-  logger: Logger
-): Promise<void> {
-  for (const pattern of CKG_CACHE_PATTERNS) {
-    await deleteByPattern(redis, `${cachePrefix}:${pattern}`);
-  }
-
-  logger.info({ patterns: CKG_CACHE_PATTERNS }, 'Cleared Redis CKG cache entries');
-}
-
-async function deleteByPattern(redis: Redis, pattern: string): Promise<void> {
-  let cursor = '0';
-
-  do {
-    const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
-    cursor = nextCursor;
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
-  } while (cursor !== '0');
 }
 
 void main().catch((error: unknown) => {

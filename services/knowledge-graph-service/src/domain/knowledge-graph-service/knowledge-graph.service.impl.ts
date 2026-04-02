@@ -48,7 +48,7 @@ import type {
   UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
@@ -1441,9 +1441,40 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     check: IMutationRecoveryCheckResult['check']
   ): Promise<IMutationRecoveryCheckResult> {
     const mutation = await this.mutationPipeline.getMutation(mutationId);
-    const operations = normalizeRecoveredMutationOperations(
-      CkgMutationOperationSchema.array().parse(mutation.operations)
-    );
+    let operations: CkgMutationOperation[];
+    try {
+      operations = normalizeRecoveredMutationOperations(
+        CkgMutationOperationSchema.array().parse(mutation.operations)
+      );
+    } catch (error) {
+      const message =
+        error instanceof z.ZodError
+          ? error.issues.map((issue) => issue.message).join('; ')
+          : error instanceof Error
+            ? error.message
+            : 'Unknown operation deserialization error.';
+
+      return {
+        mutationId,
+        check,
+        eligible: false,
+        recommendedAction: 'none',
+        mutationState: mutation.state,
+        summary:
+          'This mutation was stored with an invalid operation payload and cannot be recovered safely. Resubmit it from the CKG canvas after the serializer fix.',
+        details: [
+          `Current mutation state: ${mutation.state}.`,
+          'The stored mutation operations no longer satisfy the current CKG mutation DSL.',
+          `Deserializer error: ${message}`,
+        ],
+        checkedAt: new Date().toISOString(),
+        graphEvidence: {
+          writeDetected: false,
+          matchedNodeIds: [],
+          matchedEdgeIds: [],
+        },
+      };
+    }
     const evidence = await this.collectGraphWriteEvidence(operations);
     const checkedAt = new Date().toISOString();
 

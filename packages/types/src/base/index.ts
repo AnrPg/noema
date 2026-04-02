@@ -154,10 +154,10 @@ export type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T
 
 /**
  * Deep readonly (all nested properties recursively immutable).
- * Arrays become ReadonlyArray, objects get readonly properties.
+ * Arrays become readonly arrays, objects get readonly properties.
  */
 export type DeepReadonly<T> = T extends (infer U)[]
-  ? ReadonlyArray<DeepReadonly<U>>
+  ? readonly DeepReadonly<U>[]
   : T extends object
     ? { readonly [P in keyof T]: DeepReadonly<T[P]> }
     : T;

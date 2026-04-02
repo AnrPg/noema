@@ -86,6 +86,7 @@ export default function SessionSummaryPage(): React.JSX.Element {
     { enabled: currentUserId !== '' }
   );
   const progressData = progressSummary.data?.data;
+  const modeSnapshotUnavailable = masterySummary.isError || progressSummary.isError;
 
   const isLoading = sessionLoading || attemptsLoading;
 
@@ -151,7 +152,15 @@ export default function SessionSummaryPage(): React.JSX.Element {
       {/* ── Section 2: Vitals ────────────────────────────────────────────── */}
       {session !== null && (
         <section aria-label="Session vitals">
-          <SessionSummaryVitals session={{ startedAt, completedAt, mode }} attempts={attempts} />
+          <SessionSummaryVitals
+            session={{
+              startedAt,
+              completedAt,
+              mode,
+              uniqueCardsReviewed: session.stats.uniqueCardsReviewed,
+            }}
+            attempts={attempts}
+          />
         </section>
       )}
 
@@ -189,6 +198,22 @@ export default function SessionSummaryPage(): React.JSX.Element {
             </span>
             {masterySummary.isLoading ? (
               <span className="text-sm text-muted-foreground">Loading…</span>
+            ) : modeSnapshotUnavailable ? (
+              <>
+                <span className="text-sm text-muted-foreground">
+                  Mode snapshot is temporarily unavailable.
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => {
+                    void masterySummary.refetch();
+                    void progressSummary.refetch();
+                  }}
+                >
+                  Retry snapshot
+                </button>
+              </>
             ) : (
               <>
                 <span className="text-lg font-semibold">

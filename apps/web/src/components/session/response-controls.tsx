@@ -5,7 +5,7 @@
  *
  * Post-reveal controls: post-answer confidence capture and 4-point grade buttons.
  */
-import { ConfidenceMeter } from '@noema/ui';
+import { ConfidenceScale } from './pre-answer-confidence';
 
 // ============================================================================
 // Types
@@ -27,48 +27,44 @@ interface IResponseControlsProps {
 interface IGradeConfig {
   label: string;
   shortcut: string;
-  /** Button background (idle) */
-  bg: string;
-  /** Button background (hover) */
-  bgHover: string;
-  /** Text color */
-  text: string;
-  /** Border color */
   border: string;
+  bg: string;
+  hover: string;
+  text: string;
 }
 
 const GRADE_CONFIG: Record<Grade, IGradeConfig> = {
   1: {
     label: 'Again',
     shortcut: '1',
-    bg: 'bg-cortex-50 dark:bg-cortex-950',
-    bgHover: 'hover:bg-cortex-100 dark:hover:bg-cortex-900',
-    text: 'text-cortex-700 dark:text-cortex-300',
-    border: 'border-cortex-300 dark:border-cortex-700',
+    border: 'border-cortex-400/30',
+    bg: 'bg-cortex-500/10',
+    hover: 'hover:border-cortex-300/50 hover:bg-cortex-500/14',
+    text: 'text-cortex-300',
   },
   2: {
     label: 'Hard',
     shortcut: '2',
-    bg: 'bg-amber-50 dark:bg-amber-950',
-    bgHover: 'hover:bg-amber-100 dark:hover:bg-amber-900',
-    text: 'text-amber-700 dark:text-amber-300',
-    border: 'border-amber-300 dark:border-amber-700',
+    border: 'border-amber-400/30',
+    bg: 'bg-amber-500/10',
+    hover: 'hover:border-amber-300/50 hover:bg-amber-500/14',
+    text: 'text-amber-300',
   },
   3: {
     label: 'Good',
     shortcut: '3',
-    bg: 'bg-myelin-50 dark:bg-myelin-950',
-    bgHover: 'hover:bg-myelin-100 dark:hover:bg-myelin-900',
-    text: 'text-myelin-700 dark:text-myelin-300',
-    border: 'border-myelin-300 dark:border-myelin-700',
+    border: 'border-myelin-400/30',
+    bg: 'bg-myelin-500/10',
+    hover: 'hover:border-myelin-300/50 hover:bg-myelin-500/14',
+    text: 'text-myelin-300',
   },
   4: {
     label: 'Easy',
     shortcut: '4',
-    bg: 'bg-axon-50 dark:bg-axon-950',
-    bgHover: 'hover:bg-axon-100 dark:hover:bg-axon-900',
-    text: 'text-axon-700 dark:text-axon-300',
-    border: 'border-axon-300 dark:border-axon-700',
+    border: 'border-axon-400/30',
+    bg: 'bg-axon-500/10',
+    hover: 'hover:border-axon-300/50 hover:bg-axon-500/14',
+    text: 'text-axon-300',
   },
 };
 
@@ -94,16 +90,17 @@ function GradeButton({ grade, onClick, disabled }: IGradeButtonProps): React.JSX
       disabled={disabled}
       aria-label={`Grade ${config.label} (${config.shortcut})`}
       className={[
-        'flex flex-1 flex-col items-center gap-0.5 rounded-lg border px-2 py-2.5 text-center transition-colors',
+        'flex min-h-[4.75rem] flex-1 flex-col items-center justify-center rounded-xl border px-2 py-2 text-center transition-all sm:min-h-20 sm:rounded-2xl sm:px-3 sm:py-3',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
         'disabled:cursor-not-allowed disabled:opacity-50',
+        'bg-background/70',
         config.bg,
-        config.bgHover,
         config.border,
+        config.hover,
       ].join(' ')}
     >
-      <span className="text-xs font-mono text-muted-foreground">{config.shortcut}</span>
-      <span className={['text-sm font-semibold leading-tight', config.text].join(' ')}>
+      <span className="text-base font-semibold sm:text-lg">{config.shortcut}</span>
+      <span className={['mt-1 text-[11px] font-medium uppercase tracking-[0.2em] sm:text-xs', config.text].join(' ')}>
         {config.label}
       </span>
     </button>
@@ -123,19 +120,15 @@ export function ResponseControls({
   return (
     <div className="flex flex-col gap-4">
       {/* Post-answer confidence */}
-      <div className="flex flex-col items-center gap-2">
-        <p className="text-sm text-muted-foreground">How confident are you now?</p>
-        <ConfidenceMeter
-          value={confidenceAfter ?? 0.5}
-          onChange={onConfidenceAfter}
-          showLabel
-          className="w-full max-w-xs"
-          aria-label="Post-answer confidence"
-        />
-      </div>
+      <ConfidenceScale
+        title="Confidence"
+        description="Re-rate your confidence now that you have seen the answer."
+        value={confidenceAfter}
+        onChange={onConfidenceAfter}
+      />
 
       {/* Grade buttons */}
-      <div className="flex gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {GRADES.map((grade) => (
           <GradeButton
             key={grade}

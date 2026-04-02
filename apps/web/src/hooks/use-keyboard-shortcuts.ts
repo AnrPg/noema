@@ -94,6 +94,7 @@ export function useKeyboardShortcuts(shortcuts: IShortcutDef[]): void {
 
     const handler = (e: KeyboardEvent): void => {
       for (const shortcut of ref.current) {
+        if (e.repeat) continue;
         if (e.key !== shortcut.key) continue;
         if (!modPressed(e, shortcut.mod)) continue;
         if (!(shortcut.ignoreInputs === true) && isInputFocused()) continue;

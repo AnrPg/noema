@@ -74,6 +74,20 @@ export interface IPublicUserDto {
   createdAt: string;
 }
 
+export type PomodoroSoundscape = 'none' | 'rain' | 'deep_focus' | 'cafe' | 'night_owls';
+
+export interface IPomodoroSettingsDto {
+  focusMinutes: number;
+  shortBreakMinutes: number;
+  longBreakMinutes: number;
+  cyclesBeforeLongBreak: number;
+  dailyTargetCycles: number;
+  autoStartBreaks: boolean;
+  autoStartFocus: boolean;
+  soundscape: PomodoroSoundscape;
+  soundscapeVolume: number;
+}
+
 export interface IUserSettingsDto {
   userId: UserId;
   theme: 'light' | 'dark' | 'system';
@@ -85,6 +99,7 @@ export interface IUserSettingsDto {
   soundEnabled: boolean;
   hapticEnabled: boolean;
   activeStudyMode?: StudyMode;
+  pomodoro: IPomodoroSettingsDto;
   version: number;
 }
 
@@ -111,6 +126,7 @@ export interface IUpdateSettingsInput {
   soundEnabled?: boolean;
   hapticEnabled?: boolean;
   activeStudyMode?: StudyMode;
+  pomodoro?: Partial<IPomodoroSettingsDto>;
 }
 
 export interface IChangePasswordInput {
@@ -174,6 +190,7 @@ export type TokenPair = ITokenPair;
 export type AuthResult = IAuthResult;
 export type UserDto = IUserDto;
 export type PublicUserDto = IPublicUserDto;
+export type PomodoroSettingsDto = IPomodoroSettingsDto;
 export type UserSettingsDto = IUserSettingsDto;
 export type UpdateProfileInput = IUpdateProfileInput;
 export type UpdateSettingsInput = IUpdateSettingsInput;

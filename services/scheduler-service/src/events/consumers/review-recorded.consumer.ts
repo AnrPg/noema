@@ -144,13 +144,6 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
         return;
       }
 
-      const lane = this.readLane(parsed.data.lane);
-      if (lane === null) {
-        this.logger.warn({ eventType: envelope.eventType }, 'Skipping payload with invalid lane');
-        spanSuccess = true;
-        return;
-      }
-
       const userId = parsed.data.userId as UserId;
       const cardId = parsed.data.cardId as CardId;
       const attemptId = parsed.data.attemptId;
@@ -165,6 +158,13 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
         spanSuccess = true;
         return;
       }
+
+      const existing = await this.dependencies.schedulerCardRepository.findByCard(
+        userId,
+        cardId,
+        studyMode
+      );
+      const lane = this.readLane(parsed.data.lane) ?? existing?.lane ?? 'retention';
 
       try {
         await this.dependencies.reviewRepository.create({
@@ -197,11 +197,6 @@ export class ReviewRecordedConsumer extends SchedulerBaseConsumer {
         throw error;
       }
 
-      const existing = await this.dependencies.schedulerCardRepository.findByCard(
-        userId,
-        cardId,
-        studyMode
-      );
       if (existing === null) {
         await this.createNewSchedulerCard(userId, cardId, rating, lane, studyMode);
         spanSuccess = true;

@@ -32,7 +32,14 @@ import { JwtTokenService } from './infrastructure/external-apis/token.service.js
 import { PrismaSessionRepository } from './infrastructure/repositories/prisma-session.repository.js';
 import { PrismaUserStatusChangeRepository } from './infrastructure/repositories/prisma-user-status-change.repository.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
-import { AuthProvider, Language, Theme, UserRole, UserStatus } from './types/user.types.js';
+import {
+  AuthProvider,
+  Language,
+  PomodoroSoundscape,
+  Theme,
+  UserRole,
+  UserStatus,
+} from './types/user.types.js';
 
 async function ensureBootstrapAdmin(
   prisma: PrismaClient,
@@ -102,6 +109,18 @@ async function ensureBootstrapAdmin(
         emailAchievements: true,
         pushNotificationsEnabled: true,
         analyticsEnabled: true,
+        activeStudyMode: 'knowledge_gaining',
+        pomodoro: {
+          focusMinutes: 25,
+          shortBreakMinutes: 5,
+          longBreakMinutes: 15,
+          cyclesBeforeLongBreak: 4,
+          dailyTargetCycles: 6,
+          autoStartBreaks: false,
+          autoStartFocus: false,
+          soundscape: PomodoroSoundscape.NONE,
+          soundscapeVolume: 35,
+        },
         cognitivePolicy: {
           pacingPolicy: {
             targetSecondsPerCard: 45,

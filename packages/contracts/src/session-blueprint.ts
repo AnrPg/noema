@@ -42,6 +42,7 @@ export interface ISessionBlueprint {
   generatedBy: 'agent';
   deckQueryId: string;
   initialCardIds: string[];
+  cardLanes?: Record<string, 'retention' | 'calibration'>;
   laneMix: ISchedulerLaneMix;
   checkpointSignals: AdaptiveCheckpointSignal[];
   policySnapshot: ICognitivePolicySnapshot;

@@ -5,6 +5,108 @@ import type { IGraphNode, Metadata, MutationId } from '@noema/types';
 import { CkgMutationPipeline } from '../../../src/domain/knowledge-graph-service/ckg-mutation-pipeline.js';
 
 describe('CkgMutationPipeline applyOperations', () => {
+  it('preserves full update_node operations when proposing mutations', async () => {
+    const createMutation = vi.fn(async (input) => ({
+      mutationId: 'mut_serialize' as MutationId,
+      state: 'proposed',
+      proposedBy: input.proposedBy,
+      version: 1,
+      operations: input.operations,
+      rationale: input.rationale,
+      evidenceCount: input.evidenceCount,
+      createdAt: '2026-03-28T10:00:00.000Z',
+      updatedAt: '2026-03-28T10:00:00.000Z',
+      recoveryAttempts: 0,
+      revisionCount: 0,
+      revisionFeedback: null,
+    }));
+
+    const appendAuditEntry = vi.fn(async () => ({
+      mutationId: 'mut_serialize' as MutationId,
+      fromState: 'proposed',
+      toState: 'proposed',
+      performedBy: 'admin_user',
+      timestamp: '2026-03-28T10:00:00.000Z',
+    }));
+
+    const publish = vi.fn(async () => undefined);
+
+    const pipeline = new CkgMutationPipeline(
+      {
+        createMutation,
+        appendAuditEntry,
+      } as never,
+      {} as never,
+      {} as never,
+      { publish } as never,
+      {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      } as never
+    );
+
+    vi.spyOn(
+      pipeline as unknown as {
+        runPipelineAsync: (mutationId: MutationId, context: unknown) => Promise<unknown>;
+      },
+      'runPipelineAsync'
+    ).mockResolvedValue(undefined);
+
+    await pipeline.proposeMutation(
+      'admin_user' as never,
+      [
+        {
+          type: 'update_node',
+          nodeId: 'node_euler',
+          updates: {
+            nodeType: 'skill',
+            domain: 'mathematics',
+            tags: ['history', 'algebra'],
+          },
+          rationale: 'Retype Euler as a skill for a batch authoring regression test.',
+        },
+      ],
+      'Retype Euler',
+      0,
+      0,
+      {} as never
+    );
+
+    expect(createMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operations: [
+          {
+            type: 'update_node',
+            nodeId: 'node_euler',
+            updates: {
+              nodeType: 'skill',
+              domain: 'mathematics',
+              tags: ['history', 'algebra'],
+            },
+            rationale: 'Retype Euler as a skill for a batch authoring regression test.',
+          },
+        ],
+      })
+    );
+    expect(publish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          operations: [
+            expect.objectContaining({
+              type: 'update_node',
+              updates: expect.objectContaining({
+                nodeType: 'skill',
+                domain: 'mathematics',
+              }),
+            }),
+          ],
+        }),
+      })
+    );
+  });
+
   it('forwards ontology identity metadata when committing add_node operations', async () => {
     const createNode = vi.fn(() =>
       Promise.resolve({

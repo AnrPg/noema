@@ -27,7 +27,9 @@ export function MutationGraphDiff({
     const ids = new Set<string>();
     if (typeof payload['nodeId'] === 'string') ids.add(payload['nodeId']);
     if (typeof payload['sourceId'] === 'string') ids.add(payload['sourceId']);
+    if (typeof payload['sourceNodeId'] === 'string') ids.add(payload['sourceNodeId']);
     if (typeof payload['targetId'] === 'string') ids.add(payload['targetId']);
+    if (typeof payload['targetNodeId'] === 'string') ids.add(payload['targetNodeId']);
     return ids;
   }, [mutation.payload]);
 

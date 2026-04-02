@@ -25,8 +25,6 @@ import {
 } from '@noema/validation';
 import { z } from 'zod';
 
-import type { ISessionBlueprint } from '../../types/index.js';
-
 const AdaptiveCheckpointSignalSchema = z.enum([
   'confidence_drift',
   'latency_spike',
@@ -34,6 +32,7 @@ const AdaptiveCheckpointSignalSchema = z.enum([
   'streak_break',
   'manual',
 ]);
+const SessionSchedulerLaneSchema = z.enum(['retention', 'calibration']);
 const TeachingApproachInputSchema = z
   .union([TeachingApproachSchema, z.literal('socratic_questioning')])
   .transform((value) => (value === 'socratic_questioning' ? 'standard' : value));
@@ -43,12 +42,13 @@ const CohortLinkageSchema = z.object({
   decisionId: z.string().min(1),
 });
 
-export const SessionBlueprintSchema: z.ZodType<ISessionBlueprint> = z.object({
+export const SessionBlueprintSchema = z.object({
   blueprintVersion: z.literal('v1'),
   generatedAt: z.string().datetime(),
   generatedBy: z.literal('agent'),
   deckQueryId: z.string().min(1),
   initialCardIds: z.array(CardIdSchema).min(1),
+  cardLanes: z.record(CardIdSchema, SessionSchedulerLaneSchema).optional(),
   laneMix: z.object({
     retention: z.number().min(0).max(1),
     calibration: z.number().min(0).max(1),
@@ -92,6 +92,14 @@ export const SessionConfigSchema = z.object({
   sessionTimeoutHours: z.number().positive().default(24).describe('Auto-expire timeout in hours'),
   categoryIds: z.array(z.string()).optional().describe('Limit to specific categories'),
   cardTypes: z.array(z.string()).optional().describe('Limit to specific card types'),
+  presentation: z
+    .object({
+      promptSide: z.string().min(1).optional(),
+      answerSide: z.string().min(1).optional(),
+      revealMode: z.enum(['all_at_once', 'one_then_more']).optional(),
+    })
+    .optional()
+    .describe('Session-side presentation preferences'),
 });
 
 export type SessionConfigInput = z.input<typeof SessionConfigSchema>;
@@ -113,6 +121,10 @@ export const StartSessionInputSchema = z.object({
     .array(CardIdSchema)
     .min(1, 'At least one card is required')
     .describe('Ordered list of card IDs for the session queue'),
+  initialCardLanes: z
+    .record(CardIdSchema, SessionSchedulerLaneSchema)
+    .optional()
+    .describe('Optional per-card lane assignments for the session queue'),
   blueprint: SessionBlueprintSchema.optional(),
   offlineIntentToken: z.string().min(1).optional(),
 });
@@ -288,6 +300,7 @@ export type RecordDialogueTurnInput = z.input<typeof RecordDialogueTurnInputSche
 
 export const InjectQueueInputSchema = z.object({
   cardId: CardIdSchema.describe('Card to inject into queue'),
+  lane: SessionSchedulerLaneSchema.optional().describe('Lane to assign to the injected queue item'),
   position: z.number().int().nonnegative().describe('Position in queue (0-based)'),
   reason: z.string().min(1).max(500).describe('Reason for injection'),
   injectedBy: z.string().optional().describe('Agent or system that requested injection'),

@@ -154,6 +154,8 @@ export interface ISessionStartedPayload {
     cardTypes?: (CardType | RemediationCardType)[];
   };
   initialQueueSize: number;
+  initialCardIds?: CardId[];
+  initialCardLanes?: Record<CardId, 'retention' | 'calibration'>;
 }
 
 export interface ISessionPausedPayload {
@@ -252,6 +254,7 @@ export interface IAttemptRecordedPayload {
   userId: UserId;
   sequenceNumber: number;
   studyMode?: StudyMode;
+  lane?: 'retention' | 'calibration';
 
   // Response
   outcome: AttemptOutcome;

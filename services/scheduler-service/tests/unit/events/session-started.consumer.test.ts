@@ -123,6 +123,22 @@ describe('SessionStartedConsumer — handleSessionStarted', () => {
     expect(firstCall.schedulingAlgorithm).toBe('fsrs');
   });
 
+  it('uses initialCardLanes when provided', async () => {
+    const { consumer, schedulerCardRepository } = createConsumer();
+
+    await dispatch(consumer, {
+      userId: 'usr_abcdefghijklmnopqrstu',
+      initialQueueSize: 1,
+      initialCardIds: ['card_aaaaaaaaaaaaaaaaaaaaa'],
+      initialCardLanes: { card_aaaaaaaaaaaaaaaaaaaaa: 'calibration' },
+    });
+
+    expect(schedulerCardRepository.create).toHaveBeenCalledTimes(1);
+    const created = (schedulerCardRepository.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(created.lane).toBe('calibration');
+    expect(created.schedulingAlgorithm).toBe('hlr');
+  });
+
   it('does NOT create a card that already has a SchedulerCard record', async () => {
     const existingCard = { id: 'sc_exists', cardId: 'card_aaaaaaaaaaaaaaaaaaaaa', version: 1 };
     const { consumer, schedulerCardRepository } = createConsumer({

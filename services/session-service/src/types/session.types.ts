@@ -33,6 +33,8 @@ export interface ISchedulerLaneMix {
   calibration: number;
 }
 
+export type SessionSchedulerLane = 'retention' | 'calibration';
+
 export type AdaptiveCheckpointSignal =
   | 'confidence_drift'
   | 'latency_spike'
@@ -67,6 +69,7 @@ export interface ISessionBlueprint {
   generatedBy: 'agent';
   deckQueryId: string;
   initialCardIds: string[];
+  cardLanes?: Record<string, SessionSchedulerLane>;
   laneMix: ISchedulerLaneMix;
   checkpointSignals: AdaptiveCheckpointSignal[];
   policySnapshot: ICognitivePolicySnapshot;
@@ -179,12 +182,21 @@ export type SessionState = (typeof SessionState)[keyof typeof SessionState];
 // Session Config (immutable after creation)
 // ============================================================================
 
+export type SessionRevealMode = 'all_at_once' | 'one_then_more';
+
+export interface ISessionPresentationConfig {
+  promptSide?: string;
+  answerSide?: string;
+  revealMode?: SessionRevealMode;
+}
+
 export interface ISessionConfig {
   maxCards?: number;
   maxDurationMinutes?: number;
   sessionTimeoutHours: number;
   categoryIds?: string[];
   cardTypes?: string[];
+  presentation?: ISessionPresentationConfig;
 }
 
 // ============================================================================
@@ -331,6 +343,7 @@ export interface ISessionQueueItem {
   id: string;
   sessionId: SessionId;
   cardId: CardId;
+  lane: SessionSchedulerLane;
   position: number;
   status: CardQueueStatus;
   injectedBy: string | null;
@@ -353,6 +366,7 @@ export interface IStartSessionInput {
   loadoutArchetype?: LoadoutArchetype;
   config: ISessionConfig;
   initialCardIds: CardId[];
+  initialCardLanes?: Record<string, SessionSchedulerLane>;
   blueprint?: ISessionBlueprint;
   offlineIntentToken?: string;
 }
@@ -407,6 +421,7 @@ export interface IRequestHintInput {
 
 export interface IInjectQueueInput {
   cardId: CardId;
+  lane?: SessionSchedulerLane;
   position: number;
   reason: string;
   injectedBy?: string;

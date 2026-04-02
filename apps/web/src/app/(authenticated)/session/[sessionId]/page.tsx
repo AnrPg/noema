@@ -28,6 +28,7 @@ import type {
   IEvaluateCheckpointInput,
   IRecordAttemptInput,
   ISessionDto,
+  ISessionQueueItem,
 } from '@noema/api-client/session';
 
 import {
@@ -51,7 +52,12 @@ import { ResponseControls } from '@/components/session/response-controls';
 import type { Grade } from '@/components/session/response-controls';
 import { AdaptiveCheckpoint } from '@/components/session/adaptive-checkpoint';
 import { CardRenderer } from '@/components/card-renderers';
+import { SessionCardView } from '@/components/session/session-card-view';
 import { formatApiErrorMessage } from '@/lib/api-errors';
+import {
+  supportsSessionSidePresentation,
+  type ISessionPresentationPreferences,
+} from '@/lib/session-card-sides';
 
 // ============================================================================
 // ActiveSessionPage
@@ -68,13 +74,11 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Store ─────────────────────────────────────────────────────────────────
   const {
     pendingAttempt,
-    completedCardCount,
     elapsedTime,
     isPaused,
     setConfidenceBefore,
     setConfidenceAfter,
     setIsPaused,
-    advanceCard,
     resetAttempt,
     tickElapsedTime,
     clear,
@@ -85,6 +89,10 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const [checkpoint, setCheckpoint] = useState<IAdaptiveCheckpointDirectiveDto | null>(null);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [orderedQueue, setOrderedQueue] = useState<ISessionQueueItem[]>([]);
+  const [currentQueueIndex, setCurrentQueueIndex] = useState(0);
+  const attemptInFlightRef = useRef(false);
+  const initializedSessionRef = useRef<string | null>(null);
 
   // Track card timings for attempt payloads
   const cardStartRef = useRef<number>(Date.now());
@@ -107,10 +115,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const sessionDto: ISessionDto | null = sessionData?.data ?? null;
   const totalCards = sessionDto?.cardIds.length ?? 0;
   const lane = sessionDto?.mode === 'standard' ? 'retention' : null;
+  const initialQueueItems = queueData?.data.items ?? [];
+  const initialQueueLength = initialQueueItems.length;
+  const activeQueue =
+    orderedQueue.length > 0 || initialQueueLength === 0 ? orderedQueue : initialQueueItems;
+  const completedCardCount = Math.min(currentQueueIndex, totalCards);
 
   // ── Current card ──────────────────────────────────────────────────────────
-  const queueItems = queueData?.data.items ?? [];
-  const currentItem = queueItems[completedCardCount];
+  const currentItem = activeQueue[currentQueueIndex];
   const currentCardId = currentItem?.cardId ?? ('' as SessionId);
 
   // useCard uses select: (r) => r.data — so cardData is already ICardDto | undefined
@@ -145,11 +157,32 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Reset local state when the current card changes ───────────────────────
   useEffect(() => {
+    initializedSessionRef.current = null;
+    setOrderedQueue([]);
+    setCurrentQueueIndex(0);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (queueData === undefined || sessionDto === null) {
+      return;
+    }
+
+    if (initializedSessionRef.current === sessionId) {
+      return;
+    }
+
+    setOrderedQueue(queueData.data.items);
+    setCurrentQueueIndex(sessionDto.currentCardIndex);
+    initializedSessionRef.current = sessionId;
+  }, [queueData, sessionDto, sessionId]);
+
+  useEffect(() => {
     setIsRevealed(false);
     cardStartRef.current = Date.now();
     revealTimeRef.current = null;
     resetAttempt();
-  }, [currentCardId, resetAttempt]);
+    setConfidenceBefore(0.5);
+  }, [currentCardId, resetAttempt, setConfidenceBefore]);
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
@@ -193,16 +226,25 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Reveal ────────────────────────────────────────────────────────────────
   const handleReveal = useCallback((): void => {
-    if (!isRevealed) {
+    if (!isRevealed && !isPaused) {
       revealTimeRef.current = Date.now() - cardStartRef.current;
       setIsRevealed(true);
     }
-  }, [isRevealed]);
+  }, [isPaused, isRevealed]);
 
   // ── Grade / record attempt ────────────────────────────────────────────────
   const handleGrade = useCallback(
     (grade: Grade): void => {
-      if (card === undefined || sessionDto === null) return;
+      if (
+        card === undefined ||
+        sessionDto === null ||
+        isPaused ||
+        attemptInFlightRef.current ||
+        recordAttempt.isPending ||
+        completeSession.isPending
+      ) {
+        return;
+      }
 
       const confidenceBefore = pendingAttempt?.confidenceBefore ?? null;
       const confidenceAfter = pendingAttempt?.confidenceAfter ?? null;
@@ -239,11 +281,16 @@ export default function ActiveSessionPage(): React.JSX.Element {
       });
 
       setMutationError(null);
+      attemptInFlightRef.current = true;
       recordAttempt.mutate(attemptInput, {
         onSuccess: () => {
           const reviewedCards = completedCardCount + 1;
-          const isQueueExhausted =
-            reviewedCards >= queueItems.length || reviewedCards >= totalCards;
+          const nextQueue =
+            grade === 1 && currentItem !== undefined
+              ? enqueueRepeatCard(activeQueue, currentItem, currentQueueIndex, initialQueueLength)
+              : activeQueue;
+          const nextQueueIndex = currentQueueIndex + 1;
+          const isQueueExhausted = nextQueueIndex >= nextQueue.length;
 
           if (isQueueExhausted) {
             completeSession.mutate(sessionId, {
@@ -251,6 +298,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
                 router.push(`/session/${sessionId}/summary`);
               },
               onError: (err) => {
+                attemptInFlightRef.current = false;
                 setMutationError(
                   formatApiErrorMessage(err, {
                     action: 'finish the session',
@@ -260,9 +308,10 @@ export default function ActiveSessionPage(): React.JSX.Element {
               },
             });
           } else {
-            advanceCard();
+            setOrderedQueue(nextQueue);
+            setCurrentQueueIndex(nextQueueIndex);
             // Check checkpoint every 5 cards
-            if ((completedCardCount + 1) % 5 === 0) {
+            if (reviewedCards % 5 === 0) {
               evaluateCheckpoint.mutate(checkpointInput, {
                 onSuccess: (res) => {
                   const directive = selectCheckpointDirective(res.data.directives);
@@ -275,9 +324,12 @@ export default function ActiveSessionPage(): React.JSX.Element {
                 },
               });
             }
+
+            attemptInFlightRef.current = false;
           }
         },
         onError: (err) => {
+          attemptInFlightRef.current = false;
           setMutationError(
             formatApiErrorMessage(err, {
               action: 'save your answer',
@@ -291,15 +343,17 @@ export default function ActiveSessionPage(): React.JSX.Element {
       card,
       pendingAttempt,
       sessionDto,
+      isPaused,
       recordAttempt,
-      queueItems.length,
       completedCardCount,
-      totalCards,
       completeSession,
-      advanceCard,
       evaluateCheckpoint,
       sessionId,
       router,
+      currentItem,
+      activeQueue,
+      currentQueueIndex,
+      initialQueueLength,
     ]
   );
 
@@ -328,33 +382,34 @@ export default function ActiveSessionPage(): React.JSX.Element {
       key: ' ',
       label: 'Flip card / reveal answer',
       handler: handleReveal,
+      when: () => !isPaused,
     },
     {
       key: '1',
       label: 'Grade: Again',
       handler: () => {
-        if (isRevealed) handleGrade(1);
+        if (!isPaused && isRevealed) handleGrade(1);
       },
     },
     {
       key: '2',
       label: 'Grade: Hard',
       handler: () => {
-        if (isRevealed) handleGrade(2);
+        if (!isPaused && isRevealed) handleGrade(2);
       },
     },
     {
       key: '3',
       label: 'Grade: Good',
       handler: () => {
-        if (isRevealed) handleGrade(3);
+        if (!isPaused && isRevealed) handleGrade(3);
       },
     },
     {
       key: '4',
       label: 'Grade: Easy',
       handler: () => {
-        if (isRevealed) handleGrade(4);
+        if (!isPaused && isRevealed) handleGrade(4);
       },
     },
     {
@@ -374,7 +429,18 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Derived values ────────────────────────────────────────────────────────
   const isLoading = sessionLoading || queueLoading;
   const isCardLoading = cardLoading && currentCardId !== '';
-  const queueHasRecoverableGap = queueItems.length > completedCardCount && currentCardId === '';
+  const queueHasRecoverableGap = activeQueue.length > currentQueueIndex && currentCardId === '';
+  const sessionDtoRecord = sessionDto as unknown as Record<string, unknown> | null;
+  const sessionConfigRecord =
+    sessionDtoRecord !== null &&
+    typeof sessionDtoRecord['config'] === 'object' &&
+    sessionDtoRecord['config'] !== null
+      ? (sessionDtoRecord['config'] as {
+          presentation?: ISessionPresentationPreferences;
+        })
+      : undefined;
+  const presentationPreferences = sessionConfigRecord?.presentation;
+  const useSessionCardView = card !== undefined && supportsSessionSidePresentation(card);
 
   // ── Route param validation (after all hooks) ──────────────────────────────
   if (typeof raw !== 'string' || raw === '') {
@@ -384,7 +450,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Error state ───────────────────────────────────────────────────────────
   if (sessionError || queueError) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <p className="text-sm text-destructive">
           Failed to load session.{' '}
           <button
@@ -404,7 +470,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   // ── Loading state ─────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
       </div>
     );
@@ -412,7 +478,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-background">
+    <div className="relative flex min-h-[calc(100dvh-4rem)] flex-col bg-background">
       {/* ── SessionBar ─────────────────────────────────────────────────────── */}
       <SessionBar
         sessionId={sessionId}
@@ -461,28 +527,32 @@ export default function ActiveSessionPage(): React.JSX.Element {
       )}
 
       {/* ── Card Area (flex-1, scrollable) ─────────────────────────────────── */}
-      <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-4 pb-4 pt-6">
-        <div className="flex w-full max-w-2xl flex-col gap-4">
-          {/* PreAnswerConfidence (before reveal) */}
-          {!isRevealed && (
-            <PreAnswerConfidence
-              value={pendingAttempt?.confidenceBefore ?? null}
-              onChange={setConfidenceBefore}
-            />
-          )}
-
+      <div className="flex flex-1 flex-col items-center justify-start overflow-y-auto px-3 pb-6 pt-4 sm:px-4 sm:pt-6">
+        <div className="flex w-full max-w-6xl flex-col gap-6">
           {/* Card content */}
           {isCardLoading ? (
             <div className="flex items-center justify-center py-16">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
             </div>
           ) : card !== undefined ? (
-            <CardRenderer
-              card={card}
-              mode="interactive"
-              isRevealed={isRevealed}
-              onReveal={handleReveal}
-            />
+            useSessionCardView ? (
+              <SessionCardView
+                card={card}
+                isRevealed={isRevealed}
+                onReveal={handleReveal}
+                {...(presentationPreferences !== undefined
+                  ? { preferences: presentationPreferences }
+                  : {})}
+              />
+            ) : (
+              <CardRenderer
+                card={card}
+                mode="interactive"
+                isRevealed={isRevealed}
+                onReveal={handleReveal}
+                className="min-h-[22rem] rounded-[2rem] border-border/80 shadow-[0_24px_80px_rgba(2,6,23,0.32)] sm:min-h-[28rem]"
+              />
+            )
           ) : (
             <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-6 py-10 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-300">
@@ -537,6 +607,13 @@ export default function ActiveSessionPage(): React.JSX.Element {
           )}
 
           {!isRevealed && card !== undefined && (
+            <PreAnswerConfidence
+              value={pendingAttempt?.confidenceBefore ?? null}
+              onChange={setConfidenceBefore}
+            />
+          )}
+
+          {!isRevealed && card !== undefined && (
             <p className="pt-1 text-center text-xs text-muted-foreground">
               Press{' '}
               <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono">
@@ -550,13 +627,13 @@ export default function ActiveSessionPage(): React.JSX.Element {
 
       {/* ── ResponseControls (sticky bottom, after reveal) ─────────────────── */}
       {isRevealed && (
-        <div className="border-t border-border bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-          <div className="mx-auto max-w-2xl">
+        <div className="border-t border-border bg-background/95 px-3 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-4">
+          <div className="mx-auto max-w-4xl">
             <ResponseControls
               confidenceAfter={pendingAttempt?.confidenceAfter ?? null}
               onConfidenceAfter={setConfidenceAfter}
               onGrade={handleGrade}
-              isSubmitting={recordAttempt.isPending || completeSession.isPending}
+              isSubmitting={isPaused || recordAttempt.isPending || completeSession.isPending}
             />
           </div>
         </div>
@@ -668,4 +745,48 @@ function selectCheckpointDirective(
 
 function normalizeTeachingApproach(value: string): string {
   return value === 'socratic_questioning' ? 'standard' : value;
+}
+
+function enqueueRepeatCard(
+  queue: ISessionQueueItem[],
+  currentItem: ISessionQueueItem,
+  currentIndex: number,
+  initialQueueLength: number
+): ISessionQueueItem[] {
+  const nextRepeatItem: ISessionQueueItem = {
+    ...currentItem,
+    injected: true,
+    position: queue.length,
+  };
+  const repeatRegionStart = Math.min(initialQueueLength, queue.length);
+  const remainingInitialItems =
+    currentIndex + 1 < repeatRegionStart ? queue.slice(currentIndex + 1, repeatRegionStart) : [];
+  const pendingRepeatItems = queue.slice(Math.max(repeatRegionStart, currentIndex + 1));
+  const reshuffledRepeats = shuffleQueueItems([...pendingRepeatItems, nextRepeatItem]);
+
+  return [...queue.slice(0, currentIndex + 1), ...remainingInitialItems, ...reshuffledRepeats].map(
+    (item, index) => ({
+      ...item,
+      position: index,
+    })
+  );
+}
+
+function shuffleQueueItems<T>(items: T[]): T[] {
+  const result = [...items];
+
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const currentItem = result[index];
+    const swapItem = result[swapIndex];
+
+    if (currentItem === undefined || swapItem === undefined) {
+      continue;
+    }
+
+    result[index] = swapItem;
+    result[swapIndex] = currentItem;
+  }
+
+  return result;
 }

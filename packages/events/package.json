@@ -36,7 +36,8 @@
     },
     "./consumer": {
       "types": "./dist/consumer/index.d.ts",
-      "import": "./dist/consumer/index.js"
+      "import": "./dist/consumer/index.js",
+      "default": "./dist/consumer/index.js"
     }
   },
   "files": [

@@ -34,7 +34,7 @@ export const EdgeWeight = {
    */
   create(value: number): EdgeWeight {
     if (!Number.isFinite(value) || value < 0 || value > 1) {
-      throw new RangeError(`EdgeWeight must be in [0.0, 1.0], got: ${value}`);
+      throw new RangeError(`EdgeWeight must be in [0.0, 1.0], got: ${String(value)}`);
     }
     return value as EdgeWeight;
   },
@@ -81,7 +81,7 @@ export const MasteryLevel = {
    */
   create(value: number): MasteryLevel {
     if (!Number.isFinite(value) || value < 0 || value > 1) {
-      throw new RangeError(`MasteryLevel must be in [0.0, 1.0], got: ${value}`);
+      throw new RangeError(`MasteryLevel must be in [0.0, 1.0], got: ${String(value)}`);
     }
     return value as MasteryLevel;
   },
@@ -128,7 +128,7 @@ export const ConfidenceScore = {
    */
   create(value: number): ConfidenceScore {
     if (!Number.isFinite(value) || value < 0 || value > 1) {
-      throw new RangeError(`ConfidenceScore must be in [0.0, 1.0], got: ${value}`);
+      throw new RangeError(`ConfidenceScore must be in [0.0, 1.0], got: ${String(value)}`);
     }
     return value as ConfidenceScore;
   },
