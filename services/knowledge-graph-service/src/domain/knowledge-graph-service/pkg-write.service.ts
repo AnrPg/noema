@@ -14,6 +14,7 @@
  */
 
 import { KnowledgeGraphEventType } from '@noema/events';
+import type { IAgentHints, IWarning } from '@noema/contracts';
 import type {
   EdgeId,
   IGraphEdge,
@@ -28,7 +29,6 @@ import type { Logger } from 'pino';
 
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
-import { getConflictingEdgeTypesForAdvisory } from './ckg-validation-stages.js';
 import { UnauthorizedError, ValidationError } from './errors/base.errors.js';
 import {
   CyclicEdgeError,
@@ -54,6 +54,7 @@ import {
 } from './knowledge-graph.schemas.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
 import { KG_COUNTERS, kgCounters } from './observability.js';
+import { PkgAdvisoryService, serializeWarningsForEvent } from './pkg-advisories.js';
 import type { IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
 import {
@@ -103,6 +104,8 @@ function resolveMasteryWriteMode(
  * operations (log, publish, mark stale) that do not propagate failures.
  */
 export class PkgWriteService {
+  private readonly advisoryService: PkgAdvisoryService;
+
   constructor(
     private readonly graphRepository: IGraphRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
@@ -110,7 +113,9 @@ export class PkgWriteService {
     private readonly eventPublisher: IEventPublisher,
     private readonly hintsFactory: AgentHintsFactory,
     private readonly logger: Logger
-  ) {}
+  ) {
+    this.advisoryService = new PkgAdvisoryService(graphRepository, logger);
+  }
 
   // ========================================================================
   // PKG Node Operations
@@ -147,6 +152,11 @@ export class PkgWriteService {
       label: node.label,
       domain: node.domain,
     };
+    const advisoryWarnings = await this.safeComputeAdvisories(
+      { entityType: 'node', operation: 'create', entityId: node.nodeId as string },
+      () => this.advisoryService.assessNodeWrite(userId, node)
+    );
+    const eventAdvisories = serializeWarningsForEvent(advisoryWarnings);
 
     await Promise.all([
       this.safeAppendOperation(userId, operation),
@@ -161,6 +171,7 @@ export class PkgWriteService {
           label: node.label,
           domain: node.domain,
           metadata: node.properties,
+          ...(eventAdvisories.length > 0 ? { advisories: eventAdvisories } : {}),
         },
         metadata: {
           correlationId: context.correlationId,
@@ -175,7 +186,10 @@ export class PkgWriteService {
 
     return {
       data: node,
-      agentHints: this.hintsFactory.createNodeHints('created', node),
+      agentHints: this.withWarnings(
+        this.hintsFactory.createNodeHints('created', node),
+        advisoryWarnings
+      ),
     };
   }
 
@@ -246,6 +260,11 @@ export class PkgWriteService {
 
     // Update node in Neo4j
     const updatedNode = await this.graphRepository.updateNode(nodeId, normalizedUpdates, userId);
+    const advisoryWarnings = await this.safeComputeAdvisories(
+      { entityType: 'node', operation: 'update', entityId: nodeId as string },
+      () => this.advisoryService.assessNodeWrite(userId, updatedNode)
+    );
+    const eventAdvisories = serializeWarningsForEvent(advisoryWarnings);
 
     // Log operation with before/after tracking
     if (changedFields.length > 0) {
@@ -272,7 +291,14 @@ export class PkgWriteService {
           eventType: KnowledgeGraphEventType.PKG_NODE_UPDATED,
           aggregateType: 'PersonalKnowledgeGraph',
           aggregateId: userId,
-          payload: { nodeId, userId, changedFields: fieldNames, previousValues, newValues },
+          payload: {
+            nodeId,
+            userId,
+            changedFields: fieldNames,
+            previousValues,
+            newValues,
+            ...(eventAdvisories.length > 0 ? { advisories: eventAdvisories } : {}),
+          },
           metadata: { correlationId: context.correlationId, userId: context.userId },
         }),
         this.markMetricsStale(userId, updatedNode.domain, 'node_updated'),
@@ -294,7 +320,10 @@ export class PkgWriteService {
 
     return {
       data: updatedNode,
-      agentHints: this.hintsFactory.createNodeHints('updated', updatedNode),
+      agentHints: this.withWarnings(
+        this.hintsFactory.createNodeHints('updated', updatedNode),
+        advisoryWarnings
+      ),
     };
   }
 
@@ -531,6 +560,11 @@ export class PkgWriteService {
       weight: edge.weight,
       ...(skippedValidations.length > 0 ? { skippedValidations } : {}),
     };
+    const advisoryWarnings = await this.safeComputeAdvisories(
+      { entityType: 'edge', operation: 'create', entityId: edge.edgeId as string },
+      () => this.advisoryService.assessEdgeWrite(userId, edge, sourceNode, targetNode)
+    );
+    const eventAdvisories = serializeWarningsForEvent(advisoryWarnings);
 
     // Post-write operations: resilient & parallel (4.2)
     await Promise.all([
@@ -547,6 +581,7 @@ export class PkgWriteService {
           edgeType: edge.edgeType,
           weight: edge.weight as number,
           metadata: edge.properties,
+          ...(eventAdvisories.length > 0 ? { advisories: eventAdvisories } : {}),
         },
         metadata: {
           correlationId: context.correlationId,
@@ -559,60 +594,12 @@ export class PkgWriteService {
     this.logger.info({ edgeId: edge.edgeId, edgeType: edge.edgeType }, 'PKG edge created');
     kgCounters.increment(KG_COUNTERS.PKG_OPERATIONS, { operation: 'edge_created' });
 
-    // Phase 8e — PKG advisory ontological conflict check (non-blocking)
-    const edgeHints = this.hintsFactory.createEdgeHints('created', edge, sourceNode, targetNode);
-    const conflictingTypes = getConflictingEdgeTypesForAdvisory(edge.edgeType);
-
-    if (conflictingTypes.length > 0) {
-      try {
-        const conflicts = await this.graphRepository.findConflictingEdges(
-          edge.sourceNodeId,
-          edge.targetNodeId,
-          conflictingTypes
-        );
-
-        if (conflicts.length > 0) {
-          const firstConflict = conflicts[0];
-          if (firstConflict !== undefined) {
-            edgeHints.warnings = [
-              {
-                type: 'conflict' as const,
-                severity: 'medium' as const,
-                message:
-                  `This ${edge.edgeType} edge conflicts with existing ` +
-                  `${firstConflict.edgeType} edge. Consider whether this concept ` +
-                  `'is a kind of' or 'is part of' the target — these are different ` +
-                  `relationships.`,
-                relatedIds: conflicts.map((c) => c.edgeId as string),
-                suggestedFix:
-                  'Distinguishing taxonomic (IS_A) from mereological ' +
-                  '(PART_OF) relationships is a key skill in conceptual modelling.',
-              },
-            ];
-
-            this.logger.info(
-              {
-                edgeId: edge.edgeId,
-                edgeType: edge.edgeType,
-                conflictingEdges: conflicts.length,
-                conflictingType: firstConflict.edgeType,
-              },
-              'PKG advisory: ontological conflict detected (non-blocking)'
-            );
-          }
-        }
-      } catch (error) {
-        // Advisory check is non-blocking — log and continue
-        this.logger.warn(
-          { edgeId: edge.edgeId, error },
-          'PKG advisory ontological check failed (non-blocking)'
-        );
-      }
-    }
-
     return {
       data: edge,
-      agentHints: edgeHints,
+      agentHints: this.withWarnings(
+        this.hintsFactory.createEdgeHints('created', edge, sourceNode, targetNode),
+        advisoryWarnings
+      ),
     };
   }
 
@@ -675,6 +662,18 @@ export class PkgWriteService {
 
     // Update edge in Neo4j
     const updatedEdge = await this.graphRepository.updateEdge(edgeId, updates);
+    const [sourceNode, targetNode] = await Promise.all([
+      this.graphRepository.getNode(existingEdge.sourceNodeId, userId),
+      this.graphRepository.getNode(existingEdge.targetNodeId, userId),
+    ]);
+    const advisoryWarnings =
+      sourceNode !== null && targetNode !== null
+        ? await this.safeComputeAdvisories(
+            { entityType: 'edge', operation: 'update', entityId: edgeId as string },
+            () => this.advisoryService.assessEdgeWrite(userId, updatedEdge, sourceNode, targetNode)
+          )
+        : [];
+    const eventAdvisories = serializeWarningsForEvent(advisoryWarnings);
 
     // Log & publish only if something actually changed
     if (changedFields.length > 0) {
@@ -707,6 +706,7 @@ export class PkgWriteService {
             changedFields: fieldNames,
             previousValues,
             newValues,
+            ...(eventAdvisories.length > 0 ? { advisories: eventAdvisories } : {}),
           },
           metadata: {
             correlationId: context.correlationId,
@@ -715,8 +715,6 @@ export class PkgWriteService {
         }),
       ];
 
-      // Determine domain for staleness — look up source node
-      const sourceNode = await this.graphRepository.getNode(existingEdge.sourceNodeId, userId);
       if (sourceNode) {
         postWrites.push(this.markMetricsStale(userId, sourceNode.domain, 'edge_updated'));
       }
@@ -729,7 +727,12 @@ export class PkgWriteService {
 
     return {
       data: updatedEdge,
-      agentHints: this.hintsFactory.createEdgeRetrievalHints(updatedEdge),
+      agentHints: this.withWarnings(
+        sourceNode !== null && targetNode !== null
+          ? this.hintsFactory.createEdgeHints('updated', updatedEdge, sourceNode, targetNode)
+          : this.hintsFactory.createEdgeRetrievalHints(updatedEdge),
+        advisoryWarnings
+      ),
     };
   }
 
@@ -876,6 +879,35 @@ export class PkgWriteService {
         { error, eventType: event.eventType, aggregateId: event.aggregateId },
         'Failed to publish domain event — continuing (eventual consistency gap)'
       );
+    }
+  }
+
+  private withWarnings(agentHints: IAgentHints, warnings: readonly IWarning[]): IAgentHints {
+    if (warnings.length === 0) {
+      return agentHints;
+    }
+
+    return {
+      ...agentHints,
+      warnings: [...(agentHints.warnings ?? []), ...warnings],
+    };
+  }
+
+  private async safeComputeAdvisories(
+    context: { entityType: 'node' | 'edge'; operation: 'create' | 'update'; entityId: string },
+    compute: () => Promise<IWarning[]>
+  ): Promise<IWarning[]> {
+    try {
+      return await compute();
+    } catch (error) {
+      this.logger.warn(
+        {
+          ...context,
+          error,
+        },
+        'PKG advisory classification failed (non-blocking)'
+      );
+      return [];
     }
   }
 

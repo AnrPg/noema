@@ -102,6 +102,8 @@ export interface IPkgNodeCreatedPayload {
   domain: string;
   /** Additional node metadata */
   metadata: Metadata;
+  /** Non-blocking semantic or pedagogical advisories generated during the write */
+  advisories?: Metadata[];
 }
 
 /**
@@ -118,6 +120,8 @@ export interface IPkgNodeUpdatedPayload {
   previousValues: Metadata;
   /** New values of changed fields */
   newValues: Metadata;
+  /** Non-blocking semantic or pedagogical advisories generated during the write */
+  advisories?: Metadata[];
 }
 
 /**
@@ -150,6 +154,8 @@ export interface IPkgEdgeCreatedPayload {
   weight: number;
   /** Additional edge metadata */
   metadata: Metadata;
+  /** Non-blocking semantic or pedagogical advisories generated during the write */
+  advisories?: Metadata[];
 }
 
 /**
@@ -178,6 +184,8 @@ export interface IPkgEdgeUpdatedPayload {
   previousValues: Metadata;
   /** New values of changed fields */
   newValues: Metadata;
+  /** Non-blocking semantic or pedagogical advisories generated during the write */
+  advisories?: Metadata[];
 }
 
 /**

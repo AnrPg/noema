@@ -360,6 +360,8 @@ export type { IInvariantDefinition } from './unity-invariants.js';
 
 export { UnityInvariantStage } from './unity-invariants.js';
 
+export { PkgAdvisoryService, serializeWarningsForEvent } from './pkg-advisories.js';
+
 // Validation pipeline: IValidationPipeline implementation
 export { CkgValidationPipeline } from './ckg-validation-pipeline.js';
 

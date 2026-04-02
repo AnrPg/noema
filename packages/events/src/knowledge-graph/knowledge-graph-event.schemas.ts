@@ -67,6 +67,7 @@ export const PkgNodeCreatedPayloadSchema = z.object({
   label: z.string().min(1),
   domain: z.string().min(1),
   metadata: MetadataSchema,
+  advisories: z.array(MetadataSchema).optional(),
 });
 
 /**
@@ -78,6 +79,7 @@ export const PkgNodeUpdatedPayloadSchema = z.object({
   changedFields: z.array(z.string().min(1)).min(1),
   previousValues: MetadataSchema,
   newValues: MetadataSchema,
+  advisories: z.array(MetadataSchema).optional(),
 });
 
 /**
@@ -100,6 +102,7 @@ export const PkgEdgeCreatedPayloadSchema = z.object({
   edgeType: GraphEdgeTypeSchema,
   weight: z.number().min(0).max(1),
   metadata: MetadataSchema,
+  advisories: z.array(MetadataSchema).optional(),
 });
 
 /**
@@ -120,6 +123,7 @@ export const PkgEdgeUpdatedPayloadSchema = z.object({
   changedFields: z.array(z.string().min(1)).min(1),
   previousValues: MetadataSchema,
   newValues: MetadataSchema,
+  advisories: z.array(MetadataSchema).optional(),
 });
 
 /**
