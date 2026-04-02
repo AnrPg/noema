@@ -86,6 +86,12 @@ export interface IServiceConfig {
     /** Proof-stage rollout mode for canonical commits. */
     proofStageMode: ProofRolloutModeType;
   };
+  crdt: {
+    /** Whether Layer 3 CRDT stats are enabled. */
+    enabled: boolean;
+    /** Replica identifier used to keep CRDT counters merge-safe. */
+    replicaId: string;
+  };
   ontologyImports: {
     /** Which YAGO archive variant to fetch by default. */
     yagoVariant: 'tiny' | 'full';
@@ -253,6 +259,13 @@ export function loadConfig(): IServiceConfig {
     },
     mutation: {
       proofStageMode: optionalProofRolloutMode(),
+    },
+    crdt: {
+      enabled: optionalEnvBool('GRAPH_CRDT_STATS_ENABLED', false),
+      replicaId: optionalEnv(
+        'GRAPH_CRDT_REPLICA_ID',
+        `knowledge-graph-service-${String(process.pid)}`
+      ),
     },
     ontologyImports: {
       yagoVariant: optionalYagoVariant('YAGO_VARIANT', 'full'),

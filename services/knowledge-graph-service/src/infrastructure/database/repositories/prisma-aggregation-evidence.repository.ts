@@ -22,6 +22,7 @@ import type {
   IAggregationEvidenceRepository,
   IEvidenceSummary,
 } from '../../../domain/knowledge-graph-service/aggregation-evidence.repository.js';
+import type { GraphCrdtDirection } from '../../../domain/knowledge-graph-service/crdt-stats.repository.js';
 import { PromotionBandUtil } from '../../../domain/knowledge-graph-service/value-objects/promotion-band.js';
 import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 
@@ -48,6 +49,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
     evidenceType: string;
     confidence: ConfidenceScore;
     metadata?: Metadata;
+    direction?: GraphCrdtDirection;
   }): Promise<IAggregationEvidence> {
     const id = generateEvidenceId();
 
@@ -58,6 +60,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
       evidenceType: input.evidenceType,
       confidence: input.confidence as number,
       payload: toPrismaJson(input.metadata ?? {}),
+      direction: input.direction ?? 'support',
     };
     if (input.ckgTargetNodeId !== undefined) {
       data.ckgTargetNodeId = input.ckgTargetNodeId as string;
@@ -289,6 +292,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
     evidenceType: string;
     confidence: number;
     payload: Prisma.JsonValue;
+    direction: string;
     createdAt: Date;
   }): IAggregationEvidence {
     return {
@@ -301,6 +305,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
       evidenceType: record.evidenceType,
       confidence: record.confidence as ConfidenceScore,
       metadata: fromPrismaJson<Metadata>(record.payload),
+      direction: record.direction as GraphCrdtDirection,
       recordedAt: record.createdAt.toISOString(),
     };
   }

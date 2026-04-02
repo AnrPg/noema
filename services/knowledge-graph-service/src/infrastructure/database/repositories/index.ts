@@ -3,6 +3,10 @@
  */
 
 export { PrismaAggregationEvidenceRepository } from './prisma-aggregation-evidence.repository.js';
+export {
+  NoopGraphCrdtStatsRepository,
+  PrismaGraphCrdtStatsRepository,
+} from './prisma-graph-crdt-stats.repository.js';
 export { PrismaGraphSnapshotRepository } from './prisma-graph-snapshot.repository.js';
 export { PrismaMetricsStalenessRepository } from './prisma-metrics-staleness.repository.js';
 export { PrismaMetricsRepository } from './prisma-metrics.repository.js';

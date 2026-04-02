@@ -180,6 +180,13 @@ export type {
 } from './aggregation-evidence.repository.js';
 
 export type {
+  GraphCrdtDirection,
+  GraphCrdtTargetKind,
+  IGraphCrdtStat,
+  IGraphCrdtStatsRepository,
+} from './crdt-stats.repository.js';
+
+export type {
   ICancelOntologyImportRunInput,
   IChecksumVerifier,
   ICreateOntologyImportRunInput,

@@ -24,6 +24,7 @@ import {
   CkgOperationType,
   type CkgMutationOperation,
 } from '../../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
+import type { IGraphCrdtStatsRepository } from '../../../domain/knowledge-graph-service/crdt-stats.repository.js';
 import type { IExecutionContext } from '../../../domain/knowledge-graph-service/execution-context.js';
 import type { IGraphRepository } from '../../../domain/knowledge-graph-service/graph.repository.js';
 import { PromotionBandUtil } from '../../../domain/knowledge-graph-service/value-objects/promotion-band.js';
@@ -69,6 +70,8 @@ export class PkgAggregationApplicationService {
   constructor(
     private readonly graphRepository: IGraphRepository,
     private readonly aggregationEvidenceRepository: IAggregationEvidenceRepository,
+    private readonly graphCrdtStatsRepository: IGraphCrdtStatsRepository,
+    private readonly crdtReplicaId: string,
     private readonly mutationPipeline: ICkgMutationPipeline,
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: Logger
@@ -367,6 +370,7 @@ export class PkgAggregationApplicationService {
       sourcePkgNodeId: input.sourcePkgObjectId,
       evidenceType: input.evidenceType,
       confidence: normalizeConfidence(input.confidence) as never,
+      direction: 'support',
       metadata: {
         ...input.metadata,
         eventId: input.envelope.eventId ?? null,
@@ -374,6 +378,20 @@ export class PkgAggregationApplicationService {
       },
       ...(input.targetNodeId !== undefined ? { ckgTargetNodeId: input.targetNodeId } : {}),
       ...(input.targetKey !== undefined ? { proposedLabel: input.targetKey } : {}),
+    });
+
+    await this.graphCrdtStatsRepository.applyEvidenceSignal({
+      evidenceId: evidence.id,
+      replicaId: this.crdtReplicaId,
+      graphType: 'ckg',
+      targetKind: input.targetNodeId !== undefined ? 'ckg_node' : 'proposed_label',
+      ...(input.targetNodeId !== undefined ? { targetNodeId: input.targetNodeId } : {}),
+      ...(input.targetKey !== undefined ? { proposedLabel: input.targetKey } : {}),
+      evidenceType: input.evidenceType,
+      direction: evidence.direction,
+      confidence: input.confidence,
+      sourceUserId: input.sourceUserId,
+      metadata: input.metadata,
     });
 
     const threshold =

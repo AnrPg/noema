@@ -31,6 +31,7 @@ import {
   registerCkgNodeRoutes,
   registerCkgTraversalRoutes,
   registerComparisonRoutes,
+  registerGraphCrdtRoutes,
   registerGraphSnapshotRoutes,
   registerMetricsRoutes,
   registerMisconceptionRoutes,
@@ -78,7 +79,9 @@ import { Neo4jClient } from './infrastructure/database/neo4j-client.js';
 import { Neo4jGraphRepository } from './infrastructure/database/neo4j-graph.repository.js';
 import { initializeNeo4jSchema } from './infrastructure/database/neo4j-schema.js';
 import {
+  NoopGraphCrdtStatsRepository,
   PrismaAggregationEvidenceRepository,
+  PrismaGraphCrdtStatsRepository,
   PrismaGraphSnapshotRepository,
   PrismaMetricsRepository,
   PrismaMetricsStalenessRepository,
@@ -277,6 +280,10 @@ async function bootstrap(): Promise<void> {
           description: 'CKG subgraph, ancestor, descendant, and path operations',
         },
         { name: 'Metrics', description: 'Structural metric endpoints' },
+        {
+          name: 'Graph CRDT Stats',
+          description: 'Admin-only Layer 3 replicated statistical signals',
+        },
         { name: 'Misconceptions', description: 'Misconception detection and lifecycle' },
         { name: 'Structural Health', description: 'Structural health and metacognitive stage' },
         { name: 'PKG Operations', description: 'PKG operation log (audit trail)' },
@@ -347,6 +354,9 @@ async function bootstrap(): Promise<void> {
   const graphSnapshotRepository = new PrismaGraphSnapshotRepository(prisma);
   const metricsStalenessRepository = new PrismaMetricsStalenessRepository(prisma);
   const aggregationEvidenceRepository = new PrismaAggregationEvidenceRepository(prisma);
+  const graphCrdtStatsRepository = config.crdt.enabled
+    ? new PrismaGraphCrdtStatsRepository(prisma)
+    : new NoopGraphCrdtStatsRepository();
   const ontologySourceRepository = new PrismaOntologySourceRepository(prisma);
   const ontologyImportRunRepository = new PrismaOntologyImportRunRepository(prisma);
   const ontologyImportArtifactRepository = new PrismaOntologyImportArtifactRepository(prisma);
@@ -416,6 +426,7 @@ async function bootstrap(): Promise<void> {
     graphRepository,
     neo4jGraphRepository,
     operationLogRepository,
+    graphCrdtStatsRepository,
     graphSnapshotRepository,
     metricsStalenessRepository,
     metricsRepository,
@@ -491,6 +502,8 @@ async function bootstrap(): Promise<void> {
   const pkgAggregationService = new PkgAggregationApplicationService(
     graphRepository,
     aggregationEvidenceRepository,
+    graphCrdtStatsRepository,
+    config.crdt.replicaId,
     mutationPipeline,
     eventPublisher,
     logger
@@ -532,6 +545,7 @@ async function bootstrap(): Promise<void> {
   registerPkgOperationLogRoutes(app, service, authMiddleware, routeOptions);
 
   // Admin graph snapshots / restore
+  registerGraphCrdtRoutes(app, service, authMiddleware);
   registerGraphSnapshotRoutes(app, service, authMiddleware, routeOptions);
 
   // User-scoped analytics routes

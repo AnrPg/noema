@@ -217,6 +217,51 @@ model GraphSnapshot {
     @@map("graph_snapshots")
 }
 
+model GraphCrdtStat {
+    id String @id @db.VarChar(50)
+
+    statKey String @unique @map("stat_key") @db.VarChar(500)
+    graphType String @map("graph_type") @db.VarChar(20)
+    targetKind String @map("target_kind") @db.VarChar(50)
+    targetNodeId String? @map("target_node_id") @db.VarChar(200)
+    proposedLabel String? @map("proposed_label") @db.VarChar(500)
+    evidenceType String @map("evidence_type") @db.VarChar(100)
+
+    supportCounter Json @map("support_counter")
+    opposeCounter Json @map("oppose_counter")
+    neutralCounter Json @map("neutral_counter")
+    confidenceCounter Json @map("confidence_counter")
+
+    metadata Json @default("{}")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    appliedSignals GraphCrdtAppliedSignal[]
+
+    @@index([graphType, targetKind])
+    @@index([targetNodeId])
+    @@index([proposedLabel])
+    @@index([evidenceType])
+    @@map("graph_crdt_stats")
+}
+
+model GraphCrdtAppliedSignal {
+    id String @id @db.VarChar(50)
+
+    statKey String @map("stat_key") @db.VarChar(500)
+    evidenceId String @unique @map("evidence_id") @db.VarChar(50)
+    replicaId String @map("replica_id") @db.VarChar(100)
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    stat GraphCrdtStat @relation(fields: [statKey], references: [statKey], onDelete: Cascade)
+
+    @@index([statKey])
+    @@index([replicaId])
+    @@map("graph_crdt_applied_signals")
+}
+
 // ============================================================================
 // Aggregation Evidence — PKG → CKG aggregation pipeline records
 // ============================================================================

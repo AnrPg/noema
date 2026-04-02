@@ -52,6 +52,9 @@ export interface IAggregationEvidence {
   /** Additional evidence context */
   readonly metadata: Metadata;
 
+  /** Statistical direction of this evidence signal. */
+  readonly direction: 'support' | 'oppose' | 'neutral';
+
   /** When the evidence was recorded (ISO 8601) */
   readonly recordedAt: string;
 }
@@ -104,6 +107,7 @@ export interface IAggregationEvidenceRepository {
     evidenceType: string;
     confidence: ConfidenceScore;
     metadata?: Metadata;
+    direction?: 'support' | 'oppose' | 'neutral';
   }): Promise<IAggregationEvidence>;
 
   /**
