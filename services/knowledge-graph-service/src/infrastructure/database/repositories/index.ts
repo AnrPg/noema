@@ -3,6 +3,7 @@
  */
 
 export { PrismaAggregationEvidenceRepository } from './prisma-aggregation-evidence.repository.js';
+export { PrismaGraphSnapshotRepository } from './prisma-graph-snapshot.repository.js';
 export { PrismaMetricsStalenessRepository } from './prisma-metrics-staleness.repository.js';
 export { PrismaMetricsRepository } from './prisma-metrics.repository.js';
 export { PrismaMisconceptionRepository } from './prisma-misconception.repository.js';

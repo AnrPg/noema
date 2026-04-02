@@ -188,6 +188,36 @@ model StructuralMetricSnapshot {
 }
 
 // ============================================================================
+// Graph Snapshot — Recoverable graph-state capture for PKG/CKG restore
+// ============================================================================
+
+model GraphSnapshot {
+    id String @id @db.VarChar(50)
+
+    graphType String @map("graph_type") @db.VarChar(20)
+    scopeUserId String? @map("scope_user_id") @db.VarChar(50)
+    scopeDomain String? @map("scope_domain") @db.VarChar(200)
+
+    nodeCount Int @default(0) @map("node_count")
+    edgeCount Int @default(0) @map("edge_count")
+    schemaVersion Int @default(1) @map("schema_version")
+
+    snapshotData Json @map("snapshot_data")
+
+    reason String? @db.VarChar(2000)
+    sourceCursor String? @map("source_cursor") @db.VarChar(100)
+
+    createdAt DateTime @default(now()) @map("created_at")
+    createdBy String? @map("created_by") @db.VarChar(50)
+
+    @@index([graphType, createdAt])
+    @@index([scopeUserId, createdAt])
+    @@index([scopeDomain, createdAt])
+    @@index([graphType, scopeUserId, scopeDomain, createdAt])
+    @@map("graph_snapshots")
+}
+
+// ============================================================================
 // Aggregation Evidence — PKG → CKG aggregation pipeline records
 // ============================================================================
 // Records which PKG signals contributed to which CKG mutation proposals.

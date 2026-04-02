@@ -43,6 +43,21 @@ export class EdgeNotFoundError extends DomainError {
   }
 }
 
+/**
+ * Thrown when a graph snapshot cannot be found.
+ * Maps to HTTP 404.
+ */
+export class GraphSnapshotNotFoundError extends DomainError {
+  public readonly snapshotId: string;
+
+  constructor(snapshotId: string) {
+    super('GRAPH_SNAPSHOT_NOT_FOUND', `Graph snapshot not found: ${snapshotId}`, {
+      snapshotId,
+    });
+    this.snapshotId = snapshotId;
+  }
+}
+
 // ============================================================================
 // Structural Integrity Errors
 // ============================================================================

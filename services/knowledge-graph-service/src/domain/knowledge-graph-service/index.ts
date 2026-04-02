@@ -20,6 +20,7 @@ export {
   DuplicateNodeError,
   EdgeNotFoundError,
   GraphConsistencyError,
+  GraphSnapshotNotFoundError,
   // Misconception errors
   InterventionTemplateNotFoundError,
   InvalidEdgeTypeError,
@@ -104,6 +105,19 @@ export { EDGE_TYPE_POLICIES, getEdgePolicy } from './policies/index.js';
 // ============================================================================
 // Repository Interfaces
 // ============================================================================
+
+export type {
+  GraphRestorationScope,
+  IGraphRestorationRepository,
+  IGraphSnapshotPayload,
+} from './graph-restoration.repository.js';
+
+export type {
+  ICreateGraphSnapshotInput,
+  IGraphSnapshotListFilters,
+  IGraphSnapshotRecord,
+  IGraphSnapshotRepository,
+} from './graph-snapshot.repository.js';
 
 export type {
   // Graph repository (split interfaces + composite)
@@ -222,6 +236,10 @@ export type {
 
 export type {
   IExecutionContext,
+  IGraphRestorePreview,
+  IGraphRestoreScopeInput,
+  IGraphRestoreSummary,
+  IGraphSnapshotSummary,
   IKnowledgeGraphService,
   IServiceResult,
 } from './knowledge-graph.service.js';

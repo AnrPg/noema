@@ -51,6 +51,11 @@ import type {
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
 import type {
+  GraphRestorationScope,
+  IGraphRestorationRepository,
+  IGraphSnapshotPayload,
+} from '../../domain/knowledge-graph-service/graph-restoration.repository.js';
+import type {
   ICentralityEntry,
   ICentralityQuery,
   ICoParentsQuery,
@@ -124,6 +129,60 @@ function buildPaginationClause(limit: number, offset: number): string {
   const safeLimit = Math.max(0, Math.trunc(limit));
   const safeOffset = Math.max(0, Math.trunc(offset));
   return ` SKIP ${String(safeOffset)} LIMIT ${String(safeLimit)}`;
+}
+
+function buildRestoredNodeProperties(node: IGraphNode): Record<string, unknown> {
+  const props = buildNodeProperties(
+    {
+      label: node.label,
+      nodeType: node.nodeType,
+      domain: node.domain,
+      ...(node.description !== undefined ? { description: node.description } : {}),
+      ...(node.status !== undefined ? { status: node.status } : {}),
+      ...(node.aliases !== undefined ? { aliases: node.aliases } : {}),
+      ...(node.languages !== undefined ? { languages: node.languages } : {}),
+      ...(node.tags !== undefined ? { tags: node.tags } : {}),
+      ...(node.supportedStudyModes !== undefined
+        ? { supportedStudyModes: node.supportedStudyModes }
+        : {}),
+      ...(node.semanticHints !== undefined ? { semanticHints: node.semanticHints } : {}),
+      ...(node.canonicalExternalRefs !== undefined
+        ? { canonicalExternalRefs: node.canonicalExternalRefs }
+        : {}),
+      ...(node.ontologyMappings !== undefined ? { ontologyMappings: node.ontologyMappings } : {}),
+      ...(node.provenance !== undefined ? { provenance: node.provenance } : {}),
+      ...(node.reviewMetadata !== undefined ? { reviewMetadata: node.reviewMetadata } : {}),
+      ...(node.sourceCoverage !== undefined ? { sourceCoverage: node.sourceCoverage } : {}),
+      properties: node.properties,
+      ...(node.masteryLevel !== undefined ? { masteryLevel: node.masteryLevel } : {}),
+    },
+    node.nodeId,
+    node.graphType,
+    node.userId
+  );
+
+  props['createdAt'] = node.createdAt;
+  props['updatedAt'] = node.updatedAt;
+  props['isDeleted'] = false;
+  props['deletedAt'] = null;
+  return props;
+}
+
+function buildRestoredEdgeProperties(edge: IGraphEdge): Record<string, unknown> {
+  const props = buildEdgeProperties(
+    {
+      edgeType: edge.edgeType,
+      weight: edge.weight,
+      properties: edge.properties,
+    },
+    edge.edgeId,
+    edge.userId
+  );
+
+  props['createdAt'] = edge.createdAt;
+  props['isDeleted'] = false;
+  props['deletedAt'] = null;
+  return props;
 }
 
 function escapeLuceneTerm(value: string): string {
@@ -316,7 +375,7 @@ function buildNodeUpsertUpdateInput(input: ICreateNodeInput): IUpdateNodeInput {
 // Neo4jGraphRepository
 // ============================================================================
 
-export class Neo4jGraphRepository implements IGraphRepository {
+export class Neo4jGraphRepository implements IGraphRepository, IGraphRestorationRepository {
   private readonly neo4j: Neo4jClient;
   private readonly logger: pino.Logger;
 
@@ -2716,6 +2775,90 @@ export class Neo4jGraphRepository implements IGraphRepository {
 
     // Unknown error — rethrow
     throw error;
+  }
+
+  async captureScope(scope: GraphRestorationScope): Promise<ISubgraph> {
+    if (scope.domain !== undefined) {
+      return this.getDomainSubgraph(
+        scope.domain,
+        undefined,
+        undefined,
+        scope.graphType === 'pkg' ? scope.userId : undefined
+      );
+    }
+
+    const filter = {
+      graphType: scope.graphType,
+      includeDeleted: false,
+      ...(scope.graphType === 'pkg' ? { userId: scope.userId } : {}),
+    };
+    const total = await this.countNodes(filter);
+    const nodes = total === 0 ? [] : await this.findNodes(filter, total, 0);
+    const nodeIds = nodes.map((node) => node.nodeId);
+    const edges =
+      nodeIds.length === 0
+        ? []
+        : await this.getEdgesForNodes(
+            nodeIds,
+            undefined,
+            scope.graphType === 'pkg' ? scope.userId : undefined
+          );
+
+    return {
+      nodes,
+      edges: [...new Map(edges.map((edge) => [edge.edgeId, edge])).values()],
+    };
+  }
+
+  async replaceScope(scope: GraphRestorationScope, snapshot: IGraphSnapshotPayload): Promise<void> {
+    const current = await this.captureScope(scope);
+    const nodeIdsToDelete = current.nodes.map((node) => node.nodeId as string);
+    const session = this.neo4j.getSession();
+
+    try {
+      await session.executeWrite(async (tx: ManagedTransaction) => {
+        if (nodeIdsToDelete.length > 0) {
+          await tx.run(
+            `UNWIND $nodeIds AS nodeId
+             MATCH (n {nodeId: nodeId})
+             OPTIONAL MATCH (n)-[r]-()
+             DELETE r, n`,
+            { nodeIds: nodeIdsToDelete }
+          );
+        }
+
+        for (const node of snapshot.nodes) {
+          const primaryLabel = graphTypeToLabel(node.graphType);
+          const secondaryLabel = nodeTypeToLabel(node.nodeType);
+          await tx.run(`CREATE (n:${primaryLabel}:${secondaryLabel} $props)`, {
+            props: buildRestoredNodeProperties(node),
+          });
+        }
+
+        for (const edge of snapshot.edges) {
+          const relType = edgeTypeToRelType(edge.edgeType);
+          await tx.run(
+            `MATCH (source {nodeId: $sourceNodeId})
+             MATCH (target {nodeId: $targetNodeId})
+             CREATE (source)-[r:${relType}]->(target)
+             SET r = $props`,
+            {
+              sourceNodeId: edge.sourceNodeId,
+              targetNodeId: edge.targetNodeId,
+              props: buildRestoredEdgeProperties(edge),
+            }
+          );
+        }
+      });
+    } catch (error) {
+      this.translateNeo4jError(error, 'replaceScope', {
+        graphType: scope.graphType,
+        ...(scope.graphType === 'pkg' ? { userId: scope.userId } : {}),
+        ...(scope.domain !== undefined ? { domain: scope.domain } : {}),
+      });
+    } finally {
+      await session.close();
+    }
   }
 }
 

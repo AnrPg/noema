@@ -21,6 +21,7 @@ export {
   DuplicateNodeError,
   EdgeNotFoundError,
   GraphConsistencyError,
+  GraphSnapshotNotFoundError,
   InvalidEdgeTypeError,
   MaxDepthExceededError,
   NodeNotFoundError,
