@@ -6,7 +6,7 @@ import type {
   ICkgResetPort,
   ICkgResetResult,
 } from '../../application/knowledge-graph/maintenance/contracts.js';
-import { Neo4jClient } from '../database/neo4j-client.js';
+import type { Neo4jClient } from '../database/neo4j-client.js';
 
 const POSTGRES_CKG_TABLES = [
   'aggregation_evidence',
