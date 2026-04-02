@@ -1,6 +1,6 @@
 {
   "name": "@noema/events",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Event definitions and schemas for Noema event-driven architecture",
   "type": "module",
   "main": "./dist/index.js",
