@@ -43,6 +43,7 @@ import type {
 import type { IMetricsHistoryOptions } from './metrics.repository.js';
 import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
 import type { IPkgOperationLogEntry } from './pkg-operation-log.repository.js';
+import type { GraphRestorationScope } from './graph-restoration.repository.js';
 import type { IGraphComparison } from './value-objects/comparison.js';
 import type { IComparisonRequest } from './value-objects/comparison.js';
 import type {
@@ -70,6 +71,53 @@ import { type PkgOperationType } from './value-objects/operation-log.js';
 
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 export type { IExecutionContext, IServiceResult } from './execution-context.js';
+
+export type IGraphRestoreScopeInput =
+  | {
+      readonly graphType: 'pkg';
+      readonly userId: UserId;
+      readonly domain?: string;
+      readonly reason?: string;
+    }
+  | {
+      readonly graphType: 'ckg';
+      readonly domain?: string;
+      readonly reason?: string;
+    };
+
+export interface IGraphSnapshotSummary {
+  readonly snapshotId: string;
+  readonly graphType: 'pkg' | 'ckg';
+  readonly scope: GraphRestorationScope;
+  readonly nodeCount: number;
+  readonly edgeCount: number;
+  readonly schemaVersion: number;
+  readonly reason: string | null;
+  readonly createdAt: string;
+  readonly createdBy: string | null;
+  readonly sourceCursor: string | null;
+}
+
+export interface IGraphRestoreSummary {
+  readonly scope: GraphRestorationScope;
+  readonly currentNodeCount: number;
+  readonly currentEdgeCount: number;
+  readonly snapshotNodeCount: number;
+  readonly snapshotEdgeCount: number;
+  readonly nodesToCreate: number;
+  readonly nodesToUpdate: number;
+  readonly nodesToDelete: number;
+  readonly edgesToCreate: number;
+  readonly edgesToUpdate: number;
+  readonly edgesToDelete: number;
+}
+
+export interface IGraphRestorePreview {
+  readonly snapshot: IGraphSnapshotSummary;
+  readonly summary: IGraphRestoreSummary;
+  readonly requiresDestructiveChanges: boolean;
+  readonly reasoning: string;
+}
 
 // ============================================================================
 // IKnowledgeGraphService
@@ -762,6 +810,35 @@ export interface IKnowledgeGraphService {
     mutationId: MutationId,
     context: IExecutionContext
   ): Promise<IServiceResult<IMutationRecoveryCheckResult>>;
+
+  // ========================================================================
+  // Graph Snapshots & Restore (Phase G)
+  // ========================================================================
+
+  createGraphSnapshot(
+    input: IGraphRestoreScopeInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphSnapshotSummary>>;
+
+  listGraphSnapshots(
+    filters: {
+      graphType?: 'pkg' | 'ckg';
+      userId?: UserId;
+      domain?: string;
+    },
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphSnapshotSummary>>>;
+
+  previewGraphRestore(
+    snapshotId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphRestorePreview>>;
+
+  executeGraphRestore(
+    snapshotId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphRestorePreview>>;
 
   // ========================================================================
   // PKG Operation Log

@@ -31,6 +31,7 @@ import {
   registerCkgNodeRoutes,
   registerCkgTraversalRoutes,
   registerComparisonRoutes,
+  registerGraphSnapshotRoutes,
   registerMetricsRoutes,
   registerMisconceptionRoutes,
   registerOntologyImportRoutes,
@@ -78,6 +79,7 @@ import { Neo4jGraphRepository } from './infrastructure/database/neo4j-graph.repo
 import { initializeNeo4jSchema } from './infrastructure/database/neo4j-schema.js';
 import {
   PrismaAggregationEvidenceRepository,
+  PrismaGraphSnapshotRepository,
   PrismaMetricsRepository,
   PrismaMetricsStalenessRepository,
   PrismaMisconceptionRepository,
@@ -278,6 +280,7 @@ async function bootstrap(): Promise<void> {
         { name: 'Misconceptions', description: 'Misconception detection and lifecycle' },
         { name: 'Structural Health', description: 'Structural health and metacognitive stage' },
         { name: 'PKG Operations', description: 'PKG operation log (audit trail)' },
+        { name: 'Graph Snapshots', description: 'Admin graph snapshot and restore workflows' },
         { name: 'Comparison', description: 'PKG↔CKG comparison endpoints' },
         {
           name: 'Ontology Imports',
@@ -341,6 +344,7 @@ async function bootstrap(): Promise<void> {
   const mutationRepository = new PrismaMutationRepository(prisma);
   const misconceptionRepository = new PrismaMisconceptionRepository(prisma);
   const operationLogRepository = new PrismaOperationLogRepository(prisma);
+  const graphSnapshotRepository = new PrismaGraphSnapshotRepository(prisma);
   const metricsStalenessRepository = new PrismaMetricsStalenessRepository(prisma);
   const aggregationEvidenceRepository = new PrismaAggregationEvidenceRepository(prisma);
   const ontologySourceRepository = new PrismaOntologySourceRepository(prisma);
@@ -410,11 +414,14 @@ async function bootstrap(): Promise<void> {
   // 6. Knowledge Graph Service (domain service)
   const service = new KnowledgeGraphService(
     graphRepository,
+    neo4jGraphRepository,
     operationLogRepository,
+    graphSnapshotRepository,
     metricsStalenessRepository,
     metricsRepository,
     misconceptionRepository,
     eventPublisher,
+    mutationRepository,
     mutationPipeline,
     new AgentHintsFactory(),
     logger
@@ -523,6 +530,9 @@ async function bootstrap(): Promise<void> {
 
   // PKG operation log (user-scoped)
   registerPkgOperationLogRoutes(app, service, authMiddleware, routeOptions);
+
+  // Admin graph snapshots / restore
+  registerGraphSnapshotRoutes(app, service, authMiddleware, routeOptions);
 
   // User-scoped analytics routes
   registerMetricsRoutes(app, service, authMiddleware, routeOptions);

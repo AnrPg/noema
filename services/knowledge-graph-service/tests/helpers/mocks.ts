@@ -110,6 +110,10 @@ export function mockKnowledgeGraphService(): {
     reconcileMutationCommit: vi.fn().mockImplementation(notConfigured),
     checkMutationSafeRetry: vi.fn().mockImplementation(notConfigured),
     checkMutationReconcileCommit: vi.fn().mockImplementation(notConfigured),
+    createGraphSnapshot: vi.fn().mockImplementation(notConfigured),
+    listGraphSnapshots: vi.fn().mockImplementation(notConfigured),
+    previewGraphRestore: vi.fn().mockImplementation(notConfigured),
+    executeGraphRestore: vi.fn().mockImplementation(notConfigured),
 
     // Operation Log
     getOperationLog: vi.fn().mockImplementation(notConfigured),
@@ -227,6 +231,7 @@ export function mockOperationLogRepository(): {
     getOperationsByType: vi.fn().mockImplementation(notConfigured),
     getOperationsForNode: vi.fn().mockImplementation(notConfigured),
     getOperationsForEdge: vi.fn().mockImplementation(notConfigured),
+    countOperations: vi.fn().mockImplementation(notConfigured),
   };
 }
 

@@ -23,6 +23,7 @@ import {
   CyclicEdgeError,
   DuplicateNodeError,
   EdgeNotFoundError,
+  GraphSnapshotNotFoundError,
   GraphConsistencyError,
   InvalidEdgeTypeError,
   MaxDepthExceededError,
@@ -89,6 +90,10 @@ export const EdgeIdParamSchema = z.object({
 
 export const MutationIdParamSchema = z.object({
   mutationId: z.string().min(1, 'mutationId is required'),
+});
+
+export const SnapshotIdParamSchema = z.object({
+  snapshotId: z.string().min(1, 'snapshotId is required'),
 });
 
 export const UserNodeParamSchema = UserIdParamSchema.merge(NodeIdParamSchema);
@@ -300,6 +305,17 @@ export function handleError(
         code: error.code,
         message: error.message,
         details: { edgeId: error.edgeId },
+      },
+      metadata,
+    });
+    return;
+  }
+  if (error instanceof GraphSnapshotNotFoundError) {
+    reply.status(404).send({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: { snapshotId: error.snapshotId },
       },
       metadata,
     });

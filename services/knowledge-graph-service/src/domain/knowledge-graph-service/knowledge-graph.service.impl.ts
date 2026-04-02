@@ -64,6 +64,7 @@ import { MutationFilterSchema, MutationProposalSchema } from './ckg-mutation-dsl
 import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import { GraphReadService } from './graph-read.service.js';
+import { GraphRestorationService } from './graph-restoration.service.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -72,7 +73,12 @@ import type {
   IUpdateEdgeInput,
   IUpdateNodeInput,
 } from './graph.repository.js';
+import type { IGraphRestorationRepository } from './graph-restoration.repository.js';
+import type { IGraphSnapshotRepository } from './graph-snapshot.repository.js';
 import type {
+  IGraphRestorePreview,
+  IGraphRestoreScopeInput,
+  IGraphSnapshotSummary,
   IKnowledgeGraphService,
   IMutationRecoveryCheckResult,
   IOperationLogFilter,
@@ -82,7 +88,11 @@ import { MetricsOrchestrator } from './metrics-orchestrator.service.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
 import type { IMetricsHistoryOptions, IMetricsRepository } from './metrics.repository.js';
 import type { IMisconceptionRepository } from './misconception.repository.js';
-import type { ICkgMutation, IMutationAuditEntry } from './mutation.repository.js';
+import type {
+  ICkgMutation,
+  IMutationAuditEntry,
+  IMutationRepository,
+} from './mutation.repository.js';
 import type {
   IPkgOperationLogEntry,
   IPkgOperationLogRepository,
@@ -459,14 +469,18 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   private readonly pkgWrite: PkgWriteService;
   private readonly graphRead: GraphReadService;
   private readonly metricsOrch: MetricsOrchestrator;
+  private readonly graphRestore: GraphRestorationService;
 
   constructor(
     private readonly graphRepository: IGraphRepository,
+    graphRestorationRepository: IGraphRestorationRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
+    graphSnapshotRepository: IGraphSnapshotRepository,
     metricsStalenessRepository: IMetricsStalenessRepository,
     metricsRepository: IMetricsRepository,
     misconceptionRepository: IMisconceptionRepository,
     eventPublisher: IEventPublisher,
+    mutationRepository: IMutationRepository,
     private readonly mutationPipeline: CkgMutationPipeline,
     private readonly hintsFactory: AgentHintsFactory,
     logger: Logger
@@ -489,6 +503,14 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       metricsStalenessRepository,
       misconceptionRepository,
       eventPublisher,
+      hintsFactory,
+      this.logger
+    );
+    this.graphRestore = new GraphRestorationService(
+      graphSnapshotRepository,
+      graphRestorationRepository,
+      mutationRepository,
+      operationLogRepository,
       hintsFactory,
       this.logger
     );
@@ -1356,6 +1378,43 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
         .withReasoning(result.summary)
         .build(),
     };
+  }
+
+  async createGraphSnapshot(
+    input: IGraphRestoreScopeInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphSnapshotSummary>> {
+    requireAuth(context);
+    return this.graphRestore.createSnapshot(input, context.userId);
+  }
+
+  async listGraphSnapshots(
+    filters: {
+      graphType?: 'pkg' | 'ckg';
+      userId?: UserId;
+      domain?: string;
+    },
+    pagination: { limit: number; offset: number },
+    context: IExecutionContext
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphSnapshotSummary>>> {
+    requireAuth(context);
+    return this.graphRestore.listSnapshots(filters, pagination);
+  }
+
+  async previewGraphRestore(
+    snapshotId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphRestorePreview>> {
+    requireAuth(context);
+    return this.graphRestore.previewRestore(snapshotId);
+  }
+
+  async executeGraphRestore(
+    snapshotId: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGraphRestorePreview>> {
+    requireAuth(context);
+    return this.graphRestore.executeRestore(snapshotId);
   }
 
   // ========================================================================
