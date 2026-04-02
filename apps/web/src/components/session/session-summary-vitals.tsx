@@ -19,8 +19,9 @@ interface ISessionSummaryVitalsProps {
     startedAt: string;
     completedAt: string | null;
     mode: string;
+    uniqueCardsReviewed?: number;
   };
-  attempts: { grade: number }[];
+  attempts: { grade: number; cardId?: string }[];
 }
 
 // ============================================================================
@@ -52,6 +53,13 @@ export function SessionSummaryVitals({
   attempts,
 }: ISessionSummaryVitalsProps): React.JSX.Element {
   const total = attempts.length;
+  const uniqueCardCount =
+    session.uniqueCardsReviewed ??
+    new Set(
+      attempts
+        .map((attempt) => attempt.cardId)
+        .filter((cardId): cardId is string => typeof cardId === 'string' && cardId !== '')
+    ).size;
   const passing = attempts.filter((a) => a.grade >= PASSING_GRADE).length;
   const accuracy = total > 0 ? Math.round((passing / total) * 100) : 0;
 
@@ -66,7 +74,11 @@ export function SessionSummaryVitals({
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {/* Total cards */}
-      <MetricTile label="Cards Attempted" value={total} colorFamily="synapse" />
+      <MetricTile
+        label="Cards Attempted"
+        value={uniqueCardCount > 0 ? uniqueCardCount : total}
+        colorFamily="synapse"
+      />
 
       {/* Accuracy */}
       <MetricTile

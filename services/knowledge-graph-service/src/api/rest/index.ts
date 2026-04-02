@@ -16,6 +16,7 @@ export { registerPkgTraversalRoutes } from './pkg-traversal.routes.js';
 
 // CKG operations
 export { registerCkgEdgeRoutes } from './ckg-edge.routes.js';
+export { registerCkgMaintenanceRoutes } from './ckg-maintenance.routes.js';
 export { registerCkgMutationRoutes } from './ckg-mutation.routes.js';
 export { registerCkgNodeRoutes } from './ckg-node.routes.js';
 export { registerCkgTraversalRoutes } from './ckg-traversal.routes.js';

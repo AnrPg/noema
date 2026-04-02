@@ -27,6 +27,22 @@ export type SessionState = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ABANDONED' | 'EX
 
 export type SessionMode = 'standard' | 'cram' | 'preview' | 'test';
 export type LearningMode = 'exploration' | 'goal_driven' | 'exam_oriented' | 'synthesis';
+export type SessionRevealMode = 'all_at_once' | 'one_then_more';
+
+export interface ISessionPresentationConfig {
+  promptSide?: string;
+  answerSide?: string;
+  revealMode?: SessionRevealMode;
+}
+
+export interface ISessionConfigDto {
+  maxCards?: number;
+  maxDurationMinutes?: number;
+  sessionTimeoutHours: number;
+  categoryIds?: string[];
+  cardTypes?: string[];
+  presentation?: ISessionPresentationConfig;
+}
 
 // ============================================================================
 // Session DTO
@@ -41,6 +57,7 @@ export interface ISessionDto {
   studyMode: StudyMode;
   teachingApproach: TeachingApproach;
   schedulingAlgorithm: SchedulingAlgorithm;
+  config: ISessionConfigDto;
   cardIds: CardId[];
   currentCardIndex: number;
   stats: {
@@ -154,6 +171,7 @@ export interface IEvaluateCheckpointInput {
 
 export interface ISessionQueueItem {
   cardId: CardId;
+  lane: 'retention' | 'calibration';
   position: number;
   injected: boolean;
 }
@@ -265,8 +283,10 @@ export interface IStartSessionInput {
     sessionTimeoutHours?: number;
     categoryIds?: string[];
     cardTypes?: string[];
+    presentation?: ISessionPresentationConfig;
   };
   initialCardIds?: CardId[];
+  initialCardLanes?: Record<string, 'retention' | 'calibration'>;
   blueprint?: unknown;
   offlineIntentToken?: string;
 }

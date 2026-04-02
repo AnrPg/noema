@@ -21,20 +21,6 @@ import type { OverlayType, LayoutMode } from './types.js';
 import { drawNode, nodeRadius } from './graph-node.js';
 import { drawEdge } from './graph-edge.js';
 
-// SSR-safe import — ForceGraph2D uses browser canvas APIs.
-// react-force-graph's package entrypoint also wires VR helpers that expect a
-// global AFRAME object, so preload aframe in the client before importing it.
-const ForceGraph2D = dynamic(
-  async () => {
-    await import('aframe');
-    const forceGraphModule = await import('react-force-graph');
-    return forceGraphModule.ForceGraph2D;
-  },
-  {
-    ssr: false,
-  }
-);
-
 // ============================================================================
 // Types
 // ============================================================================
@@ -71,8 +57,7 @@ interface IForceGraphInstance {
   d3ReheatSimulation: () => void;
 }
 
-interface IForceGraph2DProps {
-  ref?: React.Ref<IForceGraphInstance>;
+interface IForceGraph2DInnerProps {
   width: number;
   height: number;
   graphData: {
@@ -105,6 +90,38 @@ interface IForceGraph2DProps {
   enableNodeDrag: boolean;
   onEngineStop?: () => void;
 }
+
+interface IForceGraph2DProps extends IForceGraph2DInnerProps {
+  graphRef?: React.MutableRefObject<IForceGraphInstance | null> | null;
+}
+
+// SSR-safe import — ForceGraph2D uses browser canvas APIs.
+// react-force-graph's package entrypoint also wires VR helpers that expect a
+// global AFRAME object, so preload aframe in the client before importing it.
+const ForceGraph2D = dynamic<IForceGraph2DProps>(
+  async () => {
+    await import('aframe');
+    const forceGraphModule = await import('react-force-graph');
+    const ForceGraph2DRaw = forceGraphModule.ForceGraph2D as unknown as React.ElementType;
+
+    function ForceGraph2DWrapper({
+      graphRef,
+      ...props
+    }: IForceGraph2DProps): React.JSX.Element {
+      const forceGraphProps =
+        graphRef === undefined || graphRef === null ? props : { ...props, ref: graphRef };
+
+      return React.createElement(ForceGraph2DRaw, forceGraphProps);
+    }
+
+    ForceGraph2DWrapper.displayName = 'ForceGraph2DWrapper';
+
+    return ForceGraph2DWrapper;
+  },
+  {
+    ssr: false,
+  }
+);
 
 const ForceGraph2DComponent = ForceGraph2D as unknown as React.ComponentType<IForceGraph2DProps>;
 
@@ -178,7 +195,7 @@ export function GraphCanvas({
   const graphRef = React.useRef<IForceGraphInstance | null>(null);
   const [dimensions, setDimensions] = React.useState({ width: 800, height: 600 });
   const basePositionMapRef = React.useRef<Map<string, { x: number; y: number }>>(new Map());
-  const interactionFocusId = selectedNodeId ?? hoveredNodeId ?? null;
+  const interactionFocusId = selectedNodeId ?? null;
 
   React.useEffect(() => {
     const el = containerRef.current;
@@ -583,7 +600,7 @@ export function GraphCanvas({
   return (
     <div ref={containerRef} className={className ?? 'h-full w-full'}>
       {React.createElement(ForceGraph2DComponent, {
-        ref: graphRef,
+        graphRef: graphRef,
         width: dimensions.width,
         height: dimensions.height,
         graphData,

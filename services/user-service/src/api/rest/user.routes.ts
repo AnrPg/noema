@@ -31,6 +31,7 @@ import type {
   ILoginInput,
   IUpdateProfileInput,
   IUpdateSettingsInput,
+  IUser,
   IUserFilters,
 } from '../../types/user.types.js';
 import { type UserRole } from '../../types/user.types.js';
@@ -67,7 +68,7 @@ interface IUpdateBody<T> {
 interface IListUsersQuery extends Omit<IUserFilters, 'roles'> {
   offset?: number;
   limit?: number;
-  roles?: UserRole[] | UserRole | string[] | string;
+  roles?: UserRole[] | string[] | string;
 }
 
 // ============================================================================
@@ -131,6 +132,82 @@ export function registerUserRoutes(
         executionTime: 0, // Set by hook
       },
     };
+  }
+
+  function mapUserSettingsResponse(user: IUser): {
+    userId: UserId;
+    version: number;
+    theme: 'light' | 'dark' | 'system';
+    emailNotifications: boolean;
+    pushNotifications: boolean;
+    dailyGoal: number;
+    studyReminders: boolean;
+    reminderTime: string | null;
+    soundEnabled: boolean;
+    hapticEnabled: boolean;
+    activeStudyMode?: string;
+    pomodoro: IUser['settings']['pomodoro'];
+  } {
+    return {
+      userId: user.id,
+      theme: user.settings.theme,
+      emailNotifications: user.settings.emailAchievements && user.settings.emailStreakReminders,
+      pushNotifications: user.settings.pushNotificationsEnabled,
+      dailyGoal: user.settings.defaultNewCardsPerDay,
+      studyReminders: user.settings.dailyReminderEnabled,
+      reminderTime: user.settings.dailyReminderTime,
+      soundEnabled: user.settings.soundEnabled,
+      hapticEnabled: user.settings.hapticEnabled,
+      activeStudyMode: user.settings.activeStudyMode,
+      pomodoro: user.settings.pomodoro,
+      version: user.version,
+    };
+  }
+
+  function mapUpdateSettingsInput(input: IUpdateSettingsInput): IUpdateSettingsInput {
+    const rawInput = input as IUpdateSettingsInput & {
+      emailNotifications?: boolean;
+      pushNotifications?: boolean;
+      dailyGoal?: number;
+      studyReminders?: boolean;
+      reminderTime?: string | null;
+    };
+    const mappedInput: IUpdateSettingsInput = {};
+
+    if (rawInput.theme !== undefined) {
+      mappedInput.theme = rawInput.theme;
+    }
+    if (rawInput.soundEnabled !== undefined) {
+      mappedInput.soundEnabled = rawInput.soundEnabled;
+    }
+    if (rawInput.hapticEnabled !== undefined) {
+      mappedInput.hapticEnabled = rawInput.hapticEnabled;
+    }
+    if (rawInput.activeStudyMode !== undefined) {
+      mappedInput.activeStudyMode = rawInput.activeStudyMode;
+    }
+    if (rawInput.pomodoro !== undefined) {
+      mappedInput.pomodoro = rawInput.pomodoro;
+    }
+    if (rawInput.emailNotifications !== undefined) {
+      mappedInput.emailAchievements = rawInput.emailNotifications;
+      mappedInput.emailStreakReminders = rawInput.emailNotifications;
+    }
+    if (rawInput.pushNotifications !== undefined) {
+      mappedInput.pushNotificationsEnabled = rawInput.pushNotifications;
+    }
+    if (rawInput.dailyGoal !== undefined) {
+      mappedInput.defaultNewCardsPerDay = rawInput.dailyGoal;
+      mappedInput.defaultReviewCardsPerDay = rawInput.dailyGoal;
+    }
+    if (rawInput.studyReminders !== undefined) {
+      mappedInput.dailyReminderEnabled = rawInput.studyReminders;
+    }
+    if (rawInput.reminderTime !== undefined) {
+      mappedInput.dailyReminderTime = rawInput.reminderTime;
+    }
+
+    return mappedInput;
   }
 
   /**
@@ -209,11 +286,12 @@ export function registerUserRoutes(
         },
       });
     } else if (error instanceof BusinessRuleError) {
-      const status = error instanceof UsernameChangeTooSoonError
-        ? 429
-        : error instanceof TooManyLoginAttemptsError
+      const status =
+        error instanceof UsernameChangeTooSoonError
           ? 429
-          : 422;
+          : error instanceof TooManyLoginAttemptsError
+            ? 429
+            : 422;
       reply.status(status).send({
         error: {
           code: (error as DomainError).code,
@@ -752,11 +830,11 @@ export function registerUserRoutes(
         const context = buildContext(request);
         const result = await userService.updateSettings(
           request.params.id as UserId,
-          request.body.data,
+          mapUpdateSettingsInput(request.body.data),
           request.body.version,
           context
         );
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+        reply.send(wrapResponse(mapUserSettingsResponse(result.data), result.agentHints, request));
       } catch (error) {
         handleError(error, reply);
       }
@@ -1034,7 +1112,7 @@ export function registerUserRoutes(
           return;
         }
         const result = await userService.findById(context.userId, context);
-        reply.send(wrapResponse(result.data.settings, result.agentHints, request));
+        reply.send(wrapResponse(mapUserSettingsResponse(result.data), result.agentHints, request));
       } catch (error) {
         handleError(error, reply);
       }
@@ -1067,11 +1145,11 @@ export function registerUserRoutes(
         }
         const result = await userService.updateSettings(
           context.userId,
-          request.body.data,
+          mapUpdateSettingsInput(request.body.data),
           request.body.version,
           context
         );
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+        reply.send(wrapResponse(mapUserSettingsResponse(result.data), result.agentHints, request));
       } catch (error) {
         handleError(error, reply);
       }

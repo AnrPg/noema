@@ -25,6 +25,7 @@ import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import {
   registerCkgEdgeRoutes,
+  registerCkgMaintenanceRoutes,
   registerCkgMutationRoutes,
   registerCkgNodeRoutes,
   registerCkgTraversalRoutes,
@@ -55,6 +56,7 @@ import {
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
 import { UserDeletedConsumer } from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
+import { CkgMaintenanceApplicationService } from './application/knowledge-graph/maintenance/index.js';
 import { CkgNodeBatchAuthoringService } from './application/knowledge-graph/node-authoring/index.js';
 import {
   NoopNormalizationPublisher,
@@ -91,6 +93,7 @@ import {
   YagoSourceNormalizer,
   YagoSourceParser,
 } from './infrastructure/ontology-imports/index.js';
+import { CkgResetService } from './infrastructure/maintenance/index.js';
 import { LocalRawArtifactStore } from './infrastructure/storage/index.js';
 
 import { SERVICE_VERSION } from './api/shared/route-helpers.js';
@@ -252,6 +255,10 @@ async function bootstrap(): Promise<void> {
         { name: 'CKG Nodes', description: 'Canonical Knowledge Graph node read operations' },
         { name: 'CKG Edges', description: 'Canonical Knowledge Graph edge read operations' },
         {
+          name: 'CKG Maintenance',
+          description: 'Admin-only destructive maintenance operations for the canonical graph',
+        },
+        {
           name: 'CKG Mutations',
           description: 'CKG mutation pipeline (propose, cancel, retry, health)',
         },
@@ -343,6 +350,15 @@ async function bootstrap(): Promise<void> {
     ontologyArtifactRootDirectory,
     ontologyImportArtifactRepository
   );
+  const ckgResetService = new CkgResetService(
+    prisma,
+    neo4jClient,
+    redis,
+    config.cache.prefix,
+    ontologyArtifactRootDirectory,
+    logger
+  );
+  const ckgMaintenanceService = new CkgMaintenanceApplicationService(ckgResetService);
 
   // 3. Event publisher (Redis Streams)
   const eventPublisher = new RedisEventPublisher(
@@ -479,6 +495,7 @@ async function bootstrap(): Promise<void> {
   registerCkgEdgeRoutes(app, service, ckgEdgeAuthoringService, authMiddleware, routeOptions);
   registerCkgTraversalRoutes(app, service, authMiddleware, routeOptions);
   registerCkgMutationRoutes(app, service, authMiddleware, routeOptions);
+  registerCkgMaintenanceRoutes(app, ckgMaintenanceService, authMiddleware, routeOptions);
 
   // PKG operation log (user-scoped)
   registerPkgOperationLogRoutes(app, service, authMiddleware, routeOptions);
@@ -498,7 +515,9 @@ async function bootstrap(): Promise<void> {
     { toolCount: toolRegistry.size },
     'MCP tool registry initialized and tool routes registered (Phase 9)'
   );
-  logger.info('All API routes registered (Phase 8 Wave 1 + Wave 2 + Phase 9 MCP tools)');
+  logger.info(
+    'All API routes registered (Phase 8 Wave 1 + Wave 2 + admin maintenance + Phase 9 MCP tools)'
+  );
 
   // ==========================================================================
   // Event Consumers

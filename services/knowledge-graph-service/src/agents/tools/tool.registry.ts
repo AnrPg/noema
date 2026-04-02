@@ -420,6 +420,7 @@ const EXPECTED_KG_TOOL_NAMES = [
   'add-concept-node',
   'add-edge',
   'update-mastery',
+  'get-node-mastery-summary',
   'remove-node',
   'remove-edge',
   // Task 2: CKG tools

@@ -17,6 +17,7 @@ import {
 } from '@tanstack/react-query';
 import type { EdgeId, MutationId, NodeId, StudyMode, UserId } from '@noema/types';
 import {
+  ckgMaintenanceApi,
   ckgEdgesApi,
   ckgMutationsApi,
   ckgNodesApi,
@@ -40,6 +41,7 @@ import type {
   ICkgMutationDto,
   ICkgMutationFilters,
   ICkgMutationProposalInput,
+  ICkgResetInput,
   ICommonAncestorsInput,
   IComparisonQueryParams,
   ICreateOntologyImportRunInput,
@@ -73,6 +75,7 @@ import type {
   CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
+  CkgResetResponse,
   ComparisonResponse,
   EdgeResponse,
   EdgesListResponse,
@@ -836,9 +839,21 @@ function matchesMutationFilters(mutation: ICkgMutationDto, filters?: ICkgMutatio
 function normalizeMutationAuditLogResponse(
   response: CkgMutationAuditLogResponse
 ): CkgMutationAuditLogResponse {
-  const data = response.data as unknown as Record<string, unknown>;
-  const entries = Array.isArray(data['entries']) ? data['entries'] : [];
-  const mutationId = stringValue(data['mutationId']) as MutationId;
+  const rawData = response.data as unknown;
+  const data =
+    typeof rawData === 'object' && rawData !== null && !Array.isArray(rawData)
+      ? (rawData as Record<string, unknown>)
+      : {};
+  const entries = Array.isArray(rawData)
+    ? rawData
+    : Array.isArray(data['entries'])
+      ? data['entries']
+      : [];
+  const firstEntry = entries[0] as Record<string, unknown> | undefined;
+  const mutationId = stringValue(
+    data['mutationId'],
+    stringValue(firstEntry?.['mutationId'])
+  ) as MutationId;
 
   return {
     ...response,
@@ -918,6 +933,15 @@ export const kgKeys = {
   comparison: (userId: UserId, params?: IComparisonQueryParams) =>
     [...kgKeys.all, 'comparison', userId, params] as const,
 };
+
+async function invalidateCkgGraphQueries(
+  queryClient: ReturnType<typeof useQueryClient>
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: kgKeys.ckgNodes() }),
+    queryClient.invalidateQueries({ queryKey: kgKeys.ckgEdges() }),
+  ]);
+}
 
 // ============================================================================
 // PKG Node Hooks
@@ -1449,9 +1473,12 @@ export function useApproveMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, note }) => ckgMutationsApi.approve(id, note),
-    onSuccess: (response, { id }) => {
+    onSuccess: async (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        invalidateCkgGraphQueries(queryClient),
+      ]);
     },
     ...options,
   });
@@ -1477,9 +1504,12 @@ export function useReconcileMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, note }) => ckgMutationsApi.reconcile(id, note),
-    onSuccess: (response, { id }) => {
+    onSuccess: async (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        invalidateCkgGraphQueries(queryClient),
+      ]);
     },
     ...options,
   });
@@ -1491,9 +1521,12 @@ export function useRecoverRejectMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, note }) => ckgMutationsApi.recoverReject(id, note),
-    onSuccess: (response, { id }) => {
+    onSuccess: async (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        invalidateCkgGraphQueries(queryClient),
+      ]);
     },
     ...options,
   });
@@ -1530,7 +1563,10 @@ export function useBulkReviewMutations(
           await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(mutationId) });
         })
       );
-      await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        invalidateCkgGraphQueries(queryClient),
+      ]);
       if (input.importRunId !== undefined) {
         await queryClient.invalidateQueries({
           queryKey: kgKeys.ckgMutations({ importRunId: input.importRunId }),
@@ -1538,6 +1574,21 @@ export function useBulkReviewMutations(
       }
     },
     ...options,
+  });
+}
+
+export function useResetCKG(
+  options?: UseMutationOptions<CkgResetResponse, Error, ICkgResetInput>
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...mutationOptions } = options ?? {};
+  return useMutation({
+    mutationFn: (input) => ckgMaintenanceApi.reset(input),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ckg() });
+      await onSuccess?.(...args);
+    },
+    ...mutationOptions,
   });
 }
 
@@ -1591,14 +1642,17 @@ export function useRetryMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id) => normalizeMutationResponse(await ckgMutationsApi.retry(id)),
-    onSuccess: (response, id) => {
+    onSuccess: async (response, id) => {
       queryClient.setQueryData(kgKeys.ckgMutation(response.data.id), response);
       queryClient.setQueriesData<CkgMutationsResponse>(
         { queryKey: kgKeys.ckgMutations() },
         (cached) => upsertMutationInMutationsResponse(cached, response.data, id)
       );
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        invalidateCkgGraphQueries(queryClient),
+      ]);
     },
     ...options,
   });

@@ -148,6 +148,8 @@ model SessionQueueItem {
     sessionId String @map("session_id") @db.VarChar(50)
     cardId    String @map("card_id") @db.VarChar(50)
 
+    lane SessionSchedulerLane @default(RETENTION)
+
     // Ordering
     position Int
 
@@ -315,6 +317,13 @@ enum CardQueueStatus {
     INJECTED
 
     @@map("card_queue_status")
+}
+
+enum SessionSchedulerLane {
+    RETENTION
+    CALIBRATION
+
+    @@map("session_scheduler_lane")
 }
 
 enum SessionCohortHandshakeStatus {

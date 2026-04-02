@@ -144,7 +144,7 @@ export function SessionBar({
 
   return (
     <div
-      className="sticky top-0 z-40 flex h-12 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+      className="sticky top-0 z-40 flex flex-wrap items-center gap-2 border-b border-border bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:flex-nowrap sm:justify-between sm:gap-3 sm:px-4"
       role="toolbar"
       aria-label="Session controls"
     >
@@ -154,7 +154,7 @@ export function SessionBar({
       </div>
 
       {/* ── Center: pulse + timer + optional lane chip ─────────────────── */}
-      <div className="flex items-center gap-2">
+      <div className="order-3 flex w-full min-w-0 items-center justify-center gap-2 sm:order-2 sm:w-auto sm:flex-1 sm:flex-none">
         <PulseIndicator status={isPaused ? 'idle' : 'active'} size="xs" />
         <span
           className="font-mono text-sm tabular-nums text-foreground"
@@ -173,13 +173,13 @@ export function SessionBar({
       </div>
 
       {/* ── Right: pause/resume + stop control ───────────────────────── */}
-      <div className="flex items-center gap-2">
+      <div className="order-2 ml-auto flex items-center justify-end gap-2 sm:order-3 sm:w-auto">
         <Button
           variant="ghost"
           size="icon"
           aria-label={isPaused ? 'Resume session' : 'Pause session'}
           onClick={isPaused ? onResume : onPause}
-          className="h-8 w-8"
+          className="h-8 w-8 shrink-0"
         >
           {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
         </Button>
@@ -188,11 +188,12 @@ export function SessionBar({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-2 text-destructive border-destructive/40 hover:border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="gap-2 border-destructive/40 px-3 text-destructive hover:border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-4"
           onClick={onAbandon}
         >
           <LogOut className="h-4 w-4" />
-          Stop session
+          <span className="sm:hidden">Stop</span>
+          <span className="hidden sm:inline">Stop session</span>
         </Button>
       </div>
     </div>

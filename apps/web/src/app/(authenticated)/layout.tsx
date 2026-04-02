@@ -51,6 +51,7 @@ import type { Route } from 'next';
 import { usePathname, useRouter } from 'next/navigation';
 import { CommandPalette } from '@/components/command-palette';
 import { CopilotSidebar, CopilotToggle } from '@/components/copilot';
+import { PomodoroNav } from '@/components/pomodoro/pomodoro-nav';
 import { SessionExpiryModal } from '@/components/session-expiry-modal';
 import { ShortcutReferencePanel } from '@/components/shortcut-reference-panel';
 import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
@@ -92,9 +93,11 @@ const navItems = [
   },
 ];
 
-function UserMenu(): JSX.Element {
+function UserMenu(props: { compact?: boolean; fullWidth?: boolean }): JSX.Element {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const compact = props.compact ?? false;
+  const fullWidth = props.fullWidth ?? false;
 
   const handleLogout = async (): Promise<void> => {
     await logout();
@@ -107,12 +110,29 @@ function UserMenu(): JSX.Element {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          className={[
+            'flex items-center gap-2',
+            compact ? 'px-2 sm:px-3' : 'px-3',
+            fullWidth ? 'w-full justify-between' : '',
+          ].join(' ')}
+        >
           <Avatar className="h-8 w-8">
             <AvatarImage src={user?.avatarUrl ?? undefined} />
             <AvatarFallback>{initials}</AvatarFallback>
           </Avatar>
-          <span className="hidden md:inline-block">{displayName}</span>
+          <span
+            className={
+              fullWidth
+                ? 'min-w-0 flex-1 truncate text-left'
+                : compact
+                  ? 'hidden lg:inline-block'
+                  : 'hidden md:inline-block'
+            }
+          >
+            {displayName}
+          </span>
           <ChevronDown className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
@@ -154,9 +174,66 @@ function UserMenu(): JSX.Element {
   );
 }
 
+function StudyModeToggle(props: {
+  activeStudyMode: AppStudyMode;
+  isUpdatingStudyMode: boolean;
+  isCompact?: boolean;
+  fullWidth?: boolean;
+  onChange: (studyMode: AppStudyMode) => void;
+}): JSX.Element {
+  const isCompact = props.isCompact === true;
+  const fullWidth = props.fullWidth === true;
+
+  return (
+    <div
+      className={[
+        'flex items-center gap-1 rounded-full border border-border/70 bg-background/80 p-1',
+        fullWidth ? 'w-full' : isCompact ? 'shrink-0' : 'hidden md:flex',
+      ].join(' ')}
+      aria-label="Study mode"
+      role="group"
+    >
+      <Button
+        variant={props.activeStudyMode === 'knowledge_gaining' ? 'default' : 'ghost'}
+        size="sm"
+        disabled={props.isUpdatingStudyMode}
+        className={[
+          fullWidth ? 'flex-1 justify-center' : '',
+          isCompact ? 'h-9 min-w-0 gap-1.5 px-2.5 sm:px-3' : '',
+        ].join(' ')}
+        onClick={() => {
+          props.onChange('knowledge_gaining');
+        }}
+      >
+        <Brain className={isCompact ? 'h-3.5 w-3.5 sm:h-4 sm:w-4' : 'mr-1.5 h-3.5 w-3.5'} />
+        <span className={isCompact ? 'hidden sm:inline' : undefined}>Knowledge</span>
+      </Button>
+      <Button
+        variant={props.activeStudyMode === 'language_learning' ? 'default' : 'ghost'}
+        size="sm"
+        disabled={props.isUpdatingStudyMode}
+        className={[
+          fullWidth ? 'flex-1 justify-center' : '',
+          isCompact ? 'h-9 min-w-0 gap-1.5 px-2.5 sm:px-3' : '',
+        ].join(' ')}
+        onClick={() => {
+          props.onChange('language_learning');
+        }}
+      >
+        <Languages className={isCompact ? 'h-3.5 w-3.5 sm:h-4 sm:w-4' : 'mr-1.5 h-3.5 w-3.5'} />
+        <span className={isCompact ? 'hidden sm:inline' : undefined}>Language</span>
+      </Button>
+    </div>
+  );
+}
+
 export default function AuthenticatedLayout({ children }: { children: ReactNode }): JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
+  const isActiveSessionRoute =
+    pathname.startsWith('/session/') &&
+    pathname !== '/session/new' &&
+    !pathname.endsWith('/summary');
   const authSettings = useAuthStore((state) => state.settings);
   const setAuthSettings = useAuthStore((state) => state.setSettings);
   const [activeStudyMode, setActiveStudyMode] = React.useState<AppStudyMode>(DEFAULT_STUDY_MODE);
@@ -226,6 +303,17 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
               </div>
             }
           >
+            <div className="mb-4 space-y-3 border-b border-border/70 pb-4 lg:hidden">
+              <UserMenu fullWidth />
+              <StudyModeToggle
+                activeStudyMode={activeStudyMode}
+                isUpdatingStudyMode={isUpdatingStudyMode}
+                fullWidth
+                onChange={(nextStudyMode) => {
+                  void handleStudyModeChange(nextStudyMode);
+                }}
+              />
+            </div>
             {navItems.map((group) => (
               <SidebarNavGroup key={group.title} title={group.title}>
                 <SidebarNav>
@@ -245,36 +333,52 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
           </DashboardSidebar>
 
           <DashboardMain>
-            <DashboardHeader>
-              <div className="ml-auto flex items-center gap-3">
-                <div className="hidden items-center gap-1 rounded-full border border-border/70 bg-background/80 p-1 md:flex">
-                  <Button
-                    variant={activeStudyMode === 'knowledge_gaining' ? 'default' : 'ghost'}
-                    size="sm"
-                    disabled={isUpdatingStudyMode}
-                    onClick={() => {
-                      void handleStudyModeChange('knowledge_gaining');
-                    }}
-                  >
-                    <Brain className="mr-1.5 h-3.5 w-3.5" />
-                    Knowledge
-                  </Button>
-                  <Button
-                    variant={activeStudyMode === 'language_learning' ? 'default' : 'ghost'}
-                    size="sm"
-                    disabled={isUpdatingStudyMode}
-                    onClick={() => {
-                      void handleStudyModeChange('language_learning');
-                    }}
-                  >
-                    <Languages className="mr-1.5 h-3.5 w-3.5" />
-                    Language
-                  </Button>
+            <DashboardHeader
+              {...(isActiveSessionRoute
+                ? {
+                    className: 'min-h-14 flex-nowrap items-center gap-2 py-2 sm:min-h-16 sm:gap-3',
+                  }
+                : {})}
+            >
+              <div
+                className={[
+                  isActiveSessionRoute ? 'min-w-0 flex-1' : 'w-full',
+                  isActiveSessionRoute
+                    ? 'flex items-center gap-2 sm:flex-nowrap sm:items-center sm:gap-3'
+                    : 'w-full min-w-0 justify-between flex-wrap gap-3 sm:flex-nowrap sm:gap-4',
+                ].join(' ')}
+              >
+                <div
+                  className={
+                    isActiveSessionRoute
+                      ? 'flex min-w-0 flex-1 items-center gap-2 sm:justify-start'
+                      : 'flex min-w-0 flex-1 items-center gap-2 sm:gap-3'
+                  }
+                >
+                  <PomodoroNav compact={isActiveSessionRoute} />
                 </div>
-                <UserMenu />
+
+                <div
+                  className={[
+                    'hidden shrink-0 items-center gap-2 lg:flex',
+                    isActiveSessionRoute
+                      ? 'w-full justify-between sm:ml-auto sm:w-auto sm:justify-end sm:gap-2'
+                      : 'ml-auto w-full justify-end sm:w-auto sm:gap-3',
+                  ].join(' ')}
+                >
+                  <StudyModeToggle
+                    activeStudyMode={activeStudyMode}
+                    isUpdatingStudyMode={isUpdatingStudyMode}
+                    isCompact={isActiveSessionRoute}
+                    onChange={(nextStudyMode) => {
+                      void handleStudyModeChange(nextStudyMode);
+                    }}
+                  />
+                  <UserMenu compact={isActiveSessionRoute} />
+                </div>
               </div>
             </DashboardHeader>
-            <div className="p-6">{children}</div>
+            <div className={isActiveSessionRoute ? 'p-0' : 'p-4 sm:p-6'}>{children}</div>
           </DashboardMain>
         </DashboardLayout>
         <CopilotSidebar />

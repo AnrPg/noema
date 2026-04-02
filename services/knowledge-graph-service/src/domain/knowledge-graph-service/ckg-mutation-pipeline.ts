@@ -83,6 +83,39 @@ function parseOperations(raw: unknown): CkgMutationOperation[] {
   return CkgMutationOperationsSchema.parse(raw) as CkgMutationOperation[];
 }
 
+function toSerializableValue(value: unknown): Metadata[string] {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((entry) => entry !== undefined)
+      .map((entry) => toSerializableValue(entry));
+  }
+
+  if (typeof value === 'object') {
+    return toSerializableMetadata(value as Record<string, unknown>);
+  }
+
+  return null;
+}
+
+function toSerializableMetadata(value: Record<string, unknown>): Metadata {
+  const metadata = {} as Metadata;
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined) {
+      metadata[key] = toSerializableValue(entry);
+    }
+  }
+  return metadata;
+}
+
 function isOntologyImportMutation(mutation: Pick<ICkgMutation, 'rationale'>): boolean {
   return mutation.rationale.includes('[ontology-import ');
 }
@@ -92,23 +125,144 @@ function isOntologyImportMutation(mutation: Pick<ICkgMutation, 'rationale'>): bo
  * Explicitly picks only the fields that are safe to serialize (C3/H5 fix).
  */
 function toSerializableOperations(operations: CkgMutationOperation[]): Metadata[] {
-  return operations.map((op) => {
-    const base: Record<string, unknown> = { type: op.type };
-    if ('nodeId' in op) base['nodeId'] = op.nodeId;
-    if ('edgeId' in op) base['edgeId'] = op.edgeId;
-    if ('label' in op) base['label'] = op.label;
-    if ('nodeType' in op) base['nodeType'] = op.nodeType;
-    if ('domain' in op) base['domain'] = op.domain;
-    if ('edgeType' in op) base['edgeType'] = op.edgeType;
-    if ('sourceNodeId' in op) base['sourceNodeId'] = op.sourceNodeId;
-    if ('targetNodeId' in op) base['targetNodeId'] = op.targetNodeId;
-    if ('weight' in op) base['weight'] = op.weight;
-    if ('properties' in op) base['properties'] = op.properties;
-    if ('description' in op) base['description'] = op.description;
-    if ('mergedNodeIds' in op) base['mergedNodeIds'] = op.mergedNodeIds;
-    if ('mergedLabel' in op) base['mergedLabel'] = op.mergedLabel;
-    if ('splitLabels' in op) base['splitLabels'] = op.splitLabels;
-    return base as Metadata;
+  return operations.map((operation) => {
+    switch (operation.type) {
+      case CkgOperationType.ADD_NODE:
+        return toSerializableMetadata({
+          type: operation.type,
+          nodeType: operation.nodeType,
+          label: operation.label,
+          description: operation.description,
+          domain: operation.domain,
+          ...(operation.status !== undefined ? { status: operation.status } : {}),
+          ...(operation.aliases !== undefined ? { aliases: operation.aliases } : {}),
+          ...(operation.languages !== undefined ? { languages: operation.languages } : {}),
+          ...(operation.tags !== undefined ? { tags: operation.tags } : {}),
+          ...(operation.semanticHints !== undefined
+            ? { semanticHints: operation.semanticHints }
+            : {}),
+          ...(operation.canonicalExternalRefs !== undefined
+            ? { canonicalExternalRefs: operation.canonicalExternalRefs }
+            : {}),
+          ...(operation.ontologyMappings !== undefined
+            ? { ontologyMappings: operation.ontologyMappings }
+            : {}),
+          ...(operation.provenance !== undefined ? { provenance: operation.provenance } : {}),
+          ...(operation.reviewMetadata !== undefined
+            ? { reviewMetadata: operation.reviewMetadata }
+            : {}),
+          ...(operation.sourceCoverage !== undefined
+            ? { sourceCoverage: operation.sourceCoverage }
+            : {}),
+          properties: operation.properties,
+        });
+
+      case CkgOperationType.REMOVE_NODE:
+        return toSerializableMetadata({
+          type: operation.type,
+          nodeId: operation.nodeId,
+          rationale: operation.rationale,
+        });
+
+      case CkgOperationType.UPDATE_NODE:
+        return toSerializableMetadata({
+          type: operation.type,
+          nodeId: operation.nodeId,
+          updates: {
+            ...(operation.updates.nodeType !== undefined
+              ? { nodeType: operation.updates.nodeType }
+              : {}),
+            ...(operation.updates.label !== undefined ? { label: operation.updates.label } : {}),
+            ...(operation.updates.description !== undefined
+              ? { description: operation.updates.description }
+              : {}),
+            ...(operation.updates.domain !== undefined
+              ? { domain: operation.updates.domain }
+              : {}),
+            ...(operation.updates.status !== undefined
+              ? { status: operation.updates.status }
+              : {}),
+            ...(operation.updates.aliases !== undefined
+              ? { aliases: operation.updates.aliases }
+              : {}),
+            ...(operation.updates.languages !== undefined
+              ? { languages: operation.updates.languages }
+              : {}),
+            ...(operation.updates.tags !== undefined ? { tags: operation.updates.tags } : {}),
+            ...(operation.updates.semanticHints !== undefined
+              ? { semanticHints: operation.updates.semanticHints }
+              : {}),
+            ...(operation.updates.canonicalExternalRefs !== undefined
+              ? { canonicalExternalRefs: operation.updates.canonicalExternalRefs }
+              : {}),
+            ...(operation.updates.ontologyMappings !== undefined
+              ? { ontologyMappings: operation.updates.ontologyMappings }
+              : {}),
+            ...(operation.updates.provenance !== undefined
+              ? { provenance: operation.updates.provenance }
+              : {}),
+            ...(operation.updates.reviewMetadata !== undefined
+              ? { reviewMetadata: operation.updates.reviewMetadata }
+              : {}),
+            ...(operation.updates.sourceCoverage !== undefined
+              ? { sourceCoverage: operation.updates.sourceCoverage }
+              : {}),
+            ...(operation.updates.properties !== undefined
+              ? { properties: operation.updates.properties }
+              : {}),
+          },
+          rationale: operation.rationale,
+        });
+
+      case CkgOperationType.ADD_EDGE:
+        return toSerializableMetadata({
+          type: operation.type,
+          edgeType: operation.edgeType,
+          sourceNodeId: operation.sourceNodeId,
+          targetNodeId: operation.targetNodeId,
+          weight: operation.weight,
+          rationale: operation.rationale,
+        });
+
+      case CkgOperationType.REMOVE_EDGE:
+        return toSerializableMetadata({
+          type: operation.type,
+          edgeId: operation.edgeId,
+          rationale: operation.rationale,
+        });
+
+      case CkgOperationType.MERGE_NODES:
+        return toSerializableMetadata({
+          type: operation.type,
+          sourceNodeId: operation.sourceNodeId,
+          targetNodeId: operation.targetNodeId,
+          mergedProperties: operation.mergedProperties,
+          rationale: operation.rationale,
+        });
+
+      case CkgOperationType.SPLIT_NODE:
+        return toSerializableMetadata({
+          type: operation.type,
+          nodeId: operation.nodeId,
+          newNodeA: {
+            label: operation.newNodeA.label,
+            description: operation.newNodeA.description,
+            nodeType: operation.newNodeA.nodeType,
+            properties: operation.newNodeA.properties,
+          },
+          newNodeB: {
+            label: operation.newNodeB.label,
+            description: operation.newNodeB.description,
+            nodeType: operation.newNodeB.nodeType,
+            properties: operation.newNodeB.properties,
+          },
+          edgeReassignmentRules: operation.edgeReassignmentRules.map((rule) => ({
+            edgeId: rule.edgeId,
+            assignTo: rule.assignTo,
+          })),
+          rationale: operation.rationale,
+        });
+    }
   });
 }
 

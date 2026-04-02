@@ -170,6 +170,29 @@ export function inferNodeType(labels: string[]): GraphNodeType {
   return (nodeTypeLabel?.toLowerCase() ?? 'concept') as GraphNodeType;
 }
 
+const VALID_NODE_TYPES = new Set<GraphNodeType>([
+  'concept',
+  'occupation',
+  'skill',
+  'fact',
+  'procedure',
+  'principle',
+  'example',
+  'counterexample',
+  'misconception',
+]);
+
+function resolveNodeType(nodeTypeProp: unknown, labels: string[]): GraphNodeType {
+  if (typeof nodeTypeProp === 'string') {
+    const normalizedNodeType = nodeTypeProp.trim().toLowerCase() as GraphNodeType;
+    if (VALID_NODE_TYPES.has(normalizedNodeType)) {
+      return normalizedNodeType;
+    }
+  }
+
+  return inferNodeType(labels);
+}
+
 /**
  * Get the primary Neo4j label for a graph type.
  */
@@ -248,7 +271,7 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
   const {
     nodeId,
     graphType: _graphTypeProp, // Prefer label-based inference
-    nodeType: _nodeTypeProp,
+    nodeType: nodeTypeProp,
     label,
     description,
     domain,
@@ -295,7 +318,7 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
   return {
     nodeId: nodeId as string as NodeId,
     graphType: inferGraphType(labels),
-    nodeType: inferNodeType(labels),
+    nodeType: resolveNodeType(nodeTypeProp, labels),
     label: typeof label === 'string' ? label : '',
     ...(description !== null ? { description: description as string } : {}),
     domain: typeof domain === 'string' ? domain : '',

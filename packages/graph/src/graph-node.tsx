@@ -25,6 +25,96 @@ export const NODE_TYPE_COLOR: Record<string, string> = {
 };
 
 const FALLBACK_COLOR = '#6b7280';
+const NODE_TYPE_ALIASES: Record<string, string> = {
+  counter_example: 'counterexample',
+};
+
+function stringArrayValue(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+}
+
+function normalizeNodeTypeToken(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function collectNodeTypeSignals(
+  metadata: Record<string, unknown>,
+  semanticHints: string[]
+): string[] {
+  const ontologyImport =
+    typeof metadata['ontologyImport'] === 'object' && metadata['ontologyImport'] !== null
+      ? (metadata['ontologyImport'] as Record<string, unknown>)
+      : {};
+  const metadataSignals = [
+    ...stringArrayValue(ontologyImport['sourceTypes']),
+    ...stringArrayValue(semanticHints),
+    ...(typeof metadata['className'] === 'string' ? [metadata['className']] : []),
+    ...(typeof metadata['nodeType'] === 'string' ? [metadata['nodeType']] : []),
+  ];
+
+  return metadataSignals.map((signal) => normalizeNodeTypeToken(signal)).filter((signal) => signal !== '');
+}
+
+export function normalizeNodeType(
+  type: unknown,
+  metadata: Record<string, unknown> = {},
+  semanticHints: string[] = []
+): string {
+  if (typeof type === 'string' && type.trim() !== '') {
+    const normalizedType = normalizeNodeTypeToken(type);
+    if (normalizedType in NODE_TYPE_COLOR) {
+      return normalizedType;
+    }
+
+    const aliasedType = NODE_TYPE_ALIASES[normalizedType];
+    if (aliasedType !== undefined) {
+      return aliasedType;
+    }
+  }
+
+  const lexicalSignals = collectNodeTypeSignals(metadata, semanticHints).join(' ');
+  if (lexicalSignals.includes('occupation')) {
+    return 'occupation';
+  }
+  if (lexicalSignals.includes('skill')) {
+    return 'skill';
+  }
+  if (lexicalSignals.includes('procedure') || lexicalSignals.includes('method')) {
+    return 'procedure';
+  }
+  if (
+    lexicalSignals.includes('principle') ||
+    lexicalSignals.includes('law') ||
+    lexicalSignals.includes('rule')
+  ) {
+    return 'principle';
+  }
+  if (lexicalSignals.includes('counterexample') || lexicalSignals.includes('counter_example')) {
+    return 'counterexample';
+  }
+  if (lexicalSignals.includes('misconception')) {
+    return 'misconception';
+  }
+  if (lexicalSignals.includes('example')) {
+    return 'example';
+  }
+  if (lexicalSignals.includes('fact') || lexicalSignals.includes('literal')) {
+    return 'fact';
+  }
+
+  return 'concept';
+}
+
+export function getNodeColor(
+  type: unknown,
+  metadata: Record<string, unknown> = {},
+  semanticHints: string[] = []
+): string {
+  const normalizedType = normalizeNodeType(type, metadata, semanticHints);
+  return NODE_TYPE_COLOR[normalizedType] ?? FALLBACK_COLOR;
+}
 
 // Node data shape as seen by canvas callbacks — any-typed because @noema/api-client
 // is not built and IGraphNodeDto resolves to any at this tsconfig level.
@@ -39,9 +129,9 @@ export interface INodeDrawOptions {
   recentlyActive?: boolean; // pulse animation
 }
 
-/** Returns node radius in graph units based on degree (min 8, max 32). */
+/** Returns node radius in graph units based on degree (min 9, max 34). */
 export function nodeRadius(degree: number): number {
-  return Math.max(8, Math.min(32, 8 + degree * 2.4));
+  return Math.max(9, Math.min(34, 9 + degree * 2.5));
 }
 
 /** Draws a single node onto the canvas context. */
@@ -59,8 +149,12 @@ export function drawNode({
   const y: number = node.y ?? 0;
   const degree: number = node.__degree ?? 0;
   const r = nodeRadius(degree);
-  const nodeType: string = node.type ?? '';
-  const color: string = NODE_TYPE_COLOR[nodeType] ?? FALLBACK_COLOR;
+  const metadata =
+    typeof node.metadata === 'object' && node.metadata !== null
+      ? (node.metadata as Record<string, unknown>)
+      : {};
+  const semanticHints = stringArrayValue(node.semanticHints);
+  const color: string = getNodeColor(node.type, metadata, semanticHints);
 
   // -- Glow for high mastery (mastery > 0.8) --
   if (mastery > 0.8) {

@@ -48,6 +48,7 @@ const SessionStartedPayloadSchema = z
     userId: z.string().min(1),
     initialQueueSize: z.number().int().nonnegative(),
     initialCardIds: z.array(z.string().min(1)).optional(),
+    initialCardLanes: z.record(z.string().min(1), z.enum(['retention', 'calibration'])).optional(),
     studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
   })
   .passthrough();
@@ -109,12 +110,14 @@ export class SessionStartedConsumer extends SchedulerBaseConsumer {
           return;
         }
 
+        const lane = parsed.data.initialCardLanes?.[rawCardId] ?? 'retention';
+
         await this.dependencies.schedulerCardRepository.create({
           id: `sc_${crypto.randomUUID()}`,
           cardId,
           userId,
           studyMode,
-          lane: 'retention',
+          lane,
           stability: null,
           difficultyParameter: null,
           halfLife: null,
@@ -124,7 +127,7 @@ export class SessionStartedConsumer extends SchedulerBaseConsumer {
           reviewCount: 0,
           lapseCount: 0,
           consecutiveCorrect: 0,
-          schedulingAlgorithm: 'fsrs',
+          schedulingAlgorithm: lane === 'calibration' ? 'hlr' : 'fsrs',
           cardType: null,
           difficulty: null,
           knowledgeNodeIds: [],

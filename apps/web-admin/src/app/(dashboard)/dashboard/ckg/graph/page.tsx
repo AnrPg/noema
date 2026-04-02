@@ -2,10 +2,10 @@
 /**
  * @noema/web-admin — /dashboard/ckg/graph
  *
- * Admin read-only CKG Graph Browser.
+ * Admin CKG Graph Browser.
  * Renders the full Canonical Knowledge Graph with layout controls,
  * overlay toggles (including the admin-only `pending_mutations` overlay),
- * node detail panel, legend, and minimap.
+ * node detail editing, mutation-driven edge authoring, legend, and minimap.
  */
 import * as React from 'react';
 import Link from 'next/link';
@@ -19,7 +19,6 @@ import {
   useProposeCkgMutation,
 } from '@noema/api-client/knowledge-graph';
 import type {
-  ICkgEdgeAuthoringOptionDto,
   ICkgEdgeAuthoringPreviewDto,
   ICkgNodeBatchAuthoringPreviewDto,
   ICkgNodeBatchAuthoringConflictDto,
@@ -36,6 +35,7 @@ import {
   GraphLegend,
   GraphMinimap,
   NodeDetailPanel,
+  normalizeNodeType,
 } from '@noema/graph';
 import type { LayoutMode, OverlayType } from '@noema/graph';
 
@@ -213,19 +213,12 @@ function extractMutationNodeIds(mutations: ICkgMutationDto[]): Set<string> {
     const p = m.payload;
     if (typeof p['nodeId'] === 'string') ids.add(p['nodeId']);
     if (typeof p['sourceId'] === 'string') ids.add(p['sourceId']);
+    if (typeof p['sourceNodeId'] === 'string') ids.add(p['sourceNodeId']);
     if (typeof p['targetId'] === 'string') ids.add(p['targetId']);
+    if (typeof p['targetNodeId'] === 'string') ids.add(p['targetNodeId']);
   }
   return ids;
 }
-
-const CATEGORY_LABELS: Record<string, string> = {
-  taxonomic: 'Taxonomic',
-  mereological: 'Mereological',
-  logical: 'Logical',
-  causal_temporal: 'Causal / Temporal',
-  associative: 'Associative',
-  structural_pedagogical: 'Structural / Pedagogical',
-};
 
 const NODE_TYPE_OPTIONS: IGraphNodeDto['type'][] = [
   'concept',
@@ -241,23 +234,6 @@ const NODE_TYPE_OPTIONS: IGraphNodeDto['type'][] = [
 
 type GraphNodeId = IGraphNodeDto['id'];
 
-interface IEdgeAuthoringMenuState {
-  sourceNodeId: GraphNodeId;
-  targetNodeId: GraphNodeId;
-  preview: ICkgEdgeAuthoringPreviewDto | null;
-  isLoading: boolean;
-  error: string | null;
-}
-
-interface IEdgeProposalDraft {
-  sourceNodeId: GraphNodeId;
-  targetNodeId: GraphNodeId;
-  sourceLabel: string;
-  targetLabel: string;
-  edgeType: IGraphEdgeDto['type'];
-  defaultWeight: number;
-}
-
 interface INodeBatchUpdateDraft {
   nodeType: string;
   domain: string;
@@ -269,21 +245,14 @@ interface INodeBatchPreviewState {
   mode: 'delete' | 'update';
 }
 
-function groupAuthoringOptions(
-  preview: ICkgEdgeAuthoringPreviewDto
-): { category: string; options: ICkgEdgeAuthoringOptionDto[] }[] {
-  const groups = new Map<string, ICkgEdgeAuthoringOptionDto[]>();
-
-  for (const option of preview.options) {
-    const existing = groups.get(option.category) ?? [];
-    existing.push(option);
-    groups.set(option.category, existing);
-  }
-
-  return [...groups.entries()].map(([category, options]) => ({
-    category,
-    options,
-  }));
+interface INodeMutationEditDraft {
+  label: string;
+  description: string;
+  nodeType: string;
+  domain: string;
+  tags: string;
+  aliases: string;
+  rationale: string;
 }
 
 function parseTagDraft(value: string): string[] {
@@ -297,8 +266,134 @@ function parseTagDraft(value: string): string[] {
   ];
 }
 
+function stringifyDraftList(values: string[]): string {
+  return values.join(', ');
+}
+
+function arraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function createNodeMutationEditDraft(node: IGraphNodeDto): INodeMutationEditDraft {
+  return {
+    label: node.label,
+    description: node.description ?? '',
+    nodeType: normalizeNodeType(node.type, node.metadata, node.semanticHints),
+    domain: node.domain ?? '',
+    tags: stringifyDraftList(node.tags),
+    aliases: stringifyDraftList(node.aliases),
+    rationale: `Update canonical node "${node.label}".`,
+  };
+}
+
+function buildNodeMutationUpdates(
+  node: IGraphNodeDto,
+  draft: INodeMutationEditDraft
+): Record<string, unknown> {
+  const nextLabel = draft.label.trim();
+  const nextDescription = draft.description.trim();
+  const nextNodeType = draft.nodeType.trim();
+  const nextDomain = draft.domain.trim();
+  const nextTags = parseTagDraft(draft.tags);
+  const nextAliases = parseTagDraft(draft.aliases);
+  const currentNodeType = normalizeNodeType(node.type, node.metadata, node.semanticHints);
+  const updates: Record<string, unknown> = {};
+
+  if (nextLabel !== '' && nextLabel !== node.label) {
+    updates['label'] = nextLabel;
+  }
+
+  if (nextDescription !== (node.description ?? '')) {
+    updates['description'] = nextDescription;
+  }
+
+  if (nextNodeType !== '' && nextNodeType !== currentNodeType) {
+    updates['nodeType'] = nextNodeType;
+  }
+
+  if (nextDomain !== '' && nextDomain !== (node.domain ?? '')) {
+    updates['domain'] = nextDomain;
+  }
+
+  if (!arraysEqual(nextTags, node.tags)) {
+    updates['tags'] = nextTags;
+  }
+
+  if (!arraysEqual(nextAliases, node.aliases)) {
+    updates['aliases'] = nextAliases;
+  }
+
+  return updates;
+}
+
+function getNodeMutationEditError(
+  node: IGraphNodeDto,
+  draft: INodeMutationEditDraft
+): string | null {
+  if (draft.label.trim() === '') {
+    return 'Label is required.';
+  }
+
+  if (!NODE_TYPE_OPTIONS.includes(draft.nodeType.trim() as IGraphNodeDto['type'])) {
+    return 'Choose a valid canonical node type.';
+  }
+
+  if (draft.domain.trim() === '' && (node.domain ?? '') !== '') {
+    return 'Domain cannot be cleared from this editor yet.';
+  }
+
+  return null;
+}
+
 function summarizeSelectedNodes(count: number): string {
   return count === 1 ? '1 node selected' : `${String(count)} nodes selected`;
+}
+
+function clampAuthoringPopupPosition(clientX: number, clientY: number): { x: number; y: number } {
+  const popupWidth = 420;
+  const popupHeight = 720;
+
+  if (typeof window === 'undefined') {
+    return { x: clientX, y: clientY };
+  }
+
+  return {
+    x: Math.max(16, Math.min(clientX + 12, window.innerWidth - popupWidth - 16)),
+    y: Math.max(16, Math.min(clientY + 12, window.innerHeight - popupHeight - 16)),
+  };
+}
+
+type EdgeType = IGraphEdgeDto['type'];
+
+interface IEdgeAuthoringMenuState {
+  sourceNodeId: string;
+  targetNodeId: string;
+  x: number;
+  y: number;
+  rationale: string;
+  preview: ICkgEdgeAuthoringPreviewDto | null;
+}
+
+const EDGE_CATEGORY_ORDER = [
+  'taxonomic',
+  'mereological',
+  'logical',
+  'causal_temporal',
+  'associative',
+  'structural_pedagogical',
+] as const;
+
+const EDGE_CATEGORY_LABELS: Record<(typeof EDGE_CATEGORY_ORDER)[number], string> = {
+  taxonomic: 'Taxonomic',
+  mereological: 'Mereological',
+  logical: 'Logical',
+  causal_temporal: 'Causal / Temporal',
+  associative: 'Associative',
+  structural_pedagogical: 'Structural / Pedagogical',
+};
+
+function humanizeEdgeType(edgeType: string): string {
+  return edgeType.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 // ============================================================================
@@ -308,8 +403,20 @@ function summarizeSelectedNodes(count: number): string {
 export default function CKGGraphBrowserPage(): React.JSX.Element {
   const { user, refreshUser } = useAuth();
   // --- Data ---
-  const { data: nodesData = [], isLoading: nodesLoading, isError: nodesError } = useCKGNodes();
-  const { data: edgesData = [], isLoading: edgesLoading, isError: edgesError } = useCKGEdges();
+  const {
+    data: nodesData = [],
+    isLoading: nodesLoading,
+    isError: nodesError,
+  } = useCKGNodes({
+    refetchOnWindowFocus: 'always',
+  });
+  const {
+    data: edgesData = [],
+    isLoading: edgesLoading,
+    isError: edgesError,
+  } = useCKGEdges({
+    refetchOnWindowFocus: 'always',
+  });
 
   const preferredLanguage = React.useMemo(() => {
     const primary =
@@ -360,7 +467,6 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const [activeOverlays, setActiveOverlays] = React.useState<Set<OverlayType>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = React.useState<Set<string>>(new Set());
-  const [relationSourceNodeId, setRelationSourceNodeId] = React.useState<GraphNodeId | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
@@ -370,11 +476,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const [isMinimapOpen, setIsMinimapOpen] = React.useState(false);
   const [edgeAuthoringMessage, setEdgeAuthoringMessage] = React.useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
-  const [edgeAuthoringMenu, setEdgeAuthoringMenu] = React.useState<IEdgeAuthoringMenuState | null>(
-    null
-  );
-  const [edgeProposalDraft, setEdgeProposalDraft] = React.useState<IEdgeProposalDraft | null>(null);
-  const [edgeProposalRationale, setEdgeProposalRationale] = React.useState('');
+  const [isBatchOperationsOpen, setIsBatchOperationsOpen] = React.useState(false);
   const [nodeBatchUpdateDraft, setNodeBatchUpdateDraft] = React.useState<INodeBatchUpdateDraft>({
     nodeType: '',
     domain: '',
@@ -382,8 +484,14 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   });
   const [nodeBatchPreviewState, setNodeBatchPreviewState] =
     React.useState<INodeBatchPreviewState | null>(null);
-  const detailPanelRef = React.useRef<HTMLDivElement | null>(null);
-  const previewEdgeAuthoring = usePreviewCkgEdgeAuthoring();
+  const [isNodeMutationEditing, setIsNodeMutationEditing] = React.useState(false);
+  const [nodeMutationEditDraft, setNodeMutationEditDraft] =
+    React.useState<INodeMutationEditDraft | null>(null);
+  const [edgeAuthoringMenuState, setEdgeAuthoringMenuState] =
+    React.useState<IEdgeAuthoringMenuState | null>(null);
+  const [submittingEdgeType, setSubmittingEdgeType] = React.useState<EdgeType | null>(null);
+  const [removingPairEdgeId, setRemovingPairEdgeId] = React.useState<string | null>(null);
+  const previewCkgEdgeAuthoring = usePreviewCkgEdgeAuthoring();
   const previewNodeBatchAuthoring = usePreviewCkgNodeBatchAuthoring();
   const proposeCkgMutation = useProposeCkgMutation();
 
@@ -421,7 +529,10 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   }, []);
 
   const visibleNodes = React.useMemo(
-    () => nodes.filter((n) => !hiddenTypes.has(n.type)),
+    () =>
+      nodes.filter(
+        (node) => !hiddenTypes.has(normalizeNodeType(node.type, node.metadata, node.semanticHints))
+      ),
     [nodes, hiddenTypes]
   );
 
@@ -456,17 +567,89 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   );
   const nodeBatchPreview = nodeBatchPreviewState?.preview ?? null;
   const nodeBatchPreviewMode = nodeBatchPreviewState?.mode ?? null;
-  const relationSourceNode = React.useMemo(
-    () => nodes.find((node) => (node.id as string) === relationSourceNodeId) ?? null,
-    [nodes, relationSourceNodeId]
+  const nodeMutationEditNode = React.useMemo(
+    () => (isNodeMutationEditing ? selectedNode : null),
+    [isNodeMutationEditing, selectedNode]
   );
-  const edgeAuthoringTargetNode = React.useMemo(
+  const nodeMutationEditError = React.useMemo(
     () =>
-      edgeAuthoringMenu === null
-        ? null
-        : (nodes.find((node) => (node.id as string) === edgeAuthoringMenu.targetNodeId) ?? null),
-    [edgeAuthoringMenu, nodes]
+      nodeMutationEditNode !== null && nodeMutationEditDraft !== null
+        ? getNodeMutationEditError(nodeMutationEditNode, nodeMutationEditDraft)
+        : null,
+    [nodeMutationEditDraft, nodeMutationEditNode]
   );
+  const nodeMutationPendingUpdates = React.useMemo(
+    () =>
+      nodeMutationEditNode !== null && nodeMutationEditDraft !== null
+        ? buildNodeMutationUpdates(nodeMutationEditNode, nodeMutationEditDraft)
+        : {},
+    [nodeMutationEditDraft, nodeMutationEditNode]
+  );
+  const edgeAuthoringSource = React.useMemo(
+    () =>
+      edgeAuthoringMenuState !== null
+        ? (nodes.find((node) => (node.id as string) === edgeAuthoringMenuState.sourceNodeId) ??
+          null)
+        : null,
+    [edgeAuthoringMenuState, nodes]
+  );
+  const edgeAuthoringTarget = React.useMemo(
+    () =>
+      edgeAuthoringMenuState !== null
+        ? (nodes.find((node) => (node.id as string) === edgeAuthoringMenuState.targetNodeId) ??
+          null)
+        : null,
+    [edgeAuthoringMenuState, nodes]
+  );
+  const edgeAuthoringPairEdges = React.useMemo(() => {
+    if (edgeAuthoringMenuState === null) {
+      return [];
+    }
+
+    const { sourceNodeId, targetNodeId } = edgeAuthoringMenuState;
+    return edges.filter((edge) => {
+      const sourceId = edge.sourceId as string;
+      const targetId = edge.targetId as string;
+      return (
+        (sourceId === sourceNodeId && targetId === targetNodeId) ||
+        (sourceId === targetNodeId && targetId === sourceNodeId)
+      );
+    });
+  }, [edgeAuthoringMenuState, edges]);
+  const edgeAuthoringOptionGroups = React.useMemo(() => {
+    const preview = edgeAuthoringMenuState?.preview;
+    if (preview === null || preview === undefined) {
+      return [];
+    }
+
+    const grouped = new Map<string, typeof preview.options>();
+    for (const option of preview.options) {
+      const currentGroup = grouped.get(option.category) ?? [];
+      grouped.set(option.category, [...currentGroup, option]);
+    }
+
+    const orderedGroups: {
+      category: string;
+      label: string;
+      options: typeof preview.options;
+    }[] = EDGE_CATEGORY_ORDER.map((category) => ({
+      category,
+      label: EDGE_CATEGORY_LABELS[category],
+      options: grouped.get(category) ?? [],
+    })).filter((group) => group.options.length > 0);
+
+    for (const [category, options] of grouped.entries()) {
+      if (!EDGE_CATEGORY_ORDER.includes(category as (typeof EDGE_CATEGORY_ORDER)[number])) {
+        orderedGroups.push({
+          category,
+          label: humanizeEdgeType(category),
+          options,
+        });
+      }
+    }
+
+    return orderedGroups;
+  }, [edgeAuthoringMenuState]);
   const selectedEdge = React.useMemo(
     () => edges.find((edge) => (edge.id as string) === selectedEdgeId) ?? null,
     [edges, selectedEdgeId]
@@ -482,13 +665,59 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
   // --- Handlers ---
 
+  const handleOpenEdgeAuthoringMenu = React.useCallback(
+    async (
+      sourceNode: IGraphNodeDto,
+      targetNode: IGraphNodeDto,
+      position: { x: number; y: number },
+      rationale: string
+    ) => {
+      setEdgeAuthoringMenuState({
+        sourceNodeId: sourceNode.id as string,
+        targetNodeId: targetNode.id as string,
+        x: position.x,
+        y: position.y,
+        rationale,
+        preview: null,
+      });
+
+      try {
+        const response = await previewCkgEdgeAuthoring.mutateAsync({
+          sourceNodeId: sourceNode.id,
+          targetNodeId: targetNode.id,
+        });
+
+        setEdgeAuthoringMenuState((current) => {
+          if (
+            current?.sourceNodeId !== (sourceNode.id as string) ||
+            current.targetNodeId !== (targetNode.id as string)
+          ) {
+            return current ?? null;
+          }
+
+          return {
+            ...current,
+            preview: response.data,
+          };
+        });
+      } catch (error: unknown) {
+        setEdgeAuthoringMenuState(null);
+        setEdgeAuthoringMessage(
+          error instanceof Error ? error.message : 'Failed to load edge authoring options.'
+        );
+      }
+    },
+    [previewCkgEdgeAuthoring]
+  );
+
   const handleNodeClick = React.useCallback((node: IGraphNodeDto, event?: MouseEvent) => {
     const id = node.id as string;
     const isMultiSelectIntent = event?.ctrlKey === true || event?.metaKey === true;
     setIsControlsOpen(false);
     setSelectedEdgeId(null);
-    setEdgeAuthoringMenu(null);
-    setEdgeProposalDraft(null);
+    setEdgeAuthoringMenuState(null);
+    setIsNodeMutationEditing(false);
+    setNodeMutationEditDraft(null);
     setNodeBatchPreviewState(null);
     setEdgeAuthoringMessage(null);
 
@@ -500,9 +729,8 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
         } else {
           next.add(id);
         }
-        const nextPrimary = (next.has(id) ? node.id : ([...next][0] ?? null)) as GraphNodeId | null;
+        const nextPrimary = next.has(id) ? id : ([...next][0] ?? null);
         setSelectedNodeId(nextPrimary);
-        setRelationSourceNodeId(nextPrimary);
         return next;
       });
       return;
@@ -510,7 +738,6 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
     setSelectedNodeId(node.id as string);
     setSelectedNodeIds(new Set([id]));
-    setRelationSourceNodeId(node.id);
   }, []);
 
   const handleNodeHover = React.useCallback((node: IGraphNodeDto | null) => {
@@ -520,10 +747,10 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const handleBackgroundClick = React.useCallback(() => {
     setSelectedNodeId(null);
     setSelectedNodeIds(new Set());
-    setRelationSourceNodeId(null);
     setSelectedEdgeId(null);
-    setEdgeAuthoringMenu(null);
-    setEdgeProposalDraft(null);
+    setEdgeAuthoringMenuState(null);
+    setIsNodeMutationEditing(false);
+    setNodeMutationEditDraft(null);
     setNodeBatchPreviewState(null);
     setEdgeAuthoringMessage(null);
   }, []);
@@ -532,10 +759,10 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     setIsControlsOpen(false);
     setSelectedNodeId(node.id as string);
     setSelectedNodeIds(new Set([node.id as string]));
-    setRelationSourceNodeId(node.id);
     setSelectedEdgeId(null);
-    setEdgeAuthoringMenu(null);
-    setEdgeProposalDraft(null);
+    setEdgeAuthoringMenuState(null);
+    setIsNodeMutationEditing(false);
+    setNodeMutationEditDraft(null);
     setNodeBatchPreviewState(null);
     setEdgeAuthoringMessage(null);
   }, []);
@@ -543,11 +770,22 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const handleClose = React.useCallback(() => {
     setSelectedNodeId(null);
     setSelectedNodeIds(new Set());
-    setRelationSourceNodeId(null);
     setSelectedEdgeId(null);
-    setEdgeAuthoringMenu(null);
-    setEdgeProposalDraft(null);
+    setEdgeAuthoringMenuState(null);
+    setIsNodeMutationEditing(false);
+    setNodeMutationEditDraft(null);
     setNodeBatchPreviewState(null);
+    setEdgeAuthoringMessage(null);
+  }, []);
+
+  const handleOpenNodeMutationEditor = React.useCallback((node: IGraphNodeDto) => {
+    setSelectedNodeId(node.id as string);
+    setSelectedNodeIds(new Set([node.id as string]));
+    setSelectedEdgeId(null);
+    setEdgeAuthoringMenuState(null);
+    setNodeBatchPreviewState(null);
+    setIsNodeMutationEditing(true);
+    setNodeMutationEditDraft(createNodeMutationEditDraft(node));
     setEdgeAuthoringMessage(null);
   }, []);
 
@@ -555,113 +793,56 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     (node: IGraphNodeDto, event: MouseEvent) => {
       event.preventDefault();
 
-      const targetNodeId = node.id;
-      const sourceNodeId = relationSourceNodeId;
+      const targetNodeId = node.id as string;
+      setIsControlsOpen(false);
+      setSelectedEdgeId(null);
+      setIsNodeMutationEditing(false);
+      setNodeMutationEditDraft(null);
+      setNodeBatchPreviewState(null);
       setEdgeAuthoringMessage(null);
 
-      if (sourceNodeId === null || sourceNodeId === targetNodeId) {
+      const sourceNode =
+        selectedNodeId !== null
+          ? (nodes.find((candidate) => (candidate.id as string) === selectedNodeId) ?? null)
+          : null;
+
+      if (sourceNode === null) {
         setSelectedNodeId(targetNodeId);
-        setSelectedNodeIds(new Set([targetNodeId as string]));
-        setRelationSourceNodeId(targetNodeId);
-        setEdgeAuthoringMenu(null);
-        setEdgeProposalDraft(null);
-        setNodeBatchPreviewState(null);
+        setSelectedNodeIds(new Set([targetNodeId]));
+        setEdgeAuthoringMenuState(null);
         setEdgeAuthoringMessage(
-          'Source node selected. Right-click a different node to create a canonical relation.'
+          `"${node.label}" is now the relation source. Right-click a second node to author a canonical edge.`
         );
         return;
       }
 
-      const initialMenuState: IEdgeAuthoringMenuState = {
-        sourceNodeId,
-        targetNodeId,
-        preview: null,
-        isLoading: true,
-        error: null,
-      };
+      if ((sourceNode.id as string) === targetNodeId) {
+        setSelectedNodeId(targetNodeId);
+        setSelectedNodeIds(new Set([targetNodeId]));
+        setEdgeAuthoringMenuState(null);
+        setEdgeAuthoringMessage(
+          `Right-click a different node to create or adjust a relation from "${node.label}".`
+        );
+        return;
+      }
 
-      setEdgeProposalDraft(null);
-      setNodeBatchPreviewState(null);
-      setEdgeAuthoringMenu(initialMenuState);
+      const nextPosition = clampAuthoringPopupPosition(event.clientX, event.clientY);
 
-      void (async () => {
-        try {
-          const response = await previewEdgeAuthoring.mutateAsync({
-            sourceNodeId,
-            targetNodeId,
-          });
-          setEdgeAuthoringMenu({
-            ...initialMenuState,
-            preview: response.data,
-            isLoading: false,
-          });
-        } catch (error) {
-          setEdgeAuthoringMenu({
-            ...initialMenuState,
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to load relation options.',
-          });
-        }
-      })();
-    },
-    [previewEdgeAuthoring, relationSourceNodeId]
-  );
-
-  const handleSelectRelationOption = React.useCallback(
-    (option: ICkgEdgeAuthoringOptionDto, preview: ICkgEdgeAuthoringPreviewDto) => {
-      setEdgeAuthoringMenu(null);
-      setEdgeProposalDraft({
-        sourceNodeId: preview.source.nodeId,
-        targetNodeId: preview.target.nodeId,
-        sourceLabel: preview.source.label,
-        targetLabel: preview.target.label,
-        edgeType: option.edgeType,
-        defaultWeight: option.defaultWeight,
-      });
-      setEdgeProposalRationale(
-        `${preview.source.label} ${option.edgeType} ${preview.target.label}`
+      setSelectedNodeId(sourceNode.id as string);
+      setSelectedNodeIds(new Set([sourceNode.id as string, targetNodeId]));
+      void handleOpenEdgeAuthoringMenu(
+        sourceNode,
+        node,
+        nextPosition,
+        `Review the canonical relation between "${sourceNode.label}" and "${node.label}".`
       );
     },
-    []
+    [handleOpenEdgeAuthoringMenu, nodes, selectedNodeId]
   );
-
-  const handleSubmitEdgeProposal = React.useCallback(async () => {
-    if (edgeProposalDraft === null) {
-      return;
-    }
-
-    const rationale =
-      edgeProposalRationale.trim() !== ''
-        ? edgeProposalRationale.trim()
-        : `Create ${edgeProposalDraft.edgeType} relation between "${edgeProposalDraft.sourceLabel}" and "${edgeProposalDraft.targetLabel}".`;
-
-    try {
-      await proposeCkgMutation.mutateAsync({
-        operations: [
-          {
-            type: 'add_edge',
-            edgeType: edgeProposalDraft.edgeType,
-            sourceNodeId: edgeProposalDraft.sourceNodeId,
-            targetNodeId: edgeProposalDraft.targetNodeId,
-            weight: edgeProposalDraft.defaultWeight,
-            rationale,
-          },
-        ],
-        rationale,
-      });
-      setEdgeProposalDraft(null);
-      setEdgeProposalRationale('');
-      setEdgeAuthoringMessage('Relation proposal submitted to the CKG mutation review queue.');
-    } catch (error) {
-      setEdgeAuthoringMessage(
-        error instanceof Error ? error.message : 'Failed to submit the relation proposal.'
-      );
-    }
-  }, [edgeProposalDraft, edgeProposalRationale, proposeCkgMutation]);
 
   const handlePreviewNodeBatchDelete = React.useCallback(async () => {
     const nodeIds = [...selectedNodeIds] as GraphNodeId[];
-    if (nodeIds.length === 0) {
+    if (nodeIds.length < 2) {
       return;
     }
 
@@ -684,7 +865,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
   const handlePreviewNodeBatchUpdate = React.useCallback(async () => {
     const nodeIds = [...selectedNodeIds] as GraphNodeId[];
-    if (nodeIds.length === 0) {
+    if (nodeIds.length < 2) {
       return;
     }
 
@@ -729,7 +910,8 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       setNodeBatchPreviewState(null);
       setSelectedNodeId(null);
       setSelectedNodeIds(new Set());
-      setRelationSourceNodeId(null);
+      setIsNodeMutationEditing(false);
+      setNodeMutationEditDraft(null);
       setEdgeAuthoringMessage('Batch node mutation proposal submitted to the CKG review queue.');
     } catch (error) {
       setEdgeAuthoringMessage(
@@ -738,50 +920,197 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     }
   }, [nodeBatchPreviewState, proposeCkgMutation]);
 
-  const handleEdgeClick = React.useCallback((edge: IGraphEdgeDto) => {
-    setSelectedEdgeId(edge.id as string);
-    setSelectedNodeId(null);
-    setSelectedNodeIds(new Set());
-    setRelationSourceNodeId(null);
-    setEdgeAuthoringMenu(null);
-    setEdgeProposalDraft(null);
-    setNodeBatchPreviewState(null);
-    setEdgeAuthoringMessage(
-      'Edge selected. You can propose removal here, then recreate a replacement relation through the node-to-node authoring flow if needed.'
-    );
-  }, []);
-
-  const handleSubmitEdgeRemovalProposal = React.useCallback(async () => {
-    if (selectedEdge === null) {
+  const handleSubmitNodeMutationProposal = React.useCallback(async () => {
+    if (nodeMutationEditNode === null || nodeMutationEditDraft === null) {
       return;
     }
 
-    const sourceLabel = selectedEdgeSource?.label ?? String(selectedEdge.sourceId);
-    const targetLabel = selectedEdgeTarget?.label ?? String(selectedEdge.targetId);
-    const rationale = `Remove ${selectedEdge.type} relation between "${sourceLabel}" and "${targetLabel}".`;
+    const validationError = getNodeMutationEditError(nodeMutationEditNode, nodeMutationEditDraft);
+    if (validationError !== null) {
+      setEdgeAuthoringMessage(validationError);
+      return;
+    }
+
+    const updates = buildNodeMutationUpdates(nodeMutationEditNode, nodeMutationEditDraft);
+    if (Object.keys(updates).length === 0) {
+      setEdgeAuthoringMessage('Make at least one node change before submitting a mutation.');
+      return;
+    }
+
+    const rationale =
+      nodeMutationEditDraft.rationale.trim() !== ''
+        ? nodeMutationEditDraft.rationale.trim()
+        : `Update canonical node "${nodeMutationEditNode.label}".`;
 
     try {
       await proposeCkgMutation.mutateAsync({
         operations: [
           {
-            type: 'remove_edge',
-            edgeId: selectedEdge.id,
+            type: 'update_node',
+            nodeId: nodeMutationEditNode.id,
+            updates,
             rationale,
           },
         ],
         rationale,
       });
-      setSelectedEdgeId(null);
-      setEdgeAuthoringMessage('Edge removal proposal submitted to the CKG review queue.');
+      setIsNodeMutationEditing(false);
+      setNodeMutationEditDraft(null);
+      setEdgeAuthoringMessage(
+        `Node mutation for "${nodeMutationEditNode.label}" submitted to the CKG review queue.`
+      );
     } catch (error) {
       setEdgeAuthoringMessage(
-        error instanceof Error ? error.message : 'Failed to submit the edge removal proposal.'
+        error instanceof Error ? error.message : 'Failed to submit the node mutation proposal.'
       );
     }
-  }, [proposeCkgMutation, selectedEdge, selectedEdgeSource, selectedEdgeTarget]);
+  }, [nodeMutationEditDraft, nodeMutationEditNode, proposeCkgMutation]);
+
+  const handleEdgeClick = React.useCallback(
+    (edge: IGraphEdgeDto, event?: MouseEvent) => {
+      const sourceNode =
+        nodes.find((node) => (node.id as string) === (edge.sourceId as string)) ?? null;
+      const targetNode =
+        nodes.find((node) => (node.id as string) === (edge.targetId as string)) ?? null;
+
+      setSelectedEdgeId(edge.id as string);
+      setSelectedNodeId(null);
+      setSelectedNodeIds(new Set());
+      setIsNodeMutationEditing(false);
+      setNodeMutationEditDraft(null);
+      setNodeBatchPreviewState(null);
+
+      if (sourceNode === null || targetNode === null) {
+        setEdgeAuthoringMenuState(null);
+        setEdgeAuthoringMessage('Edge selected, but its endpoints could not be resolved.');
+        return;
+      }
+
+      const fallbackX =
+        typeof window === 'undefined' ? 32 : Math.max(32, Math.round(window.innerWidth / 2) - 180);
+      const fallbackY = typeof window === 'undefined' ? 32 : 88;
+      const nextPosition = clampAuthoringPopupPosition(
+        event?.clientX ?? fallbackX,
+        event?.clientY ?? fallbackY
+      );
+
+      setEdgeAuthoringMessage(
+        `Previewing canonical edit options for "${sourceNode.label}" → "${targetNode.label}".`
+      );
+      void handleOpenEdgeAuthoringMenu(
+        sourceNode,
+        targetNode,
+        nextPosition,
+        `Review the canonical relation between "${sourceNode.label}" and "${targetNode.label}".`
+      );
+    },
+    [handleOpenEdgeAuthoringMenu, nodes]
+  );
+
+  const handleSubmitEdgeRemovalProposal = React.useCallback(
+    async (edgeOverride?: IGraphEdgeDto) => {
+      const edge = edgeOverride ?? selectedEdge;
+      if (edge === null) {
+        return;
+      }
+
+      const sourceNode =
+        nodes.find((node) => (node.id as string) === (edge.sourceId as string)) ?? null;
+      const targetNode =
+        nodes.find((node) => (node.id as string) === (edge.targetId as string)) ?? null;
+      const sourceLabel = sourceNode?.label ?? String(edge.sourceId);
+      const targetLabel = targetNode?.label ?? String(edge.targetId);
+      const rationale = `Remove ${edge.type} relation between "${sourceLabel}" and "${targetLabel}".`;
+
+      setRemovingPairEdgeId(edge.id as string);
+
+      try {
+        await proposeCkgMutation.mutateAsync({
+          operations: [
+            {
+              type: 'remove_edge',
+              edgeId: edge.id,
+              rationale,
+            },
+          ],
+          rationale,
+        });
+        setSelectedEdgeId(null);
+        setEdgeAuthoringMenuState(null);
+        setEdgeAuthoringMessage(
+          `Removal proposal for "${sourceLabel}" → "${targetLabel}" submitted to the CKG review queue.`
+        );
+      } catch (error) {
+        setEdgeAuthoringMessage(
+          error instanceof Error ? error.message : 'Failed to submit the edge removal proposal.'
+        );
+      } finally {
+        setRemovingPairEdgeId(null);
+      }
+    },
+    [nodes, proposeCkgMutation, selectedEdge]
+  );
+
+  const handleSubmitEdgeAuthoringProposal = React.useCallback(
+    async (edgeType: EdgeType) => {
+      if (
+        edgeAuthoringMenuState === null ||
+        edgeAuthoringSource === null ||
+        edgeAuthoringTarget === null
+      ) {
+        return;
+      }
+
+      const rationale =
+        edgeAuthoringMenuState.rationale.trim() !== ''
+          ? edgeAuthoringMenuState.rationale.trim()
+          : `Add ${humanizeEdgeType(edgeType)} relation from "${edgeAuthoringSource.label}" to "${edgeAuthoringTarget.label}".`;
+
+      setSubmittingEdgeType(edgeType);
+
+      try {
+        const response = await previewCkgEdgeAuthoring.mutateAsync({
+          sourceNodeId: edgeAuthoringSource.id,
+          targetNodeId: edgeAuthoringTarget.id,
+          edgeType,
+          rationale,
+        });
+
+        if (response.data.proposal === null) {
+          setEdgeAuthoringMessage(
+            `"${humanizeEdgeType(edgeType)}" is not available for this node pair right now.`
+          );
+          return;
+        }
+
+        await proposeCkgMutation.mutateAsync(response.data.proposal);
+        setEdgeAuthoringMenuState(null);
+        setEdgeAuthoringMessage(
+          `${humanizeEdgeType(edgeType)} proposal submitted for "${edgeAuthoringSource.label}" → "${edgeAuthoringTarget.label}".`
+        );
+      } catch (error) {
+        setEdgeAuthoringMessage(
+          error instanceof Error ? error.message : 'Failed to submit the edge mutation proposal.'
+        );
+      } finally {
+        setSubmittingEdgeType(null);
+      }
+    },
+    [
+      edgeAuthoringMenuState,
+      edgeAuthoringSource,
+      edgeAuthoringTarget,
+      previewCkgEdgeAuthoring,
+      proposeCkgMutation,
+    ]
+  );
 
   React.useEffect(() => {
-    if (selectedNodeIds.size === 0 || nodeBatchUpdateDraft.nodeType === '') {
+    if (
+      !isBatchOperationsOpen ||
+      selectedNodeIds.size < 2 ||
+      nodeBatchUpdateDraft.nodeType === ''
+    ) {
       return undefined;
     }
 
@@ -792,14 +1121,28 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [handlePreviewNodeBatchUpdate, nodeBatchUpdateDraft.nodeType, selectedNodeIds.size]);
+  }, [
+    handlePreviewNodeBatchUpdate,
+    isBatchOperationsOpen,
+    nodeBatchUpdateDraft.nodeType,
+    selectedNodeIds.size,
+  ]);
+
+  React.useEffect(() => {
+    if (selectedNodeIds.size >= 2) {
+      return;
+    }
+
+    setIsBatchOperationsOpen(false);
+    setNodeBatchPreviewState(null);
+  }, [selectedNodeIds.size]);
 
   React.useEffect(() => {
     if (
       selectedNode === null &&
-      edgeAuthoringMenu === null &&
-      edgeProposalDraft === null &&
-      nodeBatchPreviewState === null
+      nodeBatchPreviewState === null &&
+      nodeMutationEditDraft === null &&
+      edgeAuthoringMenuState === null
     ) {
       return undefined;
     }
@@ -808,10 +1151,10 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       if (event.key === 'Escape') {
         setSelectedNodeId(null);
         setSelectedNodeIds(new Set());
-        setRelationSourceNodeId(null);
         setSelectedEdgeId(null);
-        setEdgeAuthoringMenu(null);
-        setEdgeProposalDraft(null);
+        setEdgeAuthoringMenuState(null);
+        setIsNodeMutationEditing(false);
+        setNodeMutationEditDraft(null);
         setNodeBatchPreviewState(null);
         setEdgeAuthoringMessage(null);
       }
@@ -821,7 +1164,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [edgeAuthoringMenu, edgeProposalDraft, nodeBatchPreviewState, selectedNode]);
+  }, [edgeAuthoringMenuState, nodeBatchPreviewState, nodeMutationEditDraft, selectedNode]);
 
   // --- Loading / empty states ---
 
@@ -874,23 +1217,32 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
         <span className="ml-2 text-xs text-muted-foreground">
           {nodes.length} nodes · {edges.length} edges
         </span>
-        <span className="text-xs text-muted-foreground">Ctrl/Cmd+click to multi-select nodes</span>
+        <span className="text-xs text-muted-foreground">
+          Ctrl/Cmd+click to multi-select nodes · right-click a second node to author a relation
+        </span>
         {selectedNodes.length > 0 && (
           <span className="rounded-full border border-border bg-background/70 px-2 py-0.5 text-xs text-foreground">
             {summarizeSelectedNodes(selectedNodes.length)}
           </span>
         )}
-        {relationSourceNode !== null && (
-          <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">
-            Source: {relationSourceNode.label}
-          </span>
+        {selectedNodes.length > 1 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setIsBatchOperationsOpen((current) => !current);
+              setNodeBatchPreviewState(null);
+            }}
+          >
+            {isBatchOperationsOpen ? 'Hide Batch Operations' : 'Batch Operations'}
+          </Button>
         )}
         {edgeAuthoringMessage !== null && (
           <span className="text-xs text-muted-foreground">{edgeAuthoringMessage}</span>
         )}
       </div>
 
-      {selectedNodes.length > 0 && (
+      {selectedNodes.length > 1 && isBatchOperationsOpen && (
         <div className="flex flex-shrink-0 flex-wrap items-end gap-3 border-b border-border/80 bg-background/80 px-4 py-3">
           <div className="min-w-[12rem]">
             <p className="text-xs font-medium text-muted-foreground">Batch node type</p>
@@ -1065,6 +1417,217 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
               className="h-full w-full"
             />
 
+            {edgeAuthoringMenuState !== null && (
+              <div
+                className="fixed z-40 flex max-h-[calc(100vh-2rem)] w-[26rem] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur"
+                style={{
+                  left: edgeAuthoringMenuState.x,
+                  top: edgeAuthoringMenuState.y,
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Canonical edge authoring
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {edgeAuthoringSource?.label ?? edgeAuthoringMenuState.sourceNodeId} →{' '}
+                      {edgeAuthoringTarget?.label ?? edgeAuthoringMenuState.targetNodeId}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setEdgeAuthoringMenuState(null);
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-4 overflow-y-auto pr-1">
+                  <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
+                    Allowed relations are active. Blocked relations stay visible and greyed out so
+                    you can see the guardrails before proposing a canonical mutation.
+                  </div>
+
+                  {edgeAuthoringPairEdges.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Existing relations between these nodes
+                      </p>
+                      <div className="space-y-2">
+                        {edgeAuthoringPairEdges.map((edge) => {
+                          const isForward =
+                            (edge.sourceId as string) === edgeAuthoringMenuState.sourceNodeId;
+                          const sourceLabel =
+                            nodes.find((node) => (node.id as string) === (edge.sourceId as string))
+                              ?.label ?? String(edge.sourceId);
+                          const targetLabel =
+                            nodes.find((node) => (node.id as string) === (edge.targetId as string))
+                              ?.label ?? String(edge.targetId);
+
+                          return (
+                            <div
+                              key={edge.id as string}
+                              className="rounded-md border border-border bg-background/60 p-3"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-foreground">
+                                    {humanizeEdgeType(edge.type)} {isForward ? '→' : '←'}
+                                  </p>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    {sourceLabel} → {targetLabel}
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    void handleSubmitEdgeRemovalProposal(edge);
+                                  }}
+                                  disabled={
+                                    proposeCkgMutation.isPending ||
+                                    removingPairEdgeId === (edge.id as string)
+                                  }
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                                  {removingPairEdgeId === (edge.id as string)
+                                    ? 'Submitting…'
+                                    : 'Propose removal'}
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="block text-xs font-medium text-muted-foreground">
+                    Mutation rationale
+                    <textarea
+                      className="mt-1 min-h-20 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      value={edgeAuthoringMenuState.rationale}
+                      onChange={(event) => {
+                        setEdgeAuthoringMenuState((current) =>
+                          current === null
+                            ? current
+                            : {
+                                ...current,
+                                rationale: event.target.value,
+                              }
+                        );
+                      }}
+                      placeholder="Explain why this canonical relation should exist."
+                    />
+                  </label>
+
+                  {previewCkgEdgeAuthoring.isPending && edgeAuthoringMenuState.preview === null ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      Loading relation options…
+                    </div>
+                  ) : edgeAuthoringMenuState.preview === null ? (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                      The relation options could not be loaded for this node pair.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {edgeAuthoringMenuState.preview.warnings.map((warning) => (
+                        <div
+                          key={warning}
+                          className="rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200"
+                        >
+                          {warning}
+                        </div>
+                      ))}
+
+                      {edgeAuthoringOptionGroups.map((group) => (
+                        <div key={group.category} className="space-y-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {group.label}
+                          </p>
+                          <div className="space-y-2">
+                            {group.options.map((option) => (
+                              <button
+                                key={option.edgeType}
+                                type="button"
+                                disabled={!option.enabled || proposeCkgMutation.isPending}
+                                onClick={() => {
+                                  void handleSubmitEdgeAuthoringProposal(option.edgeType);
+                                }}
+                                className={[
+                                  'w-full rounded-md border p-3 text-left transition-colors',
+                                  option.enabled
+                                    ? 'border-border bg-background hover:border-primary/40 hover:bg-muted/50'
+                                    : 'cursor-not-allowed border-border/70 bg-muted/20 text-muted-foreground opacity-65',
+                                ].join(' ')}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium">
+                                      {humanizeEdgeType(option.edgeType)}
+                                    </p>
+                                    <p className="mt-1 text-xs leading-relaxed">
+                                      {option.description}
+                                    </p>
+                                  </div>
+                                  <span
+                                    className={[
+                                      'rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                                      option.enabled
+                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'
+                                        : 'bg-muted text-muted-foreground',
+                                    ].join(' ')}
+                                  >
+                                    {submittingEdgeType === option.edgeType
+                                      ? 'Submitting'
+                                      : option.enabled
+                                        ? 'Allowed'
+                                        : 'Blocked'}
+                                  </span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    Default weight {option.defaultWeight}
+                                  </span>
+                                  {option.isSymmetric && (
+                                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      Symmetric
+                                    </span>
+                                  )}
+                                  {option.requiresAcyclicity && (
+                                    <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      Acyclic
+                                    </span>
+                                  )}
+                                </div>
+                                {option.blockedReasons.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {option.blockedReasons.map((reason) => (
+                                      <p
+                                        key={`${option.edgeType}-${reason.code}`}
+                                        className="text-[11px] text-muted-foreground"
+                                      >
+                                        {reason.message}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {nodeBatchPreview !== null && nodeBatchPreviewMode !== null && (
               <div className="absolute left-4 top-20 z-30 w-[28rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
                 <div className="flex items-start justify-between gap-3">
@@ -1167,72 +1730,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
               </div>
             )}
 
-            {edgeProposalDraft !== null && (
-              <div className="absolute right-4 top-16 z-30 w-[26rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Confirm relation proposal
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {edgeProposalDraft.sourceLabel} {edgeProposalDraft.edgeType}{' '}
-                      {edgeProposalDraft.targetLabel}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setEdgeProposalDraft(null);
-                    }}
-                  >
-                    Close
-                  </button>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  <label
-                    className="block text-xs font-medium text-muted-foreground"
-                    htmlFor="edge-rationale"
-                  >
-                    Rationale
-                  </label>
-                  <textarea
-                    id="edge-rationale"
-                    className="min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary"
-                    value={edgeProposalRationale}
-                    onChange={(event) => {
-                      setEdgeProposalRationale(event.target.value);
-                    }}
-                    placeholder="Explain why this relation is semantically appropriate."
-                  />
-                  <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                    This will create a normal `add_edge` mutation proposal and send it to the
-                    canonical review queue. Nothing is written directly to the CKG from this screen.
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setEdgeProposalDraft(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        void handleSubmitEdgeProposal();
-                      }}
-                      disabled={proposeCkgMutation.isPending}
-                    >
-                      {proposeCkgMutation.isPending ? 'Submitting…' : 'Submit mutation'}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {selectedEdge !== null && (
+            {selectedEdge !== null && edgeAuthoringMenuState === null && (
               <div className="absolute bottom-4 right-4 z-30 w-[24rem] rounded-xl border border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1260,8 +1758,8 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
                     <p>Created: {new Date(selectedEdge.createdAt).toLocaleString()}</p>
                   </div>
                   <div className="rounded-md border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                    To change this relation semantically, remove it first and then use the existing
-                    node-to-node relation authoring flow to propose the replacement edge.
+                    Click the edge again inside the graph to open canonical edge authoring for this
+                    pair, preview allowed replacements, and submit a mutation proposal.
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button
@@ -1289,14 +1787,28 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
             {/* Node detail panel + "View pending mutations" link */}
             {selectedNode !== null && (
-              <div
-                ref={detailPanelRef}
-                className="absolute bottom-4 left-4 top-4 z-20 flex w-[min(32rem,calc(100%-2rem))] max-w-[calc(100%-2rem)] flex-col"
-              >
+              <div className="absolute bottom-4 left-4 top-4 z-20 flex w-[min(32rem,calc(100%-2rem))] max-w-[calc(100%-2rem)] flex-col">
                 <NodeDetailPanel
                   node={selectedNode}
                   allNodes={nodes}
                   allEdges={edges}
+                  isEditing={nodeMutationEditNode !== null && nodeMutationEditDraft !== null}
+                  editDraft={nodeMutationEditDraft}
+                  editError={nodeMutationEditError}
+                  pendingUpdateKeys={Object.keys(nodeMutationPendingUpdates)}
+                  isSubmittingEdit={proposeCkgMutation.isPending}
+                  onStartEdit={() => {
+                    handleOpenNodeMutationEditor(selectedNode);
+                  }}
+                  onCancelEdit={() => {
+                    setIsNodeMutationEditing(false);
+                    setNodeMutationEditDraft(null);
+                    setEdgeAuthoringMessage(null);
+                  }}
+                  onEditDraftChange={setNodeMutationEditDraft}
+                  onSubmitEdit={() => {
+                    void handleSubmitNodeMutationProposal();
+                  }}
                   onClose={handleClose}
                 />
                 <div className="mt-1 flex flex-shrink-0 justify-end px-1">
@@ -1310,104 +1822,6 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
               </div>
             )}
           </div>
-
-          {edgeAuthoringMenu !== null && (
-            <aside className="noema-scrollbar z-20 flex h-full w-[24rem] flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-background/95 p-4 shadow-2xl backdrop-blur">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Create relation</p>
-                  <p className="text-xs text-muted-foreground">
-                    {relationSourceNode?.label ?? edgeAuthoringMenu.sourceNodeId} →{' '}
-                    {edgeAuthoringTargetNode?.label ?? edgeAuthoringMenu.targetNodeId}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => {
-                    setEdgeAuthoringMenu(null);
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="rounded-lg border border-border bg-background/60 p-3 text-xs text-muted-foreground">
-                Relation authoring stays pinned here while edge creation mode is active, so the full
-                relation menu remains visible beside the graph.
-              </div>
-
-              {edgeAuthoringMenu.isLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Loading relation options…
-                </div>
-              ) : edgeAuthoringMenu.error !== null ? (
-                <p className="text-sm text-destructive">{edgeAuthoringMenu.error}</p>
-              ) : edgeAuthoringMenu.preview !== null ? (
-                <div className="space-y-4">
-                  {edgeAuthoringMenu.preview.warnings.length > 0 && (
-                    <div className="rounded-md border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                      {edgeAuthoringMenu.preview.warnings.join(' ')}
-                    </div>
-                  )}
-                  {groupAuthoringOptions(edgeAuthoringMenu.preview).map((group) => (
-                    <div key={group.category} className="space-y-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        {CATEGORY_LABELS[group.category] ?? group.category}
-                      </p>
-                      <div className="space-y-2">
-                        {group.options.map((option) => (
-                          <button
-                            key={option.edgeType}
-                            type="button"
-                            disabled={!option.enabled}
-                            onClick={() => {
-                              const preview = edgeAuthoringMenu.preview;
-                              if (!option.enabled) {
-                                return;
-                              }
-                              if (preview === null) {
-                                return;
-                              }
-                              handleSelectRelationOption(option, preview);
-                            }}
-                            className={`w-full rounded-md border p-3 text-left transition ${
-                              option.enabled
-                                ? 'border-border bg-background/60 hover:border-primary/40 hover:bg-primary/5'
-                                : 'cursor-not-allowed border-border/60 bg-muted/30 text-muted-foreground'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-sm font-medium">{option.edgeType}</p>
-                              <span className="text-[11px] text-muted-foreground">
-                                weight {option.defaultWeight.toFixed(2)}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {option.description}
-                            </p>
-                            {option.blockedReasons.length > 0 && (
-                              <div className="mt-2 space-y-1">
-                                {option.blockedReasons.map((reason) => (
-                                  <p
-                                    key={`${option.edgeType}-${reason.code}`}
-                                    className="text-[11px] text-amber-300"
-                                  >
-                                    {reason.message}
-                                  </p>
-                                ))}
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </aside>
-          )}
         </div>
       </div>
     </div>

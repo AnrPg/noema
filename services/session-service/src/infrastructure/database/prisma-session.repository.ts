@@ -27,6 +27,7 @@ import {
   type HintDepth as PrismaHintDepth,
   type LearningMode as PrismaLearningMode,
   type Rating as PrismaRating,
+  type SessionSchedulerLane as PrismaSessionSchedulerLane,
   type SessionCohortHandshakeStatus as PrismaSessionCohortHandshakeStatus,
   type SessionState as PrismaSessionState,
   type StudyMode as PrismaStudyMode,
@@ -49,6 +50,7 @@ import type {
   ISessionFilters,
   ISessionQueueItem,
   ISessionStats,
+  SessionSchedulerLane,
   SessionCohortHandshakeStatus,
   SessionState,
 } from '../../types/index.js';
@@ -111,6 +113,14 @@ function toPrismaCardQueueStatus(s: string): PrismaCardQueueStatus {
 
 function fromPrismaCardQueueStatus(s: PrismaCardQueueStatus): CardQueueStatus {
   return s.toLowerCase() as CardQueueStatus;
+}
+
+function toPrismaSessionSchedulerLane(s: SessionSchedulerLane): PrismaSessionSchedulerLane {
+  return s.toUpperCase() as PrismaSessionSchedulerLane;
+}
+
+function fromPrismaSessionSchedulerLane(s: PrismaSessionSchedulerLane): SessionSchedulerLane {
+  return s.toLowerCase() as SessionSchedulerLane;
 }
 
 function toPrismaSessionCohortHandshakeStatus(
@@ -194,6 +204,7 @@ function toQueueItemDomain(row: any): ISessionQueueItem {
     id: row.id,
     sessionId: row.sessionId as SessionId,
     cardId: row.cardId as CardId,
+    lane: fromPrismaSessionSchedulerLane(row.lane),
     position: row.position,
     status: fromPrismaCardQueueStatus(row.status),
     injectedBy: row.injectedBy ?? null,
@@ -652,6 +663,7 @@ export class PrismaSessionRepository implements ISessionRepository {
         id: item.id,
         sessionId: item.sessionId,
         cardId: item.cardId,
+        lane: toPrismaSessionSchedulerLane(item.lane),
         position: item.position,
         status: toPrismaCardQueueStatus(item.status),
         injectedBy: item.injectedBy,
@@ -679,6 +691,7 @@ export class PrismaSessionRepository implements ISessionRepository {
         id: item.id,
         sessionId: item.sessionId,
         cardId: item.cardId,
+        lane: toPrismaSessionSchedulerLane(item.lane),
         position: item.position,
         status: toPrismaCardQueueStatus(item.status),
         injectedBy: item.injectedBy,
@@ -754,6 +767,7 @@ export class PrismaSessionRepository implements ISessionRepository {
         id: crypto.randomUUID(),
         sessionId,
         cardId,
+        lane: 'RETENTION',
         position: index,
         status: 'PENDING',
         injectedBy: 'cohort_commit',

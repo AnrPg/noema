@@ -16,6 +16,9 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }));
+vi.mock('@/components/pomodoro/pomodoro-nav', () => ({
+  PomodoroNav: () => <div data-testid="pomodoro-nav" />,
+}));
 vi.mock('@/components/session-expiry-modal', () => ({ SessionExpiryModal: () => null }));
 vi.mock('@/components/shortcut-reference-panel', () => ({ ShortcutReferencePanel: () => null }));
 

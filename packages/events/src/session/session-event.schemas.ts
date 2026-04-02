@@ -103,6 +103,8 @@ export const SessionStartedPayloadSchema = z.object({
     cardTypes: z.array(z.union([CardTypeSchema, RemediationCardTypeSchema])).optional(),
   }),
   initialQueueSize: z.number().int().nonnegative(),
+  initialCardIds: z.array(CardIdSchema).optional(),
+  initialCardLanes: z.record(CardIdSchema, z.enum(['retention', 'calibration'])).optional(),
 });
 
 export const SessionPausedPayloadSchema = z.object({
@@ -191,6 +193,8 @@ export const AttemptRecordedPayloadSchema = z.object({
   cardId: CardIdSchema,
   userId: UserIdSchema,
   sequenceNumber: z.number().int().positive(),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+  lane: z.enum(['retention', 'calibration']).optional(),
 
   // Response
   outcome: AttemptOutcomeSchema,

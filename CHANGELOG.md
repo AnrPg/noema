@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-28 - Navbar Pomodoro Timer
+
+- added a configurable pomodoro timer to the authenticated header beside the
+  user dropdown so focus blocks stay visible across the app shell
+- introduced an animated configuration dialog with presets, cadence controls,
+  auto-start behavior, daily target guidance, and phase-specific instructions
+- added a browser-native ambient soundscape picker for optional rain, cafe,
+  deep-focus, and night-owl background audio
+- extended `user-service` and `@noema/api-client` with durable
+  `settings.pomodoro` persistence and response/update coverage
+- added frontend and backend docs describing the new timer runtime and settings
+  model
+
 ## 2026-03-28 - Mode-Aware Authoring and Guidance Rollout
 
 - unified the authenticated shell and Settings page around one shared study-mode
@@ -168,6 +181,17 @@
   proposals, including import-run group selection and shared review notes
 - kept direct-review mutations outside the bulk selection path so the ontology
   import workflow remains distinct from manual review
+
+## 2026-03-29 - Admin CKG Graph Edge Authoring
+
+- added graph-native canonical edge authoring to the admin CKG browser so
+  reviewers can choose a source node and right-click a target node to open a
+  relation popup
+- wired the popup into the existing `authoring-preview -> mutation proposal`
+  flow, with allowed edge types active and blocked ones greyed out with
+  guardrail reasons
+- added pair-aware "existing relations" controls in the same popup so admins can
+  submit edge removals from the selected node pair without leaving the graph
 
 ## 2026-03-24 - Batch 6 Merge Confidence and Conflict Policies
 

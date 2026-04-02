@@ -8,6 +8,7 @@ import { z } from 'zod';
 import {
   AuthProvider,
   Language,
+  PomodoroSoundscape,
   StudyMode,
   Theme,
   UserRole,
@@ -50,6 +51,13 @@ export const AuthProviderSchema = z.enum([
 ]);
 
 export const ThemeSchema = z.enum([Theme.LIGHT, Theme.DARK, Theme.SYSTEM]);
+export const PomodoroSoundscapeSchema = z.enum([
+  PomodoroSoundscape.NONE,
+  PomodoroSoundscape.RAIN,
+  PomodoroSoundscape.DEEP_FOCUS,
+  PomodoroSoundscape.CAFE,
+  PomodoroSoundscape.NIGHT_OWLS,
+]);
 
 export const LanguageSchema = z.enum([
   Language.EN,
@@ -106,6 +114,29 @@ export const UserSettingsSchema = z.object({
   activeStudyMode: z
     .enum(Object.values(StudyMode) as [string, ...string[]])
     .default(StudyMode.KNOWLEDGE_GAINING),
+  pomodoro: z
+    .object({
+      focusMinutes: z.number().int().min(10).max(90).default(25),
+      shortBreakMinutes: z.number().int().min(3).max(30).default(5),
+      longBreakMinutes: z.number().int().min(10).max(60).default(15),
+      cyclesBeforeLongBreak: z.number().int().min(2).max(6).default(4),
+      dailyTargetCycles: z.number().int().min(1).max(12).default(6),
+      autoStartBreaks: z.boolean().default(false),
+      autoStartFocus: z.boolean().default(false),
+      soundscape: PomodoroSoundscapeSchema.default(PomodoroSoundscape.NONE),
+      soundscapeVolume: z.number().int().min(0).max(100).default(35),
+    })
+    .default({
+      focusMinutes: 25,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 15,
+      cyclesBeforeLongBreak: 4,
+      dailyTargetCycles: 6,
+      autoStartBreaks: false,
+      autoStartFocus: false,
+      soundscape: PomodoroSoundscape.NONE,
+      soundscapeVolume: 35,
+    }),
   cognitivePolicy: z
     .object({
       pacingPolicy: z.object({
@@ -208,6 +239,19 @@ export const UpdateSettingsInputSchema = z
     pushNotificationsEnabled: z.boolean().optional(),
     analyticsEnabled: z.boolean().optional(),
     activeStudyMode: z.enum(Object.values(StudyMode) as [string, ...string[]]).optional(),
+    pomodoro: z
+      .object({
+        focusMinutes: z.number().int().min(10).max(90).optional(),
+        shortBreakMinutes: z.number().int().min(3).max(30).optional(),
+        longBreakMinutes: z.number().int().min(10).max(60).optional(),
+        cyclesBeforeLongBreak: z.number().int().min(2).max(6).optional(),
+        dailyTargetCycles: z.number().int().min(1).max(12).optional(),
+        autoStartBreaks: z.boolean().optional(),
+        autoStartFocus: z.boolean().optional(),
+        soundscape: PomodoroSoundscapeSchema.optional(),
+        soundscapeVolume: z.number().int().min(0).max(100).optional(),
+      })
+      .optional(),
     cognitivePolicy: z
       .object({
         pacingPolicy: z

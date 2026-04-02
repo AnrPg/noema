@@ -6,7 +6,6 @@
  * - Creates a Review record + updates existing SchedulerCard on re-review
  * - Idempotency: skips when findByAttemptId returns an existing review
  * - Skips payloads with invalid rating values
- * - Skips payloads with invalid lane values
  * - Handles both 'attempt.recorded' and 'review.submitted' event types
  * - Ignores events with other eventType values
  */
@@ -343,12 +342,17 @@ describe('ReviewRecordedConsumer — invalid payloads', () => {
     expect(reviewRepository.create).not.toHaveBeenCalled();
   });
 
-  it('skips events with invalid lane', async () => {
-    const { consumer, reviewRepository } = createConsumer();
+  it('falls back to the existing scheduler-card lane when payload lane is invalid', async () => {
+    const existing = buildExistingCard({ lane: 'calibration', schedulingAlgorithm: 'hlr' });
+    const { consumer, reviewRepository } = createConsumer({
+      findByCard: vi.fn().mockResolvedValue(existing),
+    });
 
     await dispatch(consumer, { ...MIN_VALID_PAYLOAD, lane: 'superfast' });
 
-    expect(reviewRepository.create).not.toHaveBeenCalled();
+    expect(reviewRepository.create).toHaveBeenCalledTimes(1);
+    const reviewCall = (reviewRepository.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(reviewCall.lane).toBe('calibration');
   });
 
   it('ignores unrelated eventType without touching repositories', async () => {

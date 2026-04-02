@@ -130,6 +130,19 @@ export const StudyMode = {
 
 export type StudyMode = (typeof StudyMode)[keyof typeof StudyMode];
 
+/**
+ * Built-in ambient soundscapes for the pomodoro timer.
+ */
+export const PomodoroSoundscape = {
+  NONE: 'none',
+  RAIN: 'rain',
+  DEEP_FOCUS: 'deep_focus',
+  CAFE: 'cafe',
+  NIGHT_OWLS: 'night_owls',
+} as const;
+
+export type PomodoroSoundscape = (typeof PomodoroSoundscape)[keyof typeof PomodoroSoundscape];
+
 // ============================================================================
 // History Entry Interfaces
 // ============================================================================
@@ -247,8 +260,40 @@ export interface IUserSettings {
   /** Global active study mode used by the authenticated app shell */
   activeStudyMode: StudyMode;
 
+  /** Navbar pomodoro timer preferences */
+  pomodoro: IPomodoroSettings;
+
   /** Cognitive control policy snapshot used by session/content/scheduler orchestration */
   cognitivePolicy: ICognitivePolicySettings;
+}
+
+export interface IPomodoroSettings {
+  /** Duration of the focus block in minutes */
+  focusMinutes: number;
+
+  /** Duration of the short break in minutes */
+  shortBreakMinutes: number;
+
+  /** Duration of the long break in minutes */
+  longBreakMinutes: number;
+
+  /** Number of completed focus blocks before a long break */
+  cyclesBeforeLongBreak: number;
+
+  /** Daily target number of focus cycles */
+  dailyTargetCycles: number;
+
+  /** Whether breaks should begin automatically */
+  autoStartBreaks: boolean;
+
+  /** Whether the next focus block should begin automatically */
+  autoStartFocus: boolean;
+
+  /** Ambient soundscape played while the timer is active */
+  soundscape: PomodoroSoundscape;
+
+  /** Ambient soundscape volume from 0 to 100 */
+  soundscapeVolume: number;
 }
 
 export interface ICognitivePolicySettings {
@@ -396,6 +441,7 @@ export interface IUpdateSettingsInput {
   pushNotificationsEnabled?: boolean;
   analyticsEnabled?: boolean;
   activeStudyMode?: StudyMode;
+  pomodoro?: Partial<IPomodoroSettings>;
   cognitivePolicy?: Partial<ICognitivePolicySettings>;
 }
 
