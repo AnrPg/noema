@@ -7,6 +7,10 @@
  */
 
 import type { Environment } from '@noema/types';
+import {
+  ProofRolloutMode,
+  type ProofRolloutMode as ProofRolloutModeType,
+} from '../domain/knowledge-graph-service/proof-stage.js';
 
 // ============================================================================
 // Configuration Schema
@@ -79,9 +83,8 @@ export interface IServiceConfig {
     };
   };
   mutation: {
-    /** Whether formal proof stage (TLA+ verification) is enabled.
-     *  When false, proof stage auto-approves (Phase 6 behavior). */
-    proofStageEnabled: boolean;
+    /** Proof-stage rollout mode for canonical commits. */
+    proofStageMode: ProofRolloutModeType;
   };
   ontologyImports: {
     /** Which YAGO archive variant to fetch by default. */
@@ -128,6 +131,32 @@ function optionalEnvBool(name: string, defaultValue: boolean): boolean {
   const value = process.env[name];
   if (value === undefined || value === '') return defaultValue;
   return value.toLowerCase() === 'true';
+}
+
+function optionalProofRolloutMode(): ProofRolloutModeType {
+  const explicitMode = process.env['MUTATION_PROOF_STAGE_MODE'];
+  if (explicitMode !== undefined && explicitMode !== '') {
+    const normalized = explicitMode.trim().toLowerCase();
+    if (
+      normalized === ProofRolloutMode.DISABLED ||
+      normalized === ProofRolloutMode.OBSERVE_ONLY ||
+      normalized === ProofRolloutMode.SOFT_BLOCK ||
+      normalized === ProofRolloutMode.HARD_BLOCK
+    ) {
+      return normalized;
+    }
+
+    throw new Error(`Invalid proof rollout mode for MUTATION_PROOF_STAGE_MODE: ${explicitMode}`);
+  }
+
+  const legacyEnabled = process.env['MUTATION_PROOF_STAGE_ENABLED'];
+  if (legacyEnabled !== undefined && legacyEnabled !== '') {
+    return legacyEnabled.toLowerCase() === 'true'
+      ? ProofRolloutMode.OBSERVE_ONLY
+      : ProofRolloutMode.DISABLED;
+  }
+
+  return ProofRolloutMode.DISABLED;
 }
 
 function optionalYagoVariant(name: string, defaultValue: 'tiny' | 'full'): 'tiny' | 'full' {
@@ -223,7 +252,7 @@ export function loadConfig(): IServiceConfig {
       },
     },
     mutation: {
-      proofStageEnabled: optionalEnvBool('MUTATION_PROOF_STAGE_ENABLED', false),
+      proofStageMode: optionalProofRolloutMode(),
     },
     ontologyImports: {
       yagoVariant: optionalYagoVariant('YAGO_VARIANT', 'full'),

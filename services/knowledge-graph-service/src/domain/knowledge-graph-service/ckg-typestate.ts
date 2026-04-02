@@ -9,6 +9,8 @@
  *               REJECTED     REJECTED   REJECTED  REJECTED   REJECTED
  *                  ↓
  *            PENDING_REVIEW → VALIDATED
+ *                  ↑             ↑
+ *                  └────── PROVING
  *                  ↓        ↓
  *               REJECTED  REVISION_REQUESTED → PROPOSED
  *                                            ↓
@@ -41,7 +43,7 @@ export const STATE_TRANSITIONS: Readonly<Record<MutationState, readonly Mutation
     proposed: ['validating', 'rejected'] as const,
     validating: ['validated', 'pending_review', 'rejected'] as const,
     validated: ['proving', 'rejected'] as const,
-    proving: ['proven', 'rejected'] as const,
+    proving: ['proven', 'pending_review', 'rejected'] as const,
     proven: ['committing', 'rejected'] as const,
     committing: ['committed', 'rejected'] as const,
     committed: [] as const,

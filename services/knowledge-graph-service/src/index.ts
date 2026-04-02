@@ -60,6 +60,7 @@ import {
   OntologyReasoningStage,
   StaticOntologyArtifactProvider,
 } from './domain/knowledge-graph-service/ontology-reasoning.js';
+import { DeterministicProofRunner } from './domain/knowledge-graph-service/proof-stage.js';
 import { UnityInvariantStage } from './domain/knowledge-graph-service/unity-invariants.js';
 import { PkgAggregationConsumer, UserDeletedConsumer } from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
@@ -402,7 +403,8 @@ async function bootstrap(): Promise<void> {
     validationPipeline,
     eventPublisher,
     logger,
-    config.mutation.proofStageEnabled
+    config.mutation.proofStageMode,
+    new DeterministicProofRunner()
   );
 
   // 6. Knowledge Graph Service (domain service)

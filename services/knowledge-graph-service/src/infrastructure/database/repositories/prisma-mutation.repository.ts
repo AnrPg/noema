@@ -13,10 +13,10 @@
 import type { Metadata, MutationId, MutationState, ProposerId } from '@noema/types';
 import { ID_PREFIXES } from '@noema/types';
 import { nanoid } from 'nanoid';
-import type {
+import {
   Prisma,
-  CkgMutationState as PrismaCkgMutationState,
-  PrismaClient,
+  type CkgMutationState as PrismaCkgMutationState,
+  type PrismaClient,
 } from '../../../../generated/prisma/index.js';
 
 import {
@@ -297,6 +297,10 @@ export class PrismaMutationRepository implements IMutationRepository {
       operations: Metadata[];
       revisionFeedback: string | null;
       revisionCount: number;
+      validationResult: Metadata | null;
+      proofResult: Metadata | null;
+      commitResult: Metadata | null;
+      rejectionReason: string | null;
     }>
   ): Promise<ICkgMutation> {
     const data: Record<string, unknown> = {};
@@ -309,6 +313,21 @@ export class PrismaMutationRepository implements IMutationRepository {
     }
     if (fields.revisionCount !== undefined) {
       data['revisionCount'] = fields.revisionCount;
+    }
+    if ('validationResult' in fields) {
+      data['validationResult'] =
+        fields.validationResult === null ? Prisma.JsonNull : toPrismaJson(fields.validationResult);
+    }
+    if ('proofResult' in fields) {
+      data['proofResult'] =
+        fields.proofResult === null ? Prisma.JsonNull : toPrismaJson(fields.proofResult);
+    }
+    if ('commitResult' in fields) {
+      data['commitResult'] =
+        fields.commitResult === null ? Prisma.JsonNull : toPrismaJson(fields.commitResult);
+    }
+    if ('rejectionReason' in fields) {
+      data['rejectionReason'] = fields.rejectionReason;
     }
 
     try {

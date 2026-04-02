@@ -362,6 +362,15 @@ export { UnityInvariantStage } from './unity-invariants.js';
 
 export { PkgAdvisoryService, serializeWarningsForEvent } from './pkg-advisories.js';
 
+export type { IProofFinding, IProofModel, IProofResult, IProofRunner } from './proof-stage.js';
+
+export {
+  buildProofModel,
+  createDisabledProofResult,
+  DeterministicProofRunner,
+  ProofRolloutMode,
+} from './proof-stage.js';
+
 // Validation pipeline: IValidationPipeline implementation
 export { CkgValidationPipeline } from './ckg-validation-pipeline.js';
 

@@ -2,7 +2,7 @@
  * @noema/knowledge-graph-service - CKG Mutation Pipeline
  *
  * Orchestrates the full lifecycle of CKG mutations:
- *   propose → validate → prove (pass-through) → commit
+ *   propose → validate → prove → commit
  *
  * This is the primary composed class that the KnowledgeGraphService
  * delegates to for all CKG mutation operations (D2: separate pipeline).
@@ -11,7 +11,7 @@
  * - Constructor DI: receives all repositories + validation pipeline
  * - State transitions use the typestate machine with audit logging
  * - Validation runs asynchronously (D3: hybrid fire-and-forget + events)
- * - PROVING/PROVEN auto-transition (D1: 8-state, Phase 6 pass-through)
+ * - PROVING/PROVEN proof gate with explicit rollout modes
  * - Commit protocol: Neo4j transaction → Postgres state update → events
  */
 
@@ -64,6 +64,15 @@ import {
   MutationNotFoundError,
 } from './errors/index.js';
 import { KG_COUNTERS, kgCounters, withSpan } from './observability.js';
+import {
+  buildProofModel,
+  createDisabledProofResult,
+  DeterministicProofRunner,
+  type IProofResult,
+  type IProofRunner,
+  ProofRolloutMode,
+  type ProofRolloutMode as ProofRolloutModeType,
+} from './proof-stage.js';
 
 // ============================================================================
 // Helpers
@@ -94,9 +103,7 @@ function toSerializableValue(value: unknown): Metadata[string] {
   }
 
   if (Array.isArray(value)) {
-    return value
-      .filter((entry) => entry !== undefined)
-      .map((entry) => toSerializableValue(entry));
+    return value.filter((entry) => entry !== undefined).map((entry) => toSerializableValue(entry));
   }
 
   if (typeof value === 'object') {
@@ -176,12 +183,8 @@ function toSerializableOperations(operations: CkgMutationOperation[]): Metadata[
             ...(operation.updates.description !== undefined
               ? { description: operation.updates.description }
               : {}),
-            ...(operation.updates.domain !== undefined
-              ? { domain: operation.updates.domain }
-              : {}),
-            ...(operation.updates.status !== undefined
-              ? { status: operation.updates.status }
-              : {}),
+            ...(operation.updates.domain !== undefined ? { domain: operation.updates.domain } : {}),
+            ...(operation.updates.status !== undefined ? { status: operation.updates.status } : {}),
             ...(operation.updates.aliases !== undefined
               ? { aliases: operation.updates.aliases }
               : {}),
@@ -311,7 +314,8 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     private readonly validationPipeline: IValidationPipeline,
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: Logger,
-    private readonly proofStageEnabled = false
+    private readonly proofStageMode: ProofRolloutModeType = ProofRolloutMode.DISABLED,
+    private readonly proofRunner: IProofRunner = new DeterministicProofRunner()
   ) {}
 
   // ==========================================================================
@@ -1030,6 +1034,10 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
         correlationId: context.correlationId as string,
         shortCircuitOnError: true,
       });
+      const serializedValidationResult = this.serializeValidationResult(validationResult);
+      await this.mutationRepository.updateMutationFields(mutation.mutationId, {
+        validationResult: serializedValidationResult,
+      });
 
       span.setAttribute('kg.validation.passed', validationResult.passed);
       span.setAttribute('kg.validation.stageCount', validationResult.stageResults.length);
@@ -1057,7 +1065,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
               ? `Ontological conflict(s) detected: ${String(ontologicalConflictCount)} conflict(s) require human review. ${String(validationResult.warnings.length)} warning(s).`
               : 'Ontology-import proposal validated successfully and is queued for manual review before commit.',
             context,
-            { validationResult: this.serializeValidationResult(validationResult) }
+            { validationResult: serializedValidationResult }
           );
 
           kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'pending_review' });
@@ -1093,7 +1101,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
           `Validation passed: ${String(validationResult.stageResults.length)} stage(s), ` +
             `${String(validationResult.totalDuration)}ms`,
           context,
-          { validationResult: this.serializeValidationResult(validationResult) }
+          { validationResult: serializedValidationResult }
         );
 
         kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'validated' });
@@ -1105,7 +1113,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
           mutation.mutationId,
           {
             mutationId: mutation.mutationId,
-            validationResults: this.serializeValidationResult(validationResult),
+            validationResults: serializedValidationResult,
           },
           context
         );
@@ -1125,7 +1133,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
             `Ontological conflict(s) detected: ${String(ontologicalViolations.length)} conflict(s) ` +
               `require human review. ${String(validationResult.warnings.length)} warning(s).`,
             context,
-            { validationResult: this.serializeValidationResult(validationResult) }
+            { validationResult: serializedValidationResult }
           );
 
           kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'pending_review' });
@@ -1144,7 +1152,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
               `${String(validationResult.violations.length)} error(s), ` +
               `${String(validationResult.warnings.length)} warning(s)`,
             context,
-            { validationResult: this.serializeValidationResult(validationResult) }
+            { validationResult: serializedValidationResult }
           );
 
           kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'rejected' });
@@ -1169,49 +1177,105 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
   }
 
   /**
-   * Proof stage: VALIDATED → PROVING → PROVEN (pass-through for Phase 6).
+   * Proof stage: VALIDATED → PROVING → PROVEN/PENDING_REVIEW/REJECTED.
    *
-   * In the full architecture (ADR-001), this stage runs TLA+ verification
-   * to prove that the mutation preserves UNITY invariants. For Phase 6,
-   * it auto-transitions with an "auto-approved" audit entry.
+   * Runs the configured proof adapter, persists proof artifacts, and enforces
+   * the configured rollout semantics for proof failures.
    */
   private async runProofStage(
     mutation: ICkgMutation,
     context: IExecutionContext
   ): Promise<ICkgMutation> {
+    const operations = parseOperations(mutation.operations);
+    const model = buildProofModel(mutation, operations);
+
     // VALIDATED → PROVING
     mutation = await this.transitionState(
       mutation,
       'proving',
       'system',
-      this.proofStageEnabled
-        ? 'Starting formal proof verification (TLA+)'
-        : 'Starting proof verification (auto-approved: formal verification disabled)',
+      `Starting proof verification (${this.proofStageMode})`,
       context
     );
+    kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'proving' });
 
-    if (this.proofStageEnabled) {
-      // TODO(NOEMA-tla): Run actual TLA+ invariant checking when implemented.
-      // For now, even when enabled, we auto-approve since TLA+ integration
-      // is not yet available. This flag gates future implementation.
-      // Tracked: Phase 11 — formal verification with TLA+ proofs.
-      this.logger.warn(
-        { mutationId: mutation.mutationId },
-        'Proof stage enabled but TLA+ integration not yet implemented — auto-approving'
+    const proofResult =
+      this.proofStageMode === ProofRolloutMode.DISABLED
+        ? createDisabledProofResult(this.proofStageMode, model)
+        : await this.proofRunner.runProof(
+            mutation,
+            operations,
+            model,
+            context,
+            this.proofStageMode
+          );
+
+    await this.mutationRepository.updateMutationFields(mutation.mutationId, {
+      proofResult: this.serializeProofResult(proofResult),
+      ...(proofResult.enforcement === 'rejected' && !proofResult.passed
+        ? { rejectionReason: proofResult.failureExplanation ?? 'Proof-stage rejection' }
+        : {}),
+    });
+
+    if (
+      proofResult.status === 'failed' &&
+      proofResult.enforcement === 'pending_review' &&
+      this.proofStageMode !== ProofRolloutMode.OBSERVE_ONLY
+    ) {
+      mutation = await this.transitionState(
+        mutation,
+        'pending_review',
+        'system',
+        proofResult.failureExplanation ?? 'Proof-stage findings require manual review.',
+        context,
+        { proofResult: this.serializeProofResult(proofResult) }
       );
+
+      kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'pending_review' });
+      return mutation;
     }
 
-    // PROVING → PROVEN (auto-transition — no actual proof logic yet)
+    if (
+      proofResult.status === 'failed' &&
+      proofResult.enforcement === 'rejected' &&
+      this.proofStageMode !== ProofRolloutMode.OBSERVE_ONLY
+    ) {
+      mutation = await this.transitionState(
+        mutation,
+        'rejected',
+        'system',
+        proofResult.failureExplanation ?? 'Proof stage rejected the mutation.',
+        context,
+        { proofResult: this.serializeProofResult(proofResult) }
+      );
+
+      kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'rejected' });
+
+      await this.publishEvent(
+        KnowledgeGraphEventType.CKG_MUTATION_REJECTED,
+        'CanonicalKnowledgeGraph',
+        mutation.mutationId,
+        {
+          mutationId: mutation.mutationId,
+          reason: proofResult.failureExplanation ?? 'Proof stage rejected the mutation.',
+          failedStage: 'proving' as MutationState,
+          rejectedBy: 'system',
+        },
+        context
+      );
+
+      return mutation;
+    }
+
     mutation = await this.transitionState(
       mutation,
       'proven',
       'system',
-      this.proofStageEnabled
-        ? 'Proof stage auto-approved: TLA+ integration pending implementation.'
-        : 'Proof stage auto-approved: formal verification not required (disabled by config).',
+      this.buildProofCompletionReason(proofResult),
       context,
-      { proofResult: { autoApproved: true, proofStageEnabled: this.proofStageEnabled } }
+      { proofResult: this.serializeProofResult(proofResult) }
     );
+    kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'proven' });
 
     return mutation;
   }
@@ -1245,6 +1309,10 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
         // Apply operations to Neo4j (atomically)
         const commitResult = await this.applyOperations(mutation);
         span.setAttribute('kg.commit.appliedCount', commitResult.appliedCount);
+        await this.mutationRepository.updateMutationFields(mutation.mutationId, {
+          commitResult: toSerializableMetadata(commitResult as unknown as Record<string, unknown>),
+          rejectionReason: null,
+        });
 
         // COMMITTING → COMMITTED (Postgres state update with retry)
         // CRITICAL: If this fails after Neo4j committed, we have a cross-DB
@@ -1294,6 +1362,9 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
           context,
           { commitError: message }
         );
+        await this.mutationRepository.updateMutationFields(mutation.mutationId, {
+          rejectionReason: `Commit failed: ${message}`,
+        });
 
         // Publish CkgMutationRejected event
         await this.publishEvent(
@@ -1898,6 +1969,48 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       errorCount: result.violations.length,
       warningCount: result.warnings.length,
     };
+  }
+
+  private serializeProofResult(result: IProofResult): Metadata {
+    return toSerializableMetadata({
+      mode: result.mode,
+      status: result.status,
+      passed: result.passed,
+      engineVersion: result.engineVersion,
+      artifactRef: result.artifactRef,
+      checkedInvariants: [...result.checkedInvariants],
+      findings: result.findings.map((finding) => ({
+        code: finding.code,
+        message: finding.message,
+        severity: finding.severity,
+        reviewable: finding.reviewable,
+        ...(finding.metadata !== undefined ? { metadata: finding.metadata } : {}),
+      })),
+      failureExplanation: result.failureExplanation,
+      modelSummary: result.modelSummary,
+      executedAt: result.executedAt,
+      autoApproved: result.autoApproved,
+      enforcement: result.enforcement,
+    });
+  }
+
+  private buildProofCompletionReason(result: IProofResult): string {
+    if (result.status === 'skipped') {
+      return `Proof stage skipped (${result.mode}).`;
+    }
+
+    if (result.status === 'passed') {
+      return `Proof stage passed via ${result.engineVersion}.`;
+    }
+
+    if (result.enforcement === 'observe_only') {
+      return (
+        `Proof stage recorded diagnostics in observe-only mode: ` +
+        (result.failureExplanation ?? 'see persisted proof findings.')
+      );
+    }
+
+    return result.failureExplanation ?? 'Proof stage completed with non-blocking diagnostics.';
   }
 
   /**

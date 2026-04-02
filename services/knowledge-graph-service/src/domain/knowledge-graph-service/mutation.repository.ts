@@ -203,6 +203,10 @@ export interface IMutationRepository {
       operations: Metadata[];
       revisionFeedback: string | null;
       revisionCount: number;
+      validationResult: Metadata | null;
+      proofResult: Metadata | null;
+      commitResult: Metadata | null;
+      rejectionReason: string | null;
     }>
   ): Promise<ICkgMutation>;
 }
