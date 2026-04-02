@@ -23,6 +23,7 @@ import { createToolRegistry } from './agents/tools/tool.registry.js';
 import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
+import { PkgAggregationApplicationService } from './application/knowledge-graph/aggregation/index.js';
 import {
   registerCkgEdgeRoutes,
   registerCkgMaintenanceRoutes,
@@ -54,7 +55,7 @@ import {
   StructuralIntegrityStage,
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
-import { UserDeletedConsumer } from './events/consumers/index.js';
+import { PkgAggregationConsumer, UserDeletedConsumer } from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
 import { CkgMaintenanceApplicationService } from './application/knowledge-graph/maintenance/index.js';
 import { CkgNodeBatchAuthoringService } from './application/knowledge-graph/node-authoring/index.js';
@@ -465,6 +466,14 @@ async function bootstrap(): Promise<void> {
     );
   }
 
+  const pkgAggregationService = new PkgAggregationApplicationService(
+    graphRepository,
+    aggregationEvidenceRepository,
+    mutationPipeline,
+    eventPublisher,
+    logger
+  );
+
   // --------------------------------------------------------------------------
   // Auth middleware & route wiring
   // --------------------------------------------------------------------------
@@ -544,6 +553,23 @@ async function bootstrap(): Promise<void> {
     );
 
     consumers.push(userDeletedConsumer);
+
+    const pkgAggregationConsumerRedis = new Redis(config.redis.url, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+    await pkgAggregationConsumerRedis.connect();
+    consumerRedisClients.push(pkgAggregationConsumerRedis);
+
+    const pkgAggregationConsumer = new PkgAggregationConsumer(
+      pkgAggregationConsumerRedis,
+      pkgAggregationService,
+      logger,
+      consumerName,
+      config.redis.eventStreamKey
+    );
+
+    consumers.push(pkgAggregationConsumer);
 
     // Initialize consumer groups (idempotent)
     await Promise.all(consumers.map((c) => c.initialize()));

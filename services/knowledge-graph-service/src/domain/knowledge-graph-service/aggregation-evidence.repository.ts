@@ -7,7 +7,14 @@
  * aggregation.
  */
 
-import type { ConfidenceScore, Metadata, NodeId, PromotionBand, UserId } from '@noema/types';
+import type {
+  ConfidenceScore,
+  Metadata,
+  MutationId,
+  NodeId,
+  PromotionBand,
+  UserId,
+} from '@noema/types';
 
 // ============================================================================
 // Evidence Types
@@ -20,6 +27,9 @@ import type { ConfidenceScore, Metadata, NodeId, PromotionBand, UserId } from '@
 export interface IAggregationEvidence {
   /** Persistence ID */
   readonly id: string;
+
+  /** Linked mutation, if this evidence has already been promoted into a proposal */
+  readonly mutationId: MutationId | null;
 
   /** User who produced this evidence signal */
   readonly sourceUserId: UserId;
@@ -102,6 +112,12 @@ export interface IAggregationEvidenceRepository {
   getEvidenceForTarget(ckgTargetNodeId: NodeId): Promise<IAggregationEvidence[]>;
 
   /**
+   * Get all evidence records for a proposed label that does not yet have
+   * a canonical target node.
+   */
+  getEvidenceForProposedLabel(proposedLabel: string): Promise<IAggregationEvidence[]>;
+
+  /**
    * Get evidence count by promotion band threshold.
    * Returns the number of independent PKGs (distinct users) supporting
    * the claim and the achieved promotion band.
@@ -109,9 +125,27 @@ export interface IAggregationEvidenceRepository {
   getEvidenceCountByBand(ckgTargetNodeId: NodeId): Promise<{ count: number; band: PromotionBand }>;
 
   /**
+   * Get evidence count by promotion band threshold for a proposed label.
+   */
+  getEvidenceCountByProposedLabel(
+    proposedLabel: string
+  ): Promise<{ count: number; band: PromotionBand }>;
+
+  /**
    * Get evidence contributed by a specific user.
    */
   getEvidenceByUser(userId: UserId): Promise<IAggregationEvidence[]>;
+
+  /**
+   * Find an existing evidence record for deduplication.
+   */
+  findEvidence(input: {
+    sourceUserId: UserId;
+    sourcePkgNodeId: NodeId;
+    ckgTargetNodeId?: NodeId;
+    proposedLabel?: string;
+    evidenceType: string;
+  }): Promise<IAggregationEvidence | null>;
 
   /**
    * Delete stale evidence for nodes/mutations that were rejected or superseded.
@@ -124,4 +158,18 @@ export interface IAggregationEvidenceRepository {
    * Get a comprehensive evidence summary for a mutation or CKG node.
    */
   getEvidenceSummary(ckgTargetNodeId: NodeId): Promise<IEvidenceSummary>;
+
+  /**
+   * Get a comprehensive evidence summary for a proposed label.
+   */
+  getEvidenceSummaryByProposedLabel(proposedLabel: string): Promise<IEvidenceSummary>;
+
+  /**
+   * Link all currently unlinked evidence for a target to a mutation.
+   */
+  linkEvidenceToMutation(input: {
+    mutationId: MutationId;
+    ckgTargetNodeId?: NodeId;
+    proposedLabel?: string;
+  }): Promise<number>;
 }

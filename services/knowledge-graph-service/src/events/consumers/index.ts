@@ -7,3 +7,4 @@
  */
 
 export { UserDeletedConsumer } from './user-deleted.consumer.js';
+export { PkgAggregationConsumer } from './pkg-aggregation.consumer.js';
