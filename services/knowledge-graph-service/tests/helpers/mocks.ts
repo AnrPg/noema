@@ -114,6 +114,7 @@ export function mockKnowledgeGraphService(): {
     listGraphSnapshots: vi.fn().mockImplementation(notConfigured),
     previewGraphRestore: vi.fn().mockImplementation(notConfigured),
     executeGraphRestore: vi.fn().mockImplementation(notConfigured),
+    listGraphCrdtStats: vi.fn().mockImplementation(notConfigured),
 
     // Operation Log
     getOperationLog: vi.fn().mockImplementation(notConfigured),
@@ -261,10 +262,15 @@ export function mockAggregationEvidenceRepository(): {
   return {
     recordEvidence: vi.fn().mockImplementation(notConfigured),
     getEvidenceForTarget: vi.fn().mockImplementation(notConfigured),
+    getEvidenceForProposedLabel: vi.fn().mockImplementation(notConfigured),
     getEvidenceCountByBand: vi.fn().mockImplementation(notConfigured),
+    getEvidenceCountByProposedLabel: vi.fn().mockImplementation(notConfigured),
     getEvidenceByUser: vi.fn().mockImplementation(notConfigured),
+    findEvidence: vi.fn().mockImplementation(notConfigured),
     deleteStaleEvidence: vi.fn().mockImplementation(notConfigured),
     getEvidenceSummary: vi.fn().mockImplementation(notConfigured),
+    getEvidenceSummaryByProposedLabel: vi.fn().mockImplementation(notConfigured),
+    linkEvidenceToMutation: vi.fn().mockImplementation(notConfigured),
   };
 }
 

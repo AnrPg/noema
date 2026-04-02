@@ -11,6 +11,52 @@ import type {
 } from '@noema/types';
 import { PkgAggregationApplicationService } from '../../../src/application/knowledge-graph/aggregation/index.js';
 
+class InMemoryGraphCrdtStatsRepository {
+  readonly appliedSignals: {
+    evidenceId: string;
+    targetKind: 'ckg_node' | 'proposed_label';
+    targetNodeId?: string;
+    proposedLabel?: string;
+    evidenceType: string;
+    direction: 'support' | 'oppose' | 'neutral';
+  }[] = [];
+
+  applyEvidenceSignal(input: {
+    evidenceId: string;
+    targetKind: 'ckg_node' | 'proposed_label';
+    targetNodeId?: string;
+    proposedLabel?: string;
+    evidenceType: string;
+    direction: 'support' | 'oppose' | 'neutral';
+  }) {
+    this.appliedSignals.push(input);
+    return Promise.resolve({
+      statKey: `stat:${input.evidenceId}`,
+      graphType: 'ckg' as const,
+      targetKind: input.targetKind,
+      targetNodeId: input.targetNodeId ?? null,
+      proposedLabel: input.proposedLabel ?? null,
+      evidenceType: input.evidenceType,
+      supportCount: input.direction === 'support' ? 1 : 0,
+      opposeCount: 0,
+      neutralCount: 0,
+      totalObservations: 1,
+      averageConfidence: 1,
+      supportCounterByReplica: { replica_test: 1 },
+      opposeCounterByReplica: {},
+      neutralCounterByReplica: {},
+      confidenceCounterByReplica: { replica_test: 1000 },
+      metadata: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  listStats() {
+    return Promise.resolve([]);
+  }
+}
+
 class InMemoryAggregationEvidenceRepository {
   private readonly records: {
     id: string;
@@ -22,6 +68,7 @@ class InMemoryAggregationEvidenceRepository {
     evidenceType: string;
     confidence: number;
     metadata: Record<string, unknown>;
+    direction: 'support' | 'oppose' | 'neutral';
     recordedAt: string;
   }[] = [];
 
@@ -33,6 +80,7 @@ class InMemoryAggregationEvidenceRepository {
     evidenceType: string;
     confidence: number;
     metadata?: Record<string, unknown>;
+    direction?: 'support' | 'oppose' | 'neutral';
   }) {
     const record = {
       id: `evid_${String(this.records.length + 1)}`,
@@ -44,6 +92,7 @@ class InMemoryAggregationEvidenceRepository {
       evidenceType: input.evidenceType,
       confidence: input.confidence,
       metadata: input.metadata ?? {},
+      direction: input.direction ?? 'support',
       recordedAt: new Date().toISOString(),
     };
     this.records.push(record);
@@ -168,6 +217,7 @@ function createCanonicalNode(overrides: Partial<IGraphNode> = {}): IGraphNode {
 describe('PkgAggregationApplicationService', () => {
   it('creates a canonical node proposal after three distinct PKG node signals converge', async () => {
     const evidenceRepository = new InMemoryAggregationEvidenceRepository();
+    const crdtRepository = new InMemoryGraphCrdtStatsRepository();
     const publish = vi.fn(() => Promise.resolve(undefined));
     const proposeFromAggregation = vi.fn(() =>
       Promise.resolve({
@@ -181,6 +231,8 @@ describe('PkgAggregationApplicationService', () => {
         findNodes: vi.fn(() => Promise.resolve([])),
       } as never,
       evidenceRepository as never,
+      crdtRepository as never,
+      'replica_test',
       {
         proposeFromAggregation,
       } as never,
@@ -212,6 +264,7 @@ describe('PkgAggregationApplicationService', () => {
     }
 
     expect(proposeFromAggregation).toHaveBeenCalledTimes(1);
+    expect(crdtRepository.appliedSignals).toHaveLength(3);
     expect(proposeFromAggregation).toHaveBeenCalledWith(
       [
         expect.objectContaining({
@@ -233,6 +286,7 @@ describe('PkgAggregationApplicationService', () => {
 
   it('creates a canonical edge proposal after three distinct PKG edge signals support the same relation', async () => {
     const evidenceRepository = new InMemoryAggregationEvidenceRepository();
+    const crdtRepository = new InMemoryGraphCrdtStatsRepository();
     const publish = vi.fn(() => Promise.resolve(undefined));
     const proposeFromAggregation = vi.fn(() =>
       Promise.resolve({
@@ -273,6 +327,8 @@ describe('PkgAggregationApplicationService', () => {
         findEdges: vi.fn(() => Promise.resolve([] as IGraphEdge[])),
       } as never,
       evidenceRepository as never,
+      crdtRepository as never,
+      'replica_test',
       {
         proposeFromAggregation,
       } as never,
@@ -305,6 +361,7 @@ describe('PkgAggregationApplicationService', () => {
     }
 
     expect(proposeFromAggregation).toHaveBeenCalledTimes(1);
+    expect(crdtRepository.appliedSignals).toHaveLength(3);
     expect(proposeFromAggregation).toHaveBeenCalledWith(
       [
         expect.objectContaining({
@@ -330,6 +387,8 @@ describe('PkgAggregationApplicationService', () => {
     const service = new PkgAggregationApplicationService(
       {} as never,
       new InMemoryAggregationEvidenceRepository() as never,
+      new InMemoryGraphCrdtStatsRepository() as never,
+      'replica_test',
       {
         getMutation: vi.fn(() =>
           Promise.resolve({
