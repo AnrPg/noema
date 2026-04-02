@@ -58,6 +58,11 @@ export const KnowledgeGraphEventType = {
   PKG_EDGE_UPDATED: 'pkg.edge.updated',
   PKG_EDGE_REMOVED: 'pkg.edge.removed',
   PKG_STRUCTURAL_METRICS_UPDATED: 'pkg.metrics.updated',
+  AGGREGATION_EVIDENCE_RECORDED: 'aggregation.evidence.recorded',
+  AGGREGATION_THRESHOLD_REACHED: 'aggregation.threshold.reached',
+  AGGREGATION_PROPOSAL_CREATED: 'aggregation.proposal.created',
+  AGGREGATION_PROPOSAL_SUPPRESSED: 'aggregation.proposal.suppressed',
+  AGGREGATION_PROPOSAL_REJECTED: 'aggregation.proposal.rejected',
 
   // ── CKG Events ─────────────────────────────────────────────────────────
   CKG_MUTATION_PROPOSED: 'ckg.mutation.proposed',
@@ -192,6 +197,56 @@ export interface IPkgStructuralMetricsUpdatedPayload {
 }
 
 // ============================================================================
+// Aggregation Event Payloads
+// ============================================================================
+
+export interface IAggregationEvidenceRecordedPayload {
+  evidenceId: string;
+  sourceUserId: UserId;
+  sourcePkgNodeId: NodeId;
+  evidenceType: string;
+  evidenceCount: number;
+  promotionBand: PromotionBand;
+  ckgTargetNodeId?: NodeId;
+  proposedLabel?: string;
+}
+
+export interface IAggregationThresholdReachedPayload {
+  sourceUserId: UserId;
+  sourcePkgNodeId: NodeId;
+  evidenceCount: number;
+  promotionBand: PromotionBand;
+  ckgTargetNodeId?: NodeId;
+  proposedLabel?: string;
+}
+
+export interface IAggregationProposalCreatedPayload {
+  mutationId: MutationId;
+  sourceUserId: UserId;
+  sourcePkgNodeId: NodeId;
+  evidenceCount: number;
+  operationCount: number;
+  ckgTargetNodeId?: NodeId;
+  proposedLabel?: string;
+}
+
+export interface IAggregationProposalSuppressedPayload {
+  sourceUserId: UserId;
+  sourcePkgNodeId: NodeId;
+  reason: string;
+  evidenceCount?: number;
+  ckgTargetNodeId?: NodeId;
+  proposedLabel?: string;
+}
+
+export interface IAggregationProposalRejectedPayload {
+  mutationId: MutationId | null;
+  failedStage: string;
+  reason: string;
+  rejectedBy: string;
+}
+
+// ============================================================================
 // CKG Event Payloads
 // ============================================================================
 
@@ -259,7 +314,7 @@ export interface ICkgMutationEscalatedPayload {
   /** Agent that proposed the mutation */
   proposedBy: AgentId;
   /** Ontological conflict details */
-  conflicts: Array<{
+  conflicts: {
     /** Edge type being added */
     proposedEdgeType: GraphEdgeType;
     /** Conflicting edge type already present or in batch */
@@ -270,7 +325,7 @@ export interface ICkgMutationEscalatedPayload {
     targetNodeId: NodeId;
     /** Human-readable conflict explanation */
     reason: string;
-  }>;
+  }[];
   /** Total number of ontological violations */
   violationCount: number;
   /** Human-readable escalation reason */
@@ -405,6 +460,31 @@ export type PkgStructuralMetricsUpdatedEvent = ITypedEvent<
   'PersonalKnowledgeGraph',
   IPkgStructuralMetricsUpdatedPayload
 >;
+export type AggregationEvidenceRecordedEvent = ITypedEvent<
+  'aggregation.evidence.recorded',
+  'KnowledgeAggregation',
+  IAggregationEvidenceRecordedPayload
+>;
+export type AggregationThresholdReachedEvent = ITypedEvent<
+  'aggregation.threshold.reached',
+  'KnowledgeAggregation',
+  IAggregationThresholdReachedPayload
+>;
+export type AggregationProposalCreatedEvent = ITypedEvent<
+  'aggregation.proposal.created',
+  'KnowledgeAggregation',
+  IAggregationProposalCreatedPayload
+>;
+export type AggregationProposalSuppressedEvent = ITypedEvent<
+  'aggregation.proposal.suppressed',
+  'KnowledgeAggregation',
+  IAggregationProposalSuppressedPayload
+>;
+export type AggregationProposalRejectedEvent = ITypedEvent<
+  'aggregation.proposal.rejected',
+  'KnowledgeAggregation',
+  IAggregationProposalRejectedPayload
+>;
 
 // CKG Events
 export type CkgMutationProposedEvent = ITypedEvent<
@@ -476,6 +556,13 @@ export type PkgDomainEvent =
   | PkgEdgeRemovedEvent
   | PkgStructuralMetricsUpdatedEvent;
 
+export type AggregationDomainEvent =
+  | AggregationEvidenceRecordedEvent
+  | AggregationThresholdReachedEvent
+  | AggregationProposalCreatedEvent
+  | AggregationProposalSuppressedEvent
+  | AggregationProposalRejectedEvent;
+
 /**
  * Union of all CKG domain events.
  */
@@ -499,4 +586,8 @@ export type MetacognitiveDomainEvent =
 /**
  * Union of all knowledge-graph domain events.
  */
-export type KnowledgeGraphDomainEvent = PkgDomainEvent | CkgDomainEvent | MetacognitiveDomainEvent;
+export type KnowledgeGraphDomainEvent =
+  | PkgDomainEvent
+  | AggregationDomainEvent
+  | CkgDomainEvent
+  | MetacognitiveDomainEvent;

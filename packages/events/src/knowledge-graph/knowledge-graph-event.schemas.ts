@@ -134,6 +134,56 @@ export const PkgStructuralMetricsUpdatedPayloadSchema = z.object({
 });
 
 // ============================================================================
+// Aggregation Event Payload Schemas
+// ============================================================================
+
+export const AggregationEvidenceRecordedPayloadSchema = z.object({
+  evidenceId: z.string().min(1),
+  sourceUserId: UserIdSchema,
+  sourcePkgNodeId: NodeIdSchema,
+  evidenceType: z.string().min(1),
+  evidenceCount: z.number().int().nonnegative(),
+  promotionBand: PromotionBandSchema,
+  ckgTargetNodeId: NodeIdSchema.optional(),
+  proposedLabel: z.string().min(1).optional(),
+});
+
+export const AggregationThresholdReachedPayloadSchema = z.object({
+  sourceUserId: UserIdSchema,
+  sourcePkgNodeId: NodeIdSchema,
+  evidenceCount: z.number().int().nonnegative(),
+  promotionBand: PromotionBandSchema,
+  ckgTargetNodeId: NodeIdSchema.optional(),
+  proposedLabel: z.string().min(1).optional(),
+});
+
+export const AggregationProposalCreatedPayloadSchema = z.object({
+  mutationId: MutationIdSchema,
+  sourceUserId: UserIdSchema,
+  sourcePkgNodeId: NodeIdSchema,
+  evidenceCount: z.number().int().nonnegative(),
+  operationCount: z.number().int().positive(),
+  ckgTargetNodeId: NodeIdSchema.optional(),
+  proposedLabel: z.string().min(1).optional(),
+});
+
+export const AggregationProposalSuppressedPayloadSchema = z.object({
+  sourceUserId: UserIdSchema,
+  sourcePkgNodeId: NodeIdSchema,
+  reason: z.string().min(1),
+  evidenceCount: z.number().int().nonnegative().optional(),
+  ckgTargetNodeId: NodeIdSchema.optional(),
+  proposedLabel: z.string().min(1).optional(),
+});
+
+export const AggregationProposalRejectedPayloadSchema = z.object({
+  mutationId: MutationIdSchema.nullable(),
+  failedStage: z.string().min(1),
+  reason: z.string().min(1),
+  rejectedBy: z.string().min(1),
+});
+
+// ============================================================================
 // CKG Event Payload Schemas
 // ============================================================================
 
@@ -284,6 +334,36 @@ export const PkgStructuralMetricsUpdatedEventSchema = createEventSchema(
   PkgStructuralMetricsUpdatedPayloadSchema
 );
 
+export const AggregationEvidenceRecordedEventSchema = createEventSchema(
+  'aggregation.evidence.recorded',
+  'KnowledgeAggregation',
+  AggregationEvidenceRecordedPayloadSchema
+);
+
+export const AggregationThresholdReachedEventSchema = createEventSchema(
+  'aggregation.threshold.reached',
+  'KnowledgeAggregation',
+  AggregationThresholdReachedPayloadSchema
+);
+
+export const AggregationProposalCreatedEventSchema = createEventSchema(
+  'aggregation.proposal.created',
+  'KnowledgeAggregation',
+  AggregationProposalCreatedPayloadSchema
+);
+
+export const AggregationProposalSuppressedEventSchema = createEventSchema(
+  'aggregation.proposal.suppressed',
+  'KnowledgeAggregation',
+  AggregationProposalSuppressedPayloadSchema
+);
+
+export const AggregationProposalRejectedEventSchema = createEventSchema(
+  'aggregation.proposal.rejected',
+  'KnowledgeAggregation',
+  AggregationProposalRejectedPayloadSchema
+);
+
 // CKG Events
 export const CkgMutationProposedEventSchema = createEventSchema(
   'ckg.mutation.proposed',
@@ -352,6 +432,21 @@ export type PkgEdgeCreatedEventInput = z.input<typeof PkgEdgeCreatedEventSchema>
 export type PkgEdgeRemovedEventInput = z.input<typeof PkgEdgeRemovedEventSchema>;
 export type PkgStructuralMetricsUpdatedEventInput = z.input<
   typeof PkgStructuralMetricsUpdatedEventSchema
+>;
+export type AggregationEvidenceRecordedEventInput = z.input<
+  typeof AggregationEvidenceRecordedEventSchema
+>;
+export type AggregationThresholdReachedEventInput = z.input<
+  typeof AggregationThresholdReachedEventSchema
+>;
+export type AggregationProposalCreatedEventInput = z.input<
+  typeof AggregationProposalCreatedEventSchema
+>;
+export type AggregationProposalSuppressedEventInput = z.input<
+  typeof AggregationProposalSuppressedEventSchema
+>;
+export type AggregationProposalRejectedEventInput = z.input<
+  typeof AggregationProposalRejectedEventSchema
 >;
 
 // CKG
