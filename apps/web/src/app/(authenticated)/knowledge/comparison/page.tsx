@@ -11,6 +11,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@noema/auth';
 import { usePKGCKGComparison, useCreatePKGNode } from '@noema/api-client';
 import type { IGraphNodeDto, IGraphEdgeDto } from '@noema/api-client';
@@ -26,12 +27,15 @@ import { GraphCanvas } from '@/components/graph/graph-canvas';
 export default function KnowledgeComparisonPage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
+  const searchParams = useSearchParams();
+  const activeDomain = searchParams.get('domain') ?? 'general';
 
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [createError, setCreateError] = React.useState<string | null>(null);
 
   // ── Data hooks ─────────────────────────────────────────────────────────────
   const { data: comparisonData, isLoading: compLoading } = usePKGCKGComparison(userId, {
+    domain: activeDomain,
     scopeMode: 'engagement_hops',
     hopCount: 2,
   });
@@ -210,6 +214,7 @@ export default function KnowledgeComparisonPage(): React.JSX.Element {
                   {
                     type: selectedNode.type,
                     label: selectedNode.label,
+                    domain: activeDomain,
                     ...(selectedNode.description !== null
                       ? { description: selectedNode.description }
                       : {}),

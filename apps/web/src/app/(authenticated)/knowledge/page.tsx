@@ -70,6 +70,7 @@ const primaryButtonClass =
   'inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50';
 const secondaryButtonClass =
   'inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50';
+const DEFAULT_NODE_DOMAIN = 'general';
 
 interface INodeFormState {
   label: string;
@@ -157,6 +158,7 @@ export default function KnowledgePage(): React.JSX.Element {
   const { user } = useAuth();
   const userId = (user?.id ?? '') as UserId;
   const selectedDomain = searchParams.get('domain') ?? undefined;
+  const activeDomain = selectedDomain ?? DEFAULT_NODE_DOMAIN;
   const activeStudyMode = useActiveStudyMode();
 
   const { data: nodesData, isLoading: nodesLoading } = usePKGNodes(userId, {
@@ -168,7 +170,7 @@ export default function KnowledgePage(): React.JSX.Element {
   const { data: frontierData } = useKnowledgeFrontier(userId, selectedDomain, activeStudyMode);
   const { data: bridgesData } = useBridgeNodes(userId, selectedDomain, activeStudyMode);
   const { data: comparisonData, isLoading: comparisonLoading } = usePKGCKGComparison(userId, {
-    domain: selectedDomain ?? 'general',
+    domain: activeDomain,
     scopeMode: 'engagement_hops',
     hopCount: 2,
     bootstrapWhenUnseeded: true,
@@ -374,6 +376,7 @@ export default function KnowledgePage(): React.JSX.Element {
       const response = await createNode.mutateAsync({
         label: node.label,
         type: node.type,
+        domain: activeDomain,
         ...(node.description !== null ? { description: node.description } : {}),
         ...(node.tags.length > 0 ? { tags: node.tags } : {}),
         supportedStudyModes:
@@ -395,6 +398,7 @@ export default function KnowledgePage(): React.JSX.Element {
         await createNode.mutateAsync({
           label: node.label,
           type: node.type,
+          domain: activeDomain,
           ...(node.description !== null ? { description: node.description } : {}),
           ...(node.tags.length > 0 ? { tags: node.tags } : {}),
           supportedStudyModes:
@@ -421,6 +425,7 @@ export default function KnowledgePage(): React.JSX.Element {
       const response = await createNode.mutateAsync({
         label: createNodeForm.label.trim(),
         type: createNodeForm.type,
+        domain: activeDomain,
         ...(createNodeForm.description.trim() !== ''
           ? { description: createNodeForm.description.trim() }
           : {}),

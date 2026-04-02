@@ -16,11 +16,13 @@ import type {
   CkgEdgeAuthoringPreviewResponse,
   CkgNodeBatchAuthoringPreviewResponse,
   CkgMutationAuditLogResponse,
+  CkgResetResponse,
   ICkgBulkReviewInput,
   ICkgEdgeAuthoringPreviewInput,
   ICkgNodeBatchAuthoringPreviewInput,
   ICkgMutationFilters,
   ICkgMutationProposalInput,
+  ICkgResetInput,
   CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
@@ -73,13 +75,20 @@ const metricsBase = (userId: UserId): string => `/api/v1/users/${userId}/metrics
 const miscBase = (userId: UserId): string => `/api/v1/users/${userId}/misconceptions`;
 const DEFAULT_DOMAIN = 'general';
 
+function normalizeCreateNodeInput(data: ICreateNodeInput): ICreateNodeInput {
+  return {
+    ...data,
+    domain: data.domain.trim() === '' ? DEFAULT_DOMAIN : data.domain.trim(),
+  };
+}
+
 // ============================================================================
 // PKG Nodes API
 // ============================================================================
 
 export const pkgNodesApi = {
   create: (userId: UserId, data: ICreateNodeInput): Promise<NodeResponse> =>
-    http.post(`${pkgBase(userId)}/nodes`, data),
+    http.post(`${pkgBase(userId)}/nodes`, normalizeCreateNodeInput(data)),
 
   list: (userId: UserId, params?: IGraphNodeQueryParams): Promise<NodesListResponse> =>
     params === undefined
@@ -300,6 +309,11 @@ export const ckgMutationsApi = {
 
   bulkReview: (input: ICkgBulkReviewInput): Promise<CkgBulkReviewResponse> =>
     http.post(`${ckgBase}/mutations/review/bulk`, input),
+};
+
+export const ckgMaintenanceApi = {
+  reset: (input: ICkgResetInput): Promise<CkgResetResponse> =>
+    http.post(`${ckgBase}/maintenance/reset`, input),
 };
 
 // ============================================================================

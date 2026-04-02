@@ -9,10 +9,10 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Loader2, Play } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Play } from 'lucide-react';
 import { useAuth } from '@noema/auth';
 import { useCards, useCard, useReviewQueue, useStartSession } from '@noema/api-client';
-import type { IDeckQueryInput } from '@noema/api-client';
+import type { IDeckQueryInput, IStartSessionInput } from '@noema/api-client';
 import type { CardId } from '@noema/types';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 
@@ -23,6 +23,27 @@ import { CardRenderer } from '@/components/card-renderers';
 import { DeckQueryFilter } from '@/components/deck-query-filter';
 import { formatApiErrorMessage } from '@/lib/api-errors';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import {
+  deriveSessionCardSides,
+  getDefaultPromptSide,
+  type SessionRevealMode,
+} from '@/lib/session-card-sides';
+
+const SESSION_CANDIDATE_QUERY_LIMIT = 100;
+const SESSION_SIZE_MIN = 5;
+const SESSION_SIZE_MAX = 100;
+
+function supportsStudyMode(
+  card: { supportedStudyModes?: string[] | undefined },
+  activeStudyMode: string
+): boolean {
+  const supportedStudyModes = card.supportedStudyModes;
+  return (
+    supportedStudyModes === undefined ||
+    supportedStudyModes.length === 0 ||
+    supportedStudyModes.includes(activeStudyMode)
+  );
+}
 
 // ============================================================================
 // SessionNewPage
@@ -30,8 +51,9 @@ import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 export default function SessionNewPage(): React.JSX.Element {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isAuthenticated, isInitialized } = useAuth();
   const activeStudyMode = useActiveStudyMode();
+  const isReadyForAuthenticatedQueries = isInitialized && isAuthenticated && user?.id !== undefined;
 
   // ── Section 1: Mode ──────────────────────────────────────────────────────
   const [mode, setMode] = React.useState<PhilosophicalMode>('exploration');
@@ -44,17 +66,21 @@ export default function SessionNewPage(): React.JSX.Element {
   // ── Section 3: Settings ──────────────────────────────────────────────────
   const [retentionPct, setRetentionPct] = React.useState(80);
   const [sessionSize, setSessionSize] = React.useState(20);
+  const [sessionSizeInput, setSessionSizeInput] = React.useState('20');
   const [startError, setStartError] = React.useState<string | null>(null);
   const [previewIndex, setPreviewIndex] = React.useState(0);
+  const [presentationPromptSide, setPresentationPromptSide] = React.useState('');
+  const [presentationRevealMode, setPresentationRevealMode] =
+    React.useState<SessionRevealMode>('all_at_once');
 
   // ── API hooks ────────────────────────────────────────────────────────────
   const reviewQueue = useReviewQueue(
     { limit: sessionSize, studyMode: activeStudyMode },
-    { enabled: useQuickStart && user?.id !== undefined }
+    { enabled: useQuickStart && isReadyForAuthenticatedQueries }
   );
   const sessionCandidates = useCards(
-    { ...customQuery, supportedStudyModes: [activeStudyMode], limit: sessionSize },
-    { enabled: !useQuickStart && showCandidates && user?.id !== undefined }
+    { ...customQuery, limit: Math.max(sessionSize, SESSION_CANDIDATE_QUERY_LIMIT) },
+    { enabled: !useQuickStart && showCandidates && isReadyForAuthenticatedQueries }
   );
 
   const startSession = useStartSession();
@@ -63,30 +89,99 @@ export default function SessionNewPage(): React.JSX.Element {
   const queue = reviewQueue.data?.data;
   const retentionCount = queue?.retentionDue;
   const calibrationCount = queue?.calibrationDue;
+  const compatibleCandidateItems = React.useMemo(
+    () =>
+      (sessionCandidates.data?.data.items ?? []).filter((candidate) =>
+        supportsStudyMode(candidate, activeStudyMode)
+      ),
+    [activeStudyMode, sessionCandidates.data]
+  );
   const previewCandidateIds = React.useMemo(
-    () => sessionCandidates.data?.data.items.map((candidate) => candidate.id) ?? [],
-    [sessionCandidates.data]
+    () => compatibleCandidateItems.map((candidate) => candidate.id),
+    [compatibleCandidateItems]
   );
   const previewCandidateId =
     previewCandidateIds.length > 0
       ? previewCandidateIds[Math.min(previewIndex, previewCandidateIds.length - 1)]
       : undefined;
+  const quickStartPreviewCardId =
+    queue !== undefined && queue.cards.length > 0 ? (queue.cards[0]?.cardId as CardId) : undefined;
+  const previewCardId = useQuickStart ? quickStartPreviewCardId : previewCandidateId;
   const { data: previewCard, isLoading: previewCardLoading } = useCard(
-    (previewCandidateId ?? '') as CardId,
-    { enabled: showCandidates && previewCandidateId !== undefined }
+    (previewCardId ?? '') as CardId,
+    { enabled: isReadyForAuthenticatedQueries && previewCardId !== undefined }
   );
+  const presentationSideOptions = React.useMemo(
+    () =>
+      previewCard !== undefined
+        ? deriveSessionCardSides(previewCard).filter((side) => side.key !== 'hint')
+        : [],
+    [previewCard]
+  );
+  const derivedAnswerSide = React.useMemo(() => {
+    const remaining = presentationSideOptions.filter((side) => side.key !== presentationPromptSide);
+    return remaining[0]?.key;
+  }, [presentationPromptSide, presentationSideOptions]);
 
   React.useEffect(() => {
     setPreviewIndex(0);
   }, [showCandidates, customQuery, sessionSize]);
 
+  React.useEffect(() => {
+    setSessionSizeInput(String(sessionSize));
+  }, [sessionSize]);
+
+  React.useEffect(() => {
+    if (presentationSideOptions.length === 0) {
+      setPresentationPromptSide('');
+      return;
+    }
+
+    if (!presentationSideOptions.some((side) => side.key === presentationPromptSide)) {
+      setPresentationPromptSide(getDefaultPromptSide(presentationSideOptions) ?? '');
+    }
+  }, [presentationPromptSide, presentationSideOptions]);
+
+  const commitSessionSizeInput = React.useCallback((): number => {
+    const trimmed = sessionSizeInput.trim();
+    if (trimmed === '') {
+      setSessionSizeInput(String(sessionSize));
+      return sessionSize;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) {
+      setSessionSizeInput(String(sessionSize));
+      return sessionSize;
+    }
+
+    const clamped = clampSessionSize(parsed);
+    setSessionSize(clamped);
+    setSessionSizeInput(String(clamped));
+    return clamped;
+  }, [sessionSize, sessionSizeInput]);
+
+  const adjustSessionSize = React.useCallback(
+    (delta: number): void => {
+      const rawValue = sessionSizeInput.trim() === '' ? sessionSize : Number(sessionSizeInput);
+      const baseline = Number.isFinite(rawValue) ? rawValue : sessionSize;
+      const nextValue = clampSessionSize(baseline + delta);
+      setSessionSize(nextValue);
+      setSessionSizeInput(String(nextValue));
+    },
+    [sessionSize, sessionSizeInput]
+  );
+
   // ── Start handler ────────────────────────────────────────────────────────
   async function handleStart(): Promise<void> {
     setStartError(null);
+    const resolvedSessionSize = commitSessionSizeInput();
     let cardIds: CardId[] = [];
+    let quickStartQueue = queue;
 
     if (useQuickStart) {
       const queueResponse = queue ?? (await reviewQueue.refetch()).data?.data;
+      quickStartQueue = queueResponse;
 
       if (queueResponse === undefined) {
         setStartError(
@@ -95,7 +190,9 @@ export default function SessionNewPage(): React.JSX.Element {
         return;
       }
 
-      cardIds = queueResponse.cards.slice(0, sessionSize).map((card) => card.cardId as CardId);
+      cardIds = queueResponse.cards
+        .slice(0, resolvedSessionSize)
+        .map((card) => card.cardId as CardId);
 
       if (cardIds.length === 0) {
         setStartError(
@@ -105,7 +202,9 @@ export default function SessionNewPage(): React.JSX.Element {
       }
     } else {
       const candidateResponse = sessionCandidates.data ?? (await sessionCandidates.refetch()).data;
-      const candidateItems = candidateResponse?.data.items ?? [];
+      const candidateItems = (candidateResponse?.data.items ?? []).filter((candidate) =>
+        supportsStudyMode(candidate, activeStudyMode)
+      );
 
       if (candidateItems.length === 0) {
         setStartError(
@@ -114,20 +213,41 @@ export default function SessionNewPage(): React.JSX.Element {
         return;
       }
 
-      cardIds = candidateItems.slice(0, sessionSize).map((card) => card.id);
+      cardIds = candidateItems.slice(0, resolvedSessionSize).map((card) => card.id);
     }
 
     try {
+      const initialCardLanes: IStartSessionInput['initialCardLanes'] =
+        useQuickStart && quickStartQueue !== undefined
+          ? Object.fromEntries(
+              quickStartQueue.cards
+                .slice(0, resolvedSessionSize)
+                .map((card: (typeof quickStartQueue.cards)[number]) => [
+                  card.cardId,
+                  card.lane === 'calibration' ? 'calibration' : 'retention',
+                ])
+            )
+          : undefined;
       const response = await startSession.mutateAsync({
         learningMode: mode,
         studyMode: activeStudyMode,
         deckQueryId: createClientDeckQueryId(),
         config: {
-          maxCards: sessionSize,
+          maxCards: resolvedSessionSize,
           sessionTimeoutHours: 24,
           ...(customQuery.cardTypes !== undefined ? { cardTypes: customQuery.cardTypes } : {}),
+          ...(presentationPromptSide !== ''
+            ? {
+                presentation: {
+                  promptSide: presentationPromptSide,
+                  revealMode: presentationRevealMode,
+                  ...(derivedAnswerSide !== undefined ? { answerSide: derivedAnswerSide } : {}),
+                },
+              }
+            : {}),
         },
         initialCardIds: cardIds,
+        ...(initialCardLanes !== undefined ? { initialCardLanes } : {}),
       });
 
       const sessionId = response.data.id as string;
@@ -250,7 +370,7 @@ export default function SessionNewPage(): React.JSX.Element {
                     </div>
                   )}
                   {sessionCandidates.isSuccess &&
-                    (sessionCandidates.data.data.items.length === 0 ? (
+                    (compatibleCandidateItems.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
                         No candidates match the current filters.
                       </p>
@@ -260,7 +380,7 @@ export default function SessionNewPage(): React.JSX.Element {
                           <div>
                             <p className="text-sm font-medium text-foreground">
                               Candidate {String(previewIndex + 1)} of{' '}
-                              {String(sessionCandidates.data.data.items.length)}
+                              {String(compatibleCandidateItems.length)}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Previewing the cards that will be eligible for this session.
@@ -283,15 +403,10 @@ export default function SessionNewPage(): React.JSX.Element {
                               type="button"
                               variant="outline"
                               size="sm"
-                              disabled={
-                                previewIndex >= sessionCandidates.data.data.items.length - 1
-                              }
+                              disabled={previewIndex >= compatibleCandidateItems.length - 1}
                               onClick={() => {
                                 setPreviewIndex((current) =>
-                                  Math.min(
-                                    sessionCandidates.data.data.items.length - 1,
-                                    current + 1
-                                  )
+                                  Math.min(compatibleCandidateItems.length - 1, current + 1)
                                 );
                               }}
                             >
@@ -371,22 +486,136 @@ export default function SessionNewPage(): React.JSX.Element {
               Session Size
             </label>
             <div className="flex items-center gap-3">
-              <input
-                id="session-size"
-                type="number"
-                min={5}
-                max={100}
-                value={sessionSize}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  if (val >= 5 && val <= 100) {
-                    setSessionSize(val);
-                  }
-                }}
-                className="w-24 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <span className="text-sm text-muted-foreground">cards (5 – 100)</span>
+              <div className="flex items-stretch overflow-hidden rounded-2xl border border-synapse-400/35 bg-background/80 shadow-[0_0_0_1px_rgba(34,211,238,0.14)] transition focus-within:border-synapse-300/60 focus-within:shadow-[0_0_0_2px_rgba(59,130,246,0.28)]">
+                <input
+                  id="session-size"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={sessionSizeInput}
+                  onChange={(e) => {
+                    const nextValue = e.target.value.replace(/\D/g, '');
+                    setSessionSizeInput(nextValue);
+                  }}
+                  onBlur={() => {
+                    commitSessionSizeInput();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      commitSessionSizeInput();
+                    }
+                  }}
+                  className="w-24 bg-transparent px-4 py-3 text-3xl font-medium tabular-nums text-foreground outline-none"
+                  aria-describedby="session-size-hint"
+                />
+                <div className="flex flex-col border-l border-border/70 bg-card/70">
+                  <button
+                    type="button"
+                    aria-label="Increase session size"
+                    className="flex h-1/2 min-h-[1.75rem] items-center justify-center px-3 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                    onClick={() => {
+                      adjustSessionSize(1);
+                    }}
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Decrease session size"
+                    className="flex h-1/2 min-h-[1.75rem] items-center justify-center border-t border-border/70 px-3 text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+                    onClick={() => {
+                      adjustSessionSize(-1);
+                    }}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <span id="session-size-hint" className="text-sm text-muted-foreground">
+                cards ({String(SESSION_SIZE_MIN)} – {String(SESSION_SIZE_MAX)})
+              </span>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="space-y-1">
+              <label htmlFor="prompt-side" className="text-sm font-medium text-foreground">
+                Card Sides
+              </label>
+              <p className="text-sm text-muted-foreground">
+                Choose which side appears first. Reveal can show everything at once or unfold one
+                side at a time.
+              </p>
+            </div>
+
+            <select
+              id="prompt-side"
+              value={presentationPromptSide}
+              disabled={presentationSideOptions.length === 0}
+              onChange={(e) => {
+                setPresentationPromptSide(e.target.value);
+              }}
+              className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {presentationSideOptions.length === 0 ? (
+                <option value="">Load a previewable card first</option>
+              ) : (
+                presentationSideOptions.map((side) => (
+                  <option key={side.key} value={side.key}>
+                    {side.label}
+                  </option>
+                ))
+              )}
+            </select>
+
+            <div className="grid gap-2 md:grid-cols-2">
+              <button
+                type="button"
+                className={[
+                  'rounded-2xl border px-4 py-3 text-left transition-colors',
+                  presentationRevealMode === 'all_at_once'
+                    ? 'border-cyan-400/50 bg-cyan-400/10'
+                    : 'border-border bg-background hover:bg-muted/40',
+                ].join(' ')}
+                onClick={() => {
+                  setPresentationRevealMode('all_at_once');
+                }}
+              >
+                <span className="block text-sm font-medium text-foreground">
+                  Reveal all other sides
+                </span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Show every remaining side together when you reveal.
+                </span>
+              </button>
+              <button
+                type="button"
+                className={[
+                  'rounded-2xl border px-4 py-3 text-left transition-colors',
+                  presentationRevealMode === 'one_then_more'
+                    ? 'border-cyan-400/50 bg-cyan-400/10'
+                    : 'border-border bg-background hover:bg-muted/40',
+                ].join(' ')}
+                onClick={() => {
+                  setPresentationRevealMode('one_then_more');
+                }}
+              >
+                <span className="block text-sm font-medium text-foreground">
+                  Reveal one side first
+                </span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Start with the main answer, then open the rest one by one.
+                </span>
+              </button>
+            </div>
+
+            {presentationRevealMode === 'one_then_more' && derivedAnswerSide !== undefined && (
+              <p className="text-xs text-muted-foreground">
+                Primary revealed side:{' '}
+                {presentationSideOptions.find((side) => side.key === derivedAnswerSide)?.label ??
+                  'Next available side'}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -454,6 +683,10 @@ function formatDifficultyLabel(difficulty: unknown): string {
   }
 
   return 'Difficulty unavailable';
+}
+
+function clampSessionSize(value: number): number {
+  return Math.min(SESSION_SIZE_MAX, Math.max(SESSION_SIZE_MIN, Math.round(value)));
 }
 
 function formatStartSessionError(error: unknown): string {
