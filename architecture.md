@@ -88,6 +88,14 @@ Critical dependency rule:
 - higher layers may depend on lower layers
 - lower layers must never depend on higher layers
 
+The concrete module-to-layer mapping now lives in:
+
+- `C:\Users\anr\Apps\noema\docs\backend\mode-aware-knowledge-graph.md`
+
+And CI enforcement is wired through:
+
+- `pnpm --filter @noema/knowledge-graph-service lint`
+
 ## Current Implementation Status
 
 The architecture is no longer only aspirational. The current repository now has

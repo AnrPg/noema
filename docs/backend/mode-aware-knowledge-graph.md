@@ -50,6 +50,68 @@ Mode is expressed through:
 - query filters
 - lens-aware frontend rendering
 
+## Stratified Layer Mapping
+
+The graph subsystem now has a concrete five-layer mapping for the modules that
+represent the actual reasoning stack. That mapping is enforced by the
+knowledge-graph-service lint pipeline.
+
+Pure orchestration files such as `pkg-write.service.ts`,
+`graph-read.service.ts`, `ckg-mutation-pipeline.ts`, route glue, hint builders,
+and observability helpers are intentionally outside the strict layer check
+because they assemble outputs from multiple layers rather than defining a
+reasoning layer themselves.
+
+Barrel files that intentionally re-export across adjacent layers, such as
+`metrics/index.ts`, are also excluded from the strict check for the same reason.
+
+### Layer 0: Structural Base Facts
+
+- `graph.repository.ts`
+- `graph-restoration.repository.ts`
+- `graph-snapshot.repository.ts`
+- `pkg-operation-log.repository.ts`
+- `ckg-mutation-dsl.ts`
+- `ckg-typestate.ts`
+- `mutation.repository.ts`
+- `proof-stage.ts`
+
+### Layer 1: Deterministic Graph Derivations
+
+- `graph-analysis.ts`
+
+### Layer 2: Ontology Reasoning
+
+- `ontology-reasoning.ts`
+- `unity-invariants.ts`
+
+### Layer 3: Aggregated and Statistical Signals
+
+- `aggregation-evidence.repository.ts`
+- `metrics.repository.ts`
+- `metrics/**`
+
+### Layer 4: Pedagogical and Diagnostic Logic
+
+- `misconception.repository.ts`
+- `misconception/**`
+- `metrics/health/**`
+- `metrics-orchestrator.service.ts`
+- `pkg-advisories.ts`
+
+### Dependency Rule
+
+- higher layers may depend on lower layers
+- lower layers must not import higher layers
+
+Enforcement lives in:
+
+- `services/knowledge-graph-service/src/scripts/check-stratified-graph-dependencies.ts`
+
+That script runs inside:
+
+- `pnpm --filter @noema/knowledge-graph-service lint`
+
 ## Node Membership
 
 Each node may support one or both modes.
