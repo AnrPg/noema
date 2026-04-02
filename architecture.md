@@ -33,6 +33,61 @@ The architectural center of gravity is:
 
 > Shared item identity is allowed. Shared memory state across modes is not.
 
+## Dual-Graph Hardening Program
+
+The mode-aware architecture remains the active application-level baseline, but
+the graph subsystem now also has an explicit hardening program locked in for
+implementation.
+
+The graph target is:
+
+- PKG remains direct-write, typed, auditable, and pedagogically flexible
+- CKG remains DSL-gated, typestate-driven, and formally guarded
+- PKG signals may influence CKG only through aggregation evidence and mutation
+  proposals
+- graph reasoning is stratified into five dependency layers with no upward
+  imports from lower layers
+
+The accepted implementation program for this work is:
+
+- `C:\Users\anr\Apps\noema\docs\plans\2026-04-02-dual-graph-gap-closure.md`
+
+The accepted architectural decisions that lock the program are:
+
+- `ADR-0059` dual-graph gap-closure program
+- `ADR-0060` canonical ontology artifact ownership
+- `ADR-0061` proof-stage rollout modes
+- `ADR-0062` stratified graph dependency enforcement
+
+### Dual-graph target state
+
+#### PKG target behavior
+
+- direct validated updates remain available
+- structural corruption remains blocking
+- semantic and pedagogical issues become structured advisory feedback by default
+- writes remain auditable and reconstructable
+
+#### CKG target behavior
+
+- all canonical writes stay behind the mutation DSL
+- validation expands to structural, ontology, invariant, and proof stages
+- proof becomes a real stage with explicit rollout modes
+- graph state becomes reconstructable and restorable, not only auditable
+
+### Five-layer graph reasoning model
+
+- Layer 0: structural base facts
+- Layer 1: deterministic graph derivations
+- Layer 2: ontology reasoning
+- Layer 3: aggregated/statistical signals
+- Layer 4: pedagogical/diagnostic logic
+
+Critical dependency rule:
+
+- higher layers may depend on lower layers
+- lower layers must never depend on higher layers
+
 ## Current Implementation Status
 
 The architecture is no longer only aspirational. The current repository now has

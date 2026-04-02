@@ -100,3 +100,38 @@ flowchart TD
   - review analytics
 - Agent tooling now consumes the same scheduler and graph read models rather
   than inferring progress from frontend-oriented views.
+
+## Dual-Graph Guardrails
+
+```mermaid
+flowchart TD
+  PKG["PKG Direct Write Path"] --> Agg["Aggregation Runtime"]
+  Agg --> Proposal["CKG Mutation Proposal (DSL only)"]
+  Proposal --> Schema["Schema Validation"]
+  Schema --> Structural["Structural Integrity"]
+  Structural --> Ontology["Ontology Reasoner"]
+  Ontology --> Invariants["UNITY Invariant Stage"]
+  Invariants --> Proof["Proof Stage"]
+  Proof --> Commit["Canonical Commit"]
+
+  subgraph Stratified["Five-Layer Graph Reasoning"]
+    L0["Layer 0\nStructural Base Facts"]
+    L1["Layer 1\nDeterministic Derivations"]
+    L2["Layer 2\nOntology Reasoning"]
+    L3["Layer 3\nAggregated & Statistical Signals"]
+    L4["Layer 4\nPedagogical & Diagnostic Logic"]
+    L0 --> L1 --> L2 --> L3 --> L4
+  end
+```
+
+### Guardrail notes
+
+- canonical graph writes remain impossible outside the mutation DSL and guarded
+  pipeline
+- proof now has an accepted rollout model:
+  - `disabled`
+  - `observe_only`
+  - `soft_block`
+  - `hard_block`
+- stratified graph dependencies are now an accepted code-level contract and are
+  scheduled for CI enforcement
