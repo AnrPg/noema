@@ -217,6 +217,24 @@ model GraphSnapshot {
     @@map("graph_snapshots")
 }
 
+model GraphRestoreConfirmationToken {
+    tokenId String @id @map("token_id") @db.VarChar(100)
+
+    snapshotId String @map("snapshot_id") @db.VarChar(50)
+    actorId String? @map("actor_id") @db.VarChar(50)
+    summaryHash String @map("summary_hash") @db.VarChar(128)
+    status String @db.VarChar(20)
+    expiresAt DateTime @map("expires_at")
+    consumedAt DateTime? @map("consumed_at")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@index([snapshotId])
+    @@index([status, expiresAt])
+    @@map("graph_restore_confirmation_tokens")
+}
+
 model GraphCrdtStat {
     id String @id @db.VarChar(50)
 
@@ -227,17 +245,13 @@ model GraphCrdtStat {
     proposedLabel String? @map("proposed_label") @db.VarChar(500)
     evidenceType String @map("evidence_type") @db.VarChar(100)
 
-    supportCounter Json @map("support_counter")
-    opposeCounter Json @map("oppose_counter")
-    neutralCounter Json @map("neutral_counter")
-    confidenceCounter Json @map("confidence_counter")
-
     metadata Json @default("{}")
 
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
     appliedSignals GraphCrdtAppliedSignal[]
+    replicaStates  GraphCrdtReplicaState[]
 
     @@index([graphType, targetKind])
     @@index([targetNodeId])
@@ -262,6 +276,27 @@ model GraphCrdtAppliedSignal {
     @@map("graph_crdt_applied_signals")
 }
 
+model GraphCrdtReplicaState {
+    id String @id @db.VarChar(50)
+
+    statKey   String @map("stat_key") @db.VarChar(500)
+    replicaId String @map("replica_id") @db.VarChar(100)
+
+    supportCount    Int @default(0) @map("support_count")
+    opposeCount     Int @default(0) @map("oppose_count")
+    neutralCount    Int @default(0) @map("neutral_count")
+    confidenceCount Int @default(0) @map("confidence_count")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    stat GraphCrdtStat @relation(fields: [statKey], references: [statKey], onDelete: Cascade)
+
+    @@unique([statKey, replicaId])
+    @@index([replicaId])
+    @@map("graph_crdt_replica_states")
+}
+
 // ============================================================================
 // Aggregation Evidence — PKG → CKG aggregation pipeline records
 // ============================================================================
@@ -271,10 +306,14 @@ model GraphCrdtAppliedSignal {
 model AggregationEvidence {
     id         String  @id @db.VarChar(50)
     mutationId String? @map("mutation_id") @db.VarChar(50)
+    dedupeKey  String  @unique @map("dedupe_key") @db.VarChar(700)
+    orderingSeq BigInt @default(autoincrement()) @unique @map("ordering_seq")
 
     // Source PKG information
     sourceUserId    String @map("source_user_id") @db.VarChar(50)
     sourcePkgNodeId String @map("source_pkg_node_id") @db.VarChar(200)
+    sourceEventId   String? @map("source_event_id") @db.VarChar(200)
+    sourceObservedAt DateTime? @map("source_observed_at")
 
     // CKG target — the canonical node this evidence supports (null before linkage)
     ckgTargetNodeId String? @map("ckg_target_node_id") @db.VarChar(200)
@@ -311,8 +350,31 @@ model AggregationEvidence {
     @@index([mutationId, sourceUserId])
     @@index([ckgTargetNodeId])
     @@index([ckgTargetNodeId, sourceUserId])
+    @@index([sourceUserId, sourcePkgNodeId, evidenceType, sourceObservedAt])
     @@index([createdAt])
     @@map("aggregation_evidence")
+}
+
+model PkgPostWriteTask {
+    id String @id @db.VarChar(50)
+
+    taskType String @map("task_type") @db.VarChar(50)
+    status   String @db.VarChar(20)
+    userId   String? @map("user_id") @db.VarChar(50)
+
+    dedupeKey String? @unique @map("dedupe_key") @db.VarChar(300)
+    payload    Json
+
+    attempts      Int      @default(0)
+    nextAttemptAt DateTime @map("next_attempt_at")
+    lastError     String?  @map("last_error") @db.Text
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@index([status, nextAttemptAt])
+    @@index([userId])
+    @@map("pkg_post_write_tasks")
 }
 
 // ============================================================================
