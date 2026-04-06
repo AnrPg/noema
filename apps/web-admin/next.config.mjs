@@ -18,7 +18,6 @@ const nextConfig = {
       { source: '/api/v1/offline-intents/:path*', destination: 'http://localhost:3004/v1/offline-intents/:path*' },
       { source: '/api/v1/scheduler/:path*', destination: 'http://localhost:3003/v1/scheduler/:path*' },
       { source: '/api/v1/schedule/:path*', destination: 'http://localhost:3003/v1/schedule/:path*' },
-      { source: '/api/v1/ckg/:path*', destination: 'http://localhost:3006/api/v1/ckg/:path*' },
       { source: '/api/hlr/:path*', destination: 'http://localhost:8020/:path*' },
     ];
   },

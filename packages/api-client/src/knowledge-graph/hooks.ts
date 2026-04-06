@@ -1055,7 +1055,9 @@ export function useDeletePKGNode(
     mutationFn: () => pkgNodesApi.delete(userId, nodeId),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: kgKeys.pkgNode(userId, nodeId) });
-      void queryClient.invalidateQueries({ queryKey: kgKeys.pkgNodes(userId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.pkg(userId) });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.comparison(userId) });
+      void queryClient.invalidateQueries({ queryKey: ['content', 'cards'] });
     },
     ...options,
   });

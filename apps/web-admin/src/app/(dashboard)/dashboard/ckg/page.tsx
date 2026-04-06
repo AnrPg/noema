@@ -47,8 +47,7 @@ export default function CKGWorkspacePage(): React.JSX.Element {
     },
   });
 
-  const canReset =
-    confirmationInput === RESET_CONFIRMATION && resetCkg.isPending === false;
+  const canReset = confirmationInput === RESET_CONFIRMATION && !resetCkg.isPending;
 
   const handleReset = (): void => {
     setResetFeedback(null);
@@ -245,7 +244,7 @@ export default function CKGWorkspacePage(): React.JSX.Element {
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="destructive"
-                    disabled={canReset === false}
+                    disabled={!canReset}
                     onClick={handleReset}
                   >
                     {resetCkg.isPending ? 'Deleting...' : 'Delete all CKG contents'}

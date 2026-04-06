@@ -128,6 +128,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                             void queryClient.invalidateQueries({
                               queryKey: kgKeys.ckgMutation(id),
                             });
+                            void queryClient.invalidateQueries({
+                              queryKey: [...kgKeys.ckgMutation(id), 'audit-log'],
+                            });
                             void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                           },
                           onError: (err) => {
@@ -333,6 +336,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                         setRejectNote('');
                         setMode('idle');
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                        void queryClient.invalidateQueries({
+                          queryKey: [...kgKeys.ckgMutation(id), 'audit-log'],
+                        });
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                       },
                       onError: (err) => {
@@ -382,6 +388,9 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                         setRevisionFeedback('');
                         setMode('idle');
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                        void queryClient.invalidateQueries({
+                          queryKey: [...kgKeys.ckgMutation(id), 'audit-log'],
+                        });
                         void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
                       },
                       onError: (err) => {
@@ -419,11 +428,14 @@ export function MutationActions({ mutation }: { mutation: ICkgMutationDto }): Re
                 onClick={() => {
                   setErrorMsg(null);
                   cancel.mutate(id, {
-                    onSuccess: () => {
-                      setMode('idle');
-                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
-                      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
-                    },
+                      onSuccess: () => {
+                        setMode('idle');
+                        void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) });
+                        void queryClient.invalidateQueries({
+                          queryKey: [...kgKeys.ckgMutation(id), 'audit-log'],
+                        });
+                        void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+                      },
                     onError: (err) => {
                       setErrorMsg(err.message);
                     },

@@ -78,21 +78,48 @@ export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.E
         </Button>
       </div>
 
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Retention (FSRS)
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {String(totalRetention)} cards
+          </p>
+        </div>
+        <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Calibration (HLR)
+          </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {String(totalCalibration)} cards
+          </p>
+        </div>
+      </div>
+
       {/* Split bar */}
       <div className="flex overflow-hidden rounded-lg" style={{ height: '40px' }}>
         <div
           className="flex flex-col items-center justify-center bg-synapse-400/80 transition-all"
           style={{ width: `${String(retentionPct)}%` }}
         >
-          <span className="text-xs font-semibold text-white">{String(totalRetention)}</span>
-          <span className="text-[10px] text-white/80">Retention</span>
+          {retentionPct >= 12 && (
+            <>
+              <span className="text-xs font-semibold text-white">{String(totalRetention)}</span>
+              <span className="text-[10px] text-white/80">Retention</span>
+            </>
+          )}
         </div>
         <div
           className="flex flex-col items-center justify-center bg-myelin-400/80 transition-all"
           style={{ width: `${String(calibrationPct)}%` }}
         >
-          <span className="text-xs font-semibold text-white">{String(totalCalibration)}</span>
-          <span className="text-[10px] text-white/80">Calibration</span>
+          {calibrationPct >= 12 && (
+            <>
+              <span className="text-xs font-semibold text-white">{String(totalCalibration)}</span>
+              <span className="text-[10px] text-white/80">Calibration</span>
+            </>
+          )}
         </div>
       </div>
 

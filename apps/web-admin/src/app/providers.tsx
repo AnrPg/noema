@@ -16,6 +16,7 @@ function shouldRetryRequest(failureCount: number, error: unknown): boolean {
   if (error instanceof ApiRequestError) {
     if (error.status === 0) return false;
     if ([400, 401, 403, 404, 409, 422].includes(error.status)) return false;
+    if (process.env.NODE_ENV === 'development' && error.status >= 500) return false;
     if (error.status >= 500) return true;
   }
 

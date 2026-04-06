@@ -19,7 +19,16 @@ import type { EdgeType, IGraphEdgeDto, IGraphNodeDto, NodeType } from '@noema/ap
 import { useAuth } from '@noema/auth';
 import type { EdgeId, NodeId, UserId } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, Loader2, PencilLine, Plus, Sparkles, Trash2 } from 'lucide-react';
+import {
+  GitBranch,
+  Loader2,
+  PanelLeft,
+  PencilLine,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Button } from '@noema/ui';
 import { useGraphStore } from '@/stores/graph-store';
 import { GraphCanvas } from '@/components/graph/graph-canvas';
@@ -85,6 +94,15 @@ interface IEdgeFormState {
   weight: string;
 }
 
+interface IQuickEdgeMenuState {
+  sourceNodeId: string;
+  targetNodeId: string;
+  x: number;
+  y: number;
+  type: EdgeType;
+  weight: string;
+}
+
 function parseTags(raw: string): string[] {
   return raw
     .split(',')
@@ -107,6 +125,22 @@ function defaultCreateNodeForm(): INodeFormState {
 
 function defaultEdgeForm(): IEdgeFormState {
   return { targetId: '', type: 'related_to', weight: '1' };
+}
+
+function defaultQuickEdgeMenu(
+  sourceNodeId: string,
+  targetNodeId: string,
+  x: number,
+  y: number
+): IQuickEdgeMenuState {
+  return {
+    sourceNodeId,
+    targetNodeId,
+    x,
+    y,
+    type: 'related_to',
+    weight: '1',
+  };
 }
 
 function formatPercent(value: number): string {
@@ -203,6 +237,7 @@ export default function KnowledgePage(): React.JSX.Element {
     x: number;
     y: number;
   } | null>(null);
+  const [quickEdgeMenu, setQuickEdgeMenu] = React.useState<IQuickEdgeMenuState | null>(null);
   const [createNodeForm, setCreateNodeForm] = React.useState<INodeFormState>(defaultCreateNodeForm);
   const [editNodeForm, setEditNodeForm] = React.useState<INodeFormState>(defaultCreateNodeForm);
   const [edgeForm, setEdgeForm] = React.useState<IEdgeFormState>(defaultEdgeForm);
@@ -211,6 +246,12 @@ export default function KnowledgePage(): React.JSX.Element {
   const [managerSuccess, setManagerSuccess] = React.useState<string | null>(null);
   const [isApplyingSuggestions, setIsApplyingSuggestions] = React.useState(false);
   const [isDeletingEdgeId, setIsDeletingEdgeId] = React.useState<string | null>(null);
+  const [isControlsOpen, setIsControlsOpen] = React.useState(false);
+  const [isNodeDetailOpen, setIsNodeDetailOpen] = React.useState(true);
+  const [selectedNodeIds, setSelectedNodeIds] = React.useState<Set<string>>(new Set());
+  const [activeWorkspacePanel, setActiveWorkspacePanel] = React.useState<
+    'review' | 'create' | 'manage' | null
+  >(null);
 
   const selectedNode = React.useMemo(
     () => nodes.find((n) => String(n.id) === selectedNodeId) ?? null,
@@ -233,6 +274,16 @@ export default function KnowledgePage(): React.JSX.Element {
         selectedNode !== null && prev.targetId === String(selectedNode.id) ? '' : prev.targetId,
     }));
   }, [selectedNode]);
+
+  React.useEffect(() => {
+    if (selectedNode === null) {
+      return;
+    }
+
+    if (activeWorkspacePanel === 'manage') {
+      setActiveWorkspacePanel('manage');
+    }
+  }, [activeWorkspacePanel, selectedNode]);
 
   const nodeIdParam = searchParams.get('nodeId');
   React.useEffect(() => {
@@ -308,17 +359,58 @@ export default function KnowledgePage(): React.JSX.Element {
 
   const suggestionPreview = React.useMemo(() => missingFromPkg.slice(0, 5), [missingFromPkg]);
 
-  const handleNodeClick = React.useCallback(
-    (node: IGraphNodeDto) => {
-      const id = String(node.id);
-      if (selectedNodeId === id) {
-        deselectNode();
-      } else {
-        selectNode(id);
-      }
-      setContextMenu(null);
+  const setSingleSelectedNode = React.useCallback(
+    (nodeId: string) => {
+      selectNode(nodeId);
+      setSelectedNodeIds(new Set([nodeId]));
+      setIsNodeDetailOpen(true);
     },
-    [selectedNodeId, selectNode, deselectNode]
+    [selectNode]
+  );
+
+  const clearGraphSelection = React.useCallback(() => {
+    deselectNode();
+    setSelectedNodeIds(new Set());
+    setIsNodeDetailOpen(false);
+  }, [deselectNode]);
+
+  const handleNodeClick = React.useCallback(
+    (node: IGraphNodeDto, event?: MouseEvent) => {
+      const nodeId = String(node.id);
+      const isMultiSelectGesture = event?.ctrlKey === true || event?.metaKey === true;
+
+      if (!isMultiSelectGesture) {
+        setSingleSelectedNode(nodeId);
+        setContextMenu(null);
+        setQuickEdgeMenu(null);
+        return;
+      }
+
+      setSelectedNodeIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(nodeId)) {
+          next.delete(nodeId);
+        } else {
+          next.add(nodeId);
+        }
+
+        if (next.size === 0) {
+          deselectNode();
+          setIsNodeDetailOpen(false);
+        } else {
+          const fallbackPrimaryNodeId = next.values().next().value;
+          const primaryNodeId =
+            next.has(nodeId) || fallbackPrimaryNodeId === undefined ? nodeId : fallbackPrimaryNodeId;
+          selectNode(primaryNodeId);
+          setIsNodeDetailOpen(next.size === 1);
+        }
+
+        return next;
+      });
+      setContextMenu(null);
+      setQuickEdgeMenu(null);
+    },
+    [deselectNode, selectNode, setSingleSelectedNode]
   );
 
   const handleNodeHover = React.useCallback(
@@ -328,26 +420,48 @@ export default function KnowledgePage(): React.JSX.Element {
     [setHoveredNode]
   );
 
-  const handleNodeRightClick = React.useCallback((node: IGraphNodeDto, event: MouseEvent) => {
-    event.preventDefault();
-    setContextMenu({ node, x: event.clientX, y: event.clientY });
-  }, []);
+  const handleNodeRightClick = React.useCallback(
+    (node: IGraphNodeDto, event: MouseEvent) => {
+      event.preventDefault();
+      const targetNodeId = String(node.id);
+      const hasSingleSourceSelection =
+        selectedNodeIds.size === 1 &&
+        selectedNodeId !== null &&
+        selectedNodeIds.has(selectedNodeId) &&
+        selectedNodeId !== targetNodeId;
+
+      if (hasSingleSourceSelection) {
+        setQuickEdgeMenu(
+          defaultQuickEdgeMenu(selectedNodeId, targetNodeId, event.clientX, event.clientY)
+        );
+        setContextMenu(null);
+        return;
+      }
+
+      setQuickEdgeMenu(null);
+      setContextMenu({ node, x: event.clientX, y: event.clientY });
+    },
+    [selectedNodeId, selectedNodeIds]
+  );
 
   const handleBackgroundClick = React.useCallback(() => {
-    deselectNode();
+    clearGraphSelection();
     setContextMenu(null);
-  }, [deselectNode]);
+    setQuickEdgeMenu(null);
+  }, [clearGraphSelection]);
 
   const handleNodeSelect = React.useCallback(
     (node: IGraphNodeDto) => {
-      selectNode(String(node.id));
+      setSingleSelectedNode(String(node.id));
     },
-    [selectNode]
+    [setSingleSelectedNode]
   );
 
   const handleViewPrerequisites = React.useCallback(
     (nodeId: string) => {
       selectNode(nodeId);
+      setSelectedNodeIds(new Set([nodeId]));
+      setIsNodeDetailOpen(true);
       if (!activeOverlays.has('prerequisites')) {
         toggleOverlay('prerequisites');
       }
@@ -358,17 +472,32 @@ export default function KnowledgePage(): React.JSX.Element {
   const activeOverlaysArray = React.useMemo(() => [...activeOverlays], [activeOverlays]);
 
   React.useEffect(() => {
-    if (contextMenu === null) return;
+    if (contextMenu === null && quickEdgeMenu === null) return;
     function handleKeyDown(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
         setContextMenu(null);
+        setQuickEdgeMenu(null);
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [contextMenu]);
+  }, [contextMenu, quickEdgeMenu]);
+
+  React.useEffect(() => {
+    if (selectedNodeId === null) {
+      setSelectedNodeIds(new Set());
+      return;
+    }
+
+    setSelectedNodeIds((prev) => {
+      if (prev.size === 1 && prev.has(selectedNodeId)) {
+        return prev;
+      }
+      return prev.size > 1 && prev.has(selectedNodeId) ? prev : new Set([selectedNodeId]);
+    });
+  }, [selectedNodeId]);
 
   async function handleApplySuggestion(node: IGraphNodeDto): Promise<void> {
     setSystemError(null);
@@ -383,7 +512,7 @@ export default function KnowledgePage(): React.JSX.Element {
           node.supportedStudyModes.length > 0 ? node.supportedStudyModes : [activeStudyMode],
         ...(Object.keys(node.metadata).length > 0 ? { metadata: node.metadata } : {}),
       });
-      selectNode(String(response.data.id));
+      setSingleSelectedNode(String(response.data.id));
     } catch (err) {
       setSystemError(err instanceof Error ? err.message : 'Failed to apply system suggestion.');
     }
@@ -435,7 +564,7 @@ export default function KnowledgePage(): React.JSX.Element {
         supportedStudyModes: [activeStudyMode],
       });
       setCreateNodeForm(defaultCreateNodeForm());
-      selectNode(String(response.data.id));
+      setSingleSelectedNode(String(response.data.id));
       setManagerSuccess('Created a new PKG node.');
     } catch (err) {
       setManagerError(err instanceof Error ? err.message : 'Failed to create node.');
@@ -465,12 +594,31 @@ export default function KnowledgePage(): React.JSX.Element {
 
   async function handleDeleteSelectedNode(): Promise<void> {
     if (selectedNode === null) return;
+    const connectedEdgeCount = selectedNodeEdges.length;
+    const deletionConfirmed = window.confirm(
+      connectedEdgeCount > 0
+        ? `Permanently delete "${selectedNode.label}" and its ${String(connectedEdgeCount)} connected edge${
+            connectedEdgeCount === 1 ? '' : 's'
+          }? Linked cards will be unlinked automatically.`
+        : `Permanently delete "${selectedNode.label}"? Linked cards will be unlinked automatically.`
+    );
+    if (!deletionConfirmed) {
+      return;
+    }
     setManagerError(null);
     setManagerSuccess(null);
     try {
       await deleteNode.mutateAsync();
-      deselectNode();
-      setManagerSuccess('Deleted the selected PKG node.');
+      clearGraphSelection();
+      setContextMenu(null);
+      setQuickEdgeMenu(null);
+      setManagerSuccess(
+        connectedEdgeCount > 0
+          ? `Deleted the selected PKG node and ${String(connectedEdgeCount)} connected edge${
+              connectedEdgeCount === 1 ? '' : 's'
+            }.`
+          : 'Deleted the selected PKG node.'
+      );
     } catch (err) {
       setManagerError(err instanceof Error ? err.message : 'Failed to delete node.');
     }
@@ -500,6 +648,33 @@ export default function KnowledgePage(): React.JSX.Element {
         weight: parsedWeight,
       });
       setEdgeForm(defaultEdgeForm());
+      setManagerSuccess('Created a new edge in your PKG.');
+    } catch (err) {
+      setManagerError(err instanceof Error ? err.message : 'Failed to create edge.');
+    }
+  }
+
+  async function handleCreateQuickEdge(): Promise<void> {
+    if (quickEdgeMenu === null) {
+      return;
+    }
+
+    const parsedWeight = Number(quickEdgeMenu.weight);
+    if (Number.isNaN(parsedWeight) || parsedWeight <= 0) {
+      setManagerError('Edge weight must be a positive number.');
+      return;
+    }
+
+    setManagerError(null);
+    setManagerSuccess(null);
+    try {
+      await createEdge.mutateAsync({
+        sourceId: quickEdgeMenu.sourceNodeId as NodeId,
+        targetId: quickEdgeMenu.targetNodeId as NodeId,
+        type: quickEdgeMenu.type,
+        weight: parsedWeight,
+      });
+      setQuickEdgeMenu(null);
       setManagerSuccess('Created a new edge in your PKG.');
     } catch (err) {
       setManagerError(err instanceof Error ? err.message : 'Failed to create edge.');
@@ -707,30 +882,95 @@ export default function KnowledgePage(): React.JSX.Element {
     );
   }
 
+  const isAnyDrawerOpen = isControlsOpen || activeWorkspacePanel !== null;
+
   return (
-    <div className="relative flex h-full w-full overflow-hidden">
-      <GraphControls
-        nodes={visibleNodes}
-        layoutMode={layoutMode}
-        activeOverlays={activeOverlays}
-        showLabels={showLabels}
-        searchQuery={searchQuery}
-        hiddenTypes={hiddenTypes}
-        onLayoutChange={setLayoutMode}
-        onOverlayToggle={toggleOverlay}
-        onToggleLabels={() => {
-          setShowLabels((prev) => !prev);
-        }}
-        onSearchChange={setSearchQuery}
-        onNodeSelect={handleNodeSelect}
-        onToggleType={handleToggleType}
-        selectedNodeId={selectedNodeId}
-      />
-      <div className="relative flex-1 overflow-hidden">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
+      {isAnyDrawerOpen && (
+        <button
+          type="button"
+          className="absolute inset-0 z-20 bg-background/30 backdrop-blur-[1px] lg:hidden"
+          onClick={() => {
+            setIsControlsOpen(false);
+            setActiveWorkspacePanel(null);
+            setContextMenu(null);
+            setQuickEdgeMenu(null);
+          }}
+          aria-label="Close open panels"
+        />
+      )}
+
+      <div className="z-30 flex flex-shrink-0 items-start justify-between gap-4 border-b border-border bg-background px-4 py-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsControlsOpen((prev) => !prev);
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm font-medium text-foreground shadow-sm backdrop-blur transition-colors hover:bg-card"
+          >
+            <PanelLeft className="h-4 w-4" aria-hidden="true" />
+            {isControlsOpen ? 'Hide controls' : 'Show controls'}
+          </button>
+
+          <div className="hidden min-w-0 max-w-[42rem] text-sm text-muted-foreground md:block">
+            <span className="font-medium">{getStudyModeLabel(activeStudyMode)}</span>
+            <span>{`: ${getStudyModeDescription(activeStudyMode)}`}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveWorkspacePanel((current) => (current === 'review' ? null : 'review'));
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm font-medium text-foreground shadow-sm backdrop-blur transition-colors hover:bg-card"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            {activeWorkspacePanel === 'review' ? 'Hide review' : 'System-guided Review'}
+          </button>
+        </div>
+      </div>
+
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+
+      <div
+        className={[
+          'absolute inset-y-0 left-0 z-30 w-[320px] max-w-[calc(100vw-1.5rem)] transition-transform duration-200 ease-out',
+          isControlsOpen ? 'translate-x-0' : '-translate-x-[calc(100%+1rem)]',
+        ].join(' ')}
+      >
+        <GraphControls
+          nodes={visibleNodes}
+          layoutMode={layoutMode}
+          activeOverlays={activeOverlays}
+          showLabels={showLabels}
+          searchQuery={searchQuery}
+          hiddenTypes={hiddenTypes}
+          onLayoutChange={setLayoutMode}
+          onOverlayToggle={toggleOverlay}
+          onToggleLabels={() => {
+            setShowLabels((prev) => !prev);
+          }}
+          onSearchChange={setSearchQuery}
+          onNodeSelect={handleNodeSelect}
+          onToggleType={handleToggleType}
+          selectedNodeId={selectedNodeId}
+          primaryActionLabel="Create Node"
+          onPrimaryAction={() => {
+            setActiveWorkspacePanel('create');
+          }}
+          onClose={() => {
+            setIsControlsOpen(false);
+          }}
+        />
+      </div>
+
+      <div className="relative h-full overflow-hidden">
         <GraphCanvas
           nodes={visibleNodes}
           edges={visibleEdges}
           selectedNodeId={selectedNodeId}
+          selectedNodeIds={selectedNodeIds}
           hoveredNodeId={hoveredNodeId}
           activeOverlays={activeOverlaysArray}
           layoutMode={layoutMode}
@@ -742,13 +982,26 @@ export default function KnowledgePage(): React.JSX.Element {
           highlightedNodeIds={highlightedNodeIds}
           className="h-full w-full"
         />
-        {selectedNode !== null && (
-          <div className="absolute bottom-4 left-4 w-[480px] max-w-[calc(100%-2rem)]">
+        {selectedNode !== null && isNodeDetailOpen && (
+          <div className="absolute bottom-4 left-4 right-4 z-20 md:right-auto md:w-[min(30rem,calc(100%-2rem))]">
             <NodeDetailPanel
               node={selectedNode}
               allNodes={visibleNodes}
               allEdges={visibleEdges}
-              onClose={deselectNode}
+              headerActions={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setActiveWorkspacePanel('manage');
+                  }}
+                >
+                  Manage node
+                </Button>
+              }
+              onClose={() => {
+                setIsNodeDetailOpen(false);
+              }}
               onViewPrerequisites={handleViewPrerequisites}
             />
           </div>
@@ -836,171 +1089,295 @@ export default function KnowledgePage(): React.JSX.Element {
             </div>
           </>
         )}
-      </div>
-      <aside className="flex h-full w-[360px] flex-shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-muted/10 p-4">
-        <Section
-          title="Active Lens"
-          subtitle={`${getStudyModeLabel(activeStudyMode)} is shaping which nodes and suggestions appear by default.`}
-        >
-          <p className="text-sm text-muted-foreground">
-            {getStudyModeDescription(activeStudyMode)}
-          </p>
-        </Section>
-        <Section
-          title="System-Guided Review"
-          subtitle="The system proposes structure from the canonical graph; you review and adopt what fits."
-        >
-          <div className="grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-border bg-background p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Alignment</p>
-              <p className="mt-1 text-lg font-semibold">{formatPercent(alignmentScore)}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-background p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Missing</p>
-              <p className="mt-1 text-lg font-semibold">{String(missingFromPkg.length)}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-background p-3">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Personal</p>
-              <p className="mt-1 text-lg font-semibold">{String(extraInPkg.length)}</p>
-            </div>
-          </div>
-          {comparisonLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              Loading comparison signals…
-            </div>
-          ) : suggestionPreview.length > 0 ? (
-            <>
-              <div className="flex flex-col gap-2">
-                {suggestionPreview.map((node) => (
-                  <div
-                    key={String(node.id)}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{node.label}</p>
-                      <p className="text-xs text-muted-foreground">{node.type}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleApplySuggestion(node);
-                      }}
-                      disabled={createNode.isPending || isApplyingSuggestions}
-                      className={secondaryButtonClass}
-                    >
-                      Add
-                    </button>
-                  </div>
-                ))}
+        {quickEdgeMenu !== null && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => {
+                setQuickEdgeMenu(null);
+              }}
+            />
+            <div
+              className="fixed z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-4 shadow-xl"
+              style={{ left: quickEdgeMenu.x, top: quickEdgeMenu.y }}
+            >
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-foreground">Create edge</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Connect{' '}
+                  <span className="font-medium text-foreground">
+                    {nodes.find((node) => String(node.id) === quickEdgeMenu.sourceNodeId)?.label ??
+                      quickEdgeMenu.sourceNodeId}
+                  </span>{' '}
+                  to{' '}
+                  <span className="font-medium text-foreground">
+                    {nodes.find((node) => String(node.id) === quickEdgeMenu.targetNodeId)?.label ??
+                      quickEdgeMenu.targetNodeId}
+                  </span>
+                  .
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col gap-3">
+                <Field label="Edge type">
+                  <select
+                    name="quickEdgeType"
+                    value={quickEdgeMenu.type}
+                    onChange={(e) => {
+                      setQuickEdgeMenu((prev) =>
+                        prev === null ? null : { ...prev, type: e.target.value as EdgeType }
+                      );
+                    }}
+                    className={selectClass}
+                  >
+                    {EDGE_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Weight">
+                  <input
+                    name="quickEdgeWeight"
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    value={quickEdgeMenu.weight}
+                    onChange={(e) => {
+                      setQuickEdgeMenu((prev) =>
+                        prev === null ? null : { ...prev, weight: e.target.value }
+                      );
+                    }}
+                    className={inputClass}
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleCreateQuickEdge();
+                    }}
+                    disabled={createEdge.isPending}
+                    className={primaryButtonClass}
+                  >
+                    <GitBranch className="h-4 w-4" />
+                    {createEdge.isPending ? 'Creating edge…' : 'Create edge'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickEdgeMenu(null);
+                    }}
+                    className={secondaryButtonClass}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      <aside
+        className={[
+          'absolute inset-y-0 right-0 z-30 w-[380px] max-w-[calc(100vw-1.5rem)] border-l border-border bg-muted/20 shadow-2xl backdrop-blur transition-transform duration-200 ease-out',
+          activeWorkspacePanel !== null ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]',
+        ].join(' ')}
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                {activeWorkspacePanel === 'create'
+                  ? 'Create Node'
+                  : activeWorkspacePanel === 'manage'
+                    ? 'Manage Node'
+                    : 'System-guided Review'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {activeWorkspacePanel === 'create'
+                  ? 'Add a new concept to your personal knowledge graph.'
+                  : activeWorkspacePanel === 'manage'
+                    ? selectedNode !== null
+                      ? `Edit ${selectedNode.label}, manage its edges, or remove it permanently.`
+                      : 'Select a node from the graph first.'
+                    : 'Review canonical suggestions and apply what fits your PKG.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveWorkspacePanel(null);
+              }}
+              className="rounded-md border border-border bg-background p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Close workspace"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="noema-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+            {activeWorkspacePanel === 'review' && (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Alignment
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">{formatPercent(alignmentScore)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Missing
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">{String(missingFromPkg.length)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Personal
+                    </p>
+                    <p className="mt-1 text-lg font-semibold">{String(extraInPkg.length)}</p>
+                  </div>
+                </div>
+                {comparisonLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    Loading comparison signals…
+                  </div>
+                ) : suggestionPreview.length > 0 ? (
+                  <>
+                    <div className="flex flex-col gap-2">
+                      {suggestionPreview.map((node) => (
+                        <div
+                          key={String(node.id)}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {node.label}
+                            </p>
+                            <p className="text-xs text-muted-foreground">{node.type}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleApplySuggestion(node);
+                            }}
+                            disabled={createNode.isPending || isApplyingSuggestions}
+                            className={secondaryButtonClass}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleApplySuggestedBaseline();
+                        }}
+                        disabled={isApplyingSuggestions || createNode.isPending}
+                        className={primaryButtonClass}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        {isApplyingSuggestions ? 'Building…' : 'Apply next 5'}
+                      </button>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/knowledge/comparison">Open comparison</Link>
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Your current PKG already covers the available canonical suggestions.
+                  </p>
+                )}
+                {systemError !== null && <p className="text-sm text-destructive">{systemError}</p>}
+              </div>
+            )}
+
+            {activeWorkspacePanel === 'create' && (
+              <div className="flex flex-col gap-3">
+                <Field label="Label">
+                  <input
+                    name="guidedCreateNodeLabel"
+                    type="text"
+                    value={createNodeForm.label}
+                    onChange={(e) => {
+                      setCreateNodeForm((prev) => ({ ...prev, label: e.target.value }));
+                    }}
+                    placeholder="Number theory"
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Type">
+                  <select
+                    name="guidedCreateNodeType"
+                    value={createNodeForm.type}
+                    onChange={(e) => {
+                      setCreateNodeForm((prev) => ({ ...prev, type: e.target.value as NodeType }));
+                    }}
+                    className={selectClass}
+                  >
+                    {NODE_TYPE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Description">
+                  <textarea
+                    name="guidedCreateNodeDescription"
+                    value={createNodeForm.description}
+                    onChange={(e) => {
+                      setCreateNodeForm((prev) => ({ ...prev, description: e.target.value }));
+                    }}
+                    rows={3}
+                    placeholder="Optional description"
+                    className={textareaClass}
+                  />
+                </Field>
+                <Field label="Tags">
+                  <input
+                    name="guidedCreateNodeTags"
+                    type="text"
+                    value={createNodeForm.tags}
+                    onChange={(e) => {
+                      setCreateNodeForm((prev) => ({ ...prev, tags: e.target.value }));
+                    }}
+                    placeholder="algebra, chapter-2"
+                    className={inputClass}
+                  />
+                </Field>
                 <button
                   type="button"
                   onClick={() => {
-                    void handleApplySuggestedBaseline();
+                    void handleCreateNodeFromForm();
                   }}
-                  disabled={isApplyingSuggestions || createNode.isPending}
+                  disabled={createNode.isPending}
                   className={primaryButtonClass}
                 >
-                  <Sparkles className="h-4 w-4" />
-                  {isApplyingSuggestions ? 'Building…' : 'Apply next 5'}
+                  <Plus className="h-4 w-4" />
+                  {createNode.isPending ? 'Creating…' : 'Create node'}
                 </button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/knowledge/comparison">Open comparison</Link>
-                </Button>
+                {managerError !== null && <p className="text-sm text-destructive">{managerError}</p>}
+                {managerSuccess !== null && (
+                  <p className="text-sm text-emerald-600 dark:text-emerald-400">{managerSuccess}</p>
+                )}
               </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Your current PKG already covers the available canonical suggestions.
-            </p>
-          )}
-          {systemError !== null && <p className="text-sm text-destructive">{systemError}</p>}
-        </Section>
-        <Section
-          title="Create Node"
-          subtitle="Manual PKG authoring remains available even in system-guided mode."
-        >
-          <Field label="Label">
-            <input
-              name="guidedCreateNodeLabel"
-              type="text"
-              value={createNodeForm.label}
-              onChange={(e) => {
-                setCreateNodeForm((prev) => ({ ...prev, label: e.target.value }));
-              }}
-              placeholder="Number theory"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Type">
-            <select
-              name="guidedCreateNodeType"
-              value={createNodeForm.type}
-              onChange={(e) => {
-                setCreateNodeForm((prev) => ({ ...prev, type: e.target.value as NodeType }));
-              }}
-              className={selectClass}
-            >
-              {NODE_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Description">
-            <textarea
-              name="guidedCreateNodeDescription"
-              value={createNodeForm.description}
-              onChange={(e) => {
-                setCreateNodeForm((prev) => ({ ...prev, description: e.target.value }));
-              }}
-              rows={3}
-              placeholder="Optional description"
-              className={textareaClass}
-            />
-          </Field>
-          <Field label="Tags">
-            <input
-              name="guidedCreateNodeTags"
-              type="text"
-              value={createNodeForm.tags}
-              onChange={(e) => {
-                setCreateNodeForm((prev) => ({ ...prev, tags: e.target.value }));
-              }}
-              placeholder="algebra, chapter-2"
-              className={inputClass}
-            />
-          </Field>
-          <button
-            type="button"
-            onClick={() => {
-              void handleCreateNodeFromForm();
-            }}
-            disabled={createNode.isPending}
-            className={primaryButtonClass}
-          >
-            <Plus className="h-4 w-4" />
-            {createNode.isPending ? 'Creating…' : 'Create node'}
-          </button>
-        </Section>
-        <Section
-          title="Manage Selected Node"
-          subtitle={
-            selectedNode !== null
-              ? `Editing ${selectedNode.label}`
-              : 'Select a node from the graph to edit it or manage its edges.'
-          }
-        >
-          {selectedNode === null ? (
-            <p className="text-sm text-muted-foreground">
-              Select a node to rename it, update its description/tags, create outgoing edges, or
-              remove it from your PKG.
-            </p>
-          ) : (
-            <>
+            )}
+
+            {activeWorkspacePanel === 'manage' &&
+              (selectedNode === null ? (
+                <p className="text-sm text-muted-foreground">
+                  Select a node to rename it, update its description and tags, create outgoing edges,
+                  or remove it from your PKG.
+                </p>
+              ) : (
+                <>
               <Field label="Label">
                 <input
                   name="editNodeLabel"
@@ -1067,7 +1444,13 @@ export default function KnowledgePage(): React.JSX.Element {
                   className={secondaryButtonClass}
                 >
                   <Trash2 className="h-4 w-4" />
-                  {deleteNode.isPending ? 'Deleting…' : 'Delete node'}
+                  {deleteNode.isPending
+                    ? 'Deleting…'
+                    : selectedNodeEdges.length > 0
+                      ? `Delete node + ${String(selectedNodeEdges.length)} edge${
+                          selectedNodeEdges.length === 1 ? '' : 's'
+                        }`
+                      : 'Delete node'}
                 </button>
               </div>
               <div className="rounded-lg border border-border bg-background p-3">
@@ -1186,14 +1569,24 @@ export default function KnowledgePage(): React.JSX.Element {
                   </div>
                 )}
               </div>
-            </>
-          )}
-          {managerError !== null && <p className="text-sm text-destructive">{managerError}</p>}
-          {managerSuccess !== null && (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">{managerSuccess}</p>
-          )}
-        </Section>
+                </>
+              ))}
+            {activeWorkspacePanel === 'manage' && managerError !== null && (
+              <p className="text-sm text-destructive">{managerError}</p>
+            )}
+            {activeWorkspacePanel === 'manage' && managerSuccess !== null && (
+              <p className="text-sm text-emerald-600 dark:text-emerald-400">{managerSuccess}</p>
+            )}
+          </div>
+        </div>
       </aside>
+
+      <div className="pointer-events-none absolute bottom-4 right-4 z-20">
+        <div className="pointer-events-auto rounded-full border border-border bg-card/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
+          Drag, zoom, or pan the canvas.
+        </div>
+      </div>
+      </div>
     </div>
   );
 }

@@ -38,6 +38,7 @@ import {
   normalizeNodeType,
 } from '@noema/graph';
 import type { LayoutMode, OverlayType } from '@noema/graph';
+import { getRequestErrorDetails } from '@/lib/api-error';
 
 // ============================================================================
 // Stable fallback — avoids passing `undefined` with exactOptionalPropertyTypes
@@ -401,21 +402,30 @@ function humanizeEdgeType(edgeType: string): string {
 // ============================================================================
 
 export default function CKGGraphBrowserPage(): React.JSX.Element {
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, isAuthenticated, isInitialized } = useAuth();
+  const ckgQueriesEnabled = isInitialized && isAuthenticated;
   // --- Data ---
   const {
     data: nodesData = [],
     isLoading: nodesLoading,
     isError: nodesError,
+    error: nodesRequestError,
   } = useCKGNodes({
-    refetchOnWindowFocus: 'always',
+    enabled: ckgQueriesEnabled,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
   const {
     data: edgesData = [],
     isLoading: edgesLoading,
     isError: edgesError,
+    error: edgesRequestError,
   } = useCKGEdges({
-    refetchOnWindowFocus: 'always',
+    enabled: ckgQueriesEnabled,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
   });
 
   const preferredLanguage = React.useMemo(() => {
@@ -467,6 +477,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const [activeOverlays, setActiveOverlays] = React.useState<Set<OverlayType>>(new Set());
   const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = React.useState<Set<string>>(new Set());
+  const [isNodeDetailPanelOpen, setIsNodeDetailPanelOpen] = React.useState(true);
   const [hoveredNodeId, setHoveredNodeId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [hiddenTypes, setHiddenTypes] = React.useState<Set<string>>(new Set());
@@ -499,7 +510,12 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const pendingMutationsActive = activeOverlays.has('pending_mutations');
   const { data: pendingMutations = [], isLoading: pendingMutationsLoading } = useCKGMutations(
     { state: 'pending_review' },
-    { enabled: pendingMutationsActive }
+    {
+      enabled: ckgQueriesEnabled && pendingMutationsActive,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: false,
+    }
   );
 
   // --- Derived state ---
@@ -731,6 +747,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
         }
         const nextPrimary = next.has(id) ? id : ([...next][0] ?? null);
         setSelectedNodeId(nextPrimary);
+        setIsNodeDetailPanelOpen(nextPrimary !== null);
         return next;
       });
       return;
@@ -738,6 +755,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
     setSelectedNodeId(node.id as string);
     setSelectedNodeIds(new Set([id]));
+    setIsNodeDetailPanelOpen(true);
   }, []);
 
   const handleNodeHover = React.useCallback((node: IGraphNodeDto | null) => {
@@ -747,6 +765,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   const handleBackgroundClick = React.useCallback(() => {
     setSelectedNodeId(null);
     setSelectedNodeIds(new Set());
+    setIsNodeDetailPanelOpen(false);
     setSelectedEdgeId(null);
     setEdgeAuthoringMenuState(null);
     setIsNodeMutationEditing(false);
@@ -759,6 +778,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     setIsControlsOpen(false);
     setSelectedNodeId(node.id as string);
     setSelectedNodeIds(new Set([node.id as string]));
+    setIsNodeDetailPanelOpen(true);
     setSelectedEdgeId(null);
     setEdgeAuthoringMenuState(null);
     setIsNodeMutationEditing(false);
@@ -768,19 +788,13 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
   }, []);
 
   const handleClose = React.useCallback(() => {
-    setSelectedNodeId(null);
-    setSelectedNodeIds(new Set());
-    setSelectedEdgeId(null);
-    setEdgeAuthoringMenuState(null);
-    setIsNodeMutationEditing(false);
-    setNodeMutationEditDraft(null);
-    setNodeBatchPreviewState(null);
-    setEdgeAuthoringMessage(null);
+    setIsNodeDetailPanelOpen(false);
   }, []);
 
   const handleOpenNodeMutationEditor = React.useCallback((node: IGraphNodeDto) => {
     setSelectedNodeId(node.id as string);
     setSelectedNodeIds(new Set([node.id as string]));
+    setIsNodeDetailPanelOpen(true);
     setSelectedEdgeId(null);
     setEdgeAuthoringMenuState(null);
     setNodeBatchPreviewState(null);
@@ -809,6 +823,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       if (sourceNode === null) {
         setSelectedNodeId(targetNodeId);
         setSelectedNodeIds(new Set([targetNodeId]));
+        setIsNodeDetailPanelOpen(true);
         setEdgeAuthoringMenuState(null);
         setEdgeAuthoringMessage(
           `"${node.label}" is now the relation source. Right-click a second node to author a canonical edge.`
@@ -819,6 +834,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       if ((sourceNode.id as string) === targetNodeId) {
         setSelectedNodeId(targetNodeId);
         setSelectedNodeIds(new Set([targetNodeId]));
+        setIsNodeDetailPanelOpen(true);
         setEdgeAuthoringMenuState(null);
         setEdgeAuthoringMessage(
           `Right-click a different node to create or adjust a relation from "${node.label}".`
@@ -830,6 +846,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
 
       setSelectedNodeId(sourceNode.id as string);
       setSelectedNodeIds(new Set([sourceNode.id as string, targetNodeId]));
+      setIsNodeDetailPanelOpen(true);
       void handleOpenEdgeAuthoringMenu(
         sourceNode,
         node,
@@ -1166,12 +1183,44 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     };
   }, [edgeAuthoringMenuState, nodeBatchPreviewState, nodeMutationEditDraft, selectedNode]);
 
+  const ckgRequestError = nodesRequestError ?? edgesRequestError;
+  const ckgErrorDetails = React.useMemo(
+    () =>
+      getRequestErrorDetails(
+        ckgRequestError,
+        'the Canonical Knowledge Graph',
+        'knowledge-graph-service'
+      ),
+    [ckgRequestError]
+  );
+
   // --- Loading / empty states ---
 
   if (nodesError || edgesError) {
     return (
-      <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-        <p className="text-sm text-destructive">Failed to load CKG data.</p>
+      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center gap-3 px-6 text-center">
+        <Network className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
+        <div className="space-y-1">
+          <p className="text-base font-semibold text-foreground">{ckgErrorDetails.title}</p>
+          <p className="max-w-xl text-sm text-muted-foreground">{ckgErrorDetails.description}</p>
+          {ckgErrorDetails.hint !== undefined && (
+            <p className="max-w-xl text-xs text-muted-foreground">{ckgErrorDetails.hint}</p>
+          )}
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              window.location.reload();
+            }}
+          >
+            Retry graph load
+          </Button>
+          <Button asChild>
+            <Link href="/dashboard/ckg/mutations">Open mutation queue</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -1786,7 +1835,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
             )}
 
             {/* Node detail panel + "View pending mutations" link */}
-            {selectedNode !== null && (
+            {selectedNode !== null && isNodeDetailPanelOpen && (
               <div className="absolute bottom-4 left-4 top-4 z-20 flex w-[min(32rem,calc(100%-2rem))] max-w-[calc(100%-2rem)] flex-col">
                 <NodeDetailPanel
                   node={selectedNode}

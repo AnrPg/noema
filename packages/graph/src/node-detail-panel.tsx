@@ -38,6 +38,7 @@ export interface INodeDetailPanelProps {
   editError?: string | null;
   pendingUpdateKeys?: string[];
   isSubmittingEdit?: boolean;
+  headerActions?: React.ReactNode;
   onStartEdit?: () => void;
   onCancelEdit?: () => void;
   onEditDraftChange?: (draft: INodeDetailPanelEditDraft) => void;
@@ -196,6 +197,7 @@ export function NodeDetailPanel({
   editError = null,
   pendingUpdateKeys = [],
   isSubmittingEdit = false,
+  headerActions,
   onStartEdit,
   onCancelEdit,
   onEditDraftChange,
@@ -280,6 +282,7 @@ export function NodeDetailPanel({
           <span className="truncate text-sm font-semibold text-foreground">{titleText}</span>
         </div>
         <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+          {headerActions}
           {!isEditMode && onStartEdit !== undefined && (
             <Button variant="outline" size="sm" onClick={onStartEdit}>
               Edit

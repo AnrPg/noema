@@ -17,7 +17,9 @@ function statusDotColor(status: string): string {
 }
 
 export function MutationAuditTrail({ mutationId }: { mutationId: MutationId }): React.JSX.Element {
-  const { data: log, isLoading } = useCKGMutationAuditLog(mutationId);
+  const { data: log, isLoading } = useCKGMutationAuditLog(mutationId, {
+    refetchInterval: 1500,
+  });
 
   if (isLoading) {
     return <div className="animate-pulse h-32 bg-muted/20 rounded-lg" />;

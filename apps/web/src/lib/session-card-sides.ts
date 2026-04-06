@@ -211,7 +211,6 @@ function formatTimelineEvents(events: unknown): string | null {
         normalizeText(record['year']);
       const description = normalizeText(record['description']);
       const header = date !== null ? `${date} - ${title}` : title;
-      const header = date !== null ? `${date} - ${title}` : title;
       return description === null ? header : `${header}\n${description}`;
     })
     .filter((row): row is string => row !== null);

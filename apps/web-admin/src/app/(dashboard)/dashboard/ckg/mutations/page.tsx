@@ -33,18 +33,18 @@ import {
 const MAX_BULK_REVIEW_SIZE = 200;
 const WORKFLOW_SORT_ORDER: Record<MutationWorkflowState, number> = {
   pending_review: 0,
-  proposed: 1,
-  validating: 2,
-  validated: 3,
-  revision_requested: 4,
-  proving: 5,
-  proven: 6,
-  committing: 7,
-  committed: 8,
-  rejected: 9,
+  rejected: 1,
+  proposed: 2,
+  validating: 3,
+  validated: 4,
+  revision_requested: 5,
+  proving: 6,
+  proven: 7,
+  committing: 8,
+  committed: 9,
 };
 
-function formatMutationDate(value: string | null | undefined): string {
+function formatMutationDateTime(value: string | null | undefined): string {
   if (typeof value !== 'string' || value.trim() === '') {
     return '—';
   }
@@ -55,7 +55,19 @@ function formatMutationDate(value: string | null | undefined): string {
   }
 
   const date = new Date(parsed);
-  return date.getUTCFullYear() <= 1970 ? '—' : date.toLocaleDateString();
+  if (date.getUTCFullYear() <= 1970) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZoneName: 'short',
+  }).format(date);
 }
 
 function mutationTypeBadgeClass(type: string): string {
@@ -135,8 +147,11 @@ function MutationRow({
         <span className="text-xs text-muted-foreground flex-1 truncate">
           {String(mutation.proposedBy)}
         </span>
-        <span className="text-xs text-muted-foreground flex-shrink-0">
-          {formatMutationDate(mutation.proposedAt)}
+        <span
+          className="text-xs text-muted-foreground flex-shrink-0 text-right"
+          title={formatMutationDateTime(mutation.proposedAt)}
+        >
+          {formatMutationDateTime(mutation.proposedAt)}
         </span>
         <Button size="sm" variant="ghost" className="gap-1" onClick={onOpenReview}>
           Review <ArrowRight className="h-3 w-3" />

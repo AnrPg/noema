@@ -234,6 +234,7 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
     pathname.startsWith('/session/') &&
     pathname !== '/session/new' &&
     !pathname.endsWith('/summary');
+  const isKnowledgeGraphRoute = pathname === '/knowledge';
   const authSettings = useAuthStore((state) => state.settings);
   const setAuthSettings = useAuthStore((state) => state.setSettings);
   const [activeStudyMode, setActiveStudyMode] = React.useState<AppStudyMode>(DEFAULT_STUDY_MODE);
@@ -338,21 +339,24 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
                 ? {
                     className: 'min-h-14 flex-nowrap items-center gap-2 py-2 sm:min-h-16 sm:gap-3',
                   }
-                : {})}
+                : {
+                    className:
+                      'min-h-16 flex-nowrap items-center gap-3 py-3 sm:min-h-[4.5rem] sm:gap-4',
+                  })}
             >
               <div
                 className={[
                   isActiveSessionRoute ? 'min-w-0 flex-1' : 'w-full',
                   isActiveSessionRoute
                     ? 'flex items-center gap-2 sm:flex-nowrap sm:items-center sm:gap-3'
-                    : 'w-full min-w-0 justify-between flex-wrap gap-3 sm:flex-nowrap sm:gap-4',
+                    : 'flex w-full min-w-0 items-center justify-between gap-5',
                 ].join(' ')}
               >
                 <div
                   className={
                     isActiveSessionRoute
                       ? 'flex min-w-0 flex-1 items-center gap-2 sm:justify-start'
-                      : 'flex min-w-0 flex-1 items-center gap-2 sm:gap-3'
+                      : 'flex min-w-0 flex-1 items-center self-center'
                   }
                 >
                   <PomodoroNav compact={isActiveSessionRoute} />
@@ -360,10 +364,10 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
 
                 <div
                   className={[
-                    'hidden shrink-0 items-center gap-2 lg:flex',
+                    'hidden shrink-0 items-center justify-end self-center lg:flex',
                     isActiveSessionRoute
                       ? 'w-full justify-between sm:ml-auto sm:w-auto sm:justify-end sm:gap-2'
-                      : 'ml-auto w-full justify-end sm:w-auto sm:gap-3',
+                      : 'ml-4 gap-3',
                   ].join(' ')}
                 >
                   <StudyModeToggle
@@ -378,7 +382,17 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
                 </div>
               </div>
             </DashboardHeader>
-            <div className={isActiveSessionRoute ? 'p-0' : 'p-4 sm:p-6'}>{children}</div>
+            <div
+              className={
+                isActiveSessionRoute
+                  ? 'p-0'
+                  : isKnowledgeGraphRoute
+                    ? 'h-[calc(100dvh-4rem)] overflow-hidden p-0'
+                    : 'p-4 sm:p-6'
+              }
+            >
+              {children}
+            </div>
           </DashboardMain>
         </DashboardLayout>
         <CopilotSidebar />

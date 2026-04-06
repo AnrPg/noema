@@ -45,6 +45,8 @@ export interface IGraphControlsProps {
   onToggleType: (type: string) => void;
   selectedNodeId?: string | null;
   onClose?: () => void;
+  primaryActionLabel?: string;
+  onPrimaryAction?: () => void;
 }
 
 export function GraphControls({
@@ -62,6 +64,8 @@ export function GraphControls({
   onToggleType,
   selectedNodeId,
   onClose,
+  primaryActionLabel,
+  onPrimaryAction,
 }: IGraphControlsProps): React.JSX.Element {
   const getNodeKey = React.useCallback((node: IGraphNodeDto, index: number): string => {
     const nodeId =
@@ -110,6 +114,16 @@ export function GraphControls({
       </div>
 
       <div className="noema-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
+        {primaryActionLabel !== undefined && onPrimaryAction !== undefined && (
+          <button
+            type="button"
+            onClick={onPrimaryAction}
+            className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            {primaryActionLabel}
+          </button>
+        )}
+
         {/* Layout toggle */}
         <div className="flex flex-col gap-1.5">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

@@ -25,7 +25,9 @@ export default function MutationDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const mutationId = params.id as MutationId;
-  const { data: mutation, isLoading, error } = useCKGMutation(mutationId);
+  const { data: mutation, isLoading, error } = useCKGMutation(mutationId, {
+    refetchInterval: 1500,
+  });
   const importRunId = searchParams.get('importRunId');
   const backHref: Route =
     importRunId !== null
