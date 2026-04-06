@@ -134,6 +134,13 @@ export interface IPkgNodeRemovedPayload {
   userId: UserId;
   /** Reason for removal */
   reason: string;
+  /** Snapshot of the removed node so downstream systems can interpret the deletion semantically */
+  snapshot?: {
+    nodeType: GraphNodeType;
+    label: string;
+    domain: string;
+    metadata: Metadata;
+  };
 }
 
 /**
@@ -168,6 +175,14 @@ export interface IPkgEdgeRemovedPayload {
   userId: UserId;
   /** Reason for removal */
   reason: string;
+  /** Snapshot of the removed edge so downstream systems can reason about the deleted relation */
+  snapshot?: {
+    sourceNodeId: NodeId;
+    targetNodeId: NodeId;
+    edgeType: GraphEdgeType;
+    weight: number;
+    metadata: Metadata;
+  };
 }
 
 /**
@@ -213,9 +228,11 @@ export interface IAggregationEvidenceRecordedPayload {
   sourceUserId: UserId;
   sourcePkgNodeId: NodeId;
   evidenceType: string;
+  direction: 'support' | 'oppose' | 'neutral';
   evidenceCount: number;
   promotionBand: PromotionBand;
   ckgTargetNodeId?: NodeId;
+  candidateKey?: string;
   proposedLabel?: string;
 }
 
@@ -225,6 +242,7 @@ export interface IAggregationThresholdReachedPayload {
   evidenceCount: number;
   promotionBand: PromotionBand;
   ckgTargetNodeId?: NodeId;
+  candidateKey?: string;
   proposedLabel?: string;
 }
 
@@ -235,6 +253,7 @@ export interface IAggregationProposalCreatedPayload {
   evidenceCount: number;
   operationCount: number;
   ckgTargetNodeId?: NodeId;
+  candidateKey?: string;
   proposedLabel?: string;
 }
 
@@ -244,6 +263,7 @@ export interface IAggregationProposalSuppressedPayload {
   reason: string;
   evidenceCount?: number;
   ckgTargetNodeId?: NodeId;
+  candidateKey?: string;
   proposedLabel?: string;
 }
 

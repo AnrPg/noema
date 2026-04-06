@@ -1,11 +1,12 @@
 /**
  * @noema/content-service - KG Node Deleted Event Consumer
  *
- * Listens for 'kg.node.deleted' events from the knowledge-graph-service
+ * Listens for 'pkg.node.removed' events from the knowledge-graph-service
  * stream and removes the deleted node ID from all cards' knowledgeNodeIds
  * arrays. Preserves the remaining node links and increments the card version.
  */
 
+import { KnowledgeGraphEventType } from '@noema/events/knowledge-graph';
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import { BaseEventConsumer } from '@noema/events/consumer';
 import type { Redis } from 'ioredis';
@@ -47,27 +48,24 @@ export class KgNodeDeletedConsumer extends BaseEventConsumer {
     prisma: PrismaClient,
     logger: Logger,
     consumerName: string,
-    sourceStreamKey = 'noema:events:knowledge-graph-service',
+    sourceStreamKey = 'noema:events:knowledge-graph-service'
   ) {
     super(redis, buildConfig({ sourceStreamKey, consumerName }), logger);
     this.prisma = prisma;
   }
 
   protected async handleEvent(envelope: IStreamEventEnvelope): Promise<boolean> {
-    if (envelope.eventType !== 'kg.node.deleted') {
+    if (envelope.eventType !== KnowledgeGraphEventType.PKG_NODE_REMOVED) {
       return true; // Not our event — acknowledge it
     }
 
     const nodeId = (envelope.payload as { nodeId?: string }).nodeId ?? envelope.aggregateId;
     if (nodeId === '') {
-      this.logger.warn({ envelope }, 'kg.node.deleted event missing nodeId');
+      this.logger.warn({ envelope }, 'pkg.node.removed event missing nodeId');
       return true;
     }
 
-    this.logger.info(
-      { nodeId },
-      'Processing kg.node.deleted — removing from linked cards',
-    );
+    this.logger.info({ nodeId }, 'Processing pkg.node.removed — removing from linked cards');
 
     // Find all non-deleted cards referencing this node
     const affectedCards = await this.prisma.card.findMany({
@@ -97,10 +95,7 @@ export class KgNodeDeletedConsumer extends BaseEventConsumer {
       updated++;
     }
 
-    this.logger.info(
-      { nodeId, updatedCards: updated },
-      'Node reference removed from cards',
-    );
+    this.logger.info({ nodeId, updatedCards: updated }, 'Node reference removed from cards');
     return true;
   }
 }

@@ -6,8 +6,7 @@ export const PkgPostWriteTaskType = {
   MARK_METRICS_STALE: 'mark_metrics_stale',
 } as const;
 
-export type PkgPostWriteTaskType =
-  (typeof PkgPostWriteTaskType)[keyof typeof PkgPostWriteTaskType];
+export type PkgPostWriteTaskType = (typeof PkgPostWriteTaskType)[keyof typeof PkgPostWriteTaskType];
 
 export const PkgPostWriteTaskStatus = {
   PENDING: 'pending',
@@ -52,8 +51,5 @@ export interface IPkgPostWriteRecoveryRepository {
     nextAttemptAt: string;
   }): Promise<void>;
 
-  failTask(input: {
-    taskId: string;
-    lastError: string;
-  }): Promise<void>;
+  failTask(input: { taskId: string; lastError: string }): Promise<void>;
 }

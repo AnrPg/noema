@@ -1,127 +1,101 @@
-/**
- * @noema/knowledge-graph-service — Neo4j Graph Repository Integration Stubs
- *
- * These tests are skipped until a Neo4j test container is available in CI.
- * They document what the real integration tests should verify once the
- * Neo4j adapter (Phase 11) is implemented.
- *
- * Prerequisites:
- * - Neo4j test container (Testcontainers or docker-compose.test.yml)
- * - Neo4jGraphRepository implementation
- * - Per-test database cleanup (MATCH (n) DETACH DELETE n)
- *
- * @see docs/knowledge-graph-service-implementation/PHASE-10-TESTING.md Task 4
- */
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import pino from 'pino';
 
-import { describe, it } from 'vitest';
+import { Neo4jClient } from '../../../src/infrastructure/database/neo4j-client.js';
+import { Neo4jGraphRepository } from '../../../src/infrastructure/database/neo4j-graph.repository.js';
+import { canUseDockerRuntime, startNeo4jContainer } from '../../helpers/docker-integration.js';
 
-// ============================================================================
-// Node Operations
-// ============================================================================
+const neo4jUri = process.env['NEO4J_URI'];
+const neo4jUser = process.env['NEO4J_USER'];
+const neo4jPassword = process.env['NEO4J_PASSWORD'];
+const neo4jDatabase = process.env['NEO4J_DATABASE'];
+const hasNeo4jIntegration =
+  [neo4jUri, neo4jUser, neo4jPassword, neo4jDatabase].every(
+    (value) => value !== undefined && value !== ''
+  ) || canUseDockerRuntime();
 
-describe.skip('Neo4j — Node Operations', () => {
-  it('createNode persists a node and returns it with generated ID', () => {
-    // 1. Call repository.createNode({ label: 'X', nodeType: 'concept', domain: 'test' })
-    // 2. Verify returned node has a NodeId with 'node_' prefix
-    // 3. Verify Cypher: MATCH (n:Concept {id: $id}) RETURN n
+describe.runIf(hasNeo4jIntegration)('Neo4j — Node Operations', () => {
+  const logger = pino({ level: 'silent' });
+  const nodeIds: string[] = [];
+  let client: Neo4jClient;
+  let repository: Neo4jGraphRepository;
+  let runtimeDispose: (() => Promise<void>) | null = null;
+  let runtimeConfig = {
+    uri: neo4jUri,
+    user: neo4jUser,
+    password: neo4jPassword,
+    database: neo4jDatabase,
+  };
+
+  beforeAll(async () => {
+    if (
+      runtimeConfig.uri === undefined ||
+      runtimeConfig.user === undefined ||
+      runtimeConfig.password === undefined ||
+      runtimeConfig.database === undefined
+    ) {
+      const runtime = await startNeo4jContainer();
+      runtimeConfig = {
+        uri: runtime.uri,
+        user: runtime.user,
+        password: runtime.password,
+        database: runtime.database,
+      };
+      runtimeDispose = runtime.dispose;
+    }
+
+    client = new Neo4jClient(
+      {
+        uri: runtimeConfig.uri!,
+        user: runtimeConfig.user!,
+        password: runtimeConfig.password!,
+        database: runtimeConfig.database!,
+        maxConnectionPoolSize: 10,
+        acquisitionTimeoutMs: 30_000,
+      },
+      logger
+    );
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      try {
+        await client.verifyConnectivity();
+        break;
+      } catch (error) {
+        if (attempt === 29) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+      }
+    }
+    repository = new Neo4jGraphRepository(client, logger);
+  }, 120_000);
+
+  afterAll(async () => {
+    if (nodeIds.length > 0) {
+      const session = client.getSession();
+      try {
+        await session.run('MATCH (n) WHERE n.id IN $ids DETACH DELETE n', { ids: nodeIds });
+      } finally {
+        await session.close();
+      }
+    }
+    await client.close();
+    await runtimeDispose?.();
   });
 
-  it('getNodeById retrieves a persisted node', () => {
-    // 1. Create node, capture ID
-    // 2. Call repository.getNodeById(id, userId)
-    // 3. Verify all fields match
-  });
+  it('creates and retrieves a real PKG node', async () => {
+    const node = await repository.createNode(
+      'pkg',
+      {
+        label: `Integration Node ${Date.now().toString(36)}`,
+        nodeType: 'concept',
+        domain: 'integration',
+      },
+      'user_integration' as never
+    );
+    nodeIds.push(node.nodeId);
 
-  it('getNodeById returns null for non-existent ID', () => {
-    // Verify null returned, no error thrown
-  });
-
-  it('updateNode modifies only the specified fields', () => {
-    // 1. Create node with label 'Original'
-    // 2. updateNode(id, { label: 'Updated' })
-    // 3. Verify label changed, other fields unchanged
-    // 4. Verify updatedAt changed
-  });
-
-  it('deleteNode soft-deletes and returns the deleted node', () => {
-    // 1. Create node
-    // 2. deleteNode(id, userId) — soft delete sets deletedAt
-    // 3. getNodeById returns null (filtered by active flag)
-    // 4. Direct Cypher query still finds the node with deletedAt set
-  });
-
-  it('listNodes applies domain + nodeType filters', () => {
-    // 1. Create nodes in different domains and types
-    // 2. listNodes with domain filter
-    // 3. Verify only matching nodes returned
-  });
-});
-
-// ============================================================================
-// Edge Operations
-// ============================================================================
-
-describe.skip('Neo4j — Edge Operations', () => {
-  it('createEdge persists a directed edge between nodes', () => {
-    // 1. Create two nodes
-    // 2. createEdge between them with edgeType 'is_a'
-    // 3. Verify Cypher: MATCH (a)-[r:IS_A]->(b) RETURN r
-  });
-
-  it('createEdge rejects self-loops', () => {
-    // source === target should fail
-  });
-
-  it('deleteEdge removes relationship', () => {
-    // Verify Cypher relationship gone after deletion
-  });
-});
-
-// ============================================================================
-// Traversal Operations
-// ============================================================================
-
-describe.skip('Neo4j — Traversal Operations', () => {
-  it('getSubgraph returns all nodes within depth limit', () => {
-    // 1. Create chain A → B → C → D
-    // 2. getSubgraph(A, depth=2) should return A, B, C only
-  });
-
-  it('getAncestors follows inbound edges upward', () => {
-    // 1. Create hierarchy root → mid → leaf
-    // 2. getAncestors(leaf, maxDepth=10) → [mid, root]
-  });
-
-  it('getDescendants follows outbound edges downward', () => {
-    // 1. Create hierarchy root → [A, B]; A → C
-    // 2. getDescendants(root, maxDepth=10) → [A, B, C]
-  });
-
-  it('detectCycles identifies cycles in the graph', () => {
-    // 1. Create cycle: A → B → C → A
-    // 2. detectCycles() returns cycle path
-  });
-
-  it('findShortestPath returns topological shortest path', () => {
-    // 1. Create graph with multiple paths from A to D
-    // 2. findShortestPath(A, D) returns the shortest
-  });
-});
-
-// ============================================================================
-// Batch Operations
-// ============================================================================
-
-describe.skip('Neo4j — Batch Operations', () => {
-  it('runInTransaction commits all-or-nothing', () => {
-    // 1. Start transaction
-    // 2. Create node A (success)
-    // 3. Create node B with intentional error
-    // 4. Verify neither A nor B persisted
-  });
-
-  it('createBatchNodes persists multiple nodes atomically', () => {
-    // 1. Create 10 nodes in batch
-    // 2. Verify all 10 persisted
+    const loaded = await repository.getNode(node.nodeId, 'user_integration' as never);
+    expect(loaded?.nodeId).toBe(node.nodeId);
+    expect(loaded?.label).toBe(node.label);
   });
 });

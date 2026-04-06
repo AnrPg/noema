@@ -40,12 +40,18 @@ function createService(graphRepository: MockGraphRepository) {
   const metricsStalenessRepository = {
     markStale: vi.fn().mockResolvedValue(undefined),
   };
+  const postWriteRecoveryService = {
+    enqueueAppendOperation: vi.fn().mockResolvedValue(undefined),
+    enqueuePublish: vi.fn().mockResolvedValue(undefined),
+    enqueueMetricsStale: vi.fn().mockResolvedValue(undefined),
+  };
 
   const service = new PkgWriteService(
     graphRepository,
     operationLogRepository as never,
     metricsStalenessRepository as never,
     eventPublisher as never,
+    postWriteRecoveryService as never,
     new AgentHintsFactory(),
     createLoggerMock()
   );
@@ -130,6 +136,40 @@ describe('PkgWriteService advisory warnings', () => {
           ]),
         }),
       })
+    );
+  });
+
+  it('falls back to a bounded domain sweep for duplicate labels when probe search misses formatting variants', async () => {
+    const graphRepository = new MockGraphRepository();
+    const userId = 'user_pkg_advisory_fallback' as UserId;
+    const existingNode = await graphRepository.createNode(
+      'pkg',
+      {
+        label: 'Graph QL',
+        nodeType: GraphNodeType.CONCEPT,
+        domain: 'computer-science',
+      },
+      userId
+    );
+    const { service } = createService(graphRepository);
+
+    const result = await service.createNode(
+      userId,
+      {
+        label: 'GraphQL',
+        nodeType: GraphNodeType.CONCEPT,
+        domain: 'computer-science',
+      },
+      createContext(userId)
+    );
+
+    expect(result.agentHints.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'duplicate',
+          relatedIds: [existingNode.nodeId],
+        }),
+      ])
     );
   });
 

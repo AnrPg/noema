@@ -291,4 +291,66 @@ describe('UnityInvariantStage', () => {
       ])
     );
   });
+
+  it('rejects merges that would create third-party bidirectional dependency conflicts', async () => {
+    const stage = new UnityInvariantStage({
+      getSubgraph: () =>
+        Promise.resolve({
+          nodes: [],
+          edges: [],
+        }),
+      getEdgesForNode: (nodeId: NodeId) => {
+        if (nodeId === ('node_source' as NodeId)) {
+          return Promise.resolve([
+            createEdge({
+              edgeId: 'edge_source_to_external',
+              sourceNodeId: 'node_source' as NodeId,
+              targetNodeId: 'node_external' as NodeId,
+              edgeType: GraphEdgeType.DEPENDS_ON,
+            }),
+          ]);
+        }
+
+        if (nodeId === ('node_target' as NodeId)) {
+          return Promise.resolve([
+            createEdge({
+              edgeId: 'edge_external_to_target',
+              sourceNodeId: 'node_external' as NodeId,
+              targetNodeId: 'node_target' as NodeId,
+              edgeType: GraphEdgeType.DEPENDS_ON,
+            }),
+          ]);
+        }
+
+        return Promise.resolve([] as IGraphEdge[]);
+      },
+    } as never);
+
+    const result = await stage.validate(
+      createMutation([
+        {
+          type: 'merge_nodes',
+          sourceNodeId: 'node_source',
+          targetNodeId: 'node_target',
+          mergedProperties: {},
+          rationale: 'Merge nodes that would create a third-party dependency contradiction',
+        },
+      ]),
+      {
+        correlationId: 'corr_merge_third_party',
+        shortCircuitOnError: false,
+      }
+    );
+
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            invariantName: 'no_required_structure_loss_on_merge',
+            offendingEdgeType: GraphEdgeType.DEPENDS_ON,
+          }),
+        }),
+      ])
+    );
+  });
 });

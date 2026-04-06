@@ -517,6 +517,26 @@ export interface ITransactional<T> {
 }
 
 // ============================================================================
+// IGraphTransactionRepository — Write-scoped transaction surface
+// ============================================================================
+
+/**
+ * Narrow repository surface available inside Neo4j write transactions.
+ *
+ * Transaction callbacks should only receive the operations that are actually
+ * safe and supported within the open transaction, rather than the full graph
+ * repository contract.
+ */
+export interface IGraphTransactionRepository
+  extends
+    Pick<INodeRepository, 'createNode' | 'getNode' | 'updateNode' | 'deleteNode'>,
+    Pick<
+      IEdgeRepository,
+      'createEdge' | 'getEdge' | 'updateEdge' | 'removeEdge' | 'getEdgesForNode'
+    >,
+    Pick<IBatchGraphRepository, 'createNodes' | 'createEdges' | 'getNodesByIds'> {}
+
+// ============================================================================
 // IReadOnlyGraphRepository — Read-only subset for CKG consumers
 // ============================================================================
 
@@ -600,4 +620,4 @@ export interface IGraphRepository
     IEdgeRepository,
     ITraversalRepository,
     IBatchGraphRepository,
-    ITransactional<IGraphRepository> {}
+    ITransactional<IGraphTransactionRepository> {}

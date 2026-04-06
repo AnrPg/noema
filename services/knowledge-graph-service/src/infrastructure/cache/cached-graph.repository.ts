@@ -32,6 +32,7 @@ import type {
   ICreateNodeInput,
   IEdgeFilter,
   IGraphRepository,
+  IGraphTransactionRepository,
   IUpdateEdgeInput,
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
@@ -461,7 +462,7 @@ export class CachedGraphRepository implements IGraphRepository {
   // Transaction support — delegates to inner (cache is bypassed within tx)
   // ==========================================================================
 
-  async runInTransaction<T>(fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
+  async runInTransaction<T>(fn: (txRepo: IGraphTransactionRepository) => Promise<T>): Promise<T> {
     return this.inner.runInTransaction(fn);
   }
 }

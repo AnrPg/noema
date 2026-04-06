@@ -1,80 +1,85 @@
-/**
- * @noema/knowledge-graph-service — Event Publishing Integration Stubs
- *
- * These tests are skipped until Redis test infrastructure is available.
- * They document what the real integration tests should verify once the
- * RedisEventPublisher (Phase 7) is connected to a real Redis instance.
- *
- * Prerequisites:
- * - Redis test container
- * - RedisEventPublisher from @noema/events
- * - Redis Streams consumer for verification
- *
- * @see docs/knowledge-graph-service-implementation/PHASE-10-TESTING.md Task 4
- */
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import Redis from 'ioredis';
+import pino from 'pino';
 
-import { describe, it } from 'vitest';
+import { RedisEventPublisher } from '@noema/events/publisher';
+import { canUseDockerRuntime, startRedisContainer } from '../../helpers/docker-integration.js';
 
-// ============================================================================
-// Event Publishing
-// ============================================================================
+const redisUrl = process.env['REDIS_URL'];
+const hasRedisIntegration = (redisUrl !== undefined && redisUrl !== '') || canUseDockerRuntime();
 
-describe.skip('Redis — Event Publishing', () => {
-  it('publish() writes event to the correct stream', () => {
-    // 1. Publish a PkgNodeCreated event
-    // 2. XRANGE on the stream
-    // 3. Verify event payload matches
+describe.runIf(hasRedisIntegration)('Redis — Event Publishing', () => {
+  const streamKey = `it:kg:event-publishing:${Date.now().toString(36)}`;
+  const logger = pino({ level: 'silent' });
+  let redis: ConstructorParameters<typeof RedisEventPublisher>[0];
+  let publisher: RedisEventPublisher;
+  let runtimeDispose: (() => Promise<void>) | null = null;
+  let runtimeRedisUrl = redisUrl;
+
+  beforeAll(async () => {
+    if (runtimeRedisUrl === undefined || runtimeRedisUrl === '') {
+      const runtime = await startRedisContainer();
+      runtimeRedisUrl = runtime.redisUrl;
+      runtimeDispose = runtime.dispose;
+    }
+
+    redis = new Redis(runtimeRedisUrl, {
+      maxRetriesPerRequest: 5,
+      lazyConnect: true,
+    });
+    await redis.connect();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        await redis.ping();
+        break;
+      } catch (error) {
+        if (attempt === 19) {
+          throw error;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
+    }
+    await redis.del(streamKey);
+    publisher = new RedisEventPublisher(
+      redis,
+      {
+        streamKey,
+        maxLen: 100,
+        serviceName: 'knowledge-graph-service',
+        serviceVersion: 'test',
+        environment: 'test',
+      },
+      logger
+    );
   });
 
-  it('publishBatch() writes all events atomically', () => {
-    // 1. Publish 3 events in batch
-    // 2. Verify all 3 appear in the stream
+  afterAll(async () => {
+    await redis.del(streamKey);
+    await redis.quit();
+    await runtimeDispose?.();
   });
 
-  it('event metadata includes serviceName and version', () => {
-    // 1. Publish event
-    // 2. Read from stream
-    // 3. Verify metadata fields
-  });
+  it('publish() writes a serialized event envelope to Redis Streams', async () => {
+    await publisher.publish({
+      eventType: 'pkg.node.created',
+      aggregateType: 'PersonalKnowledgeGraph',
+      aggregateId: 'user_test',
+      payload: { nodeId: 'node_1', label: 'Cell' },
+      metadata: { correlationId: 'corr_1', userId: 'user_test' as never },
+    });
 
-  it('correlation ID propagates through publish', () => {
-    // 1. Publish event with correlationId='cor_abc123'
-    // 2. Read from stream
-    // 3. Verify metadata.correlationId matches
-  });
-});
+    const entries = await redis.xrange(streamKey, '-', '+', 'COUNT', 1);
+    expect(entries).toHaveLength(1);
 
-// ============================================================================
-// Event Ordering
-// ============================================================================
+    const [, fields] = entries[0] ?? [];
+    const serialized = typeof fields?.[1] === 'string' ? fields[1] : '{}';
+    const envelope = JSON.parse(serialized) as Record<string, unknown>;
 
-describe.skip('Redis — Event Ordering', () => {
-  it('events published in sequence maintain order in stream', () => {
-    // 1. Publish EventA then EventB
-    // 2. XRANGE returns [EventA, EventB] in order
-  });
-});
-
-// ============================================================================
-// Cross-Concern: Service → Event Flow
-// ============================================================================
-
-describe.skip('Integration — Service to Event Flow', () => {
-  it('createNode publishes pkg.node.created event', () => {
-    // 1. Call service.createNode(...)
-    // 2. Verify pkg.node.created event in stream
-    // 3. Verify event payload matches created node
-  });
-
-  it('createEdge publishes pkg.edge.created event', () => {
-    // 1. Create two nodes
-    // 2. Call service.createEdge(...)
-    // 3. Verify pkg.edge.created event in stream
-  });
-
-  it('proposeMutation publishes ckg.mutation.proposed event', () => {
-    // 1. Call mutationPipeline.propose(...)
-    // 2. Verify ckg.mutation.proposed event in stream
-    // 3. Verify payload includes mutationId and operations
+    expect(envelope['eventType']).toBe('pkg.node.created');
+    expect(envelope['aggregateId']).toBe('user_test');
+    expect((envelope['metadata'] as Record<string, unknown>)['serviceName']).toBe(
+      'knowledge-graph-service'
+    );
+    expect((envelope['payload'] as Record<string, unknown>)['label']).toBe('Cell');
   });
 });

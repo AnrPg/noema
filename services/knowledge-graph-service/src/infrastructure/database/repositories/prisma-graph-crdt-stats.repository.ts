@@ -55,8 +55,12 @@ function toDomain(record: {
     confidenceCount: number;
   }[];
 }): IGraphCrdtStat {
-  const { supportCounterByReplica, opposeCounterByReplica, neutralCounterByReplica, confidenceCounterByReplica } =
-    buildReplicaCounters(record.replicaStates);
+  const {
+    supportCounterByReplica,
+    opposeCounterByReplica,
+    neutralCounterByReplica,
+    confidenceCounterByReplica,
+  } = buildReplicaCounters(record.replicaStates);
   const supportCount = sumCounter(supportCounterByReplica);
   const opposeCount = sumCounter(opposeCounterByReplica);
   const neutralCount = sumCounter(neutralCounterByReplica);
@@ -174,18 +178,21 @@ export class PrismaGraphCrdtStatsRepository implements IGraphCrdtStatsRepository
     });
   }
 
-  async listStats(filters: {
-    targetKind?: GraphCrdtTargetKind;
-    targetNodeId?: string;
-    proposedLabel?: string;
-    evidenceType?: string;
-  }, pagination: {
-    limit: number;
-    offset: number;
-  } = {
-    limit: 25,
-    offset: 0,
-  }): Promise<{
+  async listStats(
+    filters: {
+      targetKind?: GraphCrdtTargetKind;
+      targetNodeId?: string;
+      proposedLabel?: string;
+      evidenceType?: string;
+    },
+    pagination: {
+      limit: number;
+      offset: number;
+    } = {
+      limit: 25,
+      offset: 0,
+    }
+  ): Promise<{
     items: IGraphCrdtStat[];
     total: number;
     hasMore: boolean;

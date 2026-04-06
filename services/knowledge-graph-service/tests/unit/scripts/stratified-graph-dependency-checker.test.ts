@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findLayerDependencyViolations,
+  findUnresolvedTrackedFiles,
   resolveLayerForRelativePath,
   STRATIFIED_GRAPH_LAYER_DEFINITIONS,
   STRATIFIED_GRAPH_LAYER_IGNORED_PATHS,
@@ -12,6 +13,16 @@ describe('stratified graph dependency checker', () => {
     expect(resolveLayerForRelativePath('graph-analysis.ts')?.id).toBe(1);
     expect(resolveLayerForRelativePath('proof-stage.ts')?.id).toBe(0);
     expect(resolveLayerForRelativePath('ontology-reasoning.ts')?.id).toBe(2);
+    expect(
+      resolveLayerForRelativePath('application/knowledge-graph/aggregation/service.ts')?.id
+    ).toBe(3);
+    expect(
+      resolveLayerForRelativePath(
+        'infrastructure/ontology/file-backed-ontology-artifact.provider.ts'
+      )?.id
+    ).toBe(2);
+    expect(resolveLayerForRelativePath('crdt-stats.repository.ts')?.id).toBe(3);
+    expect(resolveLayerForRelativePath('infrastructure/proof/tla-proof-runner.ts')?.id).toBe(0);
     expect(resolveLayerForRelativePath('metrics/structural-metrics-engine.ts')?.id).toBe(3);
     expect(resolveLayerForRelativePath('metrics/health/structural-health.ts')?.id).toBe(4);
     expect(resolveLayerForRelativePath('misconception/misconception-detection-engine.ts')?.id).toBe(
@@ -26,15 +37,19 @@ describe('stratified graph dependency checker', () => {
         ['pkg-write.service.ts', ['misconception/misconception-detection-engine.ts']],
         ['graph-analysis.ts', ['ontology-reasoning.ts']],
         [
+          'application/knowledge-graph/aggregation/service.ts',
+          ['misconception/misconception-detection-engine.ts'],
+        ],
+        [
           'metrics/structural-metrics-engine.ts',
           ['misconception/misconception-detection-engine.ts'],
         ],
       ])
     );
 
-    expect(violations).toHaveLength(2);
-    expect(violations.map((violation) => violation.importerLayer.id)).toEqual([1, 3]);
-    expect(violations.map((violation) => violation.importedLayer.id)).toEqual([2, 4]);
+    expect(violations).toHaveLength(3);
+    expect(violations.map((violation) => violation.importerLayer.id)).toEqual([1, 3, 3]);
+    expect(violations.map((violation) => violation.importedLayer.id)).toEqual([2, 4, 4]);
   });
 
   it('allows same-layer and downward imports', () => {
@@ -52,5 +67,20 @@ describe('stratified graph dependency checker', () => {
     expect(violations).toEqual([]);
     expect(STRATIFIED_GRAPH_LAYER_DEFINITIONS).toHaveLength(5);
     expect(STRATIFIED_GRAPH_LAYER_IGNORED_PATHS).toContain('metrics/index.ts');
+  });
+
+  it('fails closed for tracked graph files that have no assigned layer', () => {
+    const unresolved = findUnresolvedTrackedFiles([
+      'metrics/index.ts',
+      'infrastructure/proof/tla-proof-runner.ts',
+      'crdt-stats.repository.ts',
+      'infrastructure/ontology/unmapped-provider.ts',
+    ]);
+
+    expect(unresolved).toEqual([
+      {
+        relativePath: 'infrastructure/ontology/unmapped-provider.ts',
+      },
+    ]);
   });
 });

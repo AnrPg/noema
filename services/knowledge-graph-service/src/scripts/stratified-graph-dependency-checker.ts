@@ -18,7 +18,25 @@ export interface ILayerDependencyViolation {
   readonly importedLayer: IResolvedLayer;
 }
 
+export interface IUnresolvedTrackedFile {
+  readonly relativePath: string;
+}
+
 export const STRATIFIED_GRAPH_LAYER_IGNORED_PATHS: readonly string[] = ['metrics/index.ts'];
+
+export const STRATIFIED_GRAPH_TRACKED_PATH_PATTERNS: readonly string[] = [
+  'application/knowledge-graph/aggregation/**',
+  'graph-analysis.ts',
+  'aggregation-evidence.repository.ts',
+  'crdt-stats.repository.ts',
+  'ontology-reasoning.ts',
+  'unity-invariants.ts',
+  'proof-stage.ts',
+  'metrics/**',
+  'misconception/**',
+  'infrastructure/ontology/**',
+  'infrastructure/proof/**',
+] as const;
 
 export const STRATIFIED_GRAPH_LAYER_DEFINITIONS: readonly IStratifiedLayerDefinition[] = [
   {
@@ -33,6 +51,7 @@ export const STRATIFIED_GRAPH_LAYER_DEFINITIONS: readonly IStratifiedLayerDefini
       'ckg-typestate.ts',
       'mutation.repository.ts',
       'proof-stage.ts',
+      'infrastructure/proof/tla-proof-runner.ts',
     ],
   },
   {
@@ -43,12 +62,22 @@ export const STRATIFIED_GRAPH_LAYER_DEFINITIONS: readonly IStratifiedLayerDefini
   {
     id: 2,
     name: 'Layer 2 - Ontology Reasoning',
-    patterns: ['ontology-reasoning.ts', 'unity-invariants.ts'],
+    patterns: [
+      'ontology-reasoning.ts',
+      'unity-invariants.ts',
+      'infrastructure/ontology/file-backed-ontology-artifact.provider.ts',
+    ],
   },
   {
     id: 3,
     name: 'Layer 3 - Aggregated and Statistical Signals',
-    patterns: ['aggregation-evidence.repository.ts', 'metrics.repository.ts', 'metrics/**'],
+    patterns: [
+      'application/knowledge-graph/aggregation/**',
+      'aggregation-evidence.repository.ts',
+      'crdt-stats.repository.ts',
+      'metrics.repository.ts',
+      'metrics/**',
+    ],
   },
   {
     id: 4,
@@ -162,4 +191,21 @@ export function findLayerDependencyViolations(
   }
 
   return violations;
+}
+
+export function findUnresolvedTrackedFiles(
+  relativePaths: readonly string[]
+): readonly IUnresolvedTrackedFile[] {
+  return relativePaths
+    .map(normalizeRelativePath)
+    .filter((relativePath) => !STRATIFIED_GRAPH_LAYER_IGNORED_PATHS.includes(relativePath))
+    .filter((relativePath) =>
+      STRATIFIED_GRAPH_TRACKED_PATH_PATTERNS.some((pattern) =>
+        matchesPattern(relativePath, pattern)
+      )
+    )
+    .filter((relativePath) => resolveLayerForRelativePath(relativePath) === null)
+    .map((relativePath) => ({
+      relativePath,
+    }));
 }

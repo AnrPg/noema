@@ -426,10 +426,10 @@ async function bootstrap(): Promise<void> {
   validationPipeline.addStage(new EvidenceSufficiencyStage(aggregationEvidenceRepository)); // order 400
 
   // 5. CKG mutation pipeline (orchestrates lifecycle + validation)
-    const mutationPipeline = new CkgMutationPipeline(
-      mutationRepository,
-      graphRepository,
-      validationPipeline,
+  const mutationPipeline = new CkgMutationPipeline(
+    mutationRepository,
+    graphRepository,
+    validationPipeline,
     eventPublisher,
     logger,
     config.mutation.proofStageMode,
@@ -439,11 +439,11 @@ async function bootstrap(): Promise<void> {
         tlaToolsJarPath: config.proof.tlaToolsJarPath,
         javaBinary: config.proof.javaBinary,
         timeoutMs: config.proof.timeoutMs,
-        },
-        logger
-      ),
-      ontologyArtifactProvider
-    );
+      },
+      logger
+    ),
+    ontologyArtifactProvider
+  );
 
   // 6. Knowledge Graph Service (domain service)
   const service = new KnowledgeGraphService(

@@ -34,7 +34,11 @@ import { EdgeWeight } from '@noema/types';
 
 import type { IEventPublisher, IEventToPublish } from '../shared/event-publisher.js';
 import type { IExecutionContext } from './execution-context.js';
-import type { IGraphRepository, IUpdateNodeInput } from './graph.repository.js';
+import type {
+  IGraphRepository,
+  IGraphTransactionRepository,
+  IUpdateNodeInput,
+} from './graph.repository.js';
 import type {
   ICkgMutation,
   ICreateMutationInput,
@@ -68,11 +72,16 @@ import {
   buildProofModel,
   createDisabledProofResult,
   DeterministicProofRunner,
+  type IProofGraphState,
   type IProofResult,
   type IProofRunner,
   ProofRolloutMode,
   type ProofRolloutMode as ProofRolloutModeType,
 } from './proof-stage.js';
+import {
+  StaticOntologyArtifactProvider,
+  type IOntologyArtifactProvider,
+} from './ontology-reasoning.js';
 
 // ============================================================================
 // Helpers
@@ -315,7 +324,8 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     private readonly eventPublisher: IEventPublisher,
     private readonly logger: Logger,
     private readonly proofStageMode: ProofRolloutModeType = ProofRolloutMode.DISABLED,
-    private readonly proofRunner: IProofRunner = new DeterministicProofRunner()
+    private readonly proofRunner: IProofRunner = new DeterministicProofRunner(),
+    private readonly ontologyArtifactProvider: IOntologyArtifactProvider = new StaticOntologyArtifactProvider()
   ) {}
 
   // ==========================================================================
@@ -469,6 +479,26 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     return this.mutationRepository.findMutationsByStates(activeStates);
   }
 
+  async listActiveMutationsByIds(mutationIds: readonly MutationId[]): Promise<ICkgMutation[]> {
+    if (mutationIds.length === 0) {
+      return [];
+    }
+
+    const activeStates = new Set<MutationState>([
+      'proposed',
+      'validating',
+      'validated',
+      'pending_review',
+      'revision_requested',
+      'proving',
+      'proven',
+      'committing',
+    ]);
+
+    const mutations = await this.mutationRepository.findMutationsByIds(mutationIds);
+    return mutations.filter((mutation) => activeStates.has(mutation.state));
+  }
+
   /**
    * Cancel a mutation (only allowed for PROPOSED or VALIDATING).
    * Transitions to REJECTED with reason "cancelled by proposer."
@@ -557,19 +587,33 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       ]);
     }
 
+    const pendingReviewSource = await this.getPendingReviewSource(mutationId);
     this.logger.info(
-      { mutationId, reviewerId },
-      'Approving escalated mutation — overriding ontological conflicts'
+      { mutationId, reviewerId, pendingReviewSource },
+      pendingReviewSource === 'proof'
+        ? 'Approving escalated mutation — overriding proof-stage findings'
+        : 'Approving escalated mutation — overriding pending-review findings'
     );
+    const approvalReason =
+      pendingReviewSource === 'proof'
+        ? `Proof-stage findings overridden by reviewer: ${reason}`
+        : pendingReviewSource === 'validation'
+          ? `Ontological conflicts overridden by reviewer: ${reason}`
+          : `Pending review overridden by reviewer: ${reason}`;
 
     // PENDING_REVIEW → VALIDATED
     const updated = await this.transitionState(
       mutation,
       'validated',
       reviewerId,
-      `Ontological conflicts overridden by reviewer: ${reason}`,
+      approvalReason,
       context,
-      { reviewAction: 'approved', reviewerId, reviewReason: reason }
+      {
+        reviewAction: 'approved',
+        reviewerId,
+        reviewReason: reason,
+        reviewSource: pendingReviewSource,
+      }
     );
 
     // Publish CkgMutationValidated event
@@ -585,7 +629,9 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     );
 
     // Continue the pipeline asynchronously: prove → commit
-    void this.runPostReviewPipeline(updated.mutationId, context);
+    void this.runPostReviewPipeline(updated.mutationId, context, {
+      approvedProofReview: pendingReviewSource === 'proof',
+    });
 
     return updated;
   }
@@ -968,13 +1014,18 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
    */
   private async runPostReviewPipeline(
     mutationId: MutationId,
-    context: IExecutionContext
+    context: IExecutionContext,
+    options: {
+      approvedProofReview?: boolean;
+    } = {}
   ): Promise<void> {
     try {
       let mutation = await this.getMutation(mutationId);
 
       // Stage 2: VALIDATED → PROVING → PROVEN
-      mutation = await this.runProofStage(mutation, context);
+      mutation = await this.runProofStage(mutation, context, {
+        approvedProofReview: options.approvedProofReview ?? false,
+      });
       if (mutation.state === 'rejected') return;
 
       // Stage 3: PROVEN → COMMITTING → COMMITTED/REJECTED
@@ -1184,10 +1235,19 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
    */
   private async runProofStage(
     mutation: ICkgMutation,
-    context: IExecutionContext
+    context: IExecutionContext,
+    options: {
+      approvedProofReview?: boolean;
+    } = {}
   ): Promise<ICkgMutation> {
     const operations = parseOperations(mutation.operations);
-    const model = buildProofModel(mutation, operations);
+    const proofGraphState = await this.loadProofGraphState(operations);
+    const model = buildProofModel(
+      mutation,
+      operations,
+      proofGraphState,
+      this.ontologyArtifactProvider.getArtifact()
+    );
 
     // VALIDATED → PROVING
     mutation = await this.transitionState(
@@ -1199,7 +1259,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     );
     kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'proving' });
 
-    const proofResult =
+    const rawProofResult =
       this.proofStageMode === ProofRolloutMode.DISABLED
         ? createDisabledProofResult(this.proofStageMode, model)
         : await this.proofRunner.runProof(
@@ -1209,6 +1269,17 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
             context,
             this.proofStageMode
           );
+
+    const proofResult =
+      options.approvedProofReview === true &&
+      rawProofResult.status === 'failed' &&
+      rawProofResult.enforcement === 'pending_review'
+        ? {
+            ...rawProofResult,
+            enforcement: 'observe_only' as const,
+            autoApproved: true,
+          }
+        : rawProofResult;
 
     await this.mutationRepository.updateMutationFields(mutation.mutationId, {
       proofResult: this.serializeProofResult(proofResult),
@@ -1278,6 +1349,75 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     kgCounters.increment(KG_COUNTERS.PIPELINE_STAGES, { stage: 'proven' });
 
     return mutation;
+  }
+
+  private async loadProofGraphState(
+    operations: readonly CkgMutationOperation[]
+  ): Promise<IProofGraphState> {
+    if (
+      !('getNode' in this.graphRepository) ||
+      typeof this.graphRepository.getNode !== 'function' ||
+      !('getEdgesForNodes' in this.graphRepository) ||
+      typeof this.graphRepository.getEdgesForNodes !== 'function'
+    ) {
+      this.logger.warn(
+        'Graph repository does not expose proof-state read methods; building proof model without baseline graph state'
+      );
+      return {
+        nodes: [],
+        edges: [],
+      };
+    }
+
+    const nodeIds = new Set<string>(extractAffectedNodeIds(operations));
+    for (const operation of operations) {
+      switch (operation.type) {
+        case CkgOperationType.ADD_EDGE:
+          nodeIds.add(operation.sourceNodeId);
+          nodeIds.add(operation.targetNodeId);
+          break;
+        case CkgOperationType.MERGE_NODES:
+          nodeIds.add(operation.sourceNodeId);
+          nodeIds.add(operation.targetNodeId);
+          break;
+        case CkgOperationType.SPLIT_NODE:
+          nodeIds.add(operation.nodeId);
+          break;
+        default:
+          break;
+      }
+    }
+
+    const scopedNodeIds = [...nodeIds];
+    const edges =
+      scopedNodeIds.length > 0
+        ? await this.graphRepository.getEdgesForNodes(scopedNodeIds as unknown as readonly NodeId[])
+        : [];
+
+    for (const edge of edges) {
+      nodeIds.add(edge.sourceNodeId);
+      nodeIds.add(edge.targetNodeId);
+    }
+
+    const nodes = (
+      await Promise.all(
+        [...nodeIds].map(async (nodeId) => this.graphRepository.getNode(nodeId as NodeId))
+      )
+    ).filter((node): node is NonNullable<typeof node> => node !== null);
+
+    return {
+      nodes: nodes.map((node) => ({
+        nodeId: node.nodeId,
+        nodeType: node.nodeType,
+        domain: node.domain,
+      })),
+      edges: edges.map((edge) => ({
+        edgeId: edge.edgeId,
+        edgeType: edge.edgeType,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: edge.targetNodeId,
+      })),
+    };
   }
 
   /**
@@ -1532,7 +1672,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
   private async executeMerge(
     op: Extract<CkgMutationOperation, { type: 'merge_nodes' }>,
     graphType: GraphType,
-    repo: IGraphRepository = this.graphRepository
+    repo: IGraphTransactionRepository = this.graphRepository
   ): Promise<void> {
     // Get all edges connected to the source node
     const sourceEdges = await repo.getEdgesForNode(op.sourceNodeId as NodeId, 'both');
@@ -1578,7 +1718,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
   private async executeSplit(
     op: Extract<CkgMutationOperation, { type: 'split_node' }>,
     graphType: GraphType,
-    repo: IGraphRepository = this.graphRepository
+    repo: IGraphTransactionRepository = this.graphRepository
   ): Promise<{ nodeAId: string; nodeBId: string }> {
     // Look up original node first to get domain for atomic creation
     const originalNode = await repo.getNode(op.nodeId as NodeId);
@@ -2003,6 +2143,13 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       return `Proof stage passed via ${result.engineVersion}.`;
     }
 
+    if (result.autoApproved) {
+      return (
+        `Proof-stage findings were explicitly approved by a reviewer: ` +
+        (result.failureExplanation ?? 'continuing with non-blocking proof diagnostics.')
+      );
+    }
+
     if (result.enforcement === 'observe_only') {
       return (
         `Proof stage recorded diagnostics in observe-only mode: ` +
@@ -2011,6 +2158,29 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
     }
 
     return result.failureExplanation ?? 'Proof stage completed with non-blocking diagnostics.';
+  }
+
+  private async getPendingReviewSource(
+    mutationId: MutationId
+  ): Promise<'validation' | 'proof' | 'unknown'> {
+    const auditLog = await this.mutationRepository.getAuditLog(mutationId);
+    const lastPendingReviewTransition = [...auditLog]
+      .reverse()
+      .find((entry) => entry.toState === 'pending_review');
+
+    if (lastPendingReviewTransition === undefined) {
+      return 'unknown';
+    }
+
+    if (lastPendingReviewTransition.fromState === 'proving') {
+      return 'proof';
+    }
+
+    if (lastPendingReviewTransition.fromState === 'validating') {
+      return 'validation';
+    }
+
+    return 'unknown';
   }
 
   /**

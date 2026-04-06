@@ -39,15 +39,18 @@ export interface IGraphCrdtStatsRepository {
     metadata?: Metadata;
   }): Promise<IGraphCrdtStat>;
 
-  listStats(filters: {
-    targetKind?: GraphCrdtTargetKind;
-    targetNodeId?: string;
-    proposedLabel?: string;
-    evidenceType?: string;
-  }, pagination?: {
-    limit: number;
-    offset: number;
-  }): Promise<{
+  listStats(
+    filters: {
+      targetKind?: GraphCrdtTargetKind;
+      targetNodeId?: string;
+      proposedLabel?: string;
+      evidenceType?: string;
+    },
+    pagination?: {
+      limit: number;
+      offset: number;
+    }
+  ): Promise<{
     items: IGraphCrdtStat[];
     total: number;
     hasMore: boolean;

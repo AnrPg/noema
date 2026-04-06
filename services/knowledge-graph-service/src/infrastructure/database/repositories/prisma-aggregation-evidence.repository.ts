@@ -31,7 +31,169 @@ import { fromPrismaJson, toPrismaJson } from './prisma-json.helpers.js';
 // ============================================================================
 
 function generateEvidenceId(): string {
-  return `evid_${nanoid()}`;
+  const timestamp = Date.now().toString(36).padStart(10, '0');
+  const sequence = nextEvidenceSequence().toString().padStart(4, '0');
+  return `evid_${timestamp}_${sequence}_${nanoid(6)}`;
+}
+
+let lastEvidenceTimestamp = 0;
+let lastEvidenceSequence = 0;
+
+function nextEvidenceSequence(): number {
+  const now = Date.now();
+  if (now === lastEvidenceTimestamp) {
+    lastEvidenceSequence += 1;
+  } else {
+    lastEvidenceTimestamp = now;
+    lastEvidenceSequence = 0;
+  }
+  return lastEvidenceSequence;
+}
+
+function buildEvidenceDedupeKey(input: {
+  sourceUserId: UserId;
+  sourcePkgNodeId: NodeId;
+  ckgTargetNodeId?: NodeId;
+  proposedLabel?: string;
+  evidenceType: string;
+  direction?: GraphCrdtDirection;
+  sourceEventId?: string;
+}): string {
+  const eventScope = input.sourceEventId?.trim();
+  return [
+    input.sourceUserId,
+    input.sourcePkgNodeId,
+    input.ckgTargetNodeId ?? 'no-target',
+    (input.proposedLabel ?? 'no-label').trim().toLowerCase(),
+    input.evidenceType,
+    input.direction ?? 'support',
+    eventScope !== undefined && eventScope.length > 0 ? eventScope : 'no-event',
+  ].join(':');
+}
+
+function summarizeEvidenceRecords(
+  records: readonly {
+    sourceUserId: string;
+    confidence: number;
+    direction: string;
+    createdAt: Date;
+    id: string;
+    orderingSeq: bigint;
+  }[]
+): IEvidenceSummary {
+  if (records.length === 0) {
+    return {
+      totalCount: 0,
+      contributingUserCount: 0,
+      directionalContributorCount: { support: 0, oppose: 0, neutral: 0 },
+      averageConfidence: 0 as ConfidenceScore,
+      confidenceDistribution: { low: 0, medium: 0, high: 0 },
+      achievedBand: 'none' as PromotionBand,
+      netSupportContributorCount: 0,
+    };
+  }
+
+  const totalCount = records.length;
+  const orderedLatestPerUser = new Map<
+    string,
+    { sourceUserId: string; confidence: number; direction: string; createdAt: Date; id: string }
+  >();
+  const sorted = [...records].sort((left, right) => {
+    const createdDiff = right.createdAt.getTime() - left.createdAt.getTime();
+    if (createdDiff !== 0) {
+      return createdDiff;
+    }
+    const orderingDiff = Number(right.orderingSeq - left.orderingSeq);
+    if (orderingDiff !== 0) {
+      return orderingDiff;
+    }
+    return right.id.localeCompare(left.id);
+  });
+
+  for (const record of sorted) {
+    if (!orderedLatestPerUser.has(record.sourceUserId)) {
+      orderedLatestPerUser.set(record.sourceUserId, record);
+    }
+  }
+
+  const latestContributorRecords = [...orderedLatestPerUser.values()];
+  const contributingUserCount = latestContributorRecords.length;
+  const supportContributors = latestContributorRecords.filter(
+    (record) => record.direction === 'support'
+  ).length;
+  const opposeContributors = latestContributorRecords.filter(
+    (record) => record.direction === 'oppose'
+  ).length;
+  const neutralContributors = latestContributorRecords.filter(
+    (record) => record.direction === 'neutral'
+  ).length;
+
+  const sumConfidence = records.reduce((sum, record) => sum + record.confidence, 0);
+  const averageConfidence = sumConfidence / totalCount;
+
+  let low = 0;
+  let medium = 0;
+  let high = 0;
+  for (const record of records) {
+    if (record.confidence < 0.3) low++;
+    else if (record.confidence < 0.7) medium++;
+    else high++;
+  }
+
+  return {
+    totalCount,
+    contributingUserCount,
+    directionalContributorCount: {
+      support: supportContributors,
+      oppose: opposeContributors,
+      neutral: neutralContributors,
+    },
+    averageConfidence: averageConfidence as ConfidenceScore,
+    confidenceDistribution: { low, medium, high },
+    achievedBand: PromotionBandUtil.fromEvidenceCount(supportContributors),
+    netSupportContributorCount: supportContributors - opposeContributors,
+  };
+}
+
+function toSupportBandCount(
+  records: readonly {
+    sourceUserId: string;
+    direction: string;
+    createdAt: Date;
+    id: string;
+    orderingSeq: bigint;
+  }[]
+): { count: number; band: PromotionBand } {
+  const latestByUser = new Map<string, { direction: string; createdAt: Date; id: string }>();
+  const sorted = [...records].sort((left, right) => {
+    const createdDiff = right.createdAt.getTime() - left.createdAt.getTime();
+    if (createdDiff !== 0) {
+      return createdDiff;
+    }
+    const orderingDiff = Number(right.orderingSeq - left.orderingSeq);
+    if (orderingDiff !== 0) {
+      return orderingDiff;
+    }
+    return right.id.localeCompare(left.id);
+  });
+
+  for (const record of sorted) {
+    if (!latestByUser.has(record.sourceUserId)) {
+      latestByUser.set(record.sourceUserId, {
+        direction: record.direction,
+        createdAt: record.createdAt,
+        id: record.id,
+      });
+    }
+  }
+
+  const count = [...latestByUser.values()].filter(
+    (record) => record.direction === 'support'
+  ).length;
+  return {
+    count,
+    band: PromotionBandUtil.fromEvidenceCount(count),
+  };
 }
 
 // ============================================================================
@@ -50,28 +212,46 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
     confidence: ConfidenceScore;
     metadata?: Metadata;
     direction?: GraphCrdtDirection;
+    sourceEventId?: string;
+    sourceObservedAt?: string;
   }): Promise<IAggregationEvidence> {
     const id = generateEvidenceId();
+    const dedupeKey = buildEvidenceDedupeKey(input);
+    try {
+      const data: Prisma.AggregationEvidenceUncheckedCreateInput = {
+        id,
+        dedupeKey,
+        sourceUserId: input.sourceUserId as string,
+        sourcePkgNodeId: input.sourcePkgNodeId as string,
+        ...(input.sourceEventId !== undefined ? { sourceEventId: input.sourceEventId } : {}),
+        ...(input.sourceObservedAt !== undefined
+          ? { sourceObservedAt: new Date(input.sourceObservedAt) }
+          : {}),
+        evidenceType: input.evidenceType,
+        confidence: input.confidence as number,
+        payload: toPrismaJson(input.metadata ?? {}),
+        direction: input.direction ?? 'support',
+      };
+      if (input.ckgTargetNodeId !== undefined) {
+        data.ckgTargetNodeId = input.ckgTargetNodeId as string;
+      }
+      if (input.proposedLabel !== undefined) {
+        data.proposedLabel = input.proposedLabel;
+      }
 
-    const data: Prisma.AggregationEvidenceUncheckedCreateInput = {
-      id,
-      sourceUserId: input.sourceUserId as string,
-      sourcePkgNodeId: input.sourcePkgNodeId as string,
-      evidenceType: input.evidenceType,
-      confidence: input.confidence as number,
-      payload: toPrismaJson(input.metadata ?? {}),
-      direction: input.direction ?? 'support',
-    };
-    if (input.ckgTargetNodeId !== undefined) {
-      data.ckgTargetNodeId = input.ckgTargetNodeId as string;
+      const record = await this.prisma.aggregationEvidence.create({ data });
+      return this.toDomain(record);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        const existing = await this.prisma.aggregationEvidence.findFirst({
+          where: { dedupeKey },
+        });
+        if (existing !== null) {
+          return this.toDomain(existing);
+        }
+      }
+      throw error;
     }
-    if (input.proposedLabel !== undefined) {
-      data.proposedLabel = input.proposedLabel;
-    }
-
-    const record = await this.prisma.aggregationEvidence.create({ data });
-
-    return this.toDomain(record);
   }
 
   async getEvidenceForTarget(ckgTargetNodeId: NodeId): Promise<IAggregationEvidence[]> {
@@ -95,30 +275,37 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
   async getEvidenceCountByBand(
     ckgTargetNodeId: NodeId
   ): Promise<{ count: number; band: PromotionBand }> {
-    // Count distinct contributing users (each user counts once)
-    const result = await this.prisma.aggregationEvidence.groupBy({
-      by: ['sourceUserId'],
-      where: { ckgTargetNodeId: ckgTargetNodeId as string },
+    const records = await this.prisma.aggregationEvidence.findMany({
+      where: {
+        ckgTargetNodeId: ckgTargetNodeId as string,
+      },
+      select: {
+        id: true,
+        sourceUserId: true,
+        direction: true,
+        createdAt: true,
+        orderingSeq: true,
+      },
     });
-
-    const count = result.length; // Number of distinct users
-    const band = PromotionBandUtil.fromEvidenceCount(count);
-
-    return { count, band };
+    return toSupportBandCount(records);
   }
 
   async getEvidenceCountByProposedLabel(
     proposedLabel: string
   ): Promise<{ count: number; band: PromotionBand }> {
-    const result = await this.prisma.aggregationEvidence.groupBy({
-      by: ['sourceUserId'],
-      where: { proposedLabel },
+    const records = await this.prisma.aggregationEvidence.findMany({
+      where: {
+        proposedLabel,
+      },
+      select: {
+        id: true,
+        sourceUserId: true,
+        direction: true,
+        createdAt: true,
+        orderingSeq: true,
+      },
     });
-
-    const count = result.length;
-    const band = PromotionBandUtil.fromEvidenceCount(count);
-
-    return { count, band };
+    return toSupportBandCount(records);
   }
 
   async getEvidenceByUser(userId: UserId): Promise<IAggregationEvidence[]> {
@@ -131,6 +318,24 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
   }
 
   async findEvidence(input: {
+    sourceUserId: UserId;
+    sourcePkgNodeId: NodeId;
+    ckgTargetNodeId?: NodeId;
+    proposedLabel?: string;
+    evidenceType: string;
+    direction?: GraphCrdtDirection;
+  }): Promise<IAggregationEvidence | null> {
+    const dedupeKey = buildEvidenceDedupeKey(input);
+    const record = await this.prisma.aggregationEvidence.findFirst({
+      where: {
+        dedupeKey,
+      },
+    });
+
+    return record ? this.toDomain(record) : null;
+  }
+
+  async findLatestEvidenceSignal(input: {
     sourceUserId: UserId;
     sourcePkgNodeId: NodeId;
     ckgTargetNodeId?: NodeId;
@@ -149,6 +354,7 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
           ? { proposedLabel: input.proposedLabel }
           : { proposedLabel: null }),
       },
+      orderBy: [{ sourceObservedAt: 'desc' }, { orderingSeq: 'desc' }, { id: 'desc' }],
     });
 
     return record ? this.toDomain(record) : null;
@@ -168,93 +374,56 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
     const records = await this.prisma.aggregationEvidence.findMany({
       where: { ckgTargetNodeId: ckgTargetNodeId as string },
       select: {
+        id: true,
         sourceUserId: true,
         confidence: true,
+        direction: true,
+        createdAt: true,
+        orderingSeq: true,
       },
     });
-
-    if (records.length === 0) {
-      return {
-        totalCount: 0,
-        contributingUserCount: 0,
-        averageConfidence: 0 as ConfidenceScore,
-        confidenceDistribution: { low: 0, medium: 0, high: 0 },
-        achievedBand: 'none' as PromotionBand,
-      };
-    }
-
-    // Aggregate
-    const totalCount = records.length;
-    const uniqueUsers = new Set(records.map((r) => r.sourceUserId));
-    const contributingUserCount = uniqueUsers.size;
-
-    const sumConfidence = records.reduce((sum, r) => sum + r.confidence, 0);
-    const averageConfidence = sumConfidence / totalCount;
-
-    // Confidence distribution
-    let low = 0;
-    let medium = 0;
-    let high = 0;
-    for (const r of records) {
-      if (r.confidence < 0.3) low++;
-      else if (r.confidence < 0.7) medium++;
-      else high++;
-    }
-
-    const achievedBand = PromotionBandUtil.fromEvidenceCount(contributingUserCount);
-
-    return {
-      totalCount,
-      contributingUserCount,
-      averageConfidence: averageConfidence as ConfidenceScore,
-      confidenceDistribution: { low, medium, high },
-      achievedBand,
-    };
+    return summarizeEvidenceRecords(records);
   }
 
   async getEvidenceSummaryByProposedLabel(proposedLabel: string): Promise<IEvidenceSummary> {
     const records = await this.prisma.aggregationEvidence.findMany({
       where: { proposedLabel },
       select: {
+        id: true,
         sourceUserId: true,
         confidence: true,
+        direction: true,
+        createdAt: true,
+        orderingSeq: true,
+      },
+    });
+    return summarizeEvidenceRecords(records);
+  }
+
+  async getLinkedMutationIds(input: {
+    ckgTargetNodeId?: NodeId;
+    proposedLabel?: string;
+  }): Promise<readonly MutationId[]> {
+    const records = await this.prisma.aggregationEvidence.findMany({
+      where: {
+        mutationId: { not: null },
+        ...(input.ckgTargetNodeId !== undefined
+          ? { ckgTargetNodeId: input.ckgTargetNodeId as string }
+          : {}),
+        ...(input.proposedLabel !== undefined ? { proposedLabel: input.proposedLabel } : {}),
+      },
+      select: {
+        mutationId: true,
       },
     });
 
-    if (records.length === 0) {
-      return {
-        totalCount: 0,
-        contributingUserCount: 0,
-        averageConfidence: 0 as ConfidenceScore,
-        confidenceDistribution: { low: 0, medium: 0, high: 0 },
-        achievedBand: 'none' as PromotionBand,
-      };
-    }
-
-    const totalCount = records.length;
-    const uniqueUsers = new Set(records.map((r) => r.sourceUserId));
-    const contributingUserCount = uniqueUsers.size;
-    const sumConfidence = records.reduce((sum, r) => sum + r.confidence, 0);
-    const averageConfidence = sumConfidence / totalCount;
-
-    let low = 0;
-    let medium = 0;
-    let high = 0;
-    for (const r of records) {
-      if (r.confidence < 0.3) low++;
-      else if (r.confidence < 0.7) medium++;
-      else high++;
-    }
-
-    const achievedBand = PromotionBandUtil.fromEvidenceCount(contributingUserCount);
-
-    return {
-      totalCount,
-      contributingUserCount,
-      averageConfidence: averageConfidence as ConfidenceScore,
-      confidenceDistribution: { low, medium, high },
-      achievedBand,
-    };
+    return [
+      ...new Set(
+        records.flatMap((record) =>
+          record.mutationId === null ? [] : [record.mutationId as MutationId]
+        )
+      ),
+    ];
   }
 
   async linkEvidenceToMutation(input: {
@@ -284,9 +453,13 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
 
   private toDomain(record: {
     id: string;
+    dedupeKey: string;
+    orderingSeq: bigint;
     mutationId: string | null;
     sourceUserId: string;
     sourcePkgNodeId: string;
+    sourceEventId: string | null;
+    sourceObservedAt: Date | null;
     ckgTargetNodeId: string | null;
     proposedLabel: string | null;
     evidenceType: string;
@@ -300,6 +473,8 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
       mutationId: record.mutationId as MutationId | null,
       sourceUserId: record.sourceUserId as UserId,
       sourcePkgNodeId: record.sourcePkgNodeId as NodeId,
+      sourceEventId: record.sourceEventId,
+      sourceObservedAt: record.sourceObservedAt?.toISOString() ?? null,
       ckgTargetNodeId: record.ckgTargetNodeId as NodeId | null,
       proposedLabel: record.proposedLabel,
       evidenceType: record.evidenceType,
@@ -309,4 +484,8 @@ export class PrismaAggregationEvidenceRepository implements IAggregationEvidence
       recordedAt: record.createdAt.toISOString(),
     };
   }
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Error && (error as { code?: string }).code === 'P2002';
 }

@@ -27,32 +27,38 @@ describe('PkgPostWriteRecoveryService', () => {
       } as never
     );
 
-    await service.enqueueAppendOperation('user_alpha' as never, {
-      operationType: 'PkgNodeUpdated',
-      sequenceNumber: 0,
-      timestamp: '2026-04-03T10:00:00.000Z',
-      nodeId: 'node_same',
-      changedFields: [
-        {
-          field: 'label',
-          before: 'A',
-          after: 'B',
-        },
-      ],
-    } as never);
-    await service.enqueueAppendOperation('user_alpha' as never, {
-      operationType: 'PkgNodeUpdated',
-      sequenceNumber: 0,
-      timestamp: '2026-04-03T10:00:01.000Z',
-      nodeId: 'node_same',
-      changedFields: [
-        {
-          field: 'label',
-          before: 'B',
-          after: 'C',
-        },
-      ],
-    } as never);
+    await service.enqueueAppendOperation(
+      'user_alpha' as never,
+      {
+        operationType: 'PkgNodeUpdated',
+        sequenceNumber: 0,
+        timestamp: '2026-04-03T10:00:00.000Z',
+        nodeId: 'node_same',
+        changedFields: [
+          {
+            field: 'label',
+            before: 'A',
+            after: 'B',
+          },
+        ],
+      } as never
+    );
+    await service.enqueueAppendOperation(
+      'user_alpha' as never,
+      {
+        operationType: 'PkgNodeUpdated',
+        sequenceNumber: 0,
+        timestamp: '2026-04-03T10:00:01.000Z',
+        nodeId: 'node_same',
+        changedFields: [
+          {
+            field: 'label',
+            before: 'B',
+            after: 'C',
+          },
+        ],
+      } as never
+    );
 
     const firstCall = repository.enqueueTask.mock.calls[0]?.[0];
     const secondCall = repository.enqueueTask.mock.calls[1]?.[0];

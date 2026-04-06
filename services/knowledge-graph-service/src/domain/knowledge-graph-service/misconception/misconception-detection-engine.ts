@@ -58,7 +58,7 @@ export class MisconceptionDetectionEngine {
     this.logger = logger.child({ component: 'MisconceptionDetectionEngine' });
 
     const semanticConfig: ISemanticDetectorConfig = {
-      vectorServiceEnabled: config?.vectorServiceEnabled ?? false,
+      vectorServiceEnabled: config?.vectorServiceEnabled ?? true,
     };
 
     this.detectors = [

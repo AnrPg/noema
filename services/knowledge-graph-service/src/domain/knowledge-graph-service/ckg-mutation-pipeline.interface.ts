@@ -49,6 +49,11 @@ export interface ICkgMutationPipeline {
   listActiveMutations(): Promise<ICkgMutation[]>;
 
   /**
+   * Get the subset of active mutations matching the provided IDs.
+   */
+  listActiveMutationsByIds(mutationIds: readonly MutationId[]): Promise<ICkgMutation[]>;
+
+  /**
    * Cancel a mutation (only PROPOSED or VALIDATING).
    */
   cancelMutation(mutationId: MutationId, context: IExecutionContext): Promise<ICkgMutation>;

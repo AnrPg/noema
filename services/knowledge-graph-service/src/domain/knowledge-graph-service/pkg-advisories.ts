@@ -14,7 +14,10 @@ import type { Logger } from 'pino';
 import { getConflictingEdgeTypesForAdvisory } from './ckg-validation-stages.js';
 import type { IGraphRepository } from './graph.repository.js';
 
-const MAX_DUPLICATE_SCAN = 250;
+const DUPLICATE_PROBE_PAGE_SIZE = 50;
+const MAX_DUPLICATE_PROBE_PAGES = 4;
+const MAX_DUPLICATE_PROBES = 6;
+const FALLBACK_DUPLICATE_DOMAIN_NODE_LIMIT = 1000;
 const GENERIC_RELATION_EDGE_TYPES = new Set(['related_to']);
 const VAGUE_LABELS = new Set([
   'concept',
@@ -39,6 +42,27 @@ function normalizeLabel(label: string): string {
 
 function normalizeKey(label: string): string {
   return normalizeLabel(label).replace(/[^a-z0-9]+/g, '');
+}
+
+function buildDuplicateSearchProbes(label: string): string[] {
+  const trimmed = label.trim();
+  const normalized = normalizeLabel(label);
+  const alphanumericWords = normalized
+    .split(/[^a-z0-9]+/g)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 3);
+  const joinedWords = alphanumericWords.join(' ');
+  const sortedDistinctWords = [...new Set(alphanumericWords)].sort(
+    (left, right) => right.length - left.length
+  );
+
+  const quotedPhrases = [trimmed, normalized, joinedWords]
+    .filter((probe) => probe.length >= 3)
+    .map((probe) => `"${probe}"`);
+
+  return [...new Set([trimmed, normalized, joinedWords, ...quotedPhrases, ...sortedDistinctWords])]
+    .filter((probe) => probe.length >= 3)
+    .slice(0, MAX_DUPLICATE_PROBES);
 }
 
 function dedupeWarnings(warnings: readonly IWarning[]): IWarning[] {
@@ -109,17 +133,7 @@ export class PkgAdvisoryService {
       });
     }
 
-    const nearbyNodes = await this.graphRepository.findNodes(
-      {
-        graphType: GraphType.PKG,
-        userId,
-        domain: node.domain,
-        includeDeleted: false,
-      },
-      MAX_DUPLICATE_SCAN,
-      0
-    );
-
+    const nearbyNodes = await this.findDuplicateCandidates(userId, node);
     const duplicates = nearbyNodes.filter(
       (candidate) =>
         candidate.nodeId !== node.nodeId && normalizeKey(candidate.label) === normalizedKey
@@ -139,6 +153,107 @@ export class PkgAdvisoryService {
     }
 
     return dedupeWarnings(warnings);
+  }
+
+  private async findDuplicateCandidates(userId: UserId, node: IGraphNode): Promise<IGraphNode[]> {
+    const probes = buildDuplicateSearchProbes(node.label);
+    const candidates = new Map<string, IGraphNode>();
+    const normalizedKey = normalizeKey(node.label);
+
+    for (const probe of probes) {
+      for (let page = 0; page < MAX_DUPLICATE_PROBE_PAGES; page++) {
+        const results = await this.graphRepository.findNodes(
+          {
+            graphType: GraphType.PKG,
+            userId,
+            domain: node.domain,
+            labelContains: probe,
+            searchMode: probe.startsWith('"') ? 'fulltext' : 'substring',
+            includeDeleted: false,
+          },
+          DUPLICATE_PROBE_PAGE_SIZE,
+          page * DUPLICATE_PROBE_PAGE_SIZE
+        );
+
+        for (const candidate of results) {
+          candidates.set(candidate.nodeId as string, candidate);
+        }
+
+        if (results.length < DUPLICATE_PROBE_PAGE_SIZE) {
+          break;
+        }
+      }
+
+      const exactDuplicateCount = [...candidates.values()].filter(
+        (candidate) =>
+          candidate.nodeId !== node.nodeId && normalizeKey(candidate.label) === normalizedKey
+      ).length;
+      if (exactDuplicateCount >= 3) {
+        break;
+      }
+    }
+
+    this.logger.debug(
+      {
+        userId,
+        domain: node.domain,
+        nodeId: node.nodeId,
+        probeCount: probes.length,
+        candidateCount: candidates.size,
+      },
+      'PKG advisory duplicate candidate search completed'
+    );
+
+    const candidateList = [...candidates.values()];
+    const exactDuplicateCount = candidateList.filter(
+      (candidate) =>
+        candidate.nodeId !== node.nodeId && normalizeKey(candidate.label) === normalizedKey
+    ).length;
+
+    if (exactDuplicateCount > 0) {
+      return candidateList;
+    }
+
+    const domainNodeCount = await this.graphRepository.countNodes({
+      graphType: GraphType.PKG,
+      userId,
+      domain: node.domain,
+      includeDeleted: false,
+    });
+
+    if (domainNodeCount > FALLBACK_DUPLICATE_DOMAIN_NODE_LIMIT) {
+      return candidateList;
+    }
+
+    for (let offset = 0; offset < domainNodeCount; offset += DUPLICATE_PROBE_PAGE_SIZE) {
+      const results = await this.graphRepository.findNodes(
+        {
+          graphType: GraphType.PKG,
+          userId,
+          domain: node.domain,
+          includeDeleted: false,
+        },
+        DUPLICATE_PROBE_PAGE_SIZE,
+        offset
+      );
+
+      for (const candidate of results) {
+        candidates.set(candidate.nodeId as string, candidate);
+      }
+    }
+
+    this.logger.debug(
+      {
+        userId,
+        domain: node.domain,
+        nodeId: node.nodeId,
+        fallbackSweepCount: domainNodeCount,
+        candidateCount: candidates.size,
+      },
+      'PKG advisory duplicate candidate search used bounded domain sweep fallback'
+    );
+
+    return [...candidates.values()];
   }
 
   async assessEdgeWrite(

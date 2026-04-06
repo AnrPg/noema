@@ -512,7 +512,9 @@ export class GraphRestorationService {
     if (new Date(payload.expiresAt).getTime() < Date.now()) {
       return null;
     }
-    if (payload.summaryHash !== buildRestoreSummaryHash(preview.snapshot.snapshotId, preview.summary)) {
+    if (
+      payload.summaryHash !== buildRestoreSummaryHash(preview.snapshot.snapshotId, preview.summary)
+    ) {
       return null;
     }
 

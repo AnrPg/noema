@@ -2,7 +2,7 @@
  * @noema/knowledge-graph-service — Event Contract Tests
  *
  * Verifies that:
- * 1. The event type registry is complete (16 event types)
+ * 1. The event type registry is complete (22 event types)
  * 2. Event type strings follow the naming convention
  * 3. Event payload types structurally satisfy IEventToPublish at publish sites
  * 4. Event metadata contract (IEventMetadata) has required fields
@@ -21,9 +21,9 @@ import {
 // ============================================================================
 
 describe('KnowledgeGraphEventType registry', () => {
-  it('defines exactly 17 event types', () => {
+  it('defines exactly 22 event types', () => {
     const types = Object.values(KnowledgeGraphEventType);
-    expect(types).toHaveLength(17);
+    expect(types).toHaveLength(22);
   });
 
   it('all event type values are unique', () => {
@@ -49,7 +49,7 @@ describe('KnowledgeGraphEventType registry', () => {
 });
 
 // ============================================================================
-// PKG Event Types
+// PKG + Aggregation Event Types
 // ============================================================================
 
 describe('PKG event types', () => {
@@ -70,6 +70,27 @@ describe('PKG event types', () => {
   it('has 7 PKG events', () => {
     const pkgValues = Object.values(KnowledgeGraphEventType).filter((v) => v.startsWith('pkg.'));
     expect(pkgValues).toHaveLength(7);
+  });
+});
+
+describe('aggregation event types', () => {
+  const AGGREGATION_EVENTS = {
+    AGGREGATION_EVIDENCE_RECORDED: 'aggregation.evidence.recorded',
+    AGGREGATION_THRESHOLD_REACHED: 'aggregation.threshold.reached',
+    AGGREGATION_PROPOSAL_CREATED: 'aggregation.proposal.created',
+    AGGREGATION_PROPOSAL_SUPPRESSED: 'aggregation.proposal.suppressed',
+    AGGREGATION_PROPOSAL_REJECTED: 'aggregation.proposal.rejected',
+  } as const;
+
+  it.each(Object.entries(AGGREGATION_EVENTS))('%s → %s', (key, value) => {
+    expect(KnowledgeGraphEventType[key as keyof typeof KnowledgeGraphEventType]).toBe(value);
+  });
+
+  it('has 5 aggregation events', () => {
+    const aggregationValues = Object.values(KnowledgeGraphEventType).filter((v) =>
+      v.startsWith('aggregation.')
+    );
+    expect(aggregationValues).toHaveLength(5);
   });
 });
 

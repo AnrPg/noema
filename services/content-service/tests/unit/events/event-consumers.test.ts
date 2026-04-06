@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 /**
  * @noema/content-service — Event Consumer Unit Tests
  *
@@ -7,16 +8,21 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { KnowledgeGraphEventType } from '@noema/events/knowledge-graph';
 import { AttemptRecordedConsumer } from '../../../src/events/consumers/attempt-recorded.consumer.js';
 import type { IStreamEventEnvelope } from '../../../src/events/consumers/base-consumer.js';
 import { KgNodeDeletedConsumer } from '../../../src/events/consumers/kg-node-deleted.consumer.js';
 import { UserDeletedConsumer } from '../../../src/events/consumers/user-deleted.consumer.js';
 
+type ConsumerRedis = ConstructorParameters<typeof UserDeletedConsumer>[0];
+type ConsumerPrisma = ConstructorParameters<typeof UserDeletedConsumer>[1];
+type ConsumerLogger = ConstructorParameters<typeof UserDeletedConsumer>[2];
+
 // ============================================================================
 // Mocks
 // ============================================================================
 
-function mockRedis() {
+function mockRedis(): ConsumerRedis {
   return {
     xgroup: vi.fn().mockResolvedValue('OK'),
     xreadgroup: vi.fn().mockResolvedValue(null),
@@ -24,10 +30,10 @@ function mockRedis() {
     xack: vi.fn().mockResolvedValue(1),
     xautoclaim: vi.fn().mockResolvedValue(['0-0', []]),
     quit: vi.fn().mockResolvedValue('OK'),
-  };
+  } as ConsumerRedis;
 }
 
-function mockPrisma() {
+function mockPrisma(): ConsumerPrisma {
   return {
     card: {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -47,10 +53,10 @@ function mockPrisma() {
     cardHistory: {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
-  };
+  } as ConsumerPrisma;
 }
 
-function mockLogger() {
+function mockLogger(): ConsumerLogger {
   const child: Record<string, unknown> = {
     info: vi.fn(),
     warn: vi.fn(),
@@ -59,7 +65,7 @@ function mockLogger() {
     child: vi.fn(),
   };
   (child as { child: ReturnType<typeof vi.fn> }).child.mockReturnValue(child);
-  return child;
+  return child as ConsumerLogger;
 }
 
 function makeEnvelope(overrides: Partial<IStreamEventEnvelope> = {}): IStreamEventEnvelope {
@@ -89,13 +95,7 @@ describe('UserDeletedConsumer', () => {
     redis = mockRedis();
     prisma = mockPrisma();
     logger = mockLogger();
-    consumer = new UserDeletedConsumer(
-      redis as any,
-      prisma as any,
-      logger as any,
-      'test-consumer',
-      'test:stream'
-    );
+    consumer = new UserDeletedConsumer(redis, prisma, logger, 'test-consumer', 'test:stream');
   });
 
   it('ignores non-user.deleted events', async () => {
@@ -192,17 +192,11 @@ describe('KgNodeDeletedConsumer', () => {
     redis = mockRedis();
     prisma = mockPrisma();
     logger = mockLogger();
-    consumer = new KgNodeDeletedConsumer(
-      redis as any,
-      prisma as any,
-      logger as any,
-      'test-consumer',
-      'test:stream'
-    );
+    consumer = new KgNodeDeletedConsumer(redis, prisma, logger, 'test-consumer', 'test:stream');
   });
 
-  it('ignores non-kg.node.deleted events', async () => {
-    const envelope = makeEnvelope({ eventType: 'kg.node.created' });
+  it('ignores non-pkg.node.removed events', async () => {
+    const envelope = makeEnvelope({ eventType: KnowledgeGraphEventType.PKG_NODE_CREATED });
     const result = await (consumer as any).handleEvent(envelope);
     expect(result).toBe(true);
     expect(prisma.card.findMany).not.toHaveBeenCalled();
@@ -217,7 +211,7 @@ describe('KgNodeDeletedConsumer', () => {
     prisma.card.update.mockResolvedValue({});
 
     const envelope = makeEnvelope({
-      eventType: 'kg.node.deleted',
+      eventType: KnowledgeGraphEventType.PKG_NODE_REMOVED,
       aggregateId: 'node_A',
       payload: { nodeId: 'node_A' },
     });
@@ -245,7 +239,7 @@ describe('KgNodeDeletedConsumer', () => {
     prisma.card.findMany.mockResolvedValue([]);
 
     const envelope = makeEnvelope({
-      eventType: 'kg.node.deleted',
+      eventType: KnowledgeGraphEventType.PKG_NODE_REMOVED,
       payload: { nodeId: 'node_orphan' },
     });
 
@@ -258,7 +252,7 @@ describe('KgNodeDeletedConsumer', () => {
     prisma.card.findMany.mockResolvedValue([]);
 
     const envelope = makeEnvelope({
-      eventType: 'kg.node.deleted',
+      eventType: KnowledgeGraphEventType.PKG_NODE_REMOVED,
       aggregateId: 'node_fallback',
       payload: {},
     });
@@ -287,13 +281,7 @@ describe('AttemptRecordedConsumer', () => {
     redis = mockRedis();
     prisma = mockPrisma();
     logger = mockLogger();
-    consumer = new AttemptRecordedConsumer(
-      redis as any,
-      prisma as any,
-      logger as any,
-      'test-consumer',
-      'test:stream'
-    );
+    consumer = new AttemptRecordedConsumer(redis, prisma, logger, 'test-consumer', 'test:stream');
   });
 
   it('ignores non-attempt.recorded events', async () => {

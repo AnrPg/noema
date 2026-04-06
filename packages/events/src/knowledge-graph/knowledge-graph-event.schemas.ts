@@ -89,6 +89,14 @@ export const PkgNodeRemovedPayloadSchema = z.object({
   nodeId: NodeIdSchema,
   userId: UserIdSchema,
   reason: z.string().min(1),
+  snapshot: z
+    .object({
+      nodeType: GraphNodeTypeSchema,
+      label: z.string().min(1),
+      domain: z.string().min(1),
+      metadata: MetadataSchema,
+    })
+    .optional(),
 });
 
 /**
@@ -112,6 +120,15 @@ export const PkgEdgeRemovedPayloadSchema = z.object({
   edgeId: EdgeIdSchema,
   userId: UserIdSchema,
   reason: z.string().min(1),
+  snapshot: z
+    .object({
+      sourceNodeId: NodeIdSchema,
+      targetNodeId: NodeIdSchema,
+      edgeType: GraphEdgeTypeSchema,
+      weight: z.number().min(0).max(1),
+      metadata: MetadataSchema,
+    })
+    .optional(),
 });
 
 /**
@@ -146,9 +163,11 @@ export const AggregationEvidenceRecordedPayloadSchema = z.object({
   sourceUserId: UserIdSchema,
   sourcePkgNodeId: NodeIdSchema,
   evidenceType: z.string().min(1),
+  direction: z.enum(['support', 'oppose', 'neutral']),
   evidenceCount: z.number().int().nonnegative(),
   promotionBand: PromotionBandSchema,
   ckgTargetNodeId: NodeIdSchema.optional(),
+  candidateKey: z.string().min(1).optional(),
   proposedLabel: z.string().min(1).optional(),
 });
 
@@ -158,6 +177,7 @@ export const AggregationThresholdReachedPayloadSchema = z.object({
   evidenceCount: z.number().int().nonnegative(),
   promotionBand: PromotionBandSchema,
   ckgTargetNodeId: NodeIdSchema.optional(),
+  candidateKey: z.string().min(1).optional(),
   proposedLabel: z.string().min(1).optional(),
 });
 
@@ -168,6 +188,7 @@ export const AggregationProposalCreatedPayloadSchema = z.object({
   evidenceCount: z.number().int().nonnegative(),
   operationCount: z.number().int().positive(),
   ckgTargetNodeId: NodeIdSchema.optional(),
+  candidateKey: z.string().min(1).optional(),
   proposedLabel: z.string().min(1).optional(),
 });
 
@@ -177,6 +198,7 @@ export const AggregationProposalSuppressedPayloadSchema = z.object({
   reason: z.string().min(1),
   evidenceCount: z.number().int().nonnegative().optional(),
   ckgTargetNodeId: NodeIdSchema.optional(),
+  candidateKey: z.string().min(1).optional(),
   proposedLabel: z.string().min(1).optional(),
 });
 

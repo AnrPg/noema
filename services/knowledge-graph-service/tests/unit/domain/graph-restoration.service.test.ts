@@ -193,9 +193,13 @@ describe('GraphRestorationService', () => {
     expect(preview.data.confirmationToken).toContain('.');
     expect(preview.data.confirmationExpiresAt).toMatch(/2026|20\d{2}/);
 
-    const restored = await service.executeRestore('gsnap_2', {
-      confirmationToken: preview.data.confirmationToken,
-    }, null);
+    const restored = await service.executeRestore(
+      'gsnap_2',
+      {
+        confirmationToken: preview.data.confirmationToken,
+      },
+      null
+    );
     expect(graphRestorationRepository.replaceScope).toHaveBeenCalledWith(
       snapshot.scope,
       snapshot.payload

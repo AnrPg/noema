@@ -264,7 +264,7 @@ const EDGE_CONSTRAINTS = {
   },
 } satisfies Readonly<Record<GraphEdgeType, IOntologyEdgeConstraint>>;
 
-const DEFAULT_ONTOLOGY_ARTIFACT: IOntologyArtifact = Object.freeze({
+export const DEFAULT_ONTOLOGY_ARTIFACT: IOntologyArtifact = Object.freeze({
   version: 'dual-graph-ontology-v1',
   nodeClassHierarchy: NODE_CLASS_HIERARCHY,
   disjointNodeClasses: Object.freeze([

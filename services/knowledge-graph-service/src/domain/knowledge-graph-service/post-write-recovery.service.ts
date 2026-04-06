@@ -69,11 +69,7 @@ export class PkgPostWriteRecoveryService implements IPkgPostWriteRecoveryService
     });
   }
 
-  async enqueueMetricsStale(
-    userId: UserId,
-    domain: string,
-    mutationType: string
-  ): Promise<void> {
+  async enqueueMetricsStale(userId: UserId, domain: string, mutationType: string): Promise<void> {
     await this.repository.enqueueTask({
       taskType: PkgPostWriteTaskType.MARK_METRICS_STALE,
       userId,
@@ -139,7 +135,10 @@ export class PkgPostWriteRecoveryService implements IPkgPostWriteRecoveryService
         const lastError = error instanceof Error ? error.message : String(error);
         if (task.attempts >= this.options.maxAttempts) {
           await this.repository.failTask({ taskId: task.id, lastError });
-          this.logger.error({ taskId: task.id, taskType: task.taskType, lastError }, 'Post-write task permanently failed');
+          this.logger.error(
+            { taskId: task.id, taskType: task.taskType, lastError },
+            'Post-write task permanently failed'
+          );
           continue;
         }
 
@@ -192,9 +191,7 @@ function buildAppendOperationDedupeKey(userId: UserId, operation: PkgOperation):
   // Recovery queue dedupe must track the write intent itself rather than the
   // repository-assigned sequence number, because failed appends are queued
   // before the durable operation log assigns that sequence number.
-  const operationFingerprint = createHash('sha256')
-    .update(JSON.stringify(operation))
-    .digest('hex');
+  const operationFingerprint = createHash('sha256').update(JSON.stringify(operation)).digest('hex');
   return `op:${userId}:${operation.operationType}:${operationFingerprint}`;
 }
 

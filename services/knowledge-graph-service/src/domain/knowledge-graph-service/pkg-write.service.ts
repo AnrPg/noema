@@ -33,6 +33,7 @@ import { UnauthorizedError, ValidationError } from './errors/base.errors.js';
 import {
   CyclicEdgeError,
   EdgeNotFoundError,
+  GraphConsistencyError,
   InvalidEdgeTypeError,
   NodeNotFoundError,
   OrphanEdgeError,
@@ -54,6 +55,7 @@ import {
 } from './knowledge-graph.schemas.js';
 import type { IMetricsStalenessRepository } from './metrics-staleness.repository.js';
 import { KG_COUNTERS, kgCounters } from './observability.js';
+import type { IPkgPostWriteRecoveryService } from './post-write-recovery.service.js';
 import { PkgAdvisoryService, serializeWarningsForEvent } from './pkg-advisories.js';
 import type { IPkgOperationLogRepository } from './pkg-operation-log.repository.js';
 import { getEdgePolicy } from './policies/edge-type-policies.js';
@@ -111,6 +113,7 @@ export class PkgWriteService {
     private readonly operationLogRepository: IPkgOperationLogRepository,
     private readonly metricsStalenessRepository: IMetricsStalenessRepository,
     private readonly eventPublisher: IEventPublisher,
+    private readonly postWriteRecoveryService: IPkgPostWriteRecoveryService,
     private readonly hintsFactory: AgentHintsFactory,
     private readonly logger: Logger
   ) {
@@ -361,6 +364,12 @@ export class PkgWriteService {
           nodeId,
           userId,
           reason: 'User-initiated deletion',
+          snapshot: {
+            nodeType: existingNode.nodeType,
+            label: existingNode.label,
+            domain: existingNode.domain,
+            metadata: existingNode.properties,
+          },
         },
         metadata: {
           correlationId: context.correlationId,
@@ -784,6 +793,13 @@ export class PkgWriteService {
           edgeId: existingEdge.edgeId,
           userId,
           reason: 'User-initiated deletion',
+          snapshot: {
+            sourceNodeId: existingEdge.sourceNodeId,
+            targetNodeId: existingEdge.targetNodeId,
+            edgeType: existingEdge.edgeType,
+            weight: existingEdge.weight,
+            metadata: existingEdge.properties,
+          },
         },
         metadata: {
           correlationId: context.correlationId,
@@ -859,10 +875,23 @@ export class PkgWriteService {
       kgCounters.increment(KG_COUNTERS.OPERATION_LOG_FAILURES, {
         operationType: operation.operationType,
       });
-      this.logger.warn(
-        { error, userId, operationType: operation.operationType },
-        'Failed to append operation log — continuing (eventual consistency gap)'
-      );
+      try {
+        await this.postWriteRecoveryService.enqueueAppendOperation(userId, operation);
+        this.logger.warn(
+          { error, userId, operationType: operation.operationType },
+          'Failed to append operation log immediately — queued durable recovery task'
+        );
+      } catch (recoveryError) {
+        this.logger.error(
+          { error, recoveryError, userId, operationType: operation.operationType },
+          'Failed to append operation log and failed to queue recovery task'
+        );
+        throw new GraphConsistencyError(
+          'pkg_post_write_operation_log',
+          'PKG write completed but the operation log could not be recorded or queued for recovery.',
+          { userId, operationType: operation.operationType }
+        );
+      }
     }
   }
 
@@ -875,10 +904,23 @@ export class PkgWriteService {
       await this.eventPublisher.publish(event);
     } catch (error) {
       kgCounters.increment(KG_COUNTERS.EVENT_PUBLISH_FAILURES, { eventType: event.eventType });
-      this.logger.warn(
-        { error, eventType: event.eventType, aggregateId: event.aggregateId },
-        'Failed to publish domain event — continuing (eventual consistency gap)'
-      );
+      try {
+        await this.postWriteRecoveryService.enqueuePublish(event);
+        this.logger.warn(
+          { error, eventType: event.eventType, aggregateId: event.aggregateId },
+          'Failed to publish domain event immediately — queued durable recovery task'
+        );
+      } catch (recoveryError) {
+        this.logger.error(
+          { error, recoveryError, eventType: event.eventType, aggregateId: event.aggregateId },
+          'Failed to publish domain event and failed to queue recovery task'
+        );
+        throw new GraphConsistencyError(
+          'pkg_post_write_event_publish',
+          'PKG write completed but the resulting domain event could not be published or queued for recovery.',
+          { eventType: event.eventType, aggregateId: event.aggregateId }
+        );
+      }
     }
   }
 
@@ -928,10 +970,23 @@ export class PkgWriteService {
       await this.metricsStalenessRepository.markStale(userId, domain, mutationType);
     } catch (error) {
       kgCounters.increment(KG_COUNTERS.STALENESS_MARK_FAILURES, { domain, mutationType });
-      this.logger.warn(
-        { error, userId, domain, mutationType },
-        'Failed to mark metrics as stale — continuing without it'
-      );
+      try {
+        await this.postWriteRecoveryService.enqueueMetricsStale(userId, domain, mutationType);
+        this.logger.warn(
+          { error, userId, domain, mutationType },
+          'Failed to mark metrics as stale immediately — queued durable recovery task'
+        );
+      } catch (recoveryError) {
+        this.logger.error(
+          { error, recoveryError, userId, domain, mutationType },
+          'Failed to mark metrics as stale and failed to queue recovery task'
+        );
+        throw new GraphConsistencyError(
+          'pkg_post_write_metrics_staleness',
+          'PKG write completed but metric staleness could not be recorded or queued for recovery.',
+          { userId, domain, mutationType }
+        );
+      }
     }
   }
 }

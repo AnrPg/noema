@@ -1,0 +1,264 @@
+{
+  "specVersion": "ckg-proof-spec-v2",
+  "mutationId": "mut_kE3hiUTW6vD0KEDi-81iy",
+  "operationCount": 1,
+  "operationTypes": ["add_edge"],
+  "affectedNodeIds": ["node_PqRyGuRSbx43RQUJONoFx", "node_y87cKmEZnYTMR4JJpUE_Y"],
+  "affectedEdgeIds": [],
+  "operationFingerprints": ["add_edge:is_a:node_PqRyGuRSbx43RQUJONoFx:node_y87cKmEZnYTMR4JJpUE_Y"],
+  "duplicateOperationFingerprints": [],
+  "updateRemoveConflictNodeIds": [],
+  "structuralRewriteCount": 0,
+  "currentNodes": [
+    {
+      "nodeId": "node_PqRyGuRSbx43RQUJONoFx",
+      "nodeType": "concept",
+      "domain": "skills-and-occupations",
+      "origin": "existing"
+    },
+    {
+      "nodeId": "node_y87cKmEZnYTMR4JJpUE_Y",
+      "nodeType": "concept",
+      "domain": "skills-and-occupations",
+      "origin": "existing"
+    }
+  ],
+  "currentEdges": [],
+  "projectedNodes": [
+    {
+      "nodeId": "node_PqRyGuRSbx43RQUJONoFx",
+      "nodeType": "concept",
+      "domain": "skills-and-occupations",
+      "origin": "existing"
+    },
+    {
+      "nodeId": "node_y87cKmEZnYTMR4JJpUE_Y",
+      "nodeType": "concept",
+      "domain": "skills-and-occupations",
+      "origin": "existing"
+    }
+  ],
+  "projectedEdges": [
+    {
+      "edgeId": "proof:mut_kE3hiUTW6vD0KEDi-81iy:edge:0:add",
+      "edgeType": "is_a",
+      "sourceNodeId": "node_PqRyGuRSbx43RQUJONoFx",
+      "targetNodeId": "node_y87cKmEZnYTMR4JJpUE_Y",
+      "origin": "planned_add"
+    }
+  ],
+  "dependencyEdges": [],
+  "missingEndpointWitnesses": [],
+  "dependencyCycleWitnesses": [],
+  "bidirectionalDependencyWitnesses": [],
+  "mutuallyExclusiveRelationWitnesses": [],
+  "splitAssignmentGapWitnesses": [],
+  "ontologyViolationWitnesses": [],
+  "ontologyArtifactVersion": "dual-graph-ontology-v1",
+  "projectedNodeClassifications": [
+    {
+      "nodeId": "node_PqRyGuRSbx43RQUJONoFx",
+      "classes": ["knowledge_entity", "concept_bearing", "abstraction"]
+    },
+    {
+      "nodeId": "node_y87cKmEZnYTMR4JJpUE_Y",
+      "classes": ["knowledge_entity", "concept_bearing", "abstraction"]
+    }
+  ],
+  "edgeConstraintSnapshots": [
+    {
+      "edgeType": "is_a",
+      "sourceClasses": ["abstraction", "role_like"],
+      "targetClasses": ["abstraction", "role_like"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "exemplifies",
+      "sourceClasses": ["example_like", "process_like"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "part_of",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["abstraction", "rule_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "constituted_by",
+      "sourceClasses": ["abstraction", "process_like", "rule_like"],
+      "targetClasses": ["abstraction", "fact_like", "rule_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "equivalent_to",
+      "sourceClasses": ["concept_bearing", "role_like"],
+      "targetClasses": ["concept_bearing", "role_like"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "entails",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "disjoint_with",
+      "sourceClasses": ["concept_bearing", "skill_like"],
+      "targetClasses": ["concept_bearing", "skill_like"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "contradicts",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "causes",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "precedes",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "depends_on",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "related_to",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "analogous_to",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "contrasts_with",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "confusable_with",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "translation_equivalent",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "false_friend_of",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "minimal_pair_with",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "collocates_with",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "prerequisite",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing", "fact_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "derived_from",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "has_property",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["abstraction", "fact_like", "rule_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "governs",
+      "sourceClasses": ["abstraction", "skill_like", "process_like"],
+      "targetClasses": ["abstraction", "skill_like", "process_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "inflected_form_of",
+      "sourceClasses": ["abstraction", "example_like"],
+      "targetClasses": ["abstraction", "skill_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "subskill_of",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "has_subskill",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": true
+    },
+    {
+      "edgeType": "essential_for_occupation",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["role_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "occupation_requires_essential_skill",
+      "sourceClasses": ["role_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "optional_for_occupation",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["role_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "occupation_benefits_from_optional_skill",
+      "sourceClasses": ["role_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": false
+    },
+    {
+      "edgeType": "transferable_to",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like", "abstraction", "process_like"],
+      "sameKindRequired": false
+    }
+  ],
+  "disjointClassPairs": [
+    ["concept_bearing", "instance_like"],
+    ["concept_bearing", "diagnostic_like"],
+    ["role_like", "concept_bearing"],
+    ["role_like", "instance_like"],
+    ["role_like", "diagnostic_like"]
+  ],
+  "generatedAt": "2026-04-04T08:31:25.670Z"
+}

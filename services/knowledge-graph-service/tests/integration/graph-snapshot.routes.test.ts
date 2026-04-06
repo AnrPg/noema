@@ -107,8 +107,7 @@ describe('graph snapshot routes', () => {
           edgesToUpdate: 0,
           edgesToDelete: 0,
         },
-        confirmationToken:
-          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+        confirmationToken: '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
         requiresDestructiveChanges: false,
         reasoning: 'Safe preview',
       })
@@ -154,8 +153,7 @@ describe('graph snapshot routes', () => {
           edgesToUpdate: 0,
           edgesToDelete: 0,
         },
-        confirmationToken:
-          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+        confirmationToken: '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
         requiresDestructiveChanges: false,
         reasoning: 'Safe preview',
       })
@@ -165,8 +163,7 @@ describe('graph snapshot routes', () => {
       method: 'POST',
       url: '/api/v1/graph-snapshots/gsnap_2/restore',
       payload: {
-        confirmationToken:
-          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+        confirmationToken: '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
       },
     });
 
@@ -174,8 +171,7 @@ describe('graph snapshot routes', () => {
     expect(service.executeGraphRestore).toHaveBeenCalledWith(
       'gsnap_2',
       {
-        confirmationToken:
-          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+        confirmationToken: '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
       },
       expect.objectContaining({ userId: expect.any(String) })
     );

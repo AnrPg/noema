@@ -344,23 +344,98 @@ export class UnityInvariantStage implements IValidationStage {
       );
 
     for (const { operation, index } of mergeOperations) {
-      const sourceEdges = await this.getEdgesForNodeCached(
-        operation.sourceNodeId as NodeId,
-        edgeCache
+      const [sourceEdges, targetEdges] = await Promise.all([
+        this.getEdgesForNodeCached(operation.sourceNodeId as NodeId, edgeCache),
+        this.getEdgesForNodeCached(operation.targetNodeId as NodeId, edgeCache),
+      ]);
+      const requiredIncidentEdges = [...sourceEdges, ...targetEdges].filter((edge) =>
+        REQUIRED_STRUCTURAL_EDGE_TYPES.includes(
+          edge.edgeType as (typeof REQUIRED_STRUCTURAL_EDGE_TYPES)[number]
+        )
       );
-      const connectingEdges = sourceEdges.filter((edge) => {
-        const targetsMergedNode =
-          edge.sourceNodeId === (operation.targetNodeId as NodeId) ||
-          edge.targetNodeId === (operation.targetNodeId as NodeId);
+      const connectingEdges = requiredIncidentEdges.filter((edge) => {
+        const nodeIds = [edge.sourceNodeId, edge.targetNodeId];
         return (
-          targetsMergedNode &&
-          REQUIRED_STRUCTURAL_EDGE_TYPES.includes(
-            edge.edgeType as (typeof REQUIRED_STRUCTURAL_EDGE_TYPES)[number]
-          )
+          nodeIds.includes(operation.sourceNodeId as NodeId) &&
+          nodeIds.includes(operation.targetNodeId as NodeId)
         );
       });
 
       if (connectingEdges.length === 0) {
+        const projectedEdges = projectRequiredEdgesAfterMerge(
+          requiredIncidentEdges,
+          operation.sourceNodeId as NodeId,
+          operation.targetNodeId as NodeId
+        );
+
+        const selfLoopEdges = projectedEdges.filter(
+          (edge) => edge.sourceNodeId === edge.targetNodeId
+        );
+        if (selfLoopEdges.length > 0) {
+          violations.push(
+            createInvariantViolation(
+              UNITY_INVARIANTS.NO_REQUIRED_STRUCTURE_LOSS_ON_MERGE,
+              `Merging '${operation.sourceNodeId}' into '${operation.targetNodeId}' would collapse required structural edges into self-loops.`,
+              index,
+              {
+                sourceNodeId: operation.sourceNodeId,
+                targetNodeId: operation.targetNodeId,
+                offendingEdgeIds: selfLoopEdges.map((edge) => edge.edgeId),
+                offendingEdgeTypes: selfLoopEdges.map((edge) => edge.edgeType),
+                projectedSubgraph: selfLoopEdges.map((edge) => ({
+                  edgeId: edge.edgeId,
+                  edgeType: edge.edgeType,
+                  sourceNodeId: edge.sourceNodeId,
+                  targetNodeId: edge.targetNodeId,
+                })),
+              }
+            )
+          );
+        }
+
+        const bidirectionalConflict = findProjectedBidirectionalDependency(projectedEdges);
+        if (bidirectionalConflict !== null) {
+          violations.push(
+            createInvariantViolation(
+              UNITY_INVARIANTS.NO_REQUIRED_STRUCTURE_LOSS_ON_MERGE,
+              `Merging '${operation.sourceNodeId}' into '${operation.targetNodeId}' would create a bidirectional dependency conflict with '${bidirectionalConflict.leftNodeId}' and '${bidirectionalConflict.rightNodeId}'.`,
+              index,
+              {
+                sourceNodeId: operation.sourceNodeId,
+                targetNodeId: operation.targetNodeId,
+                offendingNodeIds: [
+                  bidirectionalConflict.leftNodeId,
+                  bidirectionalConflict.rightNodeId,
+                ],
+                offendingEdgeType: bidirectionalConflict.edgeType,
+                projectedPath: [
+                  bidirectionalConflict.leftNodeId,
+                  bidirectionalConflict.rightNodeId,
+                  bidirectionalConflict.leftNodeId,
+                ],
+              }
+            )
+          );
+        }
+
+        const exclusiveConflict = findProjectedExclusivePair(projectedEdges);
+        if (exclusiveConflict !== null) {
+          violations.push(
+            createInvariantViolation(
+              UNITY_INVARIANTS.NO_REQUIRED_STRUCTURE_LOSS_ON_MERGE,
+              `Merging '${operation.sourceNodeId}' into '${operation.targetNodeId}' would collapse distinct structural relations into the mutually exclusive pair '${exclusiveConflict.leftRelation}' and '${exclusiveConflict.rightRelation}'.`,
+              index,
+              {
+                sourceNodeId: operation.sourceNodeId,
+                targetNodeId: operation.targetNodeId,
+                offendingNodeIds: [exclusiveConflict.leftNodeId, exclusiveConflict.rightNodeId],
+                leftRelation: exclusiveConflict.leftRelation,
+                rightRelation: exclusiveConflict.rightRelation,
+              }
+            )
+          );
+        }
+
         continue;
       }
 
@@ -624,6 +699,91 @@ function getUniqueEdgeTypes(
 
 function createUnorderedPairKey(leftNodeId: NodeId, rightNodeId: NodeId): string {
   return [leftNodeId, rightNodeId].sort().join('::');
+}
+
+function projectRequiredEdgesAfterMerge(
+  edges: readonly IGraphEdge[],
+  sourceNodeId: NodeId,
+  targetNodeId: NodeId
+): IProjectedEdge[] {
+  const projected = new Map<string, IProjectedEdge>();
+
+  for (const edge of edges) {
+    projected.set(edge.edgeId as string, {
+      edgeId: edge.edgeId as string,
+      sourceNodeId: edge.sourceNodeId === sourceNodeId ? targetNodeId : edge.sourceNodeId,
+      targetNodeId: edge.targetNodeId === sourceNodeId ? targetNodeId : edge.targetNodeId,
+      edgeType: edge.edgeType,
+    });
+  }
+
+  return [...projected.values()];
+}
+
+function findProjectedBidirectionalDependency(edges: readonly IProjectedEdge[]): {
+  leftNodeId: NodeId;
+  rightNodeId: NodeId;
+  edgeType: GraphEdgeType;
+} | null {
+  const seenPairs = new Set<string>();
+
+  for (const edge of edges) {
+    if (
+      !DIRECTIONAL_DEPENDENCY_TYPES.includes(
+        edge.edgeType as (typeof DIRECTIONAL_DEPENDENCY_TYPES)[number]
+      )
+    ) {
+      continue;
+    }
+
+    const reverseKey = `${edge.edgeType}:${edge.targetNodeId}:${edge.sourceNodeId}`;
+    if (seenPairs.has(reverseKey)) {
+      return {
+        leftNodeId: edge.sourceNodeId,
+        rightNodeId: edge.targetNodeId,
+        edgeType: edge.edgeType,
+      };
+    }
+
+    seenPairs.add(`${edge.edgeType}:${edge.sourceNodeId}:${edge.targetNodeId}`);
+  }
+
+  return null;
+}
+
+function findProjectedExclusivePair(edges: readonly IProjectedEdge[]): {
+  leftNodeId: NodeId;
+  rightNodeId: NodeId;
+  leftRelation: GraphEdgeType;
+  rightRelation: GraphEdgeType;
+} | null {
+  const pairMap = new Map<string, Set<GraphEdgeType>>();
+
+  for (const edge of edges) {
+    const pairKey = createUnorderedPairKey(edge.sourceNodeId, edge.targetNodeId);
+    if (!pairMap.has(pairKey)) {
+      pairMap.set(pairKey, new Set());
+    }
+    pairMap.get(pairKey)?.add(edge.edgeType);
+  }
+
+  for (const [pairKey, edgeTypesForPair] of pairMap.entries()) {
+    for (const relationPair of MUTUALLY_EXCLUSIVE_RELATION_PAIRS) {
+      if (!edgeTypesForPair.has(relationPair.left) || !edgeTypesForPair.has(relationPair.right)) {
+        continue;
+      }
+
+      const [leftNodeId, rightNodeId] = pairKey.split('::') as [NodeId, NodeId];
+      return {
+        leftNodeId,
+        rightNodeId,
+        leftRelation: relationPair.left,
+        rightRelation: relationPair.right,
+      };
+    }
+  }
+
+  return null;
 }
 
 function findOperationIndexForEdge(

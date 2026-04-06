@@ -1,0 +1,229 @@
+{
+  "version": "dual-graph-ontology-v1",
+  "nodeClassHierarchy": {
+    "concept": ["knowledge_entity", "concept_bearing", "abstraction"],
+    "skill": ["knowledge_entity", "concept_bearing", "skill_like"],
+    "occupation": ["knowledge_entity", "role_like"],
+    "fact": ["knowledge_entity", "concept_bearing", "fact_like"],
+    "procedure": ["knowledge_entity", "concept_bearing", "process_like"],
+    "principle": ["knowledge_entity", "concept_bearing", "rule_like"],
+    "example": ["knowledge_entity", "instance_like", "example_like"],
+    "counterexample": ["knowledge_entity", "instance_like", "example_like", "counterexample_like"],
+    "misconception": ["knowledge_entity", "diagnostic_like"]
+  },
+  "disjointNodeClasses": [
+    ["concept_bearing", "instance_like"],
+    ["concept_bearing", "diagnostic_like"],
+    ["role_like", "concept_bearing"],
+    ["role_like", "instance_like"],
+    ["role_like", "diagnostic_like"]
+  ],
+  "edgeConstraints": {
+    "is_a": {
+      "edgeType": "is_a",
+      "sourceClasses": ["abstraction", "role_like"],
+      "targetClasses": ["abstraction", "role_like"],
+      "sameKindRequired": true
+    },
+    "exemplifies": {
+      "edgeType": "exemplifies",
+      "sourceClasses": ["example_like", "process_like"],
+      "targetClasses": ["concept_bearing"]
+    },
+    "part_of": {
+      "edgeType": "part_of",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["abstraction", "rule_like"]
+    },
+    "constituted_by": {
+      "edgeType": "constituted_by",
+      "sourceClasses": ["abstraction", "process_like", "rule_like"],
+      "targetClasses": ["abstraction", "fact_like", "rule_like"]
+    },
+    "equivalent_to": {
+      "edgeType": "equivalent_to",
+      "sourceClasses": ["concept_bearing", "role_like"],
+      "targetClasses": ["concept_bearing", "role_like"],
+      "sameKindRequired": true
+    },
+    "entails": {
+      "edgeType": "entails",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    "disjoint_with": {
+      "edgeType": "disjoint_with",
+      "sourceClasses": ["concept_bearing", "skill_like"],
+      "targetClasses": ["concept_bearing", "skill_like"],
+      "sameKindRequired": true
+    },
+    "contradicts": {
+      "edgeType": "contradicts",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": true
+    },
+    "causes": {
+      "edgeType": "causes",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"]
+    },
+    "precedes": {
+      "edgeType": "precedes",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    "depends_on": {
+      "edgeType": "depends_on",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"]
+    },
+    "related_to": {
+      "edgeType": "related_to",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"]
+    },
+    "analogous_to": {
+      "edgeType": "analogous_to",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"]
+    },
+    "contrasts_with": {
+      "edgeType": "contrasts_with",
+      "sourceClasses": ["knowledge_entity"],
+      "targetClasses": ["knowledge_entity"],
+      "sameKindRequired": true
+    },
+    "confusable_with": {
+      "edgeType": "confusable_with",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": true
+    },
+    "translation_equivalent": {
+      "edgeType": "translation_equivalent",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    "false_friend_of": {
+      "edgeType": "false_friend_of",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    "minimal_pair_with": {
+      "edgeType": "minimal_pair_with",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    "collocates_with": {
+      "edgeType": "collocates_with",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing"],
+      "sameKindRequired": true
+    },
+    "prerequisite": {
+      "edgeType": "prerequisite",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["concept_bearing", "fact_like"]
+    },
+    "derived_from": {
+      "edgeType": "derived_from",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["knowledge_entity"]
+    },
+    "has_property": {
+      "edgeType": "has_property",
+      "sourceClasses": ["concept_bearing"],
+      "targetClasses": ["abstraction", "fact_like", "rule_like"]
+    },
+    "governs": {
+      "edgeType": "governs",
+      "sourceClasses": ["abstraction", "skill_like", "process_like"],
+      "targetClasses": ["abstraction", "skill_like", "process_like"]
+    },
+    "inflected_form_of": {
+      "edgeType": "inflected_form_of",
+      "sourceClasses": ["abstraction", "example_like"],
+      "targetClasses": ["abstraction", "skill_like"]
+    },
+    "subskill_of": {
+      "edgeType": "subskill_of",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": true
+    },
+    "has_subskill": {
+      "edgeType": "has_subskill",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like"],
+      "sameKindRequired": true
+    },
+    "essential_for_occupation": {
+      "edgeType": "essential_for_occupation",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["role_like"]
+    },
+    "occupation_requires_essential_skill": {
+      "edgeType": "occupation_requires_essential_skill",
+      "sourceClasses": ["role_like"],
+      "targetClasses": ["skill_like"]
+    },
+    "optional_for_occupation": {
+      "edgeType": "optional_for_occupation",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["role_like"]
+    },
+    "occupation_benefits_from_optional_skill": {
+      "edgeType": "occupation_benefits_from_optional_skill",
+      "sourceClasses": ["role_like"],
+      "targetClasses": ["skill_like"]
+    },
+    "transferable_to": {
+      "edgeType": "transferable_to",
+      "sourceClasses": ["skill_like"],
+      "targetClasses": ["skill_like", "abstraction", "process_like"]
+    }
+  },
+  "illegalRetypings": [
+    {
+      "from": "example",
+      "to": "skill",
+      "reason": "Examples are learner-facing instances; promote the underlying concept first instead of retyping the instance as a skill."
+    },
+    {
+      "from": "example",
+      "to": "concept",
+      "reason": "Examples should remain instances. Create or merge into the concept they illustrate rather than retyping them into abstractions."
+    },
+    {
+      "from": "counterexample",
+      "to": "concept",
+      "reason": "Counterexamples are diagnostic instances, not abstractions."
+    },
+    {
+      "from": "counterexample",
+      "to": "skill",
+      "reason": "Counterexamples cannot be promoted into skills without losing their diagnostic role."
+    },
+    {
+      "from": "misconception",
+      "to": "concept",
+      "reason": "Misconceptions must stay explicitly represented; resolve them through links or merges, not by erasing them via retyping."
+    },
+    {
+      "from": "occupation",
+      "to": "concept",
+      "reason": "Occupations are role-like entities and cannot be silently collapsed into concept-bearing abstractions."
+    },
+    {
+      "from": "concept",
+      "to": "occupation",
+      "reason": "Concepts and occupations belong to different ontology branches and require explicit canonical replacement instead of direct retyping."
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
   type IProofResult,
   ProofRolloutMode,
 } from '../../../src/domain/knowledge-graph-service/proof-stage.js';
+import type { IOntologyArtifact } from '../../../src/domain/knowledge-graph-service/ontology-reasoning.js';
 
 function createMutation(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -87,9 +88,14 @@ function createPipelineHarness(
     publish: vi.fn(() => Promise.resolve(undefined)),
   };
 
+  const graphRepository = {
+    getNode: vi.fn(() => Promise.resolve(null)),
+    getEdgesForNodes: vi.fn(() => Promise.resolve([])),
+  };
+
   const pipeline = new CkgMutationPipeline(
     mutationRepository as never,
-    {} as never,
+    graphRepository as never,
     {} as never,
     eventPublisher as never,
     {
@@ -106,6 +112,7 @@ function createPipelineHarness(
     pipeline,
     mutationRepository,
     eventPublisher,
+    graphRepository,
   };
 }
 
@@ -144,6 +151,164 @@ describe('DeterministicProofRunner', () => {
           code: 'PROOF_DUPLICATE_OPERATION_FINGERPRINT',
         }),
       ])
+    );
+  });
+
+  it('detects projected dependency cycles that only appear after combining current graph state and new operations', async () => {
+    const mutation = createMutation({
+      operations: [
+        {
+          type: 'add_edge',
+          edgeType: 'prerequisite',
+          sourceNodeId: 'node_c',
+          targetNodeId: 'node_a',
+          weight: 1,
+          rationale: 'Close the dependency loop',
+        },
+      ] as Metadata[],
+    });
+    const operations = mutation.operations as never;
+    const runner = new DeterministicProofRunner();
+
+    const result = await runner.runProof(
+      mutation,
+      operations,
+      buildProofModel(mutation, operations, {
+        nodes: [
+          { nodeId: 'node_a', nodeType: 'concept', domain: 'math' },
+          { nodeId: 'node_b', nodeType: 'concept', domain: 'math' },
+          { nodeId: 'node_c', nodeType: 'concept', domain: 'math' },
+        ],
+        edges: [
+          {
+            edgeId: 'edge_ab',
+            edgeType: 'prerequisite',
+            sourceNodeId: 'node_a',
+            targetNodeId: 'node_b',
+          },
+          {
+            edgeId: 'edge_bc',
+            edgeType: 'prerequisite',
+            sourceNodeId: 'node_b',
+            targetNodeId: 'node_c',
+          },
+        ],
+      }),
+      createContext(),
+      ProofRolloutMode.HARD_BLOCK
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PROOF_DEPENDENCY_CYCLE',
+        }),
+      ])
+    );
+  });
+
+  it('fails projected ontology violations in the proof model, not only structural witnesses', async () => {
+    const mutation = createMutation({
+      operations: [
+        {
+          type: 'add_edge',
+          edgeType: 'subskill_of',
+          sourceNodeId: 'node_fact',
+          targetNodeId: 'node_concept',
+          weight: 1,
+          rationale: 'Incorrectly type a fact as a skill relation',
+        },
+      ] as Metadata[],
+    });
+    const operations = mutation.operations as never;
+    const runner = new DeterministicProofRunner();
+
+    const result = await runner.runProof(
+      mutation,
+      operations,
+      buildProofModel(mutation, operations, {
+        nodes: [
+          { nodeId: 'node_fact', nodeType: 'fact', domain: 'math' },
+          { nodeId: 'node_concept', nodeType: 'concept', domain: 'math' },
+        ],
+        edges: [],
+      }),
+      createContext(),
+      ProofRolloutMode.HARD_BLOCK
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PROOF_ONTOLOGY_CONFLICT',
+        }),
+      ])
+    );
+  });
+
+  it('uses the supplied active ontology artifact rather than the baked-in default', async () => {
+    const mutation = createMutation({
+      operations: [
+        {
+          type: 'add_edge',
+          edgeType: 'subskill_of',
+          sourceNodeId: 'node_fact',
+          targetNodeId: 'node_concept',
+          weight: 1,
+          rationale: 'Allow this relation under a custom ontology artifact',
+        },
+      ] as Metadata[],
+    });
+    const operations = mutation.operations as never;
+    const runner = new DeterministicProofRunner();
+    const permissiveArtifact: IOntologyArtifact = {
+      version: 'test-ontology',
+      nodeClassHierarchy: {
+        concept: ['knowledge_entity', 'concept_bearing', 'abstraction'],
+        fact: ['knowledge_entity', 'skill_like'],
+        skill: ['knowledge_entity', 'skill_like'],
+        procedure: ['knowledge_entity', 'concept_bearing', 'process_like'],
+        principle: ['knowledge_entity', 'concept_bearing', 'rule_like'],
+        example: ['knowledge_entity', 'instance_like', 'example_like'],
+        misconception: ['knowledge_entity', 'diagnostic_like'],
+        exercise: ['knowledge_entity', 'diagnostic_like'],
+        occupation: ['knowledge_entity', 'role_like'],
+      } as never,
+      disjointNodeClasses: [],
+      edgeConstraints: {
+        subskill_of: {
+          edgeType: 'subskill_of' as never,
+          sourceClasses: ['skill_like'],
+          targetClasses: ['concept_bearing', 'skill_like'],
+          sameKindRequired: false,
+        },
+      } as never,
+      illegalRetypings: [],
+    };
+
+    const result = await runner.runProof(
+      mutation,
+      operations,
+      buildProofModel(
+        mutation,
+        operations,
+        {
+          nodes: [
+            { nodeId: 'node_fact', nodeType: 'fact', domain: 'math' },
+            { nodeId: 'node_concept', nodeType: 'concept', domain: 'math' },
+          ],
+          edges: [],
+        },
+        permissiveArtifact
+      ),
+      createContext(),
+      ProofRolloutMode.HARD_BLOCK
+    );
+
+    expect(result.findings).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'PROOF_ONTOLOGY_CONFLICT' })])
     );
   });
 });
@@ -243,6 +408,60 @@ describe('CkgMutationPipeline proof-stage rollout modes', () => {
     ).runProofStage(createMutation(), createContext());
 
     expect(result.state).toBe('pending_review');
+  });
+
+  it('allows reviewer-approved proof findings to continue without re-entering pending_review', async () => {
+    const proofRunner = {
+      runProof: vi.fn(
+        (): Promise<IProofResult> =>
+          Promise.resolve({
+            mode: ProofRolloutMode.SOFT_BLOCK,
+            status: 'failed',
+            passed: false,
+            engineVersion: 'proof-test-engine',
+            artifactRef: 'proof://soft-block-approved',
+            checkedInvariants: ['spec_soft_block'],
+            findings: [
+              {
+                code: 'PROOF_COMPLEX_STRUCTURAL_REWRITE',
+                message: 'Needs review',
+                severity: 'warning',
+                reviewable: true,
+              },
+            ],
+            failureExplanation: 'Needs review',
+            modelSummary: {},
+            executedAt: '2026-04-02T10:12:00.000Z',
+            autoApproved: false,
+            enforcement: 'pending_review',
+          })
+      ),
+    };
+    const { pipeline, mutationRepository } = createPipelineHarness(
+      ProofRolloutMode.SOFT_BLOCK,
+      proofRunner
+    );
+
+    const result = await (
+      pipeline as unknown as {
+        runProofStage: (
+          mutation: ReturnType<typeof createMutation>,
+          context: ReturnType<typeof createContext>,
+          options: { approvedProofReview: boolean }
+        ) => Promise<ReturnType<typeof createMutation>>;
+      }
+    ).runProofStage(createMutation(), createContext(), { approvedProofReview: true });
+
+    expect(result.state).toBe('proven');
+    expect(mutationRepository.updateMutationFields).toHaveBeenCalledWith(
+      'mut_proofstageaaaaaaaaaaaa',
+      expect.objectContaining({
+        proofResult: expect.objectContaining({
+          autoApproved: true,
+          enforcement: 'observe_only',
+        }),
+      })
+    );
   });
 
   it('rejects failed proof checks in hard-block mode and emits a rejection event', async () => {

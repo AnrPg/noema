@@ -15,6 +15,7 @@ import type {
   PromotionBand,
   UserId,
 } from '@noema/types';
+import type { GraphCrdtDirection } from './crdt-stats.repository.js';
 
 // ============================================================================
 // Evidence Types
@@ -37,11 +38,17 @@ export interface IAggregationEvidence {
   /** PKG node that provides the evidence */
   readonly sourcePkgNodeId: NodeId;
 
-  /** Target CKG node ID (if already exists) or proposed label */
+  /** Target CKG node ID (if already exists) or proposed-candidate key */
   readonly ckgTargetNodeId: NodeId | null;
 
-  /** Proposed label if the CKG node doesn't exist yet */
+  /** Candidate key for proposed canonical nodes/relations when no CKG target exists yet */
   readonly proposedLabel: string | null;
+
+  /** Source transport event identity when the evidence came from a PKG event stream. */
+  readonly sourceEventId: string | null;
+
+  /** Source-observed timestamp used for stable cross-process stance ordering. */
+  readonly sourceObservedAt: string | null;
 
   /** Type of evidence (e.g., 'node_match', 'edge_match', 'structural_similarity') */
   readonly evidenceType: string;
@@ -69,6 +76,13 @@ export interface IEvidenceSummary {
   /** Number of distinct users contributing evidence */
   readonly contributingUserCount: number;
 
+  /** Distinct contributors by signal direction. */
+  readonly directionalContributorCount: {
+    readonly support: number;
+    readonly oppose: number;
+    readonly neutral: number;
+  };
+
   /** Average confidence across all evidence records */
   readonly averageConfidence: ConfidenceScore;
 
@@ -81,6 +95,9 @@ export interface IEvidenceSummary {
 
   /** Highest promotion band the evidence count qualifies for */
   readonly achievedBand: PromotionBand;
+
+  /** Net contributor support after subtracting opposing contributors. */
+  readonly netSupportContributorCount: number;
 }
 
 // ============================================================================
@@ -107,7 +124,9 @@ export interface IAggregationEvidenceRepository {
     evidenceType: string;
     confidence: ConfidenceScore;
     metadata?: Metadata;
-    direction?: 'support' | 'oppose' | 'neutral';
+    direction?: GraphCrdtDirection;
+    sourceEventId?: string;
+    sourceObservedAt?: string;
   }): Promise<IAggregationEvidence>;
 
   /**
@@ -116,7 +135,7 @@ export interface IAggregationEvidenceRepository {
   getEvidenceForTarget(ckgTargetNodeId: NodeId): Promise<IAggregationEvidence[]>;
 
   /**
-   * Get all evidence records for a proposed label that does not yet have
+   * Get all evidence records for a proposed candidate key that does not yet have
    * a canonical target node.
    */
   getEvidenceForProposedLabel(proposedLabel: string): Promise<IAggregationEvidence[]>;
@@ -129,7 +148,7 @@ export interface IAggregationEvidenceRepository {
   getEvidenceCountByBand(ckgTargetNodeId: NodeId): Promise<{ count: number; band: PromotionBand }>;
 
   /**
-   * Get evidence count by promotion band threshold for a proposed label.
+   * Get evidence count by promotion band threshold for a proposed candidate key.
    */
   getEvidenceCountByProposedLabel(
     proposedLabel: string
@@ -144,6 +163,20 @@ export interface IAggregationEvidenceRepository {
    * Find an existing evidence record for deduplication.
    */
   findEvidence(input: {
+    sourceUserId: UserId;
+    sourcePkgNodeId: NodeId;
+    ckgTargetNodeId?: NodeId;
+    proposedLabel?: string;
+    evidenceType: string;
+    direction?: GraphCrdtDirection;
+  }): Promise<IAggregationEvidence | null>;
+
+  /**
+   * Find the latest evidence signal for a specific PKG object and target,
+   * regardless of direction. Used to decide whether a new signal changes
+   * the contributor's current stance or is just a duplicate repeat.
+   */
+  findLatestEvidenceSignal(input: {
     sourceUserId: UserId;
     sourcePkgNodeId: NodeId;
     ckgTargetNodeId?: NodeId;
@@ -164,12 +197,23 @@ export interface IAggregationEvidenceRepository {
   getEvidenceSummary(ckgTargetNodeId: NodeId): Promise<IEvidenceSummary>;
 
   /**
-   * Get a comprehensive evidence summary for a proposed label.
+   * Get a comprehensive evidence summary for a proposed candidate key.
    */
   getEvidenceSummaryByProposedLabel(proposedLabel: string): Promise<IEvidenceSummary>;
 
   /**
+   * Get distinct linked mutation IDs for evidence records attached to the target.
+   * Used by aggregation orchestration to inspect active linked proposals without
+   * loading full evidence histories into memory.
+   */
+  getLinkedMutationIds(input: {
+    ckgTargetNodeId?: NodeId;
+    proposedLabel?: string;
+  }): Promise<readonly MutationId[]>;
+
+  /**
    * Link all currently unlinked evidence for a target to a mutation.
+   * Historical linkage must be preserved; already-linked evidence is left intact.
    */
   linkEvidenceToMutation(input: {
     mutationId: MutationId;

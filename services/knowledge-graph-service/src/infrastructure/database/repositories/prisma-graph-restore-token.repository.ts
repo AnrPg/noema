@@ -44,7 +44,9 @@ export class PrismaGraphRestoreTokenRepository implements IGraphRestoreTokenRepo
       },
     });
     if (result.count !== 1) {
-      throw new Error(`Restore confirmation token ${tokenId} was not reserved at consumption time.`);
+      throw new Error(
+        `Restore confirmation token ${tokenId} was not reserved at consumption time.`
+      );
     }
   }
 

@@ -47,6 +47,7 @@ import type {
   ICreateNodeInput,
   IEdgeFilter,
   IGraphRepository,
+  IGraphTransactionRepository,
   IUpdateEdgeInput,
   IUpdateNodeInput,
 } from '../../domain/knowledge-graph-service/graph.repository.js';
@@ -2669,7 +2670,7 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
    * session/transaction and commit atomically. On failure, the entire
    * transaction is rolled back, ensuring no partial CKG mutations.
    */
-  async runInTransaction<T>(fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
+  async runInTransaction<T>(fn: (txRepo: IGraphTransactionRepository) => Promise<T>): Promise<T> {
     const session = this.neo4j.getSession();
     const tx = session.beginTransaction();
 
@@ -2888,7 +2889,7 @@ function toJsNumber(value: unknown): number {
  * Note: traversal & batch read methods are pass-through stubs that throw
  * since the commit protocol only needs write operations + getNode/getEdge.
  */
-class Neo4jTransactionalGraphRepository implements IGraphRepository {
+class Neo4jTransactionalGraphRepository implements IGraphTransactionRepository {
   constructor(private readonly tx: neo4j.Transaction) {}
 
   // ── Node CRUD ─────────────────────────────────────────────────────────
@@ -3039,21 +3040,6 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     if (result.records.length === 0) throw new NodeNotFoundError(nodeId);
   }
 
-  findNodes(_filter: INodeFilter, _limit: number, _offset: number): Promise<IGraphNode[]> {
-    throw new Error('findNodes is not supported within a transaction context');
-  }
-
-  countNodes(_filter: INodeFilter): Promise<number> {
-    throw new Error('countNodes is not supported within a transaction context');
-  }
-
-  getNodeMasterySummary(
-    _filter: INodeFilter,
-    _masteryThreshold: MasteryLevel
-  ): Promise<INodeMasterySummary> {
-    throw new Error('getNodeMasterySummary is not supported within a transaction context');
-  }
-
   // ── Edge CRUD ─────────────────────────────────────────────────────────
 
   async createEdge(
@@ -3177,14 +3163,6 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     if (deleted === 0) throw new EdgeNotFoundError(edgeId);
   }
 
-  findEdges(_filter: IEdgeFilter): Promise<IGraphEdge[]> {
-    throw new Error('findEdges is not supported within a transaction context');
-  }
-
-  countEdges(_filter: IEdgeFilter): Promise<number> {
-    throw new Error('countEdges is not supported within a transaction context');
-  }
-
   async getEdgesForNode(
     nodeId: NodeId,
     direction: EdgeDirection,
@@ -3219,40 +3197,6 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
         inferGraphType(rec.get('srcLabels') as string[])
       )
     );
-  }
-
-  getEdgesForNodes(
-    _nodeIds: readonly NodeId[],
-    _filter?: IEdgeFilter,
-    _userId?: string
-  ): Promise<IGraphEdge[]> {
-    throw new Error('getEdgesForNodes is not supported within a transaction context');
-  }
-
-  // ── Traversal (not needed in transaction context, stubs) ──────────────
-
-  getAncestors(): Promise<IGraphNode[]> {
-    throw new Error('getAncestors is not supported within a transaction context');
-  }
-
-  getDescendants(): Promise<IGraphNode[]> {
-    throw new Error('getDescendants is not supported within a transaction context');
-  }
-
-  findShortestPath(): Promise<IGraphNode[]> {
-    throw new Error('findShortestPath is not supported within a transaction context');
-  }
-
-  findFilteredShortestPath(): Promise<IGraphNode[]> {
-    throw new Error('findFilteredShortestPath is not supported within a transaction context');
-  }
-
-  getSubgraph(): Promise<ISubgraph> {
-    throw new Error('getSubgraph is not supported within a transaction context');
-  }
-
-  detectCycles(): Promise<NodeId[]> {
-    throw new Error('detectCycles is not supported within a transaction context');
   }
 
   // ── Batch operations ──────────────────────────────────────────────────
@@ -3290,82 +3234,5 @@ class Neo4jTransactionalGraphRepository implements IGraphRepository {
     );
 
     return result.records.map((r) => mapNodeToGraphNode(r.get('n') as neo4j.Node));
-  }
-
-  // ── Transaction nesting (not supported) ───────────────────────────────
-
-  runInTransaction<T>(_fn: (txRepo: IGraphRepository) => Promise<T>): Promise<T> {
-    throw new Error('Nested transactions are not supported');
-  }
-
-  // ── Traversal stubs (not needed inside commit protocol) ───────────────
-
-  getSiblings(_nodeId: NodeId, _query: ISiblingsQuery, _userId?: string): Promise<ISiblingsResult> {
-    throw new Error('getSiblings is not supported inside transactions');
-  }
-
-  getCoParents(
-    _nodeId: NodeId,
-    _query: ICoParentsQuery,
-    _userId?: string
-  ): Promise<ICoParentsResult> {
-    throw new Error('getCoParents is not supported inside transactions');
-  }
-
-  getNeighborhood(
-    _nodeId: NodeId,
-    _query: INeighborhoodQuery,
-    _userId?: string
-  ): Promise<INeighborhoodResult> {
-    throw new Error('getNeighborhood is not supported inside transactions');
-  }
-
-  // ── Phase 8c traversal stubs ──────────────────────────────────────────
-
-  getDomainSubgraph(
-    _domain: string,
-    _edgeTypes?: readonly GraphEdgeType[],
-    _studyMode?: StudyMode,
-    _userId?: string
-  ): Promise<ISubgraph> {
-    throw new Error('getDomainSubgraph is not supported inside transactions');
-  }
-
-  findArticulationPointsNative(
-    _domain: string,
-    _edgeTypes?: readonly GraphEdgeType[],
-    _studyMode?: StudyMode,
-    _userId?: string
-  ): Promise<NodeId[] | null> {
-    throw new Error('findArticulationPointsNative is not supported inside transactions');
-  }
-
-  getKnowledgeFrontier(_query: IFrontierQuery, _userId: string): Promise<IKnowledgeFrontierResult> {
-    throw new Error('getKnowledgeFrontier is not supported inside transactions');
-  }
-
-  getCommonAncestors(
-    _nodeIdA: NodeId,
-    _nodeIdB: NodeId,
-    _query: ICommonAncestorsQuery,
-    _userId?: string
-  ): Promise<ICommonAncestorsResult> {
-    throw new Error('getCommonAncestors is not supported inside transactions');
-  }
-
-  // ── Phase 8d traversal stubs ──────────────────────────────────────────
-
-  getDegreeCentrality(_query: ICentralityQuery, _userId?: string): Promise<ICentralityEntry[]> {
-    throw new Error('getDegreeCentrality is not supported inside transactions');
-  }
-
-  // ── Phase 8e ontological guardrails stubs ─────────────────────────────
-
-  findConflictingEdges(
-    _sourceNodeId: NodeId,
-    _targetNodeId: NodeId,
-    _edgeTypes: readonly GraphEdgeType[]
-  ): Promise<IGraphEdge[]> {
-    throw new Error('findConflictingEdges is not supported inside transactions');
   }
 }

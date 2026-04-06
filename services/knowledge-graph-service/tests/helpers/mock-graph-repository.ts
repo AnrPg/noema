@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await */
 /**
  * @noema/knowledge-graph-service — In-Memory Mock Graph Repository
  *
@@ -98,7 +99,7 @@ class AdjacencyIndex {
     this.outbound.delete(nodeId);
     this.inbound.delete(nodeId);
     // Also remove edges pointing to/from this node
-    for (const edgeSet of this.inbound.values()) {
+    for (const _edgeSet of this.inbound.values()) {
       // The caller must handle edge removal
     }
   }
@@ -276,6 +277,11 @@ export class MockGraphRepository implements IGraphRepository {
     if (filterObj['domain'] !== undefined) {
       results = results.filter((n) => n.domain === filterObj['domain']);
     }
+    const labelContains = filterObj['labelContains'];
+    if (typeof labelContains === 'string') {
+      const query = labelContains.toLowerCase();
+      results = results.filter((n) => n.label.toLowerCase().includes(query));
+    }
     if (filterObj['userId'] !== undefined) {
       results = results.filter((n) => {
         const nObj = n as Record<string, unknown>;
@@ -382,7 +388,11 @@ export class MockGraphRepository implements IGraphRepository {
     return all.length;
   }
 
-  async getEdgesForNode(nodeId: NodeId, direction: EdgeDirection, _userId?: string): Promise<IGraphEdge[]> {
+  async getEdgesForNode(
+    nodeId: NodeId,
+    direction: EdgeDirection,
+    _userId?: string
+  ): Promise<IGraphEdge[]> {
     const results: IGraphEdge[] = [];
 
     if (direction === 'outbound' || direction === 'both') {
@@ -432,7 +442,7 @@ export class MockGraphRepository implements IGraphRepository {
     startId: NodeId,
     options: ITraversalOptions,
     direction: 'inbound' | 'outbound',
-    userId?: string
+    _userId?: string
   ): IGraphNode[] {
     const maxDepth = ((options as Record<string, unknown>)['maxDepth'] as number | undefined) ?? 3;
     const edgeTypes = (options as Record<string, unknown>)['edgeTypes'] as
@@ -789,7 +799,7 @@ export class MockGraphRepository implements IGraphRepository {
 
   async getKnowledgeFrontier(
     _query: IFrontierQuery,
-    _userId: string
+    _userId?: string
   ): Promise<IKnowledgeFrontierResult> {
     return { frontierNodes: [], totalCount: 0 } as unknown as IKnowledgeFrontierResult;
   }
