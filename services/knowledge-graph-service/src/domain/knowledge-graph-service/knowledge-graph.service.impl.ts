@@ -66,6 +66,7 @@ import type { CkgMutationPipeline } from './ckg-mutation-pipeline.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import { GraphReadService } from './graph-read.service.js';
 import { GraphRestorationService } from './graph-restoration.service.js';
+import type { IGraphRestoreTokenRepository } from './graph-restore-token.repository.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -77,6 +78,7 @@ import type {
 import type { IGraphRestorationRepository } from './graph-restoration.repository.js';
 import type { IGraphSnapshotRepository } from './graph-snapshot.repository.js';
 import type {
+  IExecuteGraphRestoreInput,
   IGraphRestorePreview,
   IGraphRestoreScopeInput,
   IGraphSnapshotSummary,
@@ -98,6 +100,7 @@ import type {
   IPkgOperationLogEntry,
   IPkgOperationLogRepository,
 } from './pkg-operation-log.repository.js';
+import type { IPkgPostWriteRecoveryService } from './post-write-recovery.service.js';
 import { PkgWriteService } from './pkg-write.service.js';
 
 type ParsedMutationOperation = z.infer<typeof CkgMutationOperationSchema>;
@@ -475,6 +478,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
   constructor(
     private readonly graphRepository: IGraphRepository,
     graphRestorationRepository: IGraphRestorationRepository,
+    graphRestoreTokenRepository: IGraphRestoreTokenRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
     private readonly graphCrdtStatsRepository: IGraphCrdtStatsRepository,
     graphSnapshotRepository: IGraphSnapshotRepository,
@@ -484,7 +488,14 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     eventPublisher: IEventPublisher,
     mutationRepository: IMutationRepository,
     private readonly mutationPipeline: CkgMutationPipeline,
+    postWriteRecoveryService: IPkgPostWriteRecoveryService,
     private readonly hintsFactory: AgentHintsFactory,
+    graphRestoreOptions: {
+      executionEnabled: boolean;
+      requireConfirmationToken: boolean;
+      confirmationSecret: string;
+      confirmationTtlMs: number;
+    },
     logger: Logger
   ) {
     this.logger = logger.child({ service: 'KnowledgeGraphService' });
@@ -495,6 +506,7 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       operationLogRepository,
       metricsStalenessRepository,
       eventPublisher,
+      postWriteRecoveryService,
       hintsFactory,
       this.logger
     );
@@ -511,9 +523,16 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     this.graphRestore = new GraphRestorationService(
       graphSnapshotRepository,
       graphRestorationRepository,
+      graphRestoreTokenRepository,
       mutationRepository,
       operationLogRepository,
       hintsFactory,
+      {
+        executionEnabled: graphRestoreOptions.executionEnabled,
+        requireConfirmationToken: graphRestoreOptions.requireConfirmationToken,
+        confirmationSecret: graphRestoreOptions.confirmationSecret,
+        confirmationTtlMs: graphRestoreOptions.confirmationTtlMs,
+      },
       this.logger
     );
   }
@@ -1408,15 +1427,16 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphRestorePreview>> {
     requireAuth(context);
-    return this.graphRestore.previewRestore(snapshotId);
+    return this.graphRestore.previewRestore(snapshotId, context.userId ?? null);
   }
 
   async executeGraphRestore(
     snapshotId: string,
+    input: IExecuteGraphRestoreInput,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphRestorePreview>> {
     requireAuth(context);
-    return this.graphRestore.executeRestore(snapshotId);
+    return this.graphRestore.executeRestore(snapshotId, input, context.userId ?? null);
   }
 
   async listGraphCrdtStats(
@@ -1426,18 +1446,26 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
       proposedLabel?: string;
       evidenceType?: string;
     },
+    pagination: {
+      limit: number;
+      offset: number;
+    },
     context: IExecutionContext
-  ): Promise<IServiceResult<IGraphCrdtStat[]>> {
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphCrdtStat>>> {
     requireAuth(context);
 
-    const stats = await this.graphCrdtStatsRepository.listStats(filters);
+    const stats = await this.graphCrdtStatsRepository.listStats(filters, pagination);
 
     return {
-      data: stats,
+      data: {
+        items: stats.items,
+        total: stats.total,
+        hasMore: stats.hasMore,
+      },
       agentHints: AgentHintsBuilder.create()
         .withValidityPeriod('short')
         .withReasoning(
-          `Returned ${String(stats.length)} Layer 3 CRDT graph stat record(s) for operator inspection.`
+          `Returned ${String(stats.items.length)} Layer 3 CRDT graph stat record(s) for operator inspection.`
         )
         .build(),
     };

@@ -107,6 +107,8 @@ describe('graph snapshot routes', () => {
           edgesToUpdate: 0,
           edgesToDelete: 0,
         },
+        confirmationToken:
+          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
         requiresDestructiveChanges: false,
         reasoning: 'Safe preview',
       })
@@ -120,6 +122,61 @@ describe('graph snapshot routes', () => {
     expect(res.statusCode).toBe(200);
     expect(service.previewGraphRestore).toHaveBeenCalledWith(
       'gsnap_2',
+      expect.objectContaining({ userId: expect.any(String) })
+    );
+  });
+
+  it('executes restore only with an explicit confirmation token payload', async () => {
+    service.executeGraphRestore.mockResolvedValue(
+      serviceResult({
+        snapshot: {
+          snapshotId: 'gsnap_2',
+          graphType: 'ckg',
+          scope: { graphType: 'ckg', domain: 'biology' },
+          nodeCount: 10,
+          edgeCount: 12,
+          schemaVersion: 1,
+          reason: null,
+          createdAt: '2026-04-02T12:00:00.000Z',
+          createdBy: 'admin_1',
+          sourceCursor: 'mut_1',
+        },
+        summary: {
+          scope: { graphType: 'ckg', domain: 'biology' },
+          currentNodeCount: 9,
+          currentEdgeCount: 12,
+          snapshotNodeCount: 10,
+          snapshotEdgeCount: 12,
+          nodesToCreate: 1,
+          nodesToUpdate: 0,
+          nodesToDelete: 0,
+          edgesToCreate: 0,
+          edgesToUpdate: 0,
+          edgesToDelete: 0,
+        },
+        confirmationToken:
+          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+        requiresDestructiveChanges: false,
+        reasoning: 'Safe preview',
+      })
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/graph-snapshots/gsnap_2/restore',
+      payload: {
+        confirmationToken:
+          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(service.executeGraphRestore).toHaveBeenCalledWith(
+      'gsnap_2',
+      {
+        confirmationToken:
+          '4fe7f0fb35e37c7f2f8289b2b49250f8267b95c2e29c39c4f4d349adb45bf8f6',
+      },
       expect.objectContaining({ userId: expect.any(String) })
     );
   });

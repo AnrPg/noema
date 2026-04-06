@@ -1,13 +1,16 @@
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+
 import type { EdgeId, IGraphEdge, IGraphNode, NodeId } from '@noema/types';
 import type { Logger } from 'pino';
 
 import type { AgentHintsFactory } from './agent-hints.factory.js';
 import { AgentHintsBuilder } from './agent-hints.factory.js';
-import { GraphSnapshotNotFoundError } from './errors/index.js';
+import { GraphSnapshotNotFoundError, ValidationError } from './errors/index.js';
 import type {
   GraphRestorationScope,
   IGraphRestorationRepository,
 } from './graph-restoration.repository.js';
+import type { IGraphRestoreTokenRepository } from './graph-restore-token.repository.js';
 import type {
   ICreateGraphSnapshotInput,
   IGraphSnapshotListFilters,
@@ -18,6 +21,7 @@ import type {
   IGraphRestoreScopeInput,
   IGraphRestoreSummary,
   IGraphSnapshotSummary,
+  IExecuteGraphRestoreInput,
   IServiceResult,
 } from './knowledge-graph.service.js';
 import type { IMutationRepository } from './mutation.repository.js';
@@ -69,8 +73,6 @@ function buildNodeFingerprint(node: IGraphNode): string {
     sourceCoverage: node.sourceCoverage,
     properties: node.properties,
     masteryLevel: node.masteryLevel,
-    createdAt: node.createdAt,
-    updatedAt: node.updatedAt,
   });
 }
 
@@ -82,8 +84,35 @@ function buildEdgeFingerprint(edge: IGraphEdge): string {
     userId: edge.userId,
     weight: edge.weight,
     properties: edge.properties,
-    createdAt: edge.createdAt,
   });
+}
+
+function buildRestoreDiffFingerprint(input: {
+  scope: GraphRestorationScope;
+  nodeIdsToCreate: readonly string[];
+  nodeIdsToUpdate: readonly string[];
+  nodeIdsToDelete: readonly string[];
+  edgeIdsToCreate: readonly string[];
+  edgeIdsToUpdate: readonly string[];
+  edgeIdsToDelete: readonly string[];
+}): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        scope: input.scope,
+        nodes: {
+          create: [...input.nodeIdsToCreate].sort(),
+          update: [...input.nodeIdsToUpdate].sort(),
+          delete: [...input.nodeIdsToDelete].sort(),
+        },
+        edges: {
+          create: [...input.edgeIdsToCreate].sort(),
+          update: [...input.edgeIdsToUpdate].sort(),
+          delete: [...input.edgeIdsToDelete].sort(),
+        },
+      })
+    )
+    .digest('hex');
 }
 
 function describeScope(scope: GraphRestorationScope): string {
@@ -117,9 +146,16 @@ export class GraphRestorationService {
   constructor(
     private readonly graphSnapshotRepository: IGraphSnapshotRepository,
     private readonly graphRestorationRepository: IGraphRestorationRepository,
+    private readonly graphRestoreTokenRepository: IGraphRestoreTokenRepository,
     private readonly mutationRepository: IMutationRepository,
     private readonly operationLogRepository: IPkgOperationLogRepository,
     private readonly hintsFactory: AgentHintsFactory,
+    private readonly options: {
+      executionEnabled: boolean;
+      requireConfirmationToken: boolean;
+      confirmationSecret: string;
+      confirmationTtlMs: number;
+    },
     logger: Logger
   ) {
     this.logger = logger.child({ service: 'GraphRestorationService' });
@@ -200,8 +236,11 @@ export class GraphRestorationService {
     };
   }
 
-  async previewRestore(snapshotId: string): Promise<IServiceResult<IGraphRestorePreview>> {
-    const preview = await this.buildRestorePreview(snapshotId);
+  async previewRestore(
+    snapshotId: string,
+    actorId: string | null
+  ): Promise<IServiceResult<IGraphRestorePreview>> {
+    const preview = await this.buildRestorePreview(snapshotId, undefined, actorId);
     return {
       data: preview,
       agentHints: AgentHintsBuilder.create()
@@ -216,14 +255,84 @@ export class GraphRestorationService {
     };
   }
 
-  async executeRestore(snapshotId: string): Promise<IServiceResult<IGraphRestorePreview>> {
+  async executeRestore(
+    snapshotId: string,
+    input: IExecuteGraphRestoreInput,
+    actorId: string | null
+  ): Promise<IServiceResult<IGraphRestorePreview>> {
+    if (!this.options.executionEnabled) {
+      throw new ValidationError(
+        'Graph restore execution is disabled. Enable GRAPH_RESTORE_EXECUTION_ENABLED before applying snapshots.',
+        {
+          confirmationToken: ['Restore execution is disabled for this environment.'],
+        }
+      );
+    }
+
     const snapshot = await this.graphSnapshotRepository.getSnapshot(snapshotId);
     if (snapshot === null) {
       throw new GraphSnapshotNotFoundError(snapshotId);
     }
 
-    const preview = await this.buildRestorePreview(snapshotId, snapshot);
-    await this.graphRestorationRepository.replaceScope(snapshot.scope, snapshot.payload);
+    const preview = await this.buildRestorePreview(snapshotId, snapshot, actorId);
+    if (this.options.requireConfirmationToken) {
+      if (input.confirmationToken === undefined || input.confirmationToken.trim().length === 0) {
+        throw new ValidationError('confirmationToken is required to execute a graph restore', {
+          confirmationToken: ['Preview the restore and resubmit the returned confirmation token.'],
+        });
+      }
+
+      const validatedToken = await this.validateRestoreConfirmationToken(
+        input.confirmationToken,
+        preview,
+        actorId,
+        this.options.confirmationSecret
+      );
+      if (validatedToken === null) {
+        throw new ValidationError('confirmationToken does not match the latest restore preview', {
+          confirmationToken: [
+            'The confirmation token is invalid, expired, actor-mismatched, or stale. Generate a fresh preview before restoring.',
+          ],
+        });
+      }
+
+      const reserved = await this.graphRestoreTokenRepository.reserveToken({
+        tokenId: validatedToken.tokenId,
+        snapshotId: validatedToken.snapshotId,
+        actorId: validatedToken.actorId,
+        summaryHash: validatedToken.summaryHash,
+        expiresAt: validatedToken.expiresAt,
+      });
+      if (!reserved) {
+        throw new ValidationError('confirmationToken does not match the latest restore preview', {
+          confirmationToken: [
+            'The confirmation token is invalid, expired, actor-mismatched, or stale. Generate a fresh preview before restoring.',
+          ],
+        });
+      }
+
+      try {
+        await this.graphRestorationRepository.replaceScope(snapshot.scope, snapshot.payload);
+      } catch (error) {
+        await this.graphRestoreTokenRepository.releaseToken(validatedToken.tokenId);
+        throw error;
+      }
+
+      try {
+        await this.graphRestoreTokenRepository.consumeToken(validatedToken.tokenId);
+      } catch (error) {
+        this.logger.error(
+          {
+            snapshotId,
+            tokenId: validatedToken.tokenId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'Graph restore succeeded but confirmation token consumption failed'
+        );
+      }
+    } else {
+      await this.graphRestorationRepository.replaceScope(snapshot.scope, snapshot.payload);
+    }
 
     this.logger.warn(
       {
@@ -246,7 +355,8 @@ export class GraphRestorationService {
 
   private async buildRestorePreview(
     snapshotId: string,
-    snapshotRecord?: Awaited<ReturnType<IGraphSnapshotRepository['getSnapshot']>>
+    snapshotRecord?: Awaited<ReturnType<IGraphSnapshotRepository['getSnapshot']>>,
+    actorId?: string | null
   ): Promise<IGraphRestorePreview> {
     const snapshot = snapshotRecord ?? (await this.graphSnapshotRepository.getSnapshot(snapshotId));
     if (snapshot === null) {
@@ -259,9 +369,20 @@ export class GraphRestorationService {
       edges: current.edges,
     });
 
+    const issuedAt = new Date();
+    const expiresAt = new Date(issuedAt.getTime() + this.options.confirmationTtlMs);
     return {
       snapshot: toSummary(snapshot),
       summary,
+      confirmationToken: buildRestoreConfirmationToken(
+        snapshot.snapshotId,
+        summary,
+        actorId ?? null,
+        issuedAt.toISOString(),
+        expiresAt.toISOString(),
+        this.options.confirmationSecret
+      ),
+      confirmationExpiresAt: expiresAt.toISOString(),
       requiresDestructiveChanges:
         summary.nodesToDelete > 0 ||
         summary.edgesToDelete > 0 ||
@@ -289,45 +410,55 @@ export class GraphRestorationService {
       snapshot.edges.map((edge) => [edge.edgeId, edge])
     );
 
-    let nodesToCreate = 0;
-    let nodesToUpdate = 0;
+    const nodeIdsToCreate: string[] = [];
+    const nodeIdsToUpdate: string[] = [];
     for (const [nodeId, node] of snapshotNodes) {
       const existing = currentNodes.get(nodeId);
       if (existing === undefined) {
-        nodesToCreate += 1;
+        nodeIdsToCreate.push(nodeId);
         continue;
       }
       if (buildNodeFingerprint(existing) !== buildNodeFingerprint(node)) {
-        nodesToUpdate += 1;
+        nodeIdsToUpdate.push(nodeId);
       }
     }
 
-    let edgesToCreate = 0;
-    let edgesToUpdate = 0;
+    const edgeIdsToCreate: string[] = [];
+    const edgeIdsToUpdate: string[] = [];
     for (const [edgeId, edge] of snapshotEdges) {
       const existing = currentEdges.get(edgeId);
       if (existing === undefined) {
-        edgesToCreate += 1;
+        edgeIdsToCreate.push(edgeId);
         continue;
       }
       if (buildEdgeFingerprint(existing) !== buildEdgeFingerprint(edge)) {
-        edgesToUpdate += 1;
+        edgeIdsToUpdate.push(edgeId);
       }
     }
 
-    let nodesToDelete = 0;
+    const nodeIdsToDelete: string[] = [];
     for (const nodeId of currentNodes.keys()) {
       if (!snapshotNodes.has(nodeId)) {
-        nodesToDelete += 1;
+        nodeIdsToDelete.push(nodeId);
       }
     }
 
-    let edgesToDelete = 0;
+    const edgeIdsToDelete: string[] = [];
     for (const edgeId of currentEdges.keys()) {
       if (!snapshotEdges.has(edgeId)) {
-        edgesToDelete += 1;
+        edgeIdsToDelete.push(edgeId);
       }
     }
+
+    const diffFingerprint = buildRestoreDiffFingerprint({
+      scope,
+      nodeIdsToCreate,
+      nodeIdsToUpdate,
+      nodeIdsToDelete,
+      edgeIdsToCreate,
+      edgeIdsToUpdate,
+      edgeIdsToDelete,
+    });
 
     return {
       scope,
@@ -335,12 +466,13 @@ export class GraphRestorationService {
       currentEdgeCount: current.edges.length,
       snapshotNodeCount: snapshot.nodes.length,
       snapshotEdgeCount: snapshot.edges.length,
-      nodesToCreate,
-      nodesToUpdate,
-      nodesToDelete,
-      edgesToCreate,
-      edgesToUpdate,
-      edgesToDelete,
+      nodesToCreate: nodeIdsToCreate.length,
+      nodesToUpdate: nodeIdsToUpdate.length,
+      nodesToDelete: nodeIdsToDelete.length,
+      edgesToCreate: edgeIdsToCreate.length,
+      edgesToUpdate: edgeIdsToUpdate.length,
+      edgesToDelete: edgeIdsToDelete.length,
+      diffFingerprint,
     };
   }
 
@@ -350,10 +482,140 @@ export class GraphRestorationService {
       return history.items[0]?.id ?? null;
     }
 
-    const committed = await this.mutationRepository.findMutations({ state: 'committed' });
-    const latest = [...committed].sort((left, right) =>
-      right.updatedAt.localeCompare(left.updatedAt)
-    )[0];
+    const latest = await this.mutationRepository.getLatestCommittedMutationByAudit();
     return latest?.mutationId ?? null;
   }
+
+  private async validateRestoreConfirmationToken(
+    token: string,
+    preview: IGraphRestorePreview,
+    actorId: string | null,
+    secret: string
+  ): Promise<{
+    tokenId: string;
+    snapshotId: string;
+    actorId: string | null;
+    expiresAt: string;
+    summaryHash: string;
+  } | null> {
+    await this.graphRestoreTokenRepository.pruneExpiredTokens(new Date().toISOString());
+    const payload = parseRestoreConfirmationToken(token, secret);
+    if (payload === null) {
+      return null;
+    }
+    if (payload.snapshotId !== preview.snapshot.snapshotId) {
+      return null;
+    }
+    if ((payload.actorId ?? null) !== actorId) {
+      return null;
+    }
+    if (new Date(payload.expiresAt).getTime() < Date.now()) {
+      return null;
+    }
+    if (payload.summaryHash !== buildRestoreSummaryHash(preview.snapshot.snapshotId, preview.summary)) {
+      return null;
+    }
+
+    return payload;
+  }
+}
+
+function buildRestoreConfirmationToken(
+  snapshotId: string,
+  summary: IGraphRestoreSummary,
+  actorId: string | null,
+  issuedAt: string,
+  expiresAt: string,
+  secret: string
+): string {
+  const payload = {
+    tokenId: randomUUID(),
+    snapshotId,
+    actorId,
+    issuedAt,
+    expiresAt,
+    summaryHash: buildRestoreSummaryHash(snapshotId, summary),
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const signature = createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  return `${encodedPayload}.${signature}`;
+}
+
+function parseRestoreConfirmationToken(
+  token: string,
+  secret: string
+): {
+  tokenId: string;
+  snapshotId: string;
+  actorId: string | null;
+  expiresAt: string;
+  summaryHash: string;
+} | null {
+  const [encodedPayload, providedSignature] = token.split('.');
+  if (
+    encodedPayload === undefined ||
+    encodedPayload.length === 0 ||
+    providedSignature === undefined ||
+    providedSignature.length === 0
+  ) {
+    return null;
+  }
+
+  const expectedSignature = createHmac('sha256', secret).update(encodedPayload).digest('base64url');
+  const providedBuffer = Buffer.from(providedSignature, 'utf8');
+  const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+  if (
+    providedBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(providedBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  let payload: {
+    tokenId?: string;
+    snapshotId?: string;
+    actorId?: string | null;
+    expiresAt?: string;
+    summaryHash?: string;
+  };
+  try {
+    payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8')) as {
+      tokenId?: string;
+      snapshotId?: string;
+      actorId?: string | null;
+      expiresAt?: string;
+      summaryHash?: string;
+    };
+  } catch {
+    return null;
+  }
+
+  if (
+    payload.tokenId === undefined ||
+    payload.snapshotId === undefined ||
+    payload.expiresAt === undefined ||
+    payload.summaryHash === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    tokenId: payload.tokenId,
+    snapshotId: payload.snapshotId,
+    actorId: payload.actorId ?? null,
+    expiresAt: payload.expiresAt,
+    summaryHash: payload.summaryHash,
+  };
+}
+
+function buildRestoreSummaryHash(snapshotId: string, summary: IGraphRestoreSummary): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        snapshotId,
+        scope: summary.scope,
+        diffFingerprint: summary.diffFingerprint,
+      })
+    )
+    .digest('hex');
 }

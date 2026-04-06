@@ -5,6 +5,7 @@ import type { IKnowledgeGraphService } from '../../domain/knowledge-graph-servic
 import type { createAuthMiddleware } from '../middleware/auth.middleware.js';
 import {
   GraphSnapshotCreateRequestSchema,
+  GraphRestoreExecuteRequestSchema,
   GraphSnapshotQueryParamsSchema,
 } from '../schemas/graph-snapshot.schemas.js';
 import {
@@ -132,7 +133,7 @@ export function registerGraphSnapshotRoutes(
     }
   );
 
-  fastify.post<{ Params: { snapshotId: string } }>(
+  fastify.post<{ Params: { snapshotId: string }; Body: unknown }>(
     '/api/v1/graph-snapshots/:snapshotId/restore',
     {
       preHandler: authMiddleware,
@@ -146,7 +147,14 @@ export function registerGraphSnapshotRoutes(
       try {
         assertAdminOrAgent(request);
         const { snapshotId } = SnapshotIdParamSchema.parse(request.params);
-        const result = await service.executeGraphRestore(snapshotId, buildContext(request));
+        const parsed = GraphRestoreExecuteRequestSchema.parse(request.body ?? {});
+        const result = await service.executeGraphRestore(
+          snapshotId,
+          parsed.confirmationToken !== undefined
+            ? { confirmationToken: parsed.confirmationToken }
+            : {},
+          buildContext(request)
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

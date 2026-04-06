@@ -1,6 +1,6 @@
 import type { Metadata, UserId } from '@noema/types';
 import { nanoid } from 'nanoid';
-import type { Prisma, PrismaClient } from '../../../../generated/prisma/index.js';
+import { Prisma, type PrismaClient } from '../../../../generated/prisma/index.js';
 
 import type {
   GraphCrdtDirection,
@@ -18,6 +18,10 @@ function generateAppliedSignalId(): string {
   return `gcrdtsig_${nanoid()}`;
 }
 
+function generateReplicaStateId(): string {
+  return `gcrdtrep_${nanoid()}`;
+}
+
 function buildStatKey(input: {
   targetKind: GraphCrdtTargetKind;
   targetNodeId?: string;
@@ -27,17 +31,6 @@ function buildStatKey(input: {
   return input.targetKind === 'ckg_node'
     ? `ckg_node:${input.targetNodeId ?? ''}:${input.evidenceType}`
     : `proposed_label:${(input.proposedLabel ?? '').trim().toLowerCase()}:${input.evidenceType}`;
-}
-
-function incrementCounter(
-  counter: Readonly<Record<string, number>>,
-  replicaId: string,
-  delta: number
-): Record<string, number> {
-  return {
-    ...counter,
-    [replicaId]: Math.max(counter[replicaId] ?? 0, (counter[replicaId] ?? 0) + delta),
-  };
 }
 
 function sumCounter(counter: Readonly<Record<string, number>>): number {
@@ -51,20 +44,19 @@ function toDomain(record: {
   targetNodeId: string | null;
   proposedLabel: string | null;
   evidenceType: string;
-  supportCounter: Prisma.JsonValue;
-  opposeCounter: Prisma.JsonValue;
-  neutralCounter: Prisma.JsonValue;
-  confidenceCounter: Prisma.JsonValue;
   metadata: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
+  replicaStates: readonly {
+    replicaId: string;
+    supportCount: number;
+    opposeCount: number;
+    neutralCount: number;
+    confidenceCount: number;
+  }[];
 }): IGraphCrdtStat {
-  const supportCounterByReplica = fromPrismaJson<Record<string, number>>(record.supportCounter);
-  const opposeCounterByReplica = fromPrismaJson<Record<string, number>>(record.opposeCounter);
-  const neutralCounterByReplica = fromPrismaJson<Record<string, number>>(record.neutralCounter);
-  const confidenceCounterByReplica = fromPrismaJson<Record<string, number>>(
-    record.confidenceCounter
-  );
+  const { supportCounterByReplica, opposeCounterByReplica, neutralCounterByReplica, confidenceCounterByReplica } =
+    buildReplicaCounters(record.replicaStates);
   const supportCount = sumCounter(supportCounterByReplica);
   const opposeCount = sumCounter(opposeCounterByReplica);
   const neutralCount = sumCounter(neutralCounterByReplica);
@@ -119,7 +111,11 @@ export class PrismaGraphCrdtStatsRepository implements IGraphCrdtStatsRepository
         const existing = await tx.graphCrdtStat.findUniqueOrThrow({
           where: { statKey: applied.statKey },
         });
-        return toDomain(existing);
+        const replicaStates = await this.getReplicaStates(tx, applied.statKey);
+        return toDomain({
+          ...existing,
+          replicaStates,
+        });
       }
 
       const existing =
@@ -135,10 +131,6 @@ export class PrismaGraphCrdtStatsRepository implements IGraphCrdtStatsRepository
             targetNodeId: input.targetNodeId ?? null,
             proposedLabel: input.proposedLabel ?? null,
             evidenceType: input.evidenceType,
-            supportCounter: toPrismaJson({}),
-            opposeCounter: toPrismaJson({}),
-            neutralCounter: toPrismaJson({}),
-            confidenceCounter: toPrismaJson({}),
             metadata: toPrismaJson({
               ...(input.metadata ?? {}),
               latestSourceUserId: input.sourceUserId,
@@ -146,36 +138,18 @@ export class PrismaGraphCrdtStatsRepository implements IGraphCrdtStatsRepository
           },
         }));
 
-      const supportCounter = fromPrismaJson<Record<string, number>>(existing.supportCounter);
-      const opposeCounter = fromPrismaJson<Record<string, number>>(existing.opposeCounter);
-      const neutralCounter = fromPrismaJson<Record<string, number>>(existing.neutralCounter);
-      const confidenceCounter = fromPrismaJson<Record<string, number>>(existing.confidenceCounter);
+      await this.upsertReplicaState(tx, {
+        statKey,
+        replicaId: input.replicaId,
+        direction: input.direction,
+        confidenceCount: Math.round(input.confidence * 1000),
+      });
 
-      const updatedSupportCounter =
-        input.direction === 'support'
-          ? incrementCounter(supportCounter, input.replicaId, 1)
-          : supportCounter;
-      const updatedOpposeCounter =
-        input.direction === 'oppose'
-          ? incrementCounter(opposeCounter, input.replicaId, 1)
-          : opposeCounter;
-      const updatedNeutralCounter =
-        input.direction === 'neutral'
-          ? incrementCounter(neutralCounter, input.replicaId, 1)
-          : neutralCounter;
-      const updatedConfidenceCounter = incrementCounter(
-        confidenceCounter,
-        input.replicaId,
-        Math.round(input.confidence * 1000)
-      );
+      const replicaStates = await this.getReplicaStates(tx, statKey);
 
       const updated = await tx.graphCrdtStat.update({
         where: { statKey },
         data: {
-          supportCounter: toPrismaJson(updatedSupportCounter),
-          opposeCounter: toPrismaJson(updatedOpposeCounter),
-          neutralCounter: toPrismaJson(updatedNeutralCounter),
-          confidenceCounter: toPrismaJson(updatedConfidenceCounter),
           metadata: toPrismaJson({
             ...fromPrismaJson<Metadata>(existing.metadata),
             ...(input.metadata ?? {}),
@@ -193,7 +167,10 @@ export class PrismaGraphCrdtStatsRepository implements IGraphCrdtStatsRepository
         },
       });
 
-      return toDomain(updated);
+      return toDomain({
+        ...updated,
+        replicaStates,
+      });
     });
   }
 
@@ -202,19 +179,232 @@ export class PrismaGraphCrdtStatsRepository implements IGraphCrdtStatsRepository
     targetNodeId?: string;
     proposedLabel?: string;
     evidenceType?: string;
-  }): Promise<IGraphCrdtStat[]> {
-    const records = await this.prisma.graphCrdtStat.findMany({
-      where: {
-        ...(filters.targetKind !== undefined ? { targetKind: filters.targetKind } : {}),
-        ...(filters.targetNodeId !== undefined ? { targetNodeId: filters.targetNodeId } : {}),
-        ...(filters.proposedLabel !== undefined ? { proposedLabel: filters.proposedLabel } : {}),
-        ...(filters.evidenceType !== undefined ? { evidenceType: filters.evidenceType } : {}),
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+  }, pagination: {
+    limit: number;
+    offset: number;
+  } = {
+    limit: 25,
+    offset: 0,
+  }): Promise<{
+    items: IGraphCrdtStat[];
+    total: number;
+    hasMore: boolean;
+  }> {
+    const where = {
+      ...(filters.targetKind !== undefined ? { targetKind: filters.targetKind } : {}),
+      ...(filters.targetNodeId !== undefined ? { targetNodeId: filters.targetNodeId } : {}),
+      ...(filters.proposedLabel !== undefined ? { proposedLabel: filters.proposedLabel } : {}),
+      ...(filters.evidenceType !== undefined ? { evidenceType: filters.evidenceType } : {}),
+    };
 
-    return records.map((record) => toDomain(record));
+    const [records, total] = await Promise.all([
+      this.prisma.graphCrdtStat.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        take: pagination.limit,
+        skip: pagination.offset,
+      }),
+      this.prisma.graphCrdtStat.count({ where }),
+    ]);
+
+    const replicaStatesByStatKey = await this.getReplicaStatesForStatKeys(
+      this.prisma,
+      records.map((record) => record.statKey)
+    );
+
+    const items = records.map((record) =>
+      toDomain({
+        ...record,
+        replicaStates: replicaStatesByStatKey.get(record.statKey) ?? [],
+      })
+    );
+
+    return {
+      items,
+      total,
+      hasMore: pagination.offset + items.length < total,
+    };
   }
+
+  private async getReplicaStates(
+    client: PrismaClient | Prisma.TransactionClient,
+    statKey: string
+  ): Promise<
+    {
+      replicaId: string;
+      supportCount: number;
+      opposeCount: number;
+      neutralCount: number;
+      confidenceCount: number;
+    }[]
+  > {
+    const rows = await client.$queryRaw<
+      {
+        replicaId: string;
+        supportCount: number;
+        opposeCount: number;
+        neutralCount: number;
+        confidenceCount: number;
+      }[]
+    >(
+      Prisma.sql`
+        SELECT
+          "replica_id" AS "replicaId",
+          "support_count" AS "supportCount",
+          "oppose_count" AS "opposeCount",
+          "neutral_count" AS "neutralCount",
+          "confidence_count" AS "confidenceCount"
+        FROM "graph_crdt_replica_states"
+        WHERE "stat_key" = ${statKey}
+      `
+    );
+
+    return rows;
+  }
+
+  private async getReplicaStatesForStatKeys(
+    client: PrismaClient | Prisma.TransactionClient,
+    statKeys: readonly string[]
+  ): Promise<
+    Map<
+      string,
+      {
+        replicaId: string;
+        supportCount: number;
+        opposeCount: number;
+        neutralCount: number;
+        confidenceCount: number;
+      }[]
+    >
+  > {
+    if (statKeys.length === 0) {
+      return new Map();
+    }
+
+    const rows = await client.$queryRaw<
+      {
+        statKey: string;
+        replicaId: string;
+        supportCount: number;
+        opposeCount: number;
+        neutralCount: number;
+        confidenceCount: number;
+      }[]
+    >(
+      Prisma.sql`
+        SELECT
+          "stat_key" AS "statKey",
+          "replica_id" AS "replicaId",
+          "support_count" AS "supportCount",
+          "oppose_count" AS "opposeCount",
+          "neutral_count" AS "neutralCount",
+          "confidence_count" AS "confidenceCount"
+        FROM "graph_crdt_replica_states"
+        WHERE "stat_key" IN (${Prisma.join(statKeys)})
+      `
+    );
+
+    const map = new Map<
+      string,
+      {
+        replicaId: string;
+        supportCount: number;
+        opposeCount: number;
+        neutralCount: number;
+        confidenceCount: number;
+      }[]
+    >();
+    for (const row of rows) {
+      const existing = map.get(row.statKey) ?? [];
+      existing.push({
+        replicaId: row.replicaId,
+        supportCount: row.supportCount,
+        opposeCount: row.opposeCount,
+        neutralCount: row.neutralCount,
+        confidenceCount: row.confidenceCount,
+      });
+      map.set(row.statKey, existing);
+    }
+    return map;
+  }
+
+  private async upsertReplicaState(
+    client: PrismaClient | Prisma.TransactionClient,
+    input: {
+      statKey: string;
+      replicaId: string;
+      direction: GraphCrdtDirection;
+      confidenceCount: number;
+    }
+  ): Promise<void> {
+    await client.$executeRaw(
+      Prisma.sql`
+        INSERT INTO "graph_crdt_replica_states" (
+          "id",
+          "stat_key",
+          "replica_id",
+          "support_count",
+          "oppose_count",
+          "neutral_count",
+          "confidence_count"
+        ) VALUES (
+          ${generateReplicaStateId()},
+          ${input.statKey},
+          ${input.replicaId},
+          ${input.direction === 'support' ? 1 : 0},
+          ${input.direction === 'oppose' ? 1 : 0},
+          ${input.direction === 'neutral' ? 1 : 0},
+          ${input.confidenceCount}
+        )
+        ON CONFLICT ("stat_key", "replica_id")
+        DO UPDATE SET
+          "support_count" = "graph_crdt_replica_states"."support_count" + ${
+            input.direction === 'support' ? 1 : 0
+          },
+          "oppose_count" = "graph_crdt_replica_states"."oppose_count" + ${
+            input.direction === 'oppose' ? 1 : 0
+          },
+          "neutral_count" = "graph_crdt_replica_states"."neutral_count" + ${
+            input.direction === 'neutral' ? 1 : 0
+          },
+          "confidence_count" = "graph_crdt_replica_states"."confidence_count" + ${
+            input.confidenceCount
+          },
+          "updated_at" = CURRENT_TIMESTAMP
+      `
+    );
+  }
+}
+
+function buildReplicaCounters(
+  replicaStates: readonly {
+    replicaId: string;
+    supportCount: number;
+    opposeCount: number;
+    neutralCount: number;
+    confidenceCount: number;
+  }[]
+): {
+  supportCounterByReplica: Record<string, number>;
+  opposeCounterByReplica: Record<string, number>;
+  neutralCounterByReplica: Record<string, number>;
+  confidenceCounterByReplica: Record<string, number>;
+} {
+  return replicaStates.reduce(
+    (acc, replicaState) => {
+      acc.supportCounterByReplica[replicaState.replicaId] = replicaState.supportCount;
+      acc.opposeCounterByReplica[replicaState.replicaId] = replicaState.opposeCount;
+      acc.neutralCounterByReplica[replicaState.replicaId] = replicaState.neutralCount;
+      acc.confidenceCounterByReplica[replicaState.replicaId] = replicaState.confidenceCount;
+      return acc;
+    },
+    {
+      supportCounterByReplica: {} as Record<string, number>,
+      opposeCounterByReplica: {} as Record<string, number>,
+      neutralCounterByReplica: {} as Record<string, number>,
+      confidenceCounterByReplica: {} as Record<string, number>,
+    }
+  );
 }
 
 export class NoopGraphCrdtStatsRepository implements IGraphCrdtStatsRepository {
@@ -253,7 +443,7 @@ export class NoopGraphCrdtStatsRepository implements IGraphCrdtStatsRepository {
     });
   }
 
-  listStats(): Promise<IGraphCrdtStat[]> {
-    return Promise.resolve([]);
+  listStats(): Promise<{ items: IGraphCrdtStat[]; total: number; hasMore: boolean }> {
+    return Promise.resolve({ items: [], total: 0, hasMore: false });
   }
 }

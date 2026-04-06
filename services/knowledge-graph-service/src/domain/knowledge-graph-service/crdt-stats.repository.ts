@@ -44,5 +44,12 @@ export interface IGraphCrdtStatsRepository {
     targetNodeId?: string;
     proposedLabel?: string;
     evidenceType?: string;
-  }): Promise<IGraphCrdtStat[]>;
+  }, pagination?: {
+    limit: number;
+    offset: number;
+  }): Promise<{
+    items: IGraphCrdtStat[];
+    total: number;
+    hasMore: boolean;
+  }>;
 }

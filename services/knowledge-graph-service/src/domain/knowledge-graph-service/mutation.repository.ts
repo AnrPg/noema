@@ -155,6 +155,12 @@ export interface IMutationRepository {
   findMutationsByStates(states: MutationState[]): Promise<ICkgMutation[]>;
 
   /**
+   * Find mutations by their IDs in a single query.
+   * Used by aggregation and operator workflows to avoid loading unrelated mutations.
+   */
+  findMutationsByIds(mutationIds: readonly MutationId[]): Promise<ICkgMutation[]>;
+
+  /**
    * Find mutations by proposer (agent or admin user).
    */
   findMutationsByProposer(proposerId: ProposerId): Promise<ICkgMutation[]>;
@@ -174,6 +180,17 @@ export interface IMutationRepository {
     createdAfter?: string;
     createdBefore?: string;
   }): Promise<ICkgMutation[]>;
+
+  /**
+   * Get the most recently updated mutation in the given state.
+   * Used by snapshotting and operator workflows that only need the latest cursor.
+   */
+  getLatestMutationByState(state: MutationState): Promise<ICkgMutation | null>;
+
+  /**
+   * Get the most recently committed mutation based on the immutable audit log.
+   */
+  getLatestCommittedMutationByAudit(): Promise<ICkgMutation | null>;
 
   /**
    * Atomically update mutation state AND append the audit log entry

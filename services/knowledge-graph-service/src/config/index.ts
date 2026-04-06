@@ -7,6 +7,8 @@
  */
 
 import type { Environment } from '@noema/types';
+import os from 'node:os';
+import path from 'node:path';
 import {
   ProofRolloutMode,
   type ProofRolloutMode as ProofRolloutModeType,
@@ -86,6 +88,16 @@ export interface IServiceConfig {
     /** Proof-stage rollout mode for canonical commits. */
     proofStageMode: ProofRolloutModeType;
   };
+  proof: {
+    /** Root directory for persisted proof-stage artifacts. */
+    artifactRootDirectory: string;
+    /** Optional path to a TLA+ tools jar containing tlc2.TLC. */
+    tlaToolsJarPath: string | null;
+    /** Java executable used to invoke TLC when configured. */
+    javaBinary: string;
+    /** Max TLC execution time for a single mutation proof. */
+    timeoutMs: number;
+  };
   crdt: {
     /** Whether Layer 3 CRDT stats are enabled. */
     enabled: boolean;
@@ -95,6 +107,8 @@ export interface IServiceConfig {
   ontologyImports: {
     /** Which YAGO archive variant to fetch by default. */
     yagoVariant: 'tiny' | 'full';
+    /** Active ontology artifact used by canonical ontology reasoning. */
+    activeArtifactPath: string;
   };
   cors: {
     enabled: boolean;
@@ -104,6 +118,22 @@ export interface IServiceConfig {
   logging: {
     level: string;
     pretty: boolean;
+  };
+  graphRestore: {
+    /** Whether destructive restore execution is enabled. */
+    executionEnabled: boolean;
+    /** Whether restore execution requires a preview-derived confirmation token. */
+    requireConfirmationToken: boolean;
+    /** HMAC secret for restore confirmation tokens. */
+    confirmationSecret: string;
+    /** Restore confirmation token TTL in ms. */
+    confirmationTtlMs: number;
+  };
+  postWriteRecovery: {
+    intervalMs: number;
+    batchSize: number;
+    maxAttempts: number;
+    retryBaseDelayMs: number;
   };
 }
 
@@ -121,6 +151,11 @@ function requireEnv(name: string): string {
 
 function optionalEnv(name: string, defaultValue: string): string {
   return process.env[name] ?? defaultValue;
+}
+
+function optionalNullableEnv(name: string): string | null {
+  const value = process.env[name];
+  return value === undefined || value === '' ? null : value;
 }
 
 function optionalEnvInt(name: string, defaultValue: number): number {
@@ -162,7 +197,7 @@ function optionalProofRolloutMode(): ProofRolloutModeType {
       : ProofRolloutMode.DISABLED;
   }
 
-  return ProofRolloutMode.DISABLED;
+  return ProofRolloutMode.SOFT_BLOCK;
 }
 
 function optionalYagoVariant(name: string, defaultValue: 'tiny' | 'full'): 'tiny' | 'full' {
@@ -260,6 +295,15 @@ export function loadConfig(): IServiceConfig {
     mutation: {
       proofStageMode: optionalProofRolloutMode(),
     },
+    proof: {
+      artifactRootDirectory: optionalEnv(
+        'PROOF_ARTIFACT_ROOT',
+        '.data/knowledge-graph-service/proof-artifacts'
+      ),
+      tlaToolsJarPath: optionalNullableEnv('TLA_TOOLS_JAR_PATH'),
+      javaBinary: optionalEnv('JAVA_BINARY', 'java'),
+      timeoutMs: optionalEnvInt('TLA_PROOF_TIMEOUT_MS', 30_000),
+    },
     crdt: {
       enabled: optionalEnvBool('GRAPH_CRDT_STATS_ENABLED', false),
       replicaId: optionalEnv(
@@ -269,6 +313,17 @@ export function loadConfig(): IServiceConfig {
     },
     ontologyImports: {
       yagoVariant: optionalYagoVariant('YAGO_VARIANT', 'full'),
+      activeArtifactPath: optionalEnv(
+        'ONTOLOGY_ACTIVE_ARTIFACT_PATH',
+        path.join(
+          os.homedir(),
+          '.noema',
+          'runtime',
+          'knowledge-graph-service',
+          'ontology-runtime',
+          'active-ontology-artifact.json'
+        )
+      ),
     },
     cors: {
       enabled: optionalEnvBool('CORS_ENABLED', false),
@@ -302,6 +357,21 @@ export function loadConfig(): IServiceConfig {
     logging: {
       level: optionalEnv('LOG_LEVEL', environment === 'production' ? 'info' : 'debug'),
       pretty: optionalEnvBool('LOG_PRETTY', environment === 'development'),
+    },
+    graphRestore: {
+      executionEnabled: optionalEnvBool('GRAPH_RESTORE_EXECUTION_ENABLED', false),
+      requireConfirmationToken: optionalEnvBool('GRAPH_RESTORE_REQUIRE_CONFIRMATION', true),
+      confirmationSecret: optionalEnv(
+        'GRAPH_RESTORE_CONFIRMATION_SECRET',
+        requireEnv('ACCESS_TOKEN_SECRET')
+      ),
+      confirmationTtlMs: optionalEnvInt('GRAPH_RESTORE_CONFIRMATION_TTL_MS', 15 * 60_000),
+    },
+    postWriteRecovery: {
+      intervalMs: optionalEnvInt('PKG_POST_WRITE_RECOVERY_INTERVAL_MS', 5_000),
+      batchSize: optionalEnvInt('PKG_POST_WRITE_RECOVERY_BATCH_SIZE', 50),
+      maxAttempts: optionalEnvInt('PKG_POST_WRITE_RECOVERY_MAX_ATTEMPTS', 6),
+      retryBaseDelayMs: optionalEnvInt('PKG_POST_WRITE_RECOVERY_BASE_DELAY_MS', 500),
     },
   };
 }

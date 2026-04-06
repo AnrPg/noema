@@ -60,9 +60,7 @@ import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledg
 import {
   OntologyReasoningService,
   OntologyReasoningStage,
-  StaticOntologyArtifactProvider,
 } from './domain/knowledge-graph-service/ontology-reasoning.js';
-import { DeterministicProofRunner } from './domain/knowledge-graph-service/proof-stage.js';
 import { UnityInvariantStage } from './domain/knowledge-graph-service/unity-invariants.js';
 import { PkgAggregationConsumer, UserDeletedConsumer } from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
@@ -82,6 +80,7 @@ import {
   NoopGraphCrdtStatsRepository,
   PrismaAggregationEvidenceRepository,
   PrismaGraphCrdtStatsRepository,
+  PrismaGraphRestoreTokenRepository,
   PrismaGraphSnapshotRepository,
   PrismaMetricsRepository,
   PrismaMetricsStalenessRepository,
@@ -93,6 +92,7 @@ import {
   PrismaOntologyParsedBatchRepository,
   PrismaOntologySourceRepository,
   PrismaOperationLogRepository,
+  PrismaPkgPostWriteRecoveryRepository,
 } from './infrastructure/database/repositories/index.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
 import {
@@ -107,6 +107,9 @@ import {
   YagoSourceParser,
 } from './infrastructure/ontology-imports/index.js';
 import { CkgResetService } from './infrastructure/maintenance/index.js';
+import { FileBackedOntologyArtifactProvider } from './infrastructure/ontology/file-backed-ontology-artifact.provider.js';
+import { TlaProofRunner } from './infrastructure/proof/tla-proof-runner.js';
+import { PkgPostWriteRecoveryService } from './domain/knowledge-graph-service/post-write-recovery.service.js';
 import { LocalRawArtifactStore } from './infrastructure/storage/index.js';
 
 import { SERVICE_VERSION } from './api/shared/route-helpers.js';
@@ -351,7 +354,9 @@ async function bootstrap(): Promise<void> {
   const mutationRepository = new PrismaMutationRepository(prisma);
   const misconceptionRepository = new PrismaMisconceptionRepository(prisma);
   const operationLogRepository = new PrismaOperationLogRepository(prisma);
+  const postWriteRecoveryRepository = new PrismaPkgPostWriteRecoveryRepository(prisma);
   const graphSnapshotRepository = new PrismaGraphSnapshotRepository(prisma);
+  const graphRestoreTokenRepository = new PrismaGraphRestoreTokenRepository(prisma);
   const metricsStalenessRepository = new PrismaMetricsStalenessRepository(prisma);
   const aggregationEvidenceRepository = new PrismaAggregationEvidenceRepository(prisma);
   const graphCrdtStatsRepository = config.crdt.enabled
@@ -394,12 +399,22 @@ async function bootstrap(): Promise<void> {
     },
     logger
   );
+  const postWriteRecoveryService = new PkgPostWriteRecoveryService(
+    postWriteRecoveryRepository,
+    operationLogRepository,
+    metricsStalenessRepository,
+    eventPublisher,
+    config.postWriteRecovery,
+    logger
+  );
 
   // 4. CKG validation pipeline (7 stages, ordered)
   const validationPipeline = new CkgValidationPipeline();
-  const ontologyReasoningService = new OntologyReasoningService(
-    new StaticOntologyArtifactProvider()
+  const ontologyArtifactProvider = new FileBackedOntologyArtifactProvider(
+    config.ontologyImports.activeArtifactPath
   );
+  await ontologyArtifactProvider.initialize();
+  const ontologyReasoningService = new OntologyReasoningService(ontologyArtifactProvider);
   validationPipeline.addStage(new SchemaValidationStage()); // order 100
   validationPipeline.addStage(new StructuralIntegrityStage(graphRepository)); // order 200
   validationPipeline.addStage(
@@ -411,20 +426,30 @@ async function bootstrap(): Promise<void> {
   validationPipeline.addStage(new EvidenceSufficiencyStage(aggregationEvidenceRepository)); // order 400
 
   // 5. CKG mutation pipeline (orchestrates lifecycle + validation)
-  const mutationPipeline = new CkgMutationPipeline(
-    mutationRepository,
-    graphRepository,
-    validationPipeline,
+    const mutationPipeline = new CkgMutationPipeline(
+      mutationRepository,
+      graphRepository,
+      validationPipeline,
     eventPublisher,
     logger,
     config.mutation.proofStageMode,
-    new DeterministicProofRunner()
-  );
+    new TlaProofRunner(
+      {
+        artifactRootDirectory: config.proof.artifactRootDirectory,
+        tlaToolsJarPath: config.proof.tlaToolsJarPath,
+        javaBinary: config.proof.javaBinary,
+        timeoutMs: config.proof.timeoutMs,
+        },
+        logger
+      ),
+      ontologyArtifactProvider
+    );
 
   // 6. Knowledge Graph Service (domain service)
   const service = new KnowledgeGraphService(
     graphRepository,
     neo4jGraphRepository,
+    graphRestoreTokenRepository,
     operationLogRepository,
     graphCrdtStatsRepository,
     graphSnapshotRepository,
@@ -434,7 +459,9 @@ async function bootstrap(): Promise<void> {
     eventPublisher,
     mutationRepository,
     mutationPipeline,
+    postWriteRecoveryService,
     new AgentHintsFactory(),
+    config.graphRestore,
     logger
   );
   const ckgEdgeAuthoringService = new CkgEdgeAuthoringService(graphRepository);
@@ -545,7 +572,11 @@ async function bootstrap(): Promise<void> {
   registerPkgOperationLogRoutes(app, service, authMiddleware, routeOptions);
 
   // Admin graph snapshots / restore
-  registerGraphCrdtRoutes(app, service, authMiddleware);
+  if (config.crdt.enabled) {
+    registerGraphCrdtRoutes(app, service, authMiddleware);
+  } else {
+    logger.info('Graph CRDT admin routes disabled because GRAPH_CRDT_STATS_ENABLED=false');
+  }
   registerGraphSnapshotRoutes(app, service, authMiddleware, routeOptions);
 
   // User-scoped analytics routes
@@ -623,6 +654,8 @@ async function bootstrap(): Promise<void> {
     logger.info({ consumerCount: consumers.length }, 'Event consumers started');
   }
 
+  postWriteRecoveryService.start();
+
   // Graceful shutdown
   const SHUTDOWN_TIMEOUT_MS = 10_000;
   let isShuttingDown = false;
@@ -646,6 +679,8 @@ async function bootstrap(): Promise<void> {
         consumer.stop();
       }
       await Promise.all(consumers.map((c) => c.drain()));
+      postWriteRecoveryService.stop();
+      await postWriteRecoveryService.drain();
 
       await fastify.close();
       await Promise.all(consumerRedisClients.map(async (client) => client.quit()));

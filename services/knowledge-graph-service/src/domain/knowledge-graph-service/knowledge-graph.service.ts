@@ -111,13 +111,20 @@ export interface IGraphRestoreSummary {
   readonly edgesToCreate: number;
   readonly edgesToUpdate: number;
   readonly edgesToDelete: number;
+  readonly diffFingerprint: string;
 }
 
 export interface IGraphRestorePreview {
   readonly snapshot: IGraphSnapshotSummary;
   readonly summary: IGraphRestoreSummary;
   readonly requiresDestructiveChanges: boolean;
+  readonly confirmationToken: string;
+  readonly confirmationExpiresAt: string;
   readonly reasoning: string;
+}
+
+export interface IExecuteGraphRestoreInput {
+  readonly confirmationToken?: string;
 }
 
 // ============================================================================
@@ -838,6 +845,7 @@ export interface IKnowledgeGraphService {
 
   executeGraphRestore(
     snapshotId: string,
+    input: IExecuteGraphRestoreInput,
     context: IExecutionContext
   ): Promise<IServiceResult<IGraphRestorePreview>>;
 
@@ -852,8 +860,12 @@ export interface IKnowledgeGraphService {
       proposedLabel?: string;
       evidenceType?: string;
     },
+    pagination: {
+      limit: number;
+      offset: number;
+    },
     context: IExecutionContext
-  ): Promise<IServiceResult<IGraphCrdtStat[]>>;
+  ): Promise<IServiceResult<IPaginatedResponse<IGraphCrdtStat>>>;
 
   // ========================================================================
   // PKG Operation Log

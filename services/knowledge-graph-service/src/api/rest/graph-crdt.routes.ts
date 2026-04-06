@@ -32,6 +32,8 @@ export function registerGraphCrdtRoutes(
       try {
         assertAdminOrAgent(request);
         const parsed = GraphCrdtStatsQueryParamsSchema.parse(request.query);
+        const page = parsed.page;
+        const pageSize = parsed.pageSize;
         const result = await service.listGraphCrdtStats(
           {
             ...(parsed.targetKind !== undefined ? { targetKind: parsed.targetKind } : {}),
@@ -41,10 +43,20 @@ export function registerGraphCrdtRoutes(
             ...(parsed.proposedLabel !== undefined ? { proposedLabel: parsed.proposedLabel } : {}),
             ...(parsed.evidenceType !== undefined ? { evidenceType: parsed.evidenceType } : {}),
           },
+          {
+            limit: pageSize,
+            offset: (page - 1) * pageSize,
+          },
           buildContext(request)
         );
 
-        reply.send(wrapResponse(result.data, result.agentHints, request));
+        reply.send(
+          wrapResponse(result.data.items, result.agentHints, request, {
+            page,
+            pageSize,
+            total: result.data.total ?? result.data.items.length,
+          })
+        );
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }

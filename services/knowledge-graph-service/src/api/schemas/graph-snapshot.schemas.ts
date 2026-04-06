@@ -32,5 +32,10 @@ export const GraphSnapshotQueryParamsSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const GraphRestoreExecuteRequestSchema = z.object({
+  confirmationToken: z.string().min(1, 'confirmationToken is required').optional(),
+});
+
 export type GraphSnapshotCreateRequest = z.infer<typeof GraphSnapshotCreateRequestSchema>;
 export type GraphSnapshotQueryParams = z.infer<typeof GraphSnapshotQueryParamsSchema>;
+export type GraphRestoreExecuteRequest = z.infer<typeof GraphRestoreExecuteRequestSchema>;

@@ -176,6 +176,22 @@ export class PrismaMutationRepository implements IMutationRepository {
     return records.map((r) => this.toDomain(r));
   }
 
+  async findMutationsByIds(mutationIds: readonly MutationId[]): Promise<ICkgMutation[]> {
+    if (mutationIds.length === 0) {
+      return [];
+    }
+
+    const records = await this.prisma.ckgMutation.findMany({
+      where: {
+        id: {
+          in: [...mutationIds] as string[],
+        },
+      },
+    });
+
+    return records.map((r) => this.toDomain(r));
+  }
+
   async findMutationsByProposer(proposerId: ProposerId): Promise<ICkgMutation[]> {
     const records = await this.prisma.ckgMutation.findMany({
       where: { createdBy: proposerId as string },
@@ -222,6 +238,32 @@ export class PrismaMutationRepository implements IMutationRepository {
     });
 
     return records.map((r) => this.toDomain(r));
+  }
+
+  async getLatestMutationByState(state: MutationState): Promise<ICkgMutation | null> {
+    const record = await this.prisma.ckgMutation.findFirst({
+      where: { state: toDbState(state) },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return record === null ? null : this.toDomain(record);
+  }
+
+  async getLatestCommittedMutationByAudit(): Promise<ICkgMutation | null> {
+    const auditRecord = await this.prisma.ckgMutationAuditLog.findFirst({
+      where: { toState: 'COMMITTED' },
+      orderBy: { createdAt: 'desc' },
+      select: { mutationId: true },
+    });
+    if (auditRecord === null) {
+      return null;
+    }
+
+    const record = await this.prisma.ckgMutation.findUnique({
+      where: { id: auditRecord.mutationId },
+    });
+
+    return record === null ? null : this.toDomain(record);
   }
 
   async transitionStateWithAudit(
