@@ -43,3 +43,10 @@ healthy and stable.
 
 The UI composes these sources, but it should not infer scheduler health or graph
 mastery by itself.
+
+## Shared Progress UI
+
+Session-facing progress indicators should use the shared `NeuralGauge`
+speedometer rather than bespoke circular rings. That keeps summary vitals, the
+active session bar, and dashboard session snapshots visually aligned and avoids
+small-screen overflow from per-surface gauge variants.

@@ -51,3 +51,6 @@ have:
   often.
 - Tiles should summarize, not explain. Deeper analysis belongs on dedicated
   reviews, knowledge, and goals surfaces.
+- Progress visuals on dashboard session summaries should use the shared
+  speedometer-style `NeuralGauge` so mobile layouts and motion stay consistent
+  with the rest of the study UI.
