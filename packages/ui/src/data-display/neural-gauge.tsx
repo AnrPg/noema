@@ -114,7 +114,9 @@ export function NeuralGauge({
             strokeDasharray="100"
             strokeDashoffset={100 - displayedValue * 100}
             style={{
-              transition: animate ? 'stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1)' : undefined,
+              transition: animate
+                ? 'stroke-dashoffset 700ms cubic-bezier(0.22, 1, 0.36, 1)'
+                : undefined,
             }}
           />
         </svg>
