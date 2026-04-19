@@ -101,36 +101,36 @@ function SessionRow({ session, onClick }: ISessionRowProps): React.JSX.Element {
     <button
       type="button"
       onClick={onClick}
-      className="w-full flex items-center gap-4 rounded-lg px-3 py-2 text-left transition-colors hover:bg-axon-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-synapse-400"
+      className="w-full rounded-lg px-3 py-3 text-left transition-colors hover:bg-axon-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-synapse-400"
     >
-      {/* State chip */}
-      <StateChip state={session.state} stateMap={SESSION_STATE_MAP} size="sm" />
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <StateChip state={session.state} stateMap={SESSION_STATE_MAP} size="sm" />
+            <span
+              className={`inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${modeClass}`}
+            >
+              <ModeIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{SESSION_MODE_LABEL[session.mode]}</span>
+            </span>
+            <span className="shrink-0 text-xs text-axon-400">{relativeTime(session.startedAt)}</span>
+          </div>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-axon-400">
+            <span className="tabular-nums">
+              {String(session.currentCardIndex)}/{String(cardCount)} cards
+            </span>
+            <span>{String(progress)}% complete</span>
+          </div>
+        </div>
 
-      {/* Mode badge */}
-      <span
-        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${modeClass}`}
-      >
-        <ModeIcon className="h-3 w-3" aria-hidden="true" />
-        {SESSION_MODE_LABEL[session.mode]}
-      </span>
-
-      {/* Card progress */}
-      <span className="flex-1 text-xs text-axon-400 tabular-nums">
-        {String(session.currentCardIndex)}/{String(cardCount)} cards
-      </span>
-
-      {/* NeuralGauge — progress 0–1 */}
-      <NeuralGauge
-        value={progress / 100}
-        size="sm"
-        showValue={false}
-        animate={false}
-        label={`${String(progress)}%`}
-        className="shrink-0"
-      />
-
-      {/* Relative time */}
-      <span className="shrink-0 text-xs text-axon-400">{relativeTime(session.startedAt)}</span>
+        <NeuralGauge
+          value={progress / 100}
+          size="sm"
+          animate
+          valueLabel={`${String(progress)}%`}
+          className="shrink-0"
+        />
+      </div>
     </button>
   );
 }

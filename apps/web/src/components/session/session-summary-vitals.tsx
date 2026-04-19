@@ -85,7 +85,7 @@ export function SessionSummaryVitals({
         label="Accuracy"
         value={`${String(accuracy)}%`}
         colorFamily="dendrite"
-        icon={<NeuralGauge value={accuracy} size="sm" showValue={false} />}
+        icon={<NeuralGauge value={accuracy / 100} size="sm" showValue={false} />}
       />
 
       {/* Time spent */}

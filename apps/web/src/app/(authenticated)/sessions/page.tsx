@@ -66,13 +66,13 @@ function capitalize(s: string): string {
 
 function SkeletonRow(): React.JSX.Element {
   return (
-    <div className="flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3 animate-pulse">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 animate-pulse sm:flex-row sm:items-center">
       <div className="h-5 w-20 rounded-full bg-muted" />
       <div className="h-4 w-16 rounded bg-muted" />
       <div className="h-4 w-24 rounded bg-muted" />
-      <div className="h-4 w-14 rounded bg-muted ml-auto" />
+      <div className="h-4 w-14 rounded bg-muted sm:ml-auto" />
       <div className="h-4 w-12 rounded bg-muted" />
-      <div className="h-4 w-4 rounded bg-muted" />
+      <div className="hidden h-4 w-4 rounded bg-muted sm:block" />
     </div>
   );
 }
@@ -113,14 +113,14 @@ function SessionRow({ session, onStop, isStopping }: ISessionRowProps): React.JS
   return (
     <div
       className={[
-        'group flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors',
+        'group flex flex-col gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-colors sm:flex-row sm:items-center',
         'hover:border-foreground/20 hover:bg-muted/40 focus-within:border-foreground/40',
         'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
       ].join(' ')}
     >
       <Link
         href={`/session/${sessionId}/summary`}
-        className="flex flex-1 items-center gap-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       >
         {/* State badge */}
         <span
@@ -139,21 +139,18 @@ function SessionRow({ session, onStop, isStopping }: ISessionRowProps): React.JS
         <span className="text-sm text-muted-foreground">{formatDate(startedAt)}</span>
 
         {/* Spacer */}
-        <span className="flex-1" />
-
-        {/* Card count */}
-        <span className="text-sm text-muted-foreground">
+        <span className="text-sm text-muted-foreground sm:ml-auto">
           {String(cardIds.length)} {cardIds.length === 1 ? 'card' : 'cards'}
         </span>
 
         {/* Duration */}
-        <span className="w-16 text-right text-sm text-muted-foreground">
+        <span className="text-sm text-muted-foreground sm:w-16 sm:text-right">
           {formatDuration(startedAt, completedAt)}
         </span>
 
         {/* Arrow */}
         <ArrowRight
-          className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+          className="hidden h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 sm:block"
           aria-hidden="true"
         />
       </Link>

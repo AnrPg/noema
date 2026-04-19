@@ -11,7 +11,7 @@
 
 import * as React from 'react';
 import { Pause, Play, LogOut } from 'lucide-react';
-import { Button, PulseIndicator, StateChip } from '@noema/ui';
+import { Button, NeuralGauge, PulseIndicator, StateChip } from '@noema/ui';
 import type { IStateConfig } from '@noema/ui';
 import type { SessionId } from '@noema/types';
 
@@ -49,74 +49,6 @@ function formatElapsed(ms: number): string {
 }
 
 // ============================================================================
-// Inline compact progress ring (32px, 3px stroke)
-// ============================================================================
-
-interface ICompactRingProps {
-  percent: number; // 0–100
-  completed: number;
-  total: number;
-}
-
-function CompactProgressRing({ percent, completed, total }: ICompactRingProps): React.JSX.Element {
-  const size = 32;
-  const strokeWidth = 3;
-  const cx = size / 2;
-  const cy = size / 2;
-  const r = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * r;
-  const ratio = Math.min(1, Math.max(0, percent / 100));
-  const filled = circumference * ratio;
-
-  return (
-    <div
-      className="relative inline-flex items-center justify-center"
-      style={{ width: size, height: size }}
-    >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${String(size)} ${String(size)}`}
-        overflow="visible"
-        aria-label={`Progress: ${String(completed)} of ${String(total)} cards`}
-        role="meter"
-        aria-valuenow={completed}
-        aria-valuemin={0}
-        aria-valuemax={total}
-      >
-        {/* Track */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill="none"
-          strokeWidth={strokeWidth}
-          className="stroke-axon-400/20"
-        />
-        {/* Filled arc — starts at top (-90°) */}
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill="none"
-          strokeWidth={strokeWidth}
-          className="stroke-synapse-400"
-          strokeDasharray={`${String(filled)} ${String(circumference)}`}
-          strokeLinecap="round"
-          transform={`rotate(-90, ${String(cx)}, ${String(cy)})`}
-        />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[8px] font-semibold leading-none text-foreground tabular-nums">
-          {String(completed)}
-          <span className="opacity-50">/{String(total)}</span>
-        </span>
-      </span>
-    </div>
-  );
-}
-
-// ============================================================================
 // Lane state map for StateChip
 // ============================================================================
 
@@ -150,7 +82,18 @@ export function SessionBar({
     >
       {/* ── Left: compact progress ring ───────────────────────────────── */}
       <div className="flex items-center gap-2">
-        <CompactProgressRing percent={percent} completed={completed} total={total} />
+        <NeuralGauge
+          value={percent / 100}
+          size="sm"
+          animate
+          valueLabel={
+            <span className="text-[8px] tabular-nums text-foreground">
+              {String(completed)}
+              <span className="opacity-50">/{String(total)}</span>
+            </span>
+          }
+          className="shrink-0"
+        />
       </div>
 
       {/* ── Center: pulse + timer + optional lane chip ─────────────────── */}
