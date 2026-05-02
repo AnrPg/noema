@@ -19,6 +19,8 @@ Current mode-aware dashboard sources:
 - scheduler progress summary for deck/readiness state
 - scheduler forecast for short-horizon review load
 - knowledge structural health for PKG quality
+- knowledge-graph stability summary for revocable concept stability and
+  reasoning trend
 - misconceptions for active error pressure
 - session-service streaks for continuity
 
@@ -54,3 +56,10 @@ have:
 - Progress visuals on dashboard session summaries should use the shared
   speedometer-style `NeuralGauge` so mobile layouts and motion stay consistent
   with the rest of the study UI.
+
+## Stability Widgets
+
+`StabilityOverview` and `ReasoningTrend` are standalone dashboard widgets backed
+by `useStabilitySummary`. They expose the same primary closed-loop signals that
+drive gamification and strategy: stable/unstable concept counts, global
+stability ratio, and domain-level reasoning averages.

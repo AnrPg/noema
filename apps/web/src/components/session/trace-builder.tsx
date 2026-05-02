@@ -1,9 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { CheckCircle2, GitBranch, Sigma } from 'lucide-react';
+import { GitBranch } from 'lucide-react';
 import type { ISevenFrameTraceDto } from '@noema/contracts';
 import type { StepSelfRating } from '@noema/types';
+import { EvaluationSummary } from './evaluation-summary';
 
 type TraceFrameKey = keyof ISevenFrameTraceDto['frames'];
 
@@ -28,10 +29,6 @@ const FRAME_KEYS: TraceFrameKey[] = ['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6'];
 
 function formatPercent(value: number): string {
   return `${String(Math.round(Math.min(1, Math.max(0, value)) * 100))}%`;
-}
-
-function formatSelfRating(value: StepSelfRating): string {
-  return value.replace(/_/g, ' ');
 }
 
 export function TraceBuilder({
@@ -80,41 +77,12 @@ export function TraceBuilder({
         </div>
       </div>
 
-      <div className="flex flex-col justify-between gap-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
-        <div>
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Sigma className="h-4 w-4 text-primary" aria-hidden="true" />
-            Evaluation Summary
-          </h3>
-          <div className="mt-3 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Reasoning preview</span>
-              <span className="font-medium tabular-nums text-foreground">
-                {formatPercent(averageScore)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Self-rating</span>
-              <span className="font-medium capitalize text-foreground">
-                {formatSelfRating(selfRating)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Expected outcome</span>
-              <span className="font-medium text-foreground">
-                {metExpectedOutcome ? 'Met' : 'Still open'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border/70 bg-background/70 p-3">
-          <div className="flex items-start gap-2">
-            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-            <p className="text-xs leading-5 text-muted-foreground">{expectedOutcome}</p>
-          </div>
-        </div>
-      </div>
+      <EvaluationSummary
+        reasoningQuality={averageScore}
+        selfRating={selfRating}
+        expectedOutcome={expectedOutcome}
+        metExpectedOutcome={metExpectedOutcome}
+      />
     </section>
   );
 }
