@@ -1,2711 +1,861 @@
 /**
- * @noema/session-service - Session Service
- *
- * Domain service implementing all session lifecycle, attempt recording,
- * queue management, and strategy/teaching change business logic.
- *
- * Follows the SERVICE_CLASS_SPECIFICATION pattern from user-service.
+ * @noema/session-service - Step-first session application service.
  */
 
-import type { IAgentHints, ISuggestedAction } from '@noema/contracts';
-import { createEmptyAgentHints } from '@noema/contracts';
-import type {
-  IAttemptContextSnapshot,
-  IAttemptHintRequestedPayload,
-  IAttemptRecordedPayload,
-  IPriorSchedulingState,
-  ISessionAbandonedPayload,
-  ISessionCohortAcceptedPayload,
-  ISessionCohortCommittedPayload,
-  ISessionCohortProposedPayload,
-  ISessionCohortRevisedPayload,
-  ISessionCompletedPayload,
-  ISessionExpiredPayload,
-  ISessionPausedPayload,
-  ISessionQueueInjectedPayload,
-  ISessionQueueRemovedPayload,
-  ISessionResumedPayload,
-  ISessionStartedPayload,
-  ISessionStrategyUpdatedPayload,
-  ISessionTeachingChangedPayload,
-} from '@noema/events';
-import type {
-  AttemptId,
-  AttemptOutcome,
-  CardId,
-  CardQueueStatus,
-  CardType,
-  CategoryId,
-  CorrelationId,
-  DeckQueryLogId,
-  ForceLevel,
-  HintDepth,
-  LearningMode,
-  LoadoutArchetype,
-  LoadoutId,
-  Rating,
-  RemediationCardType,
-  SchedulingAlgorithm,
-  SessionId,
-  TeachingApproach,
-  StudyMode,
-  UserId,
-} from '@noema/types';
-import { ID_PREFIXES, SessionTerminationReason } from '@noema/types';
-import { decodeProtectedHeader, jwtVerify, SignJWT } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
-import type { Prisma } from '../../../generated/prisma/index.js';
 
-import type {
-  AdaptiveCheckpointSignal,
-  IAcceptCohortInput,
-  IAttempt,
-  ICommitCohortInput,
-  IEvaluateAdaptiveCheckpointInput,
-  IEvaluateAdaptiveCheckpointResult,
-  IProposeCohortInput,
-  IReviseCohortInput,
-  ISession,
-  ISessionCohortHandshake,
-  ISessionFilters,
-  ISessionQueueItem,
-  SessionSchedulerLane,
-  ISessionStats,
-  IValidateSessionBlueprintResult,
-  SessionState,
-} from '../../types/index.js';
 import {
-  SessionCohortHandshakeStatus as CohortHandshakeStatuses,
-  createEmptyStats,
-  SessionState as States,
-} from '../../types/index.js';
+  EpistemicMode,
+  GoalState,
+  ID_PREFIXES,
+  LearningMode,
+  LessonPlanState,
+  RigorLevel,
+  SessionLifecycleState,
+  StepStatus,
+  TransformationType,
+  type ActivityId,
+  type CorrelationId,
+  type EvaluationId,
+  type EventId,
+  type GoalId,
+  type LessonPlanId,
+  type SessionId,
+  type StepId,
+  type UserId,
+} from '@noema/types';
+
+import type { Prisma, PrismaClient } from '../../../generated/prisma/index.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
-  AttemptNotFoundError,
   AuthorizationError,
   BusinessRuleError,
-  InvalidSessionStateError,
   OutboxDispatchError,
-  QueueError,
   SessionNotFoundError,
   ValidationError,
-  VersionConflictError,
 } from './errors/index.js';
+import type { IMetacognitionEvaluationPort } from './metacognition-evaluation.port.js';
 import type { IOutboxEventInput, IOutboxRepository } from './outbox.repository.js';
-import type { ISessionRepository } from './session.repository.js';
 import {
-  AcceptCohortInputSchema,
-  ChangeTeachingInputSchema,
-  CommitCohortInputSchema,
-  EvaluateAdaptiveCheckpointInputSchema,
-  InjectQueueInputSchema,
+  NoopPedagogyGuardianClient,
+  type IPedagogyGuardianPort,
+} from './pedagogy-guardian.port.js';
+import type { ICreateLessonPlanRecord, ISessionRepository } from './session.repository.js';
+import {
+  AnswerStepInputSchema,
+  CreateGoalInputSchema,
+  CreateLessonPlanInputSchema,
   IssueOfflineIntentTokenInputSchema,
-  ProposeCohortInputSchema,
-  RecordAttemptInputSchema,
-  RecordDialogueTurnInputSchema,
-  RemoveQueueInputSchema,
-  RequestHintInputSchema,
-  ReviseCohortInputSchema,
+  SessionListQuerySchema,
   StartSessionInputSchema,
-  UpdateStrategyInputSchema,
-  ValidateSessionBlueprintInputSchema,
   VerifyOfflineIntentTokenInputSchema,
 } from './session.schemas.js';
+import {
+  ActivityContentSourceType,
+  createEmptyStats,
+  type ICreateGoalInput,
+  type ICreateLessonPlanInput,
+  type ILessonPlan,
+  type ILessonPlanGoal,
+  type IPlannedActivityInput,
+  type IPlannedStepInput,
+  type ISession,
+  type ISessionFilters,
+  type IStep,
+  type IStepLoopSnapshot,
+} from '../../types/index.js';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Execution context for service operations.
- */
 export interface IExecutionContext {
-  /** Current user ID */
   userId: UserId;
-  /** Request correlation ID */
   correlationId: CorrelationId;
-  /** Client IP for audit */
   clientIp?: string;
-  /** User agent */
   userAgent?: string;
-  /** User timezone when available */
   timezone?: string;
 }
 
-/**
- * Service result wrapper.
- */
 export interface IServiceResult<T> {
-  /** Result data */
   data: T;
-  /** Agent hints for next actions */
-  agentHints: IAgentHints;
-}
-
-export interface ISessionServiceSecurityConfig {
-  verifyOfflineIntentTokens: boolean;
-  offlineIntentTokenActiveKeyId: string;
-  offlineIntentTokenKeys: Record<string, string>;
-  offlineIntentTokenIssuer: string;
-  offlineIntentTokenAudience: string;
+  agentHints: {
+    suggestedNextActions: Array<{
+      action: string;
+      description: string;
+      priority: 'low' | 'medium' | 'high';
+      category: string;
+    }>;
+    relatedResources: unknown[];
+    confidence: number;
+    sourceQuality: 'high' | 'medium' | 'low';
+    validityPeriod: 'short' | 'medium' | 'long';
+    contextNeeded: string[];
+    assumptions: string[];
+    riskFactors: string[];
+    dependencies: string[];
+    estimatedImpact: { benefit: number; effort: number; roi: number };
+    preferenceAlignment: string[];
+    reasoning: string;
+  };
 }
 
 export interface ISessionServiceOptions {
-  security: ISessionServiceSecurityConfig;
+  security: {
+    verifyOfflineIntentTokens: boolean;
+    offlineIntentTokenActiveKeyId: string;
+    offlineIntentTokenKeys: Record<string, string>;
+    offlineIntentTokenIssuer: string;
+    offlineIntentTokenAudience: string;
+  };
   session: {
     maxConcurrentSessions: number;
   };
+  lessonPlanAgentUrl?: string;
+  metacognitionClient?: IMetacognitionEvaluationPort;
+  pedagogyGuardianClient?: IPedagogyGuardianPort;
 }
 
-// ============================================================================
-// Helpers
-// ============================================================================
+function id<T extends string>(prefix: string): T {
+  return `${prefix}${nanoid(21)}` as T;
+}
 
-/**
- * Build a well-formed IAgentHints from a list of action names and reasoning.
- */
-function buildHints(
-  actions: Array<{ action: string; description: string; priority?: ISuggestedAction['priority'] }>,
-  reasoning?: string
-): IAgentHints {
+function validationError(error: {
+  flatten: () => { fieldErrors: Record<string, string[]> };
+}): ValidationError {
+  return new ValidationError('Invalid input', error.flatten().fieldErrors);
+}
+
+function result<T>(data: T, reasoning: string): IServiceResult<T> {
   return {
-    ...createEmptyAgentHints(),
-    suggestedNextActions: actions.map((a) => ({
-      action: a.action,
-      description: a.description,
-      priority: a.priority ?? 'medium',
-    })),
-    confidence: 1.0,
-    sourceQuality: 'high',
-    validityPeriod: 'short',
-    ...(reasoning !== undefined ? { reasoning } : {}),
+    data,
+    agentHints: {
+      suggestedNextActions: [],
+      relatedResources: [],
+      confidence: 0.9,
+      sourceQuality: 'high',
+      validityPeriod: 'medium',
+      contextNeeded: [],
+      assumptions: [],
+      riskFactors: [],
+      dependencies: [],
+      estimatedImpact: { benefit: 1, effort: 1, roi: 1 },
+      preferenceAlignment: [],
+      reasoning,
+    },
   };
 }
 
-function sanitizePresentationConfig(
-  presentation: {
-    promptSide?: string | undefined;
-    answerSide?: string | undefined;
-    revealMode?: 'all_at_once' | 'one_then_more' | undefined;
-  } | null | undefined
-): {
-  promptSide?: string;
-  answerSide?: string;
-  revealMode?: 'all_at_once' | 'one_then_more';
-} | null {
-  if (presentation == null) {
-    return null;
-  }
-
-  const normalized = {
-    ...(presentation.promptSide !== undefined ? { promptSide: presentation.promptSide } : {}),
-    ...(presentation.answerSide !== undefined ? { answerSide: presentation.answerSide } : {}),
-    ...(presentation.revealMode !== undefined ? { revealMode: presentation.revealMode } : {}),
-  };
-
-  return Object.keys(normalized).length > 0 ? normalized : null;
+function isoNow(): string {
+  return new Date().toISOString();
 }
-
-function normalizeCardLanes(
-  cardIds: readonly string[],
-  cardLanes?: Record<string, SessionSchedulerLane> | null
-): Record<string, SessionSchedulerLane> {
-  const normalized: Record<string, SessionSchedulerLane> = {};
-  for (const cardId of cardIds) {
-    normalized[cardId] = cardLanes?.[cardId] ?? 'retention';
-  }
-  return normalized;
-}
-
-// ============================================================================
-// Session Service
-// ============================================================================
-
-export interface IOfflineIntentTokenInput {
-  userId: UserId;
-  sessionBlueprint: unknown;
-  expiresInSeconds: number;
-}
-
-export interface IOfflineIntentToken {
-  token: string;
-  expiresAt: string;
-}
-
-export interface IOfflineIntentTokenClaims {
-  tokenVersion: 'v1';
-  userId: UserId;
-  sessionBlueprint: {
-    checkpointSignals?: AdaptiveCheckpointSignal[];
-  };
-  issuedAt: string;
-  expiresAt: string;
-  nonce: string;
-}
-
-export interface IVerifyOfflineIntentTokenResult {
-  valid: boolean;
-  userId?: UserId;
-  expiresAt?: string;
-  checkpointSignals?: AdaptiveCheckpointSignal[];
-  reason?: string;
-}
-
-const OFFLINE_INTENT_TOKEN_REPLAY_GUARD_INSERT_RETRIES = 3;
-const OFFLINE_INTENT_TOKEN_REPLAY_GUARD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export class SessionService {
   private readonly logger: Logger;
   private readonly options: ISessionServiceOptions;
-  private readonly activeTokenKeyId: string;
-  private readonly tokenSecrets: Map<string, Uint8Array>;
-
-  /**
-   * Optional streak service — wired post-construction to avoid circular deps.
-   * When set, completeSession() will update the streak cache inline.
-   */
-  private streakService?: import('./streak.service.js').StreakService;
+  private readonly metacognitionClient: IMetacognitionEvaluationPort;
+  private readonly pedagogyGuardianClient: IPedagogyGuardianPort;
 
   constructor(
     private readonly repository: ISessionRepository,
     private readonly eventPublisher: IEventPublisher,
     private readonly outboxRepository: IOutboxRepository,
-    private readonly prisma: import('../../../generated/prisma/index.js').PrismaClient,
-    logger: Logger,
+    private readonly prisma: PrismaClient,
+    _logger: Logger,
     options?: Partial<ISessionServiceOptions>
   ) {
-    this.logger = logger.child({ component: 'SessionService' });
+    this.logger = _logger.child({ component: 'SessionService' });
+    const lessonPlanAgentUrl = options?.lessonPlanAgentUrl ?? process.env['LESSON_PLAN_AGENT_URL'];
+    this.metacognitionClient =
+      options?.metacognitionClient ??
+      ({
+        recordStepEvaluation: async () => {
+          throw new BusinessRuleError('Metacognition evaluation client is not configured');
+        },
+      } satisfies IMetacognitionEvaluationPort);
+    this.pedagogyGuardianClient =
+      options?.pedagogyGuardianClient ?? new NoopPedagogyGuardianClient();
     this.options = {
       security: {
-        verifyOfflineIntentTokens: options?.security?.verifyOfflineIntentTokens ?? false,
-        offlineIntentTokenActiveKeyId:
-          options?.security?.offlineIntentTokenActiveKeyId ?? 'default',
-        offlineIntentTokenKeys: options?.security?.offlineIntentTokenKeys ?? {},
-        offlineIntentTokenIssuer: options?.security?.offlineIntentTokenIssuer ?? 'noema.session',
-        offlineIntentTokenAudience: options?.security?.offlineIntentTokenAudience ?? 'noema.mobile',
+        verifyOfflineIntentTokens: true,
+        offlineIntentTokenActiveKeyId: 'default',
+        offlineIntentTokenKeys: { default: 'dev-only-session-service-secret' },
+        offlineIntentTokenIssuer: 'noema.session-service',
+        offlineIntentTokenAudience: 'noema.offline-intent',
+        ...options?.security,
       },
       session: {
-        maxConcurrentSessions: Math.max(1, options?.session?.maxConcurrentSessions ?? 1),
+        maxConcurrentSessions: 10,
+        ...options?.session,
       },
+      ...(lessonPlanAgentUrl ? { lessonPlanAgentUrl } : {}),
+      pedagogyGuardianClient: this.pedagogyGuardianClient,
     };
-    this.activeTokenKeyId = this.options.security.offlineIntentTokenActiveKeyId;
-    this.tokenSecrets = new Map(
-      Object.entries(this.options.security.offlineIntentTokenKeys).map(([keyId, secret]) => [
-        keyId,
-        new TextEncoder().encode(secret),
-      ])
-    );
   }
 
-  /**
-   * Wire the streak service after construction.
-   * Called from bootstrap to avoid circular dependency.
-   */
-  setStreakService(service: import('./streak.service.js').StreakService): void {
-    this.streakService = service;
+  setStreakService(_service: unknown): void {
+    // Streaks moved to the derived gamification projection in the realignment.
   }
 
-  // ==========================================================================
-  // Session Lifecycle
-  // ==========================================================================
-
-  /**
-   * Start a new study session.
-   *
-   * Creates the session record,
-   * populates the queue, and publishes session.started.
-   */
   async startSession(input: unknown, ctx: IExecutionContext): Promise<IServiceResult<ISession>> {
     const parsed = StartSessionInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid start session input', parsed.error.flatten().fieldErrors);
-    }
+    if (!parsed.success) throw validationError(parsed.error);
     const data = parsed.data;
+    const now = isoNow();
+    const sessionId = id<SessionId>(ID_PREFIXES.SessionId);
 
-    if (data.blueprint !== undefined) {
-      const consistency = this.validateBlueprintConsistency(
-        data.blueprint.initialCardIds,
-        data.initialCardIds,
-        data.blueprint.cardLanes,
-        data.initialCardLanes
+    const session = await this.runInTransaction(async (tx) => {
+      const created = await this.repository.createSession(
+        {
+          id: sessionId,
+          userId: ctx.userId,
+          curriculumId: data.curriculumId as never,
+          curriculumVersionId: (data.curriculumVersionId ?? null) as never,
+          studyMode: data.studyMode,
+          learningMode: data.learningMode,
+          lifecycleState: SessionLifecycleState.PLANNING,
+          config: {
+            ...data.config,
+            curriculumId: data.curriculumId as never,
+            ...(data.curriculumVersionId ? { curriculumVersionId: data.curriculumVersionId as never } : {}),
+            ...(data.topic ? { topic: data.topic } : {}),
+            sourceDecks: data.sourceDecks,
+            sourceCategories: data.sourceCategories,
+          } satisfies Record<string, unknown>,
+          stats: createEmptyStats(),
+          pauseCount: 0,
+          totalPausedMs: 0,
+          startedAt: now,
+          lastActivityAt: now,
+          completedAt: null,
+          terminationReason: null,
+          version: 1,
+        },
+        tx
       );
-      if (!consistency.valid) {
-        throw new ValidationError('Invalid session blueprint', {
-          blueprint: consistency.errors,
+
+      await this.enqueueEvent(
+        'session.started',
+        'Session',
+        created.id,
+        {
+          userId: ctx.userId,
+          studyMode: created.studyMode,
+          learningMode: created.learningMode,
+          lifecycleState: created.lifecycleState,
+        },
+        ctx,
+        tx
+      );
+
+      return created;
+    });
+
+    this.logger.debug({ sessionId: session.id, userId: ctx.userId }, 'Session started');
+    return result(session, 'Session created in PLANNING state.');
+  }
+
+  async getSession(idValue: string, ctx: IExecutionContext): Promise<IServiceResult<ISession>> {
+    const session = await this.repository.getSessionById(idValue as SessionId);
+    this.assertOwnsSession(session, ctx);
+    return result(session, 'Session fetched.');
+  }
+
+  async listSessions(
+    input: unknown,
+    limit?: number,
+    offset?: number,
+    ctx?: IExecutionContext
+  ): Promise<IServiceResult<{ sessions: ISession[]; total: number }>> {
+    if (!ctx) throw new AuthorizationError('Missing execution context');
+    const parsed = SessionListQuerySchema.safeParse(input ?? {});
+    if (!parsed.success) throw validationError(parsed.error);
+    const query = parsed.data;
+    const filters: ISessionFilters = {
+      ...(query.lifecycleState ? { lifecycleState: query.lifecycleState } : {}),
+      ...(query.learningMode ? { learningMode: query.learningMode } : {}),
+      ...(query.studyMode ? { studyMode: query.studyMode } : {}),
+      ...(query.createdAfter ? { createdAfter: query.createdAfter } : {}),
+      ...(query.createdBefore ? { createdBefore: query.createdBefore } : {}),
+      ...(query.completedAfter ? { completedAfter: query.completedAfter } : {}),
+      ...(query.completedBefore ? { completedBefore: query.completedBefore } : {}),
+    };
+    const data = await this.repository.findSessionsByUser(
+      ctx.userId,
+      filters,
+      limit ?? query.limit,
+      offset ?? query.offset
+    );
+    return result(data, 'Sessions listed.');
+  }
+
+  async createLessonPlan(
+    sessionIdValue: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<{ lessonPlan: ILessonPlan; steps: IStep[] }>> {
+    const parsed = CreateLessonPlanInputSchema.safeParse(input ?? {});
+    if (!parsed.success) throw validationError(parsed.error);
+
+    const session = await this.repository.getSessionById(sessionIdValue as SessionId);
+    this.assertOwnsSession(session, ctx);
+
+    const existing = await this.repository.findLessonPlanBySessionId(session.id);
+    if (existing) {
+      throw new BusinessRuleError('Session already has a LessonPlan', {
+        sessionId: session.id,
+        lessonPlanId: existing.id,
+      });
+    }
+
+    const requested = parsed.data as ICreateLessonPlanInput;
+    const rigorLevel =
+      requested.rigorLevel ??
+      (session.learningMode === LearningMode.GOAL_DRIVEN ? RigorLevel.FULL : RigorLevel.MINIMAL);
+
+    const record =
+      rigorLevel === RigorLevel.FULL
+        ? await this.fullLessonPlanFactory(session, requested)
+        : this.minimalLessonPlanFactory(session, requested);
+
+    this.assertLessonPlanServesCurriculumSlice(record);
+
+    await this.validateLessonPlanWithGuardian(record, ctx);
+
+    const created = await this.runInTransaction(async (tx) => {
+      const createdPlan = await this.repository.createLessonPlanWithSteps(record, tx);
+      const activated =
+        record.state === LessonPlanState.ACTIVE
+          ? createdPlan.lessonPlan
+          : await this.repository.activateLessonPlan(createdPlan.lessonPlan.id, tx);
+
+      await this.enqueueEvent(
+        'lesson_plan.created',
+        'LessonPlan',
+        activated.id,
+        { lessonPlanId: activated.id, sessionId: activated.sessionId, userId: activated.userId },
+        ctx,
+        tx
+      );
+      await this.enqueueEvent(
+        'lesson_plan.activated',
+        'LessonPlan',
+        activated.id,
+        { lessonPlanId: activated.id, sessionId: activated.sessionId, userId: activated.userId },
+        ctx,
+        tx
+      );
+
+      for (const step of createdPlan.steps) {
+        await this.enqueueEvent(
+          'step.planned',
+          'Step',
+          step.id,
+          {
+            stepId: step.id,
+            lessonPlanId: step.lessonPlanId,
+            sessionId: step.sessionId,
+            userId: step.userId,
+          },
+          ctx,
+          tx
+        );
+      }
+
+      return { lessonPlan: activated, steps: createdPlan.steps };
+    });
+
+    return result(created, 'LessonPlan created and activated.');
+  }
+
+  async createGoal(
+    lessonPlanIdValue: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ILessonPlanGoal>> {
+    const parsed = CreateGoalInputSchema.safeParse(input);
+    if (!parsed.success) throw validationError(parsed.error);
+    const lessonPlanId = lessonPlanIdValue as LessonPlanId;
+    const plan = await this.repository.findLessonPlanById(lessonPlanId);
+    if (!plan) throw new SessionNotFoundError(lessonPlanId);
+    if (plan.userId !== ctx.userId)
+      throw new AuthorizationError('LessonPlan belongs to another user');
+
+    const data = parsed.data as ICreateGoalInput;
+    if (data.state === GoalState.ACTIVE) {
+      const activeGoals = await this.repository.countActiveGoals(lessonPlanId);
+      if (activeGoals >= 4) {
+        throw new BusinessRuleError('A LessonPlan may have at most 4 active goals', {
+          lessonPlanId,
+          activeGoals,
         });
       }
     }
 
-    const sessionId = `${ID_PREFIXES.SessionId}${nanoid()}` as SessionId;
-    const now = new Date().toISOString();
-    const presentationConfig = sanitizePresentationConfig(data.config.presentation);
-    const initialCardLanes = normalizeCardLanes(data.initialCardIds, data.initialCardLanes);
-
-    const sessionInput = {
-      id: sessionId,
-      userId: ctx.userId,
-      deckQueryId: data.deckQueryId as DeckQueryLogId,
-      state: States.ACTIVE,
-      learningMode: data.learningMode as LearningMode,
-      studyMode: (data.studyMode ?? 'knowledge_gaining') as StudyMode,
-      teachingApproach: (data.teachingApproach ?? 'standard') as TeachingApproach,
-      schedulingAlgorithm: (data.schedulingAlgorithm ?? 'fsrs') as SchedulingAlgorithm,
-      loadoutId: (data.loadoutId as LoadoutId) ?? null,
-      loadoutArchetype: (data.loadoutArchetype as LoadoutArchetype) ?? null,
-      forceLevel: null,
-      config: {
-        sessionTimeoutHours: data.config.sessionTimeoutHours ?? 24,
-        ...(data.config.maxCards !== undefined ? { maxCards: data.config.maxCards } : {}),
-        ...(data.config.maxDurationMinutes !== undefined
-          ? { maxDurationMinutes: data.config.maxDurationMinutes }
-          : {}),
-        ...(data.config.categoryIds !== undefined ? { categoryIds: data.config.categoryIds } : {}),
-        ...(data.config.cardTypes !== undefined ? { cardTypes: data.config.cardTypes } : {}),
-        ...(presentationConfig !== null ? { presentation: presentationConfig } : {}),
-      },
-      stats: createEmptyStats(),
-      initialQueueSize: data.initialCardIds.length,
-      pauseCount: 0,
-      totalPausedDurationMs: 0,
-      lastPausedAt: null,
-      startedAt: now,
-      lastActivityAt: now,
-      completedAt: null,
-      terminationReason: null,
-      version: 1,
-    };
-
-    // Populate queue
-    const queueItems = data.initialCardIds.map((cardId, idx) => ({
-      id: nanoid(),
-      sessionId,
-      cardId: cardId as CardId,
-      lane: initialCardLanes[cardId] ?? 'retention',
-      position: idx,
-      status: 'pending' as CardQueueStatus,
-      injectedBy: null,
-      reason: null,
-    }));
-    const session = await this.runInTransaction(async (tx) => {
-      await this.verifyOfflineIntentToken(data.offlineIntentToken, ctx, tx);
-
-      const activeSessionCount = await this.repository.countActiveSessionsForUpdate(ctx.userId, tx);
-
-      if (activeSessionCount >= this.options.session.maxConcurrentSessions) {
-        throw new BusinessRuleError(
-          `User already has ${String(activeSessionCount)} active session(s); max concurrent sessions is ${String(this.options.session.maxConcurrentSessions)}`,
-          {
-            activeSessionCount,
-            maxConcurrentSessions: this.options.session.maxConcurrentSessions,
-          }
-        );
-      }
-
-      const createdSession = await this.repository.createSession(sessionInput, tx);
-      await this.repository.createQueueItemsBatch(queueItems, tx);
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.started',
-          aggregateType: 'Session',
-          aggregateId: sessionId,
-          payload: {
-            userId: ctx.userId,
-            deckQueryId: data.deckQueryId as DeckQueryLogId,
-            learningMode: data.learningMode as LearningMode,
-            studyMode: (data.studyMode ?? 'knowledge_gaining') as StudyMode,
-            teachingApproach: createdSession.teachingApproach,
-            schedulingAlgorithm: createdSession.schedulingAlgorithm,
-            ...(data.loadoutId !== undefined ? { loadoutId: data.loadoutId as LoadoutId } : {}),
-            ...(data.loadoutArchetype !== undefined
-              ? { loadoutArchetype: data.loadoutArchetype as LoadoutArchetype }
-              : {}),
-            config: {
-              sessionTimeoutHours: createdSession.config.sessionTimeoutHours,
-              ...(createdSession.config.maxCards !== undefined
-                ? { maxCards: createdSession.config.maxCards }
-                : {}),
-              ...(createdSession.config.maxDurationMinutes !== undefined
-                ? { maxDurationMinutes: createdSession.config.maxDurationMinutes }
-                : {}),
-              ...(createdSession.config.categoryIds !== undefined
-                ? { categoryIds: createdSession.config.categoryIds as CategoryId[] }
-                : {}),
-              ...(createdSession.config.cardTypes !== undefined
-                ? {
-                    cardTypes: createdSession.config.cardTypes as (
-                      | CardType
-                      | RemediationCardType
-                    )[],
-                  }
-                : {}),
-              ...(createdSession.config.presentation !== undefined
-                ? (() => {
-                    const normalizedPresentation = sanitizePresentationConfig(
-                      createdSession.config.presentation
-                    );
-                    return normalizedPresentation !== null
-                      ? { presentation: normalizedPresentation }
-                      : {};
-                  })()
-                : {}),
-            },
-            initialQueueSize: data.initialCardIds.length,
-            initialCardIds: data.initialCardIds as CardId[],
-            initialCardLanes: initialCardLanes as Record<CardId, SessionSchedulerLane>,
-          } satisfies ISessionStartedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-      return createdSession;
-    });
-
-    this.logger.info({ sessionId, userId: ctx.userId }, 'Session started');
-
-    return {
-      data: session,
-      agentHints: buildHints(
-        [
-          {
-            action: 'present_first_card',
-            description: 'Present the first card from the queue',
-            priority: 'high',
-          },
-          { action: 'get_queue', description: 'Retrieve the session queue' },
-        ],
-        `Session started with ${data.initialCardIds.length} cards in ${data.learningMode} mode`
-      ),
-    };
-  }
-
-  async validateSessionBlueprint(
-    input: unknown,
-    _ctx: IExecutionContext
-  ): Promise<IServiceResult<IValidateSessionBlueprintResult>> {
-    const parsed = ValidateSessionBlueprintInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError(
-        'Invalid session blueprint input',
-        parsed.error.flatten().fieldErrors
-      );
-    }
-
-    const { blueprint } = parsed.data;
-    const normalizedSignals = [
-      ...new Set(blueprint.checkpointSignals),
-    ] as AdaptiveCheckpointSignal[];
-    const laneSum = blueprint.laneMix.retention + blueprint.laneMix.calibration;
-    const errors: string[] = [];
-
-    if (Math.abs(laneSum - 1) > 0.0001) {
-      errors.push('laneMix.retention + laneMix.calibration must equal 1.0');
-    }
-
-    return {
-      data: {
-        valid: errors.length === 0,
-        errors,
-        normalizedCheckpointSignals: normalizedSignals,
-      },
-      agentHints: buildHints(
-        [
-          {
-            action: errors.length === 0 ? 'start_session' : 'fix_blueprint',
-            description:
-              errors.length === 0
-                ? 'Blueprint is valid and can be used to start session'
-                : 'Fix invalid blueprint fields before starting session',
-            priority: errors.length === 0 ? 'high' : 'critical',
-          },
-        ],
-        errors.length === 0
-          ? 'Blueprint validation passed'
-          : `Blueprint validation failed with ${errors.length} error(s)`
-      ),
-    };
-  }
-
-  async evaluateAdaptiveCheckpoint(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IEvaluateAdaptiveCheckpointResult>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertState(session, States.ACTIVE, 'evaluate checkpoint');
-
-    const parsed = EvaluateAdaptiveCheckpointInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError(
-        'Invalid adaptive checkpoint input',
-        parsed.error.flatten().fieldErrors
-      );
-    }
-
-    const data = parsed.data as IEvaluateAdaptiveCheckpointInput;
-    const directives: IEvaluateAdaptiveCheckpointResult['directives'] = [];
-
-    if (data.trigger === 'error_cascade' && (data.recentIncorrectStreak ?? 0) >= 2) {
-      directives.push({
-        action: 'increase_support',
-        reason: 'Incorrect streak indicates immediate support escalation',
-        priority: 'high',
-      });
-    }
-
-    if (
-      data.trigger === 'latency_spike' &&
-      data.lastAttemptResponseTimeMs !== undefined &&
-      data.rollingAverageResponseTimeMs !== undefined &&
-      data.lastAttemptResponseTimeMs > data.rollingAverageResponseTimeMs * 1.6
-    ) {
-      directives.push({
-        action: 'slowdown',
-        reason: 'Response latency spike indicates cognitive overload risk',
-        priority: 'medium',
-      });
-    }
-
-    if (data.trigger === 'confidence_drift' && Math.abs(data.confidenceDrift ?? 0) >= 0.25) {
-      directives.push({
-        action: 'reduce_calibration_lane',
-        reason: 'High confidence drift needs temporary lane rebalance',
-        priority: 'high',
-      });
-    }
-
-    if (directives.length === 0) {
-      directives.push({
-        action: 'continue',
-        reason: 'No adaptive intervention required for current checkpoint signal',
-        priority: 'low',
-      });
-    }
-
-    await this.runInTransaction(async (tx) => {
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.checkpoint.evaluated',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            trigger: data.trigger,
-            shouldAdapt: directives.some((d) => d.action !== 'continue'),
-            directives,
-          },
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-    });
-
-    return {
-      data: {
-        shouldAdapt: directives.some((d) => d.action !== 'continue'),
-        directives,
-        reason: directives.map((d) => d.reason).join('; '),
-      },
-      agentHints: buildHints(
-        directives.map((directive) => ({
-          action: directive.action,
-          description: directive.reason,
-          priority:
-            directive.priority === 'critical' || directive.priority === 'high' ? 'high' : 'medium',
-        })),
-        `Checkpoint evaluated for trigger ${data.trigger}`
-      ),
-    };
-  }
-
-  async proposeCohort(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionCohortHandshake>> {
-    const parsed = ProposeCohortInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid propose cohort input', parsed.error.flatten().fieldErrors);
-    }
-
-    const data = parsed.data as IProposeCohortInput;
-    if (data.revision !== 1) {
-      throw new ValidationError('Invalid cohort proposal revision', {
-        revision: ['Initial proposal revision must be 1'],
-      });
-    }
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'propose cohort');
-
-    const handshake = await this.runInTransaction(async (tx) => {
-      const existing = await this.repository.findLatestCohortHandshake(
-        session.id,
-        data.linkage.proposalId,
-        tx
-      );
-      if (existing) {
-        throw new VersionConflictError(data.revision, existing.revision);
-      }
-
-      const created = await this.repository.createCohortHandshake(
-        session.id,
-        data,
-        CohortHandshakeStatuses.PROPOSED,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.cohort.proposed',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            linkage: {
-              proposalId: created.proposalId,
-              decisionId: created.decisionId,
-              sessionId: session.id,
-              sessionRevision: created.revision,
-              correlationId: ctx.correlationId,
-            },
-            candidateCardIds: created.candidateCardIds,
-            ...(Object.keys(created.metadata).length > 0 ? { constraints: created.metadata } : {}),
-          } satisfies ISessionCohortProposedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return created;
-    });
-
-    return {
-      data: handshake,
-      agentHints: buildHints(
-        [
-          {
-            action: 'accept_cohort',
-            description: 'Accept or revise the proposed cohort before commit',
-            priority: 'high',
-          },
-        ],
-        `Cohort proposed for revision ${String(handshake.revision)}`
-      ),
-    };
-  }
-
-  async acceptCohort(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionCohortHandshake>> {
-    const parsed = AcceptCohortInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid accept cohort input', parsed.error.flatten().fieldErrors);
-    }
-
-    const data = parsed.data as IAcceptCohortInput;
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'accept cohort');
-
-    const handshake = await this.runInTransaction(async (tx) => {
-      const current = await this.repository.findCohortHandshake(
-        session.id,
-        data.linkage.proposalId,
-        data.expectedRevision,
-        tx
-      );
-
-      if (!current) {
-        const latest = await this.repository.findLatestCohortHandshake(
-          session.id,
-          data.linkage.proposalId,
-          tx
-        );
-        throw new VersionConflictError(
-          data.expectedRevision,
-          latest?.revision ?? data.expectedRevision + 1
-        );
-      }
-
-      if (
-        current.status !== CohortHandshakeStatuses.PROPOSED &&
-        current.status !== CohortHandshakeStatuses.REVISED
-      ) {
-        throw new BusinessRuleError(
-          `Cannot accept cohort from status ${current.status}; expected proposed or revised`
-        );
-      }
-
-      const updated = await this.repository.updateCohortHandshake(
-        session.id,
-        current.proposalId,
-        current.revision,
-        current.status,
-        data,
-        CohortHandshakeStatuses.ACCEPTED,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.cohort.accepted',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            linkage: {
-              proposalId: updated.proposalId,
-              decisionId: updated.decisionId,
-              sessionId: session.id,
-              sessionRevision: updated.revision,
-              correlationId: ctx.correlationId,
-            },
-            acceptedCardIds: updated.acceptedCardIds ?? [],
-            excludedCardIds: updated.rejectedCardIds ?? [],
-          } satisfies ISessionCohortAcceptedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return updated;
-    });
-
-    return {
-      data: handshake,
-      agentHints: buildHints(
-        [
-          {
-            action: 'commit_cohort',
-            description: 'Commit accepted cohort to materialize queue state',
-            priority: 'high',
-          },
-        ],
-        `Cohort accepted for revision ${String(handshake.revision)}`
-      ),
-    };
-  }
-
-  async reviseCohort(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionCohortHandshake>> {
-    const parsed = ReviseCohortInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid revise cohort input', parsed.error.flatten().fieldErrors);
-    }
-
-    const data = parsed.data as IReviseCohortInput;
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'revise cohort');
-
-    if (data.newRevision !== data.expectedRevision + 1) {
-      throw new ValidationError('Invalid cohort revision sequence', {
-        newRevision: ['newRevision must equal expectedRevision + 1'],
-      });
-    }
-
-    const handshake = await this.runInTransaction(async (tx) => {
-      const current = await this.repository.findCohortHandshake(
-        session.id,
-        data.linkage.proposalId,
-        data.expectedRevision,
-        tx
-      );
-
-      if (!current) {
-        const latest = await this.repository.findLatestCohortHandshake(
-          session.id,
-          data.linkage.proposalId,
-          tx
-        );
-        throw new VersionConflictError(
-          data.expectedRevision,
-          latest?.revision ?? data.expectedRevision + 1
-        );
-      }
-
-      if (current.status !== CohortHandshakeStatuses.ACCEPTED) {
-        throw new BusinessRuleError(
-          `Cannot revise cohort from status ${current.status}; expected accepted`
-        );
-      }
-
-      const existingNext = await this.repository.findCohortHandshake(
-        session.id,
-        data.linkage.proposalId,
-        data.newRevision,
-        tx
-      );
-      if (existingNext) {
-        throw new VersionConflictError(data.newRevision, existingNext.revision);
-      }
-
-      const created = await this.repository.createCohortHandshake(
-        session.id,
-        {
-          ...data,
-          metadata: {
-            ...(data.metadata ?? {}),
-            reason: data.reason,
-          },
-        },
-        CohortHandshakeStatuses.REVISED,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.cohort.revised',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            linkage: {
-              proposalId: created.proposalId,
-              decisionId: created.decisionId,
-              sessionId: session.id,
-              sessionRevision: created.revision,
-              correlationId: ctx.correlationId,
-            },
-            revisionFrom: data.expectedRevision,
-            revisionTo: data.newRevision,
-            candidateCardIds: created.candidateCardIds,
-            reason: data.reason,
-          } satisfies ISessionCohortRevisedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return created;
-    });
-
-    return {
-      data: handshake,
-      agentHints: buildHints(
-        [
-          {
-            action: 'accept_cohort',
-            description: 'Accept revised cohort before committing',
-            priority: 'high',
-          },
-        ],
-        `Cohort revised from ${String(data.expectedRevision)} to ${String(handshake.revision)}`
-      ),
-    };
-  }
-
-  async commitCohort(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionCohortHandshake>> {
-    const parsed = CommitCohortInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid commit cohort input', parsed.error.flatten().fieldErrors);
-    }
-
-    const data = parsed.data as ICommitCohortInput;
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'commit cohort');
-
-    const handshake = await this.runInTransaction(async (tx) => {
-      const current = await this.repository.findCohortHandshake(
-        session.id,
-        data.linkage.proposalId,
-        data.expectedRevision,
-        tx
-      );
-
-      if (!current) {
-        const latest = await this.repository.findLatestCohortHandshake(
-          session.id,
-          data.linkage.proposalId,
-          tx
-        );
-        throw new VersionConflictError(
-          data.expectedRevision,
-          latest?.revision ?? data.expectedRevision + 1
-        );
-      }
-
-      if (current.status !== CohortHandshakeStatuses.ACCEPTED) {
-        throw new BusinessRuleError(
-          `Cannot commit cohort from status ${current.status}; expected accepted`
-        );
-      }
-
-      const updated = await this.repository.updateCohortHandshake(
-        session.id,
-        current.proposalId,
-        current.revision,
-        CohortHandshakeStatuses.ACCEPTED,
-        data,
-        CohortHandshakeStatuses.COMMITTED,
-        tx
-      );
-
-      await this.repository.replacePendingQueueItems(session.id, data.committedCardIds, tx);
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.cohort.committed',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            linkage: {
-              proposalId: updated.proposalId,
-              decisionId: updated.decisionId,
-              sessionId: session.id,
-              sessionRevision: updated.revision,
-              correlationId: ctx.correlationId,
-            },
-            committedCardIds: data.committedCardIds,
-            rejectedCardIds: data.rejectedCardIds,
-            ...(data.policyVersion !== undefined ? { policyVersion: data.policyVersion } : {}),
-          } satisfies ISessionCohortCommittedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return updated;
-    });
-
-    return {
-      data: handshake,
-      agentHints: buildHints(
-        [
-          {
-            action: 'run_committed_queue',
-            description: 'Run session using the committed cohort queue',
-            priority: 'high',
-          },
-        ],
-        `Cohort committed at revision ${String(handshake.revision)}`
-      ),
-    };
-  }
-
-  /**
-   * Pause an active session.
-   */
-  async pauseSession(
-    sessionId: string,
-    reason: string | undefined,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertState(session, States.ACTIVE, 'pause');
-
-    const now = new Date().toISOString();
-    const activeDurationMs =
-      new Date(now).getTime() -
-      new Date(session.startedAt).getTime() -
-      session.totalPausedDurationMs;
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          state: States.PAUSED,
-          pauseCount: session.pauseCount + 1,
-          lastPausedAt: now,
-          lastActivityAt: now,
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.paused',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            pauseCount: next.pauseCount,
-            activeDurationMs,
-            attemptsCompleted: session.stats.totalAttempts,
-            ...(reason !== undefined && { reason }),
-          } satisfies ISessionPausedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info({ sessionId: session.id }, 'Session paused');
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [{ action: 'resume_session', description: 'Resume the paused session', priority: 'high' }],
-        `Session paused (pause #${updated.pauseCount})`
-      ),
-    };
-  }
-
-  /**
-   * Resume a paused session.
-   */
-  async resumeSession(
-    sessionId: string,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertState(session, States.PAUSED, 'resume');
-
-    const now = new Date().toISOString();
-    const pausedDurationMs = session.lastPausedAt
-      ? new Date(now).getTime() - new Date(session.lastPausedAt).getTime()
-      : 0;
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          state: States.ACTIVE,
-          totalPausedDurationMs: session.totalPausedDurationMs + pausedDurationMs,
-          lastPausedAt: null,
-          lastActivityAt: now,
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.resumed',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            pausedDurationMs,
-            totalPauseCount: next.pauseCount,
-          } satisfies ISessionResumedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info({ sessionId: session.id }, 'Session resumed');
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          { action: 'present_next_card', description: 'Present the next card', priority: 'high' },
-          { action: 'get_queue', description: 'Retrieve the session queue' },
-        ],
-        `Session resumed after ${Math.round(pausedDurationMs / 1000)}s pause`
-      ),
-    };
-  }
-
-  /**
-   * Complete a session (natural completion).
-   */
-  async completeSession(
-    sessionId: string,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'complete');
-
-    const now = new Date().toISOString();
-    const totalDurationMs = new Date(now).getTime() - new Date(session.startedAt).getTime();
-    const activeDurationMs = totalDurationMs - session.totalPausedDurationMs;
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          state: States.COMPLETED,
-          completedAt: now,
-          lastActivityAt: now,
-          terminationReason: SessionTerminationReason.COMPLETED_NORMALLY,
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.completed',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            terminationReason: SessionTerminationReason.COMPLETED_NORMALLY,
-            stats: session.stats as ISessionCompletedPayload['stats'],
-            totalDurationMs,
-            activeDurationMs,
-          } satisfies ISessionCompletedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info({ sessionId: session.id, stats: session.stats }, 'Session completed');
-
-    // Phase 5 — Inline streak update (non-critical, errors are logged and swallowed)
-    if (this.streakService) {
-      await this.streakService.updateStreakOnCompletion(
-        ctx.userId,
-        now,
-        ctx.timezone ?? 'UTC',
-        session.studyMode
-      );
-    }
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          {
-            action: 'show_session_summary',
-            description: 'Display session completion summary',
-            priority: 'high',
-          },
-          { action: 'start_new_session', description: 'Start a new study session' },
-        ],
-        `Session completed with ${session.stats.totalAttempts} attempts`
-      ),
-    };
-  }
-
-  /**
-   * Abandon a session (user exits early).
-   */
-  async abandonSession(
-    sessionId: string,
-    reason: string | undefined,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'abandon');
-
-    const now = new Date().toISOString();
-    const activeDurationMs =
-      new Date(now).getTime() -
-      new Date(session.startedAt).getTime() -
-      session.totalPausedDurationMs;
-    const cardsRemaining = await this.repository.countPendingQueueItems(session.id);
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          state: States.ABANDONED,
-          completedAt: now,
-          lastActivityAt: now,
-          terminationReason: SessionTerminationReason.USER_ENDED,
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.abandoned',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            stats: session.stats as ISessionAbandonedPayload['stats'],
-            activeDurationMs,
-            cardsRemaining,
-            ...(reason !== undefined && { reason }),
-          } satisfies ISessionAbandonedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info({ sessionId: session.id, cardsRemaining }, 'Session abandoned');
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          {
-            action: 'show_session_summary',
-            description: 'Display session summary',
-            priority: 'high',
-          },
-          { action: 'start_new_session', description: 'Start a new study session' },
-        ],
-        `Session abandoned with ${cardsRemaining} cards remaining`
-      ),
-    };
-  }
-
-  /**
-   * Expire a session (timeout). Called by the expiration job / sidecar.
-   */
-  async expireSession(
-    sessionId: string,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'expire');
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          state: States.EXPIRED,
-          completedAt: new Date().toISOString(),
-          terminationReason: SessionTerminationReason.AUTO_EXPIRED,
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.expired',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: session.userId,
-            timeoutHours: session.config.sessionTimeoutHours,
-            stats: session.stats as ISessionExpiredPayload['stats'],
-            lastActivityAt: session.lastActivityAt,
-          } satisfies ISessionExpiredPayload,
-          metadata: { correlationId: ctx.correlationId, userId: session.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info({ sessionId: session.id }, 'Session expired');
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          {
-            action: 'notify_user',
-            description: 'Notify user of session expiration',
-            priority: 'high',
-          },
-          { action: 'start_new_session', description: 'Start a new study session' },
-        ],
-        `Session expired after ${session.config.sessionTimeoutHours}h of inactivity`
-      ),
-    };
-  }
-
-  /**
-   * Expire a session from a system context (e.g. background job / sidecar).
-   *
-   * Unlike {@link expireSession}, this does NOT enforce ownership — the caller
-   * is trusted system infrastructure. Access control is delegated to the route
-   * layer (e.g. scope guard or internal-only network policy).
-   */
-  async expireSessionSystem(
-    sessionId: string,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const session = await this.repository.findSessionById(sessionId as SessionId);
-    if (!session) {
-      throw new SessionNotFoundError(sessionId);
-    }
-    this.assertActiveOrPaused(session, 'expire');
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          state: States.EXPIRED,
-          completedAt: new Date().toISOString(),
-          terminationReason: SessionTerminationReason.AUTO_EXPIRED,
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.expired',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: session.userId,
-            timeoutHours: session.config.sessionTimeoutHours,
-            stats: session.stats as ISessionExpiredPayload['stats'],
-            lastActivityAt: session.lastActivityAt,
-          } satisfies ISessionExpiredPayload,
-          metadata: { correlationId: ctx.correlationId, userId: session.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info({ sessionId: session.id, system: true }, 'Session expired (system)');
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          {
-            action: 'notify_user',
-            description: 'Notify user of session expiration',
-            priority: 'high',
-          },
-        ],
-        `Session expired by system after ${session.config.sessionTimeoutHours}h timeout`
-      ),
-    };
-  }
-
-  // ==========================================================================
-  // Session Queries
-  // ==========================================================================
-
-  /**
-   * Get a session by ID.
-   */
-  async getSession(sessionId: string, ctx: IExecutionContext): Promise<IServiceResult<ISession>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-
-    return {
-      data: session,
-      agentHints: buildHints(
-        this.suggestedActionsForState(session),
-        `Session in ${session.state} state`
-      ),
-    };
-  }
-
-  /**
-   * List sessions for the current user.
-   */
-  async listSessions(
-    filters: ISessionFilters | undefined,
-    limit: number,
-    offset: number,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<{ sessions: ISession[]; total: number }>> {
-    const result = await this.repository.findSessionsByUser(ctx.userId, filters, limit, offset);
-
-    return {
-      data: result,
-      agentHints: buildHints(
-        [{ action: 'start_new_session', description: 'Start a new study session' }],
-        `Found ${result.total} sessions`
-      ),
-    };
-  }
-
-  // ==========================================================================
-  // Attempt Recording
-  // ==========================================================================
-
-  /**
-   * Record an attempt (the most critical operation in Noema).
-   *
-   * Updates session stats, marks queue item as answered,
-   * and publishes attempt.recorded.
-   */
-  async recordAttempt(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IAttempt>> {
-    const parsed = RecordAttemptInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid attempt input', parsed.error.flatten().fieldErrors);
-    }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertState(session, States.ACTIVE, 'record attempt');
-
-    const sequenceNumber = await this.repository.getNextSequenceNumber(session.id);
-    const attemptId = `${ID_PREFIXES.AttemptId}${nanoid()}` as AttemptId;
-
-    // Compute calibration delta if both confidence values provided
-    const calibrationDelta =
-      data.confidenceBefore != null && data.confidenceAfter != null
-        ? data.confidenceAfter - data.confidenceBefore
-        : null;
-
-    const attemptInput = {
-      id: attemptId,
-      sessionId: session.id,
-      cardId: data.cardId as CardId,
-      userId: ctx.userId,
-      sequenceNumber,
-      outcome: data.outcome as AttemptOutcome,
-      rating: data.rating as Rating,
-      ratingValue: data.ratingValue,
-      responseTimeMs: data.responseTimeMs,
-      dwellTimeMs: data.dwellTimeMs,
-      timeToFirstInteractionMs: data.timeToFirstInteractionMs ?? null,
-      confidenceBefore: data.confidenceBefore ?? null,
-      confidenceAfter: data.confidenceAfter ?? null,
-      calibrationDelta,
-      wasRevisedBeforeCommit: data.wasRevisedBeforeCommit,
-      revisionCount: data.revisionCount ?? 0,
-      hintRequestCount: data.hintRequestCount ?? 0,
-      hintDepthReached: data.hintDepthReached as HintDepth,
-      contextSnapshot: {
-        ...(data.contextSnapshot as unknown as import('../../types/index.js').IAttemptContext),
-        studyMode: (data.contextSnapshot.studyMode ?? session.studyMode) as StudyMode,
-      },
-      priorSchedulingState:
-        (data.priorSchedulingState as unknown as import('../../types/index.js').IPriorScheduling) ??
-        null,
-      traceId: null,
-      diagnosisId: null,
-    };
-
-    const attempt = await this.runInTransaction(async (tx) => {
-      const createdAttempt = await this.repository.createAttempt(attemptInput, tx);
-      const queueItem = await this.repository.findQueueItemByCard(session.id, data.cardId as CardId);
-      const lane = queueItem?.lane ?? 'retention';
-
-      const attemptsForCard = await this.repository.findAttemptsByCard(
-        session.id,
-        data.cardId as CardId
-      );
-      const isFirstAttemptForCard = attemptsForCard.length === 1;
-
-      const updatedStats = this.computeUpdatedStats(session.stats, {
-        outcome: data.outcome,
-        rating: data.rating,
-        ratingValue: data.ratingValue,
-        responseTimeMs: data.responseTimeMs,
-        confidenceBefore: data.confidenceBefore ?? undefined,
-        confidenceAfter: data.confidenceAfter ?? undefined,
-        hintRequestCount: data.hintRequestCount ?? undefined,
-        isFirstAttemptForCard,
-      });
-
-      await this.repository.updateSession(
-        session.id,
-        {
-          stats: updatedStats,
-          lastActivityAt: new Date().toISOString(),
-        },
-        session.version,
-        tx
-      );
-
-      try {
-        await this.repository.markQueueItemAnswered(session.id, data.cardId as CardId, tx);
-      } catch {
-        this.logger.debug(
-          { sessionId: session.id, cardId: data.cardId },
-          'Queue item not found for marking'
-        );
-      }
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'attempt.recorded',
-          aggregateType: 'Attempt',
-          aggregateId: attemptId,
-          payload: {
-            attemptId,
-            sessionId: session.id,
-            cardId: data.cardId as CardId,
-            userId: ctx.userId,
-            sequenceNumber,
-            studyMode: session.studyMode,
-            lane,
-            outcome: data.outcome as AttemptOutcome,
-            rating: data.rating as Rating,
-            ratingValue: data.ratingValue,
-            responseTimeMs: data.responseTimeMs,
-            dwellTimeMs: data.dwellTimeMs,
-            wasRevisedBeforeCommit: data.wasRevisedBeforeCommit,
-            revisionCount: data.revisionCount ?? 0,
-            hintRequestCount: data.hintRequestCount ?? 0,
-            hintDepthReached: data.hintDepthReached as HintDepth,
-            contextSnapshot: data.contextSnapshot as unknown as IAttemptContextSnapshot,
-            ...(data.timeToFirstInteractionMs !== undefined && {
-              timeToFirstInteractionMs: data.timeToFirstInteractionMs,
-            }),
-            ...(data.confidenceBefore !== undefined && { confidenceBefore: data.confidenceBefore }),
-            ...(data.confidenceAfter !== undefined && { confidenceAfter: data.confidenceAfter }),
-            ...(calibrationDelta !== null && { calibrationDelta }),
-            ...(data.priorSchedulingState !== undefined && {
-              priorSchedulingState: data.priorSchedulingState as unknown as IPriorSchedulingState,
-            }),
-          } satisfies IAttemptRecordedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return createdAttempt;
-    });
-
-    this.logger.info(
-      { attemptId, sessionId: session.id, cardId: data.cardId, rating: data.rating },
-      'Attempt recorded'
+    const goal = await this.repository.createGoal(
+      lessonPlanId,
+      id<GoalId>(ID_PREFIXES.GoalId),
+      data
     );
-
-    return {
-      data: attempt,
-      agentHints: buildHints(
-        [
-          { action: 'present_next_card', description: 'Present the next card', priority: 'high' },
-          { action: 'check_queue_remaining', description: 'Check how many cards remain in queue' },
-        ],
-        `Attempt #${sequenceNumber} recorded: ${data.outcome} (${data.rating})`
-      ),
-    };
+    return result(goal, 'Goal created.');
   }
 
-  /**
-   * Request a hint during an active attempt.
-   */
-  async requestHint(
-    sessionId: string,
-    attemptId: string,
-    input: unknown,
+  private async validateLessonPlanWithGuardian(
+    record: ICreateLessonPlanRecord,
     ctx: IExecutionContext
-  ): Promise<IServiceResult<{ acknowledged: boolean }>> {
-    const parsed = RequestHintInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid hint request input', parsed.error.flatten().fieldErrors);
-    }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertState(session, States.ACTIVE, 'request hint');
-
-    const attempt = await this.repository.findAttemptById(attemptId as AttemptId);
-    if (!attempt) {
-      throw new AttemptNotFoundError(attemptId);
-    }
-    if (attempt.sessionId !== session.id) {
-      throw new ValidationError('Attempt does not belong to this session', {
-        attemptId: ['Attempt session mismatch'],
-      });
-    }
-    if (data.cardId !== undefined && attempt.cardId !== (data.cardId as CardId)) {
-      throw new ValidationError('Attempt card does not match provided cardId', {
-        cardId: ['Provided cardId does not match attempt.cardId'],
-      });
-    }
-
-    const payload: IAttemptHintRequestedPayload = {
-      attemptId: attemptId as AttemptId,
-      sessionId: session.id,
-      cardId: attempt.cardId,
-      userId: ctx.userId,
-      hintDepth: data.hintDepth as HintDepth,
-      hintRequestNumber: data.hintRequestNumber,
-      responseTimeMsAtRequest: data.responseTimeMsAtRequest,
-    };
-
-    await this.runInTransaction(async (tx) => {
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'attempt.hint.requested',
-          aggregateType: 'Attempt',
-          aggregateId: attemptId,
-          payload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-    });
-
-    this.logger.debug(
-      { sessionId: session.id, attemptId, hintDepth: data.hintDepth },
-      'Hint requested'
-    );
-
-    return {
-      data: { acknowledged: true },
-      agentHints: buildHints(
-        [
-          {
-            action: 'provide_hint',
-            description: 'Generate and provide the hint to the user',
-            priority: 'high',
-          },
-        ],
-        `Hint depth ${data.hintDepth} requested (hint #${data.hintRequestNumber})`
-      ),
-    };
-  }
-
-  async getThinkingTrace(
-    attemptId: string,
-    ctx: IExecutionContext
-  ): Promise<
-    IServiceResult<{
-      attemptId: string;
-      traceId: string | null;
-      diagnosisId: string | null;
-      status: 'available' | 'not_available';
-      frames: unknown[];
-    }>
-  > {
-    const attempt = await this.repository.findAttemptById(attemptId as AttemptId);
-    if (!attempt) {
-      throw new AttemptNotFoundError(attemptId);
-    }
-    await this.getAuthorizedSession(attempt.sessionId, ctx);
-
-    const hasTrace = attempt.traceId !== null;
-    return {
-      data: {
-        attemptId: attempt.id,
-        traceId: attempt.traceId,
-        diagnosisId: attempt.diagnosisId,
-        status: hasTrace ? 'available' : 'not_available',
-        frames: [],
-      },
-      agentHints: buildHints(
-        [
-          {
-            action: hasTrace ? 'inspect_trace' : 'record_attempt',
-            description: hasTrace
-              ? 'Inspect the available trace identifiers for this attempt'
-              : 'Trace is not yet attached to this attempt; continue session flow',
-            priority: 'medium',
-          },
-        ],
-        hasTrace ? 'Attempt has trace metadata' : 'Attempt currently has no trace metadata'
-      ),
-    };
-  }
-
-  async recordDialogueTurn(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<
-    IServiceResult<{
-      acknowledged: boolean;
-      sessionId: string;
-      recordedAt: string;
-      role: 'agent' | 'learner';
-      turnType: string | null;
-    }>
-  > {
-    const parsed = RecordDialogueTurnInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid dialogue turn input', parsed.error.flatten().fieldErrors);
-    }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'record dialogue turn');
-
-    const recordedAt = new Date().toISOString();
-    await this.runInTransaction(async (tx) => {
-      await this.repository.updateSession(
-        session.id,
-        {
-          lastActivityAt: recordedAt,
-        },
-        session.version,
-        tx
-      );
-    });
-
-    this.logger.debug(
+  ): Promise<void> {
+    const planValidation = await this.pedagogyGuardianClient.validateLessonPlan(
       {
-        sessionId: session.id,
-        userId: ctx.userId,
-        role: data.role,
-        turnType: data.turnType ?? null,
+        lessonPlan: record,
+        triggeredBy: 'session-service.createLessonPlan',
       },
-      'Dialogue turn recorded'
+      ctx
     );
+    if (planValidation.blocking) {
+      throw new BusinessRuleError('Pedagogy Guardian rejected LessonPlan activation', {
+        lessonPlanId: record.id,
+        validationId: planValidation.validationId,
+        reasonCodes: planValidation.reasonCodes,
+      });
+    }
+    record.guardianValidationId = planValidation.validationId;
 
-    return {
-      data: {
-        acknowledged: true,
+    for (const step of record.steps) {
+      const stepValidation = await this.pedagogyGuardianClient.validateStep(
+        {
+          step,
+          triggeredBy: 'session-service.queueStep',
+        },
+        ctx
+      );
+      if (stepValidation.blocking) {
+        throw new BusinessRuleError('Pedagogy Guardian rejected Step queueing', {
+          lessonPlanId: record.id,
+          stepId: step.id,
+          validationId: stepValidation.validationId,
+          reasonCodes: stepValidation.reasonCodes,
+        });
+      }
+      step.guardianValidationId = stepValidation.validationId;
+    }
+  }
+
+  async getNextStep(
+    sessionIdValue: string,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IStep | null>> {
+    const session = await this.repository.getSessionById(sessionIdValue as SessionId);
+    this.assertOwnsSession(session, ctx);
+    const item = await this.repository.findNextQueueItem(session.id);
+    return result(item?.step ?? null, item?.step ? 'Next Step found.' : 'No pending Step found.');
+  }
+
+  async presentStep(stepIdValue: string, ctx: IExecutionContext): Promise<IServiceResult<IStep>> {
+    const step = await this.repository.getStepById(stepIdValue as StepId);
+    await this.assertOwnsStep(step, ctx);
+    if (step.status === StepStatus.EVALUATED) {
+      throw new BusinessRuleError('Evaluated Steps are immutable', { stepId: step.id });
+    }
+
+    const presented = await this.runInTransaction(async (tx) => {
+      const updated = await this.repository.markStepPresented(step.id, tx);
+      const session = await this.repository.getSessionById(step.sessionId);
+      if (session.lifecycleState === SessionLifecycleState.PLANNING) {
+        await this.transitionSession(session, SessionLifecycleState.EXECUTION, ctx, tx);
+      }
+      await this.enqueueEvent(
+        'step.presented',
+        'Step',
+        updated.id,
+        {
+          stepId: updated.id,
+          lessonPlanId: updated.lessonPlanId,
+          sessionId: updated.sessionId,
+          userId: updated.userId,
+        },
+        ctx,
+        tx
+      );
+      return updated;
+    });
+
+    return result(presented, 'Step presented.');
+  }
+
+  async answerStep(
+    stepIdValue: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IStep>> {
+    const parsed = AnswerStepInputSchema.safeParse(input ?? {});
+    if (!parsed.success) throw validationError(parsed.error);
+    const step = await this.repository.getStepById(stepIdValue as StepId);
+    await this.assertOwnsStep(step, ctx);
+    if (step.status === StepStatus.EVALUATED) {
+      throw new BusinessRuleError('Evaluated Steps are immutable', { stepId: step.id });
+    }
+
+    const evaluationId = parsed.data.evaluationId ?? id<EvaluationId>(ID_PREFIXES.EvaluationId);
+    if (step.conceptRefs.length === 0) {
+      throw new BusinessRuleError('Cannot evaluate a Step without concept references', {
+        stepId: step.id,
+      });
+    }
+
+    const session = await this.repository.getSessionById(step.sessionId);
+    const metacognitionEvaluation = await this.metacognitionClient.recordStepEvaluation({
+      evaluationId: evaluationId as EvaluationId,
+      stepId: step.id,
+      lessonPlanId: step.lessonPlanId,
+      sessionId: step.sessionId,
+      userId: step.userId,
+      conceptRefs: step.conceptRefs,
+      correct: parsed.data.correct,
+      selfRating: parsed.data.selfRating,
+      trace: parsed.data.trace,
+      ...(parsed.data.responseTimeMs !== undefined
+        ? { responseTimeMs: parsed.data.responseTimeMs }
+        : {}),
+      studyMode: session.studyMode,
+      transformation: step.transformationType,
+    });
+
+    const evaluated = await this.runInTransaction(async (tx) => {
+      const updated = await this.repository.markStepAnsweredAndEvaluated(
+        step.id,
+        metacognitionEvaluation.evaluationId,
+        tx
+      );
+      if (session.lifecycleState !== SessionLifecycleState.EVALUATION) {
+        await this.transitionSession(session, SessionLifecycleState.EVALUATION, ctx, tx);
+      }
+      await this.enqueueEvent(
+        'step.answered',
+        'Step',
+        updated.id,
+        this.stepPayload(updated),
+        ctx,
+        tx
+      );
+      await this.enqueueEvent(
+        'step.evaluated',
+        'Step',
+        updated.id,
+        this.stepPayload(updated),
+        ctx,
+        tx
+      );
+      return updated;
+    });
+
+    return result(evaluated, 'Step answer accepted and Step marked EVALUATED.');
+  }
+
+  async skipStep(
+    stepIdValue: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IStep>> {
+    const parsed = input && typeof input === 'object' ? (input as { reason?: string }) : {};
+    const step = await this.repository.getStepById(stepIdValue as StepId);
+    await this.assertOwnsStep(step, ctx);
+    if (step.status === StepStatus.EVALUATED) {
+      throw new BusinessRuleError('Evaluated Steps are immutable', { stepId: step.id });
+    }
+    const skipped = await this.repository.markStepSkipped(step.id, parsed.reason ?? null);
+    return result(skipped, 'Step skipped.');
+  }
+
+  async getStepLoopSnapshot(
+    sessionIdValue: string,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<IStepLoopSnapshot>> {
+    const session = await this.repository.getSessionById(sessionIdValue as SessionId);
+    this.assertOwnsSession(session, ctx);
+    const lessonPlan = await this.repository.findLessonPlanBySessionId(session.id);
+    if (!lessonPlan) {
+      throw new BusinessRuleError('Session does not have a LessonPlan yet', {
         sessionId: session.id,
-        recordedAt,
-        role: data.role,
-        turnType: data.turnType ?? null,
-      },
-      agentHints: buildHints(
-        [
-          {
-            action: 'continue_session',
-            description: 'Continue the active tutoring interaction',
-            priority: 'high',
-          },
-        ],
-        `Dialogue turn recorded from ${data.role}`
-      ),
-    };
-  }
-
-  /**
-   * Get attempts for a session.
-   */
-  async listAttempts(
-    sessionId: string,
-    limit: number,
-    offset: number,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<{ attempts: IAttempt[]; total: number }>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    const result = await this.repository.findAttemptsBySession(session.id, limit, offset);
-
-    return {
-      data: result,
-      agentHints: buildHints(
-        [{ action: 'analyze_attempts', description: 'Analyze attempt patterns and performance' }],
-        `Found ${result.total} attempts in session`
-      ),
-    };
-  }
-
-  // ==========================================================================
-  // Queue Management
-  // ==========================================================================
-
-  /**
-   * Get the current queue for a session.
-   */
-  async getQueue(
-    sessionId: string,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionQueueItem[]>> {
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    const items = await this.repository.getQueueItems(session.id);
-
-    return {
-      data: items,
-      agentHints: buildHints(
-        [
-          {
-            action: 'present_next_card',
-            description: 'Present the next pending card',
-            priority: 'high',
-          },
-        ],
-        `Queue has ${items.filter((i) => i.status === 'pending').length} pending items`
-      ),
-    };
-  }
-
-  /**
-   * Inject a card into the queue at a specific position.
-   */
-  async injectQueueItem(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionQueueItem>> {
-    const parsed = InjectQueueInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid inject queue input', parsed.error.flatten().fieldErrors);
+      });
     }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'inject queue item');
-
-    // Check if card already in queue
-    const existingItem = await this.repository.findQueueItemByCard(
-      session.id,
-      data.cardId as CardId
+    const next = await this.repository.findNextQueueItem(session.id);
+    return result(
+      { session, lessonPlan, nextStep: next?.step ?? null },
+      'Step-loop snapshot fetched.'
     );
-    if (existingItem) {
-      throw new QueueError(`Card ${data.cardId} is already in the session queue`);
-    }
-
-    const item = await this.runInTransaction(async (tx) => {
-      const injected = await this.repository.injectQueueItem(
-          {
-            id: nanoid(),
-            sessionId: session.id,
-            cardId: data.cardId as CardId,
-            lane: data.lane ?? 'retention',
-            position: data.position,
-          status: 'pending' as CardQueueStatus,
-          injectedBy: data.injectedBy ?? 'user',
-          reason: data.reason,
-        },
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.queue.injected',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            cardId: data.cardId as CardId,
-            position: data.position,
-            reason: data.reason,
-            injectedBy: data.injectedBy ?? 'user',
-          } satisfies ISessionQueueInjectedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return injected;
-    });
-
-    this.logger.info(
-      { sessionId: session.id, cardId: data.cardId, position: data.position },
-      'Queue item injected'
-    );
-
-    return {
-      data: item,
-      agentHints: buildHints(
-        [{ action: 'get_queue', description: 'Retrieve the updated session queue' }],
-        `Card injected at position ${data.position}`
-      ),
-    };
   }
 
-  /**
-   * Remove a card from the queue.
-   */
-  async removeQueueItem(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<{ removed: boolean }>> {
-    const parsed = RemoveQueueInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError('Invalid remove queue input', parsed.error.flatten().fieldErrors);
-    }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'remove queue item');
-
-    const existingItem = await this.repository.findQueueItemByCard(
-      session.id,
-      data.cardId as CardId
-    );
-    if (!existingItem) {
-      throw new QueueError(`Card ${data.cardId} is not in the session queue`);
-    }
-
-    await this.runInTransaction(async (tx) => {
-      await this.repository.removeQueueItem(session.id, data.cardId as CardId, tx);
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.queue.removed',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            cardId: data.cardId as CardId,
-            reason: data.reason,
-            removedBy: data.removedBy ?? 'user',
-          } satisfies ISessionQueueRemovedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-    });
-
-    this.logger.info({ sessionId: session.id, cardId: data.cardId }, 'Queue item removed');
-
-    return {
-      data: { removed: true },
-      agentHints: buildHints(
-        [{ action: 'get_queue', description: 'Retrieve the updated session queue' }],
-        `Card removed from queue: ${data.reason}`
-      ),
-    };
-  }
-
-  // ==========================================================================
-  // Strategy & Teaching
-  // ==========================================================================
-
-  /**
-   * Update the active strategy (loadout, archetype, force level).
-   */
-  async updateStrategy(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const parsed = UpdateStrategyInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError(
-        'Invalid strategy update input',
-        parsed.error.flatten().fieldErrors
-      );
-    }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'update strategy');
-
-    const previousLoadoutId = session.loadoutId;
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          loadoutId: data.newLoadoutId as LoadoutId,
-          loadoutArchetype: data.newLoadoutArchetype as LoadoutArchetype,
-          forceLevel: data.newForceLevel as ForceLevel,
-          lastActivityAt: new Date().toISOString(),
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.strategy.updated',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            newLoadoutId: data.newLoadoutId as LoadoutId,
-            newLoadoutArchetype: data.newLoadoutArchetype as LoadoutArchetype,
-            newForceLevel: data.newForceLevel as ForceLevel,
-            trigger: data.trigger,
-            ...(previousLoadoutId !== null && { previousLoadoutId }),
-          } satisfies ISessionStrategyUpdatedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info(
-      { sessionId: session.id, archetype: data.newLoadoutArchetype },
-      'Session strategy updated'
-    );
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          {
-            action: 'continue_session',
-            description: 'Continue the session with updated strategy',
-            priority: 'high',
-          },
-        ],
-        `Strategy updated to ${data.newLoadoutArchetype} (${data.trigger})`
-      ),
-    };
-  }
-
-  /**
-   * Change the teaching approach mid-session.
-   */
-  async changeTeaching(
-    sessionId: string,
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISession>> {
-    const parsed = ChangeTeachingInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError(
-        'Invalid teaching change input',
-        parsed.error.flatten().fieldErrors
-      );
-    }
-    const data = parsed.data;
-
-    const session = await this.getAuthorizedSession(sessionId, ctx);
-    this.assertActiveOrPaused(session, 'change teaching');
-
-    const previousApproach = session.teachingApproach;
-
-    const updated = await this.runInTransaction(async (tx) => {
-      const next = await this.repository.updateSession(
-        session.id,
-        {
-          teachingApproach: data.newApproach as TeachingApproach,
-          lastActivityAt: new Date().toISOString(),
-        },
-        session.version,
-        tx
-      );
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.teaching.changed',
-          aggregateType: 'Session',
-          aggregateId: session.id,
-          payload: {
-            userId: ctx.userId,
-            previousApproach,
-            newApproach: data.newApproach as TeachingApproach,
-            trigger: data.trigger,
-          } satisfies ISessionTeachingChangedPayload,
-          metadata: { correlationId: ctx.correlationId, userId: ctx.userId },
-        },
-        tx
-      );
-
-      return next;
-    });
-
-    this.logger.info(
-      { sessionId: session.id, from: previousApproach, to: data.newApproach },
-      'Teaching approach changed'
-    );
-
-    return {
-      data: updated,
-      agentHints: buildHints(
-        [
-          {
-            action: 'continue_session',
-            description: 'Continue with the new teaching approach',
-            priority: 'high',
-          },
-        ],
-        `Teaching changed from ${previousApproach} to ${data.newApproach} (${data.trigger})`
-      ),
-    };
-  }
-
-  // ==========================================================================
-  // Private Helpers
-  // ==========================================================================
-
-  /**
-   * Fetch a session and verify the user owns it.
-   */
-  private async getAuthorizedSession(sessionId: string, ctx: IExecutionContext): Promise<ISession> {
-    const session = await this.repository.findSessionById(sessionId as SessionId);
-    if (!session) {
-      throw new SessionNotFoundError(sessionId);
-    }
-    if (session.userId !== ctx.userId) {
-      throw new AuthorizationError('You do not have access to this session');
-    }
-    return session;
-  }
-
-  /**
-   * Assert the session is in the expected state.
-   */
-  private assertState(session: ISession, expected: SessionState, action: string): void {
-    if (session.state !== expected) {
-      throw new InvalidSessionStateError(session.state, action);
-    }
-  }
-
-  /**
-   * Assert the session is either active or paused.
-   */
-  private assertActiveOrPaused(session: ISession, action: string): void {
-    if (session.state !== States.ACTIVE && session.state !== States.PAUSED) {
-      throw new InvalidSessionStateError(session.state, action);
-    }
-  }
-
-  private validateBlueprintConsistency(
-    blueprintCardIds: string[],
-    requestedCardIds: string[],
-    blueprintCardLanes?: Record<string, SessionSchedulerLane>,
-    requestedCardLanes?: Record<string, SessionSchedulerLane>
-  ): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
-    if (blueprintCardIds.length !== requestedCardIds.length) {
-      errors.push('Blueprint card list length does not match initialCardIds length');
-      return { valid: false, errors };
-    }
-
-    for (let index = 0; index < blueprintCardIds.length; index += 1) {
-      const blueprintCardId = blueprintCardIds[index];
-      const requestedCardId = requestedCardIds[index];
-
-      if (blueprintCardId !== requestedCardId) {
-        errors.push(
-          `Blueprint card order mismatch at index ${String(index)}: expected ${requestedCardId}, got ${blueprintCardId}`
-        );
-      }
-    }
-
-    for (const [cardId, lane] of Object.entries(blueprintCardLanes ?? {})) {
-      if (!blueprintCardIds.includes(cardId)) {
-        errors.push(`Blueprint lane assignment references unknown card: ${cardId}`);
-        continue;
-      }
-
-      const requestedLane = requestedCardLanes?.[cardId];
-      if (requestedLane !== undefined && requestedLane !== lane) {
-        errors.push(
-          `Blueprint lane mismatch for ${cardId}: expected ${requestedLane}, got ${lane}`
-        );
-      }
-    }
-
-    return { valid: errors.length === 0, errors };
-  }
-
-  // ==========================================================================
-  // Offline Intent Token — Issuance & Verification
-  // ==========================================================================
-
-  /**
-   * Issue a signed offline intent token.
-   *
-   * session-service is the single authority for token lifecycle (ADR-0023).
-   */
   async issueOfflineIntentToken(
     input: unknown,
     ctx: IExecutionContext
-  ): Promise<IServiceResult<IOfflineIntentToken>> {
+  ): Promise<IServiceResult<{ token: string; expiresAt: string; nonce: string }>> {
     const parsed = IssueOfflineIntentTokenInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError(
-        'Invalid offline intent token input',
-        parsed.error.flatten().fieldErrors
-      );
+    if (!parsed.success) throw validationError(parsed.error);
+    if (parsed.data.userId !== ctx.userId) {
+      throw new AuthorizationError('Cannot issue offline intent token for another user');
     }
+    const key = this.getOfflineTokenKey();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const expiresAtSeconds = nowSeconds + parsed.data.expiresInSeconds;
+    const nonce = nanoid(16);
+    const token = await new SignJWT({
+      userId: parsed.data.userId,
+      sessionBlueprint: parsed.data.sessionBlueprint,
+      nonce,
+    })
+      .setProtectedHeader({
+        alg: 'HS256',
+        kid: this.options.security.offlineIntentTokenActiveKeyId,
+      })
+      .setIssuer(this.options.security.offlineIntentTokenIssuer)
+      .setAudience(this.options.security.offlineIntentTokenAudience)
+      .setSubject(parsed.data.userId)
+      .setIssuedAt(nowSeconds)
+      .setExpirationTime(expiresAtSeconds)
+      .setJti(nonce)
+      .sign(key);
 
-    const data = parsed.data as IOfflineIntentTokenInput;
-    if (data.userId !== ctx.userId) {
-      throw new AuthorizationError('userId in payload must match authenticated user');
-    }
-
-    if (this.tokenSecrets.size === 0) {
-      throw new ValidationError('Offline intent token issuance is not configured', {
-        offlineIntentToken: ['OFFLINE_INTENT_TOKEN_KEYS is required for token issuance'],
-      });
-    }
-
-    const activeSecret = this.requireTokenSecret(this.activeTokenKeyId);
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + data.expiresInSeconds * 1000);
-
-    let claims: IOfflineIntentTokenClaims | null = null;
-    let token: string | null = null;
-
-    await this.runInTransaction(async (tx) => {
-      // Register JTI first, then sign JWT once — avoids crypto work on retry
-      let registeredNonce: string | null = null;
-
-      for (
-        let attempt = 1;
-        attempt <= OFFLINE_INTENT_TOKEN_REPLAY_GUARD_INSERT_RETRIES;
-        attempt += 1
-      ) {
-        const candidateNonce = crypto.randomUUID();
-
-        const inserted = await this.registerOfflineIntentTokenReplayGuard(tx, {
-          jti: candidateNonce,
-          userId: data.userId as UserId,
-          issuedAt: now,
-          expiresAt,
-        });
-
-        if (inserted) {
-          registeredNonce = candidateNonce;
-          break;
-        }
-      }
-
-      if (registeredNonce === null) {
-        throw new ValidationError('Failed to issue offline intent token', {
-          offlineIntentToken: ['Unable to allocate unique token nonce'],
-        });
-      }
-
-      const registeredClaims: IOfflineIntentTokenClaims = {
-        tokenVersion: 'v1',
-        userId: data.userId as UserId,
-        sessionBlueprint: data.sessionBlueprint as IOfflineIntentTokenClaims['sessionBlueprint'],
-        issuedAt: now.toISOString(),
-        expiresAt: expiresAt.toISOString(),
-        nonce: registeredNonce,
-      };
-
-      token = await new SignJWT(registeredClaims as unknown as Record<string, unknown>)
-        .setProtectedHeader({ alg: 'HS256', typ: 'JWT', kid: this.activeTokenKeyId })
-        .setIssuedAt(Math.floor(now.getTime() / 1000))
-        .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
-        .setSubject(data.userId)
-        .setIssuer(this.options.security.offlineIntentTokenIssuer)
-        .setAudience(this.options.security.offlineIntentTokenAudience)
-        .setJti(registeredNonce)
-        .sign(activeSecret);
-
-      claims = registeredClaims;
-
-      await this.publishThroughOutbox(
-        {
-          id: `${ID_PREFIXES.EventId}${nanoid()}` as import('@noema/types').EventId,
-          eventType: 'session.intent_token.issued',
-          aggregateType: 'Session',
-          aggregateId: data.userId,
-          payload: {
-            expiresAt: claims.expiresAt,
-            nonce: claims.nonce,
-          },
-          metadata: {
-            correlationId: ctx.correlationId,
-            userId: ctx.userId,
-          },
-        },
-        tx
-      );
-    });
-
-    if (claims === null || token === null) {
-      throw new ValidationError('Failed to issue offline intent token', {
-        offlineIntentToken: ['Unable to allocate unique token nonce'],
-      });
-    }
-
-    // Bind to const with type assertion — TS control-flow cannot track
-    // closure mutations, so claims/token remain typed as null|never after the guard.
-    const validClaims = claims as unknown as IOfflineIntentTokenClaims;
-    const validToken = token as unknown as string;
-
-    this.logger.info(
-      { userId: ctx.userId, kid: this.activeTokenKeyId, expiresAt: validClaims.expiresAt },
-      'Issued offline intent token'
+    return result(
+      { token, expiresAt: new Date(expiresAtSeconds * 1000).toISOString(), nonce },
+      'Offline intent token issued.'
     );
+  }
+
+  async verifyOfflineIntentTokenPublic(
+    input: unknown,
+    _ctx: IExecutionContext
+  ): Promise<IServiceResult<{ valid: boolean; claims: unknown }>> {
+    const parsed = VerifyOfflineIntentTokenInputSchema.safeParse(input);
+    if (!parsed.success) throw validationError(parsed.error);
+    const key = this.getOfflineTokenKey();
+    const verified = await jwtVerify(parsed.data.token, key, {
+      issuer: this.options.security.offlineIntentTokenIssuer,
+      audience: this.options.security.offlineIntentTokenAudience,
+    });
+    return result({ valid: true, claims: verified.payload }, 'Offline intent token verified.');
+  }
+
+  private minimalLessonPlanFactory(
+    session: ISession,
+    input: ICreateLessonPlanInput
+  ): ICreateLessonPlanRecord {
+    const topic = input.topic ?? session.config.topic ?? 'Review session';
+    const lessonPlanId = id<LessonPlanId>(ID_PREFIXES.LessonPlanId);
+    const stepId = id<StepId>(ID_PREFIXES.StepId);
+    const activityId = id<ActivityId>(ID_PREFIXES.ActivityId);
+    const variantSeed = `minimal-${session.id}-${Date.now().toString(36)}`;
+    const plannedStep = input.steps?.[0];
+
+    const activityInput: IPlannedActivityInput | undefined = plannedStep?.activities?.[0];
+    const stepInput: IPlannedStepInput = plannedStep ?? {
+      objective: `Review ${topic}`,
+      expectedOutcome: `Learner can explain the core idea of ${topic}.`,
+      conceptRefs: (input.selectedNodeIds ?? []) as never,
+    };
 
     return {
-      data: { token: validToken, expiresAt: validClaims.expiresAt },
-      agentHints: buildHints(
-        [
-          {
-            action: 'persist_intent_token',
-            description: 'Store token offline for later session replay',
-            priority: 'high',
-          },
-        ],
-        'Token issued successfully'
-      ),
+      id: lessonPlanId,
+      sessionId: session.id,
+      userId: session.userId,
+      curriculumId: input.curriculumId ?? session.curriculumId,
+      curriculumVersionId:
+        input.curriculumVersionId ?? session.curriculumVersionId ?? ('cver_maintenance_system' as never),
+      selectedNodeIds: input.selectedNodeIds ?? [],
+      studyMode: session.studyMode,
+      learningMode: session.learningMode,
+      rigorLevel: input.rigorLevel ?? RigorLevel.MINIMAL,
+      topic,
+      prerequisites: input.prerequisites ?? [],
+      sourceDecks: input.sourceDecks ?? session.config.sourceDecks ?? [],
+      sourceCategories: input.sourceCategories ?? session.config.sourceCategories ?? [],
+      assessmentStrategy: input.assessmentStrategy ?? 'Structural review step evaluation',
+      adaptationRules:
+        input.adaptationRules ?? 'Advance through pending Steps; adapt in later batches.',
+      guardianValidationId: null,
+      state: LessonPlanState.ACTIVE,
+      version: 1,
+      steps: [
+        {
+          id: stepId,
+          lessonPlanId,
+          sessionId: session.id,
+          userId: session.userId,
+          studyMode: session.studyMode,
+          position: 0,
+          objective: stepInput.objective,
+          servesGoalIds: stepInput.servesGoalIds ?? [],
+          eligibleModes: stepInput.eligibleModes ?? [EpistemicMode.GENERATIVE_RETRIEVAL],
+          selectedMode: stepInput.selectedMode ?? EpistemicMode.GENERATIVE_RETRIEVAL,
+          transformationType: stepInput.transformationType ?? TransformationType.RECALL,
+          expectedOutcome: stepInput.expectedOutcome,
+          evaluationType: stepInput.evaluationType ?? 'self_explanation',
+          difficulty: stepInput.difficulty ?? 0.5,
+          isRepair: stepInput.isRepair ?? false,
+          conceptRefs: stepInput.conceptRefs ?? [],
+          variantSeed: stepInput.variantSeed ?? variantSeed,
+          status: StepStatus.PLANNED,
+          evaluationId: null,
+          guardianValidationId: null,
+          presentedAt: null,
+          answeredAt: null,
+          evaluatedAt: null,
+          supersededByStepId: null,
+          version: 1,
+          queueStatus: 'pending',
+          activities: [
+            {
+              id: activityId,
+              stepId,
+              position: 0,
+              contentSourceType:
+                activityInput?.contentSourceType ?? ActivityContentSourceType.GENERATED,
+              cardId: activityInput?.cardId ?? null,
+              templateId: activityInput?.templateId ?? null,
+              generatedVariantId: activityInput?.generatedVariantId ?? null,
+              prompt:
+                activityInput?.prompt ??
+                `Explain ${topic} in your own words, then name one uncertainty.`,
+              renderPayload: activityInput?.renderPayload ?? {},
+              expectedResponseType: activityInput?.expectedResponseType ?? 'free_text',
+              responseSchema: activityInput?.responseSchema ?? {},
+              variantSeed: activityInput?.variantSeed ?? variantSeed,
+              generationFallbackReason: activityInput?.generationFallbackReason ?? null,
+            },
+          ],
+        },
+      ],
     };
   }
 
-  /**
-   * Verify a signed offline intent token and extract claims.
-   *
-   * Supports kid-targeted key lookup with fallback to all keys for legacy tokens.
-   */
-  async verifyOfflineIntentTokenPublic(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IVerifyOfflineIntentTokenResult>> {
-    const parsed = VerifyOfflineIntentTokenInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new ValidationError(
-        'Invalid verify intent token input',
-        parsed.error.flatten().fieldErrors
-      );
+  private async fullLessonPlanFactory(
+    session: ISession,
+    input: ICreateLessonPlanInput
+  ): Promise<ICreateLessonPlanRecord> {
+    if (!this.options.lessonPlanAgentUrl) {
+      throw new BusinessRuleError('Full LessonPlan generation agent is not configured', {
+        sessionId: session.id,
+      });
     }
 
-    try {
-      const protectedHeader = decodeProtectedHeader(parsed.data.token);
-      const candidateKeys = this.getVerificationKeys(protectedHeader.kid);
+    const response = await fetch(this.options.lessonPlanAgentUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: session.id,
+        userId: session.userId,
+        studyMode: session.studyMode,
+        learningMode: session.learningMode,
+        ...input,
+      }),
+    });
 
-      let verifiedPayload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | undefined;
-      let lastError: unknown;
-
-      for (const key of candidateKeys) {
-        try {
-          const { payload } = await jwtVerify(parsed.data.token, key, {
-            issuer: this.options.security.offlineIntentTokenIssuer,
-            audience: this.options.security.offlineIntentTokenAudience,
-          });
-          verifiedPayload = payload;
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      if (verifiedPayload === undefined) {
-        throw lastError instanceof Error ? lastError : new Error('Token verification failed');
-      }
-
-      const claims = verifiedPayload as unknown as IOfflineIntentTokenClaims;
-      if (claims.userId !== ctx.userId) {
-        return {
-          data: { valid: false, reason: 'Token userId does not match authenticated user' },
-          agentHints: buildHints(
-            [
-              {
-                action: 'request_new_intent_token',
-                description: 'Token subject does not match user',
-                priority: 'high',
-              },
-            ],
-            'Token subject mismatch'
-          ),
-        };
-      }
-
-      const jti =
-        typeof verifiedPayload.jti === 'string' && verifiedPayload.jti.length > 0
-          ? verifiedPayload.jti
-          : claims.nonce;
-      const replayGuard = await this.consumeOfflineIntentTokenReplayGuard({
-        jti,
-        userId: claims.userId,
+    if (!response.ok) {
+      throw new BusinessRuleError('Full LessonPlan generation agent rejected the request', {
+        status: response.status,
       });
+    }
 
-      if (!replayGuard.valid) {
-        return {
-          data: { valid: false, reason: replayGuard.reason },
-          agentHints: buildHints(
-            [
-              {
-                action: 'request_new_intent_token',
-                description: replayGuard.reason,
-                priority: 'high',
-              },
-            ],
-            'Token replay guard rejected token'
-          ),
-        };
-      }
+    const generated = (await response.json()) as { steps?: IPlannedStepInput[]; topic?: string };
+    return this.minimalLessonPlanFactory(session, {
+      ...input,
+      rigorLevel: RigorLevel.FULL,
+      topic: generated.topic ?? input.topic,
+      steps: generated.steps ?? input.steps,
+    });
+  }
 
-      const checkpointSignals =
-        (claims.sessionBlueprint as { checkpointSignals?: AdaptiveCheckpointSignal[] })
-          .checkpointSignals ?? [];
-
-      return {
-        data: {
-          valid: true,
-          userId: claims.userId,
-          expiresAt: claims.expiresAt,
-          checkpointSignals,
-        },
-        agentHints: buildHints(
-          [
-            {
-              action: 'resume_offline_session',
-              description: 'Intent token is valid',
-              priority: 'high',
-            },
-          ],
-          'Token verified successfully'
-        ),
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Token verification failed';
-      return {
-        data: { valid: false, reason: message },
-        agentHints: buildHints(
-          [
-            {
-              action: 'request_new_intent_token',
-              description: `Token invalid: ${message}`,
-              priority: 'high',
-            },
-          ],
-          'Token verification failed'
-        ),
-      };
+  private assertLessonPlanServesCurriculumSlice(record: ICreateLessonPlanRecord): void {
+    if (record.selectedNodeIds.length === 0) return;
+    const servedNodes = new Set(record.steps.flatMap((step) => step.conceptRefs));
+    const hasServedSelectedNode = record.selectedNodeIds.some((nodeId) =>
+      servedNodes.has(nodeId as never)
+    );
+    if (!hasServedSelectedNode) {
+      throw new BusinessRuleError('LessonPlan steps must serve at least one selected curriculum node', {
+        lessonPlanId: record.id,
+        selectedNodeIds: record.selectedNodeIds,
+      });
     }
   }
 
-  /**
-   * Internal verification used by startSession.
-   */
-  private async verifyOfflineIntentToken(
-    offlineIntentToken: string | undefined,
+  private async assertOwnsStep(step: IStep, ctx: IExecutionContext): Promise<void> {
+    if (step.userId !== ctx.userId) {
+      throw new AuthorizationError('Step belongs to another user');
+    }
+  }
+
+  private assertOwnsSession(session: ISession, ctx: IExecutionContext): void {
+    if (session.userId !== ctx.userId) {
+      throw new AuthorizationError('Session belongs to another user');
+    }
+  }
+
+  private stepPayload(step: IStep): Record<string, unknown> {
+    return {
+      stepId: step.id,
+      lessonPlanId: step.lessonPlanId,
+      sessionId: step.sessionId,
+      userId: step.userId,
+    };
+  }
+
+  private async transitionSession(
+    session: ISession,
+    nextState: SessionLifecycleState,
+    ctx: IExecutionContext,
+    tx: Prisma.TransactionClient
+  ): Promise<ISession> {
+    if (session.lifecycleState === nextState) return session;
+    const updated = await this.repository.updateSession(
+      session.id,
+      {
+        lifecycleState: nextState,
+        lastActivityAt: isoNow(),
+      },
+      session.version,
+      tx
+    );
+    await this.enqueueEvent(
+      'session.lifecycle.transitioned',
+      'Session',
+      session.id,
+      {
+        sessionId: session.id,
+        userId: session.userId,
+        previousState: session.lifecycleState,
+        newState: nextState,
+        transitionedAt: isoNow(),
+      },
+      ctx,
+      tx
+    );
+    return updated;
+  }
+
+  private async runInTransaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    return this.prisma.$transaction(async (tx) => fn(tx));
+  }
+
+  private async enqueueEvent(
+    eventType: string,
+    aggregateType: string,
+    aggregateId: string,
+    payload: unknown,
     ctx: IExecutionContext,
     tx?: Prisma.TransactionClient
   ): Promise<void> {
-    if (!this.options.security.verifyOfflineIntentTokens || offlineIntentToken === undefined) {
-      return;
-    }
-
-    if (this.tokenSecrets.size === 0) {
-      throw new ValidationError('Offline intent token verification is enabled but not configured', {
-        offlineIntentToken: ['OFFLINE_INTENT_TOKEN_KEYS is required when verification is enabled'],
-      });
-    }
-
-    try {
-      const protectedHeader = decodeProtectedHeader(offlineIntentToken);
-      const candidateKeys = this.getVerificationKeys(protectedHeader.kid);
-
-      let verifiedPayload: Awaited<ReturnType<typeof jwtVerify>>['payload'] | undefined;
-      let lastError: unknown;
-
-      for (const key of candidateKeys) {
-        try {
-          const { payload } = await jwtVerify(offlineIntentToken, key, {
-            issuer: this.options.security.offlineIntentTokenIssuer,
-            audience: this.options.security.offlineIntentTokenAudience,
-          });
-          verifiedPayload = payload;
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      if (verifiedPayload === undefined) {
-        if (lastError instanceof AuthorizationError) throw lastError;
-        throw new AuthorizationError('Invalid offline intent token');
-      }
-
-      if (verifiedPayload.sub !== ctx.userId) {
-        throw new AuthorizationError('Offline intent token does not match authenticated user');
-      }
-
-      const claims = verifiedPayload as unknown as IOfflineIntentTokenClaims;
-      const jti =
-        typeof verifiedPayload.jti === 'string' && verifiedPayload.jti.length > 0
-          ? verifiedPayload.jti
-          : claims.nonce;
-      const replayGuard = await this.consumeOfflineIntentTokenReplayGuard(
-        {
-          jti,
-          userId: ctx.userId,
-        },
-        tx
-      );
-
-      if (!replayGuard.valid) {
-        throw new AuthorizationError(replayGuard.reason);
-      }
-    } catch (error) {
-      if (error instanceof AuthorizationError) {
-        throw error;
-      }
-      if (error instanceof ValidationError) {
-        throw error;
-      }
-      throw new AuthorizationError('Invalid offline intent token');
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // Token Helpers
-  // --------------------------------------------------------------------------
-
-  private async registerOfflineIntentTokenReplayGuard(
-    tx: Prisma.TransactionClient,
-    input: { jti: string; userId: UserId; issuedAt: Date; expiresAt: Date }
-  ): Promise<boolean> {
-    const inserted = await tx.$executeRaw`
-      INSERT INTO offline_intent_token_replay_guard (
-        jti,
-        user_id,
-        issued_at,
-        expires_at,
-        consumed_at,
-        status
-      )
-      VALUES (
-        ${input.jti},
-        ${input.userId},
-        ${input.issuedAt},
-        ${input.expiresAt},
-        NULL,
-        'ISSUED'::offline_intent_token_replay_guard_status
-      )
-      ON CONFLICT (jti) DO NOTHING
-    `;
-
-    if (inserted === 1) {
-      await this.maybeCleanupExpiredReplayGuards(tx, input.issuedAt);
-    }
-    return inserted === 1;
-  }
-
-  private async consumeOfflineIntentTokenReplayGuard(
-    input: {
-      jti: string;
-      userId: UserId;
-    },
-    outerTx?: Prisma.TransactionClient
-  ): Promise<{ valid: true } | { valid: false; reason: string }> {
-    if (input.jti.trim().length === 0) {
-      return { valid: false, reason: 'Offline intent token missing nonce' };
-    }
-
-    const execute = async (tx: Prisma.TransactionClient) => {
-      const now = new Date();
-
-      await this.maybeCleanupExpiredReplayGuards(tx, now);
-
-      const consumed = await tx.$executeRaw`
-        UPDATE offline_intent_token_replay_guard
-        SET
-          consumed_at = ${now},
-          status = 'CONSUMED'::offline_intent_token_replay_guard_status,
-          updated_at = NOW()
-        WHERE jti = ${input.jti}
-          AND user_id = ${input.userId}
-          AND status = 'ISSUED'::offline_intent_token_replay_guard_status
-          AND consumed_at IS NULL
-          AND expires_at > ${now}
-      `;
-
-      if (consumed === 1) {
-        return { valid: true as const };
-      }
-
-      const records = await tx.$queryRaw<
-        Array<{
-          expiresAt: Date;
-          consumedAt: Date | null;
-          status: 'ISSUED' | 'CONSUMED' | 'EXPIRED';
-        }>
-      >`
-        SELECT
-          expires_at AS "expiresAt",
-          consumed_at AS "consumedAt",
-          status::text AS "status"
-        FROM offline_intent_token_replay_guard
-        WHERE jti = ${input.jti}
-          AND user_id = ${input.userId}
-        LIMIT 1
-      `;
-
-      const record = records[0];
-      if (!record) {
-        return { valid: false as const, reason: 'Offline intent token not registered' };
-      }
-
-      if (record.expiresAt.getTime() <= now.getTime() || record.status === 'EXPIRED') {
-        return { valid: false as const, reason: 'Offline intent token expired' };
-      }
-
-      if (record.consumedAt !== null || record.status === 'CONSUMED') {
-        return { valid: false as const, reason: 'Offline intent token replay detected' };
-      }
-
-      return { valid: false as const, reason: 'Offline intent token is not usable' };
+    const event: IOutboxEventInput = {
+      id: id<EventId>(ID_PREFIXES.EventId),
+      eventType,
+      aggregateType,
+      aggregateId,
+      payload,
+      metadata: {
+        correlationId: ctx.correlationId,
+        userId: ctx.userId,
+      },
     };
 
-    if (outerTx) {
-      return execute(outerTx);
-    }
-    return this.prisma.$transaction(async (tx) => execute(tx));
-  }
-
-  /**
-   * Probabilistic gate: run cleanup ~10% of the time to avoid
-   * two UPDATE/DELETE statements on every single token operation.
-   */
-  private async maybeCleanupExpiredReplayGuards(
-    tx: Prisma.TransactionClient,
-    now: Date
-  ): Promise<void> {
-    if (Math.random() >= 0.1) {
-      return;
-    }
-    await this.cleanupExpiredOfflineIntentTokenReplayGuards(tx, now);
-  }
-
-  private async cleanupExpiredOfflineIntentTokenReplayGuards(
-    tx: Prisma.TransactionClient,
-    now: Date
-  ): Promise<void> {
-    const retentionCutoff = new Date(
-      now.getTime() - OFFLINE_INTENT_TOKEN_REPLAY_GUARD_RETENTION_MS
-    );
-
-    await tx.$executeRaw`
-      UPDATE offline_intent_token_replay_guard
-      SET
-        status = 'EXPIRED'::offline_intent_token_replay_guard_status,
-        updated_at = NOW()
-      WHERE status <> 'EXPIRED'::offline_intent_token_replay_guard_status
-        AND expires_at <= ${now}
-    `;
-
-    await tx.$executeRaw`
-      DELETE FROM offline_intent_token_replay_guard
-      WHERE status = 'EXPIRED'::offline_intent_token_replay_guard_status
-        AND expires_at < ${retentionCutoff}
-    `;
-  }
-
-  private requireTokenSecret(keyId: string): Uint8Array {
-    const secret = this.tokenSecrets.get(keyId);
-    if (secret === undefined) {
-      throw new Error(`Offline intent token secret missing for key id '${keyId}'`);
-    }
-    return secret;
-  }
-
-  private getVerificationKeys(tokenKid: unknown): Uint8Array[] {
-    if (typeof tokenKid === 'string' && tokenKid.length > 0) {
-      const selected = this.tokenSecrets.get(tokenKid);
-      if (selected === undefined) {
-        return [];
-      }
-      return [selected];
-    }
-    return [...this.tokenSecrets.values()];
-  }
-
-  private async runInTransaction<T>(
-    operation: (tx: Prisma.TransactionClient) => Promise<T>
-  ): Promise<T> {
-    return this.prisma.$transaction(async (tx) => operation(tx));
-  }
-
-  private async publishThroughOutbox(
-    event: IOutboxEventInput,
-    tx?: Prisma.TransactionClient
-  ): Promise<void> {
     await this.outboxRepository.enqueue(event, tx);
-
-    if (tx !== undefined) {
-      return;
-    }
+    if (tx !== undefined) return;
 
     try {
       await this.eventPublisher.publish({
@@ -2718,7 +868,7 @@ export class SessionService {
       await this.outboxRepository.markPublished(event.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown outbox publish failure';
-      await this.outboxRepository.markFailed(event.id, message, tx);
+      await this.outboxRepository.markFailed(event.id, message);
       throw new OutboxDispatchError('Failed to publish outbox event', {
         eventId: event.id,
         eventType: event.eventType,
@@ -2727,118 +877,12 @@ export class SessionService {
     }
   }
 
-  /**
-   * Compute updated session stats after an attempt.
-   */
-  private computeUpdatedStats(
-    current: ISessionStats,
-    attempt: {
-      outcome: string;
-      rating: string;
-      ratingValue: number;
-      responseTimeMs: number;
-      confidenceBefore: number | undefined;
-      confidenceAfter: number | undefined;
-      hintRequestCount: number | undefined;
-      isFirstAttemptForCard: boolean;
+  private getOfflineTokenKey(): Uint8Array {
+    const keyId = this.options.security.offlineIntentTokenActiveKeyId;
+    const secret = this.options.security.offlineIntentTokenKeys[keyId];
+    if (!secret) {
+      throw new BusinessRuleError(`Offline intent token key not configured: ${keyId}`);
     }
-  ): ISessionStats {
-    const totalAttempts = current.totalAttempts + 1;
-    const correctCount = current.correctCount + (attempt.outcome === 'correct' ? 1 : 0);
-    const incorrectCount = current.incorrectCount + (attempt.outcome === 'incorrect' ? 1 : 0);
-    const skippedCount = current.skippedCount + (attempt.outcome === 'skipped' ? 1 : 0);
-
-    // Running average for response time
-    const averageResponseTimeMs = Math.round(
-      (current.averageResponseTimeMs * current.totalAttempts + attempt.responseTimeMs) /
-        totalAttempts
-    );
-
-    // Running average for confidence
-    let averageConfidence = current.averageConfidence;
-    if (attempt.confidenceBefore != null) {
-      averageConfidence =
-        averageConfidence != null
-          ? (averageConfidence * current.totalAttempts + attempt.confidenceBefore) / totalAttempts
-          : attempt.confidenceBefore;
-    }
-
-    // Calibration delta
-    let averageCalibrationDelta = current.averageCalibrationDelta;
-    if (attempt.confidenceBefore != null && attempt.confidenceAfter != null) {
-      const delta = attempt.confidenceAfter - attempt.confidenceBefore;
-      averageCalibrationDelta =
-        averageCalibrationDelta != null
-          ? (averageCalibrationDelta * current.totalAttempts + delta) / totalAttempts
-          : delta;
-    }
-
-    // Streak tracking
-    const isCorrect = attempt.outcome === 'correct';
-    const streakCurrent = isCorrect ? current.streakCurrent + 1 : 0;
-    const streakBest = Math.max(current.streakBest, streakCurrent);
-
-    // Retention rate
-    const retentionRate = totalAttempts > 0 ? correctCount / totalAttempts : 0;
-
-    // Hints
-    const totalHintsUsed = current.totalHintsUsed + (attempt.hintRequestCount ?? 0);
-
-    // Rating distribution
-    const ratingDistribution = { ...current.ratingDistribution };
-    const ratingKey = attempt.rating.toLowerCase();
-    ratingDistribution[ratingKey] = (ratingDistribution[ratingKey] ?? 0) + 1;
-
-    return {
-      totalAttempts,
-      correctCount,
-      incorrectCount,
-      skippedCount,
-      averageResponseTimeMs,
-      averageConfidence,
-      averageCalibrationDelta,
-      retentionRate,
-      streakCurrent,
-      streakBest,
-      totalHintsUsed,
-      uniqueCardsReviewed: current.uniqueCardsReviewed + (attempt.isFirstAttemptForCard ? 1 : 0),
-      newCardsIntroduced: current.newCardsIntroduced,
-      lapsedCards: current.lapsedCards,
-      ratingDistribution,
-    };
-  }
-
-  /**
-   * Suggest actions based on session state.
-   */
-  private suggestedActionsForState(
-    session: ISession
-  ): Array<{ action: string; description: string; priority?: ISuggestedAction['priority'] }> {
-    switch (session.state) {
-      case States.ACTIVE:
-        return [
-          { action: 'present_next_card', description: 'Present the next card', priority: 'high' },
-          { action: 'pause_session', description: 'Pause the session' },
-          { action: 'get_queue', description: 'Retrieve the session queue' },
-        ];
-      case States.PAUSED:
-        return [
-          { action: 'resume_session', description: 'Resume the paused session', priority: 'high' },
-          { action: 'abandon_session', description: 'Abandon the session' },
-        ];
-      case States.COMPLETED:
-      case States.ABANDONED:
-      case States.EXPIRED:
-        return [
-          {
-            action: 'show_session_summary',
-            description: 'Display session summary',
-            priority: 'high',
-          },
-          { action: 'start_new_session', description: 'Start a new study session' },
-        ];
-      default:
-        return [];
-    }
+    return new TextEncoder().encode(secret);
   }
 }

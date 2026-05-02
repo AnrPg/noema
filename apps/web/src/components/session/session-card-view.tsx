@@ -115,7 +115,7 @@ export function SessionCardView({
             <SidePanel side={promptSide} tone="primary" />
           ) : (
             <div className="rounded-2xl border border-border/70 bg-background/80 p-5 text-muted-foreground">
-              No readable side content found for this card.
+              No readable side content found for this payload.
             </div>
           )}
 
@@ -162,9 +162,9 @@ export function SessionCardView({
               size="lg"
               className="rounded-full border-border/70 px-6"
               onClick={onReveal}
-              aria-label={`Show answer for card ${card.id}`}
+              aria-label={`Reveal Step answer for payload ${card.id}`}
             >
-              Show Answer
+              Reveal Step
             </Button>
           </div>
         )}

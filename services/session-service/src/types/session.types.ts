@@ -1,268 +1,95 @@
 /**
- * @noema/session-service - Service-Internal Types
- *
- * Domain types used within the session service.
- * These map to the Prisma models but are service-internal (not in @noema/types).
+ * @noema/session-service - Step-first service-internal types.
  */
 
+import type { ISevenFrameTraceDto } from '@noema/contracts';
 import type {
-  AttemptId,
-  AttemptOutcome,
-  CardId,
-  CardQueueStatus,
-  CognitiveLoadLevel,
-  DeckQueryLogId,
-  FatigueLevel,
-  ForceLevel,
-  HintDepth,
+  ActivityId,
+  ConceptId,
+  CurriculumId,
+  CurriculumNodeId,
+  CurriculumVersionId,
+  EpistemicMode,
+  EvaluationId,
+  GoalId,
+  GoalSource,
+  GoalState,
+  GoalType,
   LearningMode,
-  LoadoutArchetype,
-  LoadoutId,
-  MotivationSignal,
-  Rating,
-  SchedulingAlgorithm,
+  LessonPlanId,
+  LessonPlanState,
+  RigorLevel,
   SessionId,
-  SessionTerminationReason,
+  SessionLifecycleState,
+  StepId,
+  StepSelfRating,
+  StepStatus,
   StudyMode,
-  TeachingApproach,
+  TransformationType,
   UserId,
 } from '@noema/types';
 
-export interface ISchedulerLaneMix {
-  retention: number;
-  calibration: number;
-}
-
-export type SessionSchedulerLane = 'retention' | 'calibration';
-
-export type AdaptiveCheckpointSignal =
-  | 'confidence_drift'
-  | 'latency_spike'
-  | 'error_cascade'
-  | 'streak_break'
-  | 'manual';
-
-export interface ICognitivePolicySnapshot {
-  pacingPolicy: {
-    targetSecondsPerCard: number;
-    hardCapSecondsPerCard: number;
-    slowdownOnError: boolean;
-  };
-  hintPolicy: {
-    maxHintsPerCard: number;
-    progressiveHintsOnly: boolean;
-    allowAnswerReveal: boolean;
-  };
-  commitPolicy: {
-    requireConfidenceBeforeCommit: boolean;
-    requireVerificationGate: boolean;
-  };
-  reflectionPolicy: {
-    postAttemptReflection: boolean;
-    postSessionReflection: boolean;
-  };
-}
-
-export interface ISessionBlueprint {
-  blueprintVersion: 'v1';
-  generatedAt: string;
-  generatedBy: 'agent';
-  deckQueryId: string;
-  initialCardIds: string[];
-  cardLanes?: Record<string, SessionSchedulerLane>;
-  laneMix: ISchedulerLaneMix;
-  checkpointSignals: AdaptiveCheckpointSignal[];
-  policySnapshot: ICognitivePolicySnapshot;
-  assumptions: string[];
-}
-
-export interface IAdaptiveCheckpointDirective {
-  action:
-    | 'rebalance_queue'
-    | 'slowdown'
-    | 'increase_support'
-    | 'reduce_calibration_lane'
-    | 'switch_teaching_approach'
-    | 'continue';
-  reason: string;
-  priority: 'critical' | 'high' | 'medium' | 'low';
-}
-
-/**
- * Cohort handshake state machine:
- *
- *   PROPOSED  ──► ACCEPTED ──► COMMITTED  (terminal)
- *       ▲             │
- *       └── REVISED ◄─┘
- *
- * CANCELLED is reserved for future use (e.g. user- or system-initiated
- * cancellation before commit). It exists in the Prisma enum to avoid a
- * migration when the feature is implemented but has no transition path today.
- */
-export const SessionCohortHandshakeStatus = {
-  PROPOSED: 'proposed',
-  ACCEPTED: 'accepted',
-  REVISED: 'revised',
-  COMMITTED: 'committed',
-  /** @reserved — no transition path implemented yet. */
-  CANCELLED: 'cancelled',
+export const ActivityContentSourceType = {
+  CARD: 'card',
+  TEMPLATE: 'template',
+  GENERATED: 'generated',
 } as const;
 
-export type SessionCohortHandshakeStatus =
-  (typeof SessionCohortHandshakeStatus)[keyof typeof SessionCohortHandshakeStatus];
+export type ActivityContentSourceType =
+  (typeof ActivityContentSourceType)[keyof typeof ActivityContentSourceType];
 
-export interface ISessionCohortLinkage {
-  proposalId: string;
-  decisionId: string;
-}
-
-export interface ISessionCohortHandshake {
-  id: string;
-  sessionId: SessionId;
-  proposalId: string;
-  decisionId: string;
-  revision: number;
-  status: SessionCohortHandshakeStatus;
-  candidateCardIds: CardId[];
-  acceptedCardIds: CardId[] | null;
-  rejectedCardIds: CardId[] | null;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface IProposeCohortInput {
-  linkage: ISessionCohortLinkage;
-  revision: number;
-  candidateCardIds: CardId[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface IAcceptCohortInput {
-  linkage: ISessionCohortLinkage;
-  expectedRevision: number;
-  acceptedCardIds: CardId[];
-  rejectedCardIds: CardId[];
-  metadata?: Record<string, unknown>;
-}
-
-export interface IReviseCohortInput {
-  linkage: ISessionCohortLinkage;
-  expectedRevision: number;
-  newRevision: number;
-  candidateCardIds: CardId[];
-  reason: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ICommitCohortInput {
-  linkage: ISessionCohortLinkage;
-  expectedRevision: number;
-  committedCardIds: CardId[];
-  rejectedCardIds: CardId[];
-  policyVersion?: string;
-  metadata?: Record<string, unknown>;
-}
-
-// ============================================================================
-// Session State Enum (service-internal FSM state)
-// ============================================================================
-
-export const SessionState = {
-  ACTIVE: 'active',
-  PAUSED: 'paused',
+export const StepQueueStatus = {
+  PENDING: 'pending',
+  PRESENTED: 'presented',
   COMPLETED: 'completed',
-  ABANDONED: 'abandoned',
-  EXPIRED: 'expired',
+  SKIPPED: 'skipped',
+  INJECTED: 'injected',
 } as const;
 
-export type SessionState = (typeof SessionState)[keyof typeof SessionState];
+export type StepQueueStatus = (typeof StepQueueStatus)[keyof typeof StepQueueStatus];
 
-// ============================================================================
-// Session Config (immutable after creation)
-// ============================================================================
-
-export type SessionRevealMode = 'all_at_once' | 'one_then_more';
-
-export interface ISessionPresentationConfig {
-  promptSide?: string;
-  answerSide?: string;
-  revealMode?: SessionRevealMode;
-}
+export type SessionTerminationReason = 'completed' | 'abandoned' | 'expired' | 'system' | string;
 
 export interface ISessionConfig {
-  maxCards?: number;
-  maxDurationMinutes?: number;
-  sessionTimeoutHours: number;
-  categoryIds?: string[];
-  cardTypes?: string[];
-  presentation?: ISessionPresentationConfig;
+  curriculumId?: CurriculumId | undefined;
+  curriculumVersionId?: CurriculumVersionId | undefined;
+  topic?: string | undefined;
+  sourceDecks?: string[] | undefined;
+  sourceCategories?: string[] | undefined;
+  maxSteps?: number | undefined;
+  maxDurationMinutes?: number | undefined;
+  sessionTimeoutHours?: number | undefined;
+  [key: string]: unknown;
 }
 
-// ============================================================================
-// Session Statistics (mutable — updated on each attempt)
-// ============================================================================
-
 export interface ISessionStats {
-  totalAttempts: number;
-  correctCount: number;
-  incorrectCount: number;
-  skippedCount: number;
-  averageResponseTimeMs: number;
-  averageConfidence: number | null;
-  averageCalibrationDelta: number | null;
-  retentionRate: number;
-  streakCurrent: number;
-  streakBest: number;
-  totalHintsUsed: number;
-  uniqueCardsReviewed: number;
-  newCardsIntroduced: number;
-  lapsedCards: number;
-  ratingDistribution: Record<string, number>;
+  stepsPlanned: number;
+  stepsPresented: number;
+  stepsEvaluated: number;
+  stepsSkipped: number;
 }
 
 export function createEmptyStats(): ISessionStats {
   return {
-    totalAttempts: 0,
-    correctCount: 0,
-    incorrectCount: 0,
-    skippedCount: 0,
-    averageResponseTimeMs: 0,
-    averageConfidence: null,
-    averageCalibrationDelta: null,
-    retentionRate: 0,
-    streakCurrent: 0,
-    streakBest: 0,
-    totalHintsUsed: 0,
-    uniqueCardsReviewed: 0,
-    newCardsIntroduced: 0,
-    lapsedCards: 0,
-    ratingDistribution: { again: 0, hard: 0, good: 0, easy: 0 },
+    stepsPlanned: 0,
+    stepsPresented: 0,
+    stepsEvaluated: 0,
+    stepsSkipped: 0,
   };
 }
-
-// ============================================================================
-// Session Entity
-// ============================================================================
 
 export interface ISession {
   id: SessionId;
   userId: UserId;
-  deckQueryId: DeckQueryLogId;
-  state: SessionState;
-  learningMode: LearningMode;
+  curriculumId: CurriculumId;
+  curriculumVersionId: CurriculumVersionId | null;
   studyMode: StudyMode;
-  teachingApproach: TeachingApproach;
-  schedulingAlgorithm: SchedulingAlgorithm;
-  loadoutId: LoadoutId | null;
-  loadoutArchetype: LoadoutArchetype | null;
-  forceLevel: ForceLevel | null;
+  learningMode: LearningMode;
+  lifecycleState: SessionLifecycleState;
   config: ISessionConfig;
   stats: ISessionStats;
-  initialQueueSize: number;
   pauseCount: number;
-  totalPausedDurationMs: number;
-  lastPausedAt: string | null;
+  totalPausedMs: number;
   startedAt: string;
   lastActivityAt: string;
   completedAt: string | null;
@@ -272,210 +99,194 @@ export interface ISession {
   updatedAt: string;
 }
 
-// ============================================================================
-// Attempt Context Snapshot
-// ============================================================================
-
-export interface IAttemptContext {
-  learningMode: LearningMode;
-  studyMode?: StudyMode;
-  teachingApproach: TeachingApproach;
-  loadoutArchetype?: LoadoutArchetype;
-  forceLevel?: ForceLevel;
-  cognitiveLoad?: CognitiveLoadLevel;
-  fatigueLevel?: FatigueLevel;
-  motivationSignal?: MotivationSignal;
-  activeInterventionIds: string[];
-}
-
-// ============================================================================
-// Prior Scheduling State
-// ============================================================================
-
-export interface IPriorScheduling {
-  algorithm: SchedulingAlgorithm;
-  stability?: number;
-  difficulty?: number;
-  elapsedDays: number;
-  retrievability?: number;
-  intervalDays?: number;
-  lapseCount?: number;
-  reviewCount?: number;
-  leitnerBox?: number;
-  sm2EaseFactor?: number;
-}
-
-// ============================================================================
-// Attempt Entity
-// ============================================================================
-
-export interface IAttempt {
-  id: AttemptId;
+export interface ILessonPlan {
+  id: LessonPlanId;
   sessionId: SessionId;
-  cardId: CardId;
   userId: UserId;
-  sequenceNumber: number;
-  outcome: AttemptOutcome;
-  rating: Rating;
-  ratingValue: number;
-  responseTimeMs: number;
-  dwellTimeMs: number;
-  timeToFirstInteractionMs: number | null;
-  confidenceBefore: number | null;
-  confidenceAfter: number | null;
-  calibrationDelta: number | null;
-  wasRevisedBeforeCommit: boolean;
-  revisionCount: number;
-  hintRequestCount: number;
-  hintDepthReached: HintDepth;
-  contextSnapshot: IAttemptContext;
-  priorSchedulingState: IPriorScheduling | null;
-  traceId: string | null;
-  diagnosisId: string | null;
-  createdAt: string;
-}
-
-// ============================================================================
-// Session Queue Item
-// ============================================================================
-
-export interface ISessionQueueItem {
-  id: string;
-  sessionId: SessionId;
-  cardId: CardId;
-  lane: SessionSchedulerLane;
-  position: number;
-  status: CardQueueStatus;
-  injectedBy: string | null;
-  reason: string | null;
+  curriculumId: CurriculumId;
+  curriculumVersionId: CurriculumVersionId;
+  selectedNodeIds: CurriculumNodeId[];
+  studyMode: StudyMode;
+  learningMode: LearningMode;
+  rigorLevel: RigorLevel;
+  topic: string;
+  prerequisites: ConceptId[];
+  sourceDecks: string[];
+  sourceCategories: string[];
+  assessmentStrategy: string | null;
+  adaptationRules: string | null;
+  guardianValidationId: string | null;
+  state: LessonPlanState;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
 
-// ============================================================================
-// Input Types (for create/update operations)
-// ============================================================================
+export interface ILessonPlanGoal {
+  id: GoalId;
+  lessonPlanId: LessonPlanId;
+  description: string;
+  type: GoalType;
+  parentGoalId: GoalId | null;
+  state: GoalState;
+  source: GoalSource;
+  conceptRefs: ConceptId[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IStep {
+  id: StepId;
+  lessonPlanId: LessonPlanId;
+  sessionId: SessionId;
+  userId: UserId;
+  studyMode: StudyMode;
+  position: number;
+  objective: string;
+  servesGoalIds: GoalId[];
+  eligibleModes: EpistemicMode[];
+  selectedMode: EpistemicMode;
+  transformationType: TransformationType;
+  expectedOutcome: string;
+  evaluationType: string;
+  difficulty: number;
+  isRepair: boolean;
+  conceptRefs: ConceptId[];
+  variantSeed: string;
+  status: StepStatus;
+  evaluationId: EvaluationId | null;
+  guardianValidationId: string | null;
+  presentedAt: string | null;
+  answeredAt: string | null;
+  evaluatedAt: string | null;
+  supersededByStepId: StepId | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  activities?: IActivity[];
+}
+
+export interface IStepQueueItem {
+  id: string;
+  sessionId: SessionId;
+  stepId: StepId;
+  position: number;
+  status: StepQueueStatus;
+  injectedBy: string | null;
+  reason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  step?: IStep;
+}
+
+export interface IActivity {
+  id: ActivityId;
+  stepId: StepId;
+  position: number;
+  contentSourceType: ActivityContentSourceType;
+  cardId: string | null;
+  templateId: string | null;
+  generatedVariantId: string | null;
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+  responseSchema: Record<string, unknown>;
+  variantSeed: string;
+  generationFallbackReason: string | null;
+}
 
 export interface IStartSessionInput {
-  deckQueryId: DeckQueryLogId;
-  learningMode: LearningMode;
+  curriculumId: CurriculumId;
+  curriculumVersionId?: CurriculumVersionId;
   studyMode?: StudyMode;
-  teachingApproach?: TeachingApproach;
-  schedulingAlgorithm?: SchedulingAlgorithm;
-  loadoutId?: LoadoutId;
-  loadoutArchetype?: LoadoutArchetype;
-  config: ISessionConfig;
-  initialCardIds: CardId[];
-  initialCardLanes?: Record<string, SessionSchedulerLane>;
-  blueprint?: ISessionBlueprint;
+  learningMode?: LearningMode;
+  config?: ISessionConfig;
+  topic?: string;
+  sourceDecks?: string[];
+  sourceCategories?: string[];
   offlineIntentToken?: string;
 }
 
-export interface IValidateSessionBlueprintInput {
-  blueprint: ISessionBlueprint;
+export interface ICreateLessonPlanInput {
+  curriculumId?: CurriculumId | undefined;
+  curriculumVersionId?: CurriculumVersionId | undefined;
+  selectedNodeIds?: CurriculumNodeId[] | undefined;
+  rigorLevel?: RigorLevel | undefined;
+  topic?: string | undefined;
+  prerequisites?: ConceptId[] | undefined;
+  sourceDecks?: string[] | undefined;
+  sourceCategories?: string[] | undefined;
+  assessmentStrategy?: string | undefined;
+  adaptationRules?: string | undefined;
+  steps?: IPlannedStepInput[] | undefined;
 }
 
-export interface IValidateSessionBlueprintResult {
-  valid: boolean;
-  errors: string[];
-  normalizedCheckpointSignals: AdaptiveCheckpointSignal[];
+export interface ICreateGoalInput {
+  description: string;
+  type: GoalType;
+  parentGoalId?: GoalId | undefined;
+  state?: GoalState | undefined;
+  source?: GoalSource | undefined;
+  conceptRefs?: ConceptId[] | undefined;
 }
 
-export interface IEvaluateAdaptiveCheckpointInput {
-  trigger: AdaptiveCheckpointSignal;
-  lastAttemptResponseTimeMs?: number;
-  rollingAverageResponseTimeMs?: number;
-  recentIncorrectStreak?: number;
-  confidenceDrift?: number;
+export interface IPlannedActivityInput {
+  contentSourceType?: ActivityContentSourceType | undefined;
+  cardId?: string | undefined;
+  templateId?: string | undefined;
+  generatedVariantId?: string | undefined;
+  prompt: string;
+  renderPayload?: Record<string, unknown> | undefined;
+  expectedResponseType?: string | undefined;
+  responseSchema?: Record<string, unknown> | undefined;
+  variantSeed?: string | undefined;
+  generationFallbackReason?: string | undefined;
 }
 
-export interface IEvaluateAdaptiveCheckpointResult {
-  shouldAdapt: boolean;
-  directives: IAdaptiveCheckpointDirective[];
-  reason: string;
+export interface IPlannedStepInput {
+  objective: string;
+  servesGoalIds?: GoalId[] | undefined;
+  eligibleModes?: EpistemicMode[] | undefined;
+  selectedMode?: EpistemicMode | undefined;
+  transformationType?: TransformationType | undefined;
+  expectedOutcome: string;
+  evaluationType?: string | undefined;
+  difficulty?: number | undefined;
+  isRepair?: boolean | undefined;
+  conceptRefs?: ConceptId[] | undefined;
+  variantSeed?: string | undefined;
+  activities?: IPlannedActivityInput[] | undefined;
 }
 
-export interface IRecordAttemptInput {
-  cardId: CardId;
-  outcome: AttemptOutcome;
-  rating: Rating;
-  ratingValue: number;
-  responseTimeMs: number;
-  dwellTimeMs: number;
-  timeToFirstInteractionMs?: number;
-  confidenceBefore?: number;
-  confidenceAfter?: number;
-  wasRevisedBeforeCommit: boolean;
-  revisionCount?: number;
-  hintRequestCount?: number;
-  hintDepthReached: HintDepth;
-  contextSnapshot: IAttemptContext;
-  priorSchedulingState?: IPriorScheduling;
+export interface IAnswerStepInput {
+  response?: unknown;
+  correct: boolean;
+  selfRating: StepSelfRating;
+  evaluationId?: EvaluationId;
+  trace: ISevenFrameTraceDto;
+  responseTimeMs?: number;
 }
 
-export interface IRequestHintInput {
-  hintDepth: HintDepth;
-  hintRequestNumber: number;
-  responseTimeMsAtRequest: number;
+export interface ISkipStepInput {
+  reason?: string;
+  skippedBy?: string;
 }
-
-export interface IInjectQueueInput {
-  cardId: CardId;
-  lane?: SessionSchedulerLane;
-  position: number;
-  reason: string;
-  injectedBy?: string;
-}
-
-export interface IRemoveQueueInput {
-  cardId: CardId;
-  reason: string;
-  removedBy?: string;
-}
-
-export interface IUpdateStrategyInput {
-  newLoadoutId: LoadoutId;
-  newLoadoutArchetype: LoadoutArchetype;
-  newForceLevel: ForceLevel;
-  trigger: string;
-}
-
-export interface IChangeTeachingInput {
-  newApproach: TeachingApproach;
-  trigger: string;
-}
-
-// ============================================================================
-// Session Filters (for list queries)
-// ============================================================================
-
-export type SessionSortBy =
-  | 'createdAt'
-  | 'completedAt'
-  | 'totalAttempts'
-  | 'durationMs'
-  | 'retentionRate';
-
-export type SortOrder = 'asc' | 'desc';
 
 export interface ISessionFilters {
-  state?: SessionState;
+  lifecycleState?: SessionLifecycleState;
   learningMode?: LearningMode;
   studyMode?: StudyMode;
-  /** Only sessions created on or after this ISO timestamp */
   createdAfter?: string;
-  /** Only sessions created on or before this ISO timestamp */
   createdBefore?: string;
-  /** Only COMPLETED sessions completed on or after this ISO timestamp */
   completedAfter?: string;
-  /** Only COMPLETED sessions completed on or before this ISO timestamp */
   completedBefore?: string;
-  /** Filter to sessions for a specific deck */
-  deckId?: string;
-  /** Minimum total attempts (from stats) */
-  minAttempts?: number;
-  /** Sort field */
-  sortBy?: SessionSortBy;
-  /** Sort direction */
-  sortOrder?: SortOrder;
+}
+
+export type SessionSortBy = 'createdAt' | 'completedAt' | 'lastActivityAt';
+export type SortOrder = 'asc' | 'desc';
+
+export interface IStepLoopSnapshot {
+  session: ISession;
+  lessonPlan: ILessonPlan;
+  nextStep: IStep | null;
 }

@@ -1,168 +1,90 @@
 /**
- * @noema/session-service - Prisma Session Repository
- *
- * Implements ISessionRepository using Prisma for PostgreSQL persistence.
- * Handles mapping between Prisma enum values (UPPERCASE) and
- * domain enum values (lowercase) from @noema/types.
+ * @noema/session-service - Prisma repository for the Step-first session aggregate.
  */
 
 import type {
-  AttemptId,
-  AttemptOutcome,
-  CardId,
-  CardQueueStatus,
-  HintDepth,
+  ActivityId,
+  ConceptId,
+  CurriculumId,
+  CurriculumNodeId,
+  CurriculumVersionId,
+  EpistemicMode,
+  EvaluationId,
+  GoalId,
+  GoalSource,
+  GoalState,
+  GoalType,
   LearningMode,
-  Rating,
+  LessonPlanId,
+  LessonPlanState,
+  RigorLevel,
   SessionId,
+  SessionLifecycleState,
+  StepId,
+  StepStatus,
   StudyMode,
+  TransformationType,
   UserId,
 } from '@noema/types';
 import type { Logger } from 'pino';
-import {
-  Prisma,
-  type AttemptOutcome as PrismaAttemptOutcome,
-  type CardQueueStatus as PrismaCardQueueStatus,
-  type PrismaClient,
-  type HintDepth as PrismaHintDepth,
-  type LearningMode as PrismaLearningMode,
-  type Rating as PrismaRating,
-  type SessionSchedulerLane as PrismaSessionSchedulerLane,
-  type SessionCohortHandshakeStatus as PrismaSessionCohortHandshakeStatus,
-  type SessionState as PrismaSessionState,
-  type StudyMode as PrismaStudyMode,
-} from '../../../generated/prisma/index.js';
+import { Prisma, type PrismaClient } from '../../../generated/prisma/index.js';
 
 import {
   SessionNotFoundError,
   VersionConflictError,
 } from '../../domain/session-service/errors/index.js';
-import type { ISessionRepository } from '../../domain/session-service/session.repository.js';
 import type {
-  IAcceptCohortInput,
-  IAttempt,
-  ICommitCohortInput,
-  IProposeCohortInput,
-  IReviseCohortInput,
+  ICreateLessonPlanRecord,
+  ICreateStepRecord,
+  ISessionRepository,
+} from '../../domain/session-service/session.repository.js';
+import type {
+  ActivityContentSourceType,
+  IActivity,
+  ICreateGoalInput,
+  ILessonPlan,
+  ILessonPlanGoal,
   ISession,
-  ISessionCohortHandshake,
   ISessionConfig,
   ISessionFilters,
-  ISessionQueueItem,
   ISessionStats,
-  SessionSchedulerLane,
-  SessionCohortHandshakeStatus,
-  SessionState,
+  IStep,
+  IStepQueueItem,
+  StepQueueStatus,
 } from '../../types/index.js';
 
-// ============================================================================
-// Enum Mappers: domain (lowercase) ↔ Prisma (UPPERCASE)
-// ============================================================================
+type Db = PrismaClient | Prisma.TransactionClient;
 
-function toPrismaSessionState(s: string): PrismaSessionState {
-  return s.toUpperCase() as PrismaSessionState;
+function toPrismaEnum<T extends string>(value: string): T {
+  return value.toUpperCase() as T;
 }
 
-function fromPrismaSessionState(s: PrismaSessionState): SessionState {
-  return s.toLowerCase() as SessionState;
+function fromPrismaEnum<T extends string>(value: string): T {
+  return value.toLowerCase() as T;
 }
 
-function toPrismaLearningMode(s: string): PrismaLearningMode {
-  return s.toUpperCase() as PrismaLearningMode;
+function dateToIso(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null;
 }
-
-function fromPrismaLearningMode(s: PrismaLearningMode): LearningMode {
-  return s.toLowerCase() as LearningMode;
-}
-
-function toPrismaStudyMode(s: string): PrismaStudyMode {
-  return s.toUpperCase() as PrismaStudyMode;
-}
-
-function fromPrismaStudyMode(s: PrismaStudyMode): StudyMode {
-  return s.toLowerCase() as StudyMode;
-}
-
-function toPrismaAttemptOutcome(s: string): PrismaAttemptOutcome {
-  return s.toUpperCase() as PrismaAttemptOutcome;
-}
-
-function fromPrismaAttemptOutcome(s: PrismaAttemptOutcome): AttemptOutcome {
-  return s.toLowerCase() as AttemptOutcome;
-}
-
-function toPrismaRating(s: string): PrismaRating {
-  return s.toUpperCase() as PrismaRating;
-}
-
-function fromPrismaRating(s: PrismaRating): Rating {
-  return s.toLowerCase() as Rating;
-}
-
-function toPrismaHintDepth(s: string): PrismaHintDepth {
-  return s.toUpperCase() as PrismaHintDepth;
-}
-
-function fromPrismaHintDepth(s: PrismaHintDepth): HintDepth {
-  return s.toLowerCase() as HintDepth;
-}
-
-function toPrismaCardQueueStatus(s: string): PrismaCardQueueStatus {
-  return s.toUpperCase() as PrismaCardQueueStatus;
-}
-
-function fromPrismaCardQueueStatus(s: PrismaCardQueueStatus): CardQueueStatus {
-  return s.toLowerCase() as CardQueueStatus;
-}
-
-function toPrismaSessionSchedulerLane(s: SessionSchedulerLane): PrismaSessionSchedulerLane {
-  return s.toUpperCase() as PrismaSessionSchedulerLane;
-}
-
-function fromPrismaSessionSchedulerLane(s: PrismaSessionSchedulerLane): SessionSchedulerLane {
-  return s.toLowerCase() as SessionSchedulerLane;
-}
-
-function toPrismaSessionCohortHandshakeStatus(
-  s: SessionCohortHandshakeStatus
-): PrismaSessionCohortHandshakeStatus {
-  return s.toUpperCase() as PrismaSessionCohortHandshakeStatus;
-}
-
-function fromPrismaSessionCohortHandshakeStatus(
-  s: PrismaSessionCohortHandshakeStatus
-): SessionCohortHandshakeStatus {
-  return s.toLowerCase() as SessionCohortHandshakeStatus;
-}
-
-// ============================================================================
-// Row → Domain Mappers
-// ============================================================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toSessionDomain(row: any): ISession {
   return {
     id: row.id as SessionId,
     userId: row.userId as UserId,
-    deckQueryId: row.deckQueryId,
-    state: fromPrismaSessionState(row.state),
-    learningMode: fromPrismaLearningMode(row.learningMode),
-    studyMode: fromPrismaStudyMode(row.studyMode),
-    teachingApproach: row.teachingApproach,
-    schedulingAlgorithm: row.schedulingAlgorithm,
-    loadoutId: row.loadoutId ?? null,
-    loadoutArchetype: row.loadoutArchetype ?? null,
-    forceLevel: row.forceLevel ?? null,
+    curriculumId: row.curriculumId as CurriculumId,
+    curriculumVersionId: (row.curriculumVersionId ?? null) as CurriculumVersionId | null,
+    studyMode: fromPrismaEnum<StudyMode>(row.studyMode),
+    learningMode: fromPrismaEnum<LearningMode>(row.learningMode),
+    lifecycleState: fromPrismaEnum<SessionLifecycleState>(row.lifecycleState),
     config: (row.config ?? {}) as ISessionConfig,
     stats: (row.stats ?? {}) as ISessionStats,
-    initialQueueSize: row.initialQueueSize,
     pauseCount: row.pauseCount,
-    totalPausedDurationMs: row.totalPausedDurationMs,
-    lastPausedAt: row.lastPausedAt?.toISOString() ?? null,
+    totalPausedMs: row.totalPausedMs,
     startedAt: row.startedAt.toISOString(),
     lastActivityAt: row.lastActivityAt.toISOString(),
-    completedAt: row.completedAt?.toISOString() ?? null,
-    terminationReason: row.terminationReason ?? null,
+    completedAt: dateToIso(row.completedAt),
+    terminationReason: row.terminationReason,
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -170,85 +92,131 @@ function toSessionDomain(row: any): ISession {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toAttemptDomain(row: any): IAttempt {
+function toLessonPlanDomain(row: any): ILessonPlan {
   return {
-    id: row.id as AttemptId,
+    id: row.id as LessonPlanId,
     sessionId: row.sessionId as SessionId,
-    cardId: row.cardId as CardId,
     userId: row.userId as UserId,
-    sequenceNumber: row.sequenceNumber,
-    outcome: fromPrismaAttemptOutcome(row.outcome),
-    rating: fromPrismaRating(row.rating),
-    ratingValue: row.ratingValue,
-    responseTimeMs: row.responseTimeMs,
-    dwellTimeMs: row.dwellTimeMs,
-    timeToFirstInteractionMs: row.timeToFirstInteractionMs ?? null,
-    confidenceBefore: row.confidenceBefore ?? null,
-    confidenceAfter: row.confidenceAfter ?? null,
-    calibrationDelta: row.calibrationDelta ?? null,
-    wasRevisedBeforeCommit: row.wasRevisedBeforeCommit,
-    revisionCount: row.revisionCount,
-    hintRequestCount: row.hintRequestCount,
-    hintDepthReached: fromPrismaHintDepth(row.hintDepthReached),
-    contextSnapshot: row.contextSnapshot,
-    priorSchedulingState: row.priorSchedulingState ?? null,
-    traceId: row.traceId ?? null,
-    diagnosisId: row.diagnosisId ?? null,
+    curriculumId: row.curriculumId as CurriculumId,
+    curriculumVersionId: row.curriculumVersionId as CurriculumVersionId,
+    selectedNodeIds: (row.selectedNodeIds ?? []) as CurriculumNodeId[],
+    studyMode: fromPrismaEnum<StudyMode>(row.studyMode),
+    learningMode: fromPrismaEnum<LearningMode>(row.learningMode),
+    rigorLevel: fromPrismaEnum<RigorLevel>(row.rigorLevel),
+    topic: row.topic,
+    prerequisites: (row.prerequisites ?? []) as ConceptId[],
+    sourceDecks: (row.sourceDecks ?? []) as string[],
+    sourceCategories: (row.sourceCategories ?? []) as string[],
+    assessmentStrategy: row.assessmentStrategy ?? null,
+    adaptationRules: row.adaptationRules ?? null,
+    guardianValidationId: row.guardianValidationId ?? null,
+    state: fromPrismaEnum<LessonPlanState>(row.state),
+    version: row.version,
     createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toQueueItemDomain(row: any): ISessionQueueItem {
+function toGoalDomain(row: any): ILessonPlanGoal {
+  return {
+    id: row.id as GoalId,
+    lessonPlanId: row.lessonPlanId as LessonPlanId,
+    description: row.description,
+    type: fromPrismaEnum<GoalType>(row.type),
+    parentGoalId: (row.parentGoalId ?? null) as GoalId | null,
+    state: fromPrismaEnum<GoalState>(row.state),
+    source: fromPrismaEnum<GoalSource>(row.source),
+    conceptRefs: (row.conceptRefs ?? []) as ConceptId[],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toActivityDomain(row: any): IActivity {
+  return {
+    id: row.id as ActivityId,
+    stepId: row.stepId as StepId,
+    position: row.position,
+    contentSourceType: fromPrismaEnum<ActivityContentSourceType>(row.contentSourceType),
+    cardId: row.cardId ?? null,
+    templateId: row.templateId ?? null,
+    generatedVariantId: row.generatedVariantId ?? null,
+    prompt: row.prompt,
+    renderPayload: (row.renderPayload ?? {}) as Record<string, unknown>,
+    expectedResponseType: row.expectedResponseType,
+    responseSchema: (row.responseSchema ?? {}) as Record<string, unknown>,
+    variantSeed: row.variantSeed,
+    generationFallbackReason: row.generationFallbackReason ?? null,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toStepDomain(row: any): IStep {
+  const activities = Array.isArray(row.activities)
+    ? row.activities.map(toActivityDomain)
+    : undefined;
+
+  return {
+    id: row.id as StepId,
+    lessonPlanId: row.lessonPlanId as LessonPlanId,
+    sessionId: row.sessionId as SessionId,
+    userId: row.userId as UserId,
+    studyMode: fromPrismaEnum<StudyMode>(row.studyMode),
+    position: row.position,
+    objective: row.objective,
+    servesGoalIds: (row.servesGoalIds ?? []) as GoalId[],
+    eligibleModes: (row.eligibleModes ?? []) as EpistemicMode[],
+    selectedMode: row.selectedMode as EpistemicMode,
+    transformationType: fromPrismaEnum<TransformationType>(row.transformationType),
+    expectedOutcome: row.expectedOutcome,
+    evaluationType: row.evaluationType,
+    difficulty: row.difficulty,
+    isRepair: row.isRepair,
+    conceptRefs: (row.conceptRefs ?? []) as ConceptId[],
+    variantSeed: row.variantSeed,
+    status: fromPrismaEnum<StepStatus>(row.status),
+    evaluationId: (row.evaluationId ?? null) as EvaluationId | null,
+    guardianValidationId: row.guardianValidationId ?? null,
+    presentedAt: dateToIso(row.presentedAt),
+    answeredAt: dateToIso(row.answeredAt),
+    evaluatedAt: dateToIso(row.evaluatedAt),
+    supersededByStepId: (row.supersededByStepId ?? null) as StepId | null,
+    version: row.version,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    ...(activities !== undefined ? { activities } : {}),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toQueueItemDomain(row: any): IStepQueueItem {
+  const step = row.step ? toStepDomain(row.step) : undefined;
+
   return {
     id: row.id,
     sessionId: row.sessionId as SessionId,
-    cardId: row.cardId as CardId,
-    lane: fromPrismaSessionSchedulerLane(row.lane),
+    stepId: row.stepId as StepId,
     position: row.position,
-    status: fromPrismaCardQueueStatus(row.status),
+    status: fromPrismaEnum<StepQueueStatus>(row.status),
     injectedBy: row.injectedBy ?? null,
     reason: row.reason ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    ...(step !== undefined ? { step } : {}),
   };
 }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toCohortHandshakeDomain(row: any): ISessionCohortHandshake {
-  return {
-    id: row.id,
-    sessionId: row.sessionId as SessionId,
-    proposalId: row.proposalId,
-    decisionId: row.decisionId,
-    revision: row.revision,
-    status: fromPrismaSessionCohortHandshakeStatus(row.status),
-    candidateCardIds: row.candidateCardIds as CardId[],
-    acceptedCardIds: (row.acceptedCardIds as CardId[] | null) ?? null,
-    rejectedCardIds: (row.rejectedCardIds as CardId[] | null) ?? null,
-    metadata: (row.metadata as Record<string, unknown>) ?? {},
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
-
-// ============================================================================
-// Prisma Repository Implementation
-// ============================================================================
 
 export class PrismaSessionRepository implements ISessionRepository {
   constructor(
     private readonly prisma: PrismaClient,
     _logger: Logger
-  ) {
-    // Logger available for future debug tracing
-  }
+  ) {}
 
-  private db(tx?: Prisma.TransactionClient): PrismaClient | Prisma.TransactionClient {
+  private db(tx?: Prisma.TransactionClient): Db {
     return tx ?? this.prisma;
   }
-
-  // ---------- Session read ----------
 
   async findSessionById(id: SessionId): Promise<ISession | null> {
     const row = await this.prisma.session.findUnique({ where: { id } });
@@ -269,120 +237,33 @@ export class PrismaSessionRepository implements ISessionRepository {
     limit = 20,
     offset = 0
   ): Promise<{ sessions: ISession[]; total: number }> {
-    const where: Record<string, unknown> = { userId };
-    if (filters?.state) {
-      where['state'] = toPrismaSessionState(filters.state);
+    const where: Prisma.SessionWhereInput = { userId };
+    if (filters?.lifecycleState) {
+      where.lifecycleState = toPrismaEnum(filters.lifecycleState) as never;
     }
     if (filters?.learningMode) {
-      where['learningMode'] = toPrismaLearningMode(filters.learningMode);
+      where.learningMode = toPrismaEnum(filters.learningMode) as never;
     }
     if (filters?.studyMode) {
-      where['studyMode'] = toPrismaStudyMode(filters.studyMode);
+      where.studyMode = toPrismaEnum(filters.studyMode) as never;
     }
-    if (filters?.deckId) {
-      where['deckQueryId'] = filters.deckId;
-    }
-
-    // Date range filters — createdAt
     if (filters?.createdAfter || filters?.createdBefore) {
-      const createdAt: Record<string, Date> = {};
-      if (filters.createdAfter) createdAt['gte'] = new Date(filters.createdAfter);
-      if (filters.createdBefore) createdAt['lte'] = new Date(filters.createdBefore);
-      where['createdAt'] = createdAt;
-    }
-
-    // Date range filters — completedAt
-    if (filters?.completedAfter || filters?.completedBefore) {
-      const completedAt: Record<string, Date> = {};
-      if (filters.completedAfter) completedAt['gte'] = new Date(filters.completedAfter);
-      if (filters.completedBefore) completedAt['lte'] = new Date(filters.completedBefore);
-      where['completedAt'] = completedAt;
-      // completedAt filters imply completed status
-      if (!filters.state) {
-        where['state'] = 'COMPLETED' as PrismaSessionState;
-      }
-    }
-
-    // Determine sort. For retentionRate and totalAttempts/durationMs (JSONB),
-    // we use app-level sort. For createdAt/completedAt, we use DB sort.
-    const sortBy = filters?.sortBy ?? 'createdAt';
-    const sortOrder = filters?.sortOrder ?? 'desc';
-    const isAppLevelSort =
-      sortBy === 'retentionRate' || sortBy === 'totalAttempts' || sortBy === 'durationMs';
-
-    // DB-level orderBy
-    let orderBy: Record<string, string> = { startedAt: 'desc' };
-    if (!isAppLevelSort) {
-      if (sortBy === 'createdAt') {
-        orderBy = { createdAt: sortOrder };
-      } else if (sortBy === 'completedAt') {
-        orderBy = { completedAt: sortOrder };
-      }
-    }
-
-    if (isAppLevelSort) {
-      // Fetch all matching rows for app-level sort
-      const [allRows, total] = await Promise.all([
-        this.prisma.session.findMany({ where, orderBy }),
-        this.prisma.session.count({ where }),
-      ]);
-
-      let sessions = allRows.map(toSessionDomain);
-
-      // Apply minAttempts filter (post-fetch since it's on JSONB stats)
-      if (filters?.minAttempts !== undefined) {
-        sessions = sessions.filter((s) => s.stats.totalAttempts >= filters.minAttempts!);
-      }
-
-      // Sort by JSONB field
-      sessions.sort((a, b) => {
-        let aVal: number;
-        let bVal: number;
-        if (sortBy === 'retentionRate') {
-          aVal = a.stats.retentionRate;
-          bVal = b.stats.retentionRate;
-        } else if (sortBy === 'totalAttempts') {
-          aVal = a.stats.totalAttempts;
-          bVal = b.stats.totalAttempts;
-        } else {
-          // durationMs: compute from timestamps
-          const aStart = new Date(a.startedAt).getTime();
-          const aEnd = a.completedAt
-            ? new Date(a.completedAt).getTime()
-            : new Date(a.lastActivityAt).getTime();
-          aVal = aEnd - aStart - a.totalPausedDurationMs;
-          const bStart = new Date(b.startedAt).getTime();
-          const bEnd = b.completedAt
-            ? new Date(b.completedAt).getTime()
-            : new Date(b.lastActivityAt).getTime();
-          bVal = bEnd - bStart - b.totalPausedDurationMs;
-        }
-        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-      });
-
-      // Apply pagination
-      const paginated = sessions.slice(offset, offset + limit);
-      return {
-        sessions: paginated,
-        total: filters?.minAttempts !== undefined ? sessions.length : total,
+      where.createdAt = {
+        ...(filters.createdAfter ? { gte: new Date(filters.createdAfter) } : {}),
+        ...(filters.createdBefore ? { lte: new Date(filters.createdBefore) } : {}),
       };
     }
-
-    // minAttempts: for DB-level sort, we still need to filter post-fetch
-    // because totalAttempts is in JSONB. For now, fetch extra and filter.
-    if (filters?.minAttempts !== undefined) {
-      const [allRows] = await Promise.all([this.prisma.session.findMany({ where, orderBy })]);
-
-      let sessions = allRows.map(toSessionDomain);
-      sessions = sessions.filter((s) => s.stats.totalAttempts >= filters.minAttempts!);
-      const paginated = sessions.slice(offset, offset + limit);
-      return { sessions: paginated, total: sessions.length };
+    if (filters?.completedAfter || filters?.completedBefore) {
+      where.completedAt = {
+        ...(filters.completedAfter ? { gte: new Date(filters.completedAfter) } : {}),
+        ...(filters.completedBefore ? { lte: new Date(filters.completedBefore) } : {}),
+      };
     }
 
     const [rows, total] = await Promise.all([
       this.prisma.session.findMany({
         where,
-        orderBy,
+        orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
       }),
@@ -392,45 +273,6 @@ export class PrismaSessionRepository implements ISessionRepository {
     return { sessions: rows.map(toSessionDomain), total };
   }
 
-  async findActiveSessionForUser(userId: UserId): Promise<ISession | null> {
-    const row = await this.prisma.session.findFirst({
-      where: { userId, state: 'ACTIVE' },
-      orderBy: { startedAt: 'desc' },
-    });
-    return row ? toSessionDomain(row) : null;
-  }
-
-  async countSessionsByUser(
-    userId: UserId,
-    state?: SessionState,
-    tx?: Prisma.TransactionClient
-  ): Promise<number> {
-    const where: Record<string, unknown> = { userId };
-    if (state) {
-      where['state'] = toPrismaSessionState(state);
-    }
-    return this.db(tx).session.count({ where });
-  }
-
-  async countActiveSessionsForUpdate(
-    userId: UserId,
-    tx: Prisma.TransactionClient
-  ): Promise<number> {
-    // Serialize concurrent session starts per user, even when they currently
-    // have zero active rows to lock.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
-
-    const result = await tx.$queryRaw<[{ count: bigint }]>`
-      SELECT count(*) AS count
-      FROM sessions
-      WHERE user_id = ${userId}
-        AND state = 'ACTIVE'
-    `;
-    return Number(result[0]?.count ?? 0n);
-  }
-
-  // ---------- Session write ----------
-
   async createSession(
     session: Omit<ISession, 'createdAt' | 'updatedAt'>,
     tx?: Prisma.TransactionClient
@@ -439,21 +281,15 @@ export class PrismaSessionRepository implements ISessionRepository {
       data: {
         id: session.id,
         userId: session.userId,
-        deckQueryId: session.deckQueryId,
-        state: toPrismaSessionState(session.state),
-        learningMode: toPrismaLearningMode(session.learningMode),
-        studyMode: toPrismaStudyMode(session.studyMode),
-        teachingApproach: session.teachingApproach,
-        schedulingAlgorithm: session.schedulingAlgorithm,
-        loadoutId: session.loadoutId,
-        loadoutArchetype: session.loadoutArchetype,
-        forceLevel: session.forceLevel,
-        config: session.config as object,
-        stats: session.stats as object,
-        initialQueueSize: session.initialQueueSize,
+        curriculumId: session.curriculumId,
+        curriculumVersionId: session.curriculumVersionId,
+        studyMode: toPrismaEnum(session.studyMode),
+        learningMode: toPrismaEnum(session.learningMode),
+        lifecycleState: toPrismaEnum(session.lifecycleState),
+        config: session.config as Prisma.InputJsonValue,
+        stats: session.stats as unknown as Prisma.InputJsonValue,
         pauseCount: session.pauseCount,
-        totalPausedDurationMs: session.totalPausedDurationMs,
-        lastPausedAt: session.lastPausedAt ? new Date(session.lastPausedAt) : null,
+        totalPausedMs: session.totalPausedMs,
         startedAt: new Date(session.startedAt),
         lastActivityAt: new Date(session.lastActivityAt),
         completedAt: session.completedAt ? new Date(session.completedAt) : null,
@@ -469,17 +305,10 @@ export class PrismaSessionRepository implements ISessionRepository {
     data: Partial<
       Pick<
         ISession,
-        | 'state'
-        | 'learningMode'
-        | 'studyMode'
-        | 'teachingApproach'
-        | 'loadoutId'
-        | 'loadoutArchetype'
-        | 'forceLevel'
+        | 'lifecycleState'
         | 'stats'
         | 'pauseCount'
-        | 'totalPausedDurationMs'
-        | 'lastPausedAt'
+        | 'totalPausedMs'
         | 'lastActivityAt'
         | 'completedAt'
         | 'terminationReason'
@@ -488,29 +317,16 @@ export class PrismaSessionRepository implements ISessionRepository {
     expectedVersion: number,
     tx?: Prisma.TransactionClient
   ): Promise<ISession> {
-    // Build update payload with enum mapping
-    const update: Record<string, unknown> = { version: { increment: 1 } };
-
-    if (data.state !== undefined) update['state'] = toPrismaSessionState(data.state);
-    if (data.learningMode !== undefined)
-      update['learningMode'] = toPrismaLearningMode(data.learningMode);
-    if (data.studyMode !== undefined) update['studyMode'] = toPrismaStudyMode(data.studyMode);
-    if (data.teachingApproach !== undefined) update['teachingApproach'] = data.teachingApproach;
-    if (data.loadoutId !== undefined) update['loadoutId'] = data.loadoutId;
-    if (data.loadoutArchetype !== undefined) update['loadoutArchetype'] = data.loadoutArchetype;
-    if (data.forceLevel !== undefined) update['forceLevel'] = data.forceLevel;
-    if (data.stats !== undefined) update['stats'] = data.stats as object;
-    if (data.pauseCount !== undefined) update['pauseCount'] = data.pauseCount;
-    if (data.totalPausedDurationMs !== undefined)
-      update['totalPausedDurationMs'] = data.totalPausedDurationMs;
-    if (data.lastPausedAt !== undefined) {
-      update['lastPausedAt'] = data.lastPausedAt ? new Date(data.lastPausedAt) : null;
-    }
-    if (data.lastActivityAt !== undefined) update['lastActivityAt'] = new Date(data.lastActivityAt);
-    if (data.completedAt !== undefined) {
-      update['completedAt'] = data.completedAt ? new Date(data.completedAt) : null;
-    }
-    if (data.terminationReason !== undefined) update['terminationReason'] = data.terminationReason;
+    const update: Prisma.SessionUpdateInput = { version: { increment: 1 } };
+    if (data.lifecycleState !== undefined)
+      update.lifecycleState = toPrismaEnum(data.lifecycleState) as never;
+    if (data.stats !== undefined) update.stats = data.stats as unknown as Prisma.InputJsonValue;
+    if (data.pauseCount !== undefined) update.pauseCount = data.pauseCount;
+    if (data.totalPausedMs !== undefined) update.totalPausedMs = data.totalPausedMs;
+    if (data.lastActivityAt !== undefined) update.lastActivityAt = new Date(data.lastActivityAt);
+    if (data.completedAt !== undefined)
+      update.completedAt = data.completedAt ? new Date(data.completedAt) : null;
+    if (data.terminationReason !== undefined) update.terminationReason = data.terminationReason;
 
     try {
       const row = await this.db(tx).session.update({
@@ -519,7 +335,6 @@ export class PrismaSessionRepository implements ISessionRepository {
       });
       return toSessionDomain(row);
     } catch (error: unknown) {
-      // Prisma P2025: Record to update not found (version mismatch)
       if (
         error &&
         typeof error === 'object' &&
@@ -532,350 +347,331 @@ export class PrismaSessionRepository implements ISessionRepository {
     }
   }
 
-  // ---------- Attempt read ----------
-
-  async findAttemptById(id: AttemptId): Promise<IAttempt | null> {
-    const row = await this.prisma.attempt.findUnique({ where: { id } });
-    return row ? toAttemptDomain(row) : null;
+  async findLessonPlanById(id: LessonPlanId): Promise<ILessonPlan | null> {
+    const row = await this.prisma.lessonPlan.findUnique({ where: { id } });
+    return row ? toLessonPlanDomain(row) : null;
   }
 
-  async findAttemptsBySession(
-    sessionId: SessionId,
-    limit = 50,
-    offset = 0
-  ): Promise<{ attempts: IAttempt[]; total: number }> {
-    const where = { sessionId };
-    const [rows, total] = await Promise.all([
-      this.prisma.attempt.findMany({
-        where,
-        orderBy: { sequenceNumber: 'asc' },
-        take: limit,
-        skip: offset,
-      }),
-      this.prisma.attempt.count({ where }),
-    ]);
-    return { attempts: rows.map(toAttemptDomain), total };
+  async findLessonPlanBySessionId(sessionId: SessionId): Promise<ILessonPlan | null> {
+    const row = await this.prisma.lessonPlan.findUnique({ where: { sessionId } });
+    return row ? toLessonPlanDomain(row) : null;
   }
 
-  async findAttemptsByCard(sessionId: SessionId, cardId: CardId): Promise<IAttempt[]> {
-    const rows = await this.prisma.attempt.findMany({
-      where: { sessionId, cardId },
-      orderBy: { sequenceNumber: 'asc' },
+  async findGoalsByLessonPlanId(lessonPlanId: LessonPlanId): Promise<ILessonPlanGoal[]> {
+    const rows = await this.prisma.lessonPlanGoal.findMany({
+      where: { lessonPlanId },
+      orderBy: { createdAt: 'asc' },
     });
-    return rows.map(toAttemptDomain);
+    return rows.map(toGoalDomain);
   }
 
-  async countAttemptsBySession(sessionId: SessionId): Promise<number> {
-    return this.prisma.attempt.count({ where: { sessionId } });
-  }
-
-  async getNextSequenceNumber(sessionId: SessionId): Promise<number> {
-    const maxResult = await this.prisma.attempt.aggregate({
-      where: { sessionId },
-      _max: { sequenceNumber: true },
-    });
-    return (maxResult._max.sequenceNumber ?? 0) + 1;
-  }
-
-  // ---------- Attempt write ----------
-
-  async createAttempt(
-    attempt: Omit<IAttempt, 'createdAt'>,
+  async createLessonPlanWithSteps(
+    plan: ICreateLessonPlanRecord,
     tx?: Prisma.TransactionClient
-  ): Promise<IAttempt> {
-    const row = await this.db(tx).attempt.create({
+  ): Promise<{ lessonPlan: ILessonPlan; steps: IStep[] }> {
+    const db = this.db(tx);
+    const row = await db.lessonPlan.create({
       data: {
-        id: attempt.id,
-        sessionId: attempt.sessionId,
-        cardId: attempt.cardId,
-        userId: attempt.userId,
-        sequenceNumber: attempt.sequenceNumber,
-        outcome: toPrismaAttemptOutcome(attempt.outcome),
-        rating: toPrismaRating(attempt.rating),
-        ratingValue: attempt.ratingValue,
-        responseTimeMs: attempt.responseTimeMs,
-        dwellTimeMs: attempt.dwellTimeMs,
-        timeToFirstInteractionMs: attempt.timeToFirstInteractionMs,
-        confidenceBefore: attempt.confidenceBefore,
-        confidenceAfter: attempt.confidenceAfter,
-        calibrationDelta: attempt.calibrationDelta,
-        wasRevisedBeforeCommit: attempt.wasRevisedBeforeCommit,
-        revisionCount: attempt.revisionCount,
-        hintRequestCount: attempt.hintRequestCount,
-        hintDepthReached: toPrismaHintDepth(attempt.hintDepthReached),
-        contextSnapshot: attempt.contextSnapshot as object,
-        priorSchedulingState: (attempt.priorSchedulingState as object) ?? undefined,
-        traceId: attempt.traceId,
-        diagnosisId: attempt.diagnosisId,
+        id: plan.id,
+        sessionId: plan.sessionId,
+        userId: plan.userId,
+        curriculumId: plan.curriculumId,
+        curriculumVersionId: plan.curriculumVersionId,
+        selectedNodeIds: plan.selectedNodeIds,
+        studyMode: toPrismaEnum(plan.studyMode),
+        learningMode: toPrismaEnum(plan.learningMode),
+        rigorLevel: toPrismaEnum(plan.rigorLevel),
+        topic: plan.topic,
+        prerequisites: plan.prerequisites as Prisma.InputJsonValue,
+        sourceDecks: plan.sourceDecks as Prisma.InputJsonValue,
+        sourceCategories: plan.sourceCategories as Prisma.InputJsonValue,
+        assessmentStrategy: plan.assessmentStrategy,
+        adaptationRules: plan.adaptationRules,
+        guardianValidationId: plan.guardianValidationId,
+        state: toPrismaEnum(plan.state),
+        version: plan.version,
       },
     });
-    return toAttemptDomain(row);
-  }
 
-  // ---------- Queue read ----------
-
-  async getQueueItems(sessionId: SessionId, status?: string): Promise<ISessionQueueItem[]> {
-    const where: Record<string, unknown> = { sessionId };
-    if (status) {
-      where['status'] = toPrismaCardQueueStatus(status);
+    const steps: IStep[] = [];
+    for (const step of plan.steps) {
+      const created = await db.step.create({
+        data: {
+          id: step.id,
+          lessonPlanId: plan.id,
+          sessionId: step.sessionId,
+          userId: step.userId,
+          studyMode: toPrismaEnum(step.studyMode),
+          position: step.position,
+          objective: step.objective,
+          servesGoalIds: step.servesGoalIds,
+          eligibleModes: step.eligibleModes,
+          selectedMode: step.selectedMode,
+          transformationType: toPrismaEnum(step.transformationType),
+          expectedOutcome: step.expectedOutcome,
+          evaluationType: step.evaluationType,
+          difficulty: step.difficulty,
+          isRepair: step.isRepair,
+          conceptRefs: step.conceptRefs,
+          variantSeed: step.variantSeed,
+          status: toPrismaEnum(step.status),
+          evaluationId: step.evaluationId,
+          guardianValidationId: step.guardianValidationId,
+          presentedAt: step.presentedAt ? new Date(step.presentedAt) : null,
+          answeredAt: step.answeredAt ? new Date(step.answeredAt) : null,
+          evaluatedAt: step.evaluatedAt ? new Date(step.evaluatedAt) : null,
+          supersededByStepId: step.supersededByStepId,
+          version: step.version,
+          activities: {
+            create: step.activities.map((activity) => ({
+              id: activity.id,
+              position: activity.position,
+              contentSourceType: toPrismaEnum(activity.contentSourceType),
+              cardId: activity.cardId,
+              templateId: activity.templateId,
+              generatedVariantId: activity.generatedVariantId,
+              prompt: activity.prompt,
+              renderPayload: activity.renderPayload as Prisma.InputJsonValue,
+              expectedResponseType: activity.expectedResponseType,
+              responseSchema: activity.responseSchema as Prisma.InputJsonValue,
+              variantSeed: activity.variantSeed,
+              generationFallbackReason: activity.generationFallbackReason,
+            })),
+          },
+          queueItem: {
+            create: {
+              id: crypto.randomUUID(),
+              sessionId: step.sessionId,
+              position: step.position,
+              status: toPrismaEnum(step.queueStatus ?? 'pending'),
+            },
+          },
+        },
+        include: { activities: true },
+      });
+      steps.push(toStepDomain(created));
     }
-    const rows = await this.prisma.sessionQueueItem.findMany({
-      where,
-      orderBy: { position: 'asc' },
-    });
-    return rows.map(toQueueItemDomain);
+
+    return { lessonPlan: toLessonPlanDomain(row), steps };
   }
 
-  async findNextPendingQueueItem(sessionId: SessionId): Promise<ISessionQueueItem | null> {
-    const row = await this.prisma.sessionQueueItem.findFirst({
-      where: { sessionId, status: 'PENDING' },
-      orderBy: { position: 'asc' },
+  async activateLessonPlan(id: LessonPlanId, tx?: Prisma.TransactionClient): Promise<ILessonPlan> {
+    const row = await this.db(tx).lessonPlan.update({
+      where: { id },
+      data: { state: 'ACTIVE' },
     });
-    return row ? toQueueItemDomain(row) : null;
+    return toLessonPlanDomain(row);
   }
 
-  async findQueueItemByCard(
-    sessionId: SessionId,
-    cardId: CardId
-  ): Promise<ISessionQueueItem | null> {
-    const row = await this.prisma.sessionQueueItem.findUnique({
-      where: { sessionId_cardId: { sessionId, cardId } },
-    });
-    return row ? toQueueItemDomain(row) : null;
-  }
-
-  async countPendingQueueItems(sessionId: SessionId): Promise<number> {
-    return this.prisma.sessionQueueItem.count({
-      where: { sessionId, status: 'PENDING' },
+  async countActiveGoals(lessonPlanId: LessonPlanId): Promise<number> {
+    return this.prisma.lessonPlanGoal.count({
+      where: { lessonPlanId, state: 'ACTIVE' },
     });
   }
 
-  // ---------- Queue write ----------
-
-  async createQueueItemsBatch(
-    items: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>[],
+  async createGoal(
+    lessonPlanId: LessonPlanId,
+    goalId: GoalId,
+    input: ICreateGoalInput,
     tx?: Prisma.TransactionClient
-  ): Promise<void> {
-    if (items.length === 0) return;
-
-    await this.db(tx).sessionQueueItem.createMany({
-      data: items.map((item) => ({
-        id: item.id,
-        sessionId: item.sessionId,
-        cardId: item.cardId,
-        lane: toPrismaSessionSchedulerLane(item.lane),
-        position: item.position,
-        status: toPrismaCardQueueStatus(item.status),
-        injectedBy: item.injectedBy,
-        reason: item.reason,
-      })),
-    });
-  }
-
-  async injectQueueItem(
-    item: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionQueueItem> {
-    // Shift existing items at >= position down by 1
-    await this.db(tx).sessionQueueItem.updateMany({
-      where: {
-        sessionId: item.sessionId,
-        position: { gte: item.position },
-        status: 'PENDING',
-      },
-      data: { position: { increment: 1 } },
-    });
-
-    const row = await this.db(tx).sessionQueueItem.create({
+  ): Promise<ILessonPlanGoal> {
+    const row = await this.db(tx).lessonPlanGoal.create({
       data: {
-        id: item.id,
-        sessionId: item.sessionId,
-        cardId: item.cardId,
-        lane: toPrismaSessionSchedulerLane(item.lane),
-        position: item.position,
-        status: toPrismaCardQueueStatus(item.status),
-        injectedBy: item.injectedBy,
-        reason: item.reason,
+        id: goalId,
+        lessonPlanId,
+        description: input.description,
+        type: toPrismaEnum(input.type),
+        parentGoalId: input.parentGoalId ?? null,
+        state: toPrismaEnum(input.state ?? 'pending'),
+        source: toPrismaEnum(input.source ?? 'system_proposed'),
+        conceptRefs: input.conceptRefs ?? [],
       },
     });
-    return toQueueItemDomain(row);
+    return toGoalDomain(row);
   }
 
-  async removeQueueItem(
-    sessionId: SessionId,
-    cardId: CardId,
-    tx?: Prisma.TransactionClient
-  ): Promise<void> {
-    await this.db(tx).sessionQueueItem.delete({
-      where: { sessionId_cardId: { sessionId, cardId } },
+  async findStepById(id: StepId): Promise<IStep | null> {
+    const row = await this.prisma.step.findUnique({
+      where: { id },
+      include: { activities: { orderBy: { position: 'asc' } } },
     });
+    return row ? toStepDomain(row) : null;
   }
 
-  async markQueueItemPresented(
-    sessionId: SessionId,
-    cardId: CardId,
+  async getStepById(id: StepId): Promise<IStep> {
+    const step = await this.findStepById(id);
+    if (!step) {
+      throw new SessionNotFoundError(id);
+    }
+    return step;
+  }
+
+  async findStepsBySessionId(sessionId: SessionId): Promise<IStep[]> {
+    const rows = await this.prisma.step.findMany({
+      where: { sessionId },
+      orderBy: { position: 'asc' },
+      include: { activities: { orderBy: { position: 'asc' } } },
+    });
+    return rows.map(toStepDomain);
+  }
+
+  async createSteps(steps: ICreateStepRecord[], tx?: Prisma.TransactionClient): Promise<IStep[]> {
+    const db = this.db(tx);
+    const created: IStep[] = [];
+    for (const step of steps) {
+      const row = await db.step.create({
+        data: {
+          id: step.id,
+          lessonPlanId: step.lessonPlanId,
+          sessionId: step.sessionId,
+          userId: step.userId,
+          studyMode: toPrismaEnum(step.studyMode),
+          position: step.position,
+          objective: step.objective,
+          servesGoalIds: step.servesGoalIds,
+          eligibleModes: step.eligibleModes,
+          selectedMode: step.selectedMode,
+          transformationType: toPrismaEnum(step.transformationType),
+          expectedOutcome: step.expectedOutcome,
+          evaluationType: step.evaluationType,
+          difficulty: step.difficulty,
+          isRepair: step.isRepair,
+          conceptRefs: step.conceptRefs,
+          variantSeed: step.variantSeed,
+          status: toPrismaEnum(step.status),
+          evaluationId: step.evaluationId,
+          guardianValidationId: step.guardianValidationId,
+          presentedAt: step.presentedAt ? new Date(step.presentedAt) : null,
+          answeredAt: step.answeredAt ? new Date(step.answeredAt) : null,
+          evaluatedAt: step.evaluatedAt ? new Date(step.evaluatedAt) : null,
+          supersededByStepId: step.supersededByStepId,
+          version: step.version,
+          activities: {
+            create: step.activities.map((activity) => ({
+              id: activity.id,
+              position: activity.position,
+              contentSourceType: toPrismaEnum(activity.contentSourceType),
+              cardId: activity.cardId,
+              templateId: activity.templateId,
+              generatedVariantId: activity.generatedVariantId,
+              prompt: activity.prompt,
+              renderPayload: activity.renderPayload as Prisma.InputJsonValue,
+              expectedResponseType: activity.expectedResponseType,
+              responseSchema: activity.responseSchema as Prisma.InputJsonValue,
+              variantSeed: activity.variantSeed,
+              generationFallbackReason: activity.generationFallbackReason,
+            })),
+          },
+          queueItem: {
+            create: {
+              id: crypto.randomUUID(),
+              sessionId: step.sessionId,
+              position: step.position,
+              status: toPrismaEnum(step.queueStatus ?? 'injected'),
+              injectedBy: 'strategy',
+              reason: step.isRepair ? 'trigger_repair' : 'trigger_replan',
+            },
+          },
+        },
+        include: { activities: { orderBy: { position: 'asc' } } },
+      });
+      created.push(toStepDomain(row));
+    }
+    return created;
+  }
+
+  async markStepsSuperseded(
+    replacements: { stepId: StepId; supersededByStepId: StepId }[],
     tx?: Prisma.TransactionClient
   ): Promise<void> {
-    await this.db(tx).sessionQueueItem.update({
-      where: { sessionId_cardId: { sessionId, cardId } },
+    const db = this.db(tx);
+    for (const replacement of replacements) {
+      await db.step.update({
+        where: { id: replacement.stepId },
+        data: {
+          status: 'SUPERSEDED',
+          supersededByStepId: replacement.supersededByStepId,
+          version: { increment: 1 },
+        },
+      });
+      await db.stepQueueItem.updateMany({
+        where: { stepId: replacement.stepId },
+        data: { status: 'SKIPPED', reason: 'superseded_by_strategy' },
+      });
+    }
+  }
+
+  async findNextQueueItem(sessionId: SessionId): Promise<IStepQueueItem | null> {
+    const row = await this.prisma.stepQueueItem.findFirst({
+      where: { sessionId, status: { in: ['PENDING', 'INJECTED'] } },
+      orderBy: { position: 'asc' },
+      include: { step: { include: { activities: { orderBy: { position: 'asc' } } } } },
+    });
+    return row ? toQueueItemDomain(row) : null;
+  }
+
+  async markStepPresented(stepId: StepId, tx?: Prisma.TransactionClient): Promise<IStep> {
+    const db = this.db(tx);
+    const now = new Date();
+    const row = await db.step.update({
+      where: { id: stepId },
+      data: {
+        status: 'PRESENTED',
+        presentedAt: now,
+        version: { increment: 1 },
+      },
+      include: { activities: { orderBy: { position: 'asc' } } },
+    });
+    await db.stepQueueItem.update({
+      where: { stepId },
       data: { status: 'PRESENTED' },
     });
+    return toStepDomain(row);
   }
 
-  async markQueueItemAnswered(
-    sessionId: SessionId,
-    cardId: CardId,
+  async markStepAnsweredAndEvaluated(
+    stepId: StepId,
+    evaluationId: string,
     tx?: Prisma.TransactionClient
-  ): Promise<void> {
-    await this.db(tx).sessionQueueItem.update({
-      where: { sessionId_cardId: { sessionId, cardId } },
+  ): Promise<IStep> {
+    const db = this.db(tx);
+    const now = new Date();
+    const row = await db.step.update({
+      where: { id: stepId },
+      data: {
+        status: 'EVALUATED',
+        evaluationId,
+        answeredAt: now,
+        evaluatedAt: now,
+        version: { increment: 1 },
+      },
+      include: { activities: { orderBy: { position: 'asc' } } },
+    });
+    await db.stepQueueItem.update({
+      where: { stepId },
       data: { status: 'COMPLETED' },
     });
+    return toStepDomain(row);
   }
 
-  async markQueueItemSkipped(
-    sessionId: SessionId,
-    cardId: CardId,
+  async markStepSkipped(
+    stepId: StepId,
+    reason: string | null,
     tx?: Prisma.TransactionClient
-  ): Promise<void> {
-    await this.db(tx).sessionQueueItem.update({
-      where: { sessionId_cardId: { sessionId, cardId } },
-      data: { status: 'SKIPPED' },
-    });
-  }
-
-  async replacePendingQueueItems(
-    sessionId: SessionId,
-    committedCardIds: CardId[],
-    tx?: Prisma.TransactionClient
-  ): Promise<void> {
-    await this.db(tx).sessionQueueItem.deleteMany({
-      where: {
-        sessionId,
-        status: {
-          in: ['PENDING', 'PRESENTED', 'INJECTED'],
-        },
-      },
-    });
-
-    if (committedCardIds.length === 0) {
-      return;
-    }
-
-    await this.db(tx).sessionQueueItem.createMany({
-      data: committedCardIds.map((cardId, index) => ({
-        id: crypto.randomUUID(),
-        sessionId,
-        cardId,
-        lane: 'RETENTION',
-        position: index,
-        status: 'PENDING',
-        injectedBy: 'cohort_commit',
-        reason: 'Materialized from committed cohort handshake',
-      })),
-      skipDuplicates: true,
-    });
-  }
-
-  async findLatestCohortHandshake(
-    sessionId: SessionId,
-    proposalId: string,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake | null> {
-    const row = await this.db(tx).sessionCohortHandshake.findFirst({
-      where: { sessionId, proposalId },
-      orderBy: { revision: 'desc' },
-    });
-    return row ? toCohortHandshakeDomain(row) : null;
-  }
-
-  async findCohortHandshake(
-    sessionId: SessionId,
-    proposalId: string,
-    revision: number,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake | null> {
-    const row = await this.db(tx).sessionCohortHandshake.findUnique({
-      where: {
-        sessionId_proposalId_revision: {
-          sessionId,
-          proposalId,
-          revision,
-        },
-      },
-    });
-
-    return row ? toCohortHandshakeDomain(row) : null;
-  }
-
-  async createCohortHandshake(
-    sessionId: SessionId,
-    input: IProposeCohortInput | IReviseCohortInput,
-    status: SessionCohortHandshakeStatus,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake> {
-    const row = await this.db(tx).sessionCohortHandshake.create({
+  ): Promise<IStep> {
+    const db = this.db(tx);
+    const row = await db.step.update({
+      where: { id: stepId },
       data: {
-        id: crypto.randomUUID(),
-        sessionId,
-        proposalId: input.linkage.proposalId,
-        decisionId: input.linkage.decisionId,
-        revision: 'newRevision' in input ? input.newRevision : input.revision,
-        status: toPrismaSessionCohortHandshakeStatus(status),
-        candidateCardIds: input.candidateCardIds as unknown as object,
-        acceptedCardIds: Prisma.DbNull,
-        rejectedCardIds: Prisma.DbNull,
-        metadata: (input.metadata ?? {}) as object,
+        status: 'SKIPPED',
+        version: { increment: 1 },
       },
+      include: { activities: { orderBy: { position: 'asc' } } },
     });
-
-    return toCohortHandshakeDomain(row);
-  }
-
-  async updateCohortHandshake(
-    sessionId: SessionId,
-    proposalId: string,
-    revision: number,
-    expectedStatus: SessionCohortHandshakeStatus,
-    input: IAcceptCohortInput | ICommitCohortInput,
-    nextStatus: SessionCohortHandshakeStatus,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake> {
-    const updated = await this.db(tx).sessionCohortHandshake.updateMany({
-      where: {
-        sessionId,
-        proposalId,
-        revision,
-        status: toPrismaSessionCohortHandshakeStatus(expectedStatus),
-      },
-      data: {
-        status: toPrismaSessionCohortHandshakeStatus(nextStatus),
-        acceptedCardIds: ('acceptedCardIds' in input
-          ? input.acceptedCardIds
-          : input.committedCardIds) as unknown as object,
-        rejectedCardIds: input.rejectedCardIds as unknown as object,
-        metadata: (input.metadata ?? {}) as object,
-      },
+    await db.stepQueueItem.update({
+      where: { stepId },
+      data: { status: 'SKIPPED', reason },
     });
-
-    if (updated.count !== 1) {
-      throw new VersionConflictError(revision, revision + 1);
-    }
-
-    const row = await this.db(tx).sessionCohortHandshake.findUnique({
-      where: {
-        sessionId_proposalId_revision: {
-          sessionId,
-          proposalId,
-          revision,
-        },
-      },
-    });
-
-    if (!row) {
-      throw new SessionNotFoundError(sessionId);
-    }
-
-    return toCohortHandshakeDomain(row);
+    return toStepDomain(row);
   }
 }

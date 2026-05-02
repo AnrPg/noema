@@ -3,8 +3,7 @@
 /**
  * @noema/web - Session / SessionSummaryVitals
  *
- * Key stats for a completed session: total cards, accuracy gauge,
- * time spent, and mode badge.
+ * Key stats for a completed Step-loop session.
  */
 
 import * as React from 'react';
@@ -19,9 +18,12 @@ interface ISessionSummaryVitalsProps {
     startedAt: string;
     completedAt: string | null;
     mode: string;
-    uniqueCardsReviewed?: number;
   };
-  attempts: { grade: number; cardId?: string }[];
+  stepStats?: {
+    stepsPlanned: number;
+    stepsEvaluated: number;
+    stepsSkipped: number;
+  };
 }
 
 // ============================================================================
@@ -41,27 +43,18 @@ function formatDuration(ms: number): string {
   return `${String(minutes)}m`;
 }
 
-// Grade >= 3 counts as a passing attempt for accuracy calculation.
-const PASSING_GRADE = 3;
-
 // ============================================================================
 // SessionSummaryVitals
 // ============================================================================
 
 export function SessionSummaryVitals({
   session,
-  attempts,
+  stepStats,
 }: ISessionSummaryVitalsProps): React.JSX.Element {
-  const total = attempts.length;
-  const uniqueCardCount =
-    session.uniqueCardsReviewed ??
-    new Set(
-      attempts
-        .map((attempt) => attempt.cardId)
-        .filter((cardId): cardId is string => typeof cardId === 'string' && cardId !== '')
-    ).size;
-  const passing = attempts.filter((a) => a.grade >= PASSING_GRADE).length;
-  const accuracy = total > 0 ? Math.round((passing / total) * 100) : 0;
+  const evaluatedSteps = stepStats?.stepsEvaluated ?? 0;
+  const plannedSteps = stepStats?.stepsPlanned ?? 0;
+  const skippedSteps = stepStats?.stepsSkipped ?? 0;
+  const completion = plannedSteps > 0 ? Math.round((evaluatedSteps / plannedSteps) * 100) : 0;
 
   const startMs = new Date(session.startedAt).getTime();
   const endMs = session.completedAt !== null ? new Date(session.completedAt).getTime() : Date.now();
@@ -72,27 +65,26 @@ export function SessionSummaryVitals({
     session.mode.charAt(0).toUpperCase() + session.mode.slice(1).toLowerCase().replace(/_/g, ' ');
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {/* Total cards */}
-      <MetricTile
-        label="Cards Attempted"
-        value={uniqueCardCount > 0 ? uniqueCardCount : total}
-        colorFamily="synapse"
-      />
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Total steps */}
+      <MetricTile label="Steps Evaluated" value={evaluatedSteps} colorFamily="synapse" />
 
-      {/* Accuracy */}
+      {/* Completion */}
       <MetricTile
-        label="Accuracy"
-        value={`${String(accuracy)}%`}
+        label="Completion"
+        value={`${String(completion)}%`}
         colorFamily="dendrite"
-        icon={<NeuralGauge value={accuracy / 100} size="sm" showValue={false} />}
+        icon={<NeuralGauge value={completion / 100} size="sm" showValue={false} />}
       />
 
       {/* Time spent */}
       <MetricTile label="Time Spent" value={timeSpent} colorFamily="myelin" />
 
+      {/* Skipped steps */}
+      <MetricTile label="Skipped" value={skippedSteps} colorFamily="cortex" />
+
       {/* Mode */}
-      <MetricTile label="Mode" value={modeLabel} colorFamily="cortex" />
+      <MetricTile label="Mode" value={modeLabel} colorFamily="dendrite" />
     </div>
   );
 }

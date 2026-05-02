@@ -17,16 +17,18 @@ import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerSessionRoutes } from './api/rest/session.routes.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
+import { NoopPedagogyGuardianClient } from './domain/session-service/pedagogy-guardian.port.js';
 import { SessionService } from './domain/session-service/session.service.js';
-import { StreakService } from './domain/session-service/streak.service.js';
-import { UserDeletedConsumer } from './events/consumers/index.js';
+import { StrategyService } from './domain/strategy/index.js';
+import { MetacognitionTriggerConsumer, UserDeletedConsumer } from './events/consumers/index.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaOutboxRepository,
   PrismaSessionRepository,
 } from './infrastructure/database/index.js';
 import { SessionOutboxWorker } from './infrastructure/events/index.js';
-import { PrismaUserStreakRepository } from './infrastructure/repositories/prisma-user-streak.repository.js';
+import { HttpMetacognitionEvaluationClient } from './infrastructure/metacognition/index.js';
+import { HttpPedagogyGuardianClient } from './infrastructure/pedagogy-guardian/index.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 // ============================================================================
@@ -92,6 +94,20 @@ async function bootstrap(): Promise<void> {
   const sessionRepository = new PrismaSessionRepository(prisma, logger);
   const outboxRepository = new PrismaOutboxRepository(prisma);
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
+  const metacognitionClient = new HttpMetacognitionEvaluationClient({
+    baseUrl: config.metacognition.serviceUrl,
+    ...(config.metacognition.serviceToken !== undefined
+      ? { serviceToken: config.metacognition.serviceToken }
+      : {}),
+  });
+  const pedagogyGuardianClient = config.pedagogyGuardian.enabled
+    ? new HttpPedagogyGuardianClient({
+        baseUrl: config.pedagogyGuardian.serviceUrl,
+        ...(config.pedagogyGuardian.serviceToken !== undefined
+          ? { serviceToken: config.pedagogyGuardian.serviceToken }
+          : {}),
+      })
+    : undefined;
   const outboxWorker = new SessionOutboxWorker(outboxRepository, eventPublisher, logger, {
     pollIntervalMs: config.redis.outboxPollIntervalMs,
     batchSize: config.redis.outboxBatchSize,
@@ -101,6 +117,13 @@ async function bootstrap(): Promise<void> {
     retryMaxDelayMs: config.redis.outboxRetryMaxDelayMs,
     drainTimeoutMs: config.redis.outboxDrainTimeoutMs,
   });
+  const strategyService = new StrategyService(
+    sessionRepository,
+    outboxRepository,
+    prisma,
+    pedagogyGuardianClient ?? new NoopPedagogyGuardianClient(),
+    logger
+  );
 
   // Create domain service
   const sessionService = new SessionService(
@@ -120,15 +143,10 @@ async function bootstrap(): Promise<void> {
       session: {
         maxConcurrentSessions: config.session.maxConcurrentSessions,
       },
+      metacognitionClient,
+      ...(pedagogyGuardianClient !== undefined ? { pedagogyGuardianClient } : {}),
     }
   );
-
-  // Create streak infrastructure (Phase 5)
-  const userStreakRepository = new PrismaUserStreakRepository(prisma, logger);
-  const streakService = new StreakService(userStreakRepository, logger);
-
-  // Wire streak service into session service for inline updates
-  sessionService.setStreakService(streakService);
 
   // ==========================================================================
   // Event Consumers
@@ -152,6 +170,7 @@ async function bootstrap(): Promise<void> {
     };
 
     const userDeletedRedis = await createConsumerRedisClient();
+    const metacognitionTriggerRedis = await createConsumerRedisClient();
 
     const userDeletedConsumer = new UserDeletedConsumer(
       userDeletedRedis,
@@ -160,8 +179,15 @@ async function bootstrap(): Promise<void> {
       consumerName,
       streams.userService
     );
+    const metacognitionTriggerConsumer = new MetacognitionTriggerConsumer(
+      metacognitionTriggerRedis,
+      strategyService,
+      logger,
+      consumerName,
+      streams.metacognitionService
+    );
 
-    consumers.push(userDeletedConsumer);
+    consumers.push(userDeletedConsumer, metacognitionTriggerConsumer);
 
     // Initialize consumer groups (idempotent)
     await Promise.all(consumers.map((c) => c.initialize()));
@@ -215,12 +241,7 @@ async function bootstrap(): Promise<void> {
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
-  registerSessionRoutes(
-    fastify as unknown as FastifyInstance,
-    sessionService,
-    authMiddleware,
-    streakService
-  );
+  registerSessionRoutes(fastify as unknown as FastifyInstance, sessionService, authMiddleware);
   registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   // Graceful shutdown

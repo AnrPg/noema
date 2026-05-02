@@ -12,195 +12,191 @@ datasource db {
 }
 
 // ============================================================================
-// Session Entity — FSM-based learning session
+// Session Aggregate — Step-first learning loop
 // ============================================================================
 
 model Session {
     id     String @id @db.VarChar(50)
     userId String @map("user_id") @db.VarChar(50)
 
-    // DeckQuery reference (resolved by Learning Agent before session start)
-    deckQueryId String @map("deck_query_id") @db.VarChar(50)
+    curriculumId        String  @map("curriculum_id") @db.VarChar(50)
+    curriculumVersionId String? @map("curriculum_version_id") @db.VarChar(50)
 
-    // FSM state
-    state SessionState @default(ACTIVE)
+    studyMode      StudyMode             @default(KNOWLEDGE_GAINING) @map("study_mode")
+    learningMode   LearningMode          @map("learning_mode")
+    lifecycleState SessionLifecycleState @default(PLANNING) @map("lifecycle_state")
 
-    // Learning configuration
-    learningMode        LearningMode
-    studyMode           StudyMode    @default(KNOWLEDGE_GAINING) @map("study_mode")
-    teachingApproach    String       @map("teaching_approach") @db.VarChar(100)
-    schedulingAlgorithm String       @map("scheduling_algorithm") @db.VarChar(50)
-
-    // Strategy (mutable mid-session)
-    loadoutId        String? @map("loadout_id") @db.VarChar(50)
-    loadoutArchetype String? @map("loadout_archetype") @db.VarChar(50)
-    forceLevel       String? @map("force_level") @db.VarChar(20)
-
-    // Session configuration (immutable after creation)
     config Json @default("{}")
+    stats  Json @default("{}")
 
-    // Running statistics (updated on each attempt)
-    stats Json @default("{}")
+    pauseCount    Int @default(0) @map("pause_count")
+    totalPausedMs Int @default(0) @map("total_paused_ms")
 
-    // Queue metadata
-    initialQueueSize Int @default(0) @map("initial_queue_size")
-
-    // Pause tracking
-    pauseCount            Int       @default(0) @map("pause_count")
-    totalPausedDurationMs Int       @default(0) @map("total_paused_duration_ms")
-    lastPausedAt          DateTime? @map("last_paused_at")
-
-    // Lifecycle timestamps
     startedAt      DateTime  @default(now()) @map("started_at")
     lastActivityAt DateTime  @default(now()) @map("last_activity_at")
     completedAt    DateTime? @map("completed_at")
 
-    // Termination
     terminationReason String? @map("termination_reason") @db.VarChar(50)
 
-    // Audit fields
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
+    version   Int      @default(1)
 
-    // Optimistic locking
-    version Int @default(1)
+    lessonPlan LessonPlan?
+    steps      Step[]
+    queueItems StepQueueItem[]
 
-    // Relations
-    attempts   Attempt[]
-    queueItems SessionQueueItem[]
-    cohortHandshakes SessionCohortHandshake[]
-
-    // Indexes
-    @@index([userId])
-    @@index([userId, studyMode])
-    @@index([userId, state])
-    @@index([state])
-    @@index([startedAt])
-    @@index([lastActivityAt])
-    @@index([userId, completedAt])
+    @@index([curriculumId])
+    @@index([userId, lifecycleState])
+    @@index([userId, studyMode, completedAt])
     @@map("sessions")
 }
 
-// ============================================================================
-// Attempt Entity — Single card review attempt
-// ============================================================================
-
-model Attempt {
+model LessonPlan {
     id        String @id @db.VarChar(50)
-    sessionId String @map("session_id") @db.VarChar(50)
-    cardId    String @map("card_id") @db.VarChar(50)
+    sessionId String @unique @map("session_id") @db.VarChar(50)
     userId    String @map("user_id") @db.VarChar(50)
 
-    // Ordering within session
-    sequenceNumber Int @map("sequence_number")
+    curriculumId        String   @map("curriculum_id") @db.VarChar(50)
+    curriculumVersionId String   @map("curriculum_version_id") @db.VarChar(50)
+    selectedNodeIds     String[] @map("selected_node_ids")
 
-    // Response
-    outcome     AttemptOutcome
-    rating      Rating
-    ratingValue Int            @map("rating_value") @db.SmallInt
+    studyMode    StudyMode    @map("study_mode")
+    learningMode LearningMode @map("learning_mode")
+    rigorLevel   RigorLevel   @map("rigor_level")
 
-    // Timing
-    responseTimeMs           Float  @map("response_time_ms")
-    dwellTimeMs              Float  @map("dwell_time_ms")
-    timeToFirstInteractionMs Float? @map("time_to_first_interaction_ms")
+    topic              String  @db.VarChar(500)
+    prerequisites      Json    @default("[]")
+    sourceDecks        Json    @default("[]") @map("source_decks")
+    sourceCategories   Json    @default("[]") @map("source_categories")
+    assessmentStrategy String? @map("assessment_strategy") @db.VarChar(2000)
+    adaptationRules    String? @map("adaptation_rules") @db.VarChar(2000)
 
-    // Metacognitive signals
-    confidenceBefore       Float?    @map("confidence_before")
-    confidenceAfter        Float?    @map("confidence_after")
-    calibrationDelta       Float?    @map("calibration_delta")
-    wasRevisedBeforeCommit Boolean   @default(false) @map("was_revised_before_commit")
-    revisionCount          Int       @default(0) @map("revision_count")
-    hintRequestCount       Int       @default(0) @map("hint_request_count")
-    hintDepthReached       HintDepth @map("hint_depth_reached")
+    guardianValidationId String? @map("guardian_validation_id") @db.VarChar(50)
+    state                LessonPlanState @default(DRAFT)
 
-    // Context at time of attempt (denormalized snapshot)
-    contextSnapshot Json @map("context_snapshot")
-
-    // Prior scheduling state for scheduler recomputation
-    priorSchedulingState Json? @map("prior_scheduling_state")
-
-    // Cross-service references
-    traceId     String? @map("trace_id") @db.VarChar(50)
-    diagnosisId String? @map("diagnosis_id") @db.VarChar(50)
-
-    // Audit
     createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+    version   Int      @default(1)
 
-    // Relations
-    session Session @relation(fields: [sessionId], references: [id])
+    goals   LessonPlanGoal[]
+    steps   Step[]
+    session Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-    // Indexes
-    @@index([sessionId])
-    @@index([sessionId, sequenceNumber])
-    @@index([userId])
-    @@index([cardId])
-    @@index([userId, cardId])
-    @@index([createdAt])
-    @@map("attempts")
+    @@index([userId, state])
+    @@index([curriculumId, curriculumVersionId])
+    @@map("lesson_plans")
 }
 
-// ============================================================================
-// Session Queue Item — Dynamic card queue within a session
-// ============================================================================
+model LessonPlanGoal {
+    id           String @id @db.VarChar(50)
+    lessonPlanId String @map("lesson_plan_id") @db.VarChar(50)
 
-model SessionQueueItem {
+    description  String     @db.VarChar(1000)
+    type         GoalType
+    parentGoalId String?    @map("parent_goal_id") @db.VarChar(50)
+    state        GoalState  @default(PENDING)
+    source       GoalSource @default(SYSTEM_PROPOSED)
+    conceptRefs  String[]   @map("concept_refs")
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    lessonPlan LessonPlan @relation(fields: [lessonPlanId], references: [id], onDelete: Cascade)
+
+    @@index([lessonPlanId, state])
+    @@map("lesson_plan_goals")
+}
+
+model Step {
+    id           String @id @db.VarChar(50)
+    lessonPlanId String @map("lesson_plan_id") @db.VarChar(50)
+    sessionId    String @map("session_id") @db.VarChar(50)
+    userId       String @map("user_id") @db.VarChar(50)
+
+    studyMode StudyMode @map("study_mode")
+    position  Int
+
+    objective          String             @db.VarChar(1000)
+    servesGoalIds      String[]           @map("serves_goal_ids")
+    eligibleModes      String[]           @map("eligible_modes")
+    selectedMode       String             @map("selected_mode") @db.VarChar(100)
+    transformationType TransformationType @map("transformation_type")
+    expectedOutcome    String             @db.VarChar(2000)
+    evaluationType     String             @map("evaluation_type") @db.VarChar(100)
+    difficulty         Float
+    isRepair           Boolean            @default(false) @map("is_repair")
+    conceptRefs        String[]           @map("concept_refs")
+    variantSeed        String             @map("variant_seed") @db.VarChar(100)
+    status             StepStatus         @default(PLANNED)
+
+    evaluationId         String? @unique @map("evaluation_id") @db.VarChar(50)
+    guardianValidationId String? @map("guardian_validation_id") @db.VarChar(50)
+
+    presentedAt        DateTime? @map("presented_at")
+    answeredAt         DateTime? @map("answered_at")
+    evaluatedAt        DateTime? @map("evaluated_at")
+    supersededByStepId String?   @map("superseded_by_step_id") @db.VarChar(50)
+
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+    version   Int      @default(1)
+
+    lessonPlan LessonPlan     @relation(fields: [lessonPlanId], references: [id], onDelete: Cascade)
+    session    Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+    activities Activity[]
+    queueItem  StepQueueItem?
+
+    @@index([sessionId, position])
+    @@index([userId, evaluatedAt])
+    @@index([conceptRefs], type: Gin)
+    @@map("steps")
+}
+
+model StepQueueItem {
     id        String @id @db.VarChar(50)
     sessionId String @map("session_id") @db.VarChar(50)
-    cardId    String @map("card_id") @db.VarChar(50)
+    stepId    String @unique @map("step_id") @db.VarChar(50)
 
-    lane SessionSchedulerLane @default(RETENTION)
-
-    // Ordering
     position Int
+    status   StepQueueStatus @default(PENDING)
 
-    // Status tracking
-    status CardQueueStatus @default(PENDING)
-
-    // Injection metadata (for agent-injected cards)
     injectedBy String? @map("injected_by") @db.VarChar(100)
     reason     String? @db.VarChar(500)
 
-    // Audit
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations
-    session Session @relation(fields: [sessionId], references: [id])
+    session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+    step    Step    @relation(fields: [stepId], references: [id], onDelete: Cascade)
 
-    // Indexes
-    @@unique([sessionId, cardId])
     @@index([sessionId, position])
     @@index([sessionId, status])
-    @@map("session_queue_items")
+    @@map("step_queue_items")
 }
 
-// ============================================================================
-// Session Cohort Handshake — auditable proposal/decision lineage
-// ============================================================================
+model Activity {
+    id     String @id @db.VarChar(50)
+    stepId String @map("step_id") @db.VarChar(50)
 
-model SessionCohortHandshake {
-    id String @id @db.VarChar(50)
+    position          Int
+    contentSourceType ActivityContentSourceType @map("content_source_type")
+    cardId            String? @map("card_id") @db.VarChar(50)
+    templateId        String? @map("template_id") @db.VarChar(50)
+    generatedVariantId String? @map("generated_variant_id") @db.VarChar(50)
 
-    sessionId   String @map("session_id") @db.VarChar(50)
-    proposalId  String @map("proposal_id") @db.VarChar(100)
-    decisionId  String @map("decision_id") @db.VarChar(100)
-    revision    Int
-    status      SessionCohortHandshakeStatus
+    prompt               String @db.VarChar(8000)
+    renderPayload        Json   @default("{}") @map("render_payload")
+    expectedResponseType String @map("expected_response_type") @db.VarChar(100)
+    responseSchema       Json   @default("{}") @map("response_schema")
+    variantSeed          String @map("variant_seed") @db.VarChar(100)
 
-    candidateCardIds Json @map("candidate_card_ids")
-    acceptedCardIds  Json? @map("accepted_card_ids")
-    rejectedCardIds  Json? @map("rejected_card_ids")
-    metadata         Json  @default("{}")
+    generationFallbackReason String? @map("generation_fallback_reason") @db.VarChar(500)
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+    step Step @relation(fields: [stepId], references: [id], onDelete: Cascade)
 
-    session Session @relation(fields: [sessionId], references: [id])
-
-    @@unique([sessionId, proposalId, revision])
-    @@index([sessionId, status])
-    @@index([sessionId, proposalId, revision])
-    @@map("session_cohort_handshakes")
+    @@index([stepId, position])
+    @@map("activities")
 }
 
 // ============================================================================
@@ -216,12 +212,12 @@ model EventOutbox {
     payload       Json
     metadata      Json
 
-    publishedAt DateTime? @map("published_at")
-    claimOwner String? @map("claim_owner") @db.VarChar(100)
-    claimUntil DateTime? @map("claim_until")
+    publishedAt   DateTime? @map("published_at")
+    claimOwner    String?   @map("claim_owner") @db.VarChar(100)
+    claimUntil    DateTime? @map("claim_until")
     nextAttemptAt DateTime? @map("next_attempt_at")
-    attempts    Int       @default(0)
-    lastError   String?   @map("last_error") @db.VarChar(1000)
+    attempts      Int       @default(0)
+    lastError     String?   @map("last_error") @db.VarChar(1000)
 
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
@@ -233,17 +229,14 @@ model EventOutbox {
     @@map("event_outbox")
 }
 
-// ============================================================================
-// Offline Intent Token Replay Guard — durable single-use protection
-// ============================================================================
-
 model OfflineIntentTokenReplayGuard {
-    jti String @id @db.VarChar(100)
-    userId String @map("user_id") @db.VarChar(50)
-    issuedAt DateTime @map("issued_at")
+    jti       String @id @db.VarChar(100)
+    userId    String @map("user_id") @db.VarChar(50)
+    issuedAt  DateTime @map("issued_at")
     expiresAt DateTime @map("expires_at")
+
     consumedAt DateTime? @map("consumed_at")
-    status OfflineIntentTokenReplayGuardStatus @default(ISSUED)
+    status     OfflineIntentTokenReplayGuardStatus @default(ISSUED)
 
     createdAt DateTime @default(now()) @map("created_at")
     updatedAt DateTime @updatedAt @map("updated_at")
@@ -257,16 +250,6 @@ model OfflineIntentTokenReplayGuard {
 // ============================================================================
 // Enums
 // ============================================================================
-
-enum SessionState {
-    ACTIVE
-    PAUSED
-    COMPLETED
-    ABANDONED
-    EXPIRED
-
-    @@map("session_state")
-}
 
 enum StudyMode {
     LANGUAGE_LEARNING
@@ -282,58 +265,100 @@ enum LearningMode {
     @@map("learning_mode")
 }
 
-enum AttemptOutcome {
-    CORRECT
-    INCORRECT
-    PARTIAL
+enum RigorLevel {
+    MINIMAL
+    FULL
+
+    @@map("rigor_level")
+}
+
+enum GoalType {
+    DISCRIMINATION
+    REASONING
+    TRANSFER
+    ACQUISITION
+    REINFORCEMENT
+
+    @@map("goal_type")
+}
+
+enum GoalState {
+    PENDING
+    ACTIVE
+    STABLE
+    UNSTABLE
+
+    @@map("goal_state")
+}
+
+enum GoalSource {
+    SYSTEM_PROPOSED
+    USER_ACCEPTED
+    USER_EDITED
+
+    @@map("goal_source")
+}
+
+enum LessonPlanState {
+    DRAFT
+    VALIDATED
+    ACTIVE
+    COMPLETED
+    ABANDONED
+
+    @@map("lesson_plan_state")
+}
+
+enum SessionLifecycleState {
+    PLANNING
+    EXECUTION
+    DIAGNOSIS
+    ADAPTATION
+    EVALUATION
+    COMPLETION
+
+    @@map("session_lifecycle_state")
+}
+
+enum TransformationType {
+    RECALL
+    EXPLANATION
+    COMPARISON
+    APPLICATION
+    PERTURBATION
+    ERROR_DETECTION
+
+    @@map("transformation_type")
+}
+
+enum StepStatus {
+    PLANNED
+    QUEUED
+    PRESENTED
+    ANSWERED
+    EVALUATED
+    SUPERSEDED
     SKIPPED
 
-    @@map("attempt_outcome")
+    @@map("step_status")
 }
 
-enum Rating {
-    AGAIN
-    HARD
-    GOOD
-    EASY
-
-    @@map("rating")
-}
-
-enum HintDepth {
-    NONE
-    CUE
-    PARTIAL
-    FULL_EXPLANATION
-
-    @@map("hint_depth")
-}
-
-enum CardQueueStatus {
+enum StepQueueStatus {
     PENDING
     PRESENTED
     COMPLETED
     SKIPPED
     INJECTED
 
-    @@map("card_queue_status")
+    @@map("step_queue_status")
 }
 
-enum SessionSchedulerLane {
-    RETENTION
-    CALIBRATION
+enum ActivityContentSourceType {
+    CARD
+    TEMPLATE
+    GENERATED
 
-    @@map("session_scheduler_lane")
-}
-
-enum SessionCohortHandshakeStatus {
-    PROPOSED
-    ACCEPTED
-    REVISED
-    COMMITTED
-    CANCELLED
-
-    @@map("session_cohort_handshake_status")
+    @@map("activity_content_source_type")
 }
 
 enum OfflineIntentTokenReplayGuardStatus {
@@ -342,26 +367,4 @@ enum OfflineIntentTokenReplayGuardStatus {
     EXPIRED
 
     @@map("offline_intent_token_replay_guard_status")
-}
-
-// ============================================================================
-// User Streak — Materialized streak cache (Phase 5, T5.4)
-// ============================================================================
-// One row per user. Incrementally updated when a session completes.
-// Lazy-reset on read: if lastActiveDate is more than 1 day ago,
-// currentStreak returns 0.
-
-model UserStreak {
-    userId         String   @map("user_id") @db.VarChar(50)
-    studyMode      StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-    currentStreak  Int      @default(0) @map("current_streak")
-    longestStreak  Int      @default(0) @map("longest_streak")
-    lastActiveDate DateTime @map("last_active_date") @db.Date
-    timezone       String   @default("UTC") @db.VarChar(50)
-    createdAt      DateTime @default(now()) @map("created_at")
-    updatedAt      DateTime @updatedAt @map("updated_at")
-
-    @@id([userId, studyMode])
-    @@index([userId])
-    @@map("user_streaks")
 }

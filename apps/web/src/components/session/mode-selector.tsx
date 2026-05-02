@@ -3,27 +3,19 @@
 /**
  * @noema/web - Session / ModeSelector
  *
- * 2×2 grid of philosophical mode cards. Each card maps to a concrete
- * API SessionMode value. The selected card receives a coloured border and
+ * 2×2 grid of learning mode cards. The selected card receives a coloured border and
  * tinted background; unselected cards use a neutral hover treatment.
  */
 
 import { BookOpen, Compass, GitMerge, Target } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { LearningMode } from '@noema/types';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type PhilosophicalMode = 'exploration' | 'goal_driven' | 'exam_oriented' | 'synthesis';
-export type ApiSessionMode = 'standard' | 'cram' | 'preview' | 'test';
-
-export const MODE_TO_API: Record<PhilosophicalMode, ApiSessionMode> = {
-  exploration: 'standard',
-  goal_driven: 'cram',
-  exam_oriented: 'test',
-  synthesis: 'preview',
-};
+export type SessionLearningMode = LearningMode;
 
 // ============================================================================
 // Mode config
@@ -43,7 +35,7 @@ interface IModeConfig {
   selectedText: string;
 }
 
-const MODE_CONFIG: Record<PhilosophicalMode, IModeConfig> = {
+const MODE_CONFIG: Record<SessionLearningMode, IModeConfig> = {
   exploration: {
     label: 'Exploration',
     icon: Compass,
@@ -58,7 +50,7 @@ const MODE_CONFIG: Record<PhilosophicalMode, IModeConfig> = {
     label: 'Goal-Driven',
     icon: Target,
     description:
-      'High-intensity cramming toward a target. Prioritizes cards closest to forgetting.',
+      'Focused work toward a target. Prioritizes unstable concepts and prerequisite gaps.',
     selectedBorder: 'border-amber-500',
     selectedBg: 'bg-amber-500/10',
     selectedIconBg: 'bg-amber-500/10',
@@ -85,7 +77,7 @@ const MODE_CONFIG: Record<PhilosophicalMode, IModeConfig> = {
   },
 };
 
-const ORDERED_MODES: PhilosophicalMode[] = [
+const ORDERED_MODES: SessionLearningMode[] = [
   'exploration',
   'goal_driven',
   'exam_oriented',
@@ -97,9 +89,9 @@ const ORDERED_MODES: PhilosophicalMode[] = [
 // ============================================================================
 
 interface IModeCardProps {
-  mode: PhilosophicalMode;
+  mode: SessionLearningMode;
   isSelected: boolean;
-  onSelect: (mode: PhilosophicalMode) => void;
+  onSelect: (mode: SessionLearningMode) => void;
 }
 
 function ModeCard({ mode, isSelected, onSelect }: IModeCardProps): React.JSX.Element {
@@ -145,8 +137,8 @@ function ModeCard({ mode, isSelected, onSelect }: IModeCardProps): React.JSX.Ele
 // ============================================================================
 
 interface IModeSelectorProps {
-  value: PhilosophicalMode;
-  onChange: (mode: PhilosophicalMode) => void;
+  value: SessionLearningMode;
+  onChange: (mode: SessionLearningMode) => void;
 }
 
 export function ModeSelector({ value, onChange }: IModeSelectorProps): React.JSX.Element {

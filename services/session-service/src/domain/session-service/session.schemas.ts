@@ -1,445 +1,187 @@
 /**
- * @noema/session-service - Input Validation Schemas
- *
- * Zod schemas for validating all REST API and domain inputs.
- * Re-uses enum and ID schemas from @noema/validation.
+ * @noema/session-service - Step-loop validation schemas.
  */
 
 import {
-  AttemptOutcomeSchema,
-  CardIdSchema,
-  CognitiveLoadLevelSchema,
-  DeckQueryLogIdSchema,
-  FatigueLevelSchema,
-  ForceLevelSchema,
-  HintDepthSchema,
-  LearningModeSchema,
-  LoadoutArchetypeSchema,
-  LoadoutIdSchema,
-  MotivationSignalSchema,
-  RatingSchema,
-  SchedulingAlgorithmSchema,
-  SessionIdSchema,
-  StudyModeSchema,
-  TeachingApproachSchema,
-} from '@noema/validation';
+  EpistemicMode,
+  GoalSource,
+  GoalState,
+  GoalType,
+  LearningMode,
+  RigorLevel,
+  SessionLifecycleState,
+  StepSelfRating,
+  StudyMode,
+  TransformationType,
+} from '@noema/types';
 import { z } from 'zod';
 
-const AdaptiveCheckpointSignalSchema = z.enum([
-  'confidence_drift',
-  'latency_spike',
-  'error_cascade',
-  'streak_break',
-  'manual',
-]);
-const SessionSchedulerLaneSchema = z.enum(['retention', 'calibration']);
-const TeachingApproachInputSchema = z
-  .union([TeachingApproachSchema, z.literal('socratic_questioning')])
-  .transform((value) => (value === 'socratic_questioning' ? 'standard' : value));
+import { ActivityContentSourceType } from '../../types/index.js';
 
-const CohortLinkageSchema = z.object({
-  proposalId: z.string().min(1),
-  decisionId: z.string().min(1),
+const values = <T extends Record<string, string>>(value: T): [T[keyof T], ...T[keyof T][]] =>
+  Object.values(value) as [T[keyof T], ...T[keyof T][]];
+
+export const StudyModeSchema = z.enum(values(StudyMode));
+export const LearningModeSchema = z.enum(values(LearningMode));
+export const RigorLevelSchema = z.enum(values(RigorLevel));
+export const GoalTypeSchema = z.enum(values(GoalType));
+export const GoalStateSchema = z.enum(values(GoalState));
+export const GoalSourceSchema = z.enum(values(GoalSource));
+export const SessionLifecycleStateSchema = z.enum(values(SessionLifecycleState));
+export const EpistemicModeSchema = z.enum(values(EpistemicMode));
+export const TransformationTypeSchema = z.enum(values(TransformationType));
+export const StepSelfRatingSchema = z.enum(values(StepSelfRating));
+export const ActivityContentSourceTypeSchema = z.enum(values(ActivityContentSourceType));
+
+const ConceptIdSchema = z.string().min(1).max(100);
+const CurriculumIdSchema = z.string().min(1).max(100);
+const CurriculumVersionIdSchema = z.string().min(1).max(100);
+const CurriculumNodeIdSchema = z.string().min(1).max(100);
+const GoalIdSchema = z.string().min(1).max(100);
+
+const SevenFrameTraceFrameSchema = z.object({
+  score: z.number().min(0).max(1),
+  notes: z.string(),
 });
 
-export const SessionBlueprintSchema = z.object({
-  blueprintVersion: z.literal('v1'),
-  generatedAt: z.string().datetime(),
-  generatedBy: z.literal('agent'),
-  deckQueryId: z.string().min(1),
-  initialCardIds: z.array(CardIdSchema).min(1),
-  cardLanes: z.record(CardIdSchema, SessionSchedulerLaneSchema).optional(),
-  laneMix: z.object({
-    retention: z.number().min(0).max(1),
-    calibration: z.number().min(0).max(1),
+export const SevenFrameTraceSchema = z.object({
+  frames: z.object({
+    f0: SevenFrameTraceFrameSchema,
+    f1: SevenFrameTraceFrameSchema,
+    f2: SevenFrameTraceFrameSchema,
+    f3: SevenFrameTraceFrameSchema,
+    f4: SevenFrameTraceFrameSchema,
+    f5: SevenFrameTraceFrameSchema,
+    f6: SevenFrameTraceFrameSchema,
   }),
-  checkpointSignals: z.array(AdaptiveCheckpointSignalSchema),
-  policySnapshot: z.object({
-    pacingPolicy: z.object({
-      targetSecondsPerCard: z.number().int().min(5).max(300),
-      hardCapSecondsPerCard: z.number().int().min(10).max(600),
-      slowdownOnError: z.boolean(),
-    }),
-    hintPolicy: z.object({
-      maxHintsPerCard: z.number().int().min(0).max(5),
-      progressiveHintsOnly: z.boolean(),
-      allowAnswerReveal: z.boolean(),
-    }),
-    commitPolicy: z.object({
-      requireConfidenceBeforeCommit: z.boolean(),
-      requireVerificationGate: z.boolean(),
-    }),
-    reflectionPolicy: z.object({
-      postAttemptReflection: z.boolean(),
-      postSessionReflection: z.boolean(),
-    }),
-  }),
-  assumptions: z.array(z.string()),
 });
 
-// ============================================================================
-// Session Config Schema
-// ============================================================================
-
-export const SessionConfigSchema = z.object({
-  maxCards: z.number().int().positive().optional().describe('Maximum cards to present'),
-  maxDurationMinutes: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe('Max session duration in minutes'),
-  sessionTimeoutHours: z.number().positive().default(24).describe('Auto-expire timeout in hours'),
-  categoryIds: z.array(z.string()).optional().describe('Limit to specific categories'),
-  cardTypes: z.array(z.string()).optional().describe('Limit to specific card types'),
-  presentation: z
-    .object({
-      promptSide: z.string().min(1).optional(),
-      answerSide: z.string().min(1).optional(),
-      revealMode: z.enum(['all_at_once', 'one_then_more']).optional(),
-    })
-    .optional()
-    .describe('Session-side presentation preferences'),
-});
-
-export type SessionConfigInput = z.input<typeof SessionConfigSchema>;
-
-// ============================================================================
-// Start Session Input
-// ============================================================================
+export const SessionConfigSchema = z
+  .object({
+    topic: z.string().min(1).max(500).optional(),
+    sourceDecks: z.array(z.string().min(1)).optional(),
+    sourceCategories: z.array(z.string().min(1)).optional(),
+    maxSteps: z.number().int().positive().max(200).optional(),
+    maxDurationMinutes: z.number().int().positive().max(1440).optional(),
+    sessionTimeoutHours: z.number().positive().max(168).optional(),
+  })
+  .catchall(z.unknown());
 
 export const StartSessionInputSchema = z.object({
-  deckQueryId: DeckQueryLogIdSchema.describe('Deck query log that produced the card set'),
-  learningMode: LearningModeSchema.describe('Active learning mode'),
-  studyMode: StudyModeSchema.default('knowledge_gaining').describe('Active study mode lens'),
-  teachingApproach: TeachingApproachInputSchema.optional().describe('Initial teaching approach'),
-  schedulingAlgorithm: SchedulingAlgorithmSchema.optional().describe('Scheduling algorithm to use'),
-  loadoutId: LoadoutIdSchema.optional().describe('Active loadout ID'),
-  loadoutArchetype: LoadoutArchetypeSchema.optional().describe('Loadout archetype'),
-  config: SessionConfigSchema.describe('Session configuration'),
-  initialCardIds: z
-    .array(CardIdSchema)
-    .min(1, 'At least one card is required')
-    .describe('Ordered list of card IDs for the session queue'),
-  initialCardLanes: z
-    .record(CardIdSchema, SessionSchedulerLaneSchema)
-    .optional()
-    .describe('Optional per-card lane assignments for the session queue'),
-  blueprint: SessionBlueprintSchema.optional(),
+  curriculumId: CurriculumIdSchema,
+  curriculumVersionId: CurriculumVersionIdSchema.optional(),
+  studyMode: StudyModeSchema.default(StudyMode.KNOWLEDGE_GAINING),
+  learningMode: LearningModeSchema.default(LearningMode.EXPLORATION),
+  config: SessionConfigSchema.default({}),
+  topic: z.string().min(1).max(500).optional(),
+  sourceDecks: z.array(z.string().min(1)).default([]),
+  sourceCategories: z.array(z.string().min(1)).default([]),
   offlineIntentToken: z.string().min(1).optional(),
 });
 
 export type StartSessionInput = z.input<typeof StartSessionInputSchema>;
 
-export const ValidateSessionBlueprintInputSchema = z.object({
-  blueprint: SessionBlueprintSchema,
+export const PlannedActivityInputSchema = z.object({
+  contentSourceType: ActivityContentSourceTypeSchema.default(ActivityContentSourceType.GENERATED),
+  cardId: z.string().min(1).max(50).optional(),
+  templateId: z.string().min(1).max(50).optional(),
+  generatedVariantId: z.string().min(1).max(50).optional(),
+  prompt: z.string().min(1).max(8000),
+  renderPayload: z.record(z.unknown()).default({}),
+  expectedResponseType: z.string().min(1).max(100).default('free_text'),
+  responseSchema: z.record(z.unknown()).default({}),
+  variantSeed: z.string().min(1).max(100).optional(),
+  generationFallbackReason: z.string().min(1).max(500).optional(),
 });
 
-export const EvaluateAdaptiveCheckpointInputSchema = z.object({
-  trigger: AdaptiveCheckpointSignalSchema,
-  lastAttemptResponseTimeMs: z.number().int().nonnegative().optional(),
-  rollingAverageResponseTimeMs: z.number().int().positive().optional(),
-  recentIncorrectStreak: z.number().int().nonnegative().optional(),
-  confidenceDrift: z.number().min(-1).max(1).optional(),
+export const PlannedStepInputSchema = z.object({
+  objective: z.string().min(1).max(1000),
+  servesGoalIds: z.array(GoalIdSchema).default([]),
+  eligibleModes: z.array(EpistemicModeSchema).min(1).optional(),
+  selectedMode: EpistemicModeSchema.optional(),
+  transformationType: TransformationTypeSchema.default(TransformationType.RECALL),
+  expectedOutcome: z.string().min(1).max(2000),
+  evaluationType: z.string().min(1).max(100).default('self_explanation'),
+  difficulty: z.number().min(0).max(1).default(0.5),
+  isRepair: z.boolean().default(false),
+  conceptRefs: z.array(ConceptIdSchema).default([]),
+  variantSeed: z.string().min(1).max(100).optional(),
+  activities: z.array(PlannedActivityInputSchema).optional(),
 });
 
-export const ProposeCohortInputSchema = z.object({
-  linkage: CohortLinkageSchema,
-  revision: z.number().int().positive(),
-  candidateCardIds: z.array(CardIdSchema).min(1),
-  metadata: z.record(z.unknown()).optional(),
+export const CreateLessonPlanInputSchema = z.object({
+  curriculumId: CurriculumIdSchema.optional(),
+  curriculumVersionId: CurriculumVersionIdSchema.optional(),
+  selectedNodeIds: z.array(CurriculumNodeIdSchema).default([]),
+  rigorLevel: RigorLevelSchema.default(RigorLevel.MINIMAL),
+  topic: z.string().min(1).max(500).optional(),
+  prerequisites: z.array(ConceptIdSchema).default([]),
+  sourceDecks: z.array(z.string().min(1)).default([]),
+  sourceCategories: z.array(z.string().min(1)).default([]),
+  assessmentStrategy: z.string().min(1).max(2000).optional(),
+  adaptationRules: z.string().min(1).max(2000).optional(),
+  steps: z.array(PlannedStepInputSchema).optional(),
 });
 
-export const AcceptCohortInputSchema = z.object({
-  linkage: CohortLinkageSchema,
-  expectedRevision: z.number().int().positive(),
-  acceptedCardIds: z.array(CardIdSchema).min(1),
-  rejectedCardIds: z.array(CardIdSchema).default([]),
-  metadata: z.record(z.unknown()).optional(),
+export type CreateLessonPlanInput = z.input<typeof CreateLessonPlanInputSchema>;
+
+export const CreateGoalInputSchema = z.object({
+  description: z.string().min(1).max(1000),
+  type: GoalTypeSchema,
+  parentGoalId: GoalIdSchema.optional(),
+  state: GoalStateSchema.default(GoalState.PENDING),
+  source: GoalSourceSchema.default(GoalSource.USER_ACCEPTED),
+  conceptRefs: z.array(ConceptIdSchema).default([]),
 });
 
-export const ReviseCohortInputSchema = z.object({
-  linkage: CohortLinkageSchema,
-  expectedRevision: z.number().int().positive(),
-  newRevision: z.number().int().positive(),
-  candidateCardIds: z.array(CardIdSchema).min(1),
-  reason: z.string().min(1).max(500),
-  metadata: z.record(z.unknown()).optional(),
+export type CreateGoalInput = z.input<typeof CreateGoalInputSchema>;
+
+export const AnswerStepInputSchema = z.object({
+  response: z.unknown().optional(),
+  correct: z.boolean(),
+  selfRating: StepSelfRatingSchema,
+  evaluationId: z.string().min(1).max(50).optional(),
+  trace: SevenFrameTraceSchema,
+  responseTimeMs: z.number().int().nonnegative().optional(),
 });
 
-export const CommitCohortInputSchema = z.object({
-  linkage: CohortLinkageSchema,
-  expectedRevision: z.number().int().positive(),
-  committedCardIds: z.array(CardIdSchema).min(1),
-  rejectedCardIds: z.array(CardIdSchema).default([]),
-  policyVersion: z.string().min(1).max(100).optional(),
-  metadata: z.record(z.unknown()).optional(),
+export type AnswerStepInput = z.input<typeof AnswerStepInputSchema>;
+
+export const SkipStepInputSchema = z.object({
+  reason: z.string().min(1).max(500).optional(),
+  skippedBy: z.string().min(1).max(100).optional(),
 });
 
-export type EvaluateAdaptiveCheckpointInput = z.input<typeof EvaluateAdaptiveCheckpointInputSchema>;
-export type ProposeCohortInput = z.input<typeof ProposeCohortInputSchema>;
-export type AcceptCohortInput = z.input<typeof AcceptCohortInputSchema>;
-export type ReviseCohortInput = z.input<typeof ReviseCohortInputSchema>;
-export type CommitCohortInput = z.input<typeof CommitCohortInputSchema>;
-
-export type ValidateSessionBlueprintInput = z.input<typeof ValidateSessionBlueprintInputSchema>;
-
-// ============================================================================
-// Attempt Context Snapshot Schema
-// ============================================================================
-
-export const AttemptContextSchema = z.object({
-  learningMode: LearningModeSchema,
-  studyMode: StudyModeSchema.optional(),
-  teachingApproach: TeachingApproachInputSchema,
-  loadoutArchetype: LoadoutArchetypeSchema.optional(),
-  forceLevel: ForceLevelSchema.optional(),
-  cognitiveLoad: CognitiveLoadLevelSchema.optional(),
-  fatigueLevel: FatigueLevelSchema.optional(),
-  motivationSignal: MotivationSignalSchema.optional(),
-  activeInterventionIds: z.array(z.string()).default([]),
-});
-
-export type AttemptContextInput = z.input<typeof AttemptContextSchema>;
-
-// ============================================================================
-// Prior Scheduling State Schema
-// ============================================================================
-
-export const PriorSchedulingStateSchema = z.object({
-  algorithm: SchedulingAlgorithmSchema,
-  stability: z.number().nonnegative().optional(),
-  difficulty: z.number().nonnegative().optional(),
-  elapsedDays: z.number().nonnegative(),
-  retrievability: z.number().min(0).max(1).optional(),
-  intervalDays: z.number().nonnegative().optional(),
-  lapseCount: z.number().int().nonnegative().optional(),
-  reviewCount: z.number().int().nonnegative().optional(),
-  leitnerBox: z.number().int().nonnegative().optional(),
-  sm2EaseFactor: z.number().nonnegative().optional(),
-});
-
-export type PriorSchedulingStateInput = z.input<typeof PriorSchedulingStateSchema>;
-
-// ============================================================================
-// Record Attempt Input
-// ============================================================================
-
-export const RecordAttemptInputSchema = z.object({
-  cardId: CardIdSchema.describe('Card that was reviewed'),
-  outcome: AttemptOutcomeSchema.describe('Result of the attempt'),
-  rating: RatingSchema.describe('User rating'),
-  ratingValue: z.number().int().min(1).max(4).describe('Numeric rating (1-4)'),
-  responseTimeMs: z.number().int().nonnegative().describe('Time to respond in milliseconds'),
-  dwellTimeMs: z.number().int().nonnegative().describe('Total time card was displayed'),
-  timeToFirstInteractionMs: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .describe('Time to first interaction'),
-  confidenceBefore: z
-    .number()
-    .min(0)
-    .max(1)
-    .optional()
-    .describe('Confidence before revealing answer'),
-  confidenceAfter: z
-    .number()
-    .min(0)
-    .max(1)
-    .optional()
-    .describe('Confidence after revealing answer'),
-  wasRevisedBeforeCommit: z
-    .boolean()
-    .describe('Whether user revised their answer before committing'),
-  revisionCount: z.number().int().nonnegative().default(0).describe('Number of revisions'),
-  hintRequestCount: z.number().int().nonnegative().default(0).describe('Number of hints used'),
-  hintDepthReached: HintDepthSchema.describe('Deepest hint level reached'),
-  contextSnapshot: AttemptContextSchema.describe('State at time of attempt'),
-  priorSchedulingState: PriorSchedulingStateSchema.optional().describe(
-    'Scheduling state before attempt'
-  ),
-});
-
-export type RecordAttemptInput = z.input<typeof RecordAttemptInputSchema>;
-
-// ============================================================================
-// Request Hint Input
-// ============================================================================
-
-export const RequestHintInputSchema = z.object({
-  cardId: CardIdSchema.optional().describe('Card ID if provided by caller for consistency checks'),
-  hintDepth: HintDepthSchema.describe('Hint depth requested'),
-  hintRequestNumber: z.number().int().positive().describe('Sequential hint number in this attempt'),
-  responseTimeMsAtRequest: z
-    .number()
-    .int()
-    .nonnegative()
-    .describe('Response time at time of hint request'),
-});
-
-export type RequestHintInput = z.input<typeof RequestHintInputSchema>;
-
-// ============================================================================
-// Dialogue Turn Input
-// ============================================================================
-
-export const RecordDialogueTurnInputSchema = z.object({
-  role: z.enum(['agent', 'learner']).describe('Who sent the dialogue message'),
-  content: z.string().min(1).max(4000).describe('Dialogue message content'),
-  turnType: z.string().min(1).max(100).optional().describe('Semantic turn type'),
-  metadata: z.record(z.unknown()).optional().describe('Optional dialogue metadata'),
-});
-
-export type RecordDialogueTurnInput = z.input<typeof RecordDialogueTurnInputSchema>;
-
-// ============================================================================
-// Inject Queue Item Input
-// ============================================================================
-
-export const InjectQueueInputSchema = z.object({
-  cardId: CardIdSchema.describe('Card to inject into queue'),
-  lane: SessionSchedulerLaneSchema.optional().describe('Lane to assign to the injected queue item'),
-  position: z.number().int().nonnegative().describe('Position in queue (0-based)'),
-  reason: z.string().min(1).max(500).describe('Reason for injection'),
-  injectedBy: z.string().optional().describe('Agent or system that requested injection'),
-});
-
-export type InjectQueueInput = z.input<typeof InjectQueueInputSchema>;
-
-// ============================================================================
-// Remove Queue Item Input
-// ============================================================================
-
-export const RemoveQueueInputSchema = z.object({
-  cardId: CardIdSchema.describe('Card to remove from queue'),
-  reason: z.string().min(1).max(500).describe('Reason for removal'),
-  removedBy: z.string().optional().describe('Agent or system that requested removal'),
-});
-
-export type RemoveQueueInput = z.input<typeof RemoveQueueInputSchema>;
-
-// ============================================================================
-// Update Strategy Input
-// ============================================================================
-
-export const UpdateStrategyInputSchema = z.object({
-  newLoadoutId: LoadoutIdSchema.describe('New loadout to apply'),
-  newLoadoutArchetype: LoadoutArchetypeSchema.describe('New archetype'),
-  newForceLevel: ForceLevelSchema.describe('New force level'),
-  trigger: z.string().min(1).max(500).describe('What triggered the strategy change'),
-});
-
-export type UpdateStrategyInput = z.input<typeof UpdateStrategyInputSchema>;
-
-// ============================================================================
-// Change Teaching Approach Input
-// ============================================================================
-
-export const ChangeTeachingInputSchema = z.object({
-  newApproach: TeachingApproachInputSchema.describe('New teaching approach'),
-  trigger: z.string().min(1).max(500).describe('What triggered the teaching change'),
-});
-
-export type ChangeTeachingInput = z.input<typeof ChangeTeachingInputSchema>;
-
-// ============================================================================
-// Query Parameter Schemas
-// ============================================================================
+export type SkipStepInput = z.input<typeof SkipStepInputSchema>;
 
 export const SessionListQuerySchema = z.object({
-  state: z.string().optional().describe('Filter by session state'),
-  learningMode: z.string().optional().describe('Filter by learning mode'),
-  studyMode: StudyModeSchema.optional().describe('Filter by study mode'),
-  limit: z.coerce.number().int().positive().max(100).default(20).describe('Page size'),
-  offset: z.coerce.number().int().nonnegative().default(0).describe('Page offset'),
-  // Phase 5 — Enhanced filters
-  createdAfter: z
-    .string()
-    .datetime()
-    .optional()
-    .describe('Only sessions created after this ISO timestamp'),
-  createdBefore: z
-    .string()
-    .datetime()
-    .optional()
-    .describe('Only sessions created before this ISO timestamp'),
-  completedAfter: z
-    .string()
-    .datetime()
-    .optional()
-    .describe('Only sessions completed after this ISO timestamp'),
-  completedBefore: z
-    .string()
-    .datetime()
-    .optional()
-    .describe('Only sessions completed before this ISO timestamp'),
-  deckId: z.string().min(1).optional().describe('Filter to sessions for a specific deck'),
-  minAttempts: z.coerce.number().int().nonnegative().optional().describe('Minimum total attempts'),
-  sortBy: z
-    .enum(['createdAt', 'completedAt', 'totalAttempts', 'durationMs', 'retentionRate'])
-    .optional()
-    .default('createdAt')
-    .describe('Sort field'),
-  sortOrder: z.enum(['asc', 'desc']).optional().default('desc').describe('Sort direction'),
+  lifecycleState: SessionLifecycleStateSchema.optional(),
+  learningMode: LearningModeSchema.optional(),
+  studyMode: StudyModeSchema.optional(),
+  limit: z.coerce.number().int().positive().max(100).default(20),
+  offset: z.coerce.number().int().nonnegative().default(0),
+  createdAfter: z.string().datetime().optional(),
+  createdBefore: z.string().datetime().optional(),
+  completedAfter: z.string().datetime().optional(),
+  completedBefore: z.string().datetime().optional(),
 });
 
 export type SessionListQuery = z.input<typeof SessionListQuerySchema>;
 
-// ============================================================================
-// Streak Query Schema (Phase 5, T5.2)
-// ============================================================================
-
-export const StreakQuerySchema = z.object({
-  days: z.coerce.number().int().min(1).max(365).default(90).describe('Days of history to return'),
-  timezone: z.string().min(1).max(50).default('UTC').describe('IANA timezone string'),
-  studyMode: StudyModeSchema.default('knowledge_gaining').describe(
-    'Study mode to scope streak analytics to'
-  ),
-});
-
-export type StreakQuery = z.input<typeof StreakQuerySchema>;
-
-export const AttemptListQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(100).default(50).describe('Page size'),
-  offset: z.coerce.number().int().nonnegative().default(0).describe('Page offset'),
-});
-
-export type AttemptListQuery = z.input<typeof AttemptListQuerySchema>;
-
-// ============================================================================
-// Path Parameter Schemas
-// ============================================================================
-
-export const SessionIdParamSchema = z.object({
-  sessionId: SessionIdSchema,
-});
-
-export const AttemptIdParamSchema = z.object({
-  sessionId: SessionIdSchema,
-  attemptId: z.string().describe('Attempt ID'),
-});
-
-// ============================================================================
-// Offline Intent Token Schemas
-// ============================================================================
-
 export const IssueOfflineIntentTokenInputSchema = z.object({
-  userId: z.string().min(1).describe('User ID requesting the token'),
-  sessionBlueprint: z.unknown().describe('Session blueprint for offline replay'),
+  userId: z.string().min(1),
+  sessionBlueprint: z.unknown(),
   expiresInSeconds: z
     .number()
     .int()
     .min(60)
-    .max(60 * 60 * 24)
-    .describe('TTL in seconds'),
+    .max(60 * 60 * 24),
 });
 
 export type IssueOfflineIntentTokenInput = z.input<typeof IssueOfflineIntentTokenInputSchema>;
 
 export const VerifyOfflineIntentTokenInputSchema = z.object({
-  token: z.string().min(1).describe('Signed JWT token to verify'),
+  token: z.string().min(1),
 });
 
 export type VerifyOfflineIntentTokenInput = z.input<typeof VerifyOfflineIntentTokenInputSchema>;

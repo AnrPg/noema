@@ -36,7 +36,7 @@ const PROMPTS: {
   {
     key: 'hardestConcept',
     label: 'What was the hardest concept?',
-    placeholder: 'Describe the concept or card that challenged you most…',
+    placeholder: 'Describe the concept or Step that challenged you most…',
   },
   {
     key: 'misconceptions',

@@ -5,14 +5,14 @@
  * Not persisted — cleared when the user navigates away.
  */
 
-import type { ISessionDto, ISessionQueueDto } from '@noema/api-client/session';
+import type { ISessionDto, IStepLoopSnapshotDto } from '@noema/api-client/session';
 import { create } from 'zustand';
 
 // ============================================================================
 // State Shape
 // ============================================================================
 
-interface ISessionPendingAttempt {
+interface ISessionPendingEvaluation {
   confidenceBefore?: number;
   confidenceAfter?: number;
   dwellTimeMs?: number;
@@ -20,9 +20,9 @@ interface ISessionPendingAttempt {
 
 interface ISessionState {
   activeSession: ISessionDto | null;
-  completedCardCount: number;
-  queue: ISessionQueueDto | null;
-  pendingAttempt: ISessionPendingAttempt | null;
+  completedStepCount: number;
+  queue: IStepLoopSnapshotDto | null;
+  pendingEvaluation: ISessionPendingEvaluation | null;
   elapsedTime: number;
   isPaused: boolean;
 }
@@ -33,12 +33,12 @@ interface ISessionState {
 
 interface ISessionActions {
   setSession: (session: ISessionDto) => void;
-  advanceCard: () => void;
+  advanceStep: () => void;
   setConfidenceBefore: (confidence: number) => void;
   setConfidenceAfter: (confidence: number) => void;
   recordDwellTime: (ms: number) => void;
   setIsPaused: (paused: boolean) => void;
-  resetAttempt: () => void;
+  resetEvaluation: () => void;
   tickElapsedTime: () => void;
   clear: () => void;
 }
@@ -49,9 +49,9 @@ interface ISessionActions {
 
 const initialState: ISessionState = {
   activeSession: null,
-  completedCardCount: 0,
+  completedStepCount: 0,
   queue: null,
-  pendingAttempt: null,
+  pendingEvaluation: null,
   elapsedTime: 0,
   isPaused: false,
 };
@@ -60,32 +60,35 @@ export const useSessionStore = create<ISessionState & ISessionActions>()((set) =
   ...initialState,
 
   setSession: (session) => {
-    set({ activeSession: session, completedCardCount: session.currentCardIndex });
+    set({
+      activeSession: session,
+      completedStepCount: session.stats.stepsEvaluated + session.stats.stepsSkipped,
+    });
   },
 
-  advanceCard: () => {
+  advanceStep: () => {
     set((s) => ({
-      completedCardCount: s.completedCardCount + 1,
-      pendingAttempt: null,
+      completedStepCount: s.completedStepCount + 1,
+      pendingEvaluation: null,
       elapsedTime: 0,
     }));
   },
 
   setConfidenceBefore: (confidence) => {
     set((s) => ({
-      pendingAttempt: { ...s.pendingAttempt, confidenceBefore: confidence },
+      pendingEvaluation: { ...s.pendingEvaluation, confidenceBefore: confidence },
     }));
   },
 
   setConfidenceAfter: (confidence) => {
     set((s) => ({
-      pendingAttempt: { ...s.pendingAttempt, confidenceAfter: confidence },
+      pendingEvaluation: { ...s.pendingEvaluation, confidenceAfter: confidence },
     }));
   },
 
   recordDwellTime: (ms) => {
     set((s) => ({
-      pendingAttempt: { ...s.pendingAttempt, dwellTimeMs: ms },
+      pendingEvaluation: { ...s.pendingEvaluation, dwellTimeMs: ms },
     }));
   },
 
@@ -93,8 +96,8 @@ export const useSessionStore = create<ISessionState & ISessionActions>()((set) =
     set({ isPaused: paused });
   },
 
-  resetAttempt: () => {
-    set({ pendingAttempt: null, elapsedTime: 0 });
+  resetEvaluation: () => {
+    set({ pendingEvaluation: null, elapsedTime: 0 });
   },
 
   tickElapsedTime: () => {

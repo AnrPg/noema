@@ -1,90 +1,56 @@
 /**
- * @noema/session-service - Session Repository Interface
- *
- * Abstract repository interface for session aggregate persistence.
- * Covers Session, Attempt, and SessionQueueItem entities.
+ * @noema/session-service - Step-loop repository interface.
  */
 
-import type { AttemptId, CardId, SessionId, UserId } from '@noema/types';
+import type { GoalId, LessonPlanId, SessionId, StepId, UserId } from '@noema/types';
 import type { Prisma } from '../../../generated/prisma/index.js';
 
 import type {
-  IAcceptCohortInput,
-  IAttempt,
-  ICommitCohortInput,
-  IProposeCohortInput,
-  IReviseCohortInput,
+  IActivity,
+  ICreateGoalInput,
+  ILessonPlan,
+  ILessonPlanGoal,
+  IPlannedActivityInput,
+  IPlannedStepInput,
   ISession,
-  ISessionCohortHandshake,
   ISessionFilters,
-  ISessionQueueItem,
-  SessionCohortHandshakeStatus,
-  SessionState,
+  IStep,
+  IStepQueueItem,
+  SessionTerminationReason,
+  StepQueueStatus,
 } from '../../types/index.js';
 
-// ============================================================================
-// Session Operations
-// ============================================================================
+export interface ICreateLessonPlanRecord extends Omit<ILessonPlan, 'createdAt' | 'updatedAt'> {
+  steps: ICreateStepRecord[];
+}
+
+export interface ICreateStepRecord extends Omit<IStep, 'createdAt' | 'updatedAt' | 'activities'> {
+  activities: Omit<IActivity, 'createdAt' | 'updatedAt'>[];
+  queueStatus?: StepQueueStatus;
+}
 
 export interface ISessionRepository {
-  // ---------- Session read ----------
-
-  /** Find a session by ID. Returns null if not found. */
   findSessionById(id: SessionId): Promise<ISession | null>;
-
-  /** Find a session by ID, throws if not found. */
   getSessionById(id: SessionId): Promise<ISession>;
-
-  /** Find sessions for a user, optionally filtered. */
   findSessionsByUser(
     userId: UserId,
     filters?: ISessionFilters,
     limit?: number,
     offset?: number
   ): Promise<{ sessions: ISession[]; total: number }>;
-
-  /** Find an active session for a user (at most one expected). */
-  findActiveSessionForUser(userId: UserId): Promise<ISession | null>;
-
-  /** Count sessions for a user, optionally filtered by state. */
-  countSessionsByUser(
-    userId: UserId,
-    state?: SessionState,
-    tx?: Prisma.TransactionClient
-  ): Promise<number>;
-
-  /**
-   * Count active sessions for a user inside a transaction-scoped lock to
-   * prevent concurrent startSession calls from both seeing zero and
-   * creating duplicate sessions.
-   */
-  countActiveSessionsForUpdate(userId: UserId, tx: Prisma.TransactionClient): Promise<number>;
-
-  // ---------- Session write ----------
-
-  /** Create a new session. Returns the created entity. */
   createSession(
     session: Omit<ISession, 'createdAt' | 'updatedAt'>,
     tx?: Prisma.TransactionClient
   ): Promise<ISession>;
-
-  /** Update an existing session with optimistic locking. */
   updateSession(
     id: SessionId,
     data: Partial<
       Pick<
         ISession,
-        | 'state'
-        | 'learningMode'
-        | 'studyMode'
-        | 'teachingApproach'
-        | 'loadoutId'
-        | 'loadoutArchetype'
-        | 'forceLevel'
+        | 'lifecycleState'
         | 'stats'
         | 'pauseCount'
-        | 'totalPausedDurationMs'
-        | 'lastPausedAt'
+        | 'totalPausedMs'
         | 'lastActivityAt'
         | 'completedAt'
         | 'terminationReason'
@@ -94,134 +60,45 @@ export interface ISessionRepository {
     tx?: Prisma.TransactionClient
   ): Promise<ISession>;
 
-  // ---------- Attempt read ----------
-
-  /** Find an attempt by ID. Returns null if not found. */
-  findAttemptById(id: AttemptId): Promise<IAttempt | null>;
-
-  /** Find attempts for a session, ordered by sequence number. */
-  findAttemptsBySession(
-    sessionId: SessionId,
-    limit?: number,
-    offset?: number
-  ): Promise<{ attempts: IAttempt[]; total: number }>;
-
-  /** Find attempts for a specific card within a session. */
-  findAttemptsByCard(sessionId: SessionId, cardId: CardId): Promise<IAttempt[]>;
-
-  /** Count attempts in a session. */
-  countAttemptsBySession(sessionId: SessionId): Promise<number>;
-
-  /** Get the next sequence number for an attempt in a session. */
-  getNextSequenceNumber(sessionId: SessionId): Promise<number>;
-
-  // ---------- Attempt write ----------
-
-  /** Record a new attempt. Returns the created entity. */
-  createAttempt(
-    attempt: Omit<IAttempt, 'createdAt'>,
+  findLessonPlanById(id: LessonPlanId): Promise<ILessonPlan | null>;
+  findLessonPlanBySessionId(sessionId: SessionId): Promise<ILessonPlan | null>;
+  findGoalsByLessonPlanId(lessonPlanId: LessonPlanId): Promise<ILessonPlanGoal[]>;
+  createLessonPlanWithSteps(
+    plan: ICreateLessonPlanRecord,
     tx?: Prisma.TransactionClient
-  ): Promise<IAttempt>;
+  ): Promise<{ lessonPlan: ILessonPlan; steps: IStep[] }>;
+  activateLessonPlan(id: LessonPlanId, tx?: Prisma.TransactionClient): Promise<ILessonPlan>;
 
-  // ---------- Queue read ----------
+  countActiveGoals(lessonPlanId: LessonPlanId): Promise<number>;
+  createGoal(
+    lessonPlanId: LessonPlanId,
+    goalId: GoalId,
+    input: ICreateGoalInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<ILessonPlanGoal>;
 
-  /** Get all queue items for a session, ordered by position. */
-  getQueueItems(sessionId: SessionId, status?: string): Promise<ISessionQueueItem[]>;
-
-  /** Find the next pending item in the queue. */
-  findNextPendingQueueItem(sessionId: SessionId): Promise<ISessionQueueItem | null>;
-
-  /** Find a queue item by session and card. */
-  findQueueItemByCard(sessionId: SessionId, cardId: CardId): Promise<ISessionQueueItem | null>;
-
-  /** Count remaining pending items in the queue. */
-  countPendingQueueItems(sessionId: SessionId): Promise<number>;
-
-  // ---------- Queue write ----------
-
-  /** Add initial queue items in bulk. */
-  createQueueItemsBatch(
-    items: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>[],
+  findStepById(id: StepId): Promise<IStep | null>;
+  getStepById(id: StepId): Promise<IStep>;
+  findStepsBySessionId(sessionId: SessionId): Promise<IStep[]>;
+  createSteps(steps: ICreateStepRecord[], tx?: Prisma.TransactionClient): Promise<IStep[]>;
+  markStepsSuperseded(
+    replacements: { stepId: StepId; supersededByStepId: StepId }[],
     tx?: Prisma.TransactionClient
   ): Promise<void>;
-
-  /** Inject a single item at a given position, shifting others down. */
-  injectQueueItem(
-    item: Omit<ISessionQueueItem, 'createdAt' | 'updatedAt'>,
+  findNextQueueItem(sessionId: SessionId): Promise<IStepQueueItem | null>;
+  markStepPresented(stepId: StepId, tx?: Prisma.TransactionClient): Promise<IStep>;
+  markStepAnsweredAndEvaluated(
+    stepId: StepId,
+    evaluationId: string,
     tx?: Prisma.TransactionClient
-  ): Promise<ISessionQueueItem>;
-
-  /** Remove a queue item by session and card. */
-  removeQueueItem(
-    sessionId: SessionId,
-    cardId: CardId,
+  ): Promise<IStep>;
+  markStepSkipped(
+    stepId: StepId,
+    reason: string | null,
     tx?: Prisma.TransactionClient
-  ): Promise<void>;
-
-  /** Mark a queue item as presented (status transition). */
-  markQueueItemPresented(
-    sessionId: SessionId,
-    cardId: CardId,
-    tx?: Prisma.TransactionClient
-  ): Promise<void>;
-
-  /** Mark a queue item as answered (status transition). */
-  markQueueItemAnswered(
-    sessionId: SessionId,
-    cardId: CardId,
-    tx?: Prisma.TransactionClient
-  ): Promise<void>;
-
-  /** Mark a queue item as skipped (status transition). */
-  markQueueItemSkipped(
-    sessionId: SessionId,
-    cardId: CardId,
-    tx?: Prisma.TransactionClient
-  ): Promise<void>;
-
-  /** Replace all pending queue items with a materialized committed cohort queue. */
-  replacePendingQueueItems(
-    sessionId: SessionId,
-    committedCardIds: CardId[],
-    tx?: Prisma.TransactionClient
-  ): Promise<void>;
-
-  // ---------- Cohort handshake read ----------
-
-  findLatestCohortHandshake(
-    sessionId: SessionId,
-    proposalId: string,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake | null>;
-
-  findCohortHandshake(
-    sessionId: SessionId,
-    proposalId: string,
-    revision: number,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake | null>;
-
-  // ---------- Cohort handshake write ----------
-
-  createCohortHandshake(
-    sessionId: SessionId,
-    input: IProposeCohortInput | IReviseCohortInput,
-    status: SessionCohortHandshakeStatus,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake>;
-
-  updateCohortHandshake(
-    sessionId: SessionId,
-    proposalId: string,
-    revision: number,
-    expectedStatus: SessionCohortHandshakeStatus,
-    input: IAcceptCohortInput | ICommitCohortInput,
-    nextStatus: SessionCohortHandshakeStatus,
-    tx?: Prisma.TransactionClient
-  ): Promise<ISessionCohortHandshake>;
+  ): Promise<IStep>;
 }
 
-/**
- * Symbol for dependency injection.
- */
 export const SESSION_REPOSITORY = Symbol.for('ISessionRepository');
+
+export type { IPlannedActivityInput, IPlannedStepInput, SessionTerminationReason };

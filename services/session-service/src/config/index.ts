@@ -39,11 +39,21 @@ export interface IServiceConfig {
     defaultTimeoutHours: number;
     maxConcurrentSessions: number;
   };
+  metacognition: {
+    serviceUrl: string;
+    serviceToken?: string;
+  };
+  pedagogyGuardian: {
+    enabled: boolean;
+    serviceUrl: string;
+    serviceToken?: string;
+  };
   consumers: {
     enabled: boolean;
     consumerName: string;
     streams: {
       userService: string;
+      metacognitionService: string;
     };
   };
   cors: {
@@ -212,11 +222,28 @@ export function loadConfig(): IServiceConfig {
       defaultTimeoutHours: optionalEnvInt('SESSION_TIMEOUT_HOURS', 24),
       maxConcurrentSessions: optionalEnvInt('MAX_CONCURRENT_SESSIONS', 1),
     },
+    metacognition: {
+      serviceUrl: optionalEnv('METACOGNITION_SERVICE_URL', 'http://localhost:3008'),
+      ...(process.env['METACOGNITION_SERVICE_TOKEN'] !== undefined
+        ? { serviceToken: process.env['METACOGNITION_SERVICE_TOKEN'] }
+        : {}),
+    },
+    pedagogyGuardian: {
+      enabled: optionalEnvBool('PEDAGOGY_GUARDIAN_ENABLED', false),
+      serviceUrl: optionalEnv('PEDAGOGY_GUARDIAN_SERVICE_URL', 'http://localhost:3009'),
+      ...(process.env['PEDAGOGY_GUARDIAN_SERVICE_TOKEN'] !== undefined
+        ? { serviceToken: process.env['PEDAGOGY_GUARDIAN_SERVICE_TOKEN'] }
+        : {}),
+    },
     consumers: {
       enabled: optionalEnvBool('CONSUMERS_ENABLED', true),
       consumerName: optionalEnv('CONSUMER_NAME', `session-service-${process.pid}`),
       streams: {
         userService: optionalEnv('CONSUMER_STREAM_USER_SERVICE', 'noema:events:user-service'),
+        metacognitionService: optionalEnv(
+          'CONSUMER_STREAM_METACOGNITION_SERVICE',
+          'noema:events:metacognition-service'
+        ),
       },
     },
     cors: {

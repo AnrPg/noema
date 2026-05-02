@@ -9,9 +9,8 @@
  *   1. Header — "Session Complete" + formatted date
  *   2. Vitals — SessionSummaryVitals grid (total, accuracy, time, mode)
  *   3. Lane Breakdown — two-column retention vs calibration comparison
- *   4. Card Results — scrollable CardResultsTable
- *   5. Post-Session Reflection — conditional (when attempts > 0 and accuracy < 100%)
- *   6. Next Actions — 3 CTA buttons (new session / dashboard / knowledge graph)
+ *   4. Post-Session Reflection — conditional when steps were evaluated
+ *   5. Next Actions — 3 CTA buttons (new session / dashboard / knowledge graph)
  */
 
 import * as React from 'react';
@@ -22,14 +21,12 @@ import type { SessionId, UserId } from '@noema/types';
 
 import {
   useMe,
-  useNodeMasterySummary,
-  useSchedulerProgressSummary,
+  useDueConcepts,
+  useStabilitySummary,
   useSession,
-  useSessionAttempts,
 } from '@noema/api-client';
 
 import { SessionSummaryVitals } from '@/components/session/session-summary-vitals';
-import { CardResultsTable } from '@/components/session/card-results-table';
 import { PostSessionReflection } from '@/components/session/post-session-reflection';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 import { getStudyModeShortLabel } from '@/lib/study-mode';
@@ -51,9 +48,6 @@ function formatDate(isoString: string): string {
   }
 }
 
-/** Grade >= 3 counts as a passing attempt for accuracy calculation. */
-const PASSING_GRADE = 3;
-
 // ============================================================================
 // SessionSummaryPage
 // ============================================================================
@@ -71,28 +65,22 @@ export default function SessionSummaryPage(): React.JSX.Element {
     isError: sessionError,
     refetch: refetchSession,
   } = useSession(sessionId);
-  const {
-    data: attemptsData,
-    isLoading: attemptsLoading,
-    isError: attemptsError,
-    refetch: refetchAttempts,
-  } = useSessionAttempts(sessionId);
-  const masterySummary = useNodeMasterySummary(currentUserId, {
+  const stabilitySummary = useStabilitySummary(currentUserId, {
     enabled: currentUserId !== '',
     studyMode: activeStudyMode,
   });
-  const progressSummary = useSchedulerProgressSummary(
-    { studyMode: activeStudyMode },
+  const dueConcepts = useDueConcepts(
+    { studyMode: activeStudyMode, limit: 200 },
     { enabled: currentUserId !== '' }
   );
-  const progressData = progressSummary.data?.data;
-  const modeSnapshotUnavailable = masterySummary.isError || progressSummary.isError;
+  const dueConceptList = dueConcepts.data?.data.concepts ?? [];
+  const modeSnapshotUnavailable = stabilitySummary.isError || dueConcepts.isError;
 
-  const isLoading = sessionLoading || attemptsLoading;
+  const isLoading = sessionLoading;
 
   // ── Error state ────────────────────────────────────────────────────────────
 
-  if (sessionError || attemptsError) {
+  if (sessionError) {
     return (
       <div className="flex h-screen items-center justify-center flex-col gap-4">
         <p className="text-sm text-destructive">Failed to load session summary.</p>
@@ -101,7 +89,6 @@ export default function SessionSummaryPage(): React.JSX.Element {
           className="text-xs text-primary hover:underline"
           onClick={() => {
             void refetchSession();
-            void refetchAttempts();
           }}
         >
           Retry
@@ -125,19 +112,14 @@ export default function SessionSummaryPage(): React.JSX.Element {
   // ── Data extraction ────────────────────────────────────────────────────────
 
   const session = sessionData?.data ?? null;
-  const attempts = Array.isArray(attemptsData?.data) ? attemptsData.data : [];
-
-  // ── Derived accuracy ───────────────────────────────────────────────────────
-
-  const total = attempts.length;
-  const passing = attempts.filter((a) => a.grade >= PASSING_GRADE).length;
-  const accuracy = total > 0 ? Math.round((passing / total) * 100) : 0;
+  const stepsEvaluated = session?.stats.stepsEvaluated ?? 0;
+  const stepsSkipped = session?.stats.stepsSkipped ?? 0;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const startedAt = session?.startedAt ?? '';
   const completedAt = session?.completedAt ?? null;
-  const mode = session?.mode ?? 'standard';
+  const mode = session?.learningMode ?? 'exploration';
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
@@ -157,32 +139,26 @@ export default function SessionSummaryPage(): React.JSX.Element {
               startedAt,
               completedAt,
               mode,
-              uniqueCardsReviewed: session.stats.uniqueCardsReviewed,
             }}
-            attempts={attempts}
+            stepStats={session.stats}
           />
         </section>
       )}
 
-      {/* ── Section 3: Accuracy ──────────────────────────────────────────── */}
+      {/* ── Section 3: Step Completion ───────────────────────────────────── */}
       <section aria-label="Accuracy">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Accuracy
+          Step Completion
         </h2>
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
           <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">Overall Accuracy</span>
-            <span className="text-lg font-semibold">
-              {total > 0 ? `${String(accuracy)}%` : '—'}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              ({String(passing)}/{String(total)} cards)
-            </span>
+            <span className="text-sm text-muted-foreground">Evaluated steps</span>
+            <span className="text-lg font-semibold">{String(stepsEvaluated)}</span>
+            <span className="text-xs text-muted-foreground">{String(stepsSkipped)} skipped</span>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            This percentage reflects how many cards you marked as Good or Easy this session.
-            Lane-specific breakdowns will appear once each attempt is tagged with a lane on the
-            server.
+            Canonical answer evaluation now lives in metacognition. This summary reports the
+            session-service step counters and the mode-scoped schedule snapshot below.
           </p>
         </div>
       </section>
@@ -194,9 +170,9 @@ export default function SessionSummaryPage(): React.JSX.Element {
         <div className="rounded-xl border border-border bg-card p-4 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-muted-foreground">
-              {getStudyModeShortLabel(activeStudyMode)} mode mastery
+              {getStudyModeShortLabel(activeStudyMode)} mode stability
             </span>
-            {masterySummary.isLoading ? (
+            {stabilitySummary.isLoading ? (
               <span className="text-sm text-muted-foreground">Loading…</span>
             ) : modeSnapshotUnavailable ? (
               <>
@@ -207,8 +183,8 @@ export default function SessionSummaryPage(): React.JSX.Element {
                   type="button"
                   className="text-xs text-primary hover:underline"
                   onClick={() => {
-                    void masterySummary.refetch();
-                    void progressSummary.refetch();
+                    void stabilitySummary.refetch();
+                    void dueConcepts.refetch();
                   }}
                 >
                   Retry snapshot
@@ -217,46 +193,40 @@ export default function SessionSummaryPage(): React.JSX.Element {
             ) : (
               <>
                 <span className="text-lg font-semibold">
-                  {masterySummary.data !== undefined
-                    ? `${String(masterySummary.data.masteredNodes)}/${String(masterySummary.data.totalNodes)} mastered`
+                  {stabilitySummary.data !== undefined
+                    ? `${String(stabilitySummary.data.stableConcepts)}/${String(stabilitySummary.data.totalConcepts)} stable`
                     : '—'}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {masterySummary.data !== undefined
-                    ? `${String(masterySummary.data.untrackedNodes)} untracked, avg ${String(
-                        Math.round(masterySummary.data.averageMastery * 100)
-                      )}% mastery`
-                    : 'Mastery snapshot unavailable'}
+                  {stabilitySummary.data !== undefined
+                    ? `${String(stabilitySummary.data.unstableConcepts)} unstable, reasoning avg ${
+                        stabilitySummary.data.averageReasoning === null
+                          ? '—'
+                          : `${String(Math.round(stabilitySummary.data.averageReasoning * 100))}%`
+                      }`
+                    : 'Stability snapshot unavailable'}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {progressData !== undefined
-                    ? `${String(progressData.dueToday)} due today, ${String(
-                        progressData.fragileCards
-                      )} fragile cards, ${String(progressData.trackedCards)}/${String(
-                        progressData.totalCards
-                      )} tracked`
+                  {dueConcepts.data !== undefined
+                    ? `${String(dueConceptList.length)} due concepts, ${String(
+                        dueConceptList.filter((concept) => concept.algorithm === 'fsrs').length
+                      )} FSRS, ${String(
+                        dueConceptList.filter((concept) => concept.algorithm === 'hlr').length
+                      )} HLR`
                     : 'Scheduler snapshot unavailable'}
                 </span>
               </>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            This snapshot uses the same mode-scoped mastery read model as Goals and the knowledge
+            This snapshot uses the same mode-scoped stability read model as Goals and the knowledge
             graph, so post-session review stays aligned with your longer-term progress.
           </p>
         </div>
       </section>
 
-      {/* ── Section 4: Card Results ──────────────────────────────────────── */}
-      <section aria-label="Card results">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Card Results
-        </h2>
-        <CardResultsTable attempts={attempts} />
-      </section>
-
       {/* ── Section 5: Post-Session Reflection (conditional) ─────────────── */}
-      {total > 0 && accuracy < 100 && (
+      {stepsEvaluated > 0 && (
         <section aria-label="Post-session reflection">
           <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Reflection

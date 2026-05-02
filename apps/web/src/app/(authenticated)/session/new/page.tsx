@@ -4,20 +4,20 @@
  * @noema/web - Session Start Page
  *
  * /session/new — configure and launch a new study session.
- * Three sections: mode selection, card source, and session settings.
+ * Three sections: mode selection, concept source, and session settings.
  */
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Play } from 'lucide-react';
 import { useAuth } from '@noema/auth';
-import { useCards, useCard, useReviewQueue, useStartSession } from '@noema/api-client';
-import type { IDeckQueryInput, IStartSessionInput } from '@noema/api-client';
-import type { CardId } from '@noema/types';
+import { useCards, useCard, useCurricula, useDueConcepts, useStartSession } from '@noema/api-client';
+import type { IDeckQueryInput } from '@noema/api-client';
+import type { CardId, CurriculumId } from '@noema/types';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 
 import { ModeSelector } from '@/components/session/mode-selector';
-import type { PhilosophicalMode } from '@/components/session/mode-selector';
+import type { SessionLearningMode } from '@/components/session/mode-selector';
 import { LaneMixSlider } from '@/components/session/lane-mix-slider';
 import { CardRenderer } from '@/components/card-renderers';
 import { DeckQueryFilter } from '@/components/deck-query-filter';
@@ -56,12 +56,13 @@ export default function SessionNewPage(): React.JSX.Element {
   const isReadyForAuthenticatedQueries = isInitialized && isAuthenticated && user?.id !== undefined;
 
   // ── Section 1: Mode ──────────────────────────────────────────────────────
-  const [mode, setMode] = React.useState<PhilosophicalMode>('exploration');
+  const [mode, setMode] = React.useState<SessionLearningMode>('exploration');
 
-  // ── Section 2: Card source ───────────────────────────────────────────────
+  // ── Section 2: Concept source ────────────────────────────────────────────
   const [useQuickStart, setUseQuickStart] = React.useState(true);
   const [customQuery, setCustomQuery] = React.useState<IDeckQueryInput>({});
   const [showCandidates, setShowCandidates] = React.useState(false);
+  const [selectedCurriculumId, setSelectedCurriculumId] = React.useState<CurriculumId | ''>('');
 
   // ── Section 3: Settings ──────────────────────────────────────────────────
   const [retentionPct, setRetentionPct] = React.useState(80);
@@ -74,7 +75,7 @@ export default function SessionNewPage(): React.JSX.Element {
     React.useState<SessionRevealMode>('all_at_once');
 
   // ── API hooks ────────────────────────────────────────────────────────────
-  const reviewQueue = useReviewQueue(
+  const dueConcepts = useDueConcepts(
     { limit: sessionSize, studyMode: activeStudyMode },
     { enabled: useQuickStart && isReadyForAuthenticatedQueries }
   );
@@ -82,13 +83,15 @@ export default function SessionNewPage(): React.JSX.Element {
     { ...customQuery, limit: Math.max(sessionSize, SESSION_CANDIDATE_QUERY_LIMIT) },
     { enabled: !useQuickStart && showCandidates && isReadyForAuthenticatedQueries }
   );
+  const curricula = useCurricula();
 
   const startSession = useStartSession();
 
   // ── Derived values ───────────────────────────────────────────────────────
-  const queue = reviewQueue.data?.data;
-  const retentionCount = queue?.retentionDue;
-  const calibrationCount = queue?.calibrationDue;
+  const dueConceptList = dueConcepts.data?.data.concepts ?? [];
+  const curriculumItems = curricula.data?.data ?? [];
+  const retentionCount = dueConceptList.filter((concept) => concept.algorithm === 'fsrs').length;
+  const calibrationCount = dueConceptList.filter((concept) => concept.algorithm === 'hlr').length;
   const compatibleCandidateItems = React.useMemo(
     () =>
       (sessionCandidates.data?.data.items ?? []).filter((candidate) =>
@@ -104,9 +107,7 @@ export default function SessionNewPage(): React.JSX.Element {
     previewCandidateIds.length > 0
       ? previewCandidateIds[Math.min(previewIndex, previewCandidateIds.length - 1)]
       : undefined;
-  const quickStartPreviewCardId =
-    queue !== undefined && queue.cards.length > 0 ? (queue.cards[0]?.cardId as CardId) : undefined;
-  const previewCardId = useQuickStart ? quickStartPreviewCardId : previewCandidateId;
+  const previewCardId = useQuickStart ? undefined : previewCandidateId;
   const { data: previewCard, isLoading: previewCardLoading } = useCard(
     (previewCardId ?? '') as CardId,
     { enabled: isReadyForAuthenticatedQueries && previewCardId !== undefined }
@@ -176,27 +177,23 @@ export default function SessionNewPage(): React.JSX.Element {
   async function handleStart(): Promise<void> {
     setStartError(null);
     const resolvedSessionSize = commitSessionSizeInput();
-    let cardIds: CardId[] = [];
-    let quickStartQueue = queue;
-
+    if (selectedCurriculumId === '') {
+      setStartError('Choose a curriculum before starting. Normal sessions are now bound to a curriculum path.');
+      return;
+    }
     if (useQuickStart) {
-      const queueResponse = queue ?? (await reviewQueue.refetch()).data?.data;
-      quickStartQueue = queueResponse;
+      const dueConceptResponse = dueConcepts.data?.data ?? (await dueConcepts.refetch()).data?.data;
 
-      if (queueResponse === undefined) {
+      if (dueConceptResponse === undefined) {
         setStartError(
-          'We could not load your review queue yet, so we do not know which cards are safe to start. Please refresh or wait a moment and try again.'
+          'We could not load your due concepts yet, so we do not know which steps are safe to start. Please refresh or wait a moment and try again.'
         );
         return;
       }
 
-      cardIds = queueResponse.cards
-        .slice(0, resolvedSessionSize)
-        .map((card) => card.cardId as CardId);
-
-      if (cardIds.length === 0) {
+      if (dueConceptResponse.concepts.length === 0) {
         setStartError(
-          'Quick Start is empty right now. You are caught up on due reviews, so try Custom Build or come back when more cards are due.'
+          'Quick Start is empty right now. You are caught up on due concepts, so try Custom Build or come back when more steps are due.'
         );
         return;
       }
@@ -208,32 +205,27 @@ export default function SessionNewPage(): React.JSX.Element {
 
       if (candidateItems.length === 0) {
         setStartError(
-          'This custom build has no matching cards yet. Adjust the filters or widen the session size, then try again.'
+          'This custom build has no matching concept payloads yet. Adjust the filters or widen the session size, then try again.'
         );
         return;
       }
 
-      cardIds = candidateItems.slice(0, resolvedSessionSize).map((card) => card.id);
+      const selectedCandidates = candidateItems.slice(0, resolvedSessionSize);
+      if (selectedCandidates.length === 0) {
+        setStartError(
+          'This custom build has no matching concept payloads yet. Adjust the filters or widen the session size, then try again.'
+        );
+        return;
+      }
     }
 
     try {
-      const initialCardLanes: IStartSessionInput['initialCardLanes'] =
-        useQuickStart && quickStartQueue !== undefined
-          ? Object.fromEntries(
-              quickStartQueue.cards
-                .slice(0, resolvedSessionSize)
-                .map((card: (typeof quickStartQueue.cards)[number]) => [
-                  card.cardId,
-                  card.lane === 'calibration' ? 'calibration' : 'retention',
-                ])
-            )
-          : undefined;
       const response = await startSession.mutateAsync({
+        curriculumId: selectedCurriculumId,
         learningMode: mode,
         studyMode: activeStudyMode,
-        deckQueryId: createClientDeckQueryId(),
         config: {
-          maxCards: resolvedSessionSize,
+          maxSteps: resolvedSessionSize,
           sessionTimeoutHours: 24,
           ...(customQuery.cardTypes !== undefined ? { cardTypes: customQuery.cardTypes } : {}),
           ...(presentationPromptSide !== ''
@@ -246,8 +238,8 @@ export default function SessionNewPage(): React.JSX.Element {
               }
             : {}),
         },
-        initialCardIds: cardIds,
-        ...(initialCardLanes !== undefined ? { initialCardLanes } : {}),
+        ...(customQuery.sources !== undefined ? { sourceDecks: customQuery.sources } : {}),
+        ...(customQuery.tags !== undefined ? { sourceCategories: customQuery.tags } : {}),
       });
 
       const sessionId = response.data.id as string;
@@ -263,9 +255,34 @@ export default function SessionNewPage(): React.JSX.Element {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Start a Session</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure your study session and begin reviewing.
+          Configure the Step loop and begin learning.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Curriculum</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <label className="grid gap-2 text-sm font-medium">
+            Path
+            <select
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm"
+              value={selectedCurriculumId}
+              onChange={(event) => {
+                setSelectedCurriculumId(event.target.value as CurriculumId);
+              }}
+            >
+              <option value="">Select a curriculum</option>
+              {curriculumItems.map((curriculum) => (
+                <option key={curriculum.id} value={curriculum.id}>
+                  {curriculum.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </CardContent>
+      </Card>
 
       {/* ------------------------------------------------------------------ */}
       {/* Section 1 — Mode Selection                                          */}
@@ -280,11 +297,11 @@ export default function SessionNewPage(): React.JSX.Element {
       </Card>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Section 2 — Card Source                                             */}
+      {/* Section 2 — Concept Source                                          */}
       {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader>
-          <CardTitle>Card Source</CardTitle>
+          <CardTitle>Concept Source</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {/* Toggle row */}
@@ -323,24 +340,24 @@ export default function SessionNewPage(): React.JSX.Element {
           {useQuickStart && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-muted-foreground">
-                Uses your dual-lane plan — optimally chosen cards based on your schedule.
+                Uses your concept schedule to seed the next available study steps.
               </p>
-              {reviewQueue.isLoading && (
+              {dueConcepts.isLoading && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Loading your queue…
+                  Loading due concepts…
                 </div>
               )}
-              {reviewQueue.isSuccess && queue !== undefined && (
+              {dueConcepts.isSuccess && (
                 <p className="text-sm text-foreground">
                   <span className="font-medium text-blue-600 dark:text-blue-400">
-                    {String(queue.retentionDue)} retention
+                    {String(retentionCount)} retention
                   </span>{' '}
                   +{' '}
                   <span className="font-medium text-amber-600 dark:text-amber-400">
-                    {String(queue.calibrationDue)} calibration
+                    {String(calibrationCount)} calibration
                   </span>{' '}
-                  cards due now.
+                  concepts due now.
                 </p>
               )}
             </div>
@@ -383,7 +400,7 @@ export default function SessionNewPage(): React.JSX.Element {
                               {String(compatibleCandidateItems.length)}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Previewing the cards that will be eligible for this session.
+                              Previewing the payloads that can seed this Step loop.
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -419,7 +436,7 @@ export default function SessionNewPage(): React.JSX.Element {
                         {previewCardLoading ? (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                            Loading card preview…
+                            Loading payload preview…
                           </div>
                         ) : previewCard !== undefined ? (
                           <div className="space-y-3">
@@ -431,7 +448,7 @@ export default function SessionNewPage(): React.JSX.Element {
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">
-                            We found candidates, but this card preview could not be loaded just now.
+                            We found candidates, but this payload preview could not be loaded just now.
                           </p>
                         )}
 
@@ -475,8 +492,8 @@ export default function SessionNewPage(): React.JSX.Element {
             <LaneMixSlider
               retentionPct={retentionPct}
               onChange={setRetentionPct}
-              {...(retentionCount !== undefined ? { retentionCount } : {})}
-              {...(calibrationCount !== undefined ? { calibrationCount } : {})}
+              retentionCount={retentionCount}
+              calibrationCount={calibrationCount}
             />
           </div>
 
@@ -532,7 +549,7 @@ export default function SessionNewPage(): React.JSX.Element {
                 </div>
               </div>
               <span id="session-size-hint" className="text-sm text-muted-foreground">
-                cards ({String(SESSION_SIZE_MIN)} – {String(SESSION_SIZE_MAX)})
+                steps ({String(SESSION_SIZE_MIN)} - {String(SESSION_SIZE_MAX)})
               </span>
             </div>
           </div>
@@ -540,11 +557,11 @@ export default function SessionNewPage(): React.JSX.Element {
           <div className="flex flex-col gap-3">
             <div className="space-y-1">
               <label htmlFor="prompt-side" className="text-sm font-medium text-foreground">
-                Card Sides
+                Payload Sides
               </label>
               <p className="text-sm text-muted-foreground">
                 Choose which side appears first. Reveal can show everything at once or unfold one
-                side at a time.
+                side at a time inside the Step.
               </p>
             </div>
 
@@ -558,7 +575,7 @@ export default function SessionNewPage(): React.JSX.Element {
               className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               {presentationSideOptions.length === 0 ? (
-                <option value="">Load a previewable card first</option>
+                <option value="">Load a previewable payload first</option>
               ) : (
                 presentationSideOptions.map((side) => (
                   <option key={side.key} value={side.key}>
@@ -655,24 +672,6 @@ export default function SessionNewPage(): React.JSX.Element {
   );
 }
 
-function createClientDeckQueryId(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
-  const values = new Uint8Array(21);
-
-  if (
-    typeof globalThis.crypto !== 'undefined' &&
-    typeof globalThis.crypto.getRandomValues === 'function'
-  ) {
-    globalThis.crypto.getRandomValues(values);
-  } else {
-    for (let index = 0; index < values.length; index += 1) {
-      values[index] = Math.floor(Math.random() * alphabet.length);
-    }
-  }
-
-  return `deck_${Array.from(values, (value) => alphabet[value % alphabet.length]).join('')}`;
-}
-
 function formatDifficultyLabel(difficulty: unknown): string {
   if (typeof difficulty === 'number' && Number.isFinite(difficulty)) {
     return `Difficulty ${(difficulty * 100).toFixed(0)}%`;
@@ -693,14 +692,14 @@ function formatStartSessionError(error: unknown): string {
   return formatApiErrorMessage(error, {
     action: 'start the session',
     fallback:
-      'We could not start the session. Review the selected mode and available cards, then try again.',
+      'We could not start the session. Review the selected mode and available concept payloads, then try again.',
     fieldLabels: {
       deckQueryId: 'Session configuration',
-      initialCardIds: 'Selected cards',
+      initialCardIds: 'Selected concept payloads',
       learningMode: 'Learning mode',
     },
     fieldHints: {
-      initialCardIds: 'Keep at least one card available before starting.',
+      initialCardIds: 'Keep at least one concept payload available before starting.',
     },
   });
 }

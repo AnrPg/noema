@@ -11,8 +11,19 @@
 
 import * as React from 'react';
 import { Info } from 'lucide-react';
-import type { IAdaptiveCheckpointDirectiveDto } from '@noema/api-client/session';
 import { Button } from '@noema/ui';
+
+export interface IAdaptiveCheckpointDirectiveDto {
+  action:
+    | 'continue'
+    | 'rebalance_queue'
+    | 'slowdown'
+    | 'increase_support'
+    | 'reduce_calibration_lane'
+    | 'switch_epistemic_mode';
+  reason: string;
+  priority: number;
+}
 
 export interface IAdaptiveCheckpointProps {
   directive: IAdaptiveCheckpointDirectiveDto;
@@ -29,7 +40,7 @@ const ACTION_LABELS: Record<IAdaptiveCheckpointDirectiveDto['action'], string> =
   slowdown: 'Slow Down',
   increase_support: 'More Support Recommended',
   reduce_calibration_lane: 'Reduce Calibration',
-  switch_teaching_approach: 'Teaching Approach Shift',
+  switch_epistemic_mode: 'Epistemic mode Shift',
 };
 
 // ============================================================================
