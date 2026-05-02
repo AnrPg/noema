@@ -68,7 +68,9 @@ lerna-debug.log*
 
 # Test coverage
 coverage/
+!apps/web/src/app/(authenticated)/content/coverage/
 .nyc_output/
+test-results/
 *.lcov
 
 # Cache

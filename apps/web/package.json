@@ -8,7 +8,8 @@
     "start": "node ../../scripts/ensure-next-middleware-manifest.cjs && next start",
     "lint": "eslint --config ../../eslint.config.mjs \"src/**/*.{ts,tsx}\"",
     "lint:fix": "eslint --config ../../eslint.config.mjs \"src/**/*.{ts,tsx}\" --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -39,6 +40,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@playwright/test": "^1.41.2"
   }
 }
