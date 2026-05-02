@@ -49,6 +49,7 @@ describe('realignment event schemas', () => {
         confidenceSignal: 0.5,
         combinedScore: 0.71,
         correct: true,
+        epistemicMode: 'generative_retrieval',
       },
     });
 

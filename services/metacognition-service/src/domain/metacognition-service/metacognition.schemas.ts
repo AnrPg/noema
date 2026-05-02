@@ -1,5 +1,5 @@
-import { StepSelfRating, StudyMode } from '@noema/types';
-import { StudyModeSchema, TransformationTypeSchema } from '@noema/validation';
+import { StepSelfRating } from '@noema/types';
+import { EpistemicModeSchema, StudyModeSchema, TransformationTypeSchema } from '@noema/validation';
 import { z } from 'zod';
 
 const values = <T extends Record<string, string>>(value: T): [T[keyof T], ...T[keyof T][]] =>
@@ -42,9 +42,12 @@ export const RecordEvaluationInputSchema = z.object({
   errorType: z.string().min(1).max(100).optional(),
   misconceptionRef: z.string().min(1).max(100).optional(),
   responseTimeMs: z.number().int().nonnegative().optional(),
+  hintRequestCount: z.number().int().nonnegative().default(0),
+  revisionCount: z.number().int().nonnegative().default(0),
   recentFailures: z.number().int().nonnegative().default(0),
   prerequisiteGapConceptIds: z.array(ConceptIdSchema).default([]),
-  studyMode: StudyModeSchema.default(StudyMode.KNOWLEDGE_GAINING),
+  studyMode: StudyModeSchema,
+  epistemicMode: EpistemicModeSchema,
   transformation: TransformationTypeSchema.optional(),
 });
 

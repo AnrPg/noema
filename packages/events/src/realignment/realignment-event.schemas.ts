@@ -5,6 +5,7 @@
 import {
   ConceptIdSchema,
   ConceptStateSchema,
+  EpistemicModeSchema,
   EvaluationIdSchema,
   LearningInterventionTypeSchema,
   LessonPlanIdSchema,
@@ -45,6 +46,7 @@ export const MetacognitionEvaluationRecordedPayloadSchema = z.object({
   combinedScore: z.number().min(0).max(1),
   correct: z.boolean(),
   studyMode: StudyModeSchema.optional(),
+  epistemicMode: EpistemicModeSchema,
   transformation: TransformationTypeSchema.optional(),
 });
 
@@ -89,8 +91,9 @@ export const ConceptStateChangedPayloadSchema = z.object({
   userId: UserIdSchema,
   conceptId: ConceptIdSchema,
   studyMode: StudyModeSchema,
-  previousState: ConceptStateSchema,
-  newState: ConceptStateSchema,
+  fromState: ConceptStateSchema,
+  toState: ConceptStateSchema,
+  triggeredBy: z.enum(['evaluation', 'recompute', 'manual']),
   changedAt: z.string().datetime(),
 });
 
@@ -168,7 +171,7 @@ export const MetacognitionTriggerFiredEventSchema = createEventSchema(
 );
 export const ReasoningAverageUpdatedEventSchema = createEventSchema(
   'metacognition.reasoning_average.updated',
-  'ConceptReasoningAverage',
+  'ConceptReasoningRollup',
   ReasoningAverageUpdatedPayloadSchema
 );
 export const StrategyReplanProposedEventSchema = createEventSchema(

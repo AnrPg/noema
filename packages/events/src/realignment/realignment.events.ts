@@ -5,6 +5,7 @@
 import type {
   ConceptId,
   ConceptState,
+  EpistemicMode,
   EvaluationId,
   LearningInterventionType,
   LessonPlanId,
@@ -116,6 +117,7 @@ export interface IMetacognitionEvaluationRecordedPayload {
   combinedScore: number;
   correct: boolean;
   studyMode?: StudyMode;
+  epistemicMode: EpistemicMode;
   transformation?: TransformationType;
 }
 
@@ -160,8 +162,9 @@ export interface IConceptStateChangedPayload {
   userId: UserId;
   conceptId: ConceptId;
   studyMode: StudyMode;
-  previousState: ConceptState;
-  newState: ConceptState;
+  fromState: ConceptState;
+  toState: ConceptState;
+  triggeredBy: 'evaluation' | 'recompute' | 'manual';
   changedAt: string;
 }
 
@@ -223,7 +226,7 @@ export type MetacognitionTriggerFiredEvent = ITypedEvent<
 >;
 export type ReasoningAverageUpdatedEvent = ITypedEvent<
   'metacognition.reasoning_average.updated',
-  'ConceptReasoningAverage',
+  'ConceptReasoningRollup',
   IReasoningAverageUpdatedPayload
 >;
 export type StrategyReplanProposedEvent = ITypedEvent<

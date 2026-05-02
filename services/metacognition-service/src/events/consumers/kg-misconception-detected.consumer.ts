@@ -7,7 +7,13 @@ import {
   type IEventConsumerConfig,
   type IStreamEventEnvelope,
 } from '@noema/events/consumer';
-import { StepSelfRating, StudyMode, TransformationType, type CorrelationId } from '@noema/types';
+import {
+  EpistemicMode,
+  StepSelfRating,
+  StudyMode,
+  TransformationType,
+  type CorrelationId,
+} from '@noema/types';
 import { createHash } from 'node:crypto';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
@@ -101,6 +107,7 @@ export class KgMisconceptionDetectedConsumer extends BaseEventConsumer {
         recentFailures: 1,
         prerequisiteGapConceptIds: conceptRefs,
         studyMode: StudyMode.KNOWLEDGE_GAINING,
+        epistemicMode: EpistemicMode.ERROR_PATTERN_REFLECTION,
         transformation: TransformationType.ERROR_DETECTION,
       },
       {
