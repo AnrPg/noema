@@ -25,17 +25,18 @@ class FakeConceptStateRepository implements IConceptStateRepository {
   readonly projections = new Map<string, IConceptStateProjection>();
   readonly history: IConceptStateHistoryEntry[] = [];
 
-  async markEventProcessed(input: { readonly eventId: string }): Promise<boolean> {
-    if (this.processedEvents.has(input.eventId)) return false;
+  markEventProcessed(input: { readonly eventId: string }): Promise<boolean> {
+    if (this.processedEvents.has(input.eventId)) return Promise.resolve(false);
     this.processedEvents.add(input.eventId);
-    return true;
+    return Promise.resolve(true);
   }
 
-  async recordReasoningEvidence(input: IConceptReasoningEvidenceInput): Promise<void> {
+  recordReasoningEvidence(input: IConceptReasoningEvidenceInput): Promise<void> {
     this.reasoningEvidence.push(input);
+    return Promise.resolve();
   }
 
-  async getReasoningAverage(input: {
+  getReasoningAverage(input: {
     readonly userId: UserId;
     readonly conceptId: ConceptId;
     readonly studyMode: StudyMode;
@@ -49,35 +50,53 @@ class FakeConceptStateRepository implements IConceptStateRepository {
           entry.studyMode === input.studyMode
       )
       .slice(-input.windowSize);
-    if (evidence.length === 0) return null;
-    return evidence.reduce((sum, entry) => sum + entry.reasoningQuality, 0) / evidence.length;
+    if (evidence.length === 0) return Promise.resolve(null);
+    return Promise.resolve(
+      evidence.reduce((sum, entry) => sum + entry.reasoningQuality, 0) / evidence.length
+    );
   }
 
-  async getProjection(input: {
+  getProjection(input: {
     readonly userId: UserId;
     readonly conceptId: ConceptId;
     readonly studyMode: StudyMode;
   }): Promise<IConceptStateProjection | null> {
-    return this.projections.get(key(input.userId, input.conceptId, input.studyMode)) ?? null;
-  }
-
-  async listProjections(input: {
-    readonly userId: UserId;
-    readonly studyMode: StudyMode;
-  }): Promise<IConceptStateProjection[]> {
-    return [...this.projections.values()].filter(
-      (projection) => projection.userId === input.userId && projection.studyMode === input.studyMode
+    return Promise.resolve(
+      this.projections.get(key(input.userId, input.conceptId, input.studyMode)) ?? null
     );
   }
 
-  async upsertProjection(input: IConceptStateUpsertInput & { state: ConceptState }): Promise<{
+  listProjections(input: {
+    readonly userId: UserId;
+    readonly studyMode: StudyMode;
+  }): Promise<IConceptStateProjection[]> {
+    return Promise.resolve(
+      [...this.projections.values()].filter(
+        (projection) =>
+          projection.userId === input.userId && projection.studyMode === input.studyMode
+      )
+    );
+  }
+
+  listRecomputeCandidates(input: {
+    readonly staleBefore: string;
+    readonly limit: number;
+  }): Promise<IConceptStateProjection[]> {
+    return Promise.resolve(
+      [...this.projections.values()]
+        .filter((projection) => projection.computedAt < input.staleBefore)
+        .slice(0, input.limit)
+    );
+  }
+
+  upsertProjection(input: IConceptStateUpsertInput & { state: ConceptState }): Promise<{
     readonly projection: IConceptStateProjection;
-    readonly previousState: ConceptState;
+    readonly fromState: ConceptState;
     readonly changed: boolean;
   }> {
     const projectionKey = key(input.userId, input.conceptId, input.studyMode);
     const existing = this.projections.get(projectionKey);
-    const previousState = existing?.state ?? ConceptState.UNSTABLE;
+    const fromState = existing?.state ?? ConceptState.UNSTABLE;
     const projection: IConceptStateProjection = {
       userId: input.userId,
       conceptId: input.conceptId,
@@ -88,24 +107,25 @@ class FakeConceptStateRepository implements IConceptStateRepository {
       evidenceWindow: input.evidenceWindow,
       lastEvaluationId: input.lastEvaluationId,
       lastChangedAt:
-        previousState !== input.state ? input.computedAt : (existing?.lastChangedAt ?? null),
+        fromState !== input.state ? input.computedAt : (existing?.lastChangedAt ?? null),
       attemptsSinceStable:
         input.state === ConceptState.STABLE ? (existing?.attemptsSinceStable ?? 0) + 1 : 0,
       computedAt: input.computedAt,
       updatedAt: input.computedAt,
     };
     this.projections.set(projectionKey, projection);
-    return { projection, previousState, changed: previousState !== input.state };
+    return Promise.resolve({ projection, fromState, changed: fromState !== input.state });
   }
 
-  async appendHistory(input: IConceptStateHistoryInput): Promise<IConceptStateHistoryEntry> {
+  appendHistory(input: IConceptStateHistoryInput): Promise<IConceptStateHistoryEntry> {
     const entry: IConceptStateHistoryEntry = {
-      id: `hist_${this.history.length + 1}`,
+      id: `hist_${String(this.history.length + 1)}`,
       userId: input.userId,
       conceptId: input.conceptId,
       studyMode: input.studyMode,
-      previousState: input.previousState,
-      newState: input.newState,
+      fromState: input.fromState,
+      toState: input.toState,
+      triggeredBy: input.triggeredBy,
       fsrsStability: input.fsrsStability,
       reasoningAverage: input.reasoningAverage,
       evaluationId: input.evaluationId,
@@ -113,11 +133,11 @@ class FakeConceptStateRepository implements IConceptStateRepository {
       createdAt: input.changedAt,
     };
     this.history.push(entry);
-    return entry;
+    return Promise.resolve(entry);
   }
 
-  async getHistory(): Promise<IConceptStateHistoryEntry[]> {
-    return this.history;
+  getHistory(): Promise<IConceptStateHistoryEntry[]> {
+    return Promise.resolve(this.history);
   }
 }
 
@@ -130,8 +150,8 @@ describe('ConceptStateService', () => {
     const repository = new FakeConceptStateRepository();
     const graphPort: IConceptStateGraphPort = {
       setConceptState: vi.fn(),
-      getPrerequisiteConceptIds: vi.fn(async () => []),
-      getConceptDomains: vi.fn(async () => new Map([[conceptId, 'math']])),
+      getPrerequisiteConceptIds: vi.fn(() => Promise.resolve([])),
+      getConceptDomains: vi.fn(() => Promise.resolve(new Map([[conceptId, 'math']]))),
     };
     const publisher = { publish: vi.fn(), publishBatch: vi.fn() };
     const service = new ConceptStateService(repository, graphPort, publisher, {
@@ -159,7 +179,8 @@ describe('ConceptStateService', () => {
       expect.objectContaining({
         eventType: 'knowledge_graph.concept_state.changed',
         payload: expect.objectContaining({
-          newState: ConceptState.STABLE,
+          toState: ConceptState.STABLE,
+          triggeredBy: 'evaluation',
           studyMode,
         }),
       })
@@ -179,15 +200,15 @@ describe('ConceptStateService', () => {
 
     const regressedProjection = await service.getProjection({ userId, conceptId, studyMode });
     expect(regressedProjection?.state).toBe(ConceptState.UNSTABLE);
-    expect(repository.history.at(-1)?.newState).toBe(ConceptState.UNSTABLE);
+    expect(repository.history.at(-1)?.toState).toBe(ConceptState.UNSTABLE);
   });
 
   it('returns only unstable prerequisite gaps', async () => {
     const repository = new FakeConceptStateRepository();
     const graphPort: IConceptStateGraphPort = {
       setConceptState: vi.fn(),
-      getPrerequisiteConceptIds: vi.fn(async () => [conceptId, prereqId]),
-      getConceptDomains: vi.fn(async () => new Map()),
+      getPrerequisiteConceptIds: vi.fn(() => Promise.resolve([conceptId, prereqId])),
+      getConceptDomains: vi.fn(() => Promise.resolve(new Map())),
     };
     const service = new ConceptStateService(repository, graphPort, {
       publish: vi.fn(),
@@ -219,5 +240,51 @@ describe('ConceptStateService', () => {
 
     const gaps = await service.getPrerequisiteGaps({ userId, conceptId, studyMode });
     expect(gaps.map((gap) => gap.conceptId)).toEqual([prereqId]);
+  });
+
+  it('periodically recomputes stale projections without requiring a new event', async () => {
+    const repository = new FakeConceptStateRepository();
+    const graphPort: IConceptStateGraphPort = {
+      setConceptState: vi.fn(),
+      getPrerequisiteConceptIds: vi.fn(() => Promise.resolve([])),
+      getConceptDomains: vi.fn(() => Promise.resolve(new Map())),
+    };
+    const service = new ConceptStateService(
+      repository,
+      graphPort,
+      { publish: vi.fn(), publishBatch: vi.fn() },
+      { S_RET: 21, R_REAS: 0.6, N_REASONING_WINDOW: 3 }
+    );
+
+    await repository.upsertProjection({
+      userId,
+      conceptId,
+      studyMode,
+      state: ConceptState.UNSTABLE,
+      fsrsStability: 30,
+      reasoningAverage: null,
+      evidenceWindow: 3,
+      lastEvaluationId: null,
+      computedAt: '2026-04-30T00:00:00.000Z',
+    });
+    await repository.recordReasoningEvidence({
+      userId,
+      conceptId,
+      studyMode,
+      evaluationId: 'eval_1' as never,
+      stepId: 'step_1',
+      reasoningQuality: 0.9,
+      evaluatedAt: '2026-05-01T00:00:00.000Z',
+    });
+
+    const result = await service.recomputeStale({
+      staleBefore: '2026-05-02T00:00:00.000Z',
+      limit: 10,
+    });
+
+    expect(result).toEqual({ checked: 1, changed: 1 });
+    expect((await service.getProjection({ userId, conceptId, studyMode }))?.state).toBe(
+      ConceptState.STABLE
+    );
   });
 });

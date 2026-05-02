@@ -59,6 +59,7 @@ import {
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
 import { ConceptStateService } from './domain/knowledge-graph-service/concept-state.service.js';
+import { ConceptStateRecomputeJob } from './domain/knowledge-graph-service/concept-state-recompute.job.js';
 import {
   OntologyReasoningService,
   OntologyReasoningStage,
@@ -420,7 +421,13 @@ async function bootstrap(): Promise<void> {
   const conceptStateService = new ConceptStateService(
     conceptStateRepository,
     conceptStateGraphRepository,
-    eventPublisher
+    eventPublisher,
+    config.conceptState.thresholds
+  );
+  const conceptStateRecomputeJob = new ConceptStateRecomputeJob(
+    conceptStateService,
+    config.conceptState.recompute,
+    logger
   );
   const postWriteRecoveryService = new PkgPostWriteRecoveryService(
     postWriteRecoveryRepository,
@@ -666,22 +673,28 @@ async function bootstrap(): Promise<void> {
 
     consumers.push(pkgAggregationConsumer);
 
-    const conceptStateConsumerRedis = new Redis(config.redis.url, {
-      maxRetriesPerRequest: 3,
-      lazyConnect: true,
-    });
-    await conceptStateConsumerRedis.connect();
-    consumerRedisClients.push(conceptStateConsumerRedis);
+    const conceptStateSourceStreams = [
+      streams.metacognitionService,
+      streams.schedulerService,
+    ] as const;
+    for (const [index, sourceStreamKey] of conceptStateSourceStreams.entries()) {
+      const conceptStateConsumerRedis = new Redis(config.redis.url, {
+        maxRetriesPerRequest: 3,
+        lazyConnect: true,
+      });
+      await conceptStateConsumerRedis.connect();
+      consumerRedisClients.push(conceptStateConsumerRedis);
 
-    const conceptStateConsumer = new ConceptStateConsumer(
-      conceptStateConsumerRedis,
-      conceptStateService,
-      logger,
-      consumerName,
-      config.redis.eventStreamKey
-    );
+      const conceptStateConsumer = new ConceptStateConsumer(
+        conceptStateConsumerRedis,
+        conceptStateService,
+        logger,
+        `${consumerName}:concept-state:${String(index + 1)}`,
+        sourceStreamKey
+      );
 
-    consumers.push(conceptStateConsumer);
+      consumers.push(conceptStateConsumer);
+    }
 
     // Initialize consumer groups (idempotent)
     await Promise.all(consumers.map((c) => c.initialize()));
@@ -697,6 +710,7 @@ async function bootstrap(): Promise<void> {
   }
 
   postWriteRecoveryService.start();
+  conceptStateRecomputeJob.start();
 
   // Graceful shutdown
   const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -722,7 +736,9 @@ async function bootstrap(): Promise<void> {
       }
       await Promise.all(consumers.map((c) => c.drain()));
       postWriteRecoveryService.stop();
+      conceptStateRecomputeJob.stop();
       await postWriteRecoveryService.drain();
+      await conceptStateRecomputeJob.drain();
 
       await fastify.close();
       await Promise.all(consumerRedisClients.map(async (client) => client.quit()));

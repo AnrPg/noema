@@ -7,6 +7,8 @@ import {
 } from '@noema/types';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import type {
+  ConceptStateHistoryTrigger,
+  IConceptStateHistoryEntry,
   IConceptStateProjection,
   IConceptStateRepository,
   IConceptStateSummaryEntry,
@@ -69,6 +71,11 @@ export interface IConceptStateSummary {
   readonly averageReasoning: number | null;
   readonly averageFsrsStability: number | null;
   readonly domains: readonly IConceptStateSummaryEntry[];
+}
+
+export interface IConceptStateRecomputeStaleResult {
+  readonly checked: number;
+  readonly changed: number;
 }
 
 export class ConceptStateService {
@@ -146,6 +153,7 @@ export class ConceptStateService {
     const fsrsStability = input.fsrsStability ?? existing?.fsrsStability ?? null;
     const state = this.deriveState({ fsrsStability, reasoningAverage });
     const computedAt = new Date().toISOString();
+    const triggeredBy = historyTriggerFor(input);
 
     const result = await this.repository.upsertProjection({
       userId: input.userId,
@@ -170,8 +178,9 @@ export class ConceptStateService {
         userId: input.userId,
         conceptId: input.conceptId,
         studyMode,
-        previousState: result.previousState,
-        newState: state,
+        fromState: result.fromState,
+        toState: state,
+        triggeredBy,
         fsrsStability,
         reasoningAverage,
         evaluationId: input.evaluationId ?? null,
@@ -186,8 +195,9 @@ export class ConceptStateService {
           userId: input.userId,
           conceptId: input.conceptId,
           studyMode,
-          previousState: result.previousState,
-          newState: state,
+          fromState: result.fromState,
+          toState: state,
+          triggeredBy,
           changedAt: computedAt,
         },
         metadata: {
@@ -209,7 +219,7 @@ export class ConceptStateService {
     return this.repository.getProjection(input);
   }
 
-  getHistory(input: IConceptStateHistoryQuery) {
+  getHistory(input: IConceptStateHistoryQuery): Promise<IConceptStateHistoryEntry[]> {
     return this.repository.getHistory(input);
   }
 
@@ -277,6 +287,35 @@ export class ConceptStateService {
       domains: domainEntries.sort((a, b) => b.stableConcepts - a.stableConcepts),
     };
   }
+
+  async recomputeStale(input: {
+    readonly staleBefore: string;
+    readonly limit: number;
+    readonly correlationId?: string;
+  }): Promise<IConceptStateRecomputeStaleResult> {
+    const candidates = await this.repository.listRecomputeCandidates(input);
+    let changed = 0;
+
+    for (const candidate of candidates) {
+      const before = candidate.state;
+      const projection = await this.recompute({
+        userId: candidate.userId,
+        conceptId: candidate.conceptId,
+        studyMode: candidate.studyMode,
+        fsrsStability: candidate.fsrsStability,
+        ...(input.correlationId !== undefined ? { correlationId: input.correlationId } : {}),
+      });
+      if (projection.state !== before) changed += 1;
+    }
+
+    return { checked: candidates.length, changed };
+  }
+}
+
+function historyTriggerFor(input: IConceptStateRecomputeInput): ConceptStateHistoryTrigger {
+  if (input.eventType === 'metacognition.evaluation.recorded') return 'evaluation';
+  if (input.eventType === 'scheduler.concept_state.updated') return 'recompute';
+  return input.evaluationId !== undefined ? 'evaluation' : 'recompute';
 }
 
 function averageNullable(values: readonly (number | null)[]): number | null {

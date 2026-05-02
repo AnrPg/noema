@@ -139,16 +139,30 @@ export class PrismaConceptStateRepository implements IConceptStateRepository {
     return records.map((record) => this.toProjection(record));
   }
 
+  async listRecomputeCandidates(input: {
+    readonly staleBefore: string;
+    readonly limit: number;
+  }): Promise<IConceptStateProjection[]> {
+    const records = await this.prisma.conceptStateProjection.findMany({
+      where: {
+        computedAt: { lt: new Date(input.staleBefore) },
+      },
+      orderBy: { computedAt: 'asc' },
+      take: input.limit,
+    });
+    return records.map((record) => this.toProjection(record));
+  }
+
   async upsertProjection(
     input: IConceptStateUpsertInput & { readonly state: ConceptState }
   ): Promise<{
     readonly projection: IConceptStateProjection;
-    readonly previousState: ConceptState;
+    readonly fromState: ConceptState;
     readonly changed: boolean;
   }> {
     const existing = await this.getProjection(input);
-    const previousState = existing?.state ?? 'unstable';
-    const changed = previousState !== input.state;
+    const fromState = existing?.state ?? 'unstable';
+    const changed = fromState !== input.state;
     const computedAt = new Date(input.computedAt);
     const attemptsSinceStable =
       input.state === 'stable' ? (existing?.attemptsSinceStable ?? 0) + (changed ? 0 : 1) : 0;
@@ -186,7 +200,7 @@ export class PrismaConceptStateRepository implements IConceptStateRepository {
       },
     });
 
-    return { projection: this.toProjection(record), previousState, changed };
+    return { projection: this.toProjection(record), fromState, changed };
   }
 
   async appendHistory(input: IConceptStateHistoryInput): Promise<IConceptStateHistoryEntry> {
@@ -196,8 +210,9 @@ export class PrismaConceptStateRepository implements IConceptStateRepository {
         userId: input.userId as string,
         conceptId: input.conceptId as string,
         studyMode: toPrismaStudyMode(input.studyMode),
-        previousState: toPrismaConceptState(input.previousState),
-        newState: toPrismaConceptState(input.newState),
+        fromState: toPrismaConceptState(input.fromState),
+        toState: toPrismaConceptState(input.toState),
+        triggeredBy: input.triggeredBy,
         fsrsStability: input.fsrsStability,
         reasoningAverage: input.reasoningAverage,
         evaluationId: input.evaluationId as string | null,
@@ -260,8 +275,9 @@ export class PrismaConceptStateRepository implements IConceptStateRepository {
     userId: string;
     conceptId: string;
     studyMode: PrismaStudyMode;
-    previousState: PrismaConceptState;
-    newState: PrismaConceptState;
+    fromState: PrismaConceptState;
+    toState: PrismaConceptState;
+    triggeredBy: string;
     fsrsStability: number | null;
     reasoningAverage: number | null;
     evaluationId: string | null;
@@ -273,8 +289,9 @@ export class PrismaConceptStateRepository implements IConceptStateRepository {
       userId: record.userId as UserId,
       conceptId: record.conceptId as ConceptId,
       studyMode: fromPrismaStudyMode(record.studyMode),
-      previousState: fromPrismaConceptState(record.previousState),
-      newState: fromPrismaConceptState(record.newState),
+      fromState: fromPrismaConceptState(record.fromState),
+      toState: fromPrismaConceptState(record.toState),
+      triggeredBy: toHistoryTrigger(record.triggeredBy),
       fsrsStability: record.fsrsStability,
       reasoningAverage: record.reasoningAverage,
       evaluationId: record.evaluationId as EvaluationId | null,
@@ -282,6 +299,10 @@ export class PrismaConceptStateRepository implements IConceptStateRepository {
       createdAt: record.createdAt.toISOString(),
     };
   }
+}
+
+function toHistoryTrigger(value: string): 'evaluation' | 'recompute' | 'manual' {
+  return value === 'evaluation' || value === 'manual' ? value : 'recompute';
 }
 
 function isUniqueViolation(error: unknown): boolean {

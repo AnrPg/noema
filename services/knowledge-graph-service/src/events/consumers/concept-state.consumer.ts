@@ -6,7 +6,6 @@ import {
 } from '@noema/events';
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import { BaseEventConsumer } from '@noema/events/consumer';
-import type { ConceptId, StudyMode } from '@noema/types';
 import type { Redis } from 'ioredis';
 import type { Logger } from 'pino';
 import type { ConceptStateService } from '../../domain/knowledge-graph-service/concept-state.service.js';
@@ -59,7 +58,7 @@ export class ConceptStateConsumer extends BaseEventConsumer {
             evaluationId: payload.evaluationId,
             reasoningQuality: payload.reasoningQuality,
             stepId: payload.stepId,
-            eventId: `${envelope.eventId}:${conceptId}`,
+            eventId: `${envelope.eventId ?? envelope.aggregateId}:${conceptId}`,
             eventType: envelope.eventType,
             ...(envelope.timestamp !== undefined ? { evaluatedAt: envelope.timestamp } : {}),
             ...(correlationId !== undefined ? { correlationId } : {}),
@@ -73,8 +72,8 @@ export class ConceptStateConsumer extends BaseEventConsumer {
       const payload = envelope.payload as unknown as ISchedulerConceptStateUpdatedPayload;
       await this.conceptStateService.recompute({
         userId: payload.userId,
-        conceptId: payload.conceptId as ConceptId,
-        studyMode: payload.studyMode as StudyMode,
+        conceptId: payload.conceptId,
+        studyMode: payload.studyMode,
         evaluationId: payload.evaluationId,
         fsrsStability: payload.stability ?? payload.halfLife ?? null,
         stepId: payload.stepId,

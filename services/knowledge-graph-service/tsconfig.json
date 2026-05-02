@@ -12,6 +12,7 @@
   "exclude": ["node_modules", "dist", "tests"],
   "references": [
     { "path": "../../packages/types" },
+    { "path": "../../packages/config" },
     { "path": "../../packages/events" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/validation" }

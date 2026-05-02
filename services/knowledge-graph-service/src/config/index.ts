@@ -7,6 +7,7 @@
  */
 
 import type { Environment } from '@noema/types';
+import { DEFAULT_CONCEPT_STATE_CONFIG } from '@noema/config';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -80,6 +81,8 @@ export interface IServiceConfig {
     /** Stream keys for the source services */
     streams: {
       contentService: string;
+      metacognitionService: string;
+      schedulerService: string;
       sessionService: string;
       userService: string;
     };
@@ -135,6 +138,19 @@ export interface IServiceConfig {
     maxAttempts: number;
     retryBaseDelayMs: number;
   };
+  conceptState: {
+    thresholds: {
+      S_RET: number;
+      R_REAS: number;
+      N_REASONING_WINDOW: number;
+    };
+    recompute: {
+      enabled: boolean;
+      intervalMs: number;
+      batchSize: number;
+      staleAfterMs: number;
+    };
+  };
 }
 
 // ============================================================================
@@ -164,6 +180,16 @@ function optionalEnvInt(name: string, defaultValue: number): number {
   const parsed = parseInt(value, 10);
   if (isNaN(parsed)) {
     throw new Error(`Invalid integer for ${name}: ${value}`);
+  }
+  return parsed;
+}
+
+function optionalEnvFloat(name: string, defaultValue: number): number {
+  const value = process.env[name];
+  if (value === undefined || value === '') return defaultValue;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Invalid number for ${name}: ${value}`);
   }
   return parsed;
 }
@@ -288,6 +314,11 @@ export function loadConfig(): IServiceConfig {
       consumerName: optionalEnv('CONSUMER_NAME', `knowledge-graph-service-${String(process.pid)}`),
       streams: {
         contentService: optionalEnv('EVENT_STREAM_CONTENT', 'noema:events:content-service'),
+        metacognitionService: optionalEnv(
+          'EVENT_STREAM_METACOGNITION',
+          'noema:events:metacognition-service'
+        ),
+        schedulerService: optionalEnv('EVENT_STREAM_SCHEDULER', 'noema:events:scheduler-service'),
         sessionService: optionalEnv('EVENT_STREAM_SESSION', 'noema:events:session-service'),
         userService: optionalEnv('EVENT_STREAM_USER', 'noema:events:user-service'),
       },
@@ -372,6 +403,40 @@ export function loadConfig(): IServiceConfig {
       batchSize: optionalEnvInt('PKG_POST_WRITE_RECOVERY_BATCH_SIZE', 50),
       maxAttempts: optionalEnvInt('PKG_POST_WRITE_RECOVERY_MAX_ATTEMPTS', 6),
       retryBaseDelayMs: optionalEnvInt('PKG_POST_WRITE_RECOVERY_BASE_DELAY_MS', 500),
+    },
+    conceptState: {
+      thresholds: {
+        S_RET: optionalEnvFloat(
+          'CONCEPT_STATE_S_RET',
+          DEFAULT_CONCEPT_STATE_CONFIG.thresholds.S_RET
+        ),
+        R_REAS: optionalEnvFloat(
+          'CONCEPT_STATE_R_REAS',
+          DEFAULT_CONCEPT_STATE_CONFIG.thresholds.R_REAS
+        ),
+        N_REASONING_WINDOW: optionalEnvInt(
+          'CONCEPT_STATE_REASONING_WINDOW',
+          DEFAULT_CONCEPT_STATE_CONFIG.thresholds.N_REASONING_WINDOW
+        ),
+      },
+      recompute: {
+        enabled: optionalEnvBool(
+          'CONCEPT_STATE_RECOMPUTE_ENABLED',
+          DEFAULT_CONCEPT_STATE_CONFIG.recompute.enabled
+        ),
+        intervalMs: optionalEnvInt(
+          'CONCEPT_STATE_RECOMPUTE_INTERVAL_MS',
+          DEFAULT_CONCEPT_STATE_CONFIG.recompute.intervalMs
+        ),
+        batchSize: optionalEnvInt(
+          'CONCEPT_STATE_RECOMPUTE_BATCH_SIZE',
+          DEFAULT_CONCEPT_STATE_CONFIG.recompute.batchSize
+        ),
+        staleAfterMs: optionalEnvInt(
+          'CONCEPT_STATE_RECOMPUTE_STALE_AFTER_MS',
+          DEFAULT_CONCEPT_STATE_CONFIG.recompute.staleAfterMs
+        ),
+      },
     },
   };
 }

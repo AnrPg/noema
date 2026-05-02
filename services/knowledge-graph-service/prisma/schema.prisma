@@ -678,8 +678,9 @@ model ConceptStateHistory {
   userId           String       @map("user_id") @db.VarChar(50)
   conceptId        String       @map("concept_id") @db.VarChar(50)
   studyMode        StudyMode    @map("study_mode")
-  previousState    ConceptState @map("previous_state")
-  newState         ConceptState @map("new_state")
+  fromState        ConceptState @map("from_state")
+  toState          ConceptState @map("to_state")
+  triggeredBy      String       @default("recompute") @map("triggered_by") @db.VarChar(50)
   fsrsStability    Float?       @map("fsrs_stability")
   reasoningAverage Float?       @map("reasoning_average")
   evaluationId     String?      @map("evaluation_id") @db.VarChar(50)
@@ -687,7 +688,8 @@ model ConceptStateHistory {
   createdAt        DateTime     @default(now()) @map("created_at")
 
   @@index([userId, conceptId, studyMode, changedAt])
-  @@index([userId, studyMode, newState])
+  @@index([userId, studyMode, toState])
+  @@index([triggeredBy])
   @@index([evaluationId])
   @@map("concept_state_history")
 }

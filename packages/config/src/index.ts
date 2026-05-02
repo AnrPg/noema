@@ -71,8 +71,29 @@ export const DEFAULT_ELIGIBILITY_CONFIG = {
   recentTransformationWindow: 6,
 } as const;
 
+export const DEFAULT_CONCEPT_STATE_CONFIG = {
+  thresholds: {
+    S_RET: 21,
+    R_REAS: 0.6,
+    N_REASONING_WINDOW: 10,
+  },
+  recompute: {
+    enabled: true,
+    intervalMs: 15 * 60 * 1000,
+    batchSize: 100,
+    staleAfterMs: 24 * 60 * 60 * 1000,
+  },
+} as const;
+
+export const N_TRANSFER = DEFAULT_ELIGIBILITY_CONFIG.transferAttemptsSinceStable;
+export const R_STREAK_THRESHOLD = DEFAULT_GAMIFICATION_CONFIG.streakReasoningQualityThreshold;
+export const S_RET = DEFAULT_CONCEPT_STATE_CONFIG.thresholds.S_RET;
+export const R_REAS = DEFAULT_CONCEPT_STATE_CONFIG.thresholds.R_REAS;
+export const N_REASONING_WINDOW = DEFAULT_CONCEPT_STATE_CONFIG.thresholds.N_REASONING_WINDOW;
+
 export const DEFAULT_REALIGNMENT_CONFIG = {
   metacognition: DEFAULT_METACOGNITION_CONFIG,
   gamification: DEFAULT_GAMIFICATION_CONFIG,
   eligibility: DEFAULT_ELIGIBILITY_CONFIG,
+  conceptState: DEFAULT_CONCEPT_STATE_CONFIG,
 } as const;
