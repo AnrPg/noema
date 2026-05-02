@@ -20,15 +20,12 @@ export default tseslint.config(
       // Skeleton services (no source code yet)
       'services/analytics-service/**',
       'services/collaboration-service/**',
-      'services/gamification-service/**',
-      'services/ingestion-service/**',
       'services/media-service/**',
       'services/notification-service/**',
       'services/scheduler-service/**',
       'services/session-service/**',
       'services/strategy-service/**',
       'services/sync-service/**',
-      'services/vector-service/**',
       // Config files at root level
       'eslint.config.mjs',
       // Vitest test setup files (not part of src build, not linted)
@@ -58,6 +55,7 @@ export default tseslint.config(
           allowDefaultProject: [
             '*.config.cjs',
             '*.config.mjs',
+            'services/*/vitest.config.ts',
             'packages/*/tailwind.config.cjs',
             'packages/ui/src/lib/*.test.ts',
             'packages/ui/src/lib/*.test.tsx',
@@ -72,6 +70,9 @@ export default tseslint.config(
             'services/metacognition-service/tests/*.ts',
             'services/metacognition-service/tests/*/*.ts',
             'services/metacognition-service/tests/*/*/*.ts',
+            'services/gamification-service/tests/*.ts',
+            'services/gamification-service/tests/*/*.ts',
+            'services/gamification-service/tests/*/*/*.ts',
             'services/pedagogy-guardian-service/tests/*.ts',
             'services/pedagogy-guardian-service/tests/*/*.ts',
             'services/pedagogy-guardian-service/tests/*/*/*.ts',
