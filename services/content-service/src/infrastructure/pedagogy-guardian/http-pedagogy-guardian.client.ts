@@ -36,7 +36,10 @@ export class HttpPedagogyGuardianClient implements IPedagogyGuardianPort {
     const response = await fetch(`${this.baseUrl}/v1/validate/generated-variant`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(input),
+      body: JSON.stringify({
+        variant: toGuardianGeneratedVariant(input.variant),
+        triggeredBy: input.triggeredBy ?? 'content-service',
+      }),
     });
     const body = (await response.json()) as IApiResponse<IGuardianValidationOutcome>;
     if (!response.ok && !('data' in body)) {
@@ -44,4 +47,31 @@ export class HttpPedagogyGuardianClient implements IPedagogyGuardianPort {
     }
     return body.data;
   }
+}
+
+function toGuardianGeneratedVariant(variant: unknown): Record<string, unknown> {
+  const draft = variant as {
+    id?: string;
+    conceptId?: string;
+    conceptIds?: string[];
+    transformationType?: string;
+    transformationKind?: string;
+    content?: { front?: unknown; back?: unknown };
+  };
+  const conceptId = draft.conceptId ?? draft.conceptIds?.[0] ?? 'concept_unknown';
+  return {
+    id: draft.id ?? `generated_${conceptId}`,
+    conceptId,
+    transformationType: draft.transformationType ?? draft.transformationKind ?? 'recall',
+    epistemicMode: 'generative_retrieval',
+    difficultyBucket: 2,
+    prompt: textOrDefault(draft.content?.front, 'Practice this concept.'),
+    expectedResponseType: 'short_text',
+    responseSchema: { type: 'string' },
+    renderPayload: variant,
+  };
+}
+
+function textOrDefault(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : fallback;
 }

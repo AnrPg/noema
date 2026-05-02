@@ -21,14 +21,22 @@ import {
 } from './index.js';
 import type { CurriculumRepository } from './curriculum.repository.js';
 import type { CurriculumNode } from './curriculum.types.js';
-import type { SchedulerClient } from '../../infrastructure/external/http-clients.js';
 import type { CurriculumEventPublisher } from '../../infrastructure/events/redis-event-publisher.js';
+import type {
+  ICurriculumDesignAgentClient,
+  IKnowledgeGraphClient,
+  IPedagogyGuardianClient,
+  ISchedulerClient,
+} from './external-ports.js';
 
 export class CurriculumService {
   constructor(
     private readonly repository: CurriculumRepository,
-    private readonly schedulerClient: SchedulerClient,
-    private readonly eventPublisher?: CurriculumEventPublisher
+    private readonly schedulerClient: ISchedulerClient,
+    private readonly eventPublisher?: CurriculumEventPublisher,
+    private readonly knowledgeGraphClient?: IKnowledgeGraphClient,
+    private readonly pedagogyGuardianClient?: IPedagogyGuardianClient,
+    private readonly curriculumDesignAgentClient?: ICurriculumDesignAgentClient
   ) {}
 
   listCurricula(userId: UserId): Promise<ICurriculum[]> {
@@ -154,6 +162,22 @@ export class CurriculumService {
     const graph = await this.repository.getActiveVersion(curriculumId);
     if (graph === undefined) throw new Error('No active curriculum version exists.');
     validateCurriculumDag(graph);
+    const conceptIds = graph.nodes
+      .map((node) => node.ckgConceptId)
+      .filter((conceptId): conceptId is NonNullable<typeof conceptId> => conceptId !== undefined);
+    if (
+      conceptIds.length > 0 &&
+      this.knowledgeGraphClient !== undefined &&
+      !(await this.knowledgeGraphClient.validateConceptAnchors(conceptIds))
+    ) {
+      throw new Error('Curriculum contains CKG concept anchors that failed validation.');
+    }
+    if (this.pedagogyGuardianClient !== undefined) {
+      const outcome = await this.pedagogyGuardianClient.validateCurriculumVersion(graph);
+      if (!outcome.accepted) {
+        throw new Error(`Pedagogy Guardian rejected curriculum version ${outcome.validationId}.`);
+      }
+    }
     const unsupportedEdges = graph.edges.filter(
       (edge) => edge.type !== CurriculumEdgeType.PREREQUISITE
     );
@@ -244,6 +268,13 @@ export class CurriculumService {
       threshold: input.threshold ?? policy.threshold,
     });
     const proposalEligible = shouldGenerateRevisionProposal(evidence);
+    if (proposalEligible && this.curriculumDesignAgentClient !== undefined) {
+      await this.curriculumDesignAgentClient.proposeRevision({
+        curriculumId,
+        userId,
+        evidence,
+      });
+    }
     await this.eventPublisher?.publish('curriculum.realignment_evidence.accumulated', {
       curriculumId,
       userId,

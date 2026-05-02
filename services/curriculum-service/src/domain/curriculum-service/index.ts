@@ -1,5 +1,6 @@
 export type * from './curriculum.types.js';
 export type * from './curriculum.repository.js';
+export type * from './external-ports.js';
 export * from './curriculum.service.js';
 export * from './dag.js';
 export * from './frontier.js';

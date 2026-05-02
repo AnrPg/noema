@@ -18,6 +18,7 @@ export interface CurriculumServiceConfig {
     schedulerServiceUrl: string;
     knowledgeGraphServiceUrl: string;
     pedagogyGuardianServiceUrl: string;
+    serviceToken: string | undefined;
   };
 }
 
@@ -43,6 +44,7 @@ export function loadConfig(): CurriculumServiceConfig {
         process.env['KNOWLEDGE_GRAPH_SERVICE_URL'] ?? 'http://localhost:3004',
       pedagogyGuardianServiceUrl:
         process.env['PEDAGOGY_GUARDIAN_SERVICE_URL'] ?? 'http://localhost:3016',
+      serviceToken: process.env['SERVICE_AUTH_TOKEN'],
     },
   };
 }

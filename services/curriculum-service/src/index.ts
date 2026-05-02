@@ -10,7 +10,12 @@ import { loadConfig } from './config/index.js';
 import { CurriculumService } from './domain/curriculum-service/curriculum.service.js';
 import { PrismaCurriculumRepository } from './infrastructure/database/prisma-curriculum.repository.js';
 import { RedisCurriculumEventPublisher } from './infrastructure/events/redis-event-publisher.js';
-import { HttpSchedulerClient } from './infrastructure/external/http-clients.js';
+import {
+  HttpCurriculumDesignAgentClient,
+  HttpKnowledgeGraphClient,
+  HttpPedagogyGuardianClient,
+  HttpSchedulerClient,
+} from './infrastructure/external/http-clients.js';
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -28,9 +33,31 @@ async function bootstrap(): Promise<void> {
   await app.register(cors, { origin: true, credentials: true });
 
   const repository = new PrismaCurriculumRepository(prisma as never);
-  const schedulerClient = new HttpSchedulerClient(config.external.schedulerServiceUrl);
+  const schedulerClient = new HttpSchedulerClient({
+    baseUrl: config.external.schedulerServiceUrl,
+    serviceToken: config.external.serviceToken,
+  });
+  const knowledgeGraphClient = new HttpKnowledgeGraphClient({
+    baseUrl: config.external.knowledgeGraphServiceUrl,
+    serviceToken: config.external.serviceToken,
+  });
+  const guardianClient = new HttpPedagogyGuardianClient({
+    baseUrl: config.external.pedagogyGuardianServiceUrl,
+    serviceToken: config.external.serviceToken,
+  });
+  const curriculumDesignAgentClient = new HttpCurriculumDesignAgentClient({
+    baseUrl: config.external.curriculumAgentUrl,
+    serviceToken: config.external.serviceToken,
+  });
   const eventPublisher = new RedisCurriculumEventPublisher(redis, 'curriculum-service', logger);
-  const curriculumService = new CurriculumService(repository, schedulerClient, eventPublisher);
+  const curriculumService = new CurriculumService(
+    repository,
+    schedulerClient,
+    eventPublisher,
+    knowledgeGraphClient,
+    guardianClient,
+    curriculumDesignAgentClient
+  );
 
   registerHealthRoutes(app as unknown as FastifyInstance, prisma, redis);
   registerCurriculumRoutes(app as unknown as FastifyInstance, curriculumService);
