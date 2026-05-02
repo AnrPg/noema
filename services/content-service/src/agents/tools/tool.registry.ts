@@ -22,12 +22,18 @@ import {
   createExecuteCardImportHandler,
   createGetCardByIdHandler,
   createGetCardHistoryHandler,
+  createGetCardLineageHandler,
   createGetCardStatsHandler,
+  createGetCoverageHandler,
   createPreviewCardImportHandler,
   createQueryCardsHandler,
   createRecoverBatchHandler,
+  createRequestGenerationHandler,
   createRestoreCardHandler,
   createRollbackBatchHandler,
+  createSuggestCardMetadataHandler,
+  createSuggestCardVariantsHandler,
+  createTransformCardHandler,
   createUpdateCardHandler,
   createUpdateCardNodeLinksHandler,
   createValidateCardContentHandler,
@@ -417,6 +423,13 @@ const EXPECTED_CONTENT_TOOL_NAMES = [
   'restore-card',
   'get-card-history',
   'get-card-stats',
+  'suggest-card-metadata',
+  'suggest-card-variants',
+  'gap-fill-concepts',
+  'request-generation',
+  'transform-card',
+  'get-card-lineage',
+  'get-coverage',
 ] as const;
 
 /**
@@ -507,6 +520,25 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
     createGetCardHistoryHandler(contentService)
   );
   registry.register(requireDefinition('get-card-stats'), createGetCardStatsHandler(contentService));
+  registry.register(
+    requireDefinition('suggest-card-metadata'),
+    createSuggestCardMetadataHandler()
+  );
+  registry.register(
+    requireDefinition('suggest-card-variants'),
+    createSuggestCardVariantsHandler()
+  );
+  registry.register(requireDefinition('gap-fill-concepts'), createGetCoverageHandler(contentService));
+  registry.register(
+    requireDefinition('request-generation'),
+    createRequestGenerationHandler(contentService)
+  );
+  registry.register(requireDefinition('transform-card'), createTransformCardHandler(contentService));
+  registry.register(
+    requireDefinition('get-card-lineage'),
+    createGetCardLineageHandler(contentService)
+  );
+  registry.register(requireDefinition('get-coverage'), createGetCoverageHandler(contentService));
 
   return registry;
 }

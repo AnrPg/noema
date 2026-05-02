@@ -22,13 +22,20 @@ import type {
 } from '../../domain/content-service/content.repository.js';
 import type {
   IBatchCreateResult,
+  IActivityPayloadCandidates,
+  IActivityPayloadCandidatesInput,
   ICard,
+  ICardLineage,
   ICardStats,
   ICardSummary,
   IChangeCardStateInput,
+  IConceptCardCoverage,
+  IContentGenerationJob,
+  ICreateContentGenerationJobInput,
   ICreateCardInput,
   ICursorPaginatedResponse,
   IDeckQuery,
+  IGeneratedActivityVariant,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import type { RedisCacheProvider } from './redis-cache.provider.js';
@@ -102,6 +109,32 @@ export class CachedContentRepository implements IContentRepository {
     return this.inner.findByContentHashes(userId, contentHashes);
   }
 
+  async queryActivityPayloadCandidates(
+    input: Required<IActivityPayloadCandidatesInput>,
+    userId: UserId
+  ): Promise<IActivityPayloadCandidates> {
+    // Generated variants are TTL-bound and can be created without a card write,
+    // so this read intentionally avoids the card-query cache.
+    return this.inner.queryActivityPayloadCandidates(input, userId);
+  }
+
+  async getLineage(id: CardId, userId: UserId): Promise<ICardLineage> {
+    return this.inner.getLineage(id, userId);
+  }
+
+  async getCoverageForConcept(
+    conceptId: string,
+    userId: UserId
+  ): Promise<IConceptCardCoverage | null> {
+    return this.inner.getCoverageForConcept(conceptId, userId);
+  }
+
+  async refreshCoverage(userId: UserId, conceptIds: string[]): Promise<IConceptCardCoverage[]> {
+    const coverage = await this.inner.refreshCoverage(userId, conceptIds);
+    await this.invalidateForUser(userId);
+    return coverage;
+  }
+
   // ============================================================================
   // Writes (Delegate + Invalidate)
   // ============================================================================
@@ -114,6 +147,46 @@ export class CachedContentRepository implements IContentRepository {
     return card;
   }
 
+  async createGenerationJob(
+    input: ICreateContentGenerationJobInput & { id: string; userId: UserId }
+  ): Promise<IContentGenerationJob> {
+    return this.inner.createGenerationJob(input);
+  }
+
+  async updateGenerationJob(
+    id: string,
+    patch: Partial<
+      Pick<
+        IContentGenerationJob,
+        | 'status'
+        | 'resultPayload'
+        | 'createdCardIds'
+        | 'rejectedDrafts'
+        | 'errorMessage'
+        | 'agentRunId'
+      >
+    >
+  ): Promise<IContentGenerationJob> {
+    const job = await this.inner.updateGenerationJob(id, patch);
+    await this.invalidateForUser(job.userId);
+    return job;
+  }
+
+  async findGenerationJobById(
+    id: string,
+    userId: UserId
+  ): Promise<IContentGenerationJob | null> {
+    return this.inner.findGenerationJobById(id, userId);
+  }
+
+  async listGenerationJobs(
+    userId: UserId,
+    status?: string,
+    limit?: number
+  ): Promise<IContentGenerationJob[]> {
+    return this.inner.listGenerationJobs(userId, status, limit);
+  }
+
   async createBatch(
     inputs: (ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string })[]
   ): Promise<IBatchCreateResult> {
@@ -121,6 +194,12 @@ export class CachedContentRepository implements IContentRepository {
     const userIds = new Set(inputs.map((i) => i.userId));
     await Promise.all([...userIds].map((uid) => this.invalidateForUser(uid)));
     return result;
+  }
+
+  async createGeneratedActivityVariant(
+    input: Omit<IGeneratedActivityVariant, 'createdAt' | 'hitCount'>
+  ): Promise<IGeneratedActivityVariant> {
+    return this.inner.createGeneratedActivityVariant(input);
   }
 
   async update(

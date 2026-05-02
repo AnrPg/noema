@@ -6,25 +6,44 @@
 
 import type {
   CardId,
+  CardOriginMode,
+  CardReviewState,
   CardState,
+  CardTransformKind,
   CardType,
+  ConceptId,
+  ContentGenerationJobId,
+  ContentGenerationJobStatus,
   DifficultyLevel,
+  EligibilityGroup,
+  EpistemicMode,
   EventSource,
+  GeneratedVariantId,
   IPaginatedResponse,
   JsonValue,
   NodeId,
   RemediationCardType,
   StudyMode,
+  TemplateId,
+  TransformationType,
   UserId,
 } from '@noema/types';
 import { Prisma } from '../../../generated/prisma/index.js';
 import type {
   Card as PrismaCard,
   CardState as PrismaCardState,
+  CardOriginMode as PrismaCardOriginMode,
+  CardReviewState as PrismaCardReviewState,
+  CardTransformKind as PrismaCardTransformKind,
   CardType as PrismaCardType,
+  ContentGenerationJobStatus as PrismaContentGenerationJobStatus,
   PrismaClient,
   DifficultyLevel as PrismaDifficultyLevel,
   EventSource as PrismaEventSource,
+  GeneratedActivityVariant as PrismaGeneratedActivityVariant,
+  StudyMode as PrismaStudyMode,
+  Template as PrismaTemplate,
+  TransformationType as PrismaTransformationType,
 } from '../../../generated/prisma/index.js';
 import type {
   IBatchSummary,
@@ -37,14 +56,24 @@ import {
 import { generatePreview } from '../../domain/content-service/value-objects/content.value-objects.js';
 import type {
   IBatchCreateResult,
+  IActivityPayloadCandidates,
+  IActivityPayloadCandidatesInput,
   ICard,
   ICardContent,
+  ICardLineage,
+  ICardPayloadCandidate,
   ICardStats,
   ICardSummary,
   IChangeCardStateInput,
+  IConceptCardCoverage,
+  IContentGenerationJob,
+  ICreateContentGenerationJobInput,
   ICreateCardInput,
   ICursorPaginatedResponse,
   IDeckQuery,
+  IGeneratedActivityVariant,
+  IGeneratedVariantPayloadCandidate,
+  ITemplatePayloadCandidate,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import { decodeCursor, encodeCursor } from '../../utils/cursor.js';
@@ -65,8 +94,18 @@ interface IRawCardRow {
   difficulty: string;
   content: unknown;
   knowledge_node_ids: string[];
+  anchored_ckg_node_ids: string[];
+  anchored_pkg_node_ids: string[];
+  compatible_transformations: string[];
+  default_eligibility_groups: string[];
+  supported_study_modes: string[];
   tags: string[];
   source: string;
+  origin_mode: string;
+  review_state: string;
+  source_document_ids: string[];
+  sources: unknown;
+  factuality_score: number | null;
   metadata: unknown;
   content_hash: string | null;
   created_at: Date | string;
@@ -85,47 +124,27 @@ interface IRawCardRow {
 export class PrismaContentRepository implements IContentRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  private mergeMetadata(
-    metadata: Record<string, JsonValue> | undefined,
-    supportedStudyModes: StudyMode[] | undefined
-  ): Prisma.JsonObject {
-    const nextMetadata = { ...(metadata ?? {}) };
-
-    if (supportedStudyModes !== undefined) {
-      nextMetadata['supportedStudyModes'] = supportedStudyModes;
-    }
-
-    return nextMetadata as unknown as Prisma.JsonObject;
+  private toJsonObject(metadata: Record<string, JsonValue> | undefined): Prisma.JsonObject {
+    return { ...(metadata ?? {}) } as unknown as Prisma.JsonObject;
   }
 
-  private extractSupportedStudyModes(metadata: unknown): StudyMode[] | undefined {
+  private difficultyBucketToDifficulty(bucket: number): PrismaDifficultyLevel {
+    const levels: PrismaDifficultyLevel[] = [
+      'BEGINNER',
+      'ELEMENTARY',
+      'INTERMEDIATE',
+      'ADVANCED',
+      'EXPERT',
+    ];
+    return levels[bucket] ?? 'INTERMEDIATE';
+  }
+
+  private metadataStringArray(metadata: unknown, key: string): string[] {
     if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
-      return undefined;
+      return [];
     }
-
-    const value = (metadata as Record<string, unknown>)['supportedStudyModes'];
-    if (!Array.isArray(value)) {
-      return undefined;
-    }
-
-    const supportedStudyModes = value.filter(
-      (entry): entry is StudyMode => entry === 'language_learning' || entry === 'knowledge_gaining'
-    );
-
-    return supportedStudyModes.length > 0 ? supportedStudyModes : undefined;
-  }
-
-  private buildSupportedStudyModesMetadataFilter(
-    supportedStudyModes: StudyMode[] | undefined
-  ): Prisma.JsonFilter<'Card'> | undefined {
-    if (supportedStudyModes === undefined || supportedStudyModes.length === 0) {
-      return undefined;
-    }
-
-    return {
-      path: ['supportedStudyModes'],
-      array_contains: supportedStudyModes,
-    };
+    const value = (metadata as Record<string, unknown>)[key];
+    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
   }
 
   // ============================================================================
@@ -244,9 +263,285 @@ export class PrismaContentRepository implements IContentRepository {
     return cards.map((c) => this.toDomain(c));
   }
 
+  async queryActivityPayloadCandidates(
+    input: Required<IActivityPayloadCandidatesInput>,
+    userId: UserId
+  ): Promise<IActivityPayloadCandidates> {
+    const difficulty = this.difficultyBucketToDifficulty(input.difficultyBucket);
+    const dbTransformation = this.toDbTransformation(input.transformationType);
+    const dbStudyMode = this.toDbStudyMode(input.studyMode);
+
+    const [cards, templates, generatedVariants] = await Promise.all([
+      this.prisma.card.findMany({
+        where: {
+          userId,
+          state: 'ACTIVE',
+          deletedAt: null,
+          difficulty,
+          knowledgeNodeIds: { has: input.conceptId },
+          compatibleTransformations: { has: dbTransformation },
+          supportedStudyModes: { has: dbStudyMode },
+          OR: [
+            { defaultEligibilityGroups: { isEmpty: true } },
+            { defaultEligibilityGroups: { has: input.eligibilityGroup } },
+          ],
+        },
+        orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+        take: input.limit,
+      }),
+      input.includeTemplates
+        ? this.prisma.template.findMany({
+            where: {
+              userId,
+              deletedAt: null,
+              difficulty,
+              knowledgeNodeIds: { has: input.conceptId },
+            },
+            orderBy: [{ usageCount: 'desc' }, { updatedAt: 'desc' }],
+            take: input.limit * 2,
+          })
+        : Promise.resolve([]),
+      input.includeGeneratedVariants
+        ? this.prisma.generatedActivityVariant.findMany({
+            where: {
+              conceptId: input.conceptId,
+              studyMode: dbStudyMode,
+              transformationType: dbTransformation,
+              epistemicMode: input.epistemicMode,
+              difficultyBucket: input.difficultyBucket,
+              ttlAt: { gt: new Date() },
+            },
+            orderBy: [{ hitCount: 'desc' }, { createdAt: 'desc' }],
+            take: input.limit,
+          })
+        : Promise.resolve([]),
+    ]);
+
+    if (generatedVariants.length > 0) {
+      await this.prisma.generatedActivityVariant.updateMany({
+        where: { id: { in: generatedVariants.map((variant) => variant.id) } },
+        data: { hitCount: { increment: 1 } },
+      });
+    }
+
+    return {
+      cards: cards.map((card) => this.toCardPayloadCandidate(card)),
+      templates: templates
+        .filter((template) => this.templateMatchesCandidate(template, input))
+        .slice(0, input.limit)
+        .map((template) => this.toTemplatePayloadCandidate(template)),
+      generatedVariants: generatedVariants.map((variant) =>
+        this.toGeneratedVariantPayloadCandidate(variant)
+      ),
+    };
+  }
+
+  async createGeneratedActivityVariant(
+    input: Omit<IGeneratedActivityVariant, 'createdAt' | 'hitCount'>
+  ): Promise<IGeneratedActivityVariant> {
+    const variant = await this.prisma.generatedActivityVariant.create({
+      data: {
+        id: input.id,
+        conceptId: input.conceptId,
+        studyMode: this.toDbStudyMode(input.studyMode),
+        transformationType: this.toDbTransformation(input.transformationType),
+        epistemicMode: input.epistemicMode,
+        difficultyBucket: input.difficultyBucket,
+        sourceCardIds: input.sourceCardIds as string[],
+        prompt: input.prompt,
+        renderPayload: input.renderPayload as unknown as Prisma.JsonObject,
+        expectedResponseType: input.expectedResponseType,
+        responseSchema: input.responseSchema as unknown as Prisma.JsonObject,
+        variantSeed: input.variantSeed,
+        generatorMetadata: input.generatorMetadata as unknown as Prisma.JsonObject,
+        guardianValidationId: input.guardianValidationId,
+        ttlAt: new Date(input.ttlAt),
+      },
+    });
+
+    return this.toGeneratedActivityVariant(variant);
+  }
+
+  async getLineage(id: CardId, userId: UserId): Promise<ICardLineage> {
+    const card = await this.prisma.card.findFirst({ where: { id, userId, deletedAt: null } });
+    if (!card) throw new CardNotFoundError(id);
+
+    const variants = await this.prisma.card.findMany({
+      where: { parentCardId: id, userId, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const ancestors: CardId[] = [];
+    let parentId = card.parentCardId;
+    while (parentId !== null) {
+      const parent = await this.prisma.card.findFirst({
+        where: { id: parentId, userId, deletedAt: null },
+      });
+      if (parent === null) break;
+      ancestors.unshift(parent.id as CardId);
+      parentId = parent.parentCardId;
+    }
+
+    return {
+      cardId: card.id as CardId,
+      parentCardId: (card.parentCardId as CardId | null) ?? null,
+      transformationKind: card.transformationKind !== null
+        ? this.fromDbTransformKind(card.transformationKind)
+        : null,
+      ancestors,
+      variants: variants.map((variant) => variant.id as CardId),
+    };
+  }
+
+  async getCoverageForConcept(
+    conceptId: string,
+    userId: UserId
+  ): Promise<IConceptCardCoverage | null> {
+    const row = await this.prisma.conceptCardCoverage.findUnique({
+      where: { userId_conceptId: { userId, conceptId } },
+    });
+    return row ? this.toConceptCoverage(row) : null;
+  }
+
+  async refreshCoverage(userId: UserId, conceptIds: string[]): Promise<IConceptCardCoverage[]> {
+    const uniqueConceptIds = [...new Set(conceptIds)].filter(Boolean);
+    const updated: IConceptCardCoverage[] = [];
+
+    for (const conceptId of uniqueConceptIds) {
+      const cards = await this.prisma.card.findMany({
+        where: {
+          userId,
+          deletedAt: null,
+          anchoredCkgNodeIds: { has: conceptId },
+        },
+        select: { cardType: true, reviewState: true, state: true },
+      });
+      const activeCards = cards.filter(
+        (card) => card.state === 'ACTIVE' && card.reviewState === 'ACTIVE'
+      );
+      const pendingReviewCount = cards.filter(
+        (card) => card.reviewState === 'PENDING_REVIEW'
+      ).length;
+      const metadataIncompleteCount = cards.filter(
+        (card) => card.reviewState === 'METADATA_INCOMPLETE'
+      ).length;
+      const coverage = await this.prisma.conceptCardCoverage.upsert({
+        where: { userId_conceptId: { userId, conceptId } },
+        create: {
+          id: this.coverageId(userId, conceptId),
+          userId,
+          conceptId,
+          activeCardCount: activeCards.length,
+          distinctActiveCardTypes: new Set(activeCards.map((card) => card.cardType)).size,
+          pendingReviewCount,
+          metadataIncompleteCount,
+        },
+        update: {
+          activeCardCount: activeCards.length,
+          distinctActiveCardTypes: new Set(activeCards.map((card) => card.cardType)).size,
+          pendingReviewCount,
+          metadataIncompleteCount,
+        },
+      });
+      updated.push(this.toConceptCoverage(coverage));
+    }
+
+    return updated;
+  }
+
   // ============================================================================
   // Write Operations
   // ============================================================================
+
+  async createGenerationJob(
+    input: ICreateContentGenerationJobInput & { id: string; userId: UserId }
+  ): Promise<IContentGenerationJob> {
+    const job = await this.prisma.contentGenerationJob.create({
+      data: {
+        id: input.id,
+        userId: input.userId,
+        status: this.toDbJobStatus('requested'),
+        mode: this.toDbOriginMode(input.mode),
+        conceptIds: input.conceptIds as string[],
+        documentIds: input.documentIds ?? [],
+        requestedCardTypes: (input.desiredCardTypes ?? []) as string[],
+        requestPayload: {
+          curriculumContext: input.curriculumContext ?? {},
+          studentContext: input.studentContext ?? {},
+          varietyMandate: input.varietyMandate ?? {},
+          budget: input.budget ?? {},
+        } as Prisma.JsonObject,
+      },
+    });
+    return this.toGenerationJob(job);
+  }
+
+  async updateGenerationJob(
+    id: string,
+    patch: Partial<
+      Pick<
+        IContentGenerationJob,
+        | 'status'
+        | 'resultPayload'
+        | 'createdCardIds'
+        | 'rejectedDrafts'
+        | 'errorMessage'
+        | 'agentRunId'
+      >
+    >
+  ): Promise<IContentGenerationJob> {
+    const data: Prisma.ContentGenerationJobUpdateInput = {};
+    if (patch.status !== undefined) {
+      data.status = this.toDbJobStatus(patch.status);
+    }
+    if (patch.resultPayload !== undefined) {
+      data.resultPayload = patch.resultPayload as Prisma.JsonObject;
+    }
+    if (patch.createdCardIds !== undefined) {
+      data.createdCardIds = patch.createdCardIds as string[];
+    }
+    if (patch.rejectedDrafts !== undefined) {
+      data.rejectedDrafts = patch.rejectedDrafts as unknown as Prisma.JsonArray;
+    }
+    if (patch.errorMessage !== undefined) {
+      data.errorMessage = patch.errorMessage;
+    }
+    if (patch.agentRunId !== undefined) {
+      data.agentRunId = patch.agentRunId;
+    }
+
+    const job = await this.prisma.contentGenerationJob.update({
+      where: { id },
+      data,
+    });
+    return this.toGenerationJob(job);
+  }
+
+  async findGenerationJobById(
+    id: string,
+    userId: UserId
+  ): Promise<IContentGenerationJob | null> {
+    const job = await this.prisma.contentGenerationJob.findFirst({ where: { id, userId } });
+    return job ? this.toGenerationJob(job) : null;
+  }
+
+  async listGenerationJobs(
+    userId: UserId,
+    status?: string,
+    limit = 50
+  ): Promise<IContentGenerationJob[]> {
+    const where: Prisma.ContentGenerationJobWhereInput = { userId };
+    if (status !== undefined && status !== '') {
+      where.status = this.toDbJobStatus(status as ContentGenerationJobStatus);
+    }
+
+    const jobs = await this.prisma.contentGenerationJob.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 100),
+    });
+    return jobs.map((job) => this.toGenerationJob(job));
+  }
 
   async create(
     input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }
@@ -260,9 +555,32 @@ export class PrismaContentRepository implements IContentRepository {
         difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
         content: input.content as unknown as Prisma.JsonObject,
         knowledgeNodeIds: input.knowledgeNodeIds as string[],
+        anchoredCkgNodeIds: (input.anchoredCkgNodeIds ?? []) as string[],
+        anchoredPkgNodeIds: (input.anchoredPkgNodeIds ?? input.knowledgeNodeIds ?? []) as string[],
+        compatibleTransformations: (input.compatibleTransformations ?? []).map((t) =>
+          this.toDbTransformation(t)
+        ),
+        defaultEligibilityGroups: input.defaultEligibilityGroups ?? [],
+        supportedStudyModes: (input.supportedStudyModes ?? ['knowledge_gaining']).map((mode) =>
+          this.toDbStudyMode(mode)
+        ),
         tags: input.tags ?? [],
         source: this.toDbSource(input.source ?? 'user'),
-        metadata: this.mergeMetadata(input.metadata, input.supportedStudyModes),
+        originMode: this.toDbOriginMode(input.originMode ?? 'authored'),
+        originAgentRunId: input.originAgentRunId ?? null,
+        authorUserId: input.authorUserId ?? input.userId,
+        sourceDocumentIds: input.sourceDocumentIds ?? [],
+        sources: (input.sources ?? []) as unknown as Prisma.JsonArray,
+        factualityScore: input.factualityScore ?? null,
+        reviewState: this.toDbReviewState(input.reviewState ?? 'metadata_incomplete'),
+        parentCardId: input.parentCardId ?? null,
+        transformationKind: input.transformationKind !== undefined
+          ? this.toDbTransformKind(input.transformationKind)
+          : null,
+        transformationAgentRunId: input.transformationAgentRunId ?? null,
+        generationJobId: input.generationJobId ?? null,
+        guardianValidationId: input.guardianValidationId ?? null,
+        metadata: this.toJsonObject(input.metadata),
         contentHash: input.contentHash ?? null,
         createdBy: input.userId,
         version: 1,
@@ -297,9 +615,32 @@ export class PrismaContentRepository implements IContentRepository {
               difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
               content: input.content as unknown as Prisma.JsonObject,
               knowledgeNodeIds: input.knowledgeNodeIds as string[],
+              anchoredCkgNodeIds: (input.anchoredCkgNodeIds ?? []) as string[],
+              anchoredPkgNodeIds: (input.anchoredPkgNodeIds ?? input.knowledgeNodeIds ?? []) as string[],
+              compatibleTransformations: (input.compatibleTransformations ?? []).map((t) =>
+                this.toDbTransformation(t)
+              ),
+              defaultEligibilityGroups: input.defaultEligibilityGroups ?? [],
+              supportedStudyModes: (input.supportedStudyModes ?? ['knowledge_gaining']).map(
+                (mode) => this.toDbStudyMode(mode)
+              ),
               tags: input.tags ?? [],
               source: this.toDbSource(input.source ?? 'user'),
-              metadata: this.mergeMetadata(input.metadata, input.supportedStudyModes),
+              originMode: this.toDbOriginMode(input.originMode ?? 'authored'),
+              originAgentRunId: input.originAgentRunId ?? null,
+              authorUserId: input.authorUserId ?? input.userId,
+              sourceDocumentIds: input.sourceDocumentIds ?? [],
+              sources: (input.sources ?? []) as unknown as Prisma.JsonArray,
+              factualityScore: input.factualityScore ?? null,
+              reviewState: this.toDbReviewState(input.reviewState ?? 'metadata_incomplete'),
+              parentCardId: input.parentCardId ?? null,
+              transformationKind: input.transformationKind !== undefined
+                ? this.toDbTransformKind(input.transformationKind)
+                : null,
+              transformationAgentRunId: input.transformationAgentRunId ?? null,
+              generationJobId: input.generationJobId ?? null,
+              guardianValidationId: input.guardianValidationId ?? null,
+              metadata: this.toJsonObject(input.metadata),
               contentHash: input.contentHash ?? null,
               createdBy: input.userId,
               version: 1,
@@ -339,17 +680,14 @@ export class PrismaContentRepository implements IContentRepository {
   ): Promise<ICard> {
     // For metadata merge we need the current record
     let mergedMetadata: Prisma.JsonObject | undefined;
-    if (input.metadata !== undefined || input.supportedStudyModes !== undefined) {
+    if (input.metadata !== undefined) {
       const existing = await this.prisma.card.findUnique({ where: { id } });
       if (existing) {
         const currentMeta = existing.metadata as Record<string, JsonValue>;
-        mergedMetadata = this.mergeMetadata(
-          {
-            ...currentMeta,
-            ...(input.metadata ?? {}),
-          },
-          input.supportedStudyModes
-        );
+        mergedMetadata = this.toJsonObject({
+          ...currentMeta,
+          ...(input.metadata ?? {}),
+        });
       }
     }
 
@@ -373,8 +711,31 @@ export class PrismaContentRepository implements IContentRepository {
     if (input.knowledgeNodeIds !== undefined) {
       data.knowledgeNodeIds = input.knowledgeNodeIds as string[];
     }
+    if (input.anchoredCkgNodeIds !== undefined) {
+      data.anchoredCkgNodeIds = input.anchoredCkgNodeIds as string[];
+    }
+    if (input.anchoredPkgNodeIds !== undefined) {
+      data.anchoredPkgNodeIds = input.anchoredPkgNodeIds as string[];
+    }
+    if (input.compatibleTransformations !== undefined) {
+      data.compatibleTransformations = input.compatibleTransformations.map((t) =>
+        this.toDbTransformation(t)
+      );
+    }
+    if (input.defaultEligibilityGroups !== undefined) {
+      data.defaultEligibilityGroups = input.defaultEligibilityGroups;
+    }
+    if (input.supportedStudyModes !== undefined) {
+      data.supportedStudyModes = input.supportedStudyModes.map((mode) => this.toDbStudyMode(mode));
+    }
     if (input.tags !== undefined) {
       data.tags = input.tags;
+    }
+    if (input.reviewState !== undefined) {
+      data.reviewState = this.toDbReviewState(input.reviewState);
+    }
+    if (input.guardianValidationId !== undefined) {
+      data.guardianValidationId = input.guardianValidationId;
     }
     if (mergedMetadata !== undefined) {
       data.metadata = mergedMetadata;
@@ -811,9 +1172,21 @@ export class PrismaContentRepository implements IContentRepository {
       params.push(dbDiffs);
       paramIdx++;
     }
+    if (query.compatibleTransformations && query.compatibleTransformations.length > 0) {
+      const dbTransformations = query.compatibleTransformations.map((t) => t.toUpperCase());
+      conditions.push(`"compatible_transformations" && $${paramIdx.toString()}::transformation_type[]`);
+      params.push(dbTransformations);
+      paramIdx++;
+    }
+    if (query.defaultEligibilityGroups && query.defaultEligibilityGroups.length > 0) {
+      conditions.push(`"default_eligibility_groups" && $${paramIdx.toString()}::text[]`);
+      params.push(query.defaultEligibilityGroups);
+      paramIdx++;
+    }
     if (query.supportedStudyModes && query.supportedStudyModes.length > 0) {
-      conditions.push(`("metadata"->'supportedStudyModes') @> $${paramIdx.toString()}::jsonb`);
-      params.push(JSON.stringify(query.supportedStudyModes));
+      const dbStudyModes = query.supportedStudyModes.map((mode) => mode.toUpperCase());
+      conditions.push(`"supported_study_modes" && $${paramIdx.toString()}::study_mode[]`);
+      params.push(dbStudyModes);
       paramIdx++;
     }
     if (query.tags && query.tags.length > 0) {
@@ -825,6 +1198,35 @@ export class PrismaContentRepository implements IContentRepository {
       const dbSources = query.sources.map((s) => s.toUpperCase());
       conditions.push(`"source"::text = ANY($${paramIdx.toString()}::text[])`);
       params.push(dbSources);
+      paramIdx++;
+    }
+    if (query.reviewStates && query.reviewStates.length > 0) {
+      const dbReviewStates = query.reviewStates.map((state) => state.toUpperCase());
+      conditions.push(`"review_state"::text = ANY($${paramIdx.toString()}::text[])`);
+      params.push(dbReviewStates);
+      paramIdx++;
+    } else {
+      conditions.push(`"review_state" = 'ACTIVE'`);
+    }
+    if (query.originModes && query.originModes.length > 0) {
+      const dbOriginModes = query.originModes.map((mode) => mode.toUpperCase());
+      conditions.push(`"origin_mode"::text = ANY($${paramIdx.toString()}::text[])`);
+      params.push(dbOriginModes);
+      paramIdx++;
+    }
+    if (query.anchoredCkgNodeIds && query.anchoredCkgNodeIds.length > 0) {
+      conditions.push(`"anchored_ckg_node_ids" && $${paramIdx.toString()}::text[]`);
+      params.push(query.anchoredCkgNodeIds);
+      paramIdx++;
+    }
+    if (query.anchoredPkgNodeIds && query.anchoredPkgNodeIds.length > 0) {
+      conditions.push(`"anchored_pkg_node_ids" && $${paramIdx.toString()}::text[]`);
+      params.push(query.anchoredPkgNodeIds);
+      paramIdx++;
+    }
+    if (query.sourceDocumentIds && query.sourceDocumentIds.length > 0) {
+      conditions.push(`"source_document_ids" && $${paramIdx.toString()}::text[]`);
+      params.push(query.sourceDocumentIds);
       paramIdx++;
     }
     if (query.knowledgeNodeIds && query.knowledgeNodeIds.length > 0) {
@@ -921,7 +1323,6 @@ export class PrismaContentRepository implements IContentRepository {
       typeof row.content === 'string' ? JSON.parse(row.content) : row.content
     ) as ICardContent;
     const front = typeof content.front === 'string' ? content.front : '';
-    const supportedStudyModes = this.extractSupportedStudyModes(row.metadata);
 
     return {
       id: row.id as CardId,
@@ -931,9 +1332,17 @@ export class PrismaContentRepository implements IContentRepository {
       difficulty: row.difficulty.toLowerCase() as DifficultyLevel,
       preview: generatePreview(front),
       knowledgeNodeIds: row.knowledge_node_ids as NodeId[],
+      anchoredCkgNodeIds: row.anchored_ckg_node_ids as ConceptId[],
+      anchoredPkgNodeIds: row.anchored_pkg_node_ids as NodeId[],
+      compatibleTransformations: row.compatible_transformations.map((t) =>
+        this.fromDbTransformation(t)
+      ),
+      defaultEligibilityGroups: row.default_eligibility_groups as EligibilityGroup[],
       tags: row.tags,
-      ...(supportedStudyModes !== undefined ? { supportedStudyModes } : {}),
+      supportedStudyModes: row.supported_study_modes.map((mode) => this.fromDbStudyMode(mode)),
       source: row.source.toLowerCase() as EventSource,
+      originMode: this.fromDbOriginMode(row.origin_mode),
+      reviewState: this.fromDbReviewState(row.review_state),
       createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
       updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
       version: row.version,
@@ -1055,11 +1464,18 @@ export class PrismaContentRepository implements IContentRepository {
     if (query.difficulties && query.difficulties.length > 0) {
       where.difficulty = { in: query.difficulties.map((d) => this.toDbDifficulty(d)) };
     }
-    const supportedStudyModesFilter = this.buildSupportedStudyModesMetadataFilter(
-      query.supportedStudyModes
-    );
-    if (supportedStudyModesFilter !== undefined) {
-      where.metadata = supportedStudyModesFilter;
+    if (query.compatibleTransformations && query.compatibleTransformations.length > 0) {
+      where.compatibleTransformations = {
+        hasSome: query.compatibleTransformations.map((t) => this.toDbTransformation(t)),
+      };
+    }
+    if (query.defaultEligibilityGroups && query.defaultEligibilityGroups.length > 0) {
+      where.defaultEligibilityGroups = { hasSome: query.defaultEligibilityGroups };
+    }
+    if (query.supportedStudyModes && query.supportedStudyModes.length > 0) {
+      where.supportedStudyModes = {
+        hasSome: query.supportedStudyModes.map((mode) => this.toDbStudyMode(mode)),
+      };
     }
     if (query.knowledgeNodeIds && query.knowledgeNodeIds.length > 0) {
       const mode = query.knowledgeNodeIdMode ?? 'any';
@@ -1101,6 +1517,23 @@ export class PrismaContentRepository implements IContentRepository {
     }
     if (query.sources && query.sources.length > 0) {
       where.source = { in: query.sources.map((s) => this.toDbSource(s)) };
+    }
+    if (query.originModes && query.originModes.length > 0) {
+      where.originMode = { in: query.originModes.map((mode) => this.toDbOriginMode(mode)) };
+    }
+    if (query.reviewStates && query.reviewStates.length > 0) {
+      where.reviewState = { in: query.reviewStates.map((state) => this.toDbReviewState(state)) };
+    } else {
+      where.reviewState = 'ACTIVE';
+    }
+    if (query.anchoredCkgNodeIds && query.anchoredCkgNodeIds.length > 0) {
+      where.anchoredCkgNodeIds = { hasSome: query.anchoredCkgNodeIds as string[] };
+    }
+    if (query.anchoredPkgNodeIds && query.anchoredPkgNodeIds.length > 0) {
+      where.anchoredPkgNodeIds = { hasSome: query.anchoredPkgNodeIds as string[] };
+    }
+    if (query.sourceDocumentIds && query.sourceDocumentIds.length > 0) {
+      where.sourceDocumentIds = { hasSome: query.sourceDocumentIds };
     }
     // Full-text search is handled by queryWithSearch() via raw SQL.
     // No search filter in the Prisma WHERE clause.
@@ -1149,7 +1582,6 @@ export class PrismaContentRepository implements IContentRepository {
 
   private toDomain(card: PrismaCard): ICard {
     const content = card.content as unknown as ICardContent;
-    const supportedStudyModes = this.extractSupportedStudyModes(card.metadata);
 
     return {
       id: card.id as CardId,
@@ -1159,9 +1591,29 @@ export class PrismaContentRepository implements IContentRepository {
       difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
       content,
       knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
+      anchoredCkgNodeIds: card.anchoredCkgNodeIds as ConceptId[],
+      anchoredPkgNodeIds: card.anchoredPkgNodeIds as NodeId[],
+      compatibleTransformations: card.compatibleTransformations.map((t) =>
+        this.fromDbTransformation(t)
+      ),
+      defaultEligibilityGroups: card.defaultEligibilityGroups as EligibilityGroup[],
       tags: card.tags,
-      ...(supportedStudyModes !== undefined ? { supportedStudyModes } : {}),
+      supportedStudyModes: card.supportedStudyModes.map((mode) => this.fromDbStudyMode(mode)),
       source: card.source.toLowerCase() as EventSource,
+      originMode: this.fromDbOriginMode(card.originMode),
+      originAgentRunId: card.originAgentRunId ?? null,
+      authorUserId: (card.authorUserId as UserId | null) ?? null,
+      sourceDocumentIds: card.sourceDocumentIds,
+      sources: card.sources as ICard['sources'],
+      factualityScore: card.factualityScore ?? null,
+      reviewState: this.fromDbReviewState(card.reviewState),
+      parentCardId: (card.parentCardId as CardId | null) ?? null,
+      transformationKind: card.transformationKind !== null
+        ? this.fromDbTransformKind(card.transformationKind)
+        : null,
+      transformationAgentRunId: card.transformationAgentRunId ?? null,
+      generationJobId: (card.generationJobId as ContentGenerationJobId | null) ?? null,
+      guardianValidationId: card.guardianValidationId ?? null,
       metadata: card.metadata as Record<string, JsonValue>,
       contentHash: card.contentHash ?? null,
       createdAt: card.createdAt.toISOString(),
@@ -1176,7 +1628,6 @@ export class PrismaContentRepository implements IContentRepository {
   private toSummary(card: PrismaCard): ICardSummary {
     const content = card.content as unknown as ICardContent;
     const front = typeof content.front === 'string' ? content.front : '';
-    const supportedStudyModes = this.extractSupportedStudyModes(card.metadata);
 
     return {
       id: card.id as CardId,
@@ -1186,13 +1637,127 @@ export class PrismaContentRepository implements IContentRepository {
       difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
       preview: generatePreview(front),
       knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
+      anchoredCkgNodeIds: card.anchoredCkgNodeIds as ConceptId[],
+      anchoredPkgNodeIds: card.anchoredPkgNodeIds as NodeId[],
+      compatibleTransformations: card.compatibleTransformations.map((t) =>
+        this.fromDbTransformation(t)
+      ),
+      defaultEligibilityGroups: card.defaultEligibilityGroups as EligibilityGroup[],
       tags: card.tags,
-      ...(supportedStudyModes !== undefined ? { supportedStudyModes } : {}),
+      supportedStudyModes: card.supportedStudyModes.map((mode) => this.fromDbStudyMode(mode)),
       source: card.source.toLowerCase() as EventSource,
+      originMode: this.fromDbOriginMode(card.originMode),
+      reviewState: this.fromDbReviewState(card.reviewState),
       createdAt: card.createdAt.toISOString(),
       updatedAt: card.updatedAt.toISOString(),
       version: card.version,
     };
+  }
+
+  private toCardPayloadCandidate(card: PrismaCard): ICardPayloadCandidate {
+    const content = card.content as unknown as ICardContent;
+    const front = typeof content.front === 'string' ? content.front : '';
+
+    return {
+      sourceType: 'card' as const,
+      cardId: card.id as CardId,
+      cardType: this.fromDbCardType(card.cardType) as CardType | RemediationCardType,
+      difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
+      prompt: front,
+      renderPayload: content as Record<string, JsonValue>,
+      expectedResponseType: this.expectedResponseTypeForCard(card.cardType),
+      compatibleTransformations: card.compatibleTransformations.map((t) =>
+        this.fromDbTransformation(t)
+      ),
+      defaultEligibilityGroups: card.defaultEligibilityGroups as EligibilityGroup[],
+      supportedStudyModes: card.supportedStudyModes.map((mode) => this.fromDbStudyMode(mode)),
+    };
+  }
+
+  private templateMatchesCandidate(
+    template: PrismaTemplate,
+    input: Required<IActivityPayloadCandidatesInput>
+  ): boolean {
+    const compatibleTransformations = this.metadataStringArray(
+      template.metadata,
+      'compatibleTransformations'
+    );
+    const eligibilityGroups = this.metadataStringArray(template.metadata, 'defaultEligibilityGroups');
+    const supportedStudyModes = this.metadataStringArray(template.metadata, 'supportedStudyModes');
+
+    return (
+      (compatibleTransformations.length === 0 ||
+        compatibleTransformations.includes(input.transformationType)) &&
+      (eligibilityGroups.length === 0 || eligibilityGroups.includes(input.eligibilityGroup)) &&
+      (supportedStudyModes.length === 0 || supportedStudyModes.includes(input.studyMode))
+    );
+  }
+
+  private toTemplatePayloadCandidate(template: PrismaTemplate): ITemplatePayloadCandidate {
+    const content = template.content as unknown as ICardContent;
+    const front = typeof content.front === 'string' ? content.front : '';
+
+    return {
+      sourceType: 'template',
+      templateId: template.id as TemplateId,
+      cardType: this.fromDbCardType(template.cardType) as CardType | RemediationCardType,
+      difficulty: template.difficulty.toLowerCase() as DifficultyLevel,
+      prompt: front,
+      renderPayload: content as Record<string, JsonValue>,
+      expectedResponseType: this.expectedResponseTypeForCard(template.cardType),
+    };
+  }
+
+  private toGeneratedActivityVariant(
+    variant: PrismaGeneratedActivityVariant
+  ): IGeneratedActivityVariant {
+    return {
+      id: variant.id as GeneratedVariantId,
+      conceptId: variant.conceptId,
+      studyMode: this.fromDbStudyMode(variant.studyMode),
+      transformationType: this.fromDbTransformation(variant.transformationType),
+      epistemicMode: variant.epistemicMode as EpistemicMode,
+      difficultyBucket: variant.difficultyBucket,
+      sourceCardIds: variant.sourceCardIds as CardId[],
+      prompt: variant.prompt,
+      renderPayload: variant.renderPayload as Record<string, JsonValue>,
+      expectedResponseType: variant.expectedResponseType,
+      responseSchema: variant.responseSchema as Record<string, JsonValue>,
+      variantSeed: variant.variantSeed,
+      generatorMetadata: variant.generatorMetadata as Record<string, JsonValue>,
+      guardianValidationId: variant.guardianValidationId,
+      ttlAt: variant.ttlAt.toISOString(),
+      hitCount: variant.hitCount,
+      createdAt: variant.createdAt.toISOString(),
+    };
+  }
+
+  private toGeneratedVariantPayloadCandidate(
+    variant: PrismaGeneratedActivityVariant
+  ): IGeneratedVariantPayloadCandidate {
+    return {
+      sourceType: 'generated',
+      variantId: variant.id as GeneratedVariantId,
+      prompt: variant.prompt,
+      renderPayload: variant.renderPayload as Record<string, JsonValue>,
+      expectedResponseType: variant.expectedResponseType,
+      responseSchema: variant.responseSchema as Record<string, JsonValue>,
+      variantSeed: variant.variantSeed,
+      hitCount: variant.hitCount + 1,
+      ttlAt: variant.ttlAt.toISOString(),
+    };
+  }
+
+  private expectedResponseTypeForCard(cardType: string): string {
+    switch (this.fromDbCardType(cardType)) {
+      case 'multiple_choice':
+      case 'true_false':
+      case 'matching':
+      case 'ordering':
+        return this.fromDbCardType(cardType);
+      default:
+        return 'free_text';
+    }
   }
 
   // ============================================================================
@@ -1217,5 +1782,108 @@ export class PrismaContentRepository implements IContentRepository {
 
   private toDbSource(source: string): PrismaEventSource {
     return source.toUpperCase() as PrismaEventSource;
+  }
+
+  private toDbOriginMode(mode: string): PrismaCardOriginMode {
+    return mode.toUpperCase() as PrismaCardOriginMode;
+  }
+
+  private fromDbOriginMode(mode: string): CardOriginMode {
+    return mode.toLowerCase() as CardOriginMode;
+  }
+
+  private toDbReviewState(state: string): PrismaCardReviewState {
+    return state.toUpperCase() as PrismaCardReviewState;
+  }
+
+  private fromDbReviewState(state: string): CardReviewState {
+    return state.toLowerCase() as CardReviewState;
+  }
+
+  private toDbTransformKind(kind: string): PrismaCardTransformKind {
+    return kind.toUpperCase() as PrismaCardTransformKind;
+  }
+
+  private fromDbTransformKind(kind: string): CardTransformKind {
+    return kind.toLowerCase() as CardTransformKind;
+  }
+
+  private toDbJobStatus(status: string): PrismaContentGenerationJobStatus {
+    return status.toUpperCase() as PrismaContentGenerationJobStatus;
+  }
+
+  private toDbStudyMode(studyMode: string): PrismaStudyMode {
+    return studyMode.toUpperCase() as PrismaStudyMode;
+  }
+
+  private fromDbStudyMode(studyMode: string): StudyMode {
+    return studyMode.toLowerCase() as StudyMode;
+  }
+
+  private toDbTransformation(transformation: string): PrismaTransformationType {
+    return transformation.toUpperCase() as PrismaTransformationType;
+  }
+
+  private fromDbTransformation(transformation: string): TransformationType {
+    return transformation.toLowerCase() as TransformationType;
+  }
+
+  private toGenerationJob(job: {
+    id: string;
+    userId: string;
+    status: string;
+    mode: string;
+    conceptIds: string[];
+    documentIds: string[];
+    requestedCardTypes: string[];
+    requestPayload: unknown;
+    resultPayload: unknown;
+    createdCardIds: string[];
+    rejectedDrafts: unknown;
+    errorMessage: string | null;
+    agentRunId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): IContentGenerationJob {
+    return {
+      id: job.id as ContentGenerationJobId,
+      userId: job.userId as UserId,
+      status: job.status.toLowerCase() as ContentGenerationJobStatus,
+      mode: this.fromDbOriginMode(job.mode),
+      conceptIds: job.conceptIds as ConceptId[],
+      documentIds: job.documentIds,
+      requestedCardTypes: job.requestedCardTypes as (CardType | RemediationCardType)[],
+      requestPayload: job.requestPayload as Record<string, JsonValue>,
+      resultPayload: job.resultPayload as Record<string, JsonValue>,
+      createdCardIds: job.createdCardIds as CardId[],
+      rejectedDrafts: job.rejectedDrafts as Record<string, JsonValue>[],
+      errorMessage: job.errorMessage,
+      agentRunId: job.agentRunId,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+    };
+  }
+
+  private toConceptCoverage(row: {
+    conceptId: string;
+    activeCardCount: number;
+    distinctActiveCardTypes: number;
+    pendingReviewCount: number;
+    metadataIncompleteCount: number;
+    updatedAt: Date;
+  }): IConceptCardCoverage {
+    return {
+      conceptId: row.conceptId as ConceptId,
+      activeCardCount: row.activeCardCount,
+      distinctActiveCardTypes: row.distinctActiveCardTypes,
+      pendingReviewCount: row.pendingReviewCount,
+      metadataIncompleteCount: row.metadataIncompleteCount,
+      lastUpdatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private coverageId(userId: UserId, conceptId: string): string {
+    const compact = `${userId}_${conceptId}`.replace(/[^a-zA-Z0-9]/g, '');
+    return `cov_${compact.slice(-42)}`;
   }
 }

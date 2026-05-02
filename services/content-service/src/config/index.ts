@@ -48,6 +48,16 @@ export interface IServiceConfig {
     bucket: string;
     presignedUrlExpiry: number;
   };
+  pedagogyGuardian: {
+    enabled: boolean;
+    serviceUrl: string;
+    serviceToken?: string;
+  };
+  contentAgent: {
+    enabled: boolean;
+    serviceUrl: string;
+    serviceToken?: string;
+  };
   rateLimit: {
     /** Global max requests per window */
     max: number;
@@ -181,6 +191,20 @@ export function loadConfig(): IServiceConfig {
       secretKey: optionalEnv('MINIO_SECRET_KEY', 'noema_minio_password'),
       bucket: optionalEnv('MINIO_BUCKET', 'content'),
       presignedUrlExpiry: optionalEnvInt('MINIO_PRESIGNED_EXPIRY', 3600),
+    },
+    pedagogyGuardian: {
+      enabled: optionalEnvBool('PEDAGOGY_GUARDIAN_ENABLED', false),
+      serviceUrl: optionalEnv('PEDAGOGY_GUARDIAN_SERVICE_URL', 'http://localhost:3009'),
+      ...(process.env['PEDAGOGY_GUARDIAN_SERVICE_TOKEN'] !== undefined
+        ? { serviceToken: process.env['PEDAGOGY_GUARDIAN_SERVICE_TOKEN'] }
+        : {}),
+    },
+    contentAgent: {
+      enabled: optionalEnvBool('CONTENT_AGENT_ENABLED', false),
+      serviceUrl: optionalEnv('CONTENT_AGENT_SERVICE_URL', 'http://localhost:8011'),
+      ...(process.env['CONTENT_AGENT_SERVICE_TOKEN'] !== undefined
+        ? { serviceToken: process.env['CONTENT_AGENT_SERVICE_TOKEN'] }
+        : {}),
     },
     rateLimit: {
       max: optionalEnvInt('RATE_LIMIT_MAX', 100),

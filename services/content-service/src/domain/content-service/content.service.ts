@@ -10,15 +10,26 @@
  */
 
 import type { IAgentHints } from '@noema/contracts';
+import { ContentEventType } from '@noema/events/content';
 import type {
   CardId,
   CardState,
+  ConceptId,
+  ContentGenerationJobId,
   CorrelationId,
+  GeneratedVariantId,
   IPaginatedResponse,
+  JsonValue,
   StudyMode,
   UserId,
 } from '@noema/types';
-import { ID_PREFIXES } from '@noema/types';
+import {
+  CardOriginMode,
+  CardReviewState,
+  CardTransformKind,
+  ContentGenerationJobStatus,
+  ID_PREFIXES,
+} from '@noema/types';
 import { nanoid } from 'nanoid';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -26,20 +37,33 @@ import type {
   CardHistoryChangeType,
   IBatchChangeStateItem,
   IBatchCreateResult,
+  IBatchDeleteCardsResult,
+  IActivityPayloadCandidates,
+  IActivityPayloadCandidatesInput,
   ICardImportExecuteInput,
   ICardImportExecuteResult,
   ICardImportPreviewInput,
   ICardImportPreviewResult,
   ICard,
+  ICardContent,
   ICardHistory,
+  ICardLineage,
   ICardStats,
   ICardSummary,
   IChangeCardStateInput,
+  ICompleteCardMetadataInput,
+  IConceptCardCoverage,
+  IContentGenerationJob,
   ICreateCardInput,
+  ICreateContentGenerationJobInput,
+  ICreateGeneratedActivityVariantInput,
   ICursorPaginatedResponse,
   IDeckQuery,
+  IGeneratedActivityVariant,
+  IPromoteCardFromReviewInput,
   ISessionSeed,
   ISessionSeedInput,
+  ITransformCardInput,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import { generateContentHash } from '../../utils/content-hash.js';
@@ -50,12 +74,18 @@ import { prepareImportedCards, previewCardImport } from './card-import.js';
 import type { IBatchSummary, IContentRepository } from './content.repository.js';
 import {
   BatchCreateCardInputSchema,
+  ActivityPayloadCandidatesInputSchema,
   CardImportExecuteInputSchema,
   CardImportPreviewInputSchema,
   ChangeCardStateInputSchema,
+  CompleteCardMetadataInputSchema,
+  CreateContentGenerationJobInputSchema,
+  CreateGeneratedActivityVariantInputSchema,
   CreateCardInputSchema,
   DeckQuerySchema,
+  PromoteCardFromReviewInputSchema,
   SessionSeedInputSchema,
+  TransformCardInputSchema,
   UpdateCardInputSchema,
 } from './content.schemas.js';
 import {
@@ -68,7 +98,20 @@ import {
   ValidationError,
   VersionConflictError,
 } from './errors/index.js';
+import {
+  NoopContentAgentClient,
+  type IContentAgentPort,
+} from './content-agent.port.js';
+import {
+  NoopPedagogyGuardianClient,
+  type IPedagogyGuardianPort,
+} from './pedagogy-guardian.port.js';
 import type { IHistoryRepository } from './history.repository.js';
+import {
+  DEFAULT_SUPPORTED_STUDY_MODES,
+  getDefaultCompatibleTransformations,
+  getDefaultEligibilityGroupsForTransformations,
+} from './transformation-compatibility.js';
 
 // ============================================================================
 // Types
@@ -105,6 +148,7 @@ export interface IServiceResult<T> {
 // ============================================================================
 
 const MAX_BATCH_SIZE = 100;
+const FACTUALITY_REVIEW_THRESHOLD = 0.7;
 
 /** Valid state transitions: from → [allowed targets] */
 const STATE_TRANSITIONS: Record<string, string[]> = {
@@ -128,7 +172,9 @@ export class ContentService {
     private readonly repository: IContentRepository,
     private readonly eventPublisher: IEventPublisher,
     logger: Logger,
-    private readonly historyRepository?: IHistoryRepository
+    private readonly historyRepository?: IHistoryRepository,
+    private readonly pedagogyGuardianClient: IPedagogyGuardianPort = new NoopPedagogyGuardianClient(),
+    private readonly contentAgentClient: IContentAgentPort = new NoopContentAgentClient()
   ) {
     this.logger = logger.child({ service: 'ContentService' });
   }
@@ -153,8 +199,11 @@ export class ContentService {
       content: sanitizeCardContent(input.content),
     };
 
-    // Validate input
-    const validated = this.validateCreateInput(sanitizedInput);
+    // Validate input and apply Step Activity compatibility defaults.
+    const validated = this.prepareCardForPersistence(
+      this.withCardCompatibilityDefaults(this.validateCreateInput(sanitizedInput)),
+      context
+    );
 
     // Content deduplication (per-user, SHA-256)
     const contentHash = generateContentHash(validated.cardType, validated.content);
@@ -187,12 +236,15 @@ export class ContentService {
       payload: {
         entity: card,
         source: validated.source ?? 'user',
+        originMode: card.originMode,
+        reviewState: card.reviewState,
       },
       metadata: {
         correlationId: context.correlationId,
         userId: context.userId,
       },
     });
+    await this.refreshCoverageForCards([card], context);
 
     this.logger.info({ cardId: id, cardType: card.cardType }, 'Card created successfully');
 
@@ -235,10 +287,15 @@ export class ContentService {
     }
 
     // Sanitize content for each card (XSS prevention)
-    const sanitizedCards = parseResult.data.cards.map((card) => ({
-      ...card,
-      content: sanitizeCardContent(card.content),
-    }));
+    const sanitizedCards = parseResult.data.cards.map((card) =>
+      this.prepareCardForPersistence(
+        this.withCardCompatibilityDefaults({
+          ...(card as unknown as ICreateCardInput),
+          content: sanitizeCardContent(card.content as ICardContent),
+        }),
+        context
+      )
+    );
 
     // Generate batch correlation ID
     const batchId = `batch_${nanoid(21)}`;
@@ -329,6 +386,8 @@ export class ContentService {
         payload: {
           entity: card,
           source: card.source,
+          originMode: card.originMode,
+          reviewState: card.reviewState,
           batchOperation: true,
           batchId,
         },
@@ -339,6 +398,7 @@ export class ContentService {
       }));
 
       await this.eventPublisher.publishBatch(events);
+      await this.refreshCoverageForCards(result.created, context);
     }
 
     this.logger.info(
@@ -441,6 +501,150 @@ export class ContentService {
         estimatedImpact: { benefit: 0.5, effort: 0.2, roi: 2.5 },
         preferenceAlignment: [],
         reasoning: `Query returned ${String(result.total)} cards`,
+      },
+    };
+  }
+
+  /**
+   * Find cards, templates, and generated variants that can supply a Step Activity payload.
+   */
+  async getActivityPayloadCandidates(
+    input: IActivityPayloadCandidatesInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IActivityPayloadCandidates>> {
+    this.requireAuth(context);
+    this.logger.debug({ conceptId: input.conceptId }, 'Querying activity payload candidates');
+
+    const parseResult = ActivityPayloadCandidatesInputSchema.safeParse(input);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError(
+        'Invalid activity payload candidate input',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+
+    const result = await this.repository.queryActivityPayloadCandidates(
+      parseResult.data as Required<IActivityPayloadCandidatesInput>,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      context.userId!
+    );
+
+    const candidateCount =
+      result.cards.length + result.templates.length + result.generatedVariants.length;
+
+    return {
+      data: result,
+      agentHints: {
+        suggestedNextActions: [
+          {
+            action: candidateCount > 0 ? 'compose_step_activity' : 'generate_activity_variant',
+            description:
+              candidateCount > 0
+                ? 'Compose a Step Activity from returned payload candidates'
+                : 'Generate and cache a new activity variant for this concept',
+            priority: 'high',
+            category: 'learning',
+          },
+        ],
+        relatedResources: [
+          ...result.cards.map((candidate) => ({
+            type: 'Card',
+            id: candidate.cardId as string,
+            label: `${candidate.cardType} candidate`,
+            relevance: 0.8,
+          })),
+          ...result.templates.map((candidate) => ({
+            type: 'Template',
+            id: candidate.templateId as string,
+            label: `${candidate.cardType} template`,
+            relevance: 0.7,
+          })),
+        ],
+        confidence: candidateCount > 0 ? 0.9 : 0.6,
+        sourceQuality: 'high',
+        validityPeriod: 'short',
+        contextNeeded: candidateCount > 0 ? [] : ['activity_generator'],
+        assumptions: ['Generated variants with expired TTL are excluded'],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: candidateCount > 0 ? 0.8 : 0.5, effort: 0.2, roi: 4.0 },
+        preferenceAlignment: [],
+        reasoning: `Found ${String(candidateCount)} activity payload candidates`,
+      },
+    };
+  }
+
+  /**
+   * Persist a generated Step Activity variant only after Guardian validation.
+   */
+  async createGeneratedActivityVariant(
+    input: ICreateGeneratedActivityVariantInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGeneratedActivityVariant>> {
+    this.requireAuth(context);
+
+    const parseResult = CreateGeneratedActivityVariantInputSchema.safeParse(input);
+    if (!parseResult.success) {
+      const errors = parseResult.error.flatten();
+      throw new ValidationError(
+        'Invalid generated activity variant input',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+
+    const id = `${ID_PREFIXES.GeneratedVariantId}${nanoid(21)}` as GeneratedVariantId;
+    const variant = { id, ...parseResult.data };
+    const validation = await this.pedagogyGuardianClient.validateGeneratedVariant(
+      {
+        variant,
+        triggeredBy: 'content-service.createGeneratedActivityVariant',
+      },
+      {
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        userId: context.userId!,
+        correlationId: context.correlationId,
+      }
+    );
+    if (validation.blocking) {
+      throw new BusinessRuleError('Pedagogy Guardian rejected generated activity variant', {
+        variantId: id,
+        validationId: validation.validationId,
+        reasonCodes: validation.reasonCodes,
+      });
+    }
+
+    const created = await this.repository.createGeneratedActivityVariant({
+      ...variant,
+      guardianValidationId: validation.validationId,
+    } as Omit<IGeneratedActivityVariant, 'createdAt' | 'hitCount'>);
+
+    await this.eventPublisher.publish({
+      eventType: 'generated_activity_variant.created',
+      aggregateType: 'GeneratedActivityVariant',
+      aggregateId: id,
+      payload: {
+        variantId: id,
+        conceptId: created.conceptId,
+        transformationType: created.transformationType,
+        epistemicMode: created.epistemicMode,
+        guardianValidationId: created.guardianValidationId,
+      },
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
+
+    return {
+      data: created,
+      agentHints: {
+        ...this.createAgentHints('generated_variant_created', {
+          id: id as unknown as CardId,
+          cardType: 'generated_activity_variant',
+          knowledgeNodeIds: [],
+        } as unknown as ICard),
+        reasoning: 'Generated activity variant stored after Guardian validation.',
       },
     };
   }
@@ -1163,6 +1367,8 @@ export class ContentService {
       batchResult.data.created[index] = stateResult.data;
     }
 
+    await this.publishConceptsExtractedForImport(batchResult.data.created, context);
+
     return {
       data: {
         ...batchResult.data,
@@ -1524,6 +1730,88 @@ export class ContentService {
     this.logger.info({ cardId: id, soft }, 'Card deleted');
   }
 
+  /**
+   * Delete multiple cards in one authenticated request.
+   * Preserves the single-card delete path so ownership checks and events stay consistent.
+   */
+  async batchDeleteCards(
+    cardIds: CardId[],
+    soft: boolean,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IBatchDeleteCardsResult>> {
+    this.requireAuth(context);
+    this.logger.info({ count: cardIds.length, soft }, 'Batch deleting cards');
+
+    if (cardIds.length > MAX_BATCH_SIZE) {
+      throw new BatchLimitExceededError(MAX_BATCH_SIZE, cardIds.length);
+    }
+
+    const uniqueCardIds = Array.from(new Set(cardIds));
+    const succeeded: CardId[] = [];
+    const failed: { id: CardId; error: string }[] = [];
+
+    for (const id of uniqueCardIds) {
+      try {
+        await this.delete(id, soft, context);
+        succeeded.push(id);
+      } catch (error) {
+        failed.push({
+          id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return {
+      data: { succeeded, failed },
+      agentHints: {
+        suggestedNextActions:
+          failed.length > 0
+            ? [
+                {
+                  action: 'retry_failed_deletes',
+                  description: `Retry ${String(failed.length)} failed card deletes`,
+                  priority: 'medium',
+                  category: 'correction',
+                },
+              ]
+            : [],
+        relatedResources: succeeded.map((id) => ({
+          type: 'Card',
+          id: id as string,
+          label: `Card ${id}`,
+          relevance: 0.9,
+        })),
+        confidence: uniqueCardIds.length === 0 ? 1.0 : succeeded.length / uniqueCardIds.length,
+        sourceQuality: 'high',
+        validityPeriod: 'medium',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors:
+          failed.length > 0
+            ? [
+                {
+                  type: 'accuracy' as const,
+                  severity: 'medium' as const,
+                  description: `${String(failed.length)} card deletes failed`,
+                  probability: 1.0,
+                  impact: failed.length / uniqueCardIds.length,
+                  mitigation: 'Review errors and retry the failed cards',
+                },
+              ]
+            : [],
+        dependencies: [],
+        estimatedImpact: {
+          benefit: succeeded.length * 0.1,
+          effort: 0.2,
+          roi: succeeded.length > 0 ? (succeeded.length * 0.1) / 0.2 : 0,
+        },
+        preferenceAlignment: [],
+        reasoning: `Batch delete: ${String(succeeded.length)}/${String(uniqueCardIds.length)} succeeded`,
+      },
+    };
+  }
+
   // ============================================================================
   // Batch Recovery & Rollback
   // ============================================================================
@@ -1674,6 +1962,321 @@ export class ContentService {
     };
   }
 
+  async getLineage(
+    id: CardId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICardLineage>> {
+    const userId = this.requireUserId(context);
+    const lineage = await this.repository.getLineage(id, userId);
+    return { data: lineage, agentHints: this.createAgentHints('viewed', { id } as unknown as ICard) };
+  }
+
+  async getSources(
+    id: CardId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard['sources']>> {
+    const card = await this.findById(id, context);
+    return { data: card.data.sources, agentHints: this.createAgentHints('viewed', card.data) };
+  }
+
+  async completeMetadata(
+    id: CardId,
+    input: ICompleteCardMetadataInput,
+    version: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard>> {
+    const userId = this.requireUserId(context);
+    const parsed = CompleteCardMetadataInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid metadata completion input',
+        parsed.error.flatten().fieldErrors as Record<string, string[]>
+      );
+    }
+    const existing = await this.repository.findByIdForUser(id, userId);
+    if (!existing) throw new CardNotFoundError(id);
+
+    const updated = await this.repository.update(
+      id,
+      {
+        ...parsed.data,
+        reviewState: this.computeReviewState({
+          ...existing,
+          ...parsed.data,
+        } as unknown as ICreateCardInput),
+      } as IUpdateCardInput,
+      version,
+      userId
+    );
+    await this.publishReviewStateChanged(existing, updated, 'metadata_completed', context);
+    await this.refreshCoverageForCards([updated], context);
+    return { data: updated, agentHints: this.createAgentHints('updated', updated) };
+  }
+
+  async promoteFromReview(
+    id: CardId,
+    input: IPromoteCardFromReviewInput,
+    version: number,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard>> {
+    const userId = this.requireUserId(context);
+    const parsed = PromoteCardFromReviewInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid review promotion input',
+        parsed.error.flatten().fieldErrors as Record<string, string[]>
+      );
+    }
+    const existing = await this.repository.findByIdForUser(id, userId);
+    if (!existing) throw new CardNotFoundError(id);
+    if (existing.reviewState !== CardReviewState.PENDING_REVIEW) {
+      throw new BusinessRuleError('Only pending-review cards can be promoted', {
+        cardId: id,
+        reviewState: existing.reviewState,
+      });
+    }
+    const updated = await this.repository.update(
+      id,
+      {
+        reviewState: CardReviewState.ACTIVE,
+        metadata: { reviewDecisionNote: parsed.data.decisionNote ?? '' },
+      } as IUpdateCardInput,
+      version,
+      userId
+    );
+    await this.publishReviewStateChanged(existing, updated, 'review_promoted', context);
+    await this.refreshCoverageForCards([updated], context);
+    return { data: updated, agentHints: this.createAgentHints('updated', updated) };
+  }
+
+  async transformCard(
+    id: CardId,
+    input: ITransformCardInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<ICard>> {
+    const userId = this.requireUserId(context);
+    const parsed = TransformCardInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid transformation input',
+        parsed.error.flatten().fieldErrors as Record<string, string[]>
+      );
+    }
+    const parent = await this.repository.findByIdForUser(id, userId);
+    if (!parent) throw new CardNotFoundError(id);
+    const shouldReanchor = parsed.data.transformationKind === CardTransformKind.REANCHOR;
+    const anchoredCkgNodeIds = shouldReanchor
+      ? ((parsed.data.anchoredCkgNodeIds ?? []) as NonNullable<
+          ICreateCardInput['anchoredCkgNodeIds']
+        >)
+      : parent.anchoredCkgNodeIds;
+    const anchoredPkgNodeIds = shouldReanchor
+      ? ((parsed.data.anchoredPkgNodeIds ?? []) as NonNullable<
+          ICreateCardInput['anchoredPkgNodeIds']
+        >)
+      : parent.anchoredPkgNodeIds;
+    const variant = await this.create(
+      {
+        cardType: (parsed.data.targetCardType ?? parent.cardType) as ICreateCardInput['cardType'],
+        content: { ...parent.content, front: parsed.data.prompt ?? parent.content.front },
+        difficulty: parent.difficulty,
+        tags: parent.tags,
+        supportedStudyModes: parent.supportedStudyModes,
+        compatibleTransformations: parent.compatibleTransformations,
+        defaultEligibilityGroups: parent.defaultEligibilityGroups,
+        originMode: CardOriginMode.AGENT_AUTONOMOUS,
+        factualityScore: 1,
+        anchoredCkgNodeIds,
+        anchoredPkgNodeIds,
+        parentCardId: parent.id,
+        transformationKind: parsed.data.transformationKind,
+        metadata: { ...parent.metadata, transformedFrom: parent.id },
+      },
+      context
+    );
+    await this.eventPublisher.publish({
+      eventType: ContentEventType.CARD_TRANSFORMATION_CREATED,
+      aggregateType: 'Card',
+      aggregateId: variant.data.id,
+      payload: {
+        parentCardId: parent.id,
+        variantCardId: variant.data.id,
+        transformationKind: parsed.data.transformationKind,
+      },
+      metadata: { correlationId: context.correlationId, userId: context.userId },
+    });
+    return variant;
+  }
+
+  async createGenerationJob(
+    input: ICreateContentGenerationJobInput,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IContentGenerationJob>> {
+    const userId = this.requireUserId(context);
+    const parsed = CreateContentGenerationJobInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ValidationError(
+        'Invalid content generation job input',
+        parsed.error.flatten().fieldErrors as Record<string, string[]>
+      );
+    }
+    const id = `${ID_PREFIXES.ContentGenerationJobId}${nanoid(21)}` as ContentGenerationJobId;
+    const jobInput: ICreateContentGenerationJobInput & { id: string; userId: UserId } = {
+      conceptIds: parsed.data.conceptIds as ICreateContentGenerationJobInput['conceptIds'],
+      mode: parsed.data.mode,
+      desiredCardTypes:
+        parsed.data.desiredCardTypes as NonNullable<
+          ICreateContentGenerationJobInput['desiredCardTypes']
+        >,
+      documentIds: parsed.data.documentIds,
+      curriculumContext:
+        parsed.data.curriculumContext as NonNullable<
+          ICreateContentGenerationJobInput['curriculumContext']
+        >,
+      studentContext: parsed.data.studentContext as NonNullable<
+        ICreateContentGenerationJobInput['studentContext']
+      >,
+      varietyMandate: parsed.data.varietyMandate as NonNullable<
+        ICreateContentGenerationJobInput['varietyMandate']
+      >,
+      budget: parsed.data.budget as NonNullable<ICreateContentGenerationJobInput['budget']>,
+      id,
+      userId,
+    };
+
+    const job = await this.repository.createGenerationJob(jobInput);
+    await this.eventPublisher.publish({
+      eventType: ContentEventType.CONTENT_GENERATION_REQUESTED,
+      aggregateType: 'ContentGenerationJob',
+      aggregateId: id,
+      payload: {
+        jobId: id,
+        userId,
+        mode: job.mode,
+        status: ContentGenerationJobStatus.REQUESTED,
+        conceptIds: job.conceptIds,
+        documentIds: job.documentIds,
+      },
+      metadata: { correlationId: context.correlationId, userId: context.userId },
+    });
+    return { data: job, agentHints: this.createAgentHints('created', { id } as unknown as ICard) };
+  }
+
+  async runGenerationJob(
+    id: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IContentGenerationJob>> {
+    const userId = this.requireUserId(context);
+    const job = await this.repository.findGenerationJobById(id, userId);
+    if (job === null) throw new BusinessRuleError('Content generation job not found', { id });
+
+    await this.repository.updateGenerationJob(id, { status: ContentGenerationJobStatus.RUNNING });
+    try {
+      const generated = await this.contentAgentClient.generateContent(job, {
+        userId,
+        correlationId: context.correlationId,
+      });
+      const createdCards: ICard[] = [];
+      for (const draft of generated.drafts) {
+        const validation = await this.pedagogyGuardianClient.validateGeneratedVariant(
+          { variant: draft, triggeredBy: 'content-service.runGenerationJob' },
+          { userId, correlationId: context.correlationId }
+        );
+        if (validation.blocking) continue;
+        const created = await this.create(
+          {
+            cardType: draft.cardType,
+            content: draft.content as ICreateCardInput['content'],
+            tags: draft.tags,
+            difficulty: draft.difficulty ?? 'intermediate',
+            originMode: CardOriginMode.AGENT_AUTONOMOUS,
+            anchoredCkgNodeIds: draft.conceptIds,
+            factualityScore: draft.factualityScore,
+            generationJobId: job.id,
+            originAgentRunId: generated.agentRunId,
+            guardianValidationId: validation.validationId,
+            metadata: { generationRationale: draft.rationale ?? '' },
+          },
+          context
+        );
+        createdCards.push(created.data);
+      }
+      const updated = await this.repository.updateGenerationJob(id, {
+        status: ContentGenerationJobStatus.COMPLETED,
+        agentRunId: generated.agentRunId,
+        createdCardIds: createdCards.map((card) => card.id),
+        rejectedDrafts: generated.rejectedDrafts as Record<string, JsonValue>[],
+        resultPayload: { createdCount: createdCards.length },
+      });
+      await this.eventPublisher.publish({
+        eventType: ContentEventType.CONTENT_GENERATION_COMPLETED,
+        aggregateType: 'ContentGenerationJob',
+        aggregateId: id,
+        payload: {
+          jobId: id,
+          userId,
+          status: updated.status,
+          createdCardIds: updated.createdCardIds,
+          rejectedDrafts: updated.rejectedDrafts,
+        },
+        metadata: { correlationId: context.correlationId, userId },
+      });
+      return { data: updated, agentHints: this.createAgentHints('updated', { id } as unknown as ICard) };
+    } catch (error) {
+      const updated = await this.repository.updateGenerationJob(id, {
+        status: ContentGenerationJobStatus.FAILED,
+        errorMessage: error instanceof Error ? error.message : 'Unknown content generation failure',
+      });
+      await this.eventPublisher.publish({
+        eventType: ContentEventType.CONTENT_GENERATION_FAILED,
+        aggregateType: 'ContentGenerationJob',
+        aggregateId: id,
+        payload: {
+          jobId: id,
+          userId,
+          status: updated.status,
+          errorMessage: updated.errorMessage ?? 'Unknown content generation failure',
+        },
+        metadata: { correlationId: context.correlationId, userId },
+      });
+      return { data: updated, agentHints: this.createAgentHints('updated', { id } as unknown as ICard) };
+    }
+  }
+
+  async getGenerationJob(
+    id: string,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IContentGenerationJob>> {
+    const userId = this.requireUserId(context);
+    const job = await this.repository.findGenerationJobById(id, userId);
+    if (!job) throw new BusinessRuleError('Content generation job not found', { id });
+    return { data: job, agentHints: this.createAgentHints('viewed', { id } as unknown as ICard) };
+  }
+
+  async listGenerationJobs(
+    context: IExecutionContext,
+    status?: string
+  ): Promise<IServiceResult<IContentGenerationJob[]>> {
+    const userId = this.requireUserId(context);
+    const jobs = await this.repository.listGenerationJobs(userId, status);
+    return { data: jobs, agentHints: this.createAgentHints('viewed', { id: '' } as unknown as ICard) };
+  }
+
+  async getCoverageForConcept(
+    conceptId: ConceptId,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IConceptCardCoverage>> {
+    const userId = this.requireUserId(context);
+    const coverage =
+      (await this.repository.getCoverageForConcept(conceptId, userId)) ??
+      (await this.repository.refreshCoverage(userId, [conceptId]))[0];
+    if (!coverage) throw new BusinessRuleError('Could not compute concept coverage', { conceptId });
+    return {
+      data: coverage,
+      agentHints: this.createAgentHints('viewed', { id: conceptId } as unknown as ICard),
+    };
+  }
+
   // ============================================================================
   // Private Validation Methods
   // ============================================================================
@@ -1688,6 +2291,142 @@ export class ContentService {
       );
     }
     return parseResult.data as unknown as ICreateCardInput;
+  }
+
+  private withCardCompatibilityDefaults(input: ICreateCardInput): ICreateCardInput {
+    const compatibleTransformations =
+      input.compatibleTransformations ?? getDefaultCompatibleTransformations(input.cardType);
+    const defaultEligibilityGroups =
+      input.defaultEligibilityGroups ??
+      getDefaultEligibilityGroupsForTransformations(compatibleTransformations);
+    const supportedStudyModes = input.supportedStudyModes ?? DEFAULT_SUPPORTED_STUDY_MODES;
+
+    if (compatibleTransformations.length === 0) {
+      throw new ValidationError('Card must support at least one Step Activity transformation', {
+        compatibleTransformations: ['At least one compatible transformation is required'],
+      });
+    }
+
+    return {
+      ...input,
+      compatibleTransformations,
+      defaultEligibilityGroups,
+      supportedStudyModes,
+    };
+  }
+
+  private prepareCardForPersistence(
+    input: ICreateCardInput,
+    context: IExecutionContext
+  ): ICreateCardInput {
+    const anchoredPkgNodeIds = input.anchoredPkgNodeIds ?? input.knowledgeNodeIds ?? [];
+    const prepared: ICreateCardInput = {
+      ...input,
+      originMode: input.originMode ?? CardOriginMode.AUTHORED,
+      anchoredPkgNodeIds,
+      anchoredCkgNodeIds: input.anchoredCkgNodeIds ?? [],
+      sourceDocumentIds: input.sourceDocumentIds ?? [],
+      sources: input.sources ?? [],
+    };
+    const authorUserId = input.authorUserId ?? context.userId ?? null;
+    if (authorUserId) {
+      prepared.authorUserId = authorUserId;
+    }
+    return {
+      ...prepared,
+      reviewState: input.reviewState ?? this.computeReviewState(prepared),
+    };
+  }
+
+  private computeReviewState(input: ICreateCardInput): CardReviewState {
+    const originMode = input.originMode ?? CardOriginMode.AUTHORED;
+    const hasMetadata =
+      Boolean(input.cardType) &&
+      Boolean(input.difficulty) &&
+      (input.tags?.length ?? 0) > 0 &&
+      ((input.anchoredCkgNodeIds?.length ?? 0) > 0 || (input.anchoredPkgNodeIds?.length ?? 0) > 0);
+
+    if (!hasMetadata) return CardReviewState.METADATA_INCOMPLETE;
+    if (
+      originMode === CardOriginMode.AGENT_AUTONOMOUS &&
+      (input.factualityScore ?? 0) < FACTUALITY_REVIEW_THRESHOLD
+    ) {
+      return CardReviewState.PENDING_REVIEW;
+    }
+    return CardReviewState.ACTIVE;
+  }
+
+  private async refreshCoverageForCards(
+    cards: readonly ICard[],
+    context: IExecutionContext
+  ): Promise<void> {
+    const conceptIds = Array.from(new Set(cards.flatMap((card) => card.anchoredCkgNodeIds)));
+    if (conceptIds.length === 0 || !context.userId) return;
+    const coverage = await this.repository.refreshCoverage(context.userId, conceptIds);
+    if (coverage.length === 0) return;
+    await this.eventPublisher.publishBatch(
+      coverage.map((entry) => ({
+        eventType: ContentEventType.CONTENT_COVERAGE_UPDATED,
+        aggregateType: 'ConceptCardCoverage',
+        aggregateId: entry.conceptId,
+        payload: {
+          userId: context.userId,
+          conceptId: entry.conceptId,
+          activeCardCount: entry.activeCardCount,
+          distinctActiveCardTypes: entry.distinctActiveCardTypes,
+          pendingReviewCount: entry.pendingReviewCount,
+          metadataIncompleteCount: entry.metadataIncompleteCount,
+        },
+        metadata: { correlationId: context.correlationId, userId: context.userId },
+      }))
+    );
+  }
+
+  private async publishReviewStateChanged(
+    previous: ICard,
+    current: ICard,
+    reason: string,
+    context: IExecutionContext
+  ): Promise<void> {
+    if (previous.reviewState === current.reviewState) return;
+    await this.eventPublisher.publish({
+      eventType: ContentEventType.CARD_REVIEW_STATE_CHANGED,
+      aggregateType: 'Card',
+      aggregateId: current.id,
+      payload: {
+        previousReviewState: previous.reviewState,
+        newReviewState: current.reviewState,
+        reason,
+      },
+      metadata: { correlationId: context.correlationId, userId: context.userId },
+    });
+  }
+
+  private async publishConceptsExtractedForImport(
+    cards: readonly ICard[],
+    context: IExecutionContext
+  ): Promise<void> {
+    const conceptIds = Array.from(
+      new Set(cards.flatMap((card) => [...card.anchoredPkgNodeIds, ...card.knowledgeNodeIds]))
+    );
+    if (conceptIds.length === 0) {
+      return;
+    }
+
+    await this.eventPublisher.publish({
+      eventType: ContentEventType.CONCEPTS_EXTRACTED,
+      aggregateType: 'ContentImport',
+      aggregateId: context.correlationId,
+      payload: {
+        conceptIds,
+        cardIds: cards.map((card) => card.id),
+        source: 'card_import',
+      } satisfies Record<string, JsonValue>,
+      metadata: {
+        correlationId: context.correlationId,
+        userId: context.userId,
+      },
+    });
   }
 
   private validateStateTransition(current: CardState, target: CardState): void {
@@ -1708,6 +2447,14 @@ export class ContentService {
     if (!context.userId) {
       throw new AuthorizationError('Authentication required');
     }
+  }
+
+  private requireUserId(context: IExecutionContext): UserId {
+    const { userId } = context;
+    if (!userId) {
+      throw new AuthorizationError('Authentication required');
+    }
+    return userId;
   }
 
   private isAdmin(context: IExecutionContext): boolean {

@@ -11,10 +11,19 @@
 
 import type {
   CardId,
+  CardOriginMode,
+  CardReviewState,
   CardState,
+  CardTransformKind,
   CardType,
+  ConceptId,
+  ContentGenerationJobId,
+  ContentGenerationJobStatus,
+  EligibilityGroup,
+  EpistemicMode,
   DifficultyLevel,
   EventSource,
+  GeneratedVariantId,
   IAuditedEntity,
   IJsonObject,
   JsonValue,
@@ -23,6 +32,7 @@ import type {
   RemediationCardType,
   StudyMode,
   TemplateId,
+  TransformationType,
   UserId,
 } from '@noema/types';
 
@@ -89,14 +99,34 @@ export interface ICard extends IAuditedEntity {
   /** PKG node IDs this card is linked to */
   knowledgeNodeIds: NodeId[];
 
+  /** Transformations this card supports when used as a Step Activity payload */
+  compatibleTransformations: TransformationType[];
+
+  /** Eligibility groups this card is most suitable for by default */
+  defaultEligibilityGroups: EligibilityGroup[];
+
   /** User-defined tags for filtering */
   tags: string[];
 
-  /** Optional study-mode membership for the dual-use learning architecture */
-  supportedStudyModes?: StudyMode[];
+  /** Study-mode membership for the dual-use learning architecture */
+  supportedStudyModes: StudyMode[];
 
   /** How this card was created */
   source: EventSource;
+  originMode: CardOriginMode;
+  originAgentRunId?: string | null;
+  authorUserId?: UserId | null;
+  sourceDocumentIds: string[];
+  sources: IContentSourceCitation[];
+  anchoredCkgNodeIds: ConceptId[];
+  anchoredPkgNodeIds: NodeId[];
+  factualityScore?: number | null;
+  reviewState: CardReviewState;
+  parentCardId?: CardId | null;
+  transformationKind?: CardTransformKind | null;
+  transformationAgentRunId?: string | null;
+  generationJobId?: ContentGenerationJobId | null;
+  guardianValidationId?: string | null;
 
   /** Extensible metadata (scheduling hints, generation params, agent trace) */
   metadata: Record<string, JsonValue>;
@@ -165,9 +195,15 @@ export interface ICardSummary {
   /** First N chars of front content for preview */
   preview: string;
   knowledgeNodeIds: NodeId[];
+  compatibleTransformations: TransformationType[];
+  defaultEligibilityGroups: EligibilityGroup[];
   tags: string[];
-  supportedStudyModes?: StudyMode[];
+  supportedStudyModes: StudyMode[];
   source: EventSource;
+  originMode: CardOriginMode;
+  reviewState: CardReviewState;
+  anchoredCkgNodeIds: ConceptId[];
+  anchoredPkgNodeIds: NodeId[];
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -185,9 +221,25 @@ export interface ICreateCardInput {
   content: ICardContent;
   difficulty?: DifficultyLevel;
   knowledgeNodeIds?: NodeId[];
+  compatibleTransformations?: TransformationType[];
+  defaultEligibilityGroups?: EligibilityGroup[];
   tags?: string[];
   supportedStudyModes?: StudyMode[];
   source?: EventSource;
+  originMode?: CardOriginMode;
+  originAgentRunId?: string;
+  authorUserId?: UserId;
+  sourceDocumentIds?: string[];
+  sources?: IContentSourceCitation[];
+  anchoredCkgNodeIds?: ConceptId[];
+  anchoredPkgNodeIds?: NodeId[];
+  factualityScore?: number;
+  reviewState?: CardReviewState;
+  parentCardId?: CardId;
+  transformationKind?: CardTransformKind;
+  transformationAgentRunId?: string;
+  generationJobId?: ContentGenerationJobId;
+  guardianValidationId?: string;
   metadata?: Record<string, JsonValue>;
 }
 
@@ -205,8 +257,14 @@ export interface IUpdateCardInput {
   content?: ICardContent;
   difficulty?: DifficultyLevel;
   knowledgeNodeIds?: NodeId[];
+  anchoredCkgNodeIds?: ConceptId[];
+  anchoredPkgNodeIds?: NodeId[];
+  compatibleTransformations?: TransformationType[];
+  defaultEligibilityGroups?: EligibilityGroup[];
   tags?: string[];
   supportedStudyModes?: StudyMode[];
+  reviewState?: CardReviewState;
+  guardianValidationId?: string | null;
   metadata?: Record<string, JsonValue>;
 }
 
@@ -230,6 +288,24 @@ export interface IBatchChangeStateItem {
   version: number;
 }
 
+/**
+ * Input for deleting multiple cards in one write request.
+ */
+export interface IBatchDeleteCardsInput {
+  /** Card IDs to delete */
+  cardIds: CardId[];
+  /** Soft delete by default; hard delete still requires admin privileges. */
+  soft?: boolean;
+}
+
+/**
+ * Result of a best-effort batch delete.
+ */
+export interface IBatchDeleteCardsResult {
+  succeeded: CardId[];
+  failed: { id: CardId; error: string }[];
+}
+
 // ============================================================================
 // Query Types (ADR-0010 Decision 2 — Dynamic Deck Queries)
 // ============================================================================
@@ -246,7 +322,11 @@ export interface IDeckQuery {
   states?: CardState[];
   /** Filter by difficulty levels */
   difficulties?: DifficultyLevel[];
-  /** Filter by study-mode membership stored on the card metadata */
+  /** Filter by Step-loop transformation compatibility */
+  compatibleTransformations?: TransformationType[];
+  /** Filter by default eligibility group membership */
+  defaultEligibilityGroups?: EligibilityGroup[];
+  /** Filter by study-mode membership */
   supportedStudyModes?: StudyMode[];
   /** Filter by PKG node IDs (cards linked to ANY of these nodes) */
   knowledgeNodeIds?: NodeId[];
@@ -268,6 +348,11 @@ export interface IDeckQuery {
   tags?: string[];
   /** Filter by source */
   sources?: EventSource[];
+  originModes?: CardOriginMode[];
+  reviewStates?: CardReviewState[];
+  anchoredCkgNodeIds?: ConceptId[];
+  anchoredPkgNodeIds?: NodeId[];
+  sourceDocumentIds?: string[];
   /** Filter by user ID (admin only — defaults to context user) */
   userId?: UserId;
   /** Full-text search on content.front + content.back */
@@ -353,6 +438,172 @@ export interface ISessionSeed {
   checkpointRecommendations: AdaptiveCheckpointSignal[];
   selectionRationale: string;
   selectedCards?: ICardSummary[];
+}
+
+// ============================================================================
+// Activity Payload Candidates
+// ============================================================================
+
+export interface IActivityPayloadCandidatesInput {
+  conceptId: string;
+  transformationType: TransformationType;
+  eligibilityGroup: EligibilityGroup;
+  epistemicMode: EpistemicMode;
+  difficultyBucket: number;
+  studyMode?: StudyMode;
+  limit?: number;
+  includeTemplates?: boolean;
+  includeGeneratedVariants?: boolean;
+}
+
+export interface ICardPayloadCandidate {
+  sourceType: 'card';
+  cardId: CardId;
+  cardType: CardType | RemediationCardType;
+  difficulty: DifficultyLevel;
+  prompt: string;
+  renderPayload: Record<string, JsonValue>;
+  expectedResponseType: string;
+  compatibleTransformations: TransformationType[];
+  defaultEligibilityGroups: EligibilityGroup[];
+  supportedStudyModes: StudyMode[];
+}
+
+export interface ITemplatePayloadCandidate {
+  sourceType: 'template';
+  templateId: TemplateId;
+  cardType: CardType | RemediationCardType;
+  difficulty: DifficultyLevel;
+  prompt: string;
+  renderPayload: Record<string, JsonValue>;
+  expectedResponseType: string;
+}
+
+export interface IGeneratedActivityVariant {
+  id: GeneratedVariantId;
+  conceptId: string;
+  studyMode: StudyMode;
+  transformationType: TransformationType;
+  epistemicMode: EpistemicMode;
+  difficultyBucket: number;
+  sourceCardIds: CardId[];
+  prompt: string;
+  renderPayload: Record<string, JsonValue>;
+  expectedResponseType: string;
+  responseSchema: Record<string, JsonValue>;
+  variantSeed: string;
+  generatorMetadata: Record<string, JsonValue>;
+  guardianValidationId: string;
+  ttlAt: string;
+  hitCount: number;
+  createdAt: string;
+}
+
+export type ICreateGeneratedActivityVariantInput = Omit<
+  IGeneratedActivityVariant,
+  'id' | 'createdAt' | 'hitCount' | 'guardianValidationId'
+>;
+
+export interface IGeneratedVariantPayloadCandidate {
+  sourceType: 'generated';
+  variantId: GeneratedVariantId;
+  prompt: string;
+  renderPayload: Record<string, JsonValue>;
+  expectedResponseType: string;
+  responseSchema: Record<string, JsonValue>;
+  variantSeed: string;
+  hitCount: number;
+  ttlAt: string;
+}
+
+export interface IActivityPayloadCandidates {
+  cards: ICardPayloadCandidate[];
+  templates: ITemplatePayloadCandidate[];
+  generatedVariants: IGeneratedVariantPayloadCandidate[];
+}
+
+// ============================================================================
+// Content provenance, lineage, generation jobs, and coverage
+// ============================================================================
+
+export interface IContentSourceCitation extends IJsonObject {
+  documentId?: string;
+  url?: string;
+  title?: string;
+  locator?: string;
+  excerptHash?: string;
+}
+
+export interface ICardLineage {
+  cardId: CardId;
+  parentCardId: CardId | null;
+  transformationKind: CardTransformKind | null;
+  ancestors: CardId[];
+  variants: CardId[];
+}
+
+export interface ICompleteCardMetadataInput {
+  cardType?: CardType | RemediationCardType;
+  difficulty?: DifficultyLevel;
+  tags?: string[];
+  anchoredCkgNodeIds?: ConceptId[];
+  anchoredPkgNodeIds?: NodeId[];
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface IPromoteCardFromReviewInput {
+  decisionNote?: string;
+}
+
+export interface ITransformCardInput {
+  transformationKind: CardTransformKind;
+  prompt?: string;
+  targetCardType?: CardType | RemediationCardType;
+  anchoredCkgNodeIds?: ConceptId[];
+  anchoredPkgNodeIds?: NodeId[];
+}
+
+export interface IContentGenerationJob {
+  id: ContentGenerationJobId;
+  userId: UserId;
+  status: ContentGenerationJobStatus;
+  mode: CardOriginMode;
+  conceptIds: ConceptId[];
+  documentIds: string[];
+  requestedCardTypes: (CardType | RemediationCardType)[];
+  requestPayload: Record<string, JsonValue>;
+  resultPayload: Record<string, JsonValue>;
+  createdCardIds: CardId[];
+  rejectedDrafts: Record<string, JsonValue>[];
+  errorMessage?: string | null;
+  agentRunId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ICreateContentGenerationJobInput {
+  mode: Exclude<CardOriginMode, 'authored'>;
+  conceptIds: ConceptId[];
+  documentIds?: string[];
+  curriculumContext?: Record<string, JsonValue>;
+  studentContext?: Record<string, JsonValue>;
+  desiredCardTypes?: (CardType | RemediationCardType)[];
+  varietyMandate?: {
+    minDistinctTypesPerConcept?: number;
+  };
+  budget?: {
+    maxCards?: number;
+    timeoutMs?: number;
+  };
+}
+
+export interface IConceptCardCoverage {
+  conceptId: ConceptId;
+  activeCardCount: number;
+  distinctActiveCardTypes: number;
+  pendingReviewCount: number;
+  metadataIncompleteCount: number;
+  lastUpdatedAt: string;
 }
 
 // ============================================================================

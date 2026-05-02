@@ -27,6 +27,8 @@ function inferSideEffects(name: string): boolean {
     name.startsWith('update-') ||
     name.startsWith('change-') ||
     name.startsWith('batch-change-') ||
+    name.startsWith('request-') ||
+    name.startsWith('transform-') ||
     name.startsWith('restore-')
   );
 }
@@ -505,6 +507,118 @@ export function createGetCardStatsHandler(contentService: ContentService) {
     }
   };
 }
+
+export function createGetCardLineageHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { cardId: string };
+      const result = await contentService.getLineage(body.cardId as CardId, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createGetCoverageHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { conceptId: string };
+      const result = await contentService.getCoverageForConcept(body.conceptId as never, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createRequestGenerationHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = await contentService.createGenerationJob(
+        input as Parameters<typeof contentService.createGenerationJob>[0],
+        context
+      );
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createTransformCardHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = input as { cardId: string } & Parameters<typeof contentService.transformCard>[1];
+      const result = await contentService.transformCard(body.cardId as CardId, body, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createSuggestCardMetadataHandler() {
+  return (input: unknown): Promise<IToolResult> => {
+    const body = input as { text?: string; conceptIds?: string[]; tags?: string[] };
+    return Promise.resolve({
+      success: true,
+      data: {
+        suggestedTags: body.tags ?? [],
+        suggestedAnchoredCkgNodeIds: body.conceptIds ?? [],
+        rationale: 'Side-effect-free metadata suggestion; accepting it keeps the card authored.',
+      },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 0.7,
+        sourceQuality: 'medium',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions:
+          typeof body.text === 'string' && body.text.length > 0
+            ? []
+            : ['No source text was provided.'],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.3, effort: 0.1, roi: 3 },
+        preferenceAlignment: [],
+        reasoning: 'Generated metadata suggestion without mutating content-service state.',
+      },
+    });
+  };
+}
+
+export function createSuggestCardVariantsHandler() {
+  return (input: unknown): Promise<IToolResult> => {
+    const body = input as { cardId?: string; transformationKinds?: string[] };
+    return Promise.resolve({
+      success: true,
+      data: {
+        cardId: body.cardId,
+        suggestedTransformations: body.transformationKinds ?? ['rephrase', 'simplify', 'remediation'],
+      },
+      agentHints: {
+        suggestedNextActions: [],
+        relatedResources: [],
+        confidence: 0.7,
+        sourceQuality: 'medium',
+        validityPeriod: 'short',
+        contextNeeded: [],
+        assumptions: [],
+        riskFactors: [],
+        dependencies: [],
+        estimatedImpact: { benefit: 0.4, effort: 0.2, roi: 2 },
+        preferenceAlignment: [],
+        reasoning: 'Suggested card variants without persisting them.',
+      },
+    });
+  };
+}
 // ============================================================================
 // Tool Definitions (for registration / discovery)
 // ============================================================================
@@ -981,6 +1095,55 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
       type: 'object',
       properties: {},
     },
+  },
+  {
+    name: 'suggest-card-metadata',
+    description: 'Suggest metadata for an authored card without mutating service state.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
+  },
+  {
+    name: 'suggest-card-variants',
+    description: 'Suggest transformation variants for a card without mutating service state.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: { type: 'object', properties: { cardId: { type: 'string' } } },
+  },
+  {
+    name: 'gap-fill-concepts',
+    description: 'Find concept coverage gaps with the content coverage projection.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: { type: 'object', required: ['conceptId'], properties: { conceptId: { type: 'string' } } },
+  },
+  {
+    name: 'request-generation',
+    description: 'Request async RAG-grounded or autonomous content generation.',
+    service: 'content-service',
+    priority: 'P0',
+    inputSchema: { type: 'object', required: ['mode', 'conceptIds'], properties: { mode: { type: 'string' }, conceptIds: { type: 'array', items: { type: 'string' } } } },
+  },
+  {
+    name: 'transform-card',
+    description: 'Create a durable transformed variant of an existing card.',
+    service: 'content-service',
+    priority: 'P0',
+    inputSchema: { type: 'object', required: ['cardId', 'transformationKind'], properties: { cardId: { type: 'string' }, transformationKind: { type: 'string' } } },
+  },
+  {
+    name: 'get-card-lineage',
+    description: 'Return parent and variant lineage for a card.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: { type: 'object', required: ['cardId'], properties: { cardId: { type: 'string' } } },
+  },
+  {
+    name: 'get-coverage',
+    description: 'Return concept card coverage counts.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: { type: 'object', required: ['conceptId'], properties: { conceptId: { type: 'string' } } },
   },
 ];
 

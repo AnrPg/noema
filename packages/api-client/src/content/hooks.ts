@@ -23,6 +23,7 @@ import { cardsApi, mediaApi, templatesApi } from './api.js';
 import type {
   BatchCardsResponse,
   BatchCreateResponse,
+  BatchDeleteCardsResponse,
   BatchSummariesResponse,
   CardCountResponse,
   CardImportExecuteResponse,
@@ -37,6 +38,7 @@ import type {
   CardsCursorResponse,
   CreateTemplateInput,
   IBatchCreateInput,
+  IBatchDeleteCardsInput,
   IBatchStateUpdateInput,
   ICardImportExecuteInput,
   ICardImportPreviewInput,
@@ -297,6 +299,22 @@ export function useDeleteCard(options?: UseMutationOptions<void, Error, CardId>)
     mutationFn: cardsApi.deleteCard,
     onSuccess: (_, id) => {
       queryClient.removeQueries({ queryKey: contentKeys.detail(id) });
+      void queryClient.invalidateQueries({ queryKey: contentKeys.list() });
+    },
+    ...options,
+  });
+}
+
+export function useBatchDeleteCards(
+  options?: UseMutationOptions<BatchDeleteCardsResponse, Error, IBatchDeleteCardsInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => cardsApi.batchDeleteCards(data),
+    onSuccess: (response) => {
+      for (const id of response.data.succeeded) {
+        queryClient.removeQueries({ queryKey: contentKeys.detail(id) });
+      }
       void queryClient.invalidateQueries({ queryKey: contentKeys.list() });
     },
     ...options,

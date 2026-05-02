@@ -8,22 +8,34 @@ import type { CardId, JobId, MediaId, TemplateId } from '@noema/types';
 
 import { http } from '../client.js';
 import type {
+  ActivityPayloadCandidatesResponse,
   BatchCardsResponse,
   BatchCreateResponse,
+  BatchDeleteCardsResponse,
   CardImportExecuteResponse,
   CardImportPreviewResponse,
   BatchSummariesResponse,
   CardCountResponse,
   CardHistoryResponse,
+  CardLineageResponse,
   CardResponse,
+  CardSourcesResponse,
+  CardVariantsResponse,
   CardStatsResponse,
   CardValidationResponse,
   CardVersionResponse,
   CardsListResponse,
   CardsCursorResponse,
+  CompleteCardMetadataInput,
+  ConceptCardCoverageResponse,
+  ContentGenerationJobResponse,
+  ContentGenerationJobsResponse,
+  CreateContentGenerationJobInput,
   CreateTemplateInput,
   IBatchCreateInput,
+  IBatchDeleteCardsInput,
   IBatchStateUpdateInput,
+  IActivityPayloadCandidatesInput,
   ICardImportExecuteInput,
   ICardImportPreviewInput,
   ICreateCardInput,
@@ -35,9 +47,11 @@ import type {
   IUpdateCardTagsInput,
   IUpdateTemplateInput,
   MediaResponse,
+  PromoteCardFromReviewInput,
   SessionSeedResponse,
   TemplateResponse,
   TemplatesListResponse,
+  TransformCardInput,
   UploadUrlResponse,
 } from './types.js';
 
@@ -57,6 +71,12 @@ function normalizeDeckQuery(query: IDeckQueryInput): Record<string, unknown> {
   }
   if (query.supportedStudyModes !== undefined && query.supportedStudyModes.length > 0) {
     normalized['supportedStudyModes'] = query.supportedStudyModes;
+  }
+  if (query.compatibleTransformations !== undefined && query.compatibleTransformations.length > 0) {
+    normalized['compatibleTransformations'] = query.compatibleTransformations;
+  }
+  if (query.defaultEligibilityGroups !== undefined && query.defaultEligibilityGroups.length > 0) {
+    normalized['defaultEligibilityGroups'] = query.defaultEligibilityGroups;
   }
   if (query.tags !== undefined && query.tags.length > 0) normalized['tags'] = query.tags;
   if (query.knowledgeNodeIds !== undefined && query.knowledgeNodeIds.length > 0) {
@@ -102,6 +122,10 @@ export const cardsApi = {
   /** Soft-delete a card. */
   deleteCard: (id: CardId): Promise<void> => http.delete(`/v1/cards/${id}`),
 
+  /** Soft-delete selected cards in one batch write request. */
+  batchDeleteCards: (data: IBatchDeleteCardsInput): Promise<BatchDeleteCardsResponse> =>
+    http.post('/v1/cards/batch/delete', data),
+
   /** Restore a soft-deleted card. */
   restoreCard: (id: CardId): Promise<CardResponse> => http.post(`/v1/cards/${id}/restore`),
 
@@ -145,6 +169,34 @@ export const cardsApi = {
   /** Get full version history for a card. */
   getCardHistory: (id: CardId): Promise<CardHistoryResponse> => http.get(`/v1/cards/${id}/history`),
 
+  /** Get card lineage and variants. */
+  getCardLineage: (id: CardId): Promise<CardLineageResponse> =>
+    http.get(`/v1/cards/${id}/lineage`),
+
+  /** Get card source citations. */
+  getCardSources: (id: CardId): Promise<CardSourcesResponse> =>
+    http.get(`/v1/cards/${id}/sources`),
+
+  /** Complete metadata and lift metadata-incomplete review state when eligible. */
+  completeMetadata: (
+    id: CardId,
+    data: { data: CompleteCardMetadataInput; version: number }
+  ): Promise<CardResponse> => http.patch(`/v1/cards/${id}/complete-metadata`, data),
+
+  /** Promote a pending-review card after explicit user review. */
+  promoteFromReview: (
+    id: CardId,
+    data: { data: PromoteCardFromReviewInput; version: number }
+  ): Promise<CardResponse> => http.post(`/v1/cards/${id}/promote-from-review`, data),
+
+  /** Create a transformed variant. */
+  transformCard: (id: CardId, data: TransformCardInput): Promise<CardResponse> =>
+    http.post(`/v1/cards/${id}/transform`, data),
+
+  /** List card variants. */
+  getCardVariants: (id: CardId): Promise<CardVariantsResponse> =>
+    http.get(`/v1/cards/${id}/variants`),
+
   /** Get a specific version snapshot. */
   getCardVersion: (id: CardId, version: number): Promise<CardVersionResponse> =>
     http.get(`/v1/cards/${id}/history/${String(version)}`),
@@ -174,6 +226,25 @@ export const cardsApi = {
   /** Build a session seed (ordered card IDs) from a DeckQuery. */
   getSessionSeed: (query: ISessionSeedQuery): Promise<SessionSeedResponse> =>
     http.post('/v1/cards/session-seed', query),
+
+  /** Find cards/templates/generated variants for Step Activity payload composition. */
+  getActivityPayloadCandidates: (
+    data: IActivityPayloadCandidatesInput
+  ): Promise<ActivityPayloadCandidatesResponse> =>
+    http.post('/v1/activity-payload-candidates', data),
+};
+
+export const contentGenerationApi = {
+  createJob: (data: CreateContentGenerationJobInput): Promise<ContentGenerationJobResponse> =>
+    http.post('/v1/content/generation-jobs', data),
+  getJob: (id: string): Promise<ContentGenerationJobResponse> =>
+    http.get(`/v1/content/generation-jobs/${id}`),
+  runJob: (id: string): Promise<ContentGenerationJobResponse> =>
+    http.post(`/v1/content/generation-jobs/${id}/run`, {}),
+  listJobs: (status?: string): Promise<ContentGenerationJobsResponse> =>
+    http.get('/v1/content/generation-jobs', { params: { status } }),
+  getConceptCoverage: (conceptId: string): Promise<ConceptCardCoverageResponse> =>
+    http.get(`/v1/coverage/concept/${conceptId}`),
 };
 
 // ============================================================================

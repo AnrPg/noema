@@ -36,7 +36,7 @@ describe('content tool registry contract', () => {
     const registry = createToolRegistry(service);
 
     const definitions = registry.listDefinitions();
-    expect(definitions).toHaveLength(19);
+    expect(definitions).toHaveLength(26);
 
     const names = definitions.map((definition) => definition.name);
     expect(names).toEqual(
@@ -60,6 +60,13 @@ describe('content tool registry contract', () => {
         'restore-card',
         'get-card-history',
         'get-card-stats',
+        'suggest-card-metadata',
+        'suggest-card-variants',
+        'gap-fill-concepts',
+        'request-generation',
+        'transform-card',
+        'get-card-lineage',
+        'get-coverage',
       ])
     );
   });

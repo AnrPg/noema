@@ -30,12 +30,35 @@ model Card {
 
     // Knowledge graph linkage (card → PKG nodes)
     knowledgeNodeIds String[] @default([]) @map("knowledge_node_ids")
+    anchoredCkgNodeIds String[] @default([]) @map("anchored_ckg_node_ids")
+    anchoredPkgNodeIds String[] @default([]) @map("anchored_pkg_node_ids")
+
+    // Step-loop payload compatibility metadata
+    compatibleTransformations TransformationType[] @default([]) @map("compatible_transformations")
+    defaultEligibilityGroups  String[]             @default([]) @map("default_eligibility_groups")
+    supportedStudyModes       StudyMode[]          @default([KNOWLEDGE_GAINING]) @map("supported_study_modes")
 
     // Classification
     tags String[] @default([])
 
     // Provenance
     source EventSource @default(USER)
+    originMode CardOriginMode @default(AUTHORED) @map("origin_mode")
+    originAgentRunId String? @map("origin_agent_run_id") @db.VarChar(100)
+    authorUserId String? @map("author_user_id") @db.VarChar(50)
+    sourceDocumentIds String[] @default([]) @map("source_document_ids")
+    sources Json @default("[]")
+    factualityScore Float? @map("factuality_score")
+    reviewState CardReviewState @default(METADATA_INCOMPLETE) @map("review_state")
+    parentCardId String? @map("parent_card_id") @db.VarChar(50)
+    transformationKind CardTransformKind? @map("transformation_kind")
+    transformationAgentRunId String? @map("transformation_agent_run_id") @db.VarChar(100)
+    generationJobId String? @map("generation_job_id") @db.VarChar(50)
+    guardianValidationId String? @map("guardian_validation_id") @db.VarChar(50)
+
+    parentCard Card? @relation("CardVariants", fields: [parentCardId], references: [id], onDelete: SetNull)
+    variants Card[] @relation("CardVariants")
+    generationJob ContentGenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
 
     // Extensible metadata (scheduling hints, generation params, etc.)
     metadata Json @default("{}")
@@ -62,12 +85,101 @@ model Card {
     @@index([state])
     @@index([difficulty])
     @@index([source])
+    @@index([originMode])
+    @@index([reviewState])
+    @@index([parentCardId])
+    @@index([generationJobId])
     @@index([createdAt])
     @@index([deletedAt])
     @@index([knowledgeNodeIds], type: Gin)
+    @@index([anchoredCkgNodeIds], type: Gin)
+    @@index([anchoredPkgNodeIds], type: Gin)
+    @@index([sourceDocumentIds], type: Gin)
+    @@index([compatibleTransformations], type: Gin)
+    @@index([defaultEligibilityGroups], type: Gin)
+    @@index([supportedStudyModes], type: Gin)
     @@index([tags], type: Gin)
     @@index([contentHash])
     @@map("cards")
+}
+
+// ============================================================================
+// Content Generation Job — async durable agent orchestration
+// ============================================================================
+
+model ContentGenerationJob {
+    id String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+    status ContentGenerationJobStatus @default(REQUESTED)
+    mode CardOriginMode
+    conceptIds String[] @default([]) @map("concept_ids")
+    documentIds String[] @default([]) @map("document_ids")
+    requestedCardTypes String[] @default([]) @map("requested_card_types")
+    requestPayload Json @default("{}") @map("request_payload")
+    resultPayload Json @default("{}") @map("result_payload")
+    createdCardIds String[] @default([]) @map("created_card_ids")
+    rejectedDrafts Json @default("[]") @map("rejected_drafts")
+    errorMessage String? @map("error_message") @db.VarChar(4000)
+    agentRunId String? @map("agent_run_id") @db.VarChar(100)
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    cards Card[]
+
+    @@index([userId])
+    @@index([status])
+    @@index([mode])
+    @@index([conceptIds], type: Gin)
+    @@index([documentIds], type: Gin)
+    @@map("content_generation_jobs")
+}
+
+// ============================================================================
+// Concept Card Coverage — eager projection for gap filling
+// ============================================================================
+
+model ConceptCardCoverage {
+    id String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+    conceptId String @map("concept_id") @db.VarChar(50)
+    activeCardCount Int @default(0) @map("active_card_count")
+    distinctActiveCardTypes Int @default(0) @map("distinct_active_card_types")
+    pendingReviewCount Int @default(0) @map("pending_review_count")
+    metadataIncompleteCount Int @default(0) @map("metadata_incomplete_count")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@unique([userId, conceptId])
+    @@index([conceptId])
+    @@map("concept_card_coverage")
+}
+
+// ============================================================================
+// Generated Activity Variant Entity — cached generated payloads for Step Activities
+// ============================================================================
+
+model GeneratedActivityVariant {
+    id                   String             @id @db.VarChar(50)
+    conceptId            String             @map("concept_id") @db.VarChar(50)
+    studyMode            StudyMode          @map("study_mode")
+    transformationType   TransformationType @map("transformation_type")
+    epistemicMode        String             @map("epistemic_mode") @db.VarChar(100)
+    difficultyBucket     Int                @map("difficulty_bucket")
+    sourceCardIds        String[]           @map("source_card_ids")
+    prompt               String             @db.VarChar(8000)
+    renderPayload        Json               @map("render_payload")
+    expectedResponseType String             @map("expected_response_type") @db.VarChar(100)
+    responseSchema       Json               @map("response_schema")
+    variantSeed          String             @map("variant_seed") @db.VarChar(100)
+    generatorMetadata    Json               @map("generator_metadata")
+    guardianValidationId String             @map("guardian_validation_id") @db.VarChar(50)
+    ttlAt                DateTime           @map("ttl_at")
+    hitCount             Int                @default(0) @map("hit_count")
+    createdAt            DateTime           @default(now()) @map("created_at")
+
+    @@unique([conceptId, transformationType, epistemicMode, difficultyBucket, variantSeed])
+    @@index([conceptId, transformationType, epistemicMode, difficultyBucket])
+    @@index([ttlAt])
+    @@map("generated_activity_variants")
 }
 
 // ============================================================================
@@ -277,4 +389,60 @@ enum TemplateVisibility {
     SHARED
 
     @@map("template_visibility")
+}
+
+enum CardOriginMode {
+    AUTHORED
+    RAG_GROUNDED
+    AGENT_AUTONOMOUS
+
+    @@map("card_origin_mode")
+}
+
+enum CardReviewState {
+    ACTIVE
+    METADATA_INCOMPLETE
+    PENDING_REVIEW
+    REJECTED
+
+    @@map("card_review_state")
+}
+
+enum CardTransformKind {
+    REPHRASE
+    SIMPLIFY
+    INCREASE_DIFFICULTY
+    CHANGE_CARD_TYPE
+    REMEDIATION
+    REANCHOR
+
+    @@map("card_transform_kind")
+}
+
+enum ContentGenerationJobStatus {
+    REQUESTED
+    RUNNING
+    COMPLETED
+    FAILED
+    CANCELLED
+
+    @@map("content_generation_job_status")
+}
+
+enum StudyMode {
+    LANGUAGE_LEARNING
+    KNOWLEDGE_GAINING
+
+    @@map("study_mode")
+}
+
+enum TransformationType {
+    RECALL
+    EXPLANATION
+    COMPARISON
+    APPLICATION
+    PERTURBATION
+    ERROR_DETECTION
+
+    @@map("transformation_type")
 }

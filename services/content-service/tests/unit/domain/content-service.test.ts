@@ -4,8 +4,14 @@
  * Tests all business logic in ContentService with mocked dependencies.
  */
 
-import type { CardState, NodeId } from '@noema/types';
-import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  EpistemicMode,
+  StudyMode,
+  TransformationType,
+  type CardState,
+  type NodeId,
+} from '@noema/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContentService } from '../../../src/domain/content-service/content.service.js';
 import {
   AuthorizationError,
@@ -297,6 +303,69 @@ describe('ContentService', () => {
       const result = await service.findById(existing.id, ctx);
 
       expect(result.data).toBe(existing);
+    });
+  });
+
+  describe('createGeneratedActivityVariant()', () => {
+    const generatedInput = () => ({
+      conceptId: 'concept_ABCDEFGHIJKLMNOPQRSTU',
+      studyMode: StudyMode.KNOWLEDGE_GAINING,
+      transformationType: TransformationType.RECALL,
+      epistemicMode: EpistemicMode.GENERATIVE_RETRIEVAL,
+      difficultyBucket: 2,
+      sourceCardIds: [cardId()],
+      prompt: 'Explain the concept in your own words.',
+      renderPayload: {},
+      expectedResponseType: 'free_text',
+      responseSchema: { type: 'string' },
+      variantSeed: 'seed-1',
+      generatorMetadata: { model: 'test' },
+      ttlAt: '2026-05-03T00:00:00.000Z',
+    });
+
+    it('validates with Guardian before storing a generated variant', async () => {
+      const ctx = executionContext();
+      const guardian = {
+        validateGeneratedVariant: vi.fn().mockResolvedValue({
+          result: 'accepted',
+          reasonCodes: [],
+          blocking: false,
+          validationId: 'guard_accepted',
+        }),
+      };
+      service = new ContentService(repo, events, logger, undefined, guardian);
+      repo.createGeneratedActivityVariant.mockImplementation((input) =>
+        Promise.resolve({ ...input, createdAt: '2026-05-02T00:00:00.000Z', hitCount: 0 })
+      );
+
+      const result = await service.createGeneratedActivityVariant(generatedInput(), ctx);
+
+      expect(guardian.validateGeneratedVariant).toHaveBeenCalledOnce();
+      expect(repo.createGeneratedActivityVariant).toHaveBeenCalledWith(
+        expect.objectContaining({ guardianValidationId: 'guard_accepted' })
+      );
+      expect(events.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'generated_activity_variant.created' })
+      );
+      expect(result.data.guardianValidationId).toBe('guard_accepted');
+    });
+
+    it('does not store a generated variant rejected by Guardian', async () => {
+      const ctx = executionContext();
+      const guardian = {
+        validateGeneratedVariant: vi.fn().mockResolvedValue({
+          result: 'rejected',
+          reasonCodes: ['generated_variant.prompt.leaks_answer'],
+          blocking: true,
+          validationId: 'guard_rejected',
+        }),
+      };
+      service = new ContentService(repo, events, logger, undefined, guardian);
+
+      await expect(service.createGeneratedActivityVariant(generatedInput(), ctx)).rejects.toThrow(
+        BusinessRuleError
+      );
+      expect(repo.createGeneratedActivityVariant).not.toHaveBeenCalled();
     });
   });
 

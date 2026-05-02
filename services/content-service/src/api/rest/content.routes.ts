@@ -12,10 +12,17 @@ import type { createAuthMiddleware } from '../../middleware/auth.middleware.js';
 import type { IBatchSummary } from '../../domain/content-service/content.repository.js';
 import type {
   IBatchChangeStateItem,
+  IBatchDeleteCardsInput,
+  IActivityPayloadCandidatesInput,
   ICardImportExecuteInput,
   ICardImportPreviewInput,
   IChangeCardStateInput,
   ICreateCardInput,
+  ICreateContentGenerationJobInput,
+  ICreateGeneratedActivityVariantInput,
+  ICompleteCardMetadataInput,
+  IPromoteCardFromReviewInput,
+  ITransformCardInput,
   IDeckQuery,
   ISessionSeedInput,
   IUpdateCardInput,
@@ -104,6 +111,8 @@ export function registerContentRoutes(
             },
             difficulty: { type: 'string' },
             knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
+            compatibleTransformations: { type: 'array', items: { type: 'string' } },
+            defaultEligibilityGroups: { type: 'array', items: { type: 'string' } },
             tags: { type: 'array', items: { type: 'string' } },
             supportedStudyModes: {
               type: 'array',
@@ -154,6 +163,8 @@ export function registerContentRoutes(
                   content: { type: 'object' },
                   difficulty: { type: 'string' },
                   knowledgeNodeIds: { type: 'array', items: { type: 'string' } },
+                  compatibleTransformations: { type: 'array', items: { type: 'string' } },
+                  defaultEligibilityGroups: { type: 'array', items: { type: 'string' } },
                   tags: { type: 'array', items: { type: 'string' } },
                   supportedStudyModes: {
                     type: 'array',
@@ -412,6 +423,8 @@ export function registerContentRoutes(
             cardTypes: { type: 'array', items: { type: 'string' } },
             states: { type: 'array', items: { type: 'string' } },
             difficulties: { type: 'array', items: { type: 'string' } },
+            compatibleTransformations: { type: 'array', items: { type: 'string' } },
+            defaultEligibilityGroups: { type: 'array', items: { type: 'string' } },
             supportedStudyModes: {
               type: 'array',
               items: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
@@ -451,6 +464,143 @@ export function registerContentRoutes(
         };
         (response.metadata as { count?: number }).count = result.data.items.length;
         reply.send(response);
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/activity-payload-candidates - Find payload sources for Step Activities
+   */
+  fastify.post<{ Body: IActivityPayloadCandidatesInput }>(
+    '/v1/activity-payload-candidates',
+    {
+      preHandler: authMiddleware,
+      schema: {
+        tags: ['Activity Payloads'],
+        summary: 'Find activity payload candidates',
+        description:
+          'Returns candidate cards, templates, and generated variants compatible with a concept/transformation request from the Step loop.',
+        body: {
+          type: 'object',
+          required: [
+            'conceptId',
+            'transformationType',
+            'eligibilityGroup',
+            'epistemicMode',
+            'difficultyBucket',
+          ],
+          properties: {
+            conceptId: { type: 'string' },
+            transformationType: {
+              type: 'string',
+              enum: [
+                'recall',
+                'explanation',
+                'comparison',
+                'application',
+                'perturbation',
+                'error_detection',
+              ],
+            },
+            eligibilityGroup: {
+              type: 'string',
+              enum: [
+                'new_concept',
+                'reinforcement',
+                'confusion',
+                'weak_reasoning',
+                'transfer',
+                'meta',
+                'pressure',
+              ],
+            },
+            epistemicMode: { type: 'string' },
+            difficultyBucket: { type: 'integer', minimum: 0, maximum: 4 },
+            studyMode: {
+              type: 'string',
+              enum: ['language_learning', 'knowledge_gaining'],
+              default: 'knowledge_gaining',
+            },
+            limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 },
+            includeTemplates: { type: 'boolean', default: true },
+            includeGeneratedVariants: { type: 'boolean', default: true },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getActivityPayloadCandidates(request.body, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  /**
+   * POST /v1/generated-activity-variants - Validate and cache a generated Step Activity payload
+   */
+  fastify.post<{ Body: ICreateGeneratedActivityVariantInput }>(
+    '/v1/generated-activity-variants',
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: {
+        tags: ['Activity Payloads'],
+        summary: 'Create generated activity variant',
+        description:
+          'Validates a generated Step Activity payload with Pedagogy Guardian before caching it for later Step composition.',
+        body: {
+          type: 'object',
+          required: [
+            'conceptId',
+            'studyMode',
+            'transformationType',
+            'epistemicMode',
+            'difficultyBucket',
+            'prompt',
+            'expectedResponseType',
+            'responseSchema',
+            'variantSeed',
+            'ttlAt',
+          ],
+          properties: {
+            conceptId: { type: 'string' },
+            studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
+            transformationType: {
+              type: 'string',
+              enum: [
+                'recall',
+                'explanation',
+                'comparison',
+                'application',
+                'perturbation',
+                'error_detection',
+              ],
+            },
+            epistemicMode: { type: 'string' },
+            difficultyBucket: { type: 'integer', minimum: 0, maximum: 4 },
+            sourceCardIds: { type: 'array', items: { type: 'string' }, default: [] },
+            prompt: { type: 'string' },
+            renderPayload: { type: 'object', additionalProperties: true, default: {} },
+            expectedResponseType: { type: 'string' },
+            responseSchema: { type: 'object', additionalProperties: true },
+            variantSeed: { type: 'string' },
+            generatorMetadata: { type: 'object', additionalProperties: true, default: {} },
+            ttlAt: { type: 'string', format: 'date-time' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.createGeneratedActivityVariant(request.body, context);
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);
       }
@@ -974,6 +1124,49 @@ export function registerContentRoutes(
     }
   );
 
+  /**
+   * POST /v1/cards/batch/delete - Batch delete selected cards
+   */
+  fastify.post<{ Body: IBatchDeleteCardsInput }>(
+    '/v1/cards/batch/delete',
+    {
+      preHandler: authMiddleware,
+      config: batchRouteConfig,
+      schema: {
+        tags: ['Cards'],
+        summary: 'Batch delete selected cards',
+        description:
+          'Soft-delete selected cards in a single write request. Use soft=false for hard delete (admin only).',
+        body: {
+          type: 'object',
+          required: ['cardIds'],
+          properties: {
+            cardIds: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: 1,
+              maxItems: 100,
+            },
+            soft: { type: 'boolean', default: true },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.batchDeleteCards(
+          request.body.cardIds,
+          request.body.soft ?? true,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
   // ============================================================================
   // Delete Route
   // ============================================================================
@@ -1240,6 +1433,177 @@ export function registerContentRoutes(
       try {
         const context = buildContext(request);
         const result = await contentService.rollbackBatch(request.params.batchId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: IIdParams }>(
+    '/v1/cards/:id/lineage',
+    { preHandler: authMiddleware, schema: { tags: ['Cards'], summary: 'Get card lineage' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getLineage(request.params.id as CardId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: IIdParams }>(
+    '/v1/cards/:id/sources',
+    { preHandler: authMiddleware, schema: { tags: ['Cards'], summary: 'Get card sources' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getSources(request.params.id as CardId, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.patch<{ Params: IIdParams; Body: IUpdateBody<ICompleteCardMetadataInput> }>(
+    '/v1/cards/:id/complete-metadata',
+    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Cards'], summary: 'Complete card metadata' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.completeMetadata(
+          request.params.id as CardId,
+          request.body.data,
+          request.body.version,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Params: IIdParams; Body: IUpdateBody<IPromoteCardFromReviewInput> }>(
+    '/v1/cards/:id/promote-from-review',
+    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Cards'], summary: 'Promote reviewed card' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.promoteFromReview(
+          request.params.id as CardId,
+          request.body.data,
+          request.body.version,
+          context
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Params: IIdParams; Body: ITransformCardInput }>(
+    '/v1/cards/:id/transform',
+    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Cards'], summary: 'Create card variant' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.transformCard(
+          request.params.id as CardId,
+          request.body,
+          context
+        );
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: IIdParams }>(
+    '/v1/cards/:id/variants',
+    { preHandler: authMiddleware, schema: { tags: ['Cards'], summary: 'List card variants' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getLineage(request.params.id as CardId, context);
+        reply.send(wrapResponse(result.data.variants, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Body: ICreateContentGenerationJobInput }>(
+    '/v1/content/generation-jobs',
+    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Content Generation'], summary: 'Request content generation' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.createGenerationJob(request.body, context);
+        reply.status(202).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { id: string } }>(
+    '/v1/content/generation-jobs/:id',
+    { preHandler: authMiddleware, schema: { tags: ['Content Generation'], summary: 'Get content generation job' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getGenerationJob(request.params.id, context);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.post<{ Params: { id: string } }>(
+    '/v1/content/generation-jobs/:id/run',
+    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Content Generation'], summary: 'Run content generation job' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.runGenerationJob(request.params.id, context);
+        reply.status(202).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Querystring: { status?: string } }>(
+    '/v1/content/generation-jobs',
+    { preHandler: authMiddleware, schema: { tags: ['Content Generation'], summary: 'List content generation jobs' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.listGenerationJobs(context, request.query.status);
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { conceptId: string } }>(
+    '/v1/coverage/concept/:conceptId',
+    { preHandler: authMiddleware, schema: { tags: ['Content Coverage'], summary: 'Get concept card coverage' } },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.getCoverageForConcept(
+          request.params.conceptId as never,
+          context
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply, fastify.log);

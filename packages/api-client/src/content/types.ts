@@ -7,12 +7,25 @@
 
 import type { IApiResponse } from '@noema/contracts';
 import type {
+  ICardLineageDto,
+  ICompleteCardMetadataInputDto,
+  IConceptCardCoverageDto,
+  IContentGenerationJobDto,
+  ICreateContentGenerationJobInputDto,
+  IPromoteCardFromReviewInputDto,
+  ITransformCardInputDto,
+} from '@noema/contracts';
+import type {
   CardId,
   CardState,
   DifficultyLevel,
+  EligibilityGroup,
+  EpistemicMode,
+  GeneratedVariantId,
   MediaId,
   StudyMode,
   TemplateId,
+  TransformationType,
 } from '@noema/types';
 import type { CardType, RemediationCardType } from '@noema/types';
 
@@ -590,8 +603,10 @@ export interface ICardDto {
   difficulty: number;
   content: Record<string, unknown>;
   knowledgeNodeIds: string[];
+  compatibleTransformations: TransformationType[];
+  defaultEligibilityGroups: EligibilityGroup[];
   tags: string[];
-  supportedStudyModes?: StudyMode[];
+  supportedStudyModes: StudyMode[];
   source?: string;
   metadata: Record<string, unknown>;
   contentHash?: string;
@@ -616,7 +631,9 @@ export interface ICardSummaryDto {
   state: CardState;
   tags: string[];
   knowledgeNodeIds: string[];
-  supportedStudyModes?: StudyMode[];
+  compatibleTransformations: TransformationType[];
+  defaultEligibilityGroups: EligibilityGroup[];
+  supportedStudyModes: StudyMode[];
   difficulty: number;
   createdAt: string;
   updatedAt: string;
@@ -641,6 +658,8 @@ export interface IDeckQueryInput {
   tags?: string[];
   knowledgeNodeIds?: string[];
   supportedStudyModes?: StudyMode[];
+  compatibleTransformations?: TransformationType[];
+  defaultEligibilityGroups?: EligibilityGroup[];
   sources?: string[];
   source?: string;
   difficulty?: { min?: number; max?: number };
@@ -662,6 +681,8 @@ export interface ICreateCardInput {
   content: Record<string, unknown>;
   tags?: string[];
   knowledgeNodeIds?: string[];
+  compatibleTransformations?: TransformationType[];
+  defaultEligibilityGroups?: EligibilityGroup[];
   source?: string;
   difficulty?: DifficultyLevel;
   supportedStudyModes?: StudyMode[];
@@ -672,6 +693,8 @@ export interface IUpdateCardInput {
   content?: Record<string, unknown>;
   tags?: string[];
   knowledgeNodeIds?: string[];
+  compatibleTransformations?: TransformationType[];
+  defaultEligibilityGroups?: EligibilityGroup[];
   source?: string;
   supportedStudyModes?: StudyMode[];
   metadata?: Record<string, unknown>;
@@ -686,6 +709,16 @@ export interface IBatchStateUpdateInput {
   items: { id: string; version: number }[];
   state: CardState;
   reason?: string;
+}
+
+export interface IBatchDeleteCardsInput {
+  cardIds: CardId[];
+  soft?: boolean;
+}
+
+export interface IBatchDeleteCardsResult {
+  succeeded: CardId[];
+  failed: { id: CardId; error: string }[];
 }
 
 export interface IUpdateCardTagsInput {
@@ -854,6 +887,63 @@ export interface ISessionSeedQuery {
 }
 
 // ============================================================================
+// Activity Payload Candidates
+// ============================================================================
+
+export interface IActivityPayloadCandidatesInput {
+  conceptId: string;
+  transformationType: TransformationType;
+  eligibilityGroup: EligibilityGroup;
+  epistemicMode: EpistemicMode;
+  difficultyBucket: number;
+  studyMode?: StudyMode;
+  limit?: number;
+  includeTemplates?: boolean;
+  includeGeneratedVariants?: boolean;
+}
+
+export interface ICardPayloadCandidateDto {
+  sourceType: 'card';
+  cardId: CardId;
+  cardType: string;
+  difficulty: DifficultyLevel;
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+  compatibleTransformations: TransformationType[];
+  defaultEligibilityGroups: EligibilityGroup[];
+  supportedStudyModes: StudyMode[];
+}
+
+export interface ITemplatePayloadCandidateDto {
+  sourceType: 'template';
+  templateId: TemplateId;
+  cardType: string;
+  difficulty: DifficultyLevel;
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+}
+
+export interface IGeneratedVariantPayloadCandidateDto {
+  sourceType: 'generated';
+  variantId: GeneratedVariantId;
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+  responseSchema: Record<string, unknown>;
+  variantSeed: string;
+  hitCount: number;
+  ttlAt: string;
+}
+
+export interface IActivityPayloadCandidatesDto {
+  cards: ICardPayloadCandidateDto[];
+  templates: ITemplatePayloadCandidateDto[];
+  generatedVariants: IGeneratedVariantPayloadCandidateDto[];
+}
+
+// ============================================================================
 // Validation
 // ============================================================================
 
@@ -928,6 +1018,7 @@ export type CardsCursorResponse = IApiResponse<{
 export type CardCountResponse = IApiResponse<{ count: number }>;
 export type CardStatsResponse = IApiResponse<ICardStatsDto>;
 export type BatchCreateResponse = IApiResponse<IBatchCreateResult>;
+export type BatchDeleteCardsResponse = IApiResponse<IBatchDeleteCardsResult>;
 export type BatchCardsResponse = IApiResponse<ICardDto[]>;
 export type BatchSummariesResponse = IApiResponse<IBatchSummaryDto[]>;
 export type CardImportPreviewResponse = IApiResponse<ICardImportPreviewResult>;
@@ -940,7 +1031,18 @@ export type CardVersionResponse = IApiResponse<{
 }>;
 export type CardValidationResponse = IApiResponse<ICardValidationResult>;
 export type SessionSeedResponse = IApiResponse<ISessionSeedDto>;
+export type ActivityPayloadCandidatesResponse = IApiResponse<IActivityPayloadCandidatesDto>;
 export type UploadUrlResponse = IApiResponse<IUploadUrlResult>;
 export type MediaResponse = IApiResponse<IMediaFileDto>;
 export type TemplateResponse = IApiResponse<TemplateDto>;
 export type TemplatesListResponse = IApiResponse<TemplateDto[]>;
+export type CompleteCardMetadataInput = ICompleteCardMetadataInputDto;
+export type PromoteCardFromReviewInput = IPromoteCardFromReviewInputDto;
+export type TransformCardInput = ITransformCardInputDto;
+export type CreateContentGenerationJobInput = ICreateContentGenerationJobInputDto;
+export type CardLineageResponse = IApiResponse<ICardLineageDto>;
+export type CardVariantsResponse = IApiResponse<CardId[]>;
+export type CardSourcesResponse = IApiResponse<unknown[]>;
+export type ContentGenerationJobResponse = IApiResponse<IContentGenerationJobDto>;
+export type ContentGenerationJobsResponse = IApiResponse<IContentGenerationJobDto[]>;
+export type ConceptCardCoverageResponse = IApiResponse<IConceptCardCoverageDto>;

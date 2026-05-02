@@ -8,13 +8,20 @@
 import type { CardId, IPaginatedResponse, UserId } from '@noema/types';
 import type {
   IBatchCreateResult,
+  IActivityPayloadCandidates,
+  IActivityPayloadCandidatesInput,
   ICard,
+  ICardLineage,
   ICardStats,
   ICardSummary,
   IChangeCardStateInput,
+  IConceptCardCoverage,
+  IContentGenerationJob,
+  ICreateContentGenerationJobInput,
   ICreateCardInput,
   ICursorPaginatedResponse,
   IDeckQuery,
+  IGeneratedActivityVariant,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 
@@ -99,6 +106,36 @@ export interface IContentRepository {
    */
   findByContentHashes(userId: UserId, contentHashes: string[]): Promise<ICard[]>;
 
+  /**
+   * Find cards/templates/generated variants that can provide an Activity payload.
+   */
+  queryActivityPayloadCandidates(
+    input: Required<IActivityPayloadCandidatesInput>,
+    userId: UserId
+  ): Promise<IActivityPayloadCandidates>;
+
+  /**
+   * Persist a generated activity variant for future cache hits.
+   */
+  createGeneratedActivityVariant(
+    input: Omit<IGeneratedActivityVariant, 'createdAt' | 'hitCount'>
+  ): Promise<IGeneratedActivityVariant>;
+
+  /**
+   * Return parent/variant lineage for a card.
+   */
+  getLineage(id: CardId, userId: UserId): Promise<ICardLineage>;
+
+  /**
+   * Return eager card coverage projection for a concept.
+   */
+  getCoverageForConcept(conceptId: string, userId: UserId): Promise<IConceptCardCoverage | null>;
+
+  /**
+   * Recompute coverage for all concepts touched by the provided anchors.
+   */
+  refreshCoverage(userId: UserId, conceptIds: string[]): Promise<IConceptCardCoverage[]>;
+
   // ============================================================================
   // Write Operations
   // ============================================================================
@@ -110,6 +147,39 @@ export interface IContentRepository {
   create(
     input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }
   ): Promise<ICard>;
+
+  /**
+   * Create an async content generation job.
+   */
+  createGenerationJob(
+    input: ICreateContentGenerationJobInput & { id: string; userId: UserId }
+  ): Promise<IContentGenerationJob>;
+
+  /**
+   * Update an async content generation job.
+   */
+  updateGenerationJob(
+    id: string,
+    patch: Partial<
+      Pick<
+        IContentGenerationJob,
+        | 'status'
+        | 'resultPayload'
+        | 'createdCardIds'
+        | 'rejectedDrafts'
+        | 'errorMessage'
+        | 'agentRunId'
+      >
+    >
+  ): Promise<IContentGenerationJob>;
+
+  findGenerationJobById(id: string, userId: UserId): Promise<IContentGenerationJob | null>;
+
+  listGenerationJobs(
+    userId: UserId,
+    status?: string,
+    limit?: number
+  ): Promise<IContentGenerationJob[]>;
 
   /**
    * Create multiple cards in a batch.

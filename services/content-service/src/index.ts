@@ -41,6 +41,8 @@ import { PrismaHistoryRepository } from './infrastructure/database/prisma-histor
 import { PrismaMediaRepository } from './infrastructure/database/prisma-media.repository.js';
 import { PrismaTemplateRepository } from './infrastructure/database/prisma-template.repository.js';
 import { JwtTokenVerifier } from './infrastructure/external-apis/token-verifier.js';
+import { HttpContentAgentClient } from './infrastructure/content-agent/index.js';
+import { HttpPedagogyGuardianClient } from './infrastructure/pedagogy-guardian/index.js';
 import { MinioStorageProvider } from './infrastructure/storage/minio-storage.provider.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
@@ -102,6 +104,22 @@ async function bootstrap(): Promise<void> {
   const mediaRepository = new PrismaMediaRepository(prisma);
   const tokenVerifier = new JwtTokenVerifier(getTokenVerifierConfig(config));
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
+  const pedagogyGuardianClient = config.pedagogyGuardian.enabled
+    ? new HttpPedagogyGuardianClient({
+        baseUrl: config.pedagogyGuardian.serviceUrl,
+        ...(config.pedagogyGuardian.serviceToken !== undefined
+          ? { serviceToken: config.pedagogyGuardian.serviceToken }
+          : {}),
+      })
+    : undefined;
+  const contentAgentClient = config.contentAgent.enabled
+    ? new HttpContentAgentClient({
+        baseUrl: config.contentAgent.serviceUrl,
+        ...(config.contentAgent.serviceToken !== undefined
+          ? { serviceToken: config.contentAgent.serviceToken }
+          : {}),
+      })
+    : undefined;
 
   // Wrap content repository with read-through cache (conditional)
   const cacheProvider = new RedisCacheProvider(
@@ -135,7 +153,9 @@ async function bootstrap(): Promise<void> {
     contentRepository,
     eventPublisher,
     logger,
-    historyRepository
+    historyRepository,
+    pedagogyGuardianClient,
+    contentAgentClient
   );
   const templateService = new TemplateService(templateRepository, eventPublisher, logger);
   const mediaService = new MediaService(

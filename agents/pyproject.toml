@@ -47,17 +47,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "shared",
-    "learning_agent",
-    "diagnostic_agent",
-    "strategy_agent",
-    "content_generation_agent",
-    "ingestion_agent",
-    "knowledge_graph_agent",
-    "socratic_tutor_agent",
-    "calibration_agent",
-    "governance_agent",
-    "taxonomy_curator_agent",
+    "src/agents",
 ]
 
 # =============================================================================
