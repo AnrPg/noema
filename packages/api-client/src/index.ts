@@ -33,6 +33,10 @@ export * from './session/index.js';
 export * from './knowledge-graph/index.js';
 export type * from './knowledge-graph/types.js';
 
+// Gamification Service
+export * from './gamification/index.js';
+export type * from './gamification/types.js';
+
 // Curriculum Service
 export * from './curriculum/index.js';
 export type * from './curriculum/types.js';

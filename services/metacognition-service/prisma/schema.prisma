@@ -8,71 +8,136 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Evaluation {
-  id                String   @id @db.VarChar(50)
-  stepId            String   @unique @map("step_id") @db.VarChar(50)
-  lessonPlanId      String   @map("lesson_plan_id") @db.VarChar(50)
-  sessionId         String   @map("session_id") @db.VarChar(50)
-  userId            String   @map("user_id") @db.VarChar(50)
-  conceptRefs       String[] @map("concept_refs")
-  correct           Boolean
-  selfRating        String   @map("self_rating") @db.VarChar(50)
-  reasoningQuality  Float    @map("reasoning_quality")
-  confidenceSignal  Float    @map("confidence_signal")
-  combinedScore     Float    @map("combined_score")
-  schedulerRating   String   @map("scheduler_rating") @db.VarChar(50)
-  trace             Json
-  errorType         String?  @map("error_type") @db.VarChar(100)
-  misconceptionRef  String?  @map("misconception_ref") @db.VarChar(100)
-  recommendedAction String   @map("recommended_action") @db.VarChar(500)
-  responseTimeMs    Int?     @map("response_time_ms")
-  studyMode         String   @default("knowledge_gaining") @map("study_mode") @db.VarChar(50)
-  transformation    String?  @db.VarChar(50)
-  createdAt         DateTime @default(now()) @map("created_at")
+enum StudyMode {
+  language_learning
+  knowledge_gaining
 
-  triggers          Trigger[]
+  @@map("study_mode")
+}
+
+enum StepSelfRating {
+  knew_it
+  hesitated
+  didnt_know
+
+  @@map("step_self_rating")
+}
+
+enum SchedulerRating {
+  again
+  hard
+  good
+  easy
+
+  @@map("scheduler_rating")
+}
+
+enum TriggerType {
+  failure
+  confusion
+  slow_thinking
+  overconfidence
+  boredom
+  prerequisite_gap
+
+  @@map("trigger_type")
+}
+
+enum TriggerStatus {
+  open
+  addressed
+  recurring
+
+  @@map("trigger_status")
+}
+
+enum LearningInterventionType {
+  insert_repair_step
+  insert_contrastive_step
+  insert_calibration_step
+  switch_epistemic_mode
+  switch_transformation
+  change_activity
+  reduce_difficulty
+  increase_difficulty
+  transition_to_transfer
+  branch_to_prerequisite
+
+  @@map("learning_intervention_type")
+}
+
+model Evaluation {
+  id                String          @id @db.VarChar(50)
+  stepId            String          @unique @map("step_id") @db.VarChar(50)
+  lessonPlanId      String          @map("lesson_plan_id") @db.VarChar(50)
+  sessionId         String          @map("session_id") @db.VarChar(50)
+  userId            String          @map("user_id") @db.VarChar(50)
+  conceptRefs       String[]        @map("concept_refs")
+  correct           Boolean
+  correctnessScore  Float           @map("correctness_score")
+  selfRating        StepSelfRating  @map("self_rating")
+  reasoningQuality  Float           @map("reasoning_quality")
+  confidenceSignal  Float           @map("confidence_signal")
+  combinedScore     Float           @map("combined_score")
+  schedulerRating   SchedulerRating @map("scheduler_rating")
+  trace             Json
+  errorType         String?         @map("error_type") @db.VarChar(100)
+  misconceptionRef  String?         @map("misconception_ref") @db.VarChar(100)
+  recommendedAction String?         @map("recommended_action") @db.VarChar(500)
+  responseTimeMs    Int             @map("response_time_ms")
+  hintRequestCount  Int             @default(0) @map("hint_request_count")
+  revisionCount     Int             @default(0) @map("revision_count")
+  studyMode         StudyMode       @map("study_mode")
+  epistemicMode     String          @map("epistemic_mode") @db.VarChar(100)
+  transformation    String?         @db.VarChar(50)
+  triggerIds        String[]        @map("trigger_ids")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  triggers          MetacognitiveTrigger[]
 
   @@index([userId, createdAt])
   @@index([lessonPlanId])
   @@index([sessionId])
   @@index([conceptRefs], type: Gin)
+  @@index([triggerIds], type: Gin)
   @@map("evaluations")
 }
 
-model Trigger {
-  id                      String     @id @db.VarChar(50)
-  evaluationId            String     @map("evaluation_id") @db.VarChar(50)
-  userId                  String     @map("user_id") @db.VarChar(50)
-  type                    String     @db.VarChar(50)
+model MetacognitiveTrigger {
+  id                      String                   @id @db.VarChar(50)
+  evaluationId            String?                  @map("evaluation_id") @db.VarChar(50)
+  userId                  String                   @map("user_id") @db.VarChar(50)
+  type                    TriggerType
   severity                Float
-  detectedFrom            String[]   @map("detected_from")
-  conceptRefs             String[]   @map("concept_refs")
-  stepId                  String     @map("step_id") @db.VarChar(50)
-  sessionId               String     @map("session_id") @db.VarChar(50)
-  recommendedIntervention String     @map("recommended_intervention") @db.VarChar(100)
-  status                  String     @default("open") @db.VarChar(50)
-  createdAt               DateTime   @default(now()) @map("created_at")
-  updatedAt               DateTime   @updatedAt @map("updated_at")
+  detectedFromFrames      String[]                 @map("detected_from_frames")
+  conceptRefs             String[]                 @map("concept_refs")
+  stepId                  String?                  @map("step_id") @db.VarChar(50)
+  sessionId               String?                  @map("session_id") @db.VarChar(50)
+  misconceptionRef        String                   @map("misconception_ref") @db.VarChar(100)
+  recommendedIntervention LearningInterventionType @map("recommended_intervention")
+  status                  TriggerStatus            @default(open)
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
 
-  evaluation              Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluation              Evaluation?              @relation(fields: [evaluationId], references: [id], onDelete: SetNull)
 
   @@index([userId, status])
   @@index([sessionId])
   @@index([conceptRefs], type: Gin)
-  @@map("triggers")
+  @@map("metacognitive_triggers")
 }
 
-model ConceptReasoningAverage {
-  id               String   @id @db.VarChar(120)
-  userId           String   @map("user_id") @db.VarChar(50)
-  conceptId        String   @map("concept_id") @db.VarChar(50)
-  studyMode        String   @default("knowledge_gaining") @map("study_mode") @db.VarChar(50)
-  average          Float
-  sampleCount      Int      @map("sample_count")
-  windowSize       Int      @map("window_size")
-  latestEvaluation String?  @map("latest_evaluation") @db.VarChar(50)
-  updatedAt        DateTime @updatedAt @map("updated_at")
+model ConceptReasoningRollup {
+  userId              String    @map("user_id") @db.VarChar(50)
+  conceptId           String    @map("concept_id") @db.VarChar(50)
+  studyMode           StudyMode @map("study_mode")
+  averageReasoning    Float     @map("average_reasoning")
+  sampleCount         Int       @map("sample_count")
+  windowSize          Int       @map("window_size")
+  lastEvaluationAt    DateTime  @map("last_evaluation_at")
+  recentEvaluationIds String[]  @map("recent_evaluation_ids")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  @@unique([userId, conceptId, studyMode])
-  @@map("concept_reasoning_averages")
+  @@id([userId, conceptId, studyMode])
+  @@map("concept_reasoning_rollups")
 }

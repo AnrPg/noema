@@ -20,13 +20,16 @@ export * from './responses.js';
 export * from './health.js';
 
 // Session blueprint / dual-lane / offline intent contracts
-export * from './session-blueprint.js';
+export type * from './session-blueprint.js';
 
 // Step-first realignment learning loop contracts
-export * from './learning-loop.js';
+export type * from './learning-loop.js';
 
 // Curriculum-service contracts
-export * from './curriculum.js';
+export type * from './curriculum.js';
+export type * from './ingestion.js';
+export type * from './vector.js';
 
 // Content generation and provenance contracts
-export * from './content.js';
+export type * from './content.js';
+export * from './gamification.js';

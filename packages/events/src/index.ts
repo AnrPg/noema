@@ -66,7 +66,13 @@ export * from './realignment/realignment.events.js';
 // Curriculum Domain Events
 // ============================================================================
 export * from './curriculum/curriculum-event.schemas.js';
-export * from './curriculum/curriculum.events.js';
+export type * from './curriculum/curriculum.events.js';
+
+// ============================================================================
+// Ingestion Domain Events
+// ============================================================================
+export * from './ingestion/ingestion-event.schemas.js';
+export * from './ingestion/ingestion.events.js';
 
 // ============================================================================
 // Event Consumer Infrastructure

@@ -99,6 +99,16 @@ export const RevisionChangeIdSchema = createIdSchema(
   ID_PREFIXES.RevisionChangeId,
   'Revision Change ID'
 );
+export const DocumentIdSchema = createIdSchema(ID_PREFIXES.DocumentId, 'Document ID');
+export const IngestionJobIdSchema = createIdSchema(ID_PREFIXES.IngestionJobId, 'Ingestion Job ID');
+export const DocumentChunkIdSchema = createIdSchema(
+  ID_PREFIXES.DocumentChunkId,
+  'Document Chunk ID'
+);
+export const ConceptCandidateIdSchema = createIdSchema(
+  ID_PREFIXES.ConceptCandidateId,
+  'Concept Candidate ID'
+);
 
 // ============================================================================
 // ID Schema Registry
@@ -152,6 +162,10 @@ export const IdSchemas = {
   [ID_PREFIXES.CurriculumEdgeId]: CurriculumEdgeIdSchema,
   [ID_PREFIXES.RevisionProposalId]: RevisionProposalIdSchema,
   [ID_PREFIXES.RevisionChangeId]: RevisionChangeIdSchema,
+  [ID_PREFIXES.DocumentId]: DocumentIdSchema,
+  [ID_PREFIXES.IngestionJobId]: IngestionJobIdSchema,
+  [ID_PREFIXES.DocumentChunkId]: DocumentChunkIdSchema,
+  [ID_PREFIXES.ConceptCandidateId]: ConceptCandidateIdSchema,
 } as const;
 
 // ============================================================================
@@ -202,3 +216,7 @@ export type CurriculumNodeIdInput = z.input<typeof CurriculumNodeIdSchema>;
 export type CurriculumEdgeIdInput = z.input<typeof CurriculumEdgeIdSchema>;
 export type RevisionProposalIdInput = z.input<typeof RevisionProposalIdSchema>;
 export type RevisionChangeIdInput = z.input<typeof RevisionChangeIdSchema>;
+export type DocumentIdInput = z.input<typeof DocumentIdSchema>;
+export type IngestionJobIdInput = z.input<typeof IngestionJobIdSchema>;
+export type DocumentChunkIdInput = z.input<typeof DocumentChunkIdSchema>;
+export type ConceptCandidateIdInput = z.input<typeof ConceptCandidateIdSchema>;

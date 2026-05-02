@@ -293,7 +293,10 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  Ingestion["ingestion-service"] -->|"ingestion.document.processed / concepts.extracted"| Content["content-service"]
+  Ingestion["ingestion-service"] -->|"chunks"| Vector["vector-service"]
+  Vector -->|"embedded chunks / retrieval results"| Ingestion
+  Ingestion -->|"curriculum handoff"| Curriculum["curriculum-service"]
+  Ingestion -->|"card seed handoff"| Content["content-service"]
   Curriculum["curriculum-service"] -->|"curriculum.frontier.updated"| Content
   Content -->|"generated/transformed drafts"| Guardian["pedagogy-guardian-service"]
   Agents["agents/content_generator.py + lesson_planner.py"] -->|"draft generation"| Content

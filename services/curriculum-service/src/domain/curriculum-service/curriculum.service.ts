@@ -3,14 +3,28 @@ import type {
   ICurriculumProgress,
   ICurriculumRevisionProposal,
   ICreateCurriculumInput,
+  IGenerateCurriculumInput,
   IRealignmentEvidence,
   IRecordCurriculumEvaluationInput,
   IRecordRealignmentEvidenceInput,
   ISessionSlice,
   ISessionSliceRequest,
 } from '@noema/contracts';
-import { CurriculumEdgeType, RevisionChangeState } from '@noema/types';
-import type { CurriculumId, RevisionChangeId, RevisionProposalId, UserId } from '@noema/types';
+import {
+  CurriculumEdgeType,
+  CurriculumOriginMode,
+  ID_PREFIXES,
+  RevisionChangeState,
+} from '@noema/types';
+import type {
+  CurriculumId,
+  CurriculumNodeId,
+  CurriculumVersionId,
+  RevisionChangeId,
+  RevisionProposalId,
+  UserId,
+} from '@noema/types';
+import { nanoid } from 'nanoid';
 import {
   composeSessionSlice,
   computeFrontier,
@@ -52,6 +66,91 @@ export class CurriculumService {
     return curriculum;
   }
 
+  async generateCurriculum(
+    userId: UserId,
+    input: IGenerateCurriculumInput & { title?: string; sourceDocumentIds?: string[] }
+  ): Promise<ICurriculum> {
+    const curriculum = await this.repository.create(userId, {
+      title: input.title ?? input.goal.slice(0, 120),
+      goal: input.goal,
+      domain: input.domain,
+      originMode: CurriculumOriginMode.DOCUMENT_DERIVED,
+    });
+    const versionId = `${ID_PREFIXES.CurriculumVersionId}${nanoid(21)}` as CurriculumVersionId;
+    const rootConceptIds = input.rootConceptIds ?? [];
+    const nodes = rootConceptIds;
+    const graph = {
+      id: versionId,
+      nodes: nodes.map((conceptId, index) => ({
+        id: `${ID_PREFIXES.CurriculumNodeId}${nanoid(21)}` as CurriculumNodeId,
+        curriculumVersionId: versionId,
+        stableNodeKey: `doc-root-${String(index)}-${conceptId}`,
+        ckgConceptId: conceptId,
+        label: `Document concept ${String(index + 1)}`,
+        learningObjective: `Understand and apply concept ${String(index + 1)} from ${curriculum.title}.`,
+        stabilityThreshold: 0.8,
+        estimatedSessions: 1,
+        traversalWeight: index + 1,
+        metadata: { sourceDocumentIds: input.sourceDocumentIds ?? [] },
+      })),
+      edges: [],
+    };
+    const fallbackGraph =
+      graph.nodes.length > 0
+        ? graph
+        : {
+            id: versionId,
+            nodes: [
+              {
+                id: `${ID_PREFIXES.CurriculumNodeId}${nanoid(21)}` as CurriculumNodeId,
+                curriculumVersionId: versionId,
+                stableNodeKey: 'document-overview',
+                proposedConcept: {
+                  label: curriculum.title,
+                  sourceDocumentIds: input.sourceDocumentIds ?? [],
+                },
+                label: curriculum.title,
+                learningObjective: input.goal,
+                stabilityThreshold: 0.8,
+                estimatedSessions: 1,
+                traversalWeight: 1,
+                metadata: { sourceDocumentIds: input.sourceDocumentIds ?? [] },
+              },
+            ],
+            edges: [],
+          };
+    const draftVersionId = await this.repository.saveDraftVersion({
+      curriculumId: curriculum.id,
+      graph: fallbackGraph,
+      agentRunId: 'ingestion-service',
+    });
+    if (this.pedagogyGuardianClient === undefined) {
+      throw new Error('Pedagogy Guardian client is required before curriculum publication.');
+    }
+    const guardianOutcome =
+      await this.pedagogyGuardianClient.validateCurriculumVersion(fallbackGraph);
+    if (!guardianOutcome.accepted) {
+      throw new Error(
+        `Pedagogy Guardian rejected curriculum version ${guardianOutcome.validationId}.`
+      );
+    }
+    await this.repository.finalizeVersion({
+      userId,
+      curriculumId: curriculum.id,
+      curriculumVersionId: draftVersionId,
+      guardianValidationId: guardianOutcome.validationId,
+    });
+    await this.eventPublisher?.publish('curriculum.generated', {
+      curriculumId: curriculum.id,
+      userId,
+      rootConceptIds,
+      sourceDocumentIds: input.sourceDocumentIds ?? [],
+    });
+    const generated = await this.repository.getById(userId, curriculum.id);
+    if (generated === undefined) throw new Error('Generated curriculum could not be loaded.');
+    return generated;
+  }
+
   getCurriculum(userId: UserId, curriculumId: CurriculumId): Promise<ICurriculum | undefined> {
     return this.repository.getById(userId, curriculumId);
   }
@@ -85,7 +184,8 @@ export class CurriculumService {
         minCorrectStreak: input.minCorrectStreak ?? 2,
       },
     };
-    if (input.stabilitySnapshot !== undefined) progressInput.stabilitySnapshot = input.stabilitySnapshot;
+    if (input.stabilitySnapshot !== undefined)
+      progressInput.stabilitySnapshot = input.stabilitySnapshot;
     if (existing !== undefined) progressInput.existing = existing;
     const next = updateProgressFromEvaluation(progressInput);
 
@@ -98,7 +198,8 @@ export class CurriculumService {
       evaluationCount: next.evaluationCount,
       correctStreak: next.correctStreak,
     };
-    if (next.stabilitySnapshot !== undefined) persistInput.stabilitySnapshot = next.stabilitySnapshot;
+    if (next.stabilitySnapshot !== undefined)
+      persistInput.stabilitySnapshot = next.stabilitySnapshot;
     if (next.completedAt !== undefined) persistInput.completedAt = next.completedAt;
     const saved = await this.repository.upsertProgress(persistInput);
     await this.eventPublisher?.publish('curriculum.progress.updated', {

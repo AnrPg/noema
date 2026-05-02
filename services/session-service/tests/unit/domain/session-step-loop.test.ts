@@ -44,6 +44,7 @@ class InMemoryRepository implements ISessionRepository {
   goals = new Map<string, ILessonPlanGoal>();
   steps = new Map<string, IStep>();
   queue = new Map<string, IStepQueueItem>();
+  lifecycleUpdates: SessionLifecycleState[] = [];
 
   async findSessionById(id: SessionId): Promise<ISession | null> {
     return this.sessions.get(id) ?? null;
@@ -82,6 +83,7 @@ class InMemoryRepository implements ISessionRepository {
       version: current.version + 1,
       updatedAt: new Date().toISOString(),
     };
+    if (data.lifecycleState !== undefined) this.lifecycleUpdates.push(data.lifecycleState);
     this.sessions.set(id, updated);
     return updated;
   }
@@ -171,6 +173,12 @@ class InMemoryRepository implements ISessionRepository {
     const step = this.steps.get(id);
     if (!step) throw new Error(`Missing step ${id}`);
     return step;
+  }
+
+  async findStepsBySessionId(sessionId: SessionId): Promise<IStep[]> {
+    return [...this.steps.values()]
+      .filter((step) => step.sessionId === sessionId)
+      .sort((a, b) => a.position - b.position);
   }
 
   async findNextQueueItem(sessionId: SessionId): Promise<IStepQueueItem | null> {
@@ -280,6 +288,7 @@ describe('session Step loop', () => {
 
     const sessionResult = await service.startSession(
       {
+        curriculumId: 'curriculum_test',
         studyMode: StudyMode.KNOWLEDGE_GAINING,
         learningMode: LearningMode.EXPLORATION,
         topic: 'Bayes theorem',
@@ -349,9 +358,19 @@ describe('session Step loop', () => {
 
     expect(answered.data.status).toBe(StepStatus.EVALUATED);
     expect(answered.data.evaluationId).toMatch(/^eval_/);
+    expect(repo.lifecycleUpdates).toContain(SessionLifecycleState.DIAGNOSIS);
     expect((await repo.getSessionById(sessionResult.data.id)).lifecycleState).toBe(
       SessionLifecycleState.EVALUATION
     );
+
+    const completed = await service.completeSession(
+      sessionResult.data.id,
+      { reason: 'completed_normally' },
+      ctx
+    );
+    expect(completed.data.lifecycleState).toBe(SessionLifecycleState.COMPLETION);
+    expect(completed.data.completedAt).toEqual(expect.any(String));
+    expect(completed.data.terminationReason).toBe('completed_normally');
   });
 
   it('blocks LessonPlan creation when Pedagogy Guardian rejects a Step', async () => {
@@ -378,6 +397,7 @@ describe('session Step loop', () => {
 
     const sessionResult = await service.startSession(
       {
+        curriculumId: 'curriculum_test',
         studyMode: StudyMode.KNOWLEDGE_GAINING,
         learningMode: LearningMode.EXPLORATION,
         topic: 'Bayes theorem',

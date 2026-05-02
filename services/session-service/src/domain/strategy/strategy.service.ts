@@ -8,6 +8,8 @@ import {
   LearningInterventionType,
   MODE_GROUPS,
   ReplanScope,
+  RigorLevel,
+  SessionLifecycleState,
   StepStatus,
   TransformationType,
   TriggerType,
@@ -116,13 +118,8 @@ export class StrategyService {
 
     const interventionType =
       trigger.recommendedIntervention ?? this.defaultInterventionForTrigger(trigger);
-    const scope = this.chooseScope(trigger, lessonPlan, steps);
-    if (scope === ReplanScope.FULL) {
-      throw new BusinessRuleError('Full LessonPlan replacement requires a generation agent', {
-        triggerId: trigger.triggerId,
-        lessonPlanId: lessonPlan.id,
-      });
-    }
+    const requestedScope = this.chooseScope(trigger, lessonPlan, steps);
+    const scope = this.effectiveScope(requestedScope, trigger, lessonPlan);
 
     const insertedSteps = this.buildInsertedSteps({
       session,
@@ -131,6 +128,13 @@ export class StrategyService {
       trigger,
       interventionType,
       scope,
+    });
+    const replacements = this.selectSupersededSteps({
+      steps,
+      failedStep,
+      trigger,
+      scope,
+      insertedSteps,
     });
     const proposedSteps: (IStep | ICreateStepRecord)[] = [...steps, ...insertedSteps];
     const currentPlan = this.guardianPlan(lessonPlan, goals, steps);
@@ -180,17 +184,44 @@ export class StrategyService {
       triggerIds: [trigger.triggerId],
       scope,
       interventionType,
-      supersededStepIds: [],
+      supersededStepIds: replacements.map((replacement) => replacement.stepId),
       insertedStepIds: insertedSteps.map((step) => step.id),
     };
 
     await this.prisma.$transaction(async (tx) => {
+      const adaptedSession = await this.repository.updateSession(
+        session.id,
+        {
+          lifecycleState: SessionLifecycleState.ADAPTATION,
+          lastActivityAt: new Date().toISOString(),
+        },
+        session.version,
+        tx
+      );
+      if (replacements.length > 0) {
+        await this.repository.markStepsSuperseded(replacements, tx);
+      }
       await this.repository.createSteps(insertedSteps, tx);
       await this.enqueueStrategyEvents(result, ctx, tx);
+      await this.repository.updateSession(
+        session.id,
+        {
+          lifecycleState: SessionLifecycleState.EVALUATION,
+          lastActivityAt: new Date().toISOString(),
+        },
+        adaptedSession.version,
+        tx
+      );
     });
 
     this.logger.info(
-      { triggerId: trigger.triggerId, scope, interventionType, inserted: result.insertedStepIds },
+      {
+        triggerId: trigger.triggerId,
+        scope,
+        interventionType,
+        superseded: result.supersededStepIds,
+        inserted: result.insertedStepIds,
+      },
       'Strategy replan committed'
     );
 
@@ -229,6 +260,24 @@ export class StrategyService {
     }
   }
 
+  private effectiveScope(
+    requestedScope: ReplanScope,
+    trigger: IMetacognitionTriggerInput,
+    lessonPlan: ILessonPlan
+  ): ReplanScope {
+    if (requestedScope !== ReplanScope.FULL) return requestedScope;
+    this.logger.warn(
+      {
+        triggerId: trigger.triggerId,
+        lessonPlanId: lessonPlan.id,
+        requestedScope,
+        fallbackScope: ReplanScope.STRUCTURAL,
+      },
+      'Full strategy replan requires the generation agent; applying structural fallback'
+    );
+    return ReplanScope.STRUCTURAL;
+  }
+
   private planFundamentallyInvalidated(
     trigger: Pick<IMetacognitionTriggerInput, 'severity' | 'conceptRefs'>,
     lessonPlan: ILessonPlan,
@@ -236,7 +285,7 @@ export class StrategyService {
   ): boolean {
     return (
       trigger.severity >= 0.99 &&
-      lessonPlan.rigorLevel === 'full' &&
+      lessonPlan.rigorLevel === RigorLevel.FULL &&
       trigger.conceptRefs.length > Math.max(3, steps.length)
     );
   }
@@ -262,6 +311,32 @@ export class StrategyService {
         ...optionalStringField('archetype', input.session.config['loadoutArchetype']),
       })
     );
+  }
+
+  private selectSupersededSteps(input: {
+    steps: readonly IStep[];
+    failedStep: IStep;
+    trigger: IMetacognitionTriggerInput;
+    scope: ReplanScope;
+    insertedSteps: readonly ICreateStepRecord[];
+  }): { stepId: StepId; supersededByStepId: StepId }[] {
+    const replacementStep = input.insertedSteps[0];
+    if (replacementStep === undefined) return [];
+
+    const triggerConcepts = new Set(input.trigger.conceptRefs);
+    const supersedableStatuses = new Set<StepStatus>([StepStatus.PLANNED, StepStatus.QUEUED]);
+    const candidates = input.steps.filter((step) => {
+      if (!supersedableStatuses.has(step.status)) return false;
+      if (step.position <= input.failedStep.position) return false;
+      if (step.supersededByStepId !== null) return false;
+      if (input.scope === ReplanScope.STRUCTURAL) return true;
+      return step.conceptRefs.some((conceptId) => triggerConcepts.has(conceptId));
+    });
+
+    return candidates.map((step) => ({
+      stepId: step.id,
+      supersededByStepId: replacementStep.id,
+    }));
   }
 
   private createInsertedStep(

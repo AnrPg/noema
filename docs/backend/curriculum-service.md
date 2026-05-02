@@ -9,6 +9,8 @@ concepts that must go through the CKG mutation DSL before anchoring.
 - Store curricula, versions, nodes, edges, progress, realignment evidence, and
   revision proposals.
 - Validate DAG invariants before activation.
+- Require Pedagogy Guardian validation before generated curriculum versions are
+  finalized and published.
 - Compute deterministic frontiers from active version plus progress.
 - Return session slices to `session-service` before LessonPlan generation.
 - Accumulate durable metacognition triggers across sessions before proposing
@@ -21,6 +23,8 @@ concepts that must go through the CKG mutation DSL before anchoring.
   service skeleton.
 - Progress identity is `(curriculumId, userId, stableNodeKey)`.
 - Completed progress does not regress when scheduler retention decays.
+- Curriculum nodes use `stabilityThreshold`; legacy learner-facing "mastery"
+  vocabulary is not part of the public or domain contract.
 
 ## Validation
 

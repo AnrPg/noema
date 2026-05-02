@@ -109,17 +109,18 @@ export class MetacognitionService {
     });
 
     const now = new Date().toISOString();
-    const studyMode = input.studyMode ?? StudyMode.KNOWLEDGE_GAINING;
+    const studyMode = input.studyMode;
     const triggers: ITrigger[] = triggerCandidates.map((candidate) => ({
       id: `trigger_${nanoid()}` as TriggerId,
       evaluationId,
       userId: input.userId,
       type: candidate.type,
       severity: candidate.severity,
-      detectedFrom: candidate.detectedFrom,
+      detectedFromFrames: candidate.detectedFrom,
       conceptRefs: candidate.conceptRefs,
       stepId: input.stepId,
       sessionId: input.sessionId,
+      misconceptionRef: input.misconceptionRef ?? `trigger:${candidate.type}`,
       recommendedIntervention: candidate.recommendedIntervention,
       status: TriggerStatus.OPEN,
       createdAt: now,
@@ -134,6 +135,7 @@ export class MetacognitionService {
       userId: input.userId,
       conceptRefs: input.conceptRefs,
       correct: input.correct,
+      correctnessScore: input.correct ? 1 : 0,
       selfRating: input.selfRating,
       reasoningQuality: reasoningResult.reasoningQuality,
       confidenceSignal,
@@ -144,8 +146,11 @@ export class MetacognitionService {
       ...(input.misconceptionRef !== undefined ? { misconceptionRef: input.misconceptionRef } : {}),
       triggersFired: triggers.map((trigger) => trigger.id),
       recommendedAction: this.recommendAction(triggers),
-      ...(input.responseTimeMs !== undefined ? { responseTimeMs: input.responseTimeMs } : {}),
+      responseTimeMs: input.responseTimeMs ?? 0,
+      hintRequestCount: input.hintRequestCount ?? 0,
+      revisionCount: input.revisionCount ?? 0,
       studyMode,
+      epistemicMode: input.epistemicMode,
       ...(input.transformation !== undefined ? { transformation: input.transformation } : {}),
       createdAt: now,
     };
@@ -207,6 +212,7 @@ export class MetacognitionService {
       combinedScore: evaluation.combinedScore,
       correct: evaluation.correct,
       studyMode: evaluation.studyMode,
+      epistemicMode: evaluation.epistemicMode,
       ...(evaluation.transformation !== undefined
         ? { transformation: evaluation.transformation }
         : {}),
@@ -225,12 +231,12 @@ export class MetacognitionService {
           userId: average.userId,
           conceptId: average.conceptId,
           studyMode: average.studyMode,
-          newAverage: average.average,
+          newAverage: average.averageReasoning,
           windowSize: average.windowSize,
         };
         return {
           eventType: MetacognitionEventType.REASONING_AVERAGE_UPDATED,
-          aggregateType: 'ConceptReasoningAverage',
+          aggregateType: 'ConceptReasoningRollup',
           aggregateId: `${average.userId}:${average.conceptId}:${average.studyMode}`,
           payload,
           metadata: { correlationId: context.correlationId, userId: average.userId },
@@ -243,8 +249,8 @@ export class MetacognitionService {
           type: trigger.type,
           severity: trigger.severity,
           conceptRefs: trigger.conceptRefs,
-          stepId: trigger.stepId,
-          sessionId: trigger.sessionId,
+          stepId: trigger.stepId as NonNullable<typeof trigger.stepId>,
+          sessionId: trigger.sessionId as NonNullable<typeof trigger.sessionId>,
           recommendedIntervention: trigger.recommendedIntervention,
         };
         return {

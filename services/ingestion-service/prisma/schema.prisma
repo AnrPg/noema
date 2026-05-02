@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../node_modules/.prisma/ingestion-service-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model IngestionDocument {
+  id         String   @id
+  userId     String   @map("user_id")
+  title      String
+  sourceKind String   @map("source_kind")
+  mimeKind   String   @map("mime_kind")
+  sourceUri  String?  @map("source_uri")
+  checksum   String
+  byteLength Int      @map("byte_length")
+  rawContent String   @map("raw_content")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  ir         IngestionDocumentIr?
+  chunks     IngestionDocumentChunk[]
+  candidates IngestionConceptCandidate[]
+  jobs       IngestionJob[]
+
+  @@index([userId, createdAt])
+  @@map("ingestion_documents")
+}
+
+model IngestionDocumentIr {
+  documentId String   @id @map("document_id")
+  language   String   @default("und")
+  title      String
+  outline    Json
+  blocks     Json
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  document IngestionDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("ingestion_document_irs")
+}
+
+model IngestionDocumentChunk {
+  id            String   @id
+  documentId    String   @map("document_id")
+  userId        String   @map("user_id")
+  ordinal       Int
+  text          String
+  tokenEstimate Int      @map("token_estimate")
+  headingPath   Json     @map("heading_path")
+  pageRef       String?  @map("page_ref")
+  vectorId      String?  @map("vector_id")
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  document IngestionDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, ordinal])
+  @@index([documentId])
+  @@index([userId])
+  @@map("ingestion_document_chunks")
+}
+
+model IngestionConceptCandidate {
+  id               String   @id
+  documentId       String   @map("document_id")
+  userId           String   @map("user_id")
+  label            String
+  definition       String?
+  salience         Float
+  evidenceChunkIds Json     @map("evidence_chunk_ids")
+  state            String
+  ckgNodeId        String?  @map("ckg_node_id")
+  proposedNodeId   String?  @map("proposed_node_id")
+  metadata         Json     @default("{}")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  document IngestionDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([userId, label])
+  @@map("ingestion_concept_candidates")
+}
+
+model IngestionJob {
+  id                      String    @id
+  documentId              String    @map("document_id")
+  userId                  String    @map("user_id")
+  intent                  String
+  stage                   String
+  checkpoints             Json      @default("{}")
+  errorMessage            String?   @map("error_message")
+  curriculumId            String?   @map("curriculum_id")
+  contentGenerationJobIds Json      @default("[]") @map("content_generation_job_ids")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  finishedAt              DateTime? @map("finished_at")
+
+  document IngestionDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([userId, createdAt])
+  @@index([stage])
+  @@map("ingestion_jobs")
+}

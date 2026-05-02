@@ -8,7 +8,7 @@ import type {
 } from '../../domain/metacognition-service/types.js';
 
 type EvaluationRecord = Awaited<ReturnType<PrismaClient['evaluation']['findUnique']>>;
-type TriggerRecord = Awaited<ReturnType<PrismaClient['trigger']['findFirst']>>;
+type TriggerRecord = Awaited<ReturnType<PrismaClient['metacognitiveTrigger']['findFirst']>>;
 
 export class PrismaMetacognitionRepository implements IMetacognitionRepository {
   public constructor(private readonly prisma: PrismaClient) {}
@@ -39,6 +39,7 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
         userId: evaluation.userId,
         conceptRefs: evaluation.conceptRefs,
         correct: evaluation.correct,
+        correctnessScore: evaluation.correctnessScore,
         selfRating: evaluation.selfRating,
         reasoningQuality: evaluation.reasoningQuality,
         confidenceSignal: evaluation.confidenceSignal,
@@ -47,20 +48,25 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
         trace: evaluation.trace as unknown as Prisma.InputJsonValue,
         errorType: evaluation.errorType ?? null,
         misconceptionRef: evaluation.misconceptionRef ?? null,
-        recommendedAction: evaluation.recommendedAction,
-        responseTimeMs: evaluation.responseTimeMs ?? null,
+        recommendedAction: evaluation.recommendedAction ?? null,
+        responseTimeMs: evaluation.responseTimeMs,
+        hintRequestCount: evaluation.hintRequestCount,
+        revisionCount: evaluation.revisionCount,
         studyMode: evaluation.studyMode,
+        epistemicMode: evaluation.epistemicMode,
         transformation: evaluation.transformation ?? null,
+        triggerIds: triggers.map((trigger) => trigger.id),
         triggers: {
           create: triggers.map((trigger) => ({
             id: trigger.id,
             userId: trigger.userId,
             type: trigger.type,
             severity: trigger.severity,
-            detectedFrom: trigger.detectedFrom,
+            detectedFromFrames: trigger.detectedFromFrames,
             conceptRefs: trigger.conceptRefs,
-            stepId: trigger.stepId,
-            sessionId: trigger.sessionId,
+            stepId: trigger.stepId ?? null,
+            sessionId: trigger.sessionId ?? null,
+            misconceptionRef: trigger.misconceptionRef,
             recommendedIntervention: trigger.recommendedIntervention,
             status: trigger.status,
           })),
@@ -77,19 +83,33 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
     evaluationId: EvaluationId;
     windowSize: number;
   }): Promise<IReasoningAverage> {
+    const existing = await this.prisma.conceptReasoningRollup.findUnique({
+      where: {
+        userId_conceptId_studyMode: {
+          userId: params.userId,
+          conceptId: params.conceptId,
+          studyMode: params.studyMode,
+        },
+      },
+    });
+    const recentEvaluationIds = [
+      params.evaluationId,
+      ...(existing?.recentEvaluationIds ?? []).filter((id) => id !== params.evaluationId),
+    ].slice(0, params.windowSize);
     const recent = await this.prisma.evaluation.findMany({
       where: {
+        id: { in: recentEvaluationIds },
         userId: params.userId,
         conceptRefs: { has: params.conceptId },
         studyMode: params.studyMode,
       },
       orderBy: { createdAt: 'desc' },
-      take: params.windowSize,
     });
     const average =
       recent.reduce((total, evaluation) => total + evaluation.reasoningQuality, 0) /
       Math.max(1, recent.length);
-    const record = await this.prisma.conceptReasoningAverage.upsert({
+    const lastEvaluationAt = recent[0]?.createdAt ?? new Date();
+    const record = await this.prisma.conceptReasoningRollup.upsert({
       where: {
         userId_conceptId_studyMode: {
           userId: params.userId,
@@ -98,32 +118,32 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
         },
       },
       update: {
-        average: Number(average.toFixed(4)),
+        averageReasoning: Number(average.toFixed(4)),
         sampleCount: recent.length,
         windowSize: params.windowSize,
-        latestEvaluation: params.evaluationId,
+        lastEvaluationAt,
+        recentEvaluationIds: recent.map((evaluation) => evaluation.id),
       },
       create: {
-        id: `${params.userId}:${params.conceptId}:${params.studyMode}`,
         userId: params.userId,
         conceptId: params.conceptId,
         studyMode: params.studyMode,
-        average: Number(average.toFixed(4)),
+        averageReasoning: Number(average.toFixed(4)),
         sampleCount: recent.length,
         windowSize: params.windowSize,
-        latestEvaluation: params.evaluationId,
+        lastEvaluationAt,
+        recentEvaluationIds: recent.map((evaluation) => evaluation.id),
       },
     });
     return {
       userId: record.userId as UserId,
       conceptId: record.conceptId as ConceptId,
       studyMode: record.studyMode as StudyMode,
-      average: record.average,
+      averageReasoning: record.averageReasoning,
       sampleCount: record.sampleCount,
       windowSize: record.windowSize,
-      ...(record.latestEvaluation !== null
-        ? { latestEvaluation: record.latestEvaluation as EvaluationId }
-        : {}),
+      lastEvaluationAt: record.lastEvaluationAt.toISOString(),
+      recentEvaluationIds: record.recentEvaluationIds as EvaluationId[],
       updatedAt: record.updatedAt.toISOString(),
     };
   }
@@ -133,7 +153,7 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
     conceptId: ConceptId,
     studyMode: StudyMode = StudyMode.KNOWLEDGE_GAINING
   ): Promise<IReasoningAverage | null> {
-    const record = await this.prisma.conceptReasoningAverage.findUnique({
+    const record = await this.prisma.conceptReasoningRollup.findUnique({
       where: { userId_conceptId_studyMode: { userId, conceptId, studyMode } },
     });
     if (record === null) return null;
@@ -141,12 +161,11 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
       userId: record.userId as UserId,
       conceptId: record.conceptId as ConceptId,
       studyMode: record.studyMode as StudyMode,
-      average: record.average,
+      averageReasoning: record.averageReasoning,
       sampleCount: record.sampleCount,
       windowSize: record.windowSize,
-      ...(record.latestEvaluation !== null
-        ? { latestEvaluation: record.latestEvaluation as EvaluationId }
-        : {}),
+      lastEvaluationAt: record.lastEvaluationAt.toISOString(),
+      recentEvaluationIds: record.recentEvaluationIds as EvaluationId[],
       updatedAt: record.updatedAt.toISOString(),
     };
   }
@@ -160,6 +179,7 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
       userId: record.userId as IEvaluation['userId'],
       conceptRefs: record.conceptRefs as IEvaluation['conceptRefs'],
       correct: record.correct,
+      correctnessScore: record.correctnessScore,
       selfRating: record.selfRating as IEvaluation['selfRating'],
       reasoningQuality: record.reasoningQuality,
       confidenceSignal: record.confidenceSignal,
@@ -168,10 +188,15 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
       trace: record.trace as unknown as IEvaluation['trace'],
       ...(record.errorType !== null ? { errorType: record.errorType } : {}),
       ...(record.misconceptionRef !== null ? { misconceptionRef: record.misconceptionRef } : {}),
-      triggersFired: triggerIds as IEvaluation['triggersFired'],
-      recommendedAction: record.recommendedAction,
-      ...(record.responseTimeMs !== null ? { responseTimeMs: record.responseTimeMs } : {}),
+      triggersFired: (record.triggerIds.length > 0
+        ? record.triggerIds
+        : triggerIds) as IEvaluation['triggersFired'],
+      ...(record.recommendedAction !== null ? { recommendedAction: record.recommendedAction } : {}),
+      responseTimeMs: record.responseTimeMs,
+      hintRequestCount: record.hintRequestCount,
+      revisionCount: record.revisionCount,
       studyMode: record.studyMode as IEvaluation['studyMode'],
+      epistemicMode: record.epistemicMode as IEvaluation['epistemicMode'],
       createdAt: record.createdAt.toISOString(),
     };
     if (record.transformation !== null) {

@@ -32,7 +32,7 @@ export function updateProgressFromEvaluation(input: {
   const stabilitySnapshot = input.stabilitySnapshot ?? input.existing?.stabilitySnapshot;
   const completed =
     stabilitySnapshot !== undefined &&
-    stabilitySnapshot >= input.node.masteryThreshold &&
+    stabilitySnapshot >= input.node.stabilityThreshold &&
     evaluationCount >= input.policy.minExposureSessions &&
     correctStreak >= input.policy.minCorrectStreak;
 

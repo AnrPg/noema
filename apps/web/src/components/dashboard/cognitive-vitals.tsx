@@ -8,7 +8,9 @@
 'use client';
 
 import {
+  type GamificationSummaryDto,
   useDueConcepts,
+  useGamificationSummary,
   useMisconceptions,
   useStabilitySummary,
   type UserDto,
@@ -21,6 +23,21 @@ type UserId = UserDto['id'];
 
 function ensureArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function isGamificationSummary(value: unknown): value is GamificationSummaryDto {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate['currentStreak'] === 'number' &&
+    typeof candidate['longestStreak'] === 'number' &&
+    typeof candidate['level'] === 'number' &&
+    typeof candidate['memoryIntegrityScore'] === 'number' &&
+    typeof candidate['activeBadgeCount'] === 'number'
+  );
 }
 
 // ============================================================================
@@ -155,9 +172,8 @@ function MisconceptionsTile({
 // ============================================================================
 
 /**
- * userId is used only to ensure this tile renders only when auth is settled.
- * The realigned public client no longer exposes card streaks, so this tile
- * reports session readiness from due concept state.
+ * Dashboard streak/progression now comes from the derived gamification
+ * projection instead of inferring readiness from queue state.
  */
 function StudyStreakTile({
   userId,
@@ -166,9 +182,13 @@ function StudyStreakTile({
   userId: UserId;
   studyMode: StudyMode;
 }): React.JSX.Element {
-  const dueConcepts = useDueConcepts({ studyMode, limit: 1 }, { enabled: userId !== '' });
+  const summary = useGamificationSummary(
+    userId,
+    { studyMode },
+    { enabled: userId !== '', retry: false }
+  );
 
-  if (dueConcepts.isLoading) {
+  if (summary.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
@@ -176,18 +196,33 @@ function StudyStreakTile({
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const hasDueConcept = (dueConcepts.data?.data.concepts.length ?? 0) > 0;
+  if (summary.isError || !isGamificationSummary(summary.data)) {
+    return (
+      <MetricTile
+        label="Learning Streak"
+        value="0d"
+        colorFamily="myelin"
+        trend={{ direction: 'flat', delta: 'Projection pending' }}
+      />
+    );
+  }
+
+  const data = summary.data;
+  const streak = data.currentStreak;
+  const memoryIntegrity = Math.round(data.memoryIntegrityScore);
+  const direction = streak > 0 ? 'up' : 'flat';
+  const delta =
+    data.activeBadgeCount > 0
+      ? `Lvl ${String(data.level)} · ${String(data.activeBadgeCount)} active badges`
+      : `Lvl ${String(data.level)} · MIS ${String(memoryIntegrity)}`;
 
   return (
     <MetricTile
-      label="Session Momentum"
-      value={hasDueConcept ? 'Ready' : 'Clear'}
+      label="Learning Streak"
+      value={`${String(streak)}d`}
       colorFamily="myelin"
-      trend={
-        hasDueConcept
-          ? { direction: 'up', delta: 'Due concepts available' }
-          : { direction: 'flat', delta: 'No due concepts' }
-      }
+      sparklineData={[data.currentStreak, data.longestStreak, data.level]}
+      trend={{ direction, delta }}
     />
   );
 }

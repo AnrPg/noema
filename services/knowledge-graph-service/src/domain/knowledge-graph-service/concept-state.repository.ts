@@ -1,5 +1,7 @@
 import type { ConceptId, ConceptState, EvaluationId, StudyMode, UserId } from '@noema/types';
 
+export type ConceptStateHistoryTrigger = 'evaluation' | 'recompute' | 'manual';
+
 export interface IConceptStateProjection {
   readonly userId: UserId;
   readonly conceptId: ConceptId;
@@ -20,8 +22,9 @@ export interface IConceptStateHistoryEntry {
   readonly userId: UserId;
   readonly conceptId: ConceptId;
   readonly studyMode: StudyMode;
-  readonly previousState: ConceptState;
-  readonly newState: ConceptState;
+  readonly fromState: ConceptState;
+  readonly toState: ConceptState;
+  readonly triggeredBy: ConceptStateHistoryTrigger;
   readonly fsrsStability: number | null;
   readonly reasoningAverage: number | null;
   readonly evaluationId: EvaluationId | null;
@@ -54,8 +57,9 @@ export interface IConceptStateHistoryInput {
   readonly userId: UserId;
   readonly conceptId: ConceptId;
   readonly studyMode: StudyMode;
-  readonly previousState: ConceptState;
-  readonly newState: ConceptState;
+  readonly fromState: ConceptState;
+  readonly toState: ConceptState;
+  readonly triggeredBy: ConceptStateHistoryTrigger;
   readonly fsrsStability: number | null;
   readonly reasoningAverage: number | null;
   readonly evaluationId: EvaluationId | null;
@@ -102,9 +106,14 @@ export interface IConceptStateRepository {
     readonly studyMode: StudyMode;
   }): Promise<IConceptStateProjection[]>;
 
+  listRecomputeCandidates(input: {
+    readonly staleBefore: string;
+    readonly limit: number;
+  }): Promise<IConceptStateProjection[]>;
+
   upsertProjection(input: IConceptStateUpsertInput & { readonly state: ConceptState }): Promise<{
     readonly projection: IConceptStateProjection;
-    readonly previousState: ConceptState;
+    readonly fromState: ConceptState;
     readonly changed: boolean;
   }>;
 

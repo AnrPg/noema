@@ -5,6 +5,28 @@
 This document defines how the shared PKG/CKG substrate supports two different
 operating modes without splitting into separate graph systems.
 
+## Closed-Loop Concept State
+
+Concept-state projection consumes learning evidence from the metacognition and
+scheduler service streams. The KG service must not read its own outbound stream
+for `metacognition.evaluation.recorded` or `scheduler.concept_state.updated`.
+
+Concept-state history uses `fromState`, `toState`, and `triggeredBy` so
+stability flips remain auditable by cause (`evaluation`, `recompute`, or
+`manual`).
+
+Operational thresholds come from `@noema/config` and are wired through
+knowledge-graph-service environment overrides:
+
+- `CONCEPT_STATE_S_RET`
+- `CONCEPT_STATE_R_REAS`
+- `CONCEPT_STATE_REASONING_WINDOW`
+
+The service also starts a periodic concept-state recompute job controlled by
+`CONCEPT_STATE_RECOMPUTE_*` settings. It walks stale projections and recomputes
+from persisted retention and reasoning evidence so concept state does not stay
+stale when event traffic dries up.
+
 It covers:
 
 - node membership

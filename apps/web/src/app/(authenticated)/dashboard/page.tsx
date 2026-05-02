@@ -14,8 +14,10 @@ import { SectionErrorBoundary } from '@/components/section-error-boundary';
 import { CognitiveVitals } from '@/components/dashboard/cognitive-vitals';
 import { CopilotSuggestions } from '@/components/dashboard/copilot-suggestions';
 import { KnowledgePulse } from '@/components/dashboard/knowledge-pulse';
+import { ReasoningTrend } from '@/components/dashboard/reasoning-trend';
 import { RecentSessions } from '@/components/dashboard/recent-sessions';
 import { ReviewForecast } from '@/components/dashboard/review-forecast';
+import { StabilityOverview } from '@/components/dashboard/stability-overview';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 // ============================================================================
@@ -68,6 +70,18 @@ export default function DashboardPage(): React.JSX.Element | null {
       <div className="animate-fade-slide-in" style={{ animationDelay: '200ms' }}>
         <SectionErrorBoundary>
           <ReviewForecast userId={userId} studyMode={activeStudyMode} />
+        </SectionErrorBoundary>
+      </div>
+
+      <div
+        className="grid gap-6 animate-fade-slide-in md:grid-cols-2"
+        style={{ animationDelay: '250ms' }}
+      >
+        <SectionErrorBoundary>
+          <StabilityOverview userId={userId} studyMode={activeStudyMode} />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary>
+          <ReasoningTrend userId={userId} studyMode={activeStudyMode} />
         </SectionErrorBoundary>
       </div>
 

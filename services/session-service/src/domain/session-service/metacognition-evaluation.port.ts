@@ -1,6 +1,7 @@
 import type { ISevenFrameTraceDto } from '@noema/contracts';
 import type {
   ConceptId,
+  EpistemicMode,
   EvaluationId,
   LessonPlanId,
   SessionId,
@@ -18,6 +19,7 @@ export interface IRecordStepEvaluationInput {
   sessionId: SessionId;
   userId: UserId;
   conceptRefs: ConceptId[];
+  epistemicMode: EpistemicMode;
   correct: boolean;
   selfRating: StepSelfRating;
   trace: ISevenFrameTraceDto;

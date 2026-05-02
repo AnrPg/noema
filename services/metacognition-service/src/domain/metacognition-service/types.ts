@@ -1,5 +1,6 @@
 import type {
   ConceptId,
+  EpistemicMode,
   EvaluationId,
   LearningInterventionType,
   LessonPlanId,
@@ -29,22 +30,26 @@ export interface IRecordEvaluationInput {
   errorType?: string;
   misconceptionRef?: string;
   responseTimeMs?: number;
+  hintRequestCount?: number;
+  revisionCount?: number;
   recentFailures?: number;
   prerequisiteGapConceptIds?: ConceptId[];
-  studyMode?: StudyMode;
+  studyMode: StudyMode;
+  epistemicMode: EpistemicMode;
   transformation?: TransformationType;
 }
 
 export interface ITrigger {
   id: TriggerId;
-  evaluationId: EvaluationId;
+  evaluationId?: EvaluationId;
   userId: UserId;
   type: TriggerType;
   severity: number;
-  detectedFrom: string[];
+  detectedFromFrames: string[];
   conceptRefs: ConceptId[];
-  stepId: StepId;
-  sessionId: SessionId;
+  stepId?: StepId;
+  sessionId?: SessionId;
+  misconceptionRef: string;
   recommendedIntervention: LearningInterventionType;
   status: TriggerStatus;
   createdAt: string;
@@ -59,6 +64,7 @@ export interface IEvaluation {
   userId: UserId;
   conceptRefs: ConceptId[];
   correct: boolean;
+  correctnessScore: number;
   selfRating: StepSelfRating;
   reasoningQuality: number;
   confidenceSignal: number;
@@ -68,9 +74,12 @@ export interface IEvaluation {
   errorType?: string;
   misconceptionRef?: string;
   triggersFired: TriggerId[];
-  recommendedAction: string;
-  responseTimeMs?: number;
+  recommendedAction?: string;
+  responseTimeMs: number;
+  hintRequestCount: number;
+  revisionCount: number;
   studyMode: StudyMode;
+  epistemicMode: EpistemicMode;
   transformation?: TransformationType;
   createdAt: string;
 }
@@ -79,10 +88,11 @@ export interface IReasoningAverage {
   userId: UserId;
   conceptId: ConceptId;
   studyMode: StudyMode;
-  average: number;
+  averageReasoning: number;
   sampleCount: number;
   windowSize: number;
-  latestEvaluation?: EvaluationId;
+  lastEvaluationAt: string;
+  recentEvaluationIds: EvaluationId[];
   updatedAt: string;
 }
 

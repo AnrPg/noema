@@ -14,6 +14,7 @@ import {
   LessonPlanState,
   RigorLevel,
   SessionLifecycleState,
+  SessionTerminationReason,
   StepStatus,
   TransformationType,
   type ActivityId,
@@ -112,6 +113,22 @@ export interface ISessionServiceOptions {
   lessonPlanAgentUrl?: string;
   metacognitionClient?: IMetacognitionEvaluationPort;
   pedagogyGuardianClient?: IPedagogyGuardianPort;
+}
+
+function normalizeTerminationReason(reason?: string): SessionTerminationReason {
+  switch (reason) {
+    case SessionTerminationReason.CARD_LIMIT_REACHED:
+    case SessionTerminationReason.TIME_LIMIT_REACHED:
+    case SessionTerminationReason.AUTO_EXPIRED:
+    case SessionTerminationReason.ERROR:
+    case SessionTerminationReason.USER_ENDED:
+    case SessionTerminationReason.COMPLETED_NORMALLY:
+      return reason;
+    default:
+      return reason === undefined
+        ? SessionTerminationReason.COMPLETED_NORMALLY
+        : SessionTerminationReason.USER_ENDED;
+  }
 }
 
 function id<T extends string>(prefix: string): T {
@@ -215,7 +232,9 @@ export class SessionService {
           config: {
             ...data.config,
             curriculumId: data.curriculumId as never,
-            ...(data.curriculumVersionId ? { curriculumVersionId: data.curriculumVersionId as never } : {}),
+            ...(data.curriculumVersionId
+              ? { curriculumVersionId: data.curriculumVersionId as never }
+              : {}),
             ...(data.topic ? { topic: data.topic } : {}),
             sourceDecks: data.sourceDecks,
             sourceCategories: data.sourceCategories,
@@ -500,7 +519,13 @@ export class SessionService {
       });
     }
 
-    const session = await this.repository.getSessionById(step.sessionId);
+    let session = await this.repository.getSessionById(step.sessionId);
+    if (session.lifecycleState !== SessionLifecycleState.DIAGNOSIS) {
+      session = await this.runInTransaction(async (tx) => {
+        return this.transitionSession(session, SessionLifecycleState.DIAGNOSIS, ctx, tx);
+      });
+    }
+
     const metacognitionEvaluation = await this.metacognitionClient.recordStepEvaluation({
       evaluationId: evaluationId as EvaluationId,
       stepId: step.id,
@@ -508,6 +533,7 @@ export class SessionService {
       sessionId: step.sessionId,
       userId: step.userId,
       conceptRefs: step.conceptRefs,
+      epistemicMode: step.selectedMode,
       correct: parsed.data.correct,
       selfRating: parsed.data.selfRating,
       trace: parsed.data.trace,
@@ -547,6 +573,74 @@ export class SessionService {
     });
 
     return result(evaluated, 'Step answer accepted and Step marked EVALUATED.');
+  }
+
+  async completeSession(
+    sessionIdValue: string,
+    input: unknown,
+    ctx: IExecutionContext
+  ): Promise<IServiceResult<ISession>> {
+    const payload =
+      input && typeof input === 'object' ? (input as { reason?: string; force?: boolean }) : {};
+    const session = await this.repository.getSessionById(sessionIdValue as SessionId);
+    this.assertOwnsSession(session, ctx);
+    if (session.lifecycleState === SessionLifecycleState.COMPLETION) {
+      return result(session, 'Session already completed.');
+    }
+
+    const steps = await this.repository.findStepsBySessionId(session.id);
+    const incompleteSteps = steps.filter(
+      (step) =>
+        step.status !== StepStatus.EVALUATED &&
+        step.status !== StepStatus.SKIPPED &&
+        step.status !== StepStatus.SUPERSEDED
+    );
+    if (incompleteSteps.length > 0 && payload.force !== true) {
+      throw new BusinessRuleError('Cannot complete a session with active Steps', {
+        sessionId: session.id,
+        incompleteStepIds: incompleteSteps.map((step) => step.id),
+      });
+    }
+
+    const completedAt = isoNow();
+    const terminationReason = normalizeTerminationReason(payload.reason);
+    const completed = await this.runInTransaction(async (tx) => {
+      const updated = await this.repository.updateSession(
+        session.id,
+        {
+          lifecycleState: SessionLifecycleState.COMPLETION,
+          completedAt,
+          lastActivityAt: completedAt,
+          terminationReason,
+        },
+        session.version,
+        tx
+      );
+      await this.enqueueEvent(
+        'session.completed',
+        'Session',
+        session.id,
+        {
+          sessionId: session.id,
+          userId: session.userId,
+          studyMode: session.studyMode,
+          completedAt,
+          terminationReason,
+          learningMode: session.learningMode,
+          sourceCategories: Array.isArray(session.config.sourceCategories)
+            ? (session.config.sourceCategories as string[])
+            : [],
+          sourceDecks: Array.isArray(session.config.sourceDecks)
+            ? (session.config.sourceDecks as string[])
+            : [],
+        },
+        ctx,
+        tx
+      );
+      return updated;
+    });
+
+    return result(completed, 'Session completed.');
   }
 
   async skipStep(
@@ -657,7 +751,9 @@ export class SessionService {
       userId: session.userId,
       curriculumId: input.curriculumId ?? session.curriculumId,
       curriculumVersionId:
-        input.curriculumVersionId ?? session.curriculumVersionId ?? ('cver_maintenance_system' as never),
+        input.curriculumVersionId ??
+        session.curriculumVersionId ??
+        ('cver_maintenance_system' as never),
       selectedNodeIds: input.selectedNodeIds ?? [],
       studyMode: session.studyMode,
       learningMode: session.learningMode,
@@ -769,10 +865,13 @@ export class SessionService {
       servedNodes.has(nodeId as never)
     );
     if (!hasServedSelectedNode) {
-      throw new BusinessRuleError('LessonPlan steps must serve at least one selected curriculum node', {
-        lessonPlanId: record.id,
-        selectedNodeIds: record.selectedNodeIds,
-      });
+      throw new BusinessRuleError(
+        'LessonPlan steps must serve at least one selected curriculum node',
+        {
+          lessonPlanId: record.id,
+          selectedNodeIds: record.selectedNodeIds,
+        }
+      );
     }
   }
 

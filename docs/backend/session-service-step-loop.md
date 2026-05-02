@@ -30,6 +30,8 @@ aggregate boundary.
 - `POST /v1/steps/:stepId/answer` accepts the learner response and marks the
   Step `evaluated`.
 - `POST /v1/steps/:stepId/skip` marks the Step skipped.
+- `POST /v1/sessions/:sessionId/complete` moves the session to `completion` and
+  writes `completedAt`.
 
 ## Events
 
@@ -58,6 +60,16 @@ full planner implementation itself belongs to a later realignment batch.
 `src/domain/strategy/` consumes `metacognition.trigger.fired` through
 `MetacognitionTriggerConsumer`. Strategy selects the default intervention and
 lowest sufficient scope:
+
+- answering a Step transitions the session through `diagnosis` while
+  metacognition records the Evaluation, then to `evaluation`
+- handling a trigger transitions through `adaptation` while the Strategy module
+  commits the replan
+- replans insert replacement Steps and mark replaced pending Steps as
+  `superseded` with `supersededByStepId`; evaluated Steps are never edited
+- if trigger severity requests `full` scope before the generation-agent path is
+  available, Strategy commits a structural fallback and logs the requested full
+  scope instead of throwing in the event consumer path
 
 - `failure` inserts a repair Step with a different transformation.
 - `prerequisite_gap` inserts a structural prerequisite branch.

@@ -1,0 +1,187 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model UserGamificationProjection {
+  id                     String   @id @db.VarChar(50)
+  userId                 String   @map("user_id") @db.VarChar(50)
+  studyMode              StudyMode @map("study_mode")
+  totalXp                Int      @default(0) @map("total_xp")
+  level                  Int      @default(1)
+  currentStreak          Int      @default(0) @map("current_streak")
+  longestStreak          Int      @default(0) @map("longest_streak")
+  lastQualifiedDay       String?  @map("last_qualified_day") @db.VarChar(10)
+  sessionsCompleted      Int      @default(0) @map("sessions_completed")
+  totalStepsCompleted    Int      @default(0) @map("total_steps_completed")
+  qualifyingEvaluations  Int      @default(0) @map("qualifying_evaluations")
+  averageReasoning       Float?   @map("average_reasoning")
+  reasoningSampleCount   Int      @default(0) @map("reasoning_sample_count")
+  stableConcepts         Int      @default(0) @map("stable_concepts")
+  activeDays             Int      @default(0) @map("active_days")
+  engagedCategories      String[] @default([]) @map("engaged_categories")
+  capabilityTier         Int      @default(0) @map("capability_tier")
+  memoryIntegrityScore   Float    @default(0) @map("memory_integrity_score")
+  lastUnstableFlipAt     DateTime? @map("last_unstable_flip_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  streakDays   GamificationStreakDay[]
+  badges       GamificationBadgeProjection[]
+  achievements GamificationAchievementProjection[]
+  tierHistory  CapabilityTierHistory[]
+
+  @@unique([userId, studyMode])
+  @@index([studyMode, updatedAt])
+  @@map("user_gamification_projections")
+}
+
+model GamificationStreakDay {
+  id                         String   @id @db.VarChar(50)
+  projectionId               String   @map("projection_id") @db.VarChar(50)
+  day                        String   @db.VarChar(10)
+  qualified                  Boolean  @default(false)
+  qualifyingEvaluationCount  Int      @default(0) @map("qualifying_evaluation_count")
+  totalEvaluationCount       Int      @default(0) @map("total_evaluation_count")
+  sessionCompletionCount     Int      @default(0) @map("session_completion_count")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+
+  projection UserGamificationProjection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+
+  @@unique([projectionId, day])
+  @@index([projectionId, qualified, day])
+  @@map("gamification_streak_days")
+}
+
+model GamificationBadgeProjection {
+  id           String   @id @db.VarChar(50)
+  projectionId String   @map("projection_id") @db.VarChar(50)
+  badgeId      String   @map("badge_id") @db.VarChar(100)
+  name         String   @db.VarChar(200)
+  description  String   @db.VarChar(500)
+  status       BadgeStatus
+  reason       String   @db.VarChar(500)
+  conceptId    String?  @map("concept_id") @db.VarChar(50)
+  awardedAt    DateTime? @map("awarded_at")
+  revokedAt    DateTime? @map("revoked_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  projection UserGamificationProjection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  history    GamificationBadgeHistory[]
+  links      ConceptStabilityBadgeLink[]
+
+  @@unique([projectionId, badgeId])
+  @@index([projectionId, status])
+  @@map("gamification_badge_projections")
+}
+
+model GamificationBadgeHistory {
+  id        String   @id @db.VarChar(50)
+  badgeProjectionId String @map("badge_projection_id") @db.VarChar(50)
+  badgeId    String  @map("badge_id") @db.VarChar(100)
+  status     BadgeStatus
+  reason     String  @db.VarChar(500)
+  conceptId  String? @map("concept_id") @db.VarChar(50)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  badgeProjection GamificationBadgeProjection @relation(fields: [badgeProjectionId], references: [id], onDelete: Cascade)
+
+  @@index([badgeProjectionId, createdAt])
+  @@map("gamification_badge_history")
+}
+
+model GamificationAchievementProjection {
+  id            String   @id @db.VarChar(50)
+  projectionId  String   @map("projection_id") @db.VarChar(50)
+  achievementId String   @map("achievement_id") @db.VarChar(100)
+  name          String   @db.VarChar(200)
+  description   String   @db.VarChar(500)
+  status        AchievementStatus
+  progress      Float    @default(0)
+  unlockedAt    DateTime? @map("unlocked_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  projection UserGamificationProjection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  history    GamificationAchievementHistory[]
+
+  @@unique([projectionId, achievementId])
+  @@map("gamification_achievement_projections")
+}
+
+model GamificationAchievementHistory {
+  id                     String   @id @db.VarChar(50)
+  achievementProjectionId String @map("achievement_projection_id") @db.VarChar(50)
+  achievementId          String   @map("achievement_id") @db.VarChar(100)
+  status                 AchievementStatus
+  progress               Float
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  achievementProjection GamificationAchievementProjection @relation(fields: [achievementProjectionId], references: [id], onDelete: Cascade)
+
+  @@index([achievementProjectionId, createdAt])
+  @@map("gamification_achievement_history")
+}
+
+model CapabilityTierHistory {
+  id           String   @id @db.VarChar(50)
+  projectionId String   @map("projection_id") @db.VarChar(50)
+  tier         Int
+  reason       String   @db.VarChar(500)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  projection UserGamificationProjection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+
+  @@index([projectionId, createdAt])
+  @@map("capability_tier_history")
+}
+
+model ConceptStabilityBadgeLink {
+  id                 String   @id @db.VarChar(50)
+  badgeProjectionId  String   @map("badge_projection_id") @db.VarChar(50)
+  conceptId          String   @map("concept_id") @db.VarChar(50)
+  studyMode          StudyMode @map("study_mode")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  badgeProjection GamificationBadgeProjection @relation(fields: [badgeProjectionId], references: [id], onDelete: Cascade)
+
+  @@unique([badgeProjectionId, conceptId])
+  @@index([conceptId, studyMode])
+  @@map("concept_stability_badge_links")
+}
+
+model ProcessedGamificationEvent {
+  id           String   @id @db.VarChar(120)
+  eventType    String   @map("event_type") @db.VarChar(100)
+  aggregateId  String   @map("aggregate_id") @db.VarChar(100)
+  processedAt  DateTime @default(now()) @map("processed_at")
+
+  @@index([eventType, processedAt])
+  @@map("processed_gamification_events")
+}
+
+enum StudyMode {
+  LANGUAGE_LEARNING
+  KNOWLEDGE_GAINING
+}
+
+enum BadgeStatus {
+  ACTIVE
+  REVOKED
+
+  @@map("badge_status")
+}
+
+enum AchievementStatus {
+  LOCKED
+  ACTIVE
+
+  @@map("achievement_status")
+}

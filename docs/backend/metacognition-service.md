@@ -10,7 +10,8 @@ realignment.
 - derives `confidenceSignal` from 3-choice self-rating
 - computes `combinedScore` with reasoning quality dominating self-rating
 - maps `combinedScore` to the internal scheduler rating
-- maintains rolling reasoning averages per `(userId, conceptId)`
+- maintains reasoning rollups per `(userId, conceptId, studyMode)` with a
+  persisted recent-evaluation ID window
 - emits first-class Triggers for strategy replanning
 
 ## REST
@@ -32,6 +33,17 @@ scores when agent/UI traces provide them, and otherwise derives scores from
 structured trace fields such as cue diagnosticity, retrieval mode, self-checks,
 and error markers.
 
-`metacognition.evaluation.recorded` now carries optional `studyMode` and
-`transformation` metadata from the Step evidence payload. Scheduler-service uses
-those fields to scope concept state and persist transformation history.
+`metacognition.evaluation.recorded` carries `studyMode`, `epistemicMode`, and
+optional `transformation` metadata from the Step evidence payload.
+Scheduler-service uses those fields to scope concept state and persist
+transformation history.
+
+`studyMode` is required on evaluation recording. Missing mode is a validation
+error rather than silently defaulting to `knowledge_gaining`, preventing
+cross-mode contamination in evaluations and reasoning rollups.
+
+The persistence schema stores typed `StudyMode`, `StepSelfRating`,
+`SchedulerRating`, `TriggerType`, `TriggerStatus`, and
+`LearningInterventionType` values. `MetacognitiveTrigger` can exist without an
+Evaluation foreign key so KG misconception bridge events can be persisted before
+a canonical Evaluation row exists.
