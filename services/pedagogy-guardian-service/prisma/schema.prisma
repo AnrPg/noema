@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GuardianValidation {
+  id             String               @id @db.VarChar(50)
+  artifactType   GuardianArtifactType @map("artifact_type")
+  artifactId     String               @map("artifact_id") @db.VarChar(100)
+  artifactHash   String               @map("artifact_hash") @db.VarChar(128)
+  result         GuardianResult
+  reasonCodes    String[]             @map("reason_codes")
+  blocking       Boolean              @default(false)
+  evaluatedRules Json                 @map("evaluated_rules")
+  triggeredBy    String               @map("triggered_by") @db.VarChar(100)
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  @@index([artifactType, artifactId, createdAt])
+  @@index([result, createdAt])
+  @@map("guardian_validations")
+}
+
+enum GuardianArtifactType {
+  LESSON_PLAN
+  STEP
+  ACTIVITY
+  REPLAN
+  GENERATED_VARIANT
+
+  @@map("guardian_artifact_type")
+}
+
+enum GuardianResult {
+  ACCEPTED
+  WARNING
+  REJECTED
+
+  @@map("guardian_result")
+}
