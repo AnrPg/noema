@@ -1,1574 +1,371 @@
-import type { IAgentHints } from '@noema/contracts';
-
-import { randomUUID } from 'node:crypto';
-import type {
-  CardId,
-  CorrelationId,
-  IBatchScheduleCommitInput,
-  IBatchScheduleCommitResult,
-  ICandidateScore,
-  ICardDetail,
-  ICardProjection,
-  ICardScheduleCommitInput,
-  ICardScheduleCommitResult,
-  ICardScheduleDecision,
-  IDualLanePlan,
-  IDualLanePlanInput,
-  IEnhancedCardScheduleDecision,
-  IEnhancedReviewWindowProposal,
-  IExecutionContext,
-  IOrchestrationMetadata,
-  IPolicyVersion,
-  IRetentionPrediction,
-  IRetentionPredictionInput,
-  IRetentionPredictionResult,
-  IReviewQueue,
-  IReviewQueueInput,
-  IReviewWindowProposalInput,
-  ISchedulerCard,
-  ISchedulerLaneMix,
-  IScoringBreakdown,
-  ISessionAdjustmentInput,
-  ISessionAdjustmentResult,
-  ISessionCandidateCard,
-  ISessionCandidateProposal,
-  ISessionCandidateProposalInput,
-  ISessionCandidateSimulation,
-  ISessionCandidateSimulationInput,
-  ISuggestedTimeBlock,
-  SchedulerLane,
-  UserId,
-} from '../../types/scheduler.types.js';
-import type { IEventPublisher } from '../shared/event-publisher.js';
-import { DEFAULT_FSRS_WEIGHTS, FSRSModel } from './algorithms/fsrs.js';
-import type {
-  ICalibrationDataRepository,
-  ICohortLineageInput,
-  ICommitProvenanceInput,
-  IProposalProvenanceInput,
-  IReviewRepository,
-  ISchedulerCardRepository,
-  ISchedulerProvenanceRepository,
-} from './scheduler.repository.js';
 import {
-  BatchScheduleCommitInputSchema,
-  CardScheduleCommitInputSchema,
-  DualLanePlanInputSchema,
-  GetCardProjectionInputSchema,
-  RetentionPredictionInputSchema,
-  ReviewQueueInputSchema,
-  ReviewWindowProposalInputSchema,
-  SessionAdjustmentInputSchema,
-  SessionCandidateProposalInputSchema,
-  SessionCandidateSimulationInputSchema,
+  SchedulerLearningEventType,
+  type ISchedulerConceptStateUpdatedPayload,
+} from '@noema/events';
+import type { IEventPublisher } from '@noema/events/publisher';
+import { SchedulingAlgorithm, SchedulerQueue, SchedulerRating, StudyMode } from '@noema/types';
+import { randomUUID } from 'node:crypto';
+import type pino from 'pino';
+
+import { applyFSRSEvaluation } from './algorithms/fsrs.js';
+import { applyHLREvaluation } from './algorithms/hlr.js';
+import { applyLeitnerEvaluation } from './algorithms/leitner.js';
+import { applySM2Evaluation } from './algorithms/sm2.js';
+import type { IConceptScheduleRepository } from './scheduler.repository.js';
+import {
+  EvaluationRecordedInputSchema,
+  GetDueConceptsQuerySchema,
+  GetTransformationHistoryQuerySchema,
 } from './scheduler.schemas.js';
-
-export interface IServiceResult<T> {
-  data: T;
-  agentHints: IAgentHints;
-}
-
-export interface ISchedulerServiceRepositories {
-  schedulerCardRepository: ISchedulerCardRepository;
-  reviewRepository: IReviewRepository;
-  calibrationDataRepository: ICalibrationDataRepository;
-  provenanceRepository?: ISchedulerProvenanceRepository;
-}
+import type {
+  IConceptEvaluationLog,
+  IConceptScheduleResult,
+  IConceptScheduleState,
+  IConceptTransformationHistory,
+  IDueConceptQuery,
+  IExecutionContext,
+  IEvaluationRecordedInput,
+  SchedulerRating as LocalSchedulerRating,
+} from '../../types/scheduler.types.js';
 
 export class SchedulerService {
-  private static readonly POLICY_VERSION: IPolicyVersion = {
-    version: 'scheduler.policy.v1',
-  };
-
-  constructor(
+  public constructor(
+    private readonly repository: IConceptScheduleRepository,
     private readonly eventPublisher: IEventPublisher,
-    private readonly repositories?: ISchedulerServiceRepositories
+    private readonly logger: pino.Logger
   ) {}
 
-  async planDualLaneQueue(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IDualLanePlan>> {
-    const parsed = DualLanePlanInputSchema.safeParse(input);
+  public async recordEvaluation(
+    rawInput: unknown,
+    context: IExecutionContext
+  ): Promise<IConceptScheduleResult[]> {
+    const parsed = EvaluationRecordedInputSchema.safeParse(rawInput);
     if (!parsed.success) {
-      throw new Error('Invalid dual-lane plan input');
+      throw new Error(`Invalid evaluation payload: ${parsed.error.message}`);
     }
 
-    const data = parsed.data as IDualLanePlanInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-    const laneMix = this.normalizeLaneMix(data.targetMix);
-    const scores = data.cardPriorityScores ?? {};
-    const interleave = data.interleave ?? true;
-
-    const { selectedCardIds, cardDetails, retentionSpillover, calibrationSpillover } =
-      this.selectByLaneMix(
-        data.retentionCardIds,
-        data.calibrationCardIds,
-        laneMix,
-        data.maxCards,
-        scores,
-        interleave
-      );
-
-    const retentionSelected = cardDetails.filter((d) => d.lane === 'retention').length;
-    const calibrationSelected = cardDetails.filter((d) => d.lane === 'calibration').length;
-    const orchestration = this.buildOrchestrationMetadata(ctx);
-
-    const result: IDualLanePlan = {
-      planVersion: 'v2',
-      policyVersion: SchedulerService.POLICY_VERSION.version,
-      laneMix,
-      selectedCardIds,
-      retentionSelected,
-      calibrationSelected,
-      retentionSpillover,
-      calibrationSpillover,
-      cardDetails,
-      orchestration,
-      rationale:
-        `Dual-lane plan: ${String(retentionSelected)}R + ${String(calibrationSelected)}C` +
-        ` (spillover: ${String(retentionSpillover)}R→C, ${String(calibrationSpillover)}C→R)` +
-        `, interleave=${String(interleave)}`,
+    const studyMode = (parsed.data.studyMode ?? StudyMode.KNOWLEDGE_GAINING) as NonNullable<
+      IEvaluationRecordedInput['studyMode']
+    >;
+    const input: IEvaluationRecordedInput = {
+      evaluationId: parsed.data.evaluationId as IEvaluationRecordedInput['evaluationId'],
+      stepId: parsed.data.stepId as IEvaluationRecordedInput['stepId'],
+      sessionId: parsed.data.sessionId as IEvaluationRecordedInput['sessionId'],
+      userId: parsed.data.userId as IEvaluationRecordedInput['userId'],
+      conceptRefs: parsed.data.conceptRefs as IEvaluationRecordedInput['conceptRefs'],
+      reasoningQuality: parsed.data.reasoningQuality,
+      confidenceSignal: parsed.data.confidenceSignal,
+      combinedScore: parsed.data.combinedScore,
+      correct: parsed.data.correct,
+      studyMode,
+      ...(parsed.data.recordedAt !== undefined ? { recordedAt: parsed.data.recordedAt } : {}),
+      ...(parsed.data.transformation !== undefined
+        ? {
+            transformation: parsed.data.transformation as NonNullable<
+              IEvaluationRecordedInput['transformation']
+            >,
+          }
+        : {}),
     };
-
-    if (this.repositories !== undefined && data.commit === true) {
-      await this.persistPlannedCards(
-        data.userId,
-        data.studyMode ?? 'knowledge_gaining',
-        data.retentionCardIds,
-        data.calibrationCardIds,
-        selectedCardIds
-      );
-    }
-
-    await this.recordProposalProvenance({
-      proposalId: orchestration.proposalId,
-      decisionId: orchestration.decisionId,
-      userId: data.userId,
-      policyVersion: SchedulerService.POLICY_VERSION.version,
-      correlationId: ctx.correlationId,
-      sessionId: orchestration.sessionId,
-      sessionRevision: orchestration.sessionRevision,
-      kind: 'dual-lane-plan',
-      payload: {
-        laneMix,
-        selectedCardIds,
-        retentionSelected,
-        calibrationSelected,
-        retentionSpillover,
-        calibrationSpillover,
-        interleaved: interleave,
-        committed: data.commit === true,
-      },
-    });
-
-    await this.recordCohortLineage({
-      id: `lin_${randomUUID()}`,
-      userId: data.userId,
-      proposalId: orchestration.proposalId,
-      decisionId: orchestration.decisionId,
-      sessionId: orchestration.sessionId,
-      sessionRevision: orchestration.sessionRevision,
-      operationKind: 'dual-lane-plan',
-      selectedCardIds,
-      excludedCardIds: [],
-      metadata: {
-        policyVersion: SchedulerService.POLICY_VERSION.version,
-        correlationId: ctx.correlationId,
-      },
-    });
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.dual_lane.planned',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        laneMix,
-        selectedCount: selectedCardIds.length,
-        policyVersion: SchedulerService.POLICY_VERSION.version,
-        orchestration,
-        retentionSelected,
-        calibrationSelected,
-        retentionSpillover,
-        calibrationSpillover,
-        interleaved: interleave,
-        committed: data.commit === true,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    return {
-      data: result,
-      agentHints: this.defaultHints(
-        'dual_lane_plan_ready',
-        `Generated plan with ${String(selectedCardIds.length)} cards (${String(retentionSelected)}R/${String(calibrationSelected)}C)`
-      ),
-    };
-  }
-
-  async proposeReviewWindows(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IEnhancedReviewWindowProposal>> {
-    const parsed = ReviewWindowProposalInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid review-window proposal input');
-    }
-
-    const data = parsed.data as IReviewWindowProposalInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    const baseTime = data.asOf ?? new Date().toISOString();
-    const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
-
-    const decisions: IEnhancedCardScheduleDecision[] = data.cards.map((card) => {
-      const intervalDays = this.deriveIntervalDays(card.algorithm, card.stability ?? undefined);
-      const nextReviewAt = new Date(
-        new Date(baseTime).getTime() + intervalDays * 24 * 60 * 60 * 1000
-      ).toISOString();
-
-      // T3.4: Compute retention probability inline
-      let retentionProbability: number | null = null;
-      const elapsedDays = card.lastReviewAt
-        ? Math.max(
-            0,
-            (new Date(baseTime).getTime() - new Date(card.lastReviewAt).getTime()) / 86_400_000
-          )
-        : null;
-
-      if (
-        card.algorithm === 'fsrs' &&
-        card.stability !== null &&
-        card.stability !== undefined &&
-        card.stability > 0 &&
-        elapsedDays !== null
-      ) {
-        retentionProbability = fsrs.forgettingCurve(elapsedDays, card.stability);
-      } else if (
-        card.algorithm === 'hlr' &&
-        card.stability !== null &&
-        card.stability !== undefined &&
-        card.stability > 0 &&
-        elapsedDays !== null
-      ) {
-        // For HLR, stability → halfLife. Use simplified formula: 2^(-elapsed / halfLife)
-        retentionProbability = Math.pow(2, -elapsedDays / card.stability);
-      }
-
-      return {
-        cardId: card.cardId,
-        nextReviewAt,
-        intervalDays,
-        lane: card.algorithm === 'hlr' ? 'calibration' : 'retention',
-        algorithm: card.algorithm,
-        rationale: 'Deterministic review-window proposal',
-        retentionProbability,
-      } as IEnhancedCardScheduleDecision;
-    });
-
-    // T3.4: Compute suggested time blocks
-    const suggestedTimeBlocks = this.computeSuggestedTimeBlocks(decisions);
-
-    const orchestration = this.buildOrchestrationMetadata(ctx);
-
-    const result: IEnhancedReviewWindowProposal = {
-      generatedAt: new Date().toISOString(),
-      decisions,
-      policyVersion: SchedulerService.POLICY_VERSION,
-      orchestration,
-      suggestedTimeBlocks,
-    };
-
-    await this.recordProposalProvenance({
-      proposalId: orchestration.proposalId,
-      decisionId: orchestration.decisionId,
-      userId: data.userId,
-      policyVersion: SchedulerService.POLICY_VERSION.version,
-      correlationId: ctx.correlationId,
-      sessionId: orchestration.sessionId,
-      sessionRevision: orchestration.sessionRevision,
-      kind: 'review-window-proposal',
-      payload: {
-        generatedAt: result.generatedAt,
-        decisionCount: decisions.length,
-        decisions,
-      },
-    });
-
-    await this.recordCohortLineage({
-      id: `lin_${randomUUID()}`,
-      userId: data.userId,
-      proposalId: orchestration.proposalId,
-      decisionId: orchestration.decisionId,
-      sessionId: orchestration.sessionId,
-      sessionRevision: orchestration.sessionRevision,
-      operationKind: 'review-window-proposal',
-      selectedCardIds: decisions.map((decision) => decision.cardId),
-      excludedCardIds: [],
-      metadata: {
-        policyVersion: SchedulerService.POLICY_VERSION.version,
-        correlationId: ctx.correlationId,
-      },
-    });
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.proposal.generated',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        kind: 'review-windows',
-        proposalSize: decisions.length,
-        policyVersion: SchedulerService.POLICY_VERSION.version,
-        orchestration,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    return {
-      data: result,
-      agentHints: this.defaultHints(
-        'review_window_proposal_ready',
-        `Generated ${String(decisions.length)} deterministic review-window proposals`
-      ),
-    };
-  }
-
-  async proposeSessionCandidates(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionCandidateProposal>> {
-    const parsed = SessionCandidateProposalInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid session-candidate proposal input');
-    }
-
-    const data = parsed.data as ISessionCandidateProposalInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    const proposal = this.computeCandidateSelection(
-      data.cards,
-      data.constraints.targetCards,
-      data.constraints.laneMix
-    );
-
-    const orchestration = this.buildOrchestrationMetadata(ctx);
-
-    const result: ISessionCandidateProposal = {
-      selectedCardIds: proposal.selectedCardIds,
-      excludedCardIds: proposal.excludedCardIds,
-      scores: proposal.scores,
-      scoringBreakdown: proposal.scoringBreakdown,
-      policyVersion: SchedulerService.POLICY_VERSION,
-      orchestration,
-      rationale: 'Highest deterministic composite score selected with stable tie-breaks',
-    };
-
-    await this.recordProposalProvenance({
-      proposalId: orchestration.proposalId,
-      decisionId: orchestration.decisionId,
-      userId: data.userId,
-      policyVersion: SchedulerService.POLICY_VERSION.version,
-      correlationId: ctx.correlationId,
-      sessionId: orchestration.sessionId,
-      sessionRevision: orchestration.sessionRevision,
-      kind: 'session-candidate-proposal',
-      payload: {
-        selectedCardIds: result.selectedCardIds,
-        excludedCardIds: result.excludedCardIds,
-        scoringBreakdown: result.scoringBreakdown,
-        scores: result.scores,
-      },
-    });
-
-    await this.recordCohortLineage({
-      id: `lin_${randomUUID()}`,
-      userId: data.userId,
-      proposalId: orchestration.proposalId,
-      decisionId: orchestration.decisionId,
-      sessionId: orchestration.sessionId,
-      sessionRevision: orchestration.sessionRevision,
-      operationKind: 'session-candidate-proposal',
-      selectedCardIds: result.selectedCardIds,
-      excludedCardIds: result.excludedCardIds,
-      metadata: {
-        policyVersion: SchedulerService.POLICY_VERSION.version,
-        correlationId: ctx.correlationId,
-      },
-    });
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.proposal.generated',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        kind: 'session-candidates',
-        selectedCount: result.selectedCardIds.length,
-        excludedCount: result.excludedCardIds.length,
-        policyVersion: SchedulerService.POLICY_VERSION.version,
-        orchestration,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    return {
-      data: result,
-      agentHints: this.defaultHints(
-        'session_candidate_proposal_ready',
-        `Computed deterministic scores for ${String(data.cards.length)} candidate cards`
-      ),
-    };
-  }
-
-  simulateSessionCandidates(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionCandidateSimulation>> {
-    const parsed = SessionCandidateSimulationInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid session-candidate simulation input');
-    }
-
-    const data = parsed.data as ISessionCandidateSimulationInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    const simulation = this.computeCandidateSelection(
-      data.cards,
-      data.constraints.targetCards,
-      data.constraints.laneMix
-    );
-
-    return Promise.resolve({
-      data: {
-        selectedCardIds: simulation.selectedCardIds,
-        excludedCardIds: simulation.excludedCardIds,
-        scores: simulation.scores,
-        scoringBreakdown: simulation.scoringBreakdown,
-        policyVersion: SchedulerService.POLICY_VERSION,
-        sideEffectFree: true,
-      },
-      agentHints: this.defaultHints(
-        'session_candidate_simulation_ready',
-        `Simulated deterministic candidate selection for ${String(data.cards.length)} cards (no persistence)`
-      ),
-    });
-  }
-
-  async commitCardSchedule(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ICardScheduleCommitResult>> {
-    const parsed = CardScheduleCommitInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid single-card commit input');
-    }
-
-    const data = parsed.data as ICardScheduleCommitInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    await this.persistDecision(data.userId, data.decision, data.studyMode);
-
-    const commitId = `com_${randomUUID()}`;
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.commit.applied',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        commitId,
-        decision: data.decision,
-        policyVersion: data.policyVersion.version,
-        orchestration: data.orchestration,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    await this.recordCommitProvenance({
-      commitId,
-      proposalId: data.orchestration.proposalId,
-      decisionId: data.orchestration.decisionId,
-      userId: data.userId,
-      policyVersion: data.policyVersion.version,
-      correlationId: ctx.correlationId,
-      sessionId: data.orchestration.sessionId,
-      sessionRevision: data.orchestration.sessionRevision,
-      kind: 'single-card-commit',
-      accepted: 1,
-      rejected: 0,
-      payload: {
-        decision: data.decision,
-      },
-    });
-
-    await this.recordCohortLineage({
-      id: `lin_${randomUUID()}`,
-      userId: data.userId,
-      proposalId: data.orchestration.proposalId,
-      decisionId: data.orchestration.decisionId,
-      sessionId: data.orchestration.sessionId,
-      sessionRevision: data.orchestration.sessionRevision,
-      operationKind: 'single-card-commit',
-      selectedCardIds: [data.decision.cardId],
-      excludedCardIds: [],
-      metadata: {
-        policyVersion: data.policyVersion.version,
-        correlationId: ctx.correlationId,
-        commitId,
-      },
-    });
-
-    return {
-      data: {
-        commitId,
-        cardId: data.decision.cardId,
-        status: 'committed',
-        policyVersion: data.policyVersion,
-        orchestration: {
-          ...data.orchestration,
-          correlationId: ctx.correlationId,
-        },
-      },
-      agentHints: this.defaultHints(
-        'schedule_commit_applied',
-        'Single-card schedule commit persisted'
-      ),
-    };
-  }
-
-  async commitCardScheduleBatch(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IBatchScheduleCommitResult>> {
-    const parsed = BatchScheduleCommitInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid batch schedule commit input');
-    }
-
-    const data = parsed.data as IBatchScheduleCommitInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    const updatedCardIds: CardId[] = [];
-    let rejected = 0;
-
-    for (const decision of data.decisions) {
-      try {
-        await this.persistDecision(data.userId, decision, data.studyMode);
-        updatedCardIds.push(decision.cardId);
-      } catch {
-        rejected += 1;
-      }
-    }
-
-    const commitId = `com_${randomUUID()}`;
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.commit.applied',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        commitId,
-        accepted: updatedCardIds.length,
-        rejected,
-        policyVersion: data.policyVersion.version,
-        orchestration: data.orchestration,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    await this.recordCommitProvenance({
-      commitId,
-      proposalId: data.orchestration.proposalId,
-      decisionId: data.orchestration.decisionId,
-      userId: data.userId,
-      policyVersion: data.policyVersion.version,
-      correlationId: ctx.correlationId,
-      sessionId: data.orchestration.sessionId,
-      sessionRevision: data.orchestration.sessionRevision,
-      kind: 'batch-card-commit',
-      accepted: updatedCardIds.length,
-      rejected,
-      payload: {
-        source: data.source,
-        decisions: data.decisions,
-        updatedCardIds,
-      },
-    });
-
-    await this.recordCohortLineage({
-      id: `lin_${randomUUID()}`,
-      userId: data.userId,
-      proposalId: data.orchestration.proposalId,
-      decisionId: data.orchestration.decisionId,
-      sessionId: data.orchestration.sessionId,
-      sessionRevision: data.orchestration.sessionRevision,
-      operationKind: 'batch-card-commit',
-      selectedCardIds: updatedCardIds,
-      excludedCardIds: data.decisions
-        .map((decision) => decision.cardId)
-        .filter((cardId) => !updatedCardIds.includes(cardId)),
-      metadata: {
-        policyVersion: data.policyVersion.version,
-        correlationId: ctx.correlationId,
-        commitId,
-      },
-    });
-
-    return {
-      data: {
-        commitId,
-        accepted: updatedCardIds.length,
-        rejected,
-        updatedCardIds,
-        policyVersion: data.policyVersion,
-        orchestration: {
-          ...data.orchestration,
-          correlationId: ctx.correlationId,
-        },
-      },
-      agentHints: this.defaultHints(
-        'schedule_batch_commit_applied',
-        `Batch commit applied with ${String(updatedCardIds.length)} accepted and ${String(rejected)} rejected`
-      ),
-    };
-  }
-
-  // ============================================================================
-  // Phase 4 Methods
-  // ============================================================================
-
-  /**
-   * Retrieve review queue (cards due for review).
-   * Implements get-srs-schedule tool (Phase 4, Gap #11).
-   */
-  async getReviewQueue(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IReviewQueue>> {
-    const parsed = ReviewQueueInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid review queue input');
-    }
-
-    const data = parsed.data as IReviewQueueInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    const asOf = data.asOf ?? new Date().toISOString();
-    const limit = data.limit ?? 500;
-
-    if (!this.repositories) {
-      throw new Error('Scheduler repositories not initialized');
-    }
-
-    const beforeDate = new Date(asOf);
-    const cards = await this.repositories.schedulerCardRepository.findDueCards(
-      data.userId,
-      beforeDate,
-      limit,
-      data.lane,
-      data.studyMode
-    );
-
-    const retentionDue = cards.filter((card: ISchedulerCard) => card.lane === 'retention').length;
-    const calibrationDue = cards.filter(
-      (card: ISchedulerCard) => card.lane === 'calibration'
-    ).length;
-
-    const result: IReviewQueue = {
-      cards,
-      totalDue: cards.length,
-      retentionDue,
-      calibrationDue,
-      asOf,
-      policyVersion: SchedulerService.POLICY_VERSION,
-    };
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.review_queue.retrieved',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        totalDue: cards.length,
-        retentionDue,
-        calibrationDue,
-        lane: data.lane ?? 'all',
-        limit,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    return {
-      data: result,
-      agentHints: this.defaultHints(
-        'review_queue_retrieved',
-        `Retrieved ${String(cards.length)} cards due for review (${String(retentionDue)}R/${String(calibrationDue)}C)`
-      ),
-    };
-  }
-
-  /**
-   * Predict retention probability for cards.
-   * Implements predict-retention tool (Phase 4, Gap #11).
-   */
-  async predictRetention(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<IRetentionPredictionResult>> {
-    const parsed = RetentionPredictionInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid retention prediction input');
-    }
-
-    const data = parsed.data as IRetentionPredictionInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    if (!this.repositories) {
-      throw new Error('Scheduler repositories not initialized');
-    }
-
-    const predictions: IRetentionPrediction[] = [];
-    const now = new Date();
-
-    for (const req of data.cards) {
-      const card = await this.repositories.schedulerCardRepository.findByCard(
-        data.userId,
-        req.cardId,
-        data.studyMode
-      );
-
-      if (!card) {
-        predictions.push({
-          cardId: req.cardId,
-          algorithm: req.algorithm,
-          retentionProbability: 0,
-          daysUntilDue: 0,
-          nextReviewAt: now.toISOString(),
-          confidence: 0,
-        });
-        continue;
-      }
-
-      const stability = card.stability ?? 1.0;
-      const intervalDays = this.deriveIntervalDays(req.algorithm, stability);
-      const nextReviewAt = new Date(now.getTime() + intervalDays * 24 * 60 * 60 * 1000);
-
-      // Use algorithm-specific retention formula (matches proposeReviewWindows)
-      let retentionProbability: number;
-      if (req.algorithm === 'fsrs') {
-        const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
-        retentionProbability = fsrs.forgettingCurve(intervalDays, stability);
-      } else if (req.algorithm === 'hlr') {
-        // HLR: stability → halfLife, closed-form 2^(-t/halfLife)
-        retentionProbability = Math.pow(2, -intervalDays / stability);
-      } else {
-        // SM2 fallback — no established formula; use conservative approximation
-        retentionProbability = Math.exp(-intervalDays / (stability * 3));
-      }
-
-      predictions.push({
-        cardId: req.cardId,
-        algorithm: req.algorithm,
-        retentionProbability: this.clamp01(retentionProbability),
-        daysUntilDue: intervalDays,
-        nextReviewAt: nextReviewAt.toISOString(),
-        confidence: req.algorithm === 'sm2' ? 0.5 : 0.85,
-      });
-    }
-
-    const result: IRetentionPredictionResult = {
-      predictions,
-      generatedAt: now.toISOString(),
-      policyVersion: SchedulerService.POLICY_VERSION,
-    };
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.retention.predicted',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        cardCount: data.cards.length,
-        averageRetention:
-          predictions.reduce((sum, p) => sum + p.retentionProbability, 0) / predictions.length,
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    return {
-      data: result,
-      agentHints: this.defaultHints(
-        'retention_predictions_ready',
-        `Generated retention predictions for ${String(predictions.length)} cards`
-      ),
-    };
-  }
-
-  /**
-   * Compute a full projection for a single card.
-   * Combines current scheduling state with a retention probability prediction
-   * to derive forgetting risk and recommended lane.
-   * Implements get-card-projection tool (Phase 4E).
-   */
-  async getCardProjection(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ICardProjection>> {
-    if (!this.repositories) {
-      throw new Error('Scheduler repositories not initialized');
-    }
-
-    // Accept { userId, cardId, asOf? }
-    const parsed = GetCardProjectionInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid card projection input');
-    }
-
-    const { userId, cardId, asOf } = parsed.data;
-    if (userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    const card = await this.repositories.schedulerCardRepository.findByCard(
-      userId as UserId,
-      cardId as CardId
-    );
-    if (!card) {
-      throw new Error(`Card not found: ${cardId}`);
-    }
-
-    const asOfDate = asOf !== undefined ? new Date(asOf) : new Date();
-    const asOfISO = asOfDate.toISOString();
-
-    // Determine time since last review in days
-    const lastReviewMs = card.lastReviewedAt !== null ? new Date(card.lastReviewedAt).getTime() : 0;
-    const deltaDays =
-      lastReviewMs > 0 ? (asOfDate.getTime() - lastReviewMs) / (1000 * 60 * 60 * 24) : 0;
-
-    const algorithm = (card.schedulingAlgorithm ?? 'fsrs') as 'fsrs' | 'hlr' | 'sm2';
-    const stability = card.stability ?? 1.0;
-
-    let retentionProbability: number;
-    if (algorithm === 'fsrs') {
-      const fsrs = new FSRSModel({ weights: DEFAULT_FSRS_WEIGHTS });
-      retentionProbability = deltaDays > 0 ? fsrs.forgettingCurve(deltaDays, stability) : 1.0;
-    } else if (algorithm === 'hlr') {
-      retentionProbability = deltaDays > 0 ? Math.pow(2, -deltaDays / stability) : 1.0;
-    } else {
-      retentionProbability = deltaDays > 0 ? Math.exp(-deltaDays / (stability * 3)) : 1.0;
-    }
-    retentionProbability = this.clamp01(retentionProbability);
-    const forgettingRisk = this.clamp01(1 - retentionProbability);
-
-    // Recommend lane: below 0.6 retention → calibration; otherwise retention
-    const recommendedLane: SchedulerLane = retentionProbability < 0.6 ? 'calibration' : 'retention';
-
-    const nextReviewDate = new Date(card.nextReviewDate);
-    const daysUntilDue = (nextReviewDate.getTime() - asOfDate.getTime()) / (1000 * 60 * 60 * 24);
-
-    const projection: ICardProjection = {
-      cardId: card.cardId,
-      userId: card.userId,
-      lane: card.lane,
-      algorithm,
-      state: card.state,
-      retentionProbability,
-      forgettingRisk,
-      recommendedLane,
-      daysUntilDue: Math.round(daysUntilDue * 10) / 10,
-      nextReviewDate: card.nextReviewDate,
-      stability: card.stability,
-      halfLife: card.halfLife,
-      reviewCount: card.reviewCount,
-      asOf: asOfISO,
-      policyVersion: SchedulerService.POLICY_VERSION,
-    };
-
-    return {
-      data: projection,
-      agentHints: this.defaultHints(
-        'card_projection_ready',
-        `Card ${cardId}: retention=${String(Math.round(retentionProbability * 100))}%, risk=${String(Math.round(forgettingRisk * 100))}%, dueIn=${String(Math.round(daysUntilDue))}d, recommended=${recommendedLane}`
-      ),
-    };
-  }
-
-  /**
-   * Apply runtime session adjustments (add/remove/reprioritize cards).
-   * Implements apply-session-adjustments tool (Phase 4, Gap #11).
-   */
-  async applySessionAdjustments(
-    input: unknown,
-    ctx: IExecutionContext
-  ): Promise<IServiceResult<ISessionAdjustmentResult>> {
-    const parsed = SessionAdjustmentInputSchema.safeParse(input);
-    if (!parsed.success) {
-      throw new Error('Invalid session adjustment input');
-    }
-
-    const data = parsed.data as unknown as ISessionAdjustmentInput;
-    if (data.userId !== ctx.userId) {
-      throw new Error('userId in payload must match authenticated user');
-    }
-
-    // Session adjustments are typically stored in session-service,
-    // scheduler-service just validates and emits the adjustment event
-    const appliedCount = data.adjustments.length;
-
-    const result: ISessionAdjustmentResult = {
-      sessionId: data.sessionId,
-      appliedCount,
-      adjustments: data.adjustments,
-      policyVersion: SchedulerService.POLICY_VERSION,
-      orchestration: {
-        ...data.orchestration,
-        correlationId: ctx.correlationId,
-      },
-    };
-
-    await this.eventPublisher.publish({
-      eventType: 'schedule.session.adjustments_applied',
-      aggregateType: 'Schedule',
-      aggregateId: data.userId,
-      payload: {
-        sessionId: data.sessionId,
-        appliedCount,
-        actions: data.adjustments.map((adj) => adj.action),
-      },
-      metadata: {
-        correlationId: ctx.correlationId,
-        userId: ctx.userId,
-      },
-    });
-
-    return {
-      data: result,
-      agentHints: this.defaultHints(
-        'session_adjustments_applied',
-        `Applied ${String(appliedCount)} session adjustments to session ${data.sessionId}`
-      ),
-    };
-  }
-
-  // ============================================================================
-  // Private Methods
-  // ============================================================================
-
-  private normalizeLaneMix(mix?: ISchedulerLaneMix): ISchedulerLaneMix {
-    if (!mix) {
-      return { retention: 0.8, calibration: 0.2 };
-    }
-
-    const sum = mix.retention + mix.calibration;
-    if (sum <= 0) {
-      return { retention: 0.8, calibration: 0.2 };
-    }
-
-    return {
-      retention: mix.retention / sum,
-      calibration: mix.calibration / sum,
-    };
-  }
-
-  private clamp01(value: number): number {
-    if (value < 0) return 0;
-    if (value > 1) return 1;
-    return value;
-  }
-
-  private buildOrchestrationMetadata(
-    ctx: IExecutionContext,
-    partial?: Partial<IOrchestrationMetadata>
-  ): IOrchestrationMetadata {
-    const metadata: IOrchestrationMetadata = {
-      proposalId: partial?.proposalId ?? `prop_${randomUUID()}`,
-      decisionId: partial?.decisionId ?? `dec_${randomUUID()}`,
-      sessionRevision: partial?.sessionRevision ?? 0,
-      correlationId: partial?.correlationId ?? ctx.correlationId,
-    };
-
-    if (partial?.sessionId !== undefined) {
-      metadata.sessionId = partial.sessionId;
-    }
-
-    return metadata;
-  }
-
-  private deriveIntervalDays(algorithm: 'fsrs' | 'hlr' | 'sm2', stability?: number): number {
-    if (algorithm === 'hlr') {
-      return Math.max(1, Math.round((stability ?? 2) * 0.75));
-    }
-    if (algorithm === 'sm2') {
-      return Math.max(1, Math.round(stability ?? 2));
-    }
-    return Math.max(1, Math.round(stability ?? 3));
-  }
-
-  /**
-   * T3.4 — Compute suggested time blocks for a set of review window decisions.
-   *
-   * Splits decisions into retention vs calibration groups and proposes
-   * reasonable study blocks. Uses sensible defaults (morning retention,
-   * afternoon calibration, ~2 min per card).
-   */
-  private computeSuggestedTimeBlocks(
-    decisions: IEnhancedCardScheduleDecision[]
-  ): ISuggestedTimeBlock[] {
-    const blocks: ISuggestedTimeBlock[] = [];
-    const retentionCards = decisions.filter((d) => d.lane === 'retention');
-    const calibrationCards = decisions.filter((d) => d.lane === 'calibration');
-    const secondsPerCard = 90;
-
-    if (retentionCards.length > 0) {
-      const durationMinutes = Math.max(5, Math.ceil((retentionCards.length * secondsPerCard) / 60));
-      const endHour = 9 + Math.floor(durationMinutes / 60);
-      const endMinute = durationMinutes % 60;
-      blocks.push({
-        startTime: '09:00',
-        endTime: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
-        cardCount: retentionCards.length,
-        description: 'Morning retention review',
-      });
-    }
-
-    if (calibrationCards.length > 0) {
-      const durationMinutes = Math.max(
-        5,
-        Math.ceil((calibrationCards.length * secondsPerCard) / 60)
-      );
-      const endHour = 14 + Math.floor(durationMinutes / 60);
-      const endMinute = durationMinutes % 60;
-      blocks.push({
-        startTime: '14:00',
-        endTime: `${String(endHour).padStart(2, '0')}:${String(endMinute).padStart(2, '0')}`,
-        cardCount: calibrationCards.length,
-        description: 'Afternoon calibration session',
-      });
-    }
-
-    return blocks;
-  }
-
-  private scoreCandidate(card: ISessionCandidateCard): ICandidateScore {
-    const nowMs = Date.now();
-    const dueMs =
-      card.dueAt !== null && card.dueAt !== undefined ? new Date(card.dueAt).getTime() : nowMs;
-    const overdueHours = Math.max(0, (nowMs - dueMs) / (1000 * 60 * 60));
-    const urgency = this.clamp01(overdueHours / 24);
-
-    const retentionRisk = this.clamp01(1 - (card.retentionProbability ?? 0.5));
-    const calibrationValue =
-      card.lane === 'calibration' ? this.clamp01(1 - (card.retentionProbability ?? 0.5)) : 0;
-
-    const composite = this.clamp01(0.5 * urgency + 0.35 * retentionRisk + 0.15 * calibrationValue);
-
-    return {
-      urgency,
-      retentionRisk,
-      calibrationValue,
-      composite,
-    };
-  }
-
-  private computeCandidateSelection(
-    cards: ISessionCandidateCard[],
-    targetCards: number,
-    laneMix?: ISchedulerLaneMix
-  ): {
-    selectedCardIds: CardId[];
-    excludedCardIds: CardId[];
-    scores: { cardId: CardId; score: ICandidateScore }[];
-    scoringBreakdown: IScoringBreakdown;
-  } {
-    const scored = cards.map((card) => ({
-      cardId: card.cardId,
-      lane: card.lane,
-      score: this.scoreCandidate(card),
-    }));
-
-    scored.sort((a, b) => {
-      if (b.score.composite !== a.score.composite) {
-        return b.score.composite - a.score.composite;
-      }
-      return a.cardId.localeCompare(b.cardId);
-    });
-
-    const scoreMap: Record<string, number> = {};
-    for (const entry of scored) {
-      scoreMap[entry.cardId] = entry.score.composite;
-    }
-
-    const retention = scored
-      .filter((entry) => entry.lane === 'retention')
-      .map((entry) => entry.cardId);
-    const calibration = scored
-      .filter((entry) => entry.lane === 'calibration')
-      .map((entry) => entry.cardId);
-
-    const mix = this.normalizeLaneMix(laneMix);
-    const selected = this.selectByLaneMix(
-      retention,
-      calibration,
-      mix,
-      targetCards,
-      scoreMap,
-      false
-    );
-
-    const selectedSet = new Set(selected.selectedCardIds);
-    const excludedCardIds = scored
-      .map((entry) => entry.cardId)
-      .filter((cardId) => !selectedSet.has(cardId));
-
-    const selectedScores = selected.selectedCardIds.map((cardId) => {
-      const score = scored.find((entry) => entry.cardId === cardId)?.score;
-      return {
-        cardId,
-        score: score ?? {
-          urgency: 0,
-          retentionRisk: 0,
-          calibrationValue: 0,
-          composite: 0,
-        },
+    const reviewedAt = input.recordedAt ?? new Date().toISOString();
+    const inputStudyMode = input.studyMode ?? StudyMode.KNOWLEDGE_GAINING;
+
+    const results: IConceptScheduleResult[] = [];
+    for (const conceptId of input.conceptRefs) {
+      const existing = await this.repository.findState(input.userId, conceptId, inputStudyMode);
+      const prior = existing ?? this.initialState(input, conceptId, reviewedAt);
+      const rating = ratingFromEvaluation(input);
+      const next = this.applyEvaluation(prior, input, rating, reviewedAt);
+
+      const patch = {
+        algorithm: next.algorithm,
+        queue: next.queue,
+        dueAt: next.dueAt,
+        stability: next.stability,
+        difficulty: next.difficulty,
+        halfLife: next.halfLife,
+        intervalDays: next.intervalDays,
+        reviewCount: next.reviewCount,
+        lapseCount: next.lapseCount,
+        consecutiveCorrect: next.consecutiveCorrect,
+        lastEvaluationId: input.evaluationId,
+        lastStepId: input.stepId,
+        version: prior.version + 1,
       };
-    });
 
-    const average = (values: number[]): number => {
-      if (values.length === 0) return 0;
-      return values.reduce((acc, value) => acc + value, 0) / values.length;
-    };
-
-    const scoringBreakdown: IScoringBreakdown = {
-      urgency: this.clamp01(average(selectedScores.map((item) => item.score.urgency))),
-      retentionRisk: this.clamp01(average(selectedScores.map((item) => item.score.retentionRisk))),
-      calibrationValue: this.clamp01(
-        average(selectedScores.map((item) => item.score.calibrationValue))
-      ),
-      composite: this.clamp01(average(selectedScores.map((item) => item.score.composite))),
-    };
-
-    return {
-      selectedCardIds: selected.selectedCardIds,
-      excludedCardIds,
-      scores: selectedScores,
-      scoringBreakdown,
-    };
-  }
-
-  private async persistDecision(
-    userId: UserId,
-    decision: ICardScheduleDecision,
-    studyMode: import('@noema/types').StudyMode = 'knowledge_gaining'
-  ): Promise<void> {
-    if (this.repositories === undefined) {
-      return;
-    }
-
-    const existing = await this.repositories.schedulerCardRepository.findByCard(
-      userId,
-      decision.cardId,
-      studyMode
-    );
-    if (!existing) {
-      await this.repositories.schedulerCardRepository.create({
-        id: `sc_${randomUUID()}`,
-        cardId: decision.cardId,
-        userId,
-        studyMode,
-        lane: decision.lane,
-        stability: null,
-        difficultyParameter: null,
-        halfLife: null,
-        interval: decision.intervalDays,
-        nextReviewDate: decision.nextReviewAt,
-        lastReviewedAt: null,
-        reviewCount: 0,
-        lapseCount: 0,
-        consecutiveCorrect: 0,
-        schedulingAlgorithm: decision.algorithm,
-        cardType: null,
-        difficulty: null,
-        knowledgeNodeIds: [],
-        state: 'review',
-        suspendedUntil: null,
-        suspendedReason: null,
-        version: 1,
+      const log: IConceptEvaluationLog = {
+        id: `cel_${randomUUID()}`,
+        userId: input.userId,
+        conceptId,
+        studyMode: inputStudyMode,
+        evaluationId: input.evaluationId,
+        stepId: input.stepId,
+        algorithm: next.algorithm,
+        schedulerRating: rating,
+        combinedScore: input.combinedScore,
+        priorState: snapshot(prior),
+        newState: snapshot({ ...prior, ...patch }),
+        reviewedAt,
+      };
+      const transition = await this.repository.recordEvaluationTransition({
+        priorState: prior,
+        patch,
+        log,
+        ...(input.transformation !== undefined
+          ? {
+              transformationHistory: {
+                userId: input.userId,
+                conceptId,
+                studyMode: inputStudyMode,
+                transformation: input.transformation,
+                usedAt: reviewedAt,
+                evaluationId: input.evaluationId,
+              },
+            }
+          : {}),
       });
-      return;
+
+      await this.publishConceptStateUpdated(transition.state, prior.queue, input, context);
+      results.push({
+        state: transition.state,
+        previousQueue: prior.queue,
+        log: transition.log,
+        replayed: transition.replayed,
+      });
     }
 
-    await this.repositories.schedulerCardRepository.update(
-      userId,
-      decision.cardId,
-      {
-        lane: decision.lane,
-        interval: decision.intervalDays,
-        nextReviewDate: decision.nextReviewAt,
-        schedulingAlgorithm: decision.algorithm,
-      },
-      existing.version,
-      studyMode
+    this.logger.info(
+      { evaluationId: input.evaluationId, conceptCount: results.length },
+      'Updated concept schedule state from evaluation'
     );
+    return results;
   }
 
-  private async recordProposalProvenance(input: IProposalProvenanceInput): Promise<void> {
-    if (this.repositories?.provenanceRepository === undefined) {
-      return;
-    }
-
-    await this.repositories.provenanceRepository.recordProposal(input);
+  public async getConceptSchedule(
+    userId: IExecutionContext['userId'],
+    conceptId: IConceptScheduleState['conceptId'],
+    studyMode: IConceptScheduleState['studyMode'] = StudyMode.KNOWLEDGE_GAINING
+  ): Promise<IConceptScheduleState | null> {
+    return this.repository.findState(userId, conceptId, studyMode);
   }
 
-  private async recordCommitProvenance(input: ICommitProvenanceInput): Promise<void> {
-    if (this.repositories?.provenanceRepository === undefined) {
-      return;
-    }
-
-    await this.repositories.provenanceRepository.recordCommit(input);
+  public async getDueConcepts(
+    rawQuery: unknown,
+    context: IExecutionContext
+  ): Promise<IConceptScheduleState[]> {
+    const query = GetDueConceptsQuerySchema.parse(rawQuery);
+    const dueQuery: IDueConceptQuery = {
+      userId: context.userId,
+      ...(query.studyMode !== undefined
+        ? { studyMode: query.studyMode as NonNullable<IEvaluationRecordedInput['studyMode']> }
+        : {}),
+      ...(query.queue !== undefined
+        ? { queue: query.queue as IConceptScheduleState['queue'] }
+        : {}),
+      asOf: query.asOf ?? new Date().toISOString(),
+      limit: query.limit,
+    };
+    return this.repository.findDueConcepts(dueQuery);
   }
 
-  private async recordCohortLineage(input: ICohortLineageInput): Promise<void> {
-    if (this.repositories?.provenanceRepository === undefined) {
-      return;
-    }
-
-    await this.repositories.provenanceRepository.recordCohortLineage(input);
+  public async getTransformationHistory(
+    rawQuery: unknown,
+    context: IExecutionContext,
+    conceptId: IConceptScheduleState['conceptId']
+  ): Promise<IConceptTransformationHistory[]> {
+    const query = GetTransformationHistoryQuerySchema.parse(rawQuery);
+    const historyQuery = {
+      userId: context.userId,
+      conceptId,
+      ...(query.studyMode !== undefined
+        ? { studyMode: query.studyMode as NonNullable<IEvaluationRecordedInput['studyMode']> }
+        : {}),
+      limit: query.limit,
+    };
+    return this.repository.findTransformationHistory(historyQuery);
   }
 
-  /**
-   * Sort card IDs by priority score (descending). Cards without a score
-   * receive 0 and preserve their original relative order (stable sort).
-   */
-  private sortByPriority(cardIds: CardId[], scores: Record<string, number>): CardId[] {
-    return [...cardIds].sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0));
+  private initialState(
+    input: IEvaluationRecordedInput,
+    conceptId: IConceptScheduleState['conceptId'],
+    now: string
+  ): IConceptScheduleState {
+    return {
+      userId: input.userId,
+      conceptId,
+      studyMode: input.studyMode ?? StudyMode.KNOWLEDGE_GAINING,
+      algorithm: SchedulingAlgorithm.FSRS,
+      queue: SchedulerQueue.NEW_LEARNING,
+      dueAt: now,
+      stability: null,
+      difficulty: null,
+      halfLife: null,
+      intervalDays: 0,
+      reviewCount: 0,
+      lapseCount: 0,
+      consecutiveCorrect: 0,
+      lastEvaluationId: null,
+      lastStepId: null,
+      suspendedUntil: null,
+      suspendedReason: null,
+      createdAt: now,
+      updatedAt: now,
+      version: 0,
+    };
   }
 
-  /**
-   * Select cards from retention and calibration pools, respecting the target
-   * lane mix ratio. Supports priority-based selection, urgency-aware spillover,
-   * and round-robin interleaving.
-   */
-  selectByLaneMix(
-    retention: CardId[],
-    calibration: CardId[],
-    mix: ISchedulerLaneMix,
-    maxCards: number,
-    scores: Record<string, number> = {},
-    interleave = true
-  ): {
-    selectedCardIds: CardId[];
-    cardDetails: ICardDetail[];
-    retentionSpillover: number;
-    calibrationSpillover: number;
-  } {
-    const sortedRetention = this.sortByPriority(retention, scores);
-    const sortedCalibration = this.sortByPriority(calibration, scores);
+  private applyEvaluation(
+    prior: IConceptScheduleState,
+    input: IEvaluationRecordedInput,
+    rating: LocalSchedulerRating,
+    reviewedAt: string
+  ): IConceptScheduleState {
+    const elapsedDays = daysBetween(prior.updatedAt, reviewedAt);
+    const reviewCount = prior.reviewCount + 1;
+    const lapseCount = rating === SchedulerRating.AGAIN ? prior.lapseCount + 1 : prior.lapseCount;
+    const consecutiveCorrect = rating === SchedulerRating.AGAIN ? 0 : prior.consecutiveCorrect + 1;
 
-    const retentionTarget = Math.round(maxCards * mix.retention);
-    const calibrationTarget = Math.max(0, maxCards - retentionTarget);
+    const algorithm = prior.algorithm;
+    let stability = prior.stability;
+    let difficulty = prior.difficulty;
+    let halfLife = prior.halfLife;
+    let intervalDays = prior.intervalDays;
 
-    // --- Primary selection (from own lane, by priority) ---
-    const retainedPrimary = sortedRetention.slice(0, retentionTarget);
-    const calibratedPrimary = sortedCalibration.slice(0, calibrationTarget);
-
-    let retentionSpillover = 0;
-    let calibrationSpillover = 0;
-    const spilloverCards: { cardId: CardId; lane: SchedulerLane }[] = [];
-
-    // --- Spillover: fill remaining slots from the other lane (by priority) ---
-    const totalPrimary = retainedPrimary.length + calibratedPrimary.length;
-    const remaining = maxCards - totalPrimary;
-
-    if (remaining > 0) {
-      const retentionRemainder = this.sortByPriority(
-        sortedRetention.slice(retainedPrimary.length),
-        scores
-      );
-      const calibrationRemainder = this.sortByPriority(
-        sortedCalibration.slice(calibratedPrimary.length),
-        scores
-      );
-
-      // Merge remainders by priority and take what we need
-      const allRemainder = [
-        ...retentionRemainder.map((id) => ({ cardId: id, lane: 'retention' as SchedulerLane })),
-        ...calibrationRemainder.map((id) => ({
-          cardId: id,
-          lane: 'calibration' as SchedulerLane,
-        })),
-      ].sort((a, b) => (scores[b.cardId] ?? 0) - (scores[a.cardId] ?? 0));
-
-      for (let i = 0; i < Math.min(remaining, allRemainder.length); i++) {
-        const entry = allRemainder[i];
-        if (entry === undefined) {
-          continue;
-        }
-        spilloverCards.push(entry);
-
-        // Count spillover direction: retention card filling calibration slots, or vice-versa
-        if (retainedPrimary.length < retentionTarget && entry.lane === 'calibration') {
-          // Calibration card spilling into retention slots
-          calibrationSpillover++;
-        } else if (calibratedPrimary.length < calibrationTarget && entry.lane === 'retention') {
-          // Retention card spilling into calibration slots
-          retentionSpillover++;
-        } else if (entry.lane === 'retention') {
-          retentionSpillover++;
-        } else {
-          calibrationSpillover++;
-        }
-      }
-    }
-
-    // --- Build detail records ---
-    const retentionDetails: ICardDetail[] = retainedPrimary.map((cardId) => ({
-      cardId,
-      lane: 'retention' as SchedulerLane,
-      score: scores[cardId] ?? 0,
-      position: -1, // assigned after interleaving
-      isSpillover: false,
-    }));
-
-    const calibrationDetails: ICardDetail[] = calibratedPrimary.map((cardId) => ({
-      cardId,
-      lane: 'calibration' as SchedulerLane,
-      score: scores[cardId] ?? 0,
-      position: -1,
-      isSpillover: false,
-    }));
-
-    const spilloverDetails: ICardDetail[] = spilloverCards.map(({ cardId, lane }) => ({
-      cardId,
-      lane,
-      score: scores[cardId] ?? 0,
-      position: -1,
-      isSpillover: true,
-    }));
-
-    // --- Interleave or block-order ---
-    let orderedDetails: ICardDetail[];
-
-    if (interleave) {
-      orderedDetails = this.interleaveByRatio(
-        retentionDetails,
-        calibrationDetails,
-        spilloverDetails,
-        mix
-      );
+    if (algorithm === SchedulingAlgorithm.FSRS) {
+      const next = applyFSRSEvaluation({
+        rating,
+        elapsedDays,
+        reviewCount: prior.reviewCount,
+        stability,
+        difficulty,
+        intervalDays,
+      });
+      stability = next.stability;
+      difficulty = next.difficulty;
+      intervalDays = next.intervalDays;
+    } else if (algorithm === SchedulingAlgorithm.HLR) {
+      const next = applyHLREvaluation({
+        rating,
+        elapsedDays,
+        reviewCount,
+        lapseCount,
+        consecutiveCorrect,
+        halfLife,
+        combinedScore: input.combinedScore,
+      });
+      halfLife = next.halfLife;
+      intervalDays = next.intervalDays;
+    } else if (algorithm === SchedulingAlgorithm.SM2) {
+      const next = applySM2Evaluation({
+        rating,
+        easeFactor: difficulty,
+        intervalDays,
+        reviewCount: prior.reviewCount,
+      });
+      difficulty = next.easeFactor;
+      intervalDays = next.intervalDays;
     } else {
-      orderedDetails = [...retentionDetails, ...calibrationDetails, ...spilloverDetails];
+      const next = applyLeitnerEvaluation({
+        rating,
+        box: halfLife,
+      });
+      halfLife = next.box;
+      intervalDays = next.intervalDays;
     }
 
-    // Assign final positions
-    orderedDetails.forEach((d, i) => {
-      d.position = i;
-    });
-
+    const dueAt = addDays(reviewedAt, intervalDays).toISOString();
     return {
-      selectedCardIds: orderedDetails.map((d) => d.cardId),
-      cardDetails: orderedDetails,
-      retentionSpillover,
-      calibrationSpillover,
+      ...prior,
+      algorithm,
+      queue: queueFromEvaluation(prior.queue, rating),
+      dueAt,
+      stability,
+      difficulty,
+      halfLife,
+      intervalDays,
+      reviewCount,
+      lapseCount,
+      consecutiveCorrect,
+      lastEvaluationId: input.evaluationId,
+      lastStepId: input.stepId,
+      updatedAt: reviewedAt,
+      version: prior.version + 1,
     };
   }
 
-  /**
-   * Interleave retention and calibration cards using a ratio-based round-robin.
-   * For an 80/20 mix this produces patterns like: R R R R C R R R R C ...
-   * Spillover cards are appended in priority order at the end.
-   */
-  private interleaveByRatio(
-    retentionDetails: ICardDetail[],
-    calibrationDetails: ICardDetail[],
-    spilloverDetails: ICardDetail[],
-    mix: ISchedulerLaneMix
-  ): ICardDetail[] {
-    const result: ICardDetail[] = [];
-    let ri = 0;
-    let ci = 0;
-
-    // retentionPerCalibration = retention / calibration. E.g. 0.8 / 0.2 = 4.
-    // Insert a calibration card after every N retention cards.
-    const retentionPerCalibration =
-      mix.calibration > 0 ? mix.retention / mix.calibration : Infinity;
-
-    // Count retention cards emitted since last calibration insertion
-    let retentionCount = 0;
-
-    while (ri < retentionDetails.length || ci < calibrationDetails.length) {
-      if (ri < retentionDetails.length && ci < calibrationDetails.length) {
-        // Both lanes have cards remaining
-        if (retentionCount >= retentionPerCalibration) {
-          // Time for a calibration card
-          const calibrationCard = calibrationDetails[ci];
-          if (calibrationCard !== undefined) {
-            result.push(calibrationCard);
-          }
-          ci++;
-          retentionCount = 0;
-        } else {
-          const retentionCard = retentionDetails[ri];
-          if (retentionCard !== undefined) {
-            result.push(retentionCard);
-          }
-          ri++;
-          retentionCount++;
-        }
-      } else if (ri < retentionDetails.length) {
-        const retentionCard = retentionDetails[ri];
-        if (retentionCard !== undefined) {
-          result.push(retentionCard);
-        }
-        ri++;
-      } else {
-        const calibrationCard = calibrationDetails[ci];
-        if (calibrationCard !== undefined) {
-          result.push(calibrationCard);
-        }
-        ci++;
-      }
-    }
-
-    // Append spillover at the end (already sorted by priority)
-    result.push(...spilloverDetails);
-
-    return result;
-  }
-
-  private defaultHints(action: string, reasoning: string): IAgentHints {
-    return {
-      suggestedNextActions: [
-        {
-          action,
-          description: reasoning,
-          priority: 'high',
-        },
-      ],
-      relatedResources: [],
-      confidence: 1,
-      sourceQuality: 'high',
-      validityPeriod: 'short',
-      contextNeeded: [],
-      assumptions: [],
-      riskFactors: [],
-      dependencies: [],
-      estimatedImpact: { benefit: 0.6, effort: 0.2, roi: 3 },
-      preferenceAlignment: [],
-      reasoning,
-    };
-  }
-
-  private async persistPlannedCards(
-    userId: UserId,
-    studyMode: import('@noema/types').StudyMode,
-    retentionCardIds: CardId[],
-    calibrationCardIds: CardId[],
-    selectedCardIds: CardId[]
+  private async publishConceptStateUpdated(
+    state: IConceptScheduleState,
+    previousQueue: IConceptScheduleState['queue'],
+    input: IEvaluationRecordedInput,
+    context: IExecutionContext
   ): Promise<void> {
-    if (this.repositories === undefined) {
-      return;
-    }
-
-    const repositories = this.repositories;
-
-    const retentionSet = new Set<CardId>(retentionCardIds);
-    const calibrationSet = new Set<CardId>(calibrationCardIds);
-    const now = new Date();
-
-    await Promise.all(
-      selectedCardIds.map(async (cardId) => {
-        const lane: SchedulerLane = retentionSet.has(cardId)
-          ? 'retention'
-          : calibrationSet.has(cardId)
-            ? 'calibration'
-            : 'retention';
-
-        const existing = await repositories.schedulerCardRepository.findByCard(
-          userId,
-          cardId,
-          studyMode
-        );
-
-        if (existing === null) {
-          await repositories.schedulerCardRepository.create({
-            id: `sc_${randomUUID()}`,
-            cardId,
-            userId,
-            studyMode,
-            lane,
-            stability: null,
-            difficultyParameter: null,
-            halfLife: null,
-            interval: 0,
-            nextReviewDate: now.toISOString(),
-            lastReviewedAt: null,
-            reviewCount: 0,
-            lapseCount: 0,
-            consecutiveCorrect: 0,
-            schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
-            cardType: null,
-            difficulty: null,
-            knowledgeNodeIds: [],
-            state: 'new',
-            suspendedUntil: null,
-            suspendedReason: null,
-            version: 1,
-          });
-          return;
-        }
-
-        await repositories.schedulerCardRepository.update(
-          userId,
-          cardId,
-          {
-            lane,
-            nextReviewDate: now.toISOString(),
-            schedulingAlgorithm: lane === 'retention' ? 'fsrs' : 'hlr',
-          },
-          existing.version,
-          studyMode
-        );
-      })
-    );
+    const payload: ISchedulerConceptStateUpdatedPayload = {
+      userId: state.userId,
+      conceptId: state.conceptId,
+      studyMode: state.studyMode,
+      previousQueue,
+      queue: state.queue,
+      dueAt: state.dueAt,
+      evaluationId: input.evaluationId,
+      stepId: input.stepId,
+      reviewCount: state.reviewCount,
+      intervalDays: state.intervalDays,
+      ...(state.stability !== null ? { stability: state.stability } : {}),
+      ...(state.halfLife !== null ? { halfLife: state.halfLife } : {}),
+    };
+    await this.eventPublisher.publish({
+      eventType: SchedulerLearningEventType.SCHEDULER_CONCEPT_STATE_UPDATED,
+      aggregateType: 'ConceptScheduleState',
+      aggregateId: `${state.userId}:${state.conceptId}:${state.studyMode}`,
+      payload,
+      metadata: { correlationId: context.correlationId, userId: state.userId },
+    });
   }
 }
 
-export function buildExecutionContext(
-  userId: UserId,
-  correlationId: CorrelationId
-): IExecutionContext {
-  return { userId, correlationId };
+function ratingFromEvaluation(input: IEvaluationRecordedInput): LocalSchedulerRating {
+  if (!input.correct || input.combinedScore < 0.3 || input.reasoningQuality < 0.3) {
+    return SchedulerRating.AGAIN;
+  }
+  if (input.combinedScore < 0.5) return SchedulerRating.HARD;
+  if (input.combinedScore > 0.85 && input.reasoningQuality > 0.7) return SchedulerRating.EASY;
+  return SchedulerRating.GOOD;
+}
+
+function queueFromEvaluation(
+  priorQueue: IConceptScheduleState['queue'],
+  rating: LocalSchedulerRating
+): IConceptScheduleState['queue'] {
+  if (rating === SchedulerRating.AGAIN) return SchedulerQueue.REPAIR;
+  if (priorQueue === SchedulerQueue.NEW_LEARNING) return SchedulerQueue.REINFORCEMENT;
+  return SchedulerQueue.REINFORCEMENT;
+}
+
+function daysBetween(fromIso: string, toIso: string): number {
+  const from = new Date(fromIso).getTime();
+  const to = new Date(toIso).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return 0;
+  return Math.max(0, (to - from) / 86_400_000);
+}
+
+function addDays(fromIso: string, days: number): Date {
+  const date = new Date(fromIso);
+  date.setTime(date.getTime() + Math.max(0, days) * 86_400_000);
+  return date;
+}
+
+function snapshot(state: IConceptScheduleState): Record<string, unknown> {
+  return {
+    queue: state.queue,
+    algorithm: state.algorithm,
+    dueAt: state.dueAt,
+    stability: state.stability,
+    difficulty: state.difficulty,
+    halfLife: state.halfLife,
+    intervalDays: state.intervalDays,
+    reviewCount: state.reviewCount,
+    lapseCount: state.lapseCount,
+    consecutiveCorrect: state.consecutiveCorrect,
+    version: state.version,
+  };
 }

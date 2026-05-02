@@ -1,329 +1,131 @@
-// Prisma schema for scheduler-service
-// Database: PostgreSQL
-
 generator client {
-    provider = "prisma-client-js"
-    output   = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-}
-
-// ============================================================================
-// SchedulerCard Entity — Scheduling metadata for cards
-// ============================================================================
-
-model SchedulerCard {
-    id     String @id @db.VarChar(50) // Surrogate key
-    cardId String @map("card_id") @db.VarChar(50) // CardId from content-service
-    userId String @map("user_id") @db.VarChar(50)
-    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-
-    // Lane assignment
-    lane SchedulerLane @default(RETENTION)
-
-    // FSRS parameters (retention lane)
-    stability           Float? // long-term memory stability in days
-    difficultyParameter Float? @map("difficulty_parameter") // intrinsic difficulty [1-10]
-
-    // HLR parameters (calibration lane)
-    halfLife Float? @map("half_life") // half-life in days from HLR model
-
-    // Common scheduling state
-    interval           Float     @default(0) // current interval in days
-    nextReviewDate     DateTime  @map("next_review_date")
-    lastReviewedAt     DateTime? @map("last_reviewed_at")
-    reviewCount        Int       @default(0) @map("review_count")
-    lapseCount         Int       @default(0) @map("lapse_count")
-    consecutiveCorrect Int       @default(0) @map("consecutive_correct")
-
-    // Algorithm selection
-    schedulingAlgorithm String @default("fsrs") @map("scheduling_algorithm") @db.VarChar(20)
-
-    // Metadata
-    cardType         String?  @map("card_type") @db.VarChar(50)
-    difficulty       String?  @db.VarChar(20) // difficulty level from content
-    knowledgeNodeIds String[] @map("knowledge_node_ids") // for PKG-aware scheduling
-
-    // State tracking
-    state           SchedulerCardState @default(NEW)
-    suspendedUntil  DateTime?          @map("suspended_until")
-    suspendedReason String?            @map("suspended_reason") @db.VarChar(255)
-
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-
-    // Optimistic locking
-    version Int @default(1)
-
-    // Relations
-    reviews         Review[]
-    calibrationData CalibrationData[]
-
-    @@unique([userId, cardId, studyMode])
-    // Indexes
-    @@index([userId, nextReviewDate])
-    @@index([userId, studyMode, nextReviewDate])
-    @@index([cardId])
-    @@index([userId, lane])
-    @@index([userId, studyMode, lane])
-    @@index([userId, state, nextReviewDate])
-    @@index([userId, studyMode, state, nextReviewDate])
-    @@index([nextReviewDate])
-    @@index([lane, state])
-    @@map("scheduler_cards")
-}
-
-// ============================================================================
-// Review Entity — Historical review records for algorithm training
-// ============================================================================
-
-model Review {
-    id String @id @db.VarChar(50)
-
-    // References
-    cardId    String @map("card_id") @db.VarChar(50)
-    userId    String @map("user_id") @db.VarChar(50)
-    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-    sessionId String @map("session_id") @db.VarChar(50)
-    attemptId String @map("attempt_id") @db.VarChar(50)
-
-    // Review outcome
-    rating      Rating
-    ratingValue Int    @map("rating_value") @db.SmallInt // 1-4 for FSRS
-    outcome     String @db.VarChar(20) // correct, incorrect, partial, skipped
-
-    // Timing
-    deltaDays    Float    @map("delta_days") // days since last review
-    responseTime Float?   @map("response_time") // milliseconds
-    reviewedAt   DateTime @map("reviewed_at")
-
-    // Prior state (snapshot before this review)
-    priorState Json @map("prior_state") // {interval, stability, difficulty, halfLife,...}
-
-    // New state (snapshot after this review)
-    newState Json @map("new_state")
-
-    // Algorithm used
-    schedulingAlgorithm String        @map("scheduling_algorithm") @db.VarChar(20)
-    lane                SchedulerLane
-
-    // Metacognitive signals (denormalized from session-service Attempt)
-    confidenceBefore Float? @map("confidence_before")
-    confidenceAfter  Float? @map("confidence_after")
-    hintRequestCount Int?   @map("hint_request_count")
-
-    // Audit
-    createdAt DateTime @default(now()) @map("created_at")
-
-    // Relation
-    schedulerCard SchedulerCard @relation(fields: [userId, cardId, studyMode], references: [userId, cardId, studyMode])
-
-    @@unique([attemptId])
-    // Indexes
-    @@index([cardId, reviewedAt])
-    @@index([userId, reviewedAt])
-    @@index([userId, studyMode, reviewedAt])
-    @@index([sessionId])
-    @@index([rating])
-    @@index([lane, rating])
-    @@map("reviews")
-}
-
-// ============================================================================
-// CalibrationData Entity — Bayesian parameter estimates per user/card/type
-// ============================================================================
-
-model CalibrationData {
-    id String @id @db.VarChar(50)
-
-    // Scope: per-user, per-card OR per-cardType
-    userId   String  @map("user_id") @db.VarChar(50)
-    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-    cardId   String? @map("card_id") @db.VarChar(50) // null for type-level calibration
-    cardType String? @map("card_type") @db.VarChar(50)
-
-    // Parameter estimates (JSON for flexibility as algorithms evolve)
-    parameters Json // e.g. {fsrs: {w0: ..., w1: ...}, hlr: {theta: [...]}}
-
-    // Confidence metrics
-    sampleCount     Int       @default(0) @map("sample_count")
-    confidenceScore Float     @default(0.5) @map("confidence_score")
-    lastTrainedAt   DateTime? @map("last_trained_at")
-
-    // Audit
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-
-    // Relation (optional foreign key)
-    card SchedulerCard? @relation(fields: [userId, cardId, studyMode], references: [userId, cardId, studyMode])
-
-    // Indexes
-    @@unique([userId, cardId, studyMode])
-    @@index([userId, studyMode, cardType])
-    @@index([userId, studyMode, lastTrainedAt])
-    @@map("calibration_data")
-}
-
-// ============================================================================
-// Scheduler proposal/commit provenance and cohort lineage
-// ============================================================================
-
-model ScheduleProposal {
-    id String @id @db.VarChar(50)
-
-    decisionId    String  @map("decision_id") @db.VarChar(50)
-    userId        String  @map("user_id") @db.VarChar(50)
-    studyMode     StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-    policyVersion String  @map("policy_version") @db.VarChar(100)
-    correlationId String  @map("correlation_id") @db.VarChar(100)
-    sessionId     String? @map("session_id") @db.VarChar(50)
-    sessionRevision Int   @map("session_revision")
-    kind          String  @db.VarChar(64)
-    payload       Json
-
-    createdAt DateTime @default(now()) @map("created_at")
-
-    @@index([userId, studyMode, createdAt])
-    @@index([decisionId])
-    @@index([sessionId, sessionRevision])
-    @@map("schedule_proposals")
-}
-
-model ScheduleCommit {
-    id String @id @db.VarChar(50)
-
-    proposalId    String? @map("proposal_id") @db.VarChar(50)
-    decisionId    String  @map("decision_id") @db.VarChar(50)
-    userId        String  @map("user_id") @db.VarChar(50)
-    studyMode     StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-    policyVersion String  @map("policy_version") @db.VarChar(100)
-    correlationId String  @map("correlation_id") @db.VarChar(100)
-    sessionId     String? @map("session_id") @db.VarChar(50)
-    sessionRevision Int   @map("session_revision")
-    kind          String  @db.VarChar(64)
-    accepted      Int
-    rejected      Int
-    payload       Json
-
-    createdAt DateTime @default(now()) @map("created_at")
-
-    @@index([userId, studyMode, createdAt])
-    @@index([proposalId])
-    @@index([decisionId])
-    @@index([sessionId, sessionRevision])
-    @@map("schedule_commits")
-}
-
-model ScheduleCohortLineage {
-    id String @id @db.VarChar(50)
-
-    userId         String  @map("user_id") @db.VarChar(50)
-    studyMode      StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
-    proposalId     String? @map("proposal_id") @db.VarChar(50)
-    decisionId     String  @map("decision_id") @db.VarChar(50)
-    sessionId      String? @map("session_id") @db.VarChar(50)
-    sessionRevision Int    @map("session_revision")
-    operationKind  String  @map("operation_kind") @db.VarChar(64)
-    selectedCardIds String[] @map("selected_card_ids")
-    excludedCardIds String[] @map("excluded_card_ids")
-    metadata       Json
-
-    createdAt DateTime @default(now()) @map("created_at")
-
-    @@index([userId, studyMode, createdAt])
-    @@index([proposalId])
-    @@index([decisionId])
-    @@index([sessionId, sessionRevision])
-    @@map("schedule_cohort_lineage")
-}
-
-model SchedulerEventInbox {
-    id             String   @id @db.VarChar(120)
-    eventType      String   @map("event_type") @db.VarChar(120)
-    streamMessageId String? @map("stream_message_id") @db.VarChar(64)
-    processState   String   @default("PROCESSING") @map("process_state") @db.VarChar(20)
-
-    correlationId  String?  @map("correlation_id") @db.VarChar(100)
-    userId         String?  @map("user_id") @db.VarChar(50)
-    studyMode      StudyMode? @map("study_mode")
-    proposalId     String?  @map("proposal_id") @db.VarChar(50)
-    decisionId     String?  @map("decision_id") @db.VarChar(50)
-    sessionId      String?  @map("session_id") @db.VarChar(50)
-    sessionRevision Int?    @map("session_revision")
-
-    payload        Json
-    deliveryCount  Int      @default(1) @map("delivery_count")
-    lastError      String?  @map("last_error") @db.VarChar(1000)
-
-    firstSeenAt    DateTime @default(now()) @map("first_seen_at")
-    lastSeenAt     DateTime @default(now()) @map("last_seen_at")
-    processedAt    DateTime? @map("processed_at")
-
-    @@index([eventType, processState])
-    @@index([sessionId, proposalId, sessionRevision])
-    @@index([lastSeenAt])
-    @@map("scheduler_event_inbox")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum StudyMode {
-    LANGUAGE_LEARNING
-    KNOWLEDGE_GAINING
+  LANGUAGE_LEARNING
+  KNOWLEDGE_GAINING
+
+  @@map("study_mode")
 }
 
-model SchedulerHandshakeState {
-    id             String   @id @db.VarChar(100)
-    userId         String?  @map("user_id") @db.VarChar(50)
-    correlationId  String?  @map("correlation_id") @db.VarChar(100)
-    proposalId     String   @map("proposal_id") @db.VarChar(50)
-    decisionId     String?  @map("decision_id") @db.VarChar(50)
-    sessionId      String   @map("session_id") @db.VarChar(50)
-    sessionRevision Int     @map("session_revision")
-    state          String   @db.VarChar(20)
-    lastEventType  String   @map("last_event_type") @db.VarChar(120)
-    lastStreamMessageId String? @map("last_stream_message_id") @db.VarChar(64)
-    metadata       Json
+enum SchedulingAlgorithm {
+  FSRS
+  HLR
+  SM2
+  LEITNER
 
-    createdAt      DateTime @default(now()) @map("created_at")
-    updatedAt      DateTime @updatedAt @map("updated_at")
-
-    @@unique([sessionId, proposalId])
-    @@index([decisionId])
-    @@index([correlationId])
-    @@index([sessionId, sessionRevision])
-    @@map("scheduler_handshake_state")
+  @@map("scheduling_algorithm")
 }
 
-// ============================================================================
-// Enums
-// ============================================================================
+enum SchedulerQueue {
+  NEW_LEARNING
+  REINFORCEMENT
+  REPAIR
 
-enum SchedulerLane {
-    RETENTION
-    CALIBRATION
-
-    @@map("scheduler_lane")
+  @@map("scheduler_queue")
 }
 
-enum SchedulerCardState {
-    NEW // Never reviewed
-    LEARNING // In initial learning phase
-    REVIEW // In spaced repetition
-    RELEARNING // After lapse
-    SUSPENDED // Temporarily paused
-    GRADUATED // Mastered (very long intervals)
+enum SchedulerRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
 
-    @@map("scheduler_card_state")
+  @@map("scheduler_rating")
 }
 
-enum Rating {
-    AGAIN
-    HARD
-    GOOD
-    EASY
+enum TransformationType {
+  RECALL          @map("recall")
+  EXPLANATION     @map("explanation")
+  COMPARISON      @map("comparison")
+  APPLICATION     @map("application")
+  PERTURBATION    @map("perturbation")
+  ERROR_DETECTION @map("error_detection")
 
-    @@map("rating")
+  @@map("transformation_type")
+}
+
+model ConceptScheduleState {
+  userId             String              @map("user_id") @db.VarChar(50)
+  conceptId          String              @map("concept_id") @db.VarChar(50)
+  studyMode          StudyMode           @map("study_mode")
+  algorithm          SchedulingAlgorithm @default(FSRS)
+  queue              SchedulerQueue      @default(NEW_LEARNING)
+  dueAt              DateTime            @map("due_at")
+  stability          Float?
+  difficulty         Float?
+  halfLife           Float?              @map("half_life")
+  intervalDays       Float               @default(0) @map("interval_days")
+  reviewCount        Int                 @default(0) @map("review_count")
+  lapseCount         Int                 @default(0) @map("lapse_count")
+  consecutiveCorrect Int                 @default(0) @map("consecutive_correct")
+  lastEvaluationId   String?             @map("last_evaluation_id") @db.VarChar(50)
+  lastStepId         String?             @map("last_step_id") @db.VarChar(50)
+  suspendedUntil     DateTime?           @map("suspended_until")
+  suspendedReason    String?             @map("suspended_reason") @db.VarChar(255)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  version            Int                 @default(1)
+
+  @@id([userId, conceptId, studyMode])
+  @@index([userId, dueAt])
+  @@index([userId, studyMode, queue, dueAt])
+  @@map("concept_schedule_state")
+}
+
+model ConceptEvaluationLog {
+  id              String              @id @db.VarChar(50)
+  userId          String              @map("user_id") @db.VarChar(50)
+  conceptId       String              @map("concept_id") @db.VarChar(50)
+  studyMode       StudyMode           @map("study_mode")
+  evaluationId    String              @map("evaluation_id") @db.VarChar(50)
+  stepId          String              @map("step_id") @db.VarChar(50)
+  algorithm       SchedulingAlgorithm
+  schedulerRating SchedulerRating     @map("scheduler_rating")
+  combinedScore   Float               @map("combined_score")
+  priorState      Json                @map("prior_state")
+  newState        Json                @map("new_state")
+  reviewedAt      DateTime            @map("reviewed_at")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  @@unique([evaluationId])
+  @@index([userId, conceptId, reviewedAt])
+  @@map("concept_evaluation_log")
+}
+
+model ConceptCalibrationData {
+  id            String              @id @db.VarChar(50)
+  userId        String              @map("user_id") @db.VarChar(50)
+  studyMode     StudyMode           @map("study_mode")
+  conceptId     String?             @map("concept_id") @db.VarChar(50)
+  algorithm     SchedulingAlgorithm
+  parameters    Json
+  sampleCount   Int                 @default(0) @map("sample_count")
+  confidence    Float               @default(0.5)
+  lastTrainedAt DateTime?           @map("last_trained_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@unique([userId, studyMode, algorithm, conceptId])
+  @@map("concept_calibration_data")
+}
+
+model ConceptTransformationHistory {
+  userId         String             @map("user_id") @db.VarChar(50)
+  conceptId      String             @map("concept_id") @db.VarChar(50)
+  studyMode      StudyMode          @map("study_mode")
+  transformation TransformationType
+  usedAt         DateTime           @map("used_at")
+  evaluationId   String             @map("evaluation_id") @db.VarChar(50)
+
+  @@id([userId, conceptId, studyMode, transformation, usedAt])
+  @@index([userId, conceptId, studyMode, usedAt])
+  @@map("concept_transformation_history")
 }

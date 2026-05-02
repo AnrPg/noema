@@ -206,12 +206,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
       request.user = {
         principalType: 'user',
         principalId: normalizeDevUserId(headerUserId),
-        scopes: [
-          'scheduler:plan',
-          'scheduler:write',
-          'scheduler:tools:read',
-          'scheduler:tools:execute',
-        ],
+        scopes: ['scheduler:plan', 'scheduler:write'],
         audienceClass: 'user-client',
         sub: normalizeDevUserId(headerUserId),
         roles: ['user'],

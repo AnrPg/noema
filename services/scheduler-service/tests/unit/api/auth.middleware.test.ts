@@ -64,7 +64,7 @@ describe('auth middleware phase 1', () => {
       principalType: 'user',
       principalId: 'usr_test',
       audienceClass: 'user-client',
-      scope: 'scheduler:plan scheduler:tools:execute',
+      scope: 'scheduler:plan scheduler:write',
       roles: ['user'],
       aud: 'noema.user',
     });
@@ -86,7 +86,7 @@ describe('auth middleware phase 1', () => {
       principalType: 'user',
       principalId: 'usr_test',
       audienceClass: 'user-client',
-      scopes: ['scheduler:plan', 'scheduler:tools:execute'],
+      scopes: ['scheduler:plan', 'scheduler:write'],
       sub: 'usr_test',
     });
   });
@@ -166,7 +166,7 @@ describe('auth middleware phase 1', () => {
       principalType: 'agent',
       principalId: 'agent_1',
       audienceClass: 'agent-runtime',
-      scopes: ['scheduler:tools:execute'],
+      scopes: ['scheduler:write'],
       aud: 'wrong.audience',
     });
 
@@ -203,7 +203,7 @@ describe('auth middleware phase 1', () => {
     const reply = createReply();
 
     const allowed = await requireScopes(request as never, reply as never, {
-      requiredScopes: ['scheduler:tools:execute'],
+      requiredScopes: ['scheduler:write'],
       match: 'all',
     });
 
@@ -224,14 +224,14 @@ describe('auth middleware phase 1', () => {
       sub: 'svc_test',
       principalType: 'service',
       principalId: 'svc_test',
-      scopes: ['scheduler:tools:execute'],
+      scopes: ['scheduler:write'],
       audienceClass: 'service-internal',
     };
     const reply = createReply();
     reply.status = vi.fn(reply.status.bind(reply));
 
     const allowed = await requireScopes(request as never, reply as never, {
-      requiredScopes: ['scheduler:read', 'scheduler:tools:execute'],
+      requiredScopes: ['scheduler:read', 'scheduler:write'],
       match: 'any',
     });
 

@@ -99,6 +99,21 @@ export interface IFSRSPrediction {
   retrievability?: number;
 }
 
+export interface IFSRSEvaluationInput {
+  rating: FSRSRating;
+  elapsedDays: number;
+  reviewCount: number;
+  stability: number | null;
+  difficulty: number | null;
+  intervalDays: number;
+}
+
+export interface IFSRSEvaluationResult {
+  stability: number;
+  difficulty: number;
+  intervalDays: number;
+}
+
 // ---------------------------------------------------------------------------
 // Default FSRS-5 parameters
 // ---------------------------------------------------------------------------
@@ -478,6 +493,39 @@ export class FSRSModel {
   getMaximumInterval(): number {
     return this.maximumInterval;
   }
+}
+
+export function applyFSRSEvaluation(
+  input: IFSRSEvaluationInput,
+  options: IFSRSParameters = {}
+): IFSRSEvaluationResult {
+  const modelOptions: IFSRSModelOptions = { weights: options.weights ?? DEFAULT_FSRS_WEIGHTS };
+  if (options.requestRetention !== undefined)
+    modelOptions.requestRetention = options.requestRetention;
+  if (options.maximumInterval !== undefined) modelOptions.maximumInterval = options.maximumInterval;
+  const model = new FSRSModel(modelOptions);
+
+  if (input.reviewCount === 0 || input.stability === null || input.difficulty === null) {
+    const state = model.initState(input.rating);
+    return {
+      stability: state.stability,
+      difficulty: state.difficulty,
+      intervalDays: model.nextInterval(state.stability),
+    };
+  }
+
+  const prediction = model.predictReviewState(
+    { stability: input.stability, difficulty: input.difficulty },
+    input.elapsedDays,
+    input.rating,
+    input.intervalDays
+  );
+
+  return {
+    stability: prediction.stability,
+    difficulty: prediction.difficulty,
+    intervalDays: prediction.interval,
+  };
 }
 
 // Re-export constants for testing

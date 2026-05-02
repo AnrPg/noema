@@ -27,6 +27,7 @@ export interface IServiceConfig {
       sessionService: string;
       contentService: string;
       userService: string;
+      metacognitionService: string;
     };
   };
   cors: {
@@ -111,7 +112,7 @@ export function loadConfig(): IServiceConfig {
     },
     consumers: {
       enabled: optionalEnvBool('EVENT_CONSUMERS_ENABLED', true),
-      consumerName: optionalEnv('REDIS_CONSUMER_NAME', `scheduler-service-${process.pid}`),
+      consumerName: optionalEnv('REDIS_CONSUMER_NAME', `scheduler-service-${String(process.pid)}`),
       streams: {
         sessionService: optionalEnv(
           'CONSUMER_STREAM_SESSION_SERVICE',
@@ -122,6 +123,10 @@ export function loadConfig(): IServiceConfig {
           'noema:events:content-service'
         ),
         userService: optionalEnv('CONSUMER_STREAM_USER_SERVICE', 'noema:events:user-service'),
+        metacognitionService: optionalEnv(
+          'CONSUMER_STREAM_METACOGNITION_SERVICE',
+          'noema:events:metacognition-service'
+        ),
       },
     },
     cors: {

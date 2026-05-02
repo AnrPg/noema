@@ -57,6 +57,24 @@ export interface IPredictResult {
   halfLifeDays: number;
 }
 
+export type HLRRating = 'again' | 'hard' | 'good' | 'easy';
+
+export interface IHLREvaluationInput {
+  rating: HLRRating;
+  elapsedDays: number;
+  reviewCount: number;
+  lapseCount: number;
+  consecutiveCorrect: number;
+  halfLife: number | null;
+  combinedScore: number;
+}
+
+export interface IHLREvaluationResult {
+  halfLife: number;
+  intervalDays: number;
+  weights: Record<string, number>;
+}
+
 // ---------------------------------------------------------------------------
 // HLR Model
 // ---------------------------------------------------------------------------
@@ -196,6 +214,27 @@ export class HLRModel {
       this.weights.set(k, v);
     }
   }
+}
+
+export function applyHLREvaluation(input: IHLREvaluationInput): IHLREvaluationResult {
+  const model = new HLRModel();
+  const features: Feature[] = [
+    ['bias', 1],
+    ['reviews', input.reviewCount],
+    ['lapses', input.lapseCount],
+    ['correct_streak', input.consecutiveCorrect],
+    ['prior_half_life', input.halfLife ?? 0],
+  ];
+  const actualRecall = input.rating === 'again' ? 0 : input.rating === 'hard' ? 0.5 : 1;
+
+  model.trainUpdate(features, input.elapsedDays, Math.max(actualRecall, input.combinedScore));
+  const prediction = model.predict(features, 0);
+
+  return {
+    halfLife: prediction.halfLifeDays,
+    intervalDays: Math.max(1, Math.round(prediction.halfLifeDays)),
+    weights: model.getWeights(),
+  };
 }
 
 // Re-export helpers for testing
