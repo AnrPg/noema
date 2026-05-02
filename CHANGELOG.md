@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-05-02 - Closed-Loop Audit Fixes
+
+- fixed KG concept-state consumption to read metacognition and scheduler source
+  streams instead of its own outbound stream
+- aligned metacognition Evaluation, Trigger, and reasoning rollup persistence
+  with the Step-first schema, including typed enums, `epistemicMode`, trigger
+  IDs, and idempotent recent-evaluation rollups
+- made session lifecycle state observable across diagnosis, adaptation,
+  evaluation, and explicit completion, and made Strategy replans supersede
+  replaced pending Steps
+- renamed concept-state history to `fromState` / `toState` and added
+  `triggeredBy` audit cause
+- required Pedagogy Guardian validation before generated curriculum versions are
+  finalized
+- replaced Guardian warning suffix detection with explicit warning reason-code
+  classification
+
+## 2026-05-02 - Realignment Batch 11 Ingestion and Vector Services
+
+- accepted ADR-038 for splitting durable document orchestration into
+  `ingestion-service` and chunk embedding/search into `vector-service`
+- added shared ingestion/vector contracts, validation schemas, branded IDs,
+  enums, and ingestion event schemas
+- implemented `@noema/vector-service` with deterministic embeddings, Qdrant
+  collection/upsert/search adapter, health routes, and focused tests
+- implemented `@noema/ingestion-service` with document/job persistence, Prisma
+  migration, parse/IR/chunk/embed/concept/CKG/curriculum/content handoff
+  pipeline, Redis event publication, REST API, and focused tests
+- added `curriculum-service` document-derived generation endpoint for ingestion
+  handoff
+- documented ingestion-service and vector-service backend boundaries
+
 ## 2026-05-02 - Realignment Batch 10 Step-Focused Web Cutover
 
 - accepted ADR-035 for the concept-oriented, Step-focused learner web cutover
@@ -415,3 +447,20 @@
   slices, evidence, freeze controls, and revision workflows.
 - Validated shared packages, content-service, and curriculum-service
   lint/typecheck/test/Prisma generation suites.
+
+# 2026-05-02 — Closed-Loop Audit Remediation
+
+- Wired concept-state thresholds through `@noema/config`, added KG environment
+  overrides, and introduced a periodic stale-projection recompute job.
+- Required explicit `studyMode` for metacognition evaluation recording and added
+  regression tests for mode-scoped persistence.
+- Renamed curriculum node completion vocabulary from `masteryThreshold` to
+  `stabilityThreshold` across contracts, validation, domain logic, Prisma, and
+  tests.
+- Aligned scheduler calibration records with the composite primary key required
+  by the spec.
+- Added standalone web `EvaluationSummary`, `StabilityOverview`, and
+  `ReasoningTrend` components and surfaced the dashboard stability/reasoning
+  widgets.
+- Removed dead `CardQueueStatus` public exports and switched strategy trigger
+  consumption to the shared metacognition event enum.
