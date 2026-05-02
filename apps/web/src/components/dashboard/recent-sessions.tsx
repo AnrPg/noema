@@ -1,15 +1,15 @@
 /**
  * Recent Sessions Panel
  *
- * Lists the 5 most recent study sessions with state chips, mode badges,
- * card progress, and a NeuralGauge showing completion percentage.
+ * Lists the 5 most recent study sessions with lifecycle chips, learning mode badges,
+ * Step progress, and a NeuralGauge showing completion percentage.
  */
 
 'use client';
 
 import { useSessions } from '@noema/api-client';
-import type { ISessionDto, SessionMode, UserDto } from '@noema/api-client';
-import type { StudyMode } from '@noema/types';
+import type { ISessionDto, UserDto } from '@noema/api-client';
+import type { LearningMode, SessionLifecycleState, StudyMode } from '@noema/types';
 import {
   Card,
   CardContent,
@@ -17,9 +17,7 @@ import {
   CardTitle,
   EmptyState,
   NeuralGauge,
-  SESSION_STATE_MAP,
   Skeleton,
-  StateChip,
 } from '@noema/ui';
 import { BookOpen, FlaskConical, Layers, Target } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -35,26 +33,35 @@ function ensureSessions(value: unknown): ISessionDto[] {
 // Constants
 // ============================================================================
 
-const SESSION_MODE_LABEL: Record<SessionMode, string> = {
-  standard: 'Standard',
-  cram: 'Cram',
-  preview: 'Preview',
-  test: 'Test',
+const SESSION_MODE_LABEL: Record<LearningMode, string> = {
+  exploration: 'Exploration',
+  goal_driven: 'Goal Driven',
+  exam_oriented: 'Exam Oriented',
+  synthesis: 'Synthesis',
 };
 
-const SESSION_MODE_ICON: Record<SessionMode, LucideIcon> = {
-  standard: BookOpen,
-  cram: Layers,
-  preview: FlaskConical,
-  test: Target,
+const SESSION_MODE_ICON: Record<LearningMode, LucideIcon> = {
+  exploration: BookOpen,
+  goal_driven: Target,
+  exam_oriented: FlaskConical,
+  synthesis: Layers,
 };
 
 // Mode badge background colors — static for Tailwind JIT
-const MODE_BADGE_CLASS: Record<SessionMode, string> = {
-  standard: 'bg-synapse-400/10 text-synapse-400',
-  cram: 'bg-cortex-400/10 text-cortex-400',
-  preview: 'bg-dendrite-400/10 text-dendrite-400',
-  test: 'bg-myelin-400/10 text-myelin-400',
+const MODE_BADGE_CLASS: Record<LearningMode, string> = {
+  exploration: 'bg-synapse-400/10 text-synapse-400',
+  goal_driven: 'bg-cortex-400/10 text-cortex-400',
+  exam_oriented: 'bg-dendrite-400/10 text-dendrite-400',
+  synthesis: 'bg-myelin-400/10 text-myelin-400',
+};
+
+const STATE_LABEL: Record<SessionLifecycleState, string> = {
+  planning: 'Planning',
+  execution: 'Execution',
+  diagnosis: 'Diagnosis',
+  adaptation: 'Adaptation',
+  evaluation: 'Evaluation',
+  completion: 'Completion',
 };
 
 // ============================================================================
@@ -77,9 +84,11 @@ function relativeTime(dateStr: string): string {
 }
 
 function sessionProgress(session: ISessionDto): number {
-  if (session.state === 'COMPLETED') return 100;
-  if (session.cardIds.length === 0) return 0;
-  return Math.round((session.currentCardIndex / session.cardIds.length) * 100);
+  if (session.lifecycleState === 'completion') return 100;
+  if (session.stats.stepsPlanned === 0) return 0;
+  return Math.round(
+    ((session.stats.stepsEvaluated + session.stats.stepsSkipped) / session.stats.stepsPlanned) * 100
+  );
 }
 
 // ============================================================================
@@ -92,10 +101,10 @@ interface ISessionRowProps {
 }
 
 function SessionRow({ session, onClick }: ISessionRowProps): React.JSX.Element {
-  const ModeIcon = SESSION_MODE_ICON[session.mode];
+  const ModeIcon = SESSION_MODE_ICON[session.learningMode];
   const progress = sessionProgress(session);
-  const cardCount = session.cardIds.length;
-  const modeClass = MODE_BADGE_CLASS[session.mode];
+  const stepCount = session.stats.stepsPlanned;
+  const modeClass = MODE_BADGE_CLASS[session.learningMode];
 
   return (
     <button
@@ -106,18 +115,23 @@ function SessionRow({ session, onClick }: ISessionRowProps): React.JSX.Element {
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <StateChip state={session.state} stateMap={SESSION_STATE_MAP} size="sm" />
+            <span className="inline-flex shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              {STATE_LABEL[session.lifecycleState]}
+            </span>
             <span
               className={`inline-flex min-w-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${modeClass}`}
             >
               <ModeIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
-              <span className="truncate">{SESSION_MODE_LABEL[session.mode]}</span>
+              <span className="truncate">{SESSION_MODE_LABEL[session.learningMode]}</span>
             </span>
-            <span className="shrink-0 text-xs text-axon-400">{relativeTime(session.startedAt)}</span>
+            <span className="shrink-0 text-xs text-axon-400">
+              {relativeTime(session.startedAt)}
+            </span>
           </div>
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-axon-400">
             <span className="tabular-nums">
-              {String(session.currentCardIndex)}/{String(cardCount)} cards
+              {String(session.stats.stepsEvaluated + session.stats.stepsSkipped)}/
+              {String(stepCount)} steps
             </span>
             <span>{String(progress)}% complete</span>
           </div>

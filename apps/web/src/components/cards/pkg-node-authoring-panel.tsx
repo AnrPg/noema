@@ -22,6 +22,7 @@ import type { EdgeId, NodeId, StudyMode, UserId } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, GitBranch, Link2, PencilLine, Search } from 'lucide-react';
 import * as React from 'react';
+import { FieldLabel } from '@noema/ui';
 import { toast } from '@/hooks/use-toast';
 
 const NODE_TYPES: { value: NodeType; label: string }[] = [
@@ -37,7 +38,7 @@ const NODE_TYPES: { value: NodeType; label: string }[] = [
 const EDGE_TYPES: { value: EdgeType; label: string }[] = [
   { value: 'subskill_of', label: 'Subskill of' },
   { value: 'has_subskill', label: 'Has subskill' },
-  { value: 'prerequisite', label: 'Prerequisite' },
+  { value: 'prerequisite', label: 'Is prerequisite of' },
   { value: 'transferable_to', label: 'Transferable to' },
   { value: 'confusable_with', label: 'Confusable with' },
   { value: 'essential_for_occupation', label: 'Essential for occupation' },
@@ -64,6 +65,10 @@ const primaryBtnClass =
 const secondaryBtnClass =
   'inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring disabled:pointer-events-none disabled:opacity-50';
 
+const EDGE_TYPE_LABELS = new Map<EdgeType, string>(
+  EDGE_TYPES.map((option) => [option.value, option.label])
+);
+
 function normalizeKnowledgeNodeIds(raw: string): string[] {
   return [
     ...new Set(
@@ -77,6 +82,14 @@ function normalizeKnowledgeNodeIds(raw: string): string[] {
 
 function formatKnowledgeNodeIds(ids: readonly string[]): string {
   return ids.join(', ');
+}
+
+function getEdgeTypeLabel(type: EdgeType): string {
+  return EDGE_TYPE_LABELS.get(type) ?? type.replaceAll('_', ' ');
+}
+
+function getNodeLabel(nodeMap: Map<string, IGraphNodeDto>, nodeId: string): string {
+  return nodeMap.get(nodeId)?.label ?? nodeId;
 }
 
 function defaultDomainForStudyMode(studyMode: StudyMode): string {
@@ -352,7 +365,7 @@ export function PkgNodeAuthoringPanel({
     if (existing !== null) {
       attachNode(String(existing.id));
       setSearchValue('');
-      toast.success('Existing local copy attached to this card.');
+      toast.success('Existing local copy attached to this payload.');
       return;
     }
 
@@ -411,7 +424,7 @@ export function PkgNodeAuthoringPanel({
 
     setPanelError(null);
     toast.warning(
-      'You are editing your PKG directly. These changes affect future cards and structural analytics immediately.'
+      'You are editing your PKG directly. These changes affect future payloads and structural analytics immediately.'
     );
 
     try {
@@ -554,7 +567,7 @@ export function PkgNodeAuthoringPanel({
                           onClick={() => {
                             attachNode(String(node.id));
                             setSearchValue('');
-                            toast.success('Existing PKG node attached to this card.');
+                            toast.success('Existing PKG node attached to this payload.');
                           }}
                           className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-left hover:bg-muted"
                         >
@@ -624,13 +637,17 @@ export function PkgNodeAuthoringPanel({
             </p>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-foreground">Local node label</span>
+              <FieldLabel className="text-sm font-medium text-foreground" required>
+                Local node label
+              </FieldLabel>
               <input value={searchValue} readOnly className={inputClass} />
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Node type</span>
+                <FieldLabel className="text-sm font-medium text-foreground" required>
+                  Node type
+                </FieldLabel>
                 <select
                   value={createType}
                   onChange={(event) => {
@@ -726,7 +743,7 @@ export function PkgNodeAuthoringPanel({
                   onClick={() => {
                     setAttachedNodeIds(attachedNodeIds.filter((id) => id !== nodeId));
                     toast.warning(
-                      'The node was detached from this card only. It still remains in your PKG.'
+                      'The node was detached from this payload only. It still remains in your PKG.'
                     );
                   }}
                   className="text-xs text-muted-foreground hover:text-foreground"
@@ -751,7 +768,9 @@ export function PkgNodeAuthoringPanel({
             </p>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-foreground">Label</span>
+              <FieldLabel className="text-sm font-medium text-foreground" required>
+                Label
+              </FieldLabel>
               <input
                 value={editLabel}
                 onChange={(event) => {
@@ -826,7 +845,9 @@ export function PkgNodeAuthoringPanel({
             </p>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-foreground">Target node</span>
+              <FieldLabel className="text-sm font-medium text-foreground" required>
+                Target node
+              </FieldLabel>
               <input
                 value={edgeTargetSearch}
                 onChange={(event) => {
@@ -872,13 +893,27 @@ export function PkgNodeAuthoringPanel({
 
             {selectedEdgeTarget !== null && (
               <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-                Relation target: {selectedEdgeTarget.label} · {selectedEdgeTarget.type}
+                Source:{' '}
+                <span className="font-medium text-foreground">{activeNode.label}</span>{' '}
+                {'->'} target:{' '}
+                <span className="font-medium text-foreground">{selectedEdgeTarget.label}</span> ·{' '}
+                {selectedEdgeTarget.type}
+                {edgeType === 'prerequisite' && (
+                  <p className="mt-1">
+                    Meaning:{' '}
+                    <span className="font-medium text-foreground">{activeNode.label}</span> is a
+                    prerequisite of{' '}
+                    <span className="font-medium text-foreground">{selectedEdgeTarget.label}</span>.
+                  </p>
+                )}
               </div>
             )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Relation type</span>
+                <FieldLabel className="text-sm font-medium text-foreground" required>
+                  Relation type
+                </FieldLabel>
                 <select
                   value={edgeType}
                   onChange={(event) => {
@@ -933,9 +968,9 @@ export function PkgNodeAuthoringPanel({
           ) : (
             <div className="flex flex-col gap-2">
               {connectedEdges.map((edge) => {
-                const isSource = String(edge.sourceId) === String(activeNode.id);
-                const otherId = isSource ? String(edge.targetId) : String(edge.sourceId);
-                const otherNode = pkgNodeMap.get(otherId);
+                const isOutgoing = String(edge.sourceId) === String(activeNode.id);
+                const sourceLabel = getNodeLabel(pkgNodeMap, String(edge.sourceId));
+                const targetLabel = getNodeLabel(pkgNodeMap, String(edge.targetId));
                 return (
                   <div
                     key={String(edge.id)}
@@ -943,9 +978,16 @@ export function PkgNodeAuthoringPanel({
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-foreground">
-                        {edge.type} {isSource ? '→' : '←'} {otherNode?.label ?? otherId}
+                        {getEdgeTypeLabel(edge.type)} · {isOutgoing ? 'outgoing' : 'incoming'}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">Weight {edge.weight}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {sourceLabel} -&gt; {targetLabel} · weight {edge.weight}
+                      </p>
+                      {edge.type === 'prerequisite' && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {sourceLabel} is a prerequisite of {targetLabel}
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"

@@ -37,7 +37,7 @@ export default function AudioCardRenderer(props: ICardRendererProps): React.JSX.
             ? content.front
             : content.transcript !== undefined && content.transcript !== ''
               ? content.transcript
-              : 'Audio card'}
+              : 'Audio payload'}
         </span>
       </CardShell>
     );
@@ -69,7 +69,7 @@ export default function AudioCardRenderer(props: ICardRendererProps): React.JSX.
           ref={audioRef}
           controls
           className="w-full"
-          aria-label="Card audio"
+          aria-label="Payload audio"
           {...(content.playbackSpeed !== undefined && content.playbackSpeed !== 1
             ? {
                 onCanPlay: () => {

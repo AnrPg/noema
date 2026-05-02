@@ -1,13 +1,13 @@
 /**
  * Review Forecast Timeline
  *
- * 7-day horizontal segmented bar chart (retention=synapse, calibration=myelin).
- * Data from useReviewWindows aggregated per day × lane.
+ * 7-day horizontal segmented bar chart (FSRS=synapse, HLR=myelin).
+ * Data from due concept schedule state.
  */
 
 'use client';
 
-import { useForecast } from '@noema/api-client';
+import { useDueConcepts } from '@noema/api-client';
 import type { UserDto } from '@noema/api-client';
 import type { StudyMode } from '@noema/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@noema/ui';
@@ -22,8 +22,8 @@ const MAX_DISPLAY_VALUE = 50;
 interface IDayData {
   label: string;
   date: string;
-  retention: number;
-  calibration: number;
+  fsrs: number;
+  hlr: number;
   isToday: boolean;
 }
 
@@ -34,43 +34,34 @@ function localDateStr(d: Date): string {
   return `${y}-${mo}-${day}`;
 }
 
-function buildDayData(
-  forecastDays: {
-    date: string;
-    retention: { total: number };
-    calibration: { total: number };
-  }[]
-): IDayData[] {
+function buildDayData(concepts: { dueAt: string; algorithm: string }[]): IDayData[] {
   const today = localDateStr(new Date());
-  return Array.from({ length: 7 }, (_, i) => {
-    const source = forecastDays[i];
-    const d = source !== undefined ? new Date(`${source.date}T00:00:00`) : new Date();
-    if (source === undefined) {
-      d.setDate(d.getDate() + i);
+  const counts = new Map<string, { fsrs: number; hlr: number }>();
+
+  for (const concept of concepts) {
+    const dueDate = localDateStr(new Date(concept.dueAt));
+    const current = counts.get(dueDate) ?? { fsrs: 0, hlr: 0 };
+    if (concept.algorithm === 'hlr') {
+      current.hlr += 1;
+    } else {
+      current.fsrs += 1;
     }
+    counts.set(dueDate, current);
+  }
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
     const dateStr = localDateStr(d);
+    const source = counts.get(dateStr);
     return {
       label: DAY_LABELS[d.getDay()] ?? 'Day',
       date: dateStr,
-      retention: source?.retention.total ?? 0,
-      calibration: source?.calibration.total ?? 0,
+      fsrs: source?.fsrs ?? 0,
+      hlr: source?.hlr ?? 0,
       isToday: dateStr === today,
     };
   });
-}
-
-function ensureForecastDays(value: unknown): {
-  date: string;
-  retention: { total: number };
-  calibration: { total: number };
-}[] {
-  return Array.isArray(value)
-    ? (value as {
-        date: string;
-        retention: { total: number };
-        calibration: { total: number };
-      }[])
-    : [];
 }
 
 export function ReviewForecast({
@@ -80,13 +71,10 @@ export function ReviewForecast({
   userId: UserId;
   studyMode: StudyMode;
 }): React.JSX.Element {
-  const forecast = useForecast(
-    { userId, days: 7, includeOverdue: true, studyMode },
-    { enabled: userId !== '' }
-  );
+  const dueConcepts = useDueConcepts({ studyMode, limit: 500 }, { enabled: userId !== '' });
   const [hoveredDay, setHoveredDay] = useState<IDayData | null>(null);
 
-  if (forecast.isLoading) {
+  if (dueConcepts.isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -100,10 +88,10 @@ export function ReviewForecast({
     );
   }
 
-  const days = buildDayData(ensureForecastDays(forecast.data?.data.days));
-  const totalWeek = days.reduce((s, d) => s + d.retention + d.calibration, 0);
+  const days = buildDayData(dueConcepts.data?.data.concepts ?? []);
+  const totalWeek = days.reduce((s, d) => s + d.fsrs + d.hlr, 0);
   const todayData = days[0];
-  const todayTotal = (todayData?.retention ?? 0) + (todayData?.calibration ?? 0);
+  const todayTotal = (todayData?.fsrs ?? 0) + (todayData?.hlr ?? 0);
 
   return (
     <Card>
@@ -119,14 +107,12 @@ export function ReviewForecast({
             style={{ height: `${String(BAR_CHART_HEIGHT)}px` }}
           >
             {days.map((day) => {
-              const total = day.retention + day.calibration;
+              const total = day.fsrs + day.hlr;
               const innerHeight = BAR_CHART_HEIGHT - 20; // 20px reserved for the day label
               const scale = innerHeight / MAX_DISPLAY_VALUE;
               const cappedTotal = Math.min(total, MAX_DISPLAY_VALUE);
-              const retH =
-                total > 0 ? Math.round((day.retention / total) * cappedTotal * scale) : 0;
-              const calH =
-                total > 0 ? Math.round((day.calibration / total) * cappedTotal * scale) : 0;
+              const retH = total > 0 ? Math.round((day.fsrs / total) * cappedTotal * scale) : 0;
+              const calH = total > 0 ? Math.round((day.hlr / total) * cappedTotal * scale) : 0;
 
               return (
                 <div
@@ -184,10 +170,10 @@ export function ReviewForecast({
           {hoveredDay !== null && (
             <div className="pointer-events-none absolute -top-16 left-1/2 z-10 min-w-[140px] -translate-x-1/2 rounded-md border bg-popover px-3 py-1.5 text-xs shadow-md">
               <p className="font-semibold">{hoveredDay.date}</p>
-              <p className="text-synapse-400">Retention: {String(hoveredDay.retention)}</p>
-              <p className="text-myelin-400">Calibration: {String(hoveredDay.calibration)}</p>
+              <p className="text-synapse-400">FSRS: {String(hoveredDay.fsrs)}</p>
+              <p className="text-myelin-400">HLR: {String(hoveredDay.hlr)}</p>
               <p className="text-muted-foreground">
-                Total: {String(hoveredDay.retention + hoveredDay.calibration)}
+                Total: {String(hoveredDay.fsrs + hoveredDay.hlr)}
               </p>
             </div>
           )}
@@ -198,15 +184,15 @@ export function ReviewForecast({
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-2 rounded-sm bg-synapse-400" />
-              Retention
+              FSRS
             </span>
             <span className="flex items-center gap-1">
               <span className="inline-block h-2 w-2 rounded-sm bg-myelin-400" />
-              Calibration
+              HLR
             </span>
           </div>
           <span>
-            {String(totalWeek)} reviews this week · {String(todayTotal)} due today
+            {String(totalWeek)} concepts this week · {String(todayTotal)} due today
           </span>
         </div>
       </CardContent>

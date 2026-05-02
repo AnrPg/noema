@@ -23,6 +23,7 @@ import { ArrowLeft, ArrowRight, Check, Plus } from 'lucide-react';
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 import * as React from 'react';
+import { FieldLabel } from '@noema/ui';
 import { PkgNodeAuthoringPanel } from '@/components/cards/pkg-node-authoring-panel';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
@@ -91,7 +92,7 @@ const CARD_TYPE_INFO: ICardTypeInfo[] = [
   {
     value: CardType.CLOZE,
     label: 'Cloze',
-    description: 'Fill-in-the-blank card',
+    description: 'Fill-in-the-blank payload',
     group: 'Standard',
   },
   {
@@ -503,7 +504,7 @@ function normalizeKnowledgeNodeIds(raw: string): string[] {
 
 function validateKnowledgeNodeIds(ids: string[]): string | null {
   if (ids.length > 50) {
-    return 'You can link up to 50 knowledge nodes per card.';
+    return 'You can link up to 50 knowledge nodes per payload.';
   }
 
   const invalid = ids.find((id) => !KNOWLEDGE_NODE_ID_PATTERN.test(id));
@@ -555,7 +556,7 @@ function prioritizeCardTypes(types: ICardTypeInfo[], activeStudyMode: StudyMode)
 
 function getAuthoringHint(activeStudyMode: StudyMode): string {
   return activeStudyMode === 'language_learning'
-    ? 'Author around one language target at a time: a lemma, a phrase, a construction, or a pronunciation contrast. Good prompts usually isolate meaning, form, or usage instead of mixing all three.'
+    ? 'Author around one language target at a time: a lemma, a phrase, a construction, or a pronunciation contrast. Strong prompts usually isolate meaning, form, or usage instead of mixing all three.'
     : 'Author around one knowledge target at a time: a concept, a principle, a procedure step, or a comparison. Strong prompts isolate the exact claim or dependency you want the learner to retrieve.';
 }
 
@@ -585,7 +586,7 @@ function Step1TypeSelection({ activeStudyMode, onSelect }: IStep1Props): React.J
           Active mode: {getStudyModeLabel(activeStudyMode)}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {getStudyModeDescription(activeStudyMode)} Recommended card families rise to the top, but
+          {getStudyModeDescription(activeStudyMode)} Recommended payload families rise to the top, but
           the full catalog remains available.
         </p>
         <p className="mt-2 text-sm text-muted-foreground">{getAuthoringHint(activeStudyMode)}</p>
@@ -657,7 +658,7 @@ function Step2ContentEntry({
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-md border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
-        Card type: <span className="font-semibold text-foreground">{labelForType(cardType)}</span>
+        Payload type: <span className="font-semibold text-foreground">{labelForType(cardType)}</span>
       </div>
 
       {cardType === CardType.ATOMIC && <AtomicForm form={form} onChange={onChange} />}
@@ -961,7 +962,7 @@ function Step3Settings({
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-md border border-border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
-        Card type: <span className="font-semibold text-foreground">{labelForType(cardType)}</span>
+        Payload type: <span className="font-semibold text-foreground">{labelForType(cardType)}</span>
       </div>
 
       {/* Tags */}
@@ -973,7 +974,7 @@ function Step3Settings({
           onChange={(e) => {
             onChange({ tags: e.target.value });
           }}
-          placeholder="biology, chapter-3, hard"
+          placeholder="biology, chapter-3, advanced"
           className={inputClass}
         />
       </FieldGroup>
@@ -1052,7 +1053,7 @@ function Step3Settings({
           ) : (
             <Check className="h-4 w-4" />
           )}
-          Create Card
+          Create Payload
         </button>
       </div>
     </div>
@@ -1077,8 +1078,8 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
         <Check className="h-8 w-8 text-primary" />
       </div>
       <div>
-        <h2 className="text-xl font-semibold">Card created successfully</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Card ID: {card.id}</p>
+        <h2 className="text-xl font-semibold">Payload created successfully</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Payload ID: {card.id}</p>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button
@@ -1088,7 +1089,7 @@ function Step4Result({ result, onCreateAnother }: IStep4Props): React.JSX.Elemen
           }}
           className={primaryBtnClass}
         >
-          View Card
+          View Payload
         </button>
         <button
           type="button"
@@ -1156,10 +1157,12 @@ interface IFieldGroupProps {
 function FieldGroup({ label, required, hint, children }: IFieldGroupProps): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium">
+      <FieldLabel
+        className="text-sm font-medium"
+        {...(required === true ? { required: true } : {})}
+      >
         {label}
-        {required === true && <span className="ml-1 text-destructive">*</span>}
-      </label>
+      </FieldLabel>
       {hint !== undefined && <p className="text-xs text-muted-foreground">{hint}</p>}
       {children}
     </div>
@@ -1456,7 +1459,7 @@ export default function NewCardPage(): React.JSX.Element {
       setResult({ mode: 'single', card });
       setStep(4);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Card creation failed.');
+      setSubmitError(err instanceof Error ? err.message : 'Payload creation failed.');
     }
   }
 
@@ -1484,9 +1487,9 @@ export default function NewCardPage(): React.JSX.Element {
     <div className="mx-auto flex max-w-3xl flex-col gap-8">
       {/* Page header */}
       <div>
-        <h1 className="text-3xl font-bold">Create Card</h1>
+        <h1 className="text-3xl font-bold">Create Payload</h1>
         <p className="mt-1 text-muted-foreground">
-          Choose a card type, enter content, configure settings, and save.
+          Choose a payload type, enter content, configure settings, and save.
         </p>
         <div className="mt-3 inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
           Mode-aware defaults: {getStudyModeLabel(activeStudyMode)}

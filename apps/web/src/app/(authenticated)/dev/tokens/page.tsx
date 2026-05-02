@@ -16,7 +16,7 @@ const colorFamilies = [
   {
     name: 'myelin',
     label: 'Myelin — Myelin Gold',
-    description: 'Mastery, confidence, review readiness',
+    description: 'Stability, confidence, review readiness',
   },
   {
     name: 'neuron',

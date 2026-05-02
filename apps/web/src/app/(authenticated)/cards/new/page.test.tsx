@@ -111,7 +111,7 @@ beforeEach(() => {
   });
 });
 
-test('creates and attaches a new PKG node before card creation', async () => {
+test('creates and attaches a new PKG node before payload creation', async () => {
   createNodeMock.mockResolvedValue({
     data: {
       id: 'node_abcdefghijklmnopqrstu',
@@ -167,7 +167,7 @@ test('creates and attaches a new PKG node before card creation', async () => {
     );
   });
 
-  fireEvent.click(screen.getByRole('button', { name: /^create card$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^create payload$/i }));
 
   await waitFor(() => {
     expect(createCardMock).toHaveBeenCalledWith(

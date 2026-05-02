@@ -144,7 +144,7 @@ function GridCardTile({
   return (
     <div
       className={[
-        'relative flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors',
+        'relative flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-colors',
         'focus-within:ring-2 focus-within:ring-ring',
         isSelected
           ? 'border-primary ring-1 ring-primary'
@@ -161,7 +161,7 @@ function GridCardTile({
           onClick={(e) => {
             e.stopPropagation();
           }}
-          aria-label={['Select card', card.id].join(' ')}
+          aria-label={['Select payload', card.id].join(' ')}
           className="h-4 w-4 rounded border-border accent-primary"
         />
       </label>
@@ -175,7 +175,7 @@ function GridCardTile({
           onCardClick?.(card.id);
         }}
         onKeyDown={handleKeyDown}
-        aria-label={['Open card', formatTypeLabel(card.cardType)].join(' ')}
+        aria-label={['Open payload', formatTypeLabel(card.cardType)].join(' ')}
       >
         {/* Type badge */}
         <span className="inline-block rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground mb-2">
@@ -256,7 +256,7 @@ function ListCardRow({
   return (
     <div
       className={[
-        'flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors',
+        'flex min-w-0 flex-col gap-3 rounded-lg border bg-card px-4 py-3 transition-colors sm:flex-row sm:items-center',
         isSelected
           ? 'border-primary ring-1 ring-primary'
           : 'border-border hover:border-foreground/30',
@@ -272,57 +272,57 @@ function ListCardRow({
           onClick={(e) => {
             e.stopPropagation();
           }}
-          aria-label={['Select card', card.id].join(' ')}
+          aria-label={['Select payload', card.id].join(' ')}
           className="h-4 w-4 rounded border-border accent-primary"
         />
       </label>
 
       {/* Type badge */}
-      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-        {formatTypeLabel(card.cardType)}
-      </span>
-
-      {/* State badge */}
-      <span
-        className={[
-          'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize',
-          stateCls,
-        ].join(' ')}
-      >
-        {card.state.toLowerCase()}
-      </span>
-
-      {/* Tags */}
-      <div className="flex flex-1 flex-wrap gap-1 overflow-hidden">
-        {card.tags.slice(0, 5).map((tag) => (
-          <span
-            key={tag}
-            className="inline-block rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"
-          >
-            {tag}
+      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+            {formatTypeLabel(card.cardType)}
           </span>
-        ))}
-        {card.tags.length > 5 && (
-          <span className="text-[10px] text-muted-foreground">+{String(card.tags.length - 5)}</span>
-        )}
-      </div>
+          <span
+            className={[
+              'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize',
+              stateCls,
+            ].join(' ')}
+          >
+            {card.state.toLowerCase()}
+          </span>
+        </div>
 
-      {/* Difficulty + click target */}
-      <div className="ml-auto flex items-center gap-3 shrink-0">
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {String(Math.round(card.difficulty * 100))}%
-        </span>
-        <div
-          role="button"
-          tabIndex={0}
-          className="cursor-pointer rounded px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-          onClick={() => {
-            onCardClick?.(card.id);
-          }}
-          onKeyDown={handleKeyDown}
-          aria-label={['Open card', formatTypeLabel(card.cardType)].join(' ')}
-        >
-          Open
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-hidden">
+          {card.tags.slice(0, 5).map((tag) => (
+            <span
+              key={tag}
+              className="inline-block rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            >
+              {tag}
+            </span>
+          ))}
+          {card.tags.length > 5 && (
+            <span className="text-[10px] text-muted-foreground">+{String(card.tags.length - 5)}</span>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 sm:ml-auto sm:flex-shrink-0">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {String(Math.round(card.difficulty * 100))}%
+          </span>
+          <div
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer rounded px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            onClick={() => {
+              onCardClick?.(card.id);
+            }}
+            onKeyDown={handleKeyDown}
+            aria-label={['Open payload', formatTypeLabel(card.cardType)].join(' ')}
+          >
+            Open
+          </div>
         </div>
       </div>
     </div>
@@ -351,7 +351,7 @@ function BulkActionBar({
   onClearSelection,
 }: IBulkActionBarProps): React.JSX.Element {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
       <span className="font-medium text-primary">
         {String(selectedCount)} of {String(totalCount)} selected
       </span>
@@ -364,7 +364,7 @@ function BulkActionBar({
         {selectedCount === totalCount ? 'Deselect all' : 'Select all'}
       </button>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:justify-end">
         {bulkActions.map((action) => (
           <button
             key={action.label}
@@ -546,9 +546,9 @@ export function CardCollection({
             <line x1="2" y1="10" x2="22" y2="10" />
           </svg>
         </div>
-        <p className="text-sm font-medium text-foreground">No cards</p>
+        <p className="text-sm font-medium text-foreground">No payloads</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          No cards match the current filter criteria.
+          No payloads match the current filter criteria.
         </p>
       </div>
     );
@@ -573,7 +573,7 @@ export function CardCollection({
       )}
 
       {/* Header row: select-all checkbox + count */}
-      <div className="flex items-center gap-3 px-1">
+      <div className="flex flex-wrap items-center gap-3 px-1">
         <label className="flex cursor-pointer items-center gap-2">
           <input
             name="selectAllCards"
@@ -581,13 +581,13 @@ export function CardCollection({
             type="checkbox"
             checked={allSelected}
             onChange={handleHeaderCheckboxChange}
-            aria-label={allSelected ? 'Deselect all cards' : 'Select all cards'}
+            aria-label={allSelected ? 'Deselect all payloads' : 'Select all payloads'}
             className="h-4 w-4 rounded border-border accent-primary"
           />
           <span className="text-xs text-muted-foreground">
             {selectedIds.size > 0
               ? [String(selectedIds.size), 'selected'].join(' ')
-              : [String(cards.length), cards.length === 1 ? 'card' : 'cards'].join(' ')}
+              : [String(cards.length), cards.length === 1 ? 'payload' : 'payloads'].join(' ')}
           </span>
         </label>
       </div>

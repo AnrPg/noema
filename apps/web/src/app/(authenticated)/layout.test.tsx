@@ -22,20 +22,20 @@ vi.mock('@/components/pomodoro/pomodoro-nav', () => ({
 vi.mock('@/components/session-expiry-modal', () => ({ SessionExpiryModal: () => null }));
 vi.mock('@/components/shortcut-reference-panel', () => ({ ShortcutReferencePanel: () => null }));
 
-test('Card Library nav item is present', () => {
+test('Concept Payloads nav item is present', () => {
   render(
     <AuthenticatedLayout>
       <div />
     </AuthenticatedLayout>
   );
-  expect(screen.getByRole('link', { name: /card library/i })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: /concept payloads/i })).toBeInTheDocument();
 });
 
-test('Card Library nav item links to /cards', () => {
+test('Concept Payloads nav item links to /cards', () => {
   render(
     <AuthenticatedLayout>
       <div />
     </AuthenticatedLayout>
   );
-  expect(screen.getByRole('link', { name: /card library/i })).toHaveAttribute('href', '/cards');
+  expect(screen.getByRole('link', { name: /concept payloads/i })).toHaveAttribute('href', '/cards');
 });

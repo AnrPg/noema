@@ -407,7 +407,7 @@ const ACCESSIBILITY_TOGGLES: {
   {
     key: 'soundEnabled',
     label: 'Sound effects',
-    description: 'Play sounds on card interactions',
+    description: 'Play sounds on Step interactions',
   },
   {
     key: 'hapticEnabled',

@@ -2,14 +2,14 @@
 /**
  * @noema/web — Reviews / RecallTimeline
  *
- * Timeline of past reviews for a card.
- * Each dot: date, grade, colored by result.
+ * Timeline of past Step checks.
+ * Each dot: date, Step confidence, colored by result.
  */
 import * as React from 'react';
 
 export interface IReviewEvent {
   date: string;
-  grade: number; // 1=Again, 2=Hard, 3=Good, 4=Easy
+  grade: number; // legacy numeric source, rendered as Step confidence
   responseTimeMs?: number | null;
 }
 
@@ -25,10 +25,10 @@ const GRADE_COLOR: Record<number, string> = {
 };
 
 const GRADE_LABEL: Record<number, string> = {
-  1: 'Again',
-  2: 'Hard',
-  3: 'Good',
-  4: 'Easy',
+  1: "Didn't know",
+  2: 'Hesitated',
+  3: 'Knew it',
+  4: 'Knew it',
 };
 
 function formatDate(iso: string): string {

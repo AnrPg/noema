@@ -3,10 +3,10 @@
  * @noema/web — Reviews / ReviewWindows
  *
  * Day-planner style view of today's suggested review time blocks.
- * Each block shows time range, card count, and lane.
+ * Each block shows time range, concept count, and algorithm lane.
  */
 import * as React from 'react';
-import { useReviewWindows } from '@noema/api-client';
+import { useDueConcepts } from '@noema/api-client';
 import type { StudyMode, UserId } from '@noema/types';
 import { Loader2 } from 'lucide-react';
 
@@ -36,60 +36,48 @@ function formatDuration(startAt: string, endAt: string): string {
 interface IReviewWindowBlock {
   startAt: string;
   endAt: string;
-  cardsDue: number;
-  lane: 'retention' | 'calibration';
+  conceptsDue: number;
+  lane: 'fsrs' | 'hlr';
   loadScore: number;
 }
 
-function normalizeReviewWindows(value: unknown): IReviewWindowBlock[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
+function buildReviewWindows(
+  concepts: { dueAt: string; algorithm: string }[]
+): IReviewWindowBlock[] {
+  const today = localDateStr(new Date());
+  const dueToday = concepts.filter((concept) => localDateStr(new Date(concept.dueAt)) === today);
+  const fsrsCount = dueToday.filter((concept) => concept.algorithm === 'fsrs').length;
+  const hlrCount = dueToday.filter((concept) => concept.algorithm === 'hlr').length;
+  const total = Math.max(1, fsrsCount + hlrCount);
 
-  return value
-    .map((entry) => {
-      if (typeof entry !== 'object' || entry === null) {
-        return null;
-      }
-
-      const block = entry as Record<string, unknown>;
-      const lane = block['lane'];
-      if (lane !== 'retention' && lane !== 'calibration') {
-        return null;
-      }
-
+  return [
+    { lane: 'fsrs' as const, conceptsDue: fsrsCount, startHour: 9 },
+    { lane: 'hlr' as const, conceptsDue: hlrCount, startHour: 13 },
+  ]
+    .filter((block) => block.conceptsDue > 0)
+    .map((block) => {
+      const startAt = new Date(`${today}T${String(block.startHour).padStart(2, '0')}:00:00`);
+      const durationMinutes = Math.max(20, block.conceptsDue * 2);
+      const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
       return {
-        startAt: typeof block['startAt'] === 'string' ? block['startAt'] : new Date().toISOString(),
-        endAt: typeof block['endAt'] === 'string' ? block['endAt'] : new Date().toISOString(),
-        cardsDue: typeof block['cardsDue'] === 'number' ? block['cardsDue'] : 0,
-        lane,
-        loadScore: typeof block['loadScore'] === 'number' ? block['loadScore'] : 0,
-      } satisfies IReviewWindowBlock;
-    })
-    .filter((block): block is IReviewWindowBlock => block !== null);
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        conceptsDue: block.conceptsDue,
+        lane: block.lane,
+        loadScore: block.conceptsDue / total,
+      };
+    });
 }
 
 export function ReviewWindows({ userId, studyMode }: IReviewWindowsProps): React.JSX.Element {
-  const timezone = React.useMemo(() => {
-    const resolvedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return resolvedTimezone !== '' ? resolvedTimezone : 'UTC';
-  }, []);
-  const reviewWindows = useReviewWindows(
-    {
-      userId,
-      studyMode,
-      date: localDateStr(new Date()),
-      timezone,
-    },
-    { enabled: userId !== '' }
-  );
+  const dueConcepts = useDueConcepts({ studyMode, limit: 500 }, { enabled: userId !== '' });
 
   const todayWindows = React.useMemo(
-    () => normalizeReviewWindows(reviewWindows.data?.data),
-    [reviewWindows.data]
+    () => buildReviewWindows(dueConcepts.data?.data.concepts ?? []),
+    [dueConcepts.data]
   );
 
-  const isLoading = reviewWindows.isLoading;
+  const isLoading = dueConcepts.isLoading;
 
   if (isLoading) {
     return (
@@ -119,14 +107,14 @@ export function ReviewWindows({ userId, studyMode }: IReviewWindowsProps): React
 
       <div className="flex flex-col gap-2">
         {todayWindows.map((w, i) => {
-          const { lane, loadScore, cardsDue } = w;
+          const { lane, loadScore, conceptsDue } = w;
 
           return (
             <div
               key={`${w.startAt}-${String(i)}`}
               className={[
                 'flex items-center gap-4 rounded-lg border border-dashed px-4 py-3',
-                lane === 'retention'
+                lane === 'fsrs'
                   ? 'border-synapse-400/40 bg-synapse-400/5'
                   : 'border-myelin-400/40 bg-myelin-400/5',
               ].join(' ')}
@@ -145,17 +133,17 @@ export function ReviewWindows({ userId, studyMode }: IReviewWindowsProps): React
               <span
                 className={[
                   'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                  lane === 'retention'
+                  lane === 'fsrs'
                     ? 'bg-synapse-400/15 text-synapse-400'
                     : 'bg-myelin-400/15 text-myelin-400',
                 ].join(' ')}
               >
-                {lane}
+                {lane.toUpperCase()}
               </span>
 
               {/* Card count */}
               <span className="flex-1 text-sm text-muted-foreground">
-                {String(cardsDue)} {cardsDue === 1 ? 'card' : 'cards'}
+                {String(conceptsDue)} {conceptsDue === 1 ? 'concept' : 'concepts'}
               </span>
 
               {/* Load indicator */}
@@ -164,7 +152,7 @@ export function ReviewWindows({ userId, studyMode }: IReviewWindowsProps): React
                   <div
                     className={[
                       'h-full rounded-full transition-all',
-                      lane === 'retention' ? 'bg-synapse-400' : 'bg-myelin-400',
+                      lane === 'fsrs' ? 'bg-synapse-400' : 'bg-myelin-400',
                     ].join(' ')}
                     style={{ width: `${String(Math.round(loadScore * 100))}%` }}
                   />

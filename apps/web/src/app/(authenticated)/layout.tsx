@@ -81,7 +81,7 @@ const navItems = [
       { href: '/knowledge/comparison', label: 'KG Comparison', icon: GitCompare },
       { href: '/goals', label: 'Goals', icon: Target },
       { href: '/sessions', label: 'Sessions', icon: ClipboardList },
-      { href: '/cards', label: 'Card Library', icon: LibraryBig },
+      { href: '/cards', label: 'Concept Payloads', icon: LibraryBig },
     ],
   },
   {

@@ -17,6 +17,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  FieldLabel,
 } from '@noema/ui';
 import { AlertCircle, CheckCircle2, ExternalLink, PlusCircle } from 'lucide-react';
 
@@ -142,7 +143,9 @@ export function OntologyImportCreateRunCard({
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2 text-sm">
-            <span className="font-medium text-foreground">Source</span>
+            <FieldLabel className="font-medium text-foreground" required>
+              Source
+            </FieldLabel>
             <select
               id="ontology-import-run-source"
               name="sourceId"
@@ -179,7 +182,9 @@ export function OntologyImportCreateRunCard({
           </label>
 
           <label className="space-y-2 text-sm">
-            <span className="font-medium text-foreground">Source mode</span>
+            <FieldLabel className="font-medium text-foreground" required>
+              Source mode
+            </FieldLabel>
             <select
               id="ontology-import-run-mode"
               name="mode"

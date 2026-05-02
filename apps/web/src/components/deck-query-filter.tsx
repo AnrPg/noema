@@ -226,7 +226,7 @@ export function DeckQueryFilter({
         <input
           name="search"
           type="search"
-          aria-label="Search cards"
+          aria-label="Search payloads"
           placeholder="Full-text search…"
           value={query.search ?? ''}
           onChange={(e) => {
@@ -241,7 +241,7 @@ export function DeckQueryFilter({
       {/* ------------------------------------------------------------------ */}
       {/* Card Types                                                           */}
       {/* ------------------------------------------------------------------ */}
-      <FilterSection title="Card Types">
+      <FilterSection title="Payload Types">
         <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
           {CARD_TYPE_VALUES.map((type) => {
             const checked = (query.cardTypes ?? []).includes(type);

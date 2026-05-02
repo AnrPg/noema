@@ -42,7 +42,7 @@ const SCENE_CONFIG: Record<SceneVariant, ISceneConfig> = {
     eyebrow: 'Retrieval mismatch detected',
     title: 'This pathway never made it into long-term memory.',
     description:
-      'We sent a retrieval cue through the Noema graph and it came back carrying a blank flashcard and several strong opinions.',
+      'We sent a retrieval cue through the Noema graph and it came back carrying a blank payload and several strong opinions.',
     detail:
       'The page may have moved, been renamed, or existed only in a remarkably confident neuron.',
     primaryLabel: 'Back to knowledge map',

@@ -2,14 +2,14 @@
 /**
  * @noema/web — Reviews / CalibrationChart
  *
- * Scatter plot: predicted confidence (x) vs actual grade outcome (y).
+ * Scatter plot: predicted confidence (x) vs observed Step confidence (y).
  * Pure SVG, no external charting library.
  */
 import * as React from 'react';
 
 export interface ICalibrationPoint {
   predictedConfidence: number; // 0–1
-  actualGrade: number; // 1–4
+  actualGrade: number; // legacy numeric source, rendered as Step confidence
 }
 
 export interface ICalibrationChartProps {
@@ -35,7 +35,7 @@ export function CalibrationChart({
     );
   }
 
-  // Grade 1–4 mapped to y 0–1 (inverted: 4=top)
+  // Numeric confidence source mapped to y 0–1 (inverted: higher=top)
   const gradeToY = (grade: number): number => PAD + innerSize - ((grade - 1) / 3) * innerSize;
 
   const confidenceToX = (conf: number): number => PAD + conf * innerSize;
@@ -44,7 +44,7 @@ export function CalibrationChart({
     <svg
       width={size}
       height={size}
-      aria-label="Calibration chart: predicted confidence vs actual grade"
+      aria-label="Calibration chart: predicted confidence vs observed Step confidence"
       role="img"
       overflow="visible"
     >
@@ -93,7 +93,7 @@ export function CalibrationChart({
             fill="currentColor"
             className="text-muted-foreground"
           >
-            {grade === 1 ? 'Again' : grade === 2 ? 'Hard' : grade === 3 ? 'Good' : 'Easy'}
+            {grade <= 1 ? "Didn't know" : grade === 2 ? 'Hesitated' : 'Knew it'}
           </text>
         </g>
       ))}

@@ -3,11 +3,10 @@
 import Link from 'next/link';
 import * as React from 'react';
 import {
+  useDueConcepts,
   useMe,
-  useNodeMasterySummary,
+  useStabilitySummary,
   usePKGNodes,
-  useSchedulerCardFocusSummary,
-  useSchedulerStudyGuidanceSummary,
 } from '@noema/api-client';
 import type { IGraphNodeDto } from '@noema/api-client';
 import type { UserId } from '@noema/types';
@@ -29,17 +28,24 @@ function percent(part: number, total: number): number {
   return Math.round((part / total) * 100);
 }
 
-function clampAverage(average: number): string {
-  return `${String(Math.round(average * 100))}%`;
+function percentText(value: number | null): string {
+  if (value === null) {
+    return '—';
+  }
+
+  return `${String(Math.round(value * 100))}%`;
 }
 
-function formatDueStatus(value: 'overdue' | 'due_today' | 'upcoming'): string {
-  if (value === 'due_today') return 'due today';
-  return value.replace('_', ' ');
+function daysText(value: number | null): string {
+  if (value === null) {
+    return '—';
+  }
+
+  return `${String(Math.round(value))}d`;
 }
 
-function weakestNodes(nodes: IGraphNodeDto[]): IGraphNodeDto[] {
-  return nodes.filter((node) => typeof node.masteryLevel === 'number').slice(0, 5);
+function leastStableNodes(nodes: IGraphNodeDto[]): IGraphNodeDto[] {
+  return nodes.filter((node) => typeof node.stabilityLevel === 'number').slice(0, 5);
 }
 
 export default function GoalsPage(): React.JSX.Element {
@@ -47,38 +53,59 @@ export default function GoalsPage(): React.JSX.Element {
   const { data: me } = useMe();
   const userId = (me?.id ?? '') as UserId;
 
-  const summary = useNodeMasterySummary(userId, {
+  const summary = useStabilitySummary(userId, {
     enabled: userId !== '',
     studyMode: activeStudyMode,
   });
   const weakestNodeQuery = usePKGNodes(userId, {
     enabled: userId !== '',
     pageSize: 5,
-    sortBy: 'masteryLevel',
+    sortBy: 'stabilityLevel',
     sortOrder: 'asc',
     studyMode: activeStudyMode,
   });
-  const cardFocus = useSchedulerCardFocusSummary(
+  const dueConcepts = useDueConcepts(
     { studyMode: activeStudyMode, limit: 4 },
-    { enabled: userId !== '' }
-  );
-  const studyGuidance = useSchedulerStudyGuidanceSummary(
-    { studyMode: activeStudyMode },
     { enabled: userId !== '' }
   );
 
   const summaryData = summary.data;
   const weakNodes = React.useMemo(
-    () => weakestNodes(Array.isArray(weakestNodeQuery.data) ? weakestNodeQuery.data : []),
+    () => leastStableNodes(Array.isArray(weakestNodeQuery.data) ? weakestNodeQuery.data : []),
     [weakestNodeQuery.data]
   );
-  const focusData = cardFocus.data?.data;
-  const studyGuidanceData = studyGuidance.data?.data;
-  const schedulerRecommendations = studyGuidanceData?.recommendations ?? [];
+  const dueConceptList = dueConcepts.data?.data.concepts ?? [];
+  const strongestDomains = React.useMemo(
+    () =>
+      summaryData?.domains
+        .slice()
+        .sort((a, b) => b.stabilityRatio - a.stabilityRatio)
+        .slice(0, 5) ?? [],
+    [summaryData?.domains]
+  );
+  const weakestDomains = React.useMemo(
+    () =>
+      summaryData?.domains
+        .slice()
+        .sort((a, b) => a.stabilityRatio - b.stabilityRatio)
+        .slice(0, 5) ?? [],
+    [summaryData?.domains]
+  );
+  const schedulerRecommendations =
+    dueConceptList.length > 0
+      ? [
+          {
+            action: 'review_due_concepts',
+            headline: 'Review due concepts',
+            explanation:
+              'The scheduler has concepts ready now; start a session to generate step-level practice for them.',
+            suggestedStepCount: Math.max(3, Math.min(12, dueConceptList.length)),
+          },
+        ]
+      : [];
   const dailyTarget =
-    summaryData !== undefined ? Math.max(3, Math.min(12, summaryData.untrackedNodes)) : 5;
-  const campaignTarget =
-    summaryData !== undefined ? summaryData.emergingNodes + summaryData.developingNodes : 0;
+    summaryData !== undefined ? Math.max(3, Math.min(12, summaryData.unstableConcepts)) : 5;
+  const campaignTarget = summaryData !== undefined ? summaryData.unstableConcepts : 0;
 
   return (
     <div className="space-y-6">
@@ -90,7 +117,7 @@ export default function GoalsPage(): React.JSX.Element {
           </span>
         </div>
         <p className="max-w-3xl text-sm text-muted-foreground">
-          {getStudyModeDescription(activeStudyMode)} This workspace now reads the explicit mastery
+          {getStudyModeDescription(activeStudyMode)} This workspace now reads the explicit stability
           model for {getStudyModeLabel(activeStudyMode).toLowerCase()} so your goals reflect the
           same mode-scoped progress as the rest of the app.
         </p>
@@ -104,11 +131,11 @@ export default function GoalsPage(): React.JSX.Element {
               Next Recommendations
             </CardTitle>
             <CardDescription>
-              Ordered, simple recommendations from the mode-scoped scheduler guidance summary.
+              Ordered, simple recommendations from the mode-scoped concept scheduler.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {studyGuidance.isLoading ? (
+            {dueConcepts.isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                 Loading study guidance…
@@ -125,7 +152,7 @@ export default function GoalsPage(): React.JSX.Element {
                       {recommendation.explanation}
                     </p>
                     <p className="mt-2 text-xs font-medium text-foreground">
-                      Suggested workload: {String(recommendation.suggestedCardCount)}
+                      Suggested workload: {String(recommendation.suggestedStepCount)} steps
                     </p>
                   </div>
                 )
@@ -148,7 +175,7 @@ export default function GoalsPage(): React.JSX.Element {
               Daily target
             </CardTitle>
             <CardDescription>
-              Use untracked concepts as the simplest daily planning input.
+              Use unstable concepts as the simplest daily planning input.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -180,11 +207,11 @@ export default function GoalsPage(): React.JSX.Element {
             <div>
               <p className="text-3xl font-semibold tracking-tight text-foreground">
                 {summaryData !== undefined
-                  ? `${String(summaryData.trackedNodes)}/${String(summaryData.totalNodes)}`
+                  ? `${String(summaryData.stableConcepts)}/${String(summaryData.totalConcepts)}`
                   : '—'}
               </p>
               <p className="text-sm text-muted-foreground">
-                Nodes with explicit mastery evidence this week&apos;s plan can build on.
+                Concepts with a derived stability state this week&apos;s plan can build on.
               </p>
             </div>
             <Button asChild variant="outline" className="w-full">
@@ -197,7 +224,7 @@ export default function GoalsPage(): React.JSX.Element {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Flag className="h-5 w-5 text-primary" />
-              Mastery campaigns
+              Stability campaigns
             </CardTitle>
             <CardDescription>
               Track the nodes still moving from exposure toward durable recall.
@@ -209,7 +236,7 @@ export default function GoalsPage(): React.JSX.Element {
                 {summary.isLoading ? '…' : String(campaignTarget)}
               </p>
               <p className="text-sm text-muted-foreground">
-                Emerging or developing nodes in{' '}
+                Unstable concepts in{' '}
                 {getStudyModeShortLabel(activeStudyMode).toLowerCase()} mode.
               </p>
             </div>
@@ -225,10 +252,10 @@ export default function GoalsPage(): React.JSX.Element {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <BarChart3 className="h-5 w-5 text-primary" />
-              Mode-Scoped Mastery
+              Mode-Scoped Stability
             </CardTitle>
             <CardDescription>
-              This summary is served by the backend mastery read model, not reconstructed in the
+              This summary is served by the backend stability read model, not reconstructed in the
               browser.
             </CardDescription>
           </CardHeader>
@@ -236,11 +263,11 @@ export default function GoalsPage(): React.JSX.Element {
             {summary.isLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                Loading mastery summary…
+                Loading stability summary…
               </div>
             ) : summaryData === undefined ? (
               <p className="text-sm text-muted-foreground">
-                We couldn&apos;t load the mastery summary yet. You can still use the knowledge map
+                We couldn&apos;t load the stability summary yet. You can still use the knowledge map
                 and reviews while the read model catches up.
               </p>
             ) : (
@@ -249,43 +276,41 @@ export default function GoalsPage(): React.JSX.Element {
                   <div className="rounded-lg border border-border/70 bg-background/40 px-4 py-3">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Tracked</p>
                     <p className="mt-2 text-2xl font-bold text-foreground">
-                      {String(summaryData.trackedNodes)}
+                      {String(summaryData.totalConcepts)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {String(percent(summaryData.trackedNodes, summaryData.totalNodes))}% of
-                      in-scope nodes
+                      In-scope derived concept states
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 bg-background/40 px-4 py-3">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Stable</p>
+                    <p className="mt-2 text-2xl font-bold text-foreground">
+                      {String(summaryData.stableConcepts)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {String(percent(summaryData.stableConcepts, summaryData.totalConcepts))}% of
+                      derived concept states
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/70 bg-background/40 px-4 py-3">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Mastered
+                      Unstable
                     </p>
                     <p className="mt-2 text-2xl font-bold text-foreground">
-                      {String(summaryData.masteredNodes)}
+                      {String(summaryData.unstableConcepts)}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Threshold {Math.round(summaryData.masteryThreshold * 100)}%
+                      Best source for review and prerequisite-gap goals
                     </p>
                   </div>
                   <div className="rounded-lg border border-border/70 bg-background/40 px-4 py-3">
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Untracked
+                      Reasoning average
                     </p>
                     <p className="mt-2 text-2xl font-bold text-foreground">
-                      {String(summaryData.untrackedNodes)}
+                      {percentText(summaryData.averageReasoning)}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Best source for new coverage goals
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/70 bg-background/40 px-4 py-3">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Average mastery
-                    </p>
-                    <p className="mt-2 text-2xl font-bold text-foreground">
-                      {clampAverage(summaryData.averageMastery)}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">Tracked nodes only</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Latest concept projections</p>
                   </div>
                 </div>
 
@@ -293,11 +318,11 @@ export default function GoalsPage(): React.JSX.Element {
                   <div className="rounded-xl border border-border/70 bg-background/30 p-4">
                     <h2 className="text-sm font-semibold text-foreground">Strongest domains</h2>
                     <div className="mt-3 space-y-2">
-                      {summaryData.strongestDomains.length === 0 ? (
+                      {strongestDomains.length === 0 ? (
                         <p className="text-sm text-muted-foreground">No domain rollups yet.</p>
                       ) : (
-                        summaryData.strongestDomains.map(
-                          (entry: (typeof summaryData.strongestDomains)[number]) => (
+                        strongestDomains.map(
+                          (entry: (typeof strongestDomains)[number]) => (
                             <div
                               key={`strong-${entry.domain}`}
                               className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2"
@@ -307,11 +332,11 @@ export default function GoalsPage(): React.JSX.Element {
                                   {entry.domain}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {String(entry.masteredNodes)}/{String(entry.nodeCount)} mastered
+                                  {String(entry.stableConcepts)}/{String(entry.totalConcepts)} stable
                                 </p>
                               </div>
                               <p className="text-sm font-semibold text-foreground">
-                                {clampAverage(entry.averageMastery)}
+                                {percentText(entry.stabilityRatio)}
                               </p>
                             </div>
                           )
@@ -323,13 +348,13 @@ export default function GoalsPage(): React.JSX.Element {
                   <div className="rounded-xl border border-border/70 bg-background/30 p-4">
                     <h2 className="text-sm font-semibold text-foreground">Weakest domains</h2>
                     <div className="mt-3 space-y-2">
-                      {summaryData.weakestDomains.length === 0 ? (
+                      {weakestDomains.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
                           No weak spots identified yet.
                         </p>
                       ) : (
-                        summaryData.weakestDomains.map(
-                          (entry: (typeof summaryData.weakestDomains)[number]) => (
+                        weakestDomains.map(
+                          (entry: (typeof weakestDomains)[number]) => (
                             <div
                               key={`weak-${entry.domain}`}
                               className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2"
@@ -339,11 +364,12 @@ export default function GoalsPage(): React.JSX.Element {
                                   {entry.domain}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {String(entry.trackedNodes)} tracked of {String(entry.nodeCount)}
+                                  {String(entry.unstableConcepts)} unstable of{' '}
+                                  {String(entry.totalConcepts)}
                                 </p>
                               </div>
                               <p className="text-sm font-semibold text-foreground">
-                                {clampAverage(entry.averageMastery)}
+                                {daysText(entry.averageFsrsStability)}
                               </p>
                             </div>
                           )
@@ -364,18 +390,18 @@ export default function GoalsPage(): React.JSX.Element {
               Focus Candidates
             </CardTitle>
             <CardDescription>
-              Combine node-level weak spots with card-level readiness so the next study action is
+              Combine node-level weak spots with concept readiness so the next study action is
               concrete.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-3">
               <div className="space-y-2">
-                <h2 className="text-sm font-semibold text-foreground">Weakest nodes</h2>
+                <h2 className="text-sm font-semibold text-foreground">Least stable nodes</h2>
                 {weakestNodeQuery.isLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Loading low-mastery nodes…
+                    Loading low-stability nodes…
                   </div>
                 ) : weakNodes.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
@@ -396,8 +422,8 @@ export default function GoalsPage(): React.JSX.Element {
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-foreground">
-                          {node.masteryLevel !== undefined && node.masteryLevel !== null
-                            ? clampAverage(node.masteryLevel)
+                          {node.stabilityLevel !== undefined && node.stabilityLevel !== null
+                            ? percentText(node.stabilityLevel)
                             : '—'}
                         </p>
                       </div>
@@ -407,33 +433,34 @@ export default function GoalsPage(): React.JSX.Element {
               </div>
 
               <div className="space-y-2 border-t border-border/60 pt-3">
-                <h2 className="text-sm font-semibold text-foreground">Most fragile cards</h2>
-                {cardFocus.isLoading ? (
+                <h2 className="text-sm font-semibold text-foreground">Due concepts</h2>
+                {dueConcepts.isLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
                     Loading scheduler focus…
                   </div>
-                ) : focusData === undefined || focusData.weakestCards.length === 0 ? (
+                ) : dueConceptList.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No fragile cards identified yet in this mode.
+                    No due concepts identified yet in this mode.
                   </p>
                 ) : (
-                  focusData.weakestCards.map((card: (typeof focusData.weakestCards)[number]) => (
+                  dueConceptList.map((concept) => (
                     <div
-                      key={card.cardId}
+                      key={concept.conceptId}
                       className="rounded-lg border border-border/70 bg-background/40 px-4 py-3"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-medium text-foreground">{card.cardId}</p>
+                          <p className="text-sm font-medium text-foreground">{concept.conceptId}</p>
                           <p className="text-xs text-muted-foreground">
-                            {card.focusReason} · {formatDueStatus(card.dueStatus)} · {card.lane}
+                            {concept.algorithm} · {concept.queue} · due{' '}
+                            {new Date(concept.dueAt).toLocaleDateString()}
                           </p>
                         </div>
                         <p className="text-sm font-semibold text-foreground">
-                          {card.recallProbability !== null
-                            ? clampAverage(card.recallProbability)
-                            : card.readinessBand}
+                          {concept.stability !== null
+                            ? `${concept.stability.toFixed(1)}d`
+                            : `${String(concept.reviewCount)} reviews`}
                         </p>
                       </div>
                     </div>
@@ -446,7 +473,7 @@ export default function GoalsPage(): React.JSX.Element {
                 <Link href="/knowledge">Open knowledge graph</Link>
               </Button>
               <Button asChild className="flex-1">
-                <Link href="/reviews">Review fragile cards</Link>
+                <Link href="/reviews">Review due concepts</Link>
               </Button>
             </div>
           </CardContent>

@@ -2,7 +2,15 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useCKGEdges, useCKGMutations, useCKGNodes, useResetCKG } from '@noema/api-client/knowledge-graph';
+import {
+  type CkgResetResponse,
+  type CkgSourcePurgeResponse,
+  useCKGEdges,
+  useCKGMutations,
+  useCKGNodes,
+  usePurgeCKGSource,
+  useResetCKG,
+} from '@noema/api-client/knowledge-graph';
 import {
   Button,
   Card,
@@ -17,6 +25,8 @@ import {
 import { ArrowRight, Database, GitPullRequest, Network, Upload } from 'lucide-react';
 
 const RESET_CONFIRMATION = 'DELETE_ALL_CKG_CONTENTS';
+const STREAM_PURGE_CONFIRMATION = 'DELETE_SELECTED_CKG_STREAM';
+const SUGGESTED_STREAM_IDS = ['yago', 'esco', 'users_aggregation', 'agents', 'admin_manual'];
 
 export default function CKGWorkspacePage(): React.JSX.Element {
   const { data: nodes = [] } = useCKGNodes();
@@ -25,13 +35,16 @@ export default function CKGWorkspacePage(): React.JSX.Element {
   const [showDangerZone, setShowDangerZone] = React.useState(false);
   const [confirmationInput, setConfirmationInput] = React.useState('');
   const [includeSources, setIncludeSources] = React.useState(false);
+  const [streamIdInput, setStreamIdInput] = React.useState('');
+  const [streamConfirmationInput, setStreamConfirmationInput] = React.useState('');
+  const [includeSourceRegistration, setIncludeSourceRegistration] = React.useState(false);
   const [resetFeedback, setResetFeedback] = React.useState<{
     tone: 'success' | 'error';
     message: string;
   } | null>(null);
 
   const resetCkg = useResetCKG({
-    onSuccess: (response) => {
+    onSuccess: (response: CkgResetResponse) => {
       setResetFeedback({
         tone: 'success',
         message: `Reset complete. Deleted ${String(response.data.deletedNeo4jCkgNodes)} Neo4j nodes and truncated ${String(response.data.truncatedTables.length)} PostgreSQL tables.`,
@@ -39,7 +52,24 @@ export default function CKGWorkspacePage(): React.JSX.Element {
       setConfirmationInput('');
       setShowDangerZone(false);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
+      setResetFeedback({
+        tone: 'error',
+        message: error.message,
+      });
+    },
+  });
+  const purgeCkgSource = usePurgeCKGSource({
+    onSuccess: (response: CkgSourcePurgeResponse) => {
+      setResetFeedback({
+        tone: 'success',
+        message: `Purged stream "${response.data.streamId}". Removed ${String(response.data.deletedNeo4jCkgNodes)} node(s), ${String(response.data.deletedNeo4jCkgEdges)} edge(s), and ${String(response.data.deletedMutationCount)} mutation record(s).`,
+      });
+      setStreamIdInput('');
+      setStreamConfirmationInput('');
+      setIncludeSourceRegistration(false);
+    },
+    onError: (error: Error) => {
       setResetFeedback({
         tone: 'error',
         message: error.message,
@@ -48,12 +78,25 @@ export default function CKGWorkspacePage(): React.JSX.Element {
   });
 
   const canReset = confirmationInput === RESET_CONFIRMATION && !resetCkg.isPending;
+  const canPurgeStream =
+    streamIdInput.trim() !== '' &&
+    streamConfirmationInput === STREAM_PURGE_CONFIRMATION &&
+    !purgeCkgSource.isPending;
 
   const handleReset = (): void => {
     setResetFeedback(null);
     resetCkg.mutate({
       confirmation: RESET_CONFIRMATION,
       includeSources,
+    });
+  };
+
+  const handlePurgeStream = (): void => {
+    setResetFeedback(null);
+    purgeCkgSource.mutate({
+      confirmation: STREAM_PURGE_CONFIRMATION,
+      streamId: streamIdInput.trim(),
+      includeSourceRegistration,
     });
   };
 
@@ -258,6 +301,85 @@ export default function CKGWorkspacePage(): React.JSX.Element {
                   >
                     Cancel
                   </Button>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-destructive">
+                      Delete one source or stream from the CKG
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Use this for source-scoped cleanup like <code>yago</code>, <code>esco</code>,{' '}
+                      <code>users_aggregation</code>, <code>agents</code>, or{' '}
+                      <code>admin_manual</code>.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {SUGGESTED_STREAM_IDS.map((streamId) => (
+                      <Button
+                        key={streamId}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setStreamIdInput(streamId);
+                        }}
+                      >
+                        {streamId}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <Input
+                    value={streamIdInput}
+                    onChange={(event) => {
+                      setStreamIdInput(event.target.value);
+                    }}
+                    placeholder="Enter stream id"
+                    className="max-w-md"
+                  />
+
+                  <label className="flex items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={includeSourceRegistration}
+                      onChange={(event) => {
+                        setIncludeSourceRegistration(event.target.checked);
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-input"
+                    />
+                    <span className="text-muted-foreground">
+                      Also delete the ontology source registration if this stream maps to a source
+                      registry entry.
+                    </span>
+                  </label>
+
+                  <p className="text-sm text-muted-foreground">
+                    Type <span className="font-mono font-semibold">{STREAM_PURGE_CONFIRMATION}</span>{' '}
+                    to confirm the source purge.
+                  </p>
+
+                  <Input
+                    value={streamConfirmationInput}
+                    onChange={(event) => {
+                      setStreamConfirmationInput(event.target.value);
+                    }}
+                    placeholder={STREAM_PURGE_CONFIRMATION}
+                    className="max-w-md"
+                  />
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="destructive"
+                      disabled={!canPurgeStream}
+                      onClick={handlePurgeStream}
+                    >
+                      {purgeCkgSource.isPending ? 'Deleting stream...' : 'Delete selected stream'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>

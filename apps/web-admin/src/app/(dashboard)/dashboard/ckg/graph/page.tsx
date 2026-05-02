@@ -552,6 +552,20 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     [nodes, hiddenTypes]
   );
 
+  const visibleNodeIds = React.useMemo(
+    () => new Set(visibleNodes.map((node) => node.id as string)),
+    [visibleNodes]
+  );
+
+  const visibleEdges = React.useMemo(
+    () =>
+      edges.filter(
+        (edge) =>
+          visibleNodeIds.has(edge.sourceId as string) && visibleNodeIds.has(edge.targetId as string)
+      ),
+    [edges, visibleNodeIds]
+  );
+
   // Build highlighted node set from active overlays
   const highlightedNodeIds = React.useMemo(() => {
     const set = new Set<string>();
@@ -1369,7 +1383,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {/* Left control panel — includes layout, overlays (with pending_mutations), node list */}
         {isControlsOpen && (
-          <div className="relative z-10">
+          <div className="relative z-10 flex h-full min-h-0">
             <GraphControls
               nodes={visibleNodes}
               layoutMode={layoutMode}
@@ -1449,7 +1463,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
             )}
             <GraphCanvas
               nodes={visibleNodes}
-              edges={edges}
+              edges={visibleEdges}
               selectedNodeId={selectedNodeId}
               selectedNodeIds={selectedNodeIds}
               selectedEdgeId={selectedEdgeId}

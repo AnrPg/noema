@@ -4,7 +4,9 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  kgKeys,
   pkgEdgesApi,
+  useBulkDeletePKGNodes,
   useBridgeNodes,
   useCreatePKGEdge,
   useCreatePKGNode,
@@ -13,23 +15,15 @@ import {
   usePKGCKGComparison,
   usePKGEdges,
   usePKGNodes,
+  useResetPKG,
   useUpdatePKGNode,
 } from '@noema/api-client';
 import type { EdgeType, IGraphEdgeDto, IGraphNodeDto, NodeType } from '@noema/api-client';
 import { useAuth } from '@noema/auth';
 import type { EdgeId, NodeId, UserId } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  GitBranch,
-  Loader2,
-  PanelLeft,
-  PencilLine,
-  Plus,
-  Sparkles,
-  Trash2,
-  X,
-} from 'lucide-react';
-import { Button } from '@noema/ui';
+import { GitBranch, Loader2, PanelLeft, PencilLine, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { Button, FieldLabel } from '@noema/ui';
 import { useGraphStore } from '@/stores/graph-store';
 import { GraphCanvas } from '@/components/graph/graph-canvas';
 import { GraphControls } from '@/components/graph/graph-controls';
@@ -50,7 +44,7 @@ const NODE_TYPE_OPTIONS: { value: NodeType; label: string }[] = [
 const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string }[] = [
   { value: 'subskill_of', label: 'Subskill of' },
   { value: 'has_subskill', label: 'Has subskill' },
-  { value: 'prerequisite', label: 'Prerequisite' },
+  { value: 'prerequisite', label: 'Is prerequisite of' },
   { value: 'transferable_to', label: 'Transferable to' },
   { value: 'confusable_with', label: 'Confusable with' },
   { value: 'essential_for_occupation', label: 'Essential for occupation' },
@@ -68,6 +62,9 @@ const EDGE_TYPE_OPTIONS: { value: EdgeType; label: string }[] = [
   { value: 'exemplifies', label: 'Example of' },
   { value: 'contradicts', label: 'Contradicts' },
 ];
+const EDGE_TYPE_LABELS = new Map<EdgeType, string>(
+  EDGE_TYPE_OPTIONS.map((option) => [option.value, option.label])
+);
 
 const inputClass =
   'w-full rounded-md border border-border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0';
@@ -80,6 +77,7 @@ const primaryButtonClass =
 const secondaryButtonClass =
   'inline-flex items-center gap-1.5 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50';
 const DEFAULT_NODE_DOMAIN = 'general';
+const PKG_RESET_CONFIRMATION = 'DELETE_ALL_PKG_CONTENTS';
 
 interface INodeFormState {
   label: string;
@@ -143,6 +141,26 @@ function defaultQuickEdgeMenu(
   };
 }
 
+function getNodeDisplayLabel(nodes: IGraphNodeDto[], nodeId: string): string {
+  return nodes.find((node) => String(node.id) === nodeId)?.label ?? nodeId;
+}
+
+function getEdgeTypeLabel(type: EdgeType): string {
+  return EDGE_TYPE_LABELS.get(type) ?? type.replaceAll('_', ' ');
+}
+
+function getEdgeDirectionLabel(edge: IGraphEdgeDto, nodes: IGraphNodeDto[]): string {
+  const source = getNodeDisplayLabel(nodes, String(edge.sourceId));
+  const target = getNodeDisplayLabel(nodes, String(edge.targetId));
+  return `${source} -> ${target}`;
+}
+
+function getPrerequisiteMeaning(edge: IGraphEdgeDto, nodes: IGraphNodeDto[]): string {
+  const source = getNodeDisplayLabel(nodes, String(edge.sourceId));
+  const target = getNodeDisplayLabel(nodes, String(edge.targetId));
+  return `${source} is a prerequisite of ${target}`;
+}
+
 function formatPercent(value: number): string {
   return `${String(Math.round(value * 100))}%`;
 }
@@ -169,16 +187,23 @@ function Section({
 
 function Field({
   label,
+  required,
   hint,
   children,
 }: {
   label: string;
+  required?: boolean;
   hint?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-sm font-medium text-foreground">{label}</span>
+      <FieldLabel
+        className="text-sm font-medium text-foreground"
+        {...(required === true ? { required: true } : {})}
+      >
+        {label}
+      </FieldLabel>
       {hint !== undefined && <span className="text-xs text-muted-foreground">{hint}</span>}
       {children}
     </label>
@@ -250,18 +275,22 @@ export default function KnowledgePage(): React.JSX.Element {
   const [isNodeDetailOpen, setIsNodeDetailOpen] = React.useState(true);
   const [selectedNodeIds, setSelectedNodeIds] = React.useState<Set<string>>(new Set());
   const [activeWorkspacePanel, setActiveWorkspacePanel] = React.useState<
-    'review' | 'create' | 'manage' | null
+    'review' | 'create' | 'manage' | 'prerequisites' | null
   >(null);
 
   const selectedNode = React.useMemo(
     () => nodes.find((n) => String(n.id) === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   );
+  const hasKnowledgeWorkspaceRail =
+    (selectedNode !== null && isNodeDetailOpen) || activeWorkspacePanel !== null;
   const selectedNodeIdForHooks = (selectedNode?.id ?? '') as unknown as NodeId;
 
   const createNode = useCreatePKGNode(userId);
   const updateNode = useUpdatePKGNode(userId, selectedNodeIdForHooks);
   const deleteNode = useDeletePKGNode(userId, selectedNodeIdForHooks);
+  const bulkDeleteNodes = useBulkDeletePKGNodes(userId);
+  const resetPkg = useResetPKG(userId);
   const createEdge = useCreatePKGEdge(userId);
 
   const isLoading = nodesLoading || edgesLoading;
@@ -349,6 +378,22 @@ export default function KnowledgePage(): React.JSX.Element {
     );
   }, [edges, selectedNode]);
 
+  const selectedNodePrerequisiteEdges = React.useMemo(() => {
+    if (selectedNode === null) return [];
+    const nodeId = String(selectedNode.id);
+    return edges.filter(
+      (edge) => edge.type === 'prerequisite' && String(edge.targetId) === nodeId
+    );
+  }, [edges, selectedNode]);
+
+  const selectedNodeDependentEdges = React.useMemo(() => {
+    if (selectedNode === null) return [];
+    const nodeId = String(selectedNode.id);
+    return edges.filter(
+      (edge) => edge.type === 'prerequisite' && String(edge.sourceId) === nodeId
+    );
+  }, [edges, selectedNode]);
+
   const edgeTargets = React.useMemo(
     () =>
       nodes
@@ -400,7 +445,9 @@ export default function KnowledgePage(): React.JSX.Element {
         } else {
           const fallbackPrimaryNodeId = next.values().next().value;
           const primaryNodeId =
-            next.has(nodeId) || fallbackPrimaryNodeId === undefined ? nodeId : fallbackPrimaryNodeId;
+            next.has(nodeId) || fallbackPrimaryNodeId === undefined
+              ? nodeId
+              : fallbackPrimaryNodeId;
           selectNode(primaryNodeId);
           setIsNodeDetailOpen(next.size === 1);
         }
@@ -462,6 +509,7 @@ export default function KnowledgePage(): React.JSX.Element {
       selectNode(nodeId);
       setSelectedNodeIds(new Set([nodeId]));
       setIsNodeDetailOpen(true);
+      setActiveWorkspacePanel('prerequisites');
       if (!activeOverlays.has('prerequisites')) {
         toggleOverlay('prerequisites');
       }
@@ -624,6 +672,70 @@ export default function KnowledgePage(): React.JSX.Element {
     }
   }
 
+  async function handleDeleteSelectedNodes(): Promise<void> {
+    if (selectedNodeIds.size < 2) {
+      return;
+    }
+
+    const selectedIds = Array.from(selectedNodeIds);
+    const selectedLabels = nodes
+      .filter((node) => selectedNodeIds.has(String(node.id)))
+      .map((node) => node.label);
+    const connectedEdgeCount = edges.filter(
+      (edge) =>
+        selectedNodeIds.has(String(edge.sourceId)) || selectedNodeIds.has(String(edge.targetId))
+    ).length;
+    const confirmed = window.confirm(
+      `Permanently delete ${String(selectedIds.length)} selected nodes${connectedEdgeCount > 0 ? ` and ${String(connectedEdgeCount)} connected edge${connectedEdgeCount === 1 ? '' : 's'}` : ''}?\n\n${selectedLabels.slice(0, 6).join(', ')}${selectedLabels.length > 6 ? '…' : ''}`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setManagerError(null);
+    setManagerSuccess(null);
+    try {
+      const response = await bulkDeleteNodes.mutateAsync({ nodeIds: selectedIds });
+      clearGraphSelection();
+      setContextMenu(null);
+      setQuickEdgeMenu(null);
+      setManagerSuccess(
+        response.data.failed.length === 0
+          ? `Deleted ${String(response.data.deletedNodeIds.length)} PKG nodes and ${String(response.data.deletedEdgeCount)} connected edge(s).`
+          : `Deleted ${String(response.data.deletedNodeIds.length)} PKG nodes. ${String(response.data.failed.length)} deletion(s) still need attention.`
+      );
+    } catch (err) {
+      setManagerError(err instanceof Error ? err.message : 'Failed to delete the selected nodes.');
+    }
+  }
+
+  async function handleResetPkg(): Promise<void> {
+    const confirmation = window.prompt(
+      `Type ${PKG_RESET_CONFIRMATION} to permanently wipe your PKG, attached edges, and graph-side derived records.`
+    );
+
+    if (confirmation !== PKG_RESET_CONFIRMATION) {
+      return;
+    }
+
+    setManagerError(null);
+    setManagerSuccess(null);
+    try {
+      const response = await resetPkg.mutateAsync({
+        confirmation: PKG_RESET_CONFIRMATION,
+      });
+      clearGraphSelection();
+      setContextMenu(null);
+      setQuickEdgeMenu(null);
+      setManagerSuccess(
+        `Reset your PKG. Removed ${String(response.data.deletedNeo4jPkgNodes)} node(s) and ${String(response.data.deletedNeo4jPkgEdges)} edge(s).`
+      );
+    } catch (err) {
+      setManagerError(err instanceof Error ? err.message : 'Failed to reset your PKG.');
+    }
+  }
+
   async function handleCreateEdge(): Promise<void> {
     if (selectedNode === null) {
       setManagerError('Select a source node before creating an edge.');
@@ -634,8 +746,8 @@ export default function KnowledgePage(): React.JSX.Element {
       return;
     }
     const parsedWeight = Number(edgeForm.weight);
-    if (Number.isNaN(parsedWeight) || parsedWeight <= 0) {
-      setManagerError('Edge weight must be a positive number.');
+    if (Number.isNaN(parsedWeight) || parsedWeight <= 0 || parsedWeight > 1) {
+      setManagerError('Edge weight must be between 0 and 1.');
       return;
     }
     setManagerError(null);
@@ -660,8 +772,8 @@ export default function KnowledgePage(): React.JSX.Element {
     }
 
     const parsedWeight = Number(quickEdgeMenu.weight);
-    if (Number.isNaN(parsedWeight) || parsedWeight <= 0) {
-      setManagerError('Edge weight must be a positive number.');
+    if (Number.isNaN(parsedWeight) || parsedWeight <= 0 || parsedWeight > 1) {
+      setManagerError('Edge weight must be between 0 and 1.');
       return;
     }
 
@@ -687,7 +799,8 @@ export default function KnowledgePage(): React.JSX.Element {
     setIsDeletingEdgeId(edgeId);
     try {
       await pkgEdgesApi.delete(userId, edgeId as EdgeId);
-      await queryClient.invalidateQueries({ queryKey: ['kg', userId, 'pkg', 'edges'] });
+      await queryClient.invalidateQueries({ queryKey: kgKeys.pkg(userId) });
+      await queryClient.invalidateQueries({ queryKey: ['kg', 'comparison', userId] });
       setManagerSuccess('Removed the selected edge.');
     } catch (err) {
       setManagerError(err instanceof Error ? err.message : 'Failed to delete edge.');
@@ -809,7 +922,7 @@ export default function KnowledgePage(): React.JSX.Element {
             title="Manual PKG Setup"
             subtitle="If you prefer, you can begin by creating your own first nodes."
           >
-            <Field label="Label">
+                <Field label="Label" required>
               <input
                 name="createNodeLabel"
                 type="text"
@@ -821,7 +934,7 @@ export default function KnowledgePage(): React.JSX.Element {
                 className={inputClass}
               />
             </Field>
-            <Field label="Type">
+                <Field label="Type" required>
               <select
                 name="createNodeType"
                 value={createNodeForm.type}
@@ -882,32 +995,16 @@ export default function KnowledgePage(): React.JSX.Element {
     );
   }
 
-  const isAnyDrawerOpen = isControlsOpen || activeWorkspacePanel !== null;
-
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background">
-      {isAnyDrawerOpen && (
-        <button
-          type="button"
-          className="absolute inset-0 z-20 bg-background/30 backdrop-blur-[1px] lg:hidden"
-          onClick={() => {
-            setIsControlsOpen(false);
-            setActiveWorkspacePanel(null);
-            setContextMenu(null);
-            setQuickEdgeMenu(null);
-          }}
-          aria-label="Close open panels"
-        />
-      )}
-
-      <div className="z-30 flex flex-shrink-0 items-start justify-between gap-4 border-b border-border bg-background px-4 py-3">
+    <div className="flex h-full min-h-0 w-full flex-col bg-background xl:overflow-hidden">
+      <div className="z-30 flex flex-shrink-0 flex-col gap-3 border-b border-border bg-background px-4 py-3 md:flex-row md:items-start md:justify-between">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => {
               setIsControlsOpen((prev) => !prev);
             }}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm font-medium text-foreground shadow-sm backdrop-blur transition-colors hover:bg-card"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
           >
             <PanelLeft className="h-4 w-4" aria-hidden="true" />
             {isControlsOpen ? 'Hide controls' : 'Show controls'}
@@ -923,7 +1020,7 @@ export default function KnowledgePage(): React.JSX.Element {
             onClick={() => {
               setActiveWorkspacePanel((current) => (current === 'review' ? null : 'review'));
             }}
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm font-medium text-foreground shadow-sm backdrop-blur transition-colors hover:bg-card"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             {activeWorkspacePanel === 'review' ? 'Hide review' : 'System-guided Review'}
@@ -931,558 +1028,200 @@ export default function KnowledgePage(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-
-      <div
-        className={[
-          'absolute inset-y-0 left-0 z-30 w-[320px] max-w-[calc(100vw-1.5rem)] transition-transform duration-200 ease-out',
-          isControlsOpen ? 'translate-x-0' : '-translate-x-[calc(100%+1rem)]',
-        ].join(' ')}
-      >
-        <GraphControls
-          nodes={visibleNodes}
-          layoutMode={layoutMode}
-          activeOverlays={activeOverlays}
-          showLabels={showLabels}
-          searchQuery={searchQuery}
-          hiddenTypes={hiddenTypes}
-          onLayoutChange={setLayoutMode}
-          onOverlayToggle={toggleOverlay}
-          onToggleLabels={() => {
-            setShowLabels((prev) => !prev);
-          }}
-          onSearchChange={setSearchQuery}
-          onNodeSelect={handleNodeSelect}
-          onToggleType={handleToggleType}
-          selectedNodeId={selectedNodeId}
-          primaryActionLabel="Create Node"
-          onPrimaryAction={() => {
-            setActiveWorkspacePanel('create');
-          }}
-          onClose={() => {
-            setIsControlsOpen(false);
-          }}
-        />
-      </div>
-
-      <div className="relative h-full overflow-hidden">
-        <GraphCanvas
-          nodes={visibleNodes}
-          edges={visibleEdges}
-          selectedNodeId={selectedNodeId}
-          selectedNodeIds={selectedNodeIds}
-          hoveredNodeId={hoveredNodeId}
-          activeOverlays={activeOverlaysArray}
-          layoutMode={layoutMode}
-          showLabels={showLabels}
-          onNodeClick={handleNodeClick}
-          onNodeHover={handleNodeHover}
-          onNodeRightClick={handleNodeRightClick}
-          onBackgroundClick={handleBackgroundClick}
-          highlightedNodeIds={highlightedNodeIds}
-          className="h-full w-full"
-        />
-        {selectedNode !== null && isNodeDetailOpen && (
-          <div className="absolute bottom-4 left-4 right-4 z-20 md:right-auto md:w-[min(30rem,calc(100%-2rem))]">
-            <NodeDetailPanel
-              node={selectedNode}
-              allNodes={visibleNodes}
-              allEdges={visibleEdges}
-              headerActions={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setActiveWorkspacePanel('manage');
-                  }}
-                >
-                  Manage node
-                </Button>
-              }
-              onClose={() => {
-                setIsNodeDetailOpen(false);
-              }}
-              onViewPrerequisites={handleViewPrerequisites}
-            />
-          </div>
-        )}
-        {contextMenu !== null && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => {
-                setContextMenu(null);
-              }}
-            />
-            <div
-              className="fixed z-50 min-w-[180px] rounded-lg border border-border bg-card py-1 shadow-lg"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-            >
-              <button
-                type="button"
-                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={() => {
-                  router.push(`/cards?conceptId=${String(contextMenu.node.id)}`);
-                  setContextMenu(null);
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 xl:overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
+          {isControlsOpen && (
+            <div className="order-2 min-h-0 w-full flex-shrink-0 overflow-hidden xl:order-none xl:w-[320px]">
+              <GraphControls
+                nodes={visibleNodes}
+                layoutMode={layoutMode}
+                activeOverlays={activeOverlays}
+                showLabels={showLabels}
+                searchQuery={searchQuery}
+                hiddenTypes={hiddenTypes}
+                onLayoutChange={setLayoutMode}
+                onOverlayToggle={toggleOverlay}
+                onToggleLabels={() => {
+                  setShowLabels((prev) => !prev);
                 }}
-              >
-                View card linked to this concept
-              </button>
-              <button
-                type="button"
-                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={() => {
-                  setLayoutMode('hierarchical');
-                  if (!activeOverlays.has('prerequisites')) {
-                    toggleOverlay('prerequisites');
+                onSearchChange={setSearchQuery}
+                onNodeSelect={handleNodeSelect}
+                onToggleType={handleToggleType}
+                selectedNodeId={selectedNodeId}
+                primaryActionLabel="Create Node"
+                onPrimaryAction={() => {
+                  setActiveWorkspacePanel('create');
+                }}
+                onClose={() => {
+                  setIsControlsOpen(false);
+                }}
+              />
+            </div>
+          )}
+
+          <div className="order-1 relative min-h-[50vh] min-w-0 flex-1 overflow-hidden rounded-xl border border-border bg-card xl:order-none xl:min-h-0">
+            <GraphCanvas
+              nodes={visibleNodes}
+              edges={visibleEdges}
+              selectedNodeId={selectedNodeId}
+              selectedNodeIds={selectedNodeIds}
+              hoveredNodeId={hoveredNodeId}
+              activeOverlays={activeOverlaysArray}
+              layoutMode={layoutMode}
+              showLabels={showLabels}
+              onNodeClick={handleNodeClick}
+              onNodeHover={handleNodeHover}
+              onNodeRightClick={handleNodeRightClick}
+              onBackgroundClick={handleBackgroundClick}
+              highlightedNodeIds={highlightedNodeIds}
+              className="h-full w-full"
+            />
+            {contextMenu !== null && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => {
+                    setContextMenu(null);
+                  }}
+                />
+                <div
+                  className="fixed z-50 min-w-[180px] max-w-[calc(100vw-1.5rem)] rounded-lg border border-border bg-card py-1 shadow-lg"
+                  style={
+                    {
+                      left: `max(0.75rem, min(${String(contextMenu.x)}px, calc(100vw - 13rem)))`,
+                      top: `max(0.75rem, min(${String(contextMenu.y)}px, calc(100vh - 18rem)))`,
+                    } as React.CSSProperties
                   }
-                  selectNode(String(contextMenu.node.id));
-                  setContextMenu(null);
-                }}
-              >
-                Show prerequisite chain
-              </button>
-              <button
-                type="button"
-                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={() => {
-                  const nodeId = String(contextMenu.node.id);
-                  const hop1 = new Set(
-                    edges
-                      .filter((e) => String(e.sourceId) === nodeId || String(e.targetId) === nodeId)
-                      .flatMap((e) => [String(e.sourceId), String(e.targetId)])
-                  );
-                  const hop2 = new Set([
-                    ...hop1,
-                    ...[...hop1].flatMap((id) =>
-                      edges
-                        .filter((e) => String(e.sourceId) === id || String(e.targetId) === id)
-                        .flatMap((e) => [String(e.sourceId), String(e.targetId)])
-                    ),
-                  ]);
-                  setNeighborhoodHighlight(hop2);
-                  setContextMenu(null);
-                }}
-              >
-                Show neighborhood (2 hops)
-              </button>
-              <button
-                type="button"
-                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={() => {
-                  router.push(`/knowledge/misconceptions?nodeId=${String(contextMenu.node.id)}`);
-                  setContextMenu(null);
-                }}
-              >
-                Check for misconceptions
-              </button>
-              <button
-                type="button"
-                className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
-                onClick={() => {
-                  router.push('/knowledge/comparison');
-                  setContextMenu(null);
-                }}
-              >
-                Compare with CKG
-              </button>
-            </div>
-          </>
-        )}
-        {quickEdgeMenu !== null && (
-          <>
-            <div
-              className="fixed inset-0 z-40"
-              onClick={() => {
-                setQuickEdgeMenu(null);
-              }}
-            />
-            <div
-              className="fixed z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-4 shadow-xl"
-              style={{ left: quickEdgeMenu.x, top: quickEdgeMenu.y }}
-            >
-              <div className="mb-3">
-                <p className="text-sm font-semibold text-foreground">Create edge</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Connect{' '}
-                  <span className="font-medium text-foreground">
-                    {nodes.find((node) => String(node.id) === quickEdgeMenu.sourceNodeId)?.label ??
-                      quickEdgeMenu.sourceNodeId}
-                  </span>{' '}
-                  to{' '}
-                  <span className="font-medium text-foreground">
-                    {nodes.find((node) => String(node.id) === quickEdgeMenu.targetNodeId)?.label ??
-                      quickEdgeMenu.targetNodeId}
-                  </span>
-                  .
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                <Field label="Edge type">
-                  <select
-                    name="quickEdgeType"
-                    value={quickEdgeMenu.type}
-                    onChange={(e) => {
-                      setQuickEdgeMenu((prev) =>
-                        prev === null ? null : { ...prev, type: e.target.value as EdgeType }
-                      );
-                    }}
-                    className={selectClass}
-                  >
-                    {EDGE_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Weight">
-                  <input
-                    name="quickEdgeWeight"
-                    type="number"
-                    min={0.1}
-                    step={0.1}
-                    value={quickEdgeMenu.weight}
-                    onChange={(e) => {
-                      setQuickEdgeMenu((prev) =>
-                        prev === null ? null : { ...prev, weight: e.target.value }
-                      );
-                    }}
-                    className={inputClass}
-                  />
-                </Field>
-                <div className="flex flex-wrap gap-2">
+                >
                   <button
                     type="button"
+                    className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                     onClick={() => {
-                      void handleCreateQuickEdge();
+                      router.push(`/cards?conceptId=${String(contextMenu.node.id)}`);
+                      setContextMenu(null);
                     }}
-                    disabled={createEdge.isPending}
-                    className={primaryButtonClass}
                   >
-                    <GitBranch className="h-4 w-4" />
-                    {createEdge.isPending ? 'Creating edge…' : 'Create edge'}
+                    View payload linked to this concept
                   </button>
                   <button
                     type="button"
+                    className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
                     onClick={() => {
-                      setQuickEdgeMenu(null);
+                      setLayoutMode('hierarchical');
+                      if (!activeOverlays.has('prerequisites')) {
+                        toggleOverlay('prerequisites');
+                      }
+                      selectNode(String(contextMenu.node.id));
+                      setContextMenu(null);
                     }}
-                    className={secondaryButtonClass}
                   >
-                    Cancel
+                    Show prerequisite chain
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                    onClick={() => {
+                      const nodeId = String(contextMenu.node.id);
+                      const hop1 = new Set(
+                        edges
+                          .filter(
+                            (e) => String(e.sourceId) === nodeId || String(e.targetId) === nodeId
+                          )
+                          .flatMap((e) => [String(e.sourceId), String(e.targetId)])
+                      );
+                      const hop2 = new Set([
+                        ...hop1,
+                        ...[...hop1].flatMap((id) =>
+                          edges
+                            .filter((e) => String(e.sourceId) === id || String(e.targetId) === id)
+                            .flatMap((e) => [String(e.sourceId), String(e.targetId)])
+                        ),
+                      ]);
+                      setNeighborhoodHighlight(hop2);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Show neighborhood (2 hops)
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                    onClick={() => {
+                      router.push(
+                        `/knowledge/misconceptions?nodeId=${String(contextMenu.node.id)}`
+                      );
+                      setContextMenu(null);
+                    }}
+                  >
+                    Check for misconceptions
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-1.5 text-left text-sm text-foreground hover:bg-muted"
+                    onClick={() => {
+                      router.push('/knowledge/comparison');
+                      setContextMenu(null);
+                    }}
+                  >
+                    Compare with CKG
                   </button>
                 </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      <aside
-        className={[
-          'absolute inset-y-0 right-0 z-30 w-[380px] max-w-[calc(100vw-1.5rem)] border-l border-border bg-muted/20 shadow-2xl backdrop-blur transition-transform duration-200 ease-out',
-          activeWorkspacePanel !== null ? 'translate-x-0' : 'translate-x-[calc(100%+1rem)]',
-        ].join(' ')}
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wide text-foreground">
-                {activeWorkspacePanel === 'create'
-                  ? 'Create Node'
-                  : activeWorkspacePanel === 'manage'
-                    ? 'Manage Node'
-                    : 'System-guided Review'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {activeWorkspacePanel === 'create'
-                  ? 'Add a new concept to your personal knowledge graph.'
-                  : activeWorkspacePanel === 'manage'
-                    ? selectedNode !== null
-                      ? `Edit ${selectedNode.label}, manage its edges, or remove it permanently.`
-                      : 'Select a node from the graph first.'
-                    : 'Review canonical suggestions and apply what fits your PKG.'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveWorkspacePanel(null);
-              }}
-              className="rounded-md border border-border bg-background p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              aria-label="Close workspace"
-            >
-              <X className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </div>
-
-          <div className="noema-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
-            {activeWorkspacePanel === 'review' && (
-              <div className="flex flex-col gap-3">
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-lg border border-border bg-background p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Alignment
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">{formatPercent(alignmentScore)}</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-background p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Missing
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">{String(missingFromPkg.length)}</p>
-                  </div>
-                  <div className="rounded-lg border border-border bg-background p-3">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Personal
-                    </p>
-                    <p className="mt-1 text-lg font-semibold">{String(extraInPkg.length)}</p>
-                  </div>
-                </div>
-                {comparisonLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    Loading comparison signals…
-                  </div>
-                ) : suggestionPreview.length > 0 ? (
-                  <>
-                    <div className="flex flex-col gap-2">
-                      {suggestionPreview.map((node) => (
-                        <div
-                          key={String(node.id)}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {node.label}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{node.type}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void handleApplySuggestion(node);
-                            }}
-                            disabled={createNode.isPending || isApplyingSuggestions}
-                            className={secondaryButtonClass}
-                          >
-                            Add
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void handleApplySuggestedBaseline();
-                        }}
-                        disabled={isApplyingSuggestions || createNode.isPending}
-                        className={primaryButtonClass}
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        {isApplyingSuggestions ? 'Building…' : 'Apply next 5'}
-                      </button>
-                      <Button asChild variant="outline" size="sm">
-                        <Link href="/knowledge/comparison">Open comparison</Link>
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Your current PKG already covers the available canonical suggestions.
-                  </p>
-                )}
-                {systemError !== null && <p className="text-sm text-destructive">{systemError}</p>}
-              </div>
+              </>
             )}
-
-            {activeWorkspacePanel === 'create' && (
-              <div className="flex flex-col gap-3">
-                <Field label="Label">
-                  <input
-                    name="guidedCreateNodeLabel"
-                    type="text"
-                    value={createNodeForm.label}
-                    onChange={(e) => {
-                      setCreateNodeForm((prev) => ({ ...prev, label: e.target.value }));
-                    }}
-                    placeholder="Number theory"
-                    className={inputClass}
-                  />
-                </Field>
-                <Field label="Type">
-                  <select
-                    name="guidedCreateNodeType"
-                    value={createNodeForm.type}
-                    onChange={(e) => {
-                      setCreateNodeForm((prev) => ({ ...prev, type: e.target.value as NodeType }));
-                    }}
-                    className={selectClass}
-                  >
-                    {NODE_TYPE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Description">
-                  <textarea
-                    name="guidedCreateNodeDescription"
-                    value={createNodeForm.description}
-                    onChange={(e) => {
-                      setCreateNodeForm((prev) => ({ ...prev, description: e.target.value }));
-                    }}
-                    rows={3}
-                    placeholder="Optional description"
-                    className={textareaClass}
-                  />
-                </Field>
-                <Field label="Tags">
-                  <input
-                    name="guidedCreateNodeTags"
-                    type="text"
-                    value={createNodeForm.tags}
-                    onChange={(e) => {
-                      setCreateNodeForm((prev) => ({ ...prev, tags: e.target.value }));
-                    }}
-                    placeholder="algebra, chapter-2"
-                    className={inputClass}
-                  />
-                </Field>
-                <button
-                  type="button"
+            {quickEdgeMenu !== null && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
                   onClick={() => {
-                    void handleCreateNodeFromForm();
+                    setQuickEdgeMenu(null);
                   }}
-                  disabled={createNode.isPending}
-                  className={primaryButtonClass}
+                />
+                <div
+                  className="fixed z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card p-4 shadow-xl"
+                  style={
+                    {
+                      left: `max(0.75rem, min(${String(quickEdgeMenu.x)}px, calc(100vw - 23rem)))`,
+                      top: `max(0.75rem, min(${String(quickEdgeMenu.y)}px, calc(100vh - 28rem)))`,
+                      maxHeight: 'calc(100vh - 1.5rem)',
+                    } as React.CSSProperties
+                  }
                 >
-                  <Plus className="h-4 w-4" />
-                  {createNode.isPending ? 'Creating…' : 'Create node'}
-                </button>
-                {managerError !== null && <p className="text-sm text-destructive">{managerError}</p>}
-                {managerSuccess !== null && (
-                  <p className="text-sm text-emerald-600 dark:text-emerald-400">{managerSuccess}</p>
-                )}
-              </div>
-            )}
-
-            {activeWorkspacePanel === 'manage' &&
-              (selectedNode === null ? (
-                <p className="text-sm text-muted-foreground">
-                  Select a node to rename it, update its description and tags, create outgoing edges,
-                  or remove it from your PKG.
-                </p>
-              ) : (
-                <>
-              <Field label="Label">
-                <input
-                  name="editNodeLabel"
-                  type="text"
-                  value={editNodeForm.label}
-                  onChange={(e) => {
-                    setEditNodeForm((prev) => ({ ...prev, label: e.target.value }));
-                  }}
-                  className={inputClass}
-                />
-              </Field>
-              <Field
-                label="Type"
-                hint="Node type is set at creation time and shown here for review."
-              >
-                <input
-                  type="text"
-                  name="editNodeType"
-                  value={selectedNode.type}
-                  readOnly
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Description">
-                <textarea
-                  name="editNodeDescription"
-                  value={editNodeForm.description}
-                  onChange={(e) => {
-                    setEditNodeForm((prev) => ({ ...prev, description: e.target.value }));
-                  }}
-                  rows={3}
-                  className={textareaClass}
-                />
-              </Field>
-              <Field label="Tags">
-                <input
-                  name="editNodeTags"
-                  type="text"
-                  value={editNodeForm.tags}
-                  onChange={(e) => {
-                    setEditNodeForm((prev) => ({ ...prev, tags: e.target.value }));
-                  }}
-                  className={inputClass}
-                />
-              </Field>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleUpdateSelectedNode();
-                  }}
-                  disabled={updateNode.isPending}
-                  className={primaryButtonClass}
-                >
-                  <PencilLine className="h-4 w-4" />
-                  {updateNode.isPending ? 'Saving…' : 'Save node'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleDeleteSelectedNode();
-                  }}
-                  disabled={deleteNode.isPending}
-                  className={secondaryButtonClass}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {deleteNode.isPending
-                    ? 'Deleting…'
-                    : selectedNodeEdges.length > 0
-                      ? `Delete node + ${String(selectedNodeEdges.length)} edge${
-                          selectedNodeEdges.length === 1 ? '' : 's'
-                        }`
-                      : 'Delete node'}
-                </button>
-              </div>
-              <div className="rounded-lg border border-border bg-background p-3">
-                <div className="mb-3 flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  <p className="text-sm font-medium text-foreground">Add edge from selected node</p>
-                </div>
-                <div className="flex flex-col gap-3">
-                  <Field label="Target node">
-                    <select
-                      name="edgeTargetId"
-                      value={edgeForm.targetId}
-                      onChange={(e) => {
-                        setEdgeForm((prev) => ({ ...prev, targetId: e.target.value }));
-                      }}
-                      className={selectClass}
-                    >
-                      <option value="">Choose a target…</option>
-                      {edgeTargets.map((node) => (
-                        <option key={String(node.id)} value={String(node.id)}>
-                          {node.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field label="Edge type">
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-foreground">Create edge</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Source:{' '}
+                      <span className="font-medium text-foreground">
+                        {getNodeDisplayLabel(nodes, quickEdgeMenu.sourceNodeId)}
+                      </span>{' '}
+                      {'->'} target:{' '}
+                      <span className="font-medium text-foreground">
+                        {getNodeDisplayLabel(nodes, quickEdgeMenu.targetNodeId)}
+                      </span>
+                      .
+                    </p>
+                    {quickEdgeMenu.type === 'prerequisite' && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Meaning:{' '}
+                        <span className="font-medium text-foreground">
+                          {getNodeDisplayLabel(nodes, quickEdgeMenu.sourceNodeId)}
+                        </span>{' '}
+                        is a prerequisite of{' '}
+                        <span className="font-medium text-foreground">
+                          {getNodeDisplayLabel(nodes, quickEdgeMenu.targetNodeId)}
+                        </span>
+                        .
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <Field label="Edge type" required>
                       <select
-                        name="edgeType"
-                        value={edgeForm.type}
+                        name="quickEdgeType"
+                        value={quickEdgeMenu.type}
                         onChange={(e) => {
-                          setEdgeForm((prev) => ({ ...prev, type: e.target.value as EdgeType }));
+                          setQuickEdgeMenu((prev) =>
+                            prev === null ? null : { ...prev, type: e.target.value as EdgeType }
+                          );
                         }}
                         className={selectClass}
                       >
@@ -1495,97 +1234,698 @@ export default function KnowledgePage(): React.JSX.Element {
                     </Field>
                     <Field label="Weight">
                       <input
-                        name="edgeWeight"
+                        name="quickEdgeWeight"
                         type="number"
                         min={0.1}
+                        max={1}
                         step={0.1}
-                        value={edgeForm.weight}
+                        value={quickEdgeMenu.weight}
                         onChange={(e) => {
-                          setEdgeForm((prev) => ({ ...prev, weight: e.target.value }));
+                          setQuickEdgeMenu((prev) =>
+                            prev === null ? null : { ...prev, weight: e.target.value }
+                          );
                         }}
                         className={inputClass}
                       />
                     </Field>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleCreateQuickEdge();
+                        }}
+                        disabled={createEdge.isPending}
+                        className={primaryButtonClass}
+                      >
+                        <GitBranch className="h-4 w-4" />
+                        {createEdge.isPending ? 'Creating edge…' : 'Create edge'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickEdgeMenu(null);
+                        }}
+                        className={secondaryButtonClass}
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void handleCreateEdge();
-                    }}
-                    disabled={createEdge.isPending}
-                    className={primaryButtonClass}
-                  >
-                    <GitBranch className="h-4 w-4" />
-                    {createEdge.isPending ? 'Creating edge…' : 'Create edge'}
-                  </button>
                 </div>
+              </>
+            )}
+
+            <div className="pointer-events-none absolute bottom-4 right-4 z-20">
+              <div className="pointer-events-auto rounded-full border border-border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
+                Drag, zoom, or pan the canvas.
               </div>
-              <div className="rounded-lg border border-border bg-background p-3">
-                <p className="mb-3 text-sm font-medium text-foreground">
-                  Connected edges ({String(selectedNodeEdges.length)})
-                </p>
-                {selectedNodeEdges.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No connected edges yet. Add one to start structuring this concept.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {selectedNodeEdges.map((edge) => {
-                      const isSource = String(edge.sourceId) === String(selectedNode.id);
-                      const otherNode = nodes.find(
-                        (node) =>
-                          String(node.id) ===
-                          (isSource ? String(edge.targetId) : String(edge.sourceId))
-                      );
-                      return (
-                        <div
-                          key={String(edge.id)}
-                          className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-foreground">
-                              {edge.type} →{' '}
-                              {otherNode?.label ??
-                                (isSource ? String(edge.targetId) : String(edge.sourceId))}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              weight {String(edge.weight)}
-                            </p>
+            </div>
+          </div>
+
+          {hasKnowledgeWorkspaceRail && (
+            <div className="noema-scrollbar order-3 flex min-h-0 w-full flex-shrink-0 flex-col gap-4 overflow-visible xl:order-none xl:w-[min(44rem,42vw)] xl:overflow-y-auto">
+              {selectedNode !== null && isNodeDetailOpen && (
+                <div className="min-h-0 flex-shrink-0">
+                  <NodeDetailPanel
+                    node={selectedNode}
+                    allNodes={visibleNodes}
+                    allEdges={visibleEdges}
+                    headerActions={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setActiveWorkspacePanel('manage');
+                        }}
+                      >
+                        Manage node
+                      </Button>
+                    }
+                    onClose={() => {
+                      setIsNodeDetailOpen(false);
+                    }}
+                    onViewPrerequisites={handleViewPrerequisites}
+                  />
+                </div>
+              )}
+
+              {activeWorkspacePanel !== null && (
+                <aside className="min-h-0 max-h-[min(80vh,60rem)] overflow-hidden rounded-xl border border-border bg-muted/20 shadow-sm xl:max-h-none">
+                  <div className="flex h-full min-h-0 flex-col">
+                    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                          {activeWorkspacePanel === 'create'
+                            ? 'Create Node'
+                            : activeWorkspacePanel === 'manage'
+                              ? 'Manage Node'
+                              : activeWorkspacePanel === 'prerequisites'
+                                ? 'Prerequisites'
+                              : 'System-guided Review'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {activeWorkspacePanel === 'create'
+                            ? 'Add a new concept to your personal knowledge graph.'
+                            : activeWorkspacePanel === 'manage'
+                              ? selectedNode !== null
+                                ? `Edit ${selectedNode.label}, manage its edges, or remove it permanently.`
+                                : 'Select a node from the graph first.'
+                              : activeWorkspacePanel === 'prerequisites'
+                                ? selectedNode !== null
+                                  ? `Directed prerequisite edges for ${selectedNode.label}.`
+                                  : 'Select a node to inspect its prerequisite direction.'
+                              : 'Review canonical suggestions and apply what fits your PKG.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveWorkspacePanel(null);
+                        }}
+                        className="rounded-md border border-border bg-background p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Close workspace"
+                      >
+                        <X className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+
+                    <div className="noema-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+                      {activeWorkspacePanel === 'review' && (
+                        <div className="flex flex-col gap-3">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Alignment
+                              </p>
+                              <p className="mt-1 text-lg font-semibold">
+                                {formatPercent(alignmentScore)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Missing
+                              </p>
+                              <p className="mt-1 text-lg font-semibold">
+                                {String(missingFromPkg.length)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                Personal
+                              </p>
+                              <p className="mt-1 text-lg font-semibold">
+                                {String(extraInPkg.length)}
+                              </p>
+                            </div>
                           </div>
+                          {comparisonLoading ? (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                              Loading comparison signals…
+                            </div>
+                          ) : suggestionPreview.length > 0 ? (
+                            <>
+                              <div className="flex flex-col gap-2">
+                                {suggestionPreview.map((node) => (
+                                  <div
+                                    key={String(node.id)}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-medium text-foreground">
+                                        {node.label}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">{node.type}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void handleApplySuggestion(node);
+                                      }}
+                                      disabled={createNode.isPending || isApplyingSuggestions}
+                                      className={secondaryButtonClass}
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleApplySuggestedBaseline();
+                                  }}
+                                  disabled={isApplyingSuggestions || createNode.isPending}
+                                  className={primaryButtonClass}
+                                >
+                                  <Sparkles className="h-4 w-4" />
+                                  {isApplyingSuggestions ? 'Building…' : 'Apply next 5'}
+                                </button>
+                                <Button asChild variant="outline" size="sm">
+                                  <Link href="/knowledge/comparison">Open comparison</Link>
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Your current PKG already covers the available canonical suggestions.
+                            </p>
+                          )}
+                          {systemError !== null && (
+                            <p className="text-sm text-destructive">{systemError}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {activeWorkspacePanel === 'create' && (
+                        <div className="flex flex-col gap-3">
+                          <Field label="Label">
+                            <input
+                              name="guidedCreateNodeLabel"
+                              type="text"
+                              value={createNodeForm.label}
+                              onChange={(e) => {
+                                setCreateNodeForm((prev) => ({ ...prev, label: e.target.value }));
+                              }}
+                              placeholder="Number theory"
+                              className={inputClass}
+                            />
+                          </Field>
+                          <Field label="Type">
+                            <select
+                              name="guidedCreateNodeType"
+                              value={createNodeForm.type}
+                              onChange={(e) => {
+                                setCreateNodeForm((prev) => ({
+                                  ...prev,
+                                  type: e.target.value as NodeType,
+                                }));
+                              }}
+                              className={selectClass}
+                            >
+                              {NODE_TYPE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                          <Field label="Description">
+                            <textarea
+                              name="guidedCreateNodeDescription"
+                              value={createNodeForm.description}
+                              onChange={(e) => {
+                                setCreateNodeForm((prev) => ({
+                                  ...prev,
+                                  description: e.target.value,
+                                }));
+                              }}
+                              rows={3}
+                              placeholder="Optional description"
+                              className={textareaClass}
+                            />
+                          </Field>
+                          <Field label="Tags">
+                            <input
+                              name="guidedCreateNodeTags"
+                              type="text"
+                              value={createNodeForm.tags}
+                              onChange={(e) => {
+                                setCreateNodeForm((prev) => ({ ...prev, tags: e.target.value }));
+                              }}
+                              placeholder="algebra, chapter-2"
+                              className={inputClass}
+                            />
+                          </Field>
                           <button
                             type="button"
                             onClick={() => {
-                              void handleDeleteEdge(String(edge.id));
+                              void handleCreateNodeFromForm();
                             }}
-                            disabled={isDeletingEdgeId === String(edge.id)}
-                            className={secondaryButtonClass}
+                            disabled={createNode.isPending}
+                            className={primaryButtonClass}
                           >
-                            <Trash2 className="h-4 w-4" />
-                            {isDeletingEdgeId === String(edge.id) ? 'Removing…' : 'Remove'}
+                            <Plus className="h-4 w-4" />
+                            {createNode.isPending ? 'Creating…' : 'Create node'}
                           </button>
+                          {managerError !== null && (
+                            <p className="text-sm text-destructive">{managerError}</p>
+                          )}
+                          {managerSuccess !== null && (
+                            <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                              {managerSuccess}
+                            </p>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-                </>
-              ))}
-            {activeWorkspacePanel === 'manage' && managerError !== null && (
-              <p className="text-sm text-destructive">{managerError}</p>
-            )}
-            {activeWorkspacePanel === 'manage' && managerSuccess !== null && (
-              <p className="text-sm text-emerald-600 dark:text-emerald-400">{managerSuccess}</p>
-            )}
-          </div>
-        </div>
-      </aside>
+                      )}
 
-      <div className="pointer-events-none absolute bottom-4 right-4 z-20">
-        <div className="pointer-events-auto rounded-full border border-border bg-card/90 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
-          Drag, zoom, or pan the canvas.
+                      {activeWorkspacePanel === 'prerequisites' &&
+                        (selectedNode === null ? (
+                          <p className="text-sm text-muted-foreground">
+                            Select a node to inspect prerequisite direction.
+                          </p>
+                        ) : (
+                          <div className="flex flex-col gap-3">
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <p className="text-sm font-medium text-foreground">
+                                Required before {selectedNode.label}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                These are incoming prerequisite edges. The source node is learned
+                                before the selected target node.
+                              </p>
+                              {selectedNodePrerequisiteEdges.length === 0 ? (
+                                <p className="mt-3 text-sm text-muted-foreground">
+                                  No prerequisite edges point into this node.
+                                </p>
+                              ) : (
+                                <div className="mt-3 flex flex-col gap-2">
+                                  {selectedNodePrerequisiteEdges.map((edge) => (
+                                    <div
+                                      key={String(edge.id)}
+                                      className="rounded-md border border-border px-3 py-2"
+                                    >
+                                      <p className="text-sm font-medium text-foreground">
+                                        {getPrerequisiteMeaning(edge, nodes)}
+                                      </p>
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        {getEdgeDirectionLabel(edge, nodes)} · weight{' '}
+                                        {String(edge.weight)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <p className="text-sm font-medium text-foreground">
+                                Depends on {selectedNode.label}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                These are outgoing prerequisite edges. The selected node is learned
+                                before each target node.
+                              </p>
+                              {selectedNodeDependentEdges.length === 0 ? (
+                                <p className="mt-3 text-sm text-muted-foreground">
+                                  No prerequisite edges leave this node.
+                                </p>
+                              ) : (
+                                <div className="mt-3 flex flex-col gap-2">
+                                  {selectedNodeDependentEdges.map((edge) => (
+                                    <div
+                                      key={String(edge.id)}
+                                      className="rounded-md border border-border px-3 py-2"
+                                    >
+                                      <p className="text-sm font-medium text-foreground">
+                                        {getPrerequisiteMeaning(edge, nodes)}
+                                      </p>
+                                      <p className="mt-1 text-xs text-muted-foreground">
+                                        {getEdgeDirectionLabel(edge, nodes)} · weight{' '}
+                                        {String(edge.weight)}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                      {activeWorkspacePanel === 'manage' &&
+                        (selectedNode === null ? (
+                          selectedNodeIds.size > 1 ? (
+                            <div className="space-y-3">
+                              <p className="text-sm text-muted-foreground">
+                                {String(selectedNodeIds.size)} nodes are selected. You can batch
+                                delete them from here.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleDeleteSelectedNodes();
+                                }}
+                                disabled={bulkDeleteNodes.isPending}
+                                className={secondaryButtonClass}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                {bulkDeleteNodes.isPending
+                                  ? 'Deleting selected nodes…'
+                                  : `Delete ${String(selectedNodeIds.size)} selected nodes`}
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              Select a node to rename it, update its description and tags, create
+                              outgoing edges, or remove it from your PKG.
+                            </p>
+                          )
+                        ) : (
+                          <>
+                            {selectedNodeIds.size > 1 && (
+                              <div className="rounded-lg border border-border bg-background p-3">
+                                <p className="text-sm font-medium text-foreground">
+                                  Batch selection active
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {String(selectedNodeIds.size)} nodes are selected. The forms below
+                                  still target the primary node, but you can batch delete the whole
+                                  selection from here.
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleDeleteSelectedNodes();
+                                  }}
+                                  disabled={bulkDeleteNodes.isPending}
+                                  className={[secondaryButtonClass, 'mt-3'].join(' ')}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  {bulkDeleteNodes.isPending
+                                    ? 'Deleting selected nodes…'
+                                    : `Delete ${String(selectedNodeIds.size)} selected nodes`}
+                                </button>
+                              </div>
+                            )}
+                            <Field label="Label" required>
+                              <input
+                                name="editNodeLabel"
+                                type="text"
+                                value={editNodeForm.label}
+                                onChange={(e) => {
+                                  setEditNodeForm((prev) => ({ ...prev, label: e.target.value }));
+                                }}
+                                className={inputClass}
+                              />
+                            </Field>
+                            <Field
+                              label="Type"
+                              hint="Node type is set at creation time and shown here for review."
+                            >
+                              <input
+                                type="text"
+                                name="editNodeType"
+                                value={selectedNode.type}
+                                readOnly
+                                className={inputClass}
+                              />
+                            </Field>
+                            <Field label="Description">
+                              <textarea
+                                name="editNodeDescription"
+                                value={editNodeForm.description}
+                                onChange={(e) => {
+                                  setEditNodeForm((prev) => ({
+                                    ...prev,
+                                    description: e.target.value,
+                                  }));
+                                }}
+                                rows={3}
+                                className={textareaClass}
+                              />
+                            </Field>
+                            <Field label="Tags">
+                              <input
+                                name="editNodeTags"
+                                type="text"
+                                value={editNodeForm.tags}
+                                onChange={(e) => {
+                                  setEditNodeForm((prev) => ({ ...prev, tags: e.target.value }));
+                                }}
+                                className={inputClass}
+                              />
+                            </Field>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleUpdateSelectedNode();
+                                }}
+                                disabled={updateNode.isPending}
+                                className={primaryButtonClass}
+                              >
+                                <PencilLine className="h-4 w-4" />
+                                {updateNode.isPending ? 'Saving…' : 'Save node'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleDeleteSelectedNode();
+                                }}
+                                disabled={deleteNode.isPending}
+                                className={secondaryButtonClass}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                {deleteNode.isPending
+                                  ? 'Deleting…'
+                                  : selectedNodeEdges.length > 0
+                                    ? `Delete node + ${String(selectedNodeEdges.length)} edge${
+                                        selectedNodeEdges.length === 1 ? '' : 's'
+                                      }`
+                                    : 'Delete node'}
+                              </button>
+                            </div>
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <div className="mb-3 flex items-center gap-2">
+                                <GitBranch
+                                  className="h-4 w-4 text-muted-foreground"
+                                  aria-hidden="true"
+                                />
+                                <p className="text-sm font-medium text-foreground">
+                                  Add edge from selected node
+                                </p>
+                              </div>
+                              <div className="flex flex-col gap-3">
+                                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                                  Source:{' '}
+                                  <span className="font-medium text-foreground">
+                                    {selectedNode.label}
+                                  </span>
+                                  {edgeForm.targetId !== '' && (
+                                    <>
+                                      {' '}
+                                      {'->'} target:{' '}
+                                      <span className="font-medium text-foreground">
+                                        {getNodeDisplayLabel(nodes, edgeForm.targetId)}
+                                      </span>
+                                    </>
+                                  )}
+                                  {edgeForm.type === 'prerequisite' && edgeForm.targetId !== '' && (
+                                    <p className="mt-1">
+                                      Meaning:{' '}
+                                      <span className="font-medium text-foreground">
+                                        {selectedNode.label}
+                                      </span>{' '}
+                                      is a prerequisite of{' '}
+                                      <span className="font-medium text-foreground">
+                                        {getNodeDisplayLabel(nodes, edgeForm.targetId)}
+                                      </span>
+                                      .
+                                    </p>
+                                  )}
+                                </div>
+                                <Field label="Target node" required>
+                                  <select
+                                    name="edgeTargetId"
+                                    value={edgeForm.targetId}
+                                    onChange={(e) => {
+                                      setEdgeForm((prev) => ({
+                                        ...prev,
+                                        targetId: e.target.value,
+                                      }));
+                                    }}
+                                    className={selectClass}
+                                  >
+                                    <option value="">Choose a target…</option>
+                                    {edgeTargets.map((node) => (
+                                      <option key={String(node.id)} value={String(node.id)}>
+                                        {node.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </Field>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <Field label="Edge type" required>
+                                    <select
+                                      name="edgeType"
+                                      value={edgeForm.type}
+                                      onChange={(e) => {
+                                        setEdgeForm((prev) => ({
+                                          ...prev,
+                                          type: e.target.value as EdgeType,
+                                        }));
+                                      }}
+                                      className={selectClass}
+                                    >
+                                      {EDGE_TYPE_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </Field>
+                                  <Field label="Weight">
+                                    <input
+                                      name="edgeWeight"
+                                      type="number"
+                                      min={0.1}
+                                      max={1}
+                                      step={0.1}
+                                      value={edgeForm.weight}
+                                      onChange={(e) => {
+                                        setEdgeForm((prev) => ({
+                                          ...prev,
+                                          weight: e.target.value,
+                                        }));
+                                      }}
+                                      className={inputClass}
+                                    />
+                                  </Field>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void handleCreateEdge();
+                                  }}
+                                  disabled={createEdge.isPending}
+                                  className={primaryButtonClass}
+                                >
+                                  <GitBranch className="h-4 w-4" />
+                                  {createEdge.isPending ? 'Creating edge…' : 'Create edge'}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="rounded-lg border border-border bg-background p-3">
+                              <p className="mb-3 text-sm font-medium text-foreground">
+                                Connected edges ({String(selectedNodeEdges.length)})
+                              </p>
+                              {selectedNodeEdges.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                  No connected edges yet. Add one to start structuring this concept.
+                                </p>
+                              ) : (
+                                <div className="flex flex-col gap-2">
+                                  {selectedNodeEdges.map((edge) => {
+                                    const isOutgoing =
+                                      String(edge.sourceId) === String(selectedNode.id);
+                                    return (
+                                      <div
+                                        key={String(edge.id)}
+                                        className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="truncate text-sm font-medium text-foreground">
+                                            {getEdgeTypeLabel(edge.type)} ·{' '}
+                                            {isOutgoing ? 'outgoing' : 'incoming'}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {getEdgeDirectionLabel(edge, nodes)} · weight{' '}
+                                            {String(edge.weight)}
+                                          </p>
+                                          {edge.type === 'prerequisite' && (
+                                            <p className="text-xs text-muted-foreground">
+                                              {getPrerequisiteMeaning(edge, nodes)}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            void handleDeleteEdge(String(edge.id));
+                                          }}
+                                          disabled={isDeletingEdgeId === String(edge.id)}
+                                          className={secondaryButtonClass}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                          {isDeletingEdgeId === String(edge.id)
+                                            ? 'Removing…'
+                                            : 'Remove'}
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+                              <p className="text-sm font-medium text-destructive">Reset PKG</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Permanently wipe your PKG nodes, connected edges, operation log,
+                                metric snapshots, staleness markers, misconceptions, and
+                                aggregation evidence.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleResetPkg();
+                                }}
+                                disabled={resetPkg.isPending}
+                                className={[secondaryButtonClass, 'mt-3 border-destructive/40'].join(
+                                  ' '
+                                )}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                {resetPkg.isPending ? 'Resetting PKG…' : 'Wipe entire PKG'}
+                              </button>
+                            </div>
+                          </>
+                        ))}
+                      {activeWorkspacePanel === 'manage' && managerError !== null && (
+                        <p className="text-sm text-destructive">{managerError}</p>
+                      )}
+                      {activeWorkspacePanel === 'manage' && managerSuccess !== null && (
+                        <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                          {managerSuccess}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </aside>
+              )}
+            </div>
+          )}
         </div>
-      </div>
       </div>
     </div>
   );

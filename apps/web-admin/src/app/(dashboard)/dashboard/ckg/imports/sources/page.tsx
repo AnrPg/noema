@@ -19,6 +19,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  FieldLabel,
   CardHeader,
   CardTitle,
 } from '@noema/ui';
@@ -227,7 +228,9 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2 text-sm">
-              <span className="font-medium text-foreground">Source id</span>
+              <FieldLabel className="font-medium text-foreground" required>
+                Source id
+              </FieldLabel>
               <input
                 id="ontology-source-id"
                 name="id"
@@ -241,7 +244,9 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
               />
             </label>
             <label className="space-y-2 text-sm">
-              <span className="font-medium text-foreground">Display name</span>
+              <FieldLabel className="font-medium text-foreground" required>
+                Display name
+              </FieldLabel>
               <input
                 id="ontology-source-name"
                 name="name"
@@ -296,7 +301,9 @@ export default function OntologyImportSourcesPage(): React.JSX.Element {
               </select>
             </label>
             <label className="space-y-2 text-sm md:col-span-2">
-              <span className="font-medium text-foreground">Description</span>
+              <FieldLabel className="font-medium text-foreground" required>
+                Description
+              </FieldLabel>
               <textarea
                 id="ontology-source-description"
                 name="description"

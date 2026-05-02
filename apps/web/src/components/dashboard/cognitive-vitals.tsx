@@ -8,16 +8,13 @@
 'use client';
 
 import {
-  useForecast,
+  useDueConcepts,
   useMisconceptions,
-  useSchedulerProgressSummary,
-  useStudyStreak,
-  useStructuralHealth,
+  useStabilitySummary,
   type UserDto,
 } from '@noema/api-client';
 import type { StudyMode } from '@noema/types';
 import { MetricTile, NeuralGauge, Skeleton } from '@noema/ui';
-import { Flame } from 'lucide-react';
 import { SectionErrorBoundary } from '@/components/section-error-boundary';
 
 type UserId = UserDto['id'];
@@ -27,7 +24,7 @@ function ensureArray<T>(value: unknown): T[] {
 }
 
 // ============================================================================
-// Sub-tile: Cards Due
+// Sub-tile: Concepts Due
 // ============================================================================
 
 function CardsDueTile({
@@ -37,25 +34,22 @@ function CardsDueTile({
   userId: UserId;
   studyMode: StudyMode;
 }): React.JSX.Element {
-  const progress = useSchedulerProgressSummary({ studyMode }, { enabled: userId !== '' });
-  const forecast = useForecast(
-    { userId, days: 7, includeOverdue: true, studyMode },
-    { enabled: userId !== '' }
-  );
+  const dueConcepts = useDueConcepts({ studyMode, limit: 200 }, { enabled: userId !== '' });
 
-  if (progress.isLoading || forecast.isLoading) {
+  if (dueConcepts.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const summary = progress.data?.data;
-  const total = summary?.dueNow ?? 0;
-
-  const forecastDays = ensureArray<{ combined: { total: number } }>(forecast.data?.data.days);
-  const sparklineData = forecastDays.map((day) => day.combined.total);
+  const concepts = dueConcepts.data?.data.concepts ?? [];
+  const total = concepts.length;
+  const overdue = concepts.filter(
+    (concept) => new Date(concept.dueAt).getTime() < Date.now()
+  ).length;
+  const sparklineData = [overdue, total];
 
   return (
     <MetricTile
-      label="Cards Due"
+      label="Concepts Due"
       value={total}
       colorFamily="synapse"
       sparklineData={sparklineData}
@@ -63,11 +57,11 @@ function CardsDueTile({
         total > 0
           ? {
               direction: 'up',
-              delta: `${String(summary?.overdueCards ?? 0)} overdue`,
+              delta: `${String(overdue)} overdue`,
             }
           : {
               direction: 'flat',
-              delta: `${String(summary?.matureCards ?? 0)} mature`,
+              delta: 'Clear',
             }
       }
     />
@@ -75,32 +69,41 @@ function CardsDueTile({
 }
 
 // ============================================================================
-// Sub-tile: Knowledge Health
+// Sub-tile: Concept Stability
 // ============================================================================
 
-function KnowledgeHealthTile({
+function ConceptStabilityTile({
   userId,
   studyMode,
 }: {
   userId: UserId;
   studyMode: StudyMode;
 }): React.JSX.Element {
-  const health = useStructuralHealth(userId, { studyMode });
+  const summary = useStabilitySummary(userId, { studyMode });
 
-  if (health.isLoading) {
+  if (summary.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const data = health.data?.data;
-  const score = data?.score ?? 0;
-  const grade = data?.grade ?? '—';
+  const data = summary.data;
+  const ratio = data?.stabilityRatio ?? 0;
+  const stable = data?.stableConcepts ?? 0;
+  const total = data?.totalConcepts ?? 0;
+  const averageReasoning = data?.averageReasoning;
 
   return (
     <MetricTile
-      label="Knowledge Health"
-      value={grade.charAt(0).toUpperCase() + grade.slice(1)}
+      label="Concept Stability"
+      value={`${String(stable)}/${String(total)}`}
       colorFamily="dendrite"
-      icon={<NeuralGauge value={score} size="sm" showValue={false} />}
+      icon={<NeuralGauge value={ratio} size="sm" showValue={false} />}
+      trend={{
+        direction: ratio >= 0.7 ? 'up' : ratio >= 0.4 ? 'flat' : 'down',
+        delta:
+          averageReasoning === null || averageReasoning === undefined
+            ? 'Reasoning trend pending'
+            : `Reasoning ${String(Math.round(averageReasoning * 100))}%`,
+      }}
     />
   );
 }
@@ -153,8 +156,8 @@ function MisconceptionsTile({
 
 /**
  * userId is used only to ensure this tile renders only when auth is settled.
- * Streaks are now read from the dedicated session-service streak endpoint so
- * dashboard analytics stay aligned with mode-scoped scheduling state.
+ * The realigned public client no longer exposes card streaks, so this tile
+ * reports session readiness from due concept state.
  */
 function StudyStreakTile({
   userId,
@@ -163,9 +166,9 @@ function StudyStreakTile({
   userId: UserId;
   studyMode: StudyMode;
 }): React.JSX.Element {
-  const streak = useStudyStreak({ studyMode, days: 30 });
+  const dueConcepts = useDueConcepts({ studyMode, limit: 1 }, { enabled: userId !== '' });
 
-  if (streak.isLoading) {
+  if (dueConcepts.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
@@ -173,18 +176,17 @@ function StudyStreakTile({
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
-  const streakDays = streak.data?.data.currentStreak ?? 0;
+  const hasDueConcept = (dueConcepts.data?.data.concepts.length ?? 0) > 0;
 
   return (
     <MetricTile
-      label="Study Streak"
-      value={`${String(streakDays)}d`}
+      label="Session Momentum"
+      value={hasDueConcept ? 'Ready' : 'Clear'}
       colorFamily="myelin"
-      icon={streakDays > 7 ? <Flame className="h-4 w-4 text-myelin-400" /> : undefined}
       trend={
-        streakDays > 0
-          ? { direction: 'up', delta: 'Keep it up!' }
-          : { direction: 'flat', delta: 'Start a streak' }
+        hasDueConcept
+          ? { direction: 'up', delta: 'Due concepts available' }
+          : { direction: 'flat', delta: 'No due concepts' }
       }
     />
   );
@@ -207,7 +209,7 @@ export function CognitiveVitals({
         <CardsDueTile userId={userId} studyMode={studyMode} />
       </SectionErrorBoundary>
       <SectionErrorBoundary>
-        <KnowledgeHealthTile userId={userId} studyMode={studyMode} />
+        <ConceptStabilityTile userId={userId} studyMode={studyMode} />
       </SectionErrorBoundary>
       <SectionErrorBoundary>
         <MisconceptionsTile userId={userId} studyMode={studyMode} />

@@ -84,7 +84,7 @@ export function CardShell({
             variant="outline"
             size="sm"
             onClick={onReveal}
-            aria-label={`Show answer for card ${card.id}`}
+            aria-label={`Show answer for payload ${card.id}`}
           >
             Show Answer
           </Button>

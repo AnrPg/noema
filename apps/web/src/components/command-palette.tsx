@@ -77,16 +77,16 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
       {
         id: 'nav-reviews',
         label: 'Go to Reviews',
-        keywords: ['study', 'session', 'cards'],
+        keywords: ['study', 'session', 'steps', 'concepts'],
         category: 'Navigation',
         action: () => {
           router.push('/reviews');
         },
       },
       {
-        id: 'nav-cards',
-        label: 'Go to Cards',
-        keywords: ['flashcard', 'deck'],
+        id: 'nav-concept-payloads',
+        label: 'Go to Concept Payloads',
+        keywords: ['payload', 'concept', 'activity source'],
         category: 'Navigation',
         action: () => {
           router.push('/cards');
@@ -121,9 +121,9 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
         },
       },
       {
-        id: 'action-create-card',
-        label: 'Create a Card',
-        keywords: ['add', 'new card', 'flashcard'],
+        id: 'action-create-concept-payload',
+        label: 'Create a Concept Payload',
+        keywords: ['add', 'new payload', 'activity source'],
         category: 'Actions',
         action: () => {
           router.push('/cards/new');
@@ -169,7 +169,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
 
   // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent): void => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setOpen((prev) => !prev);

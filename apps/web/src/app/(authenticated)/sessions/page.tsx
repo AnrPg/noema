@@ -9,32 +9,31 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { ArrowRight, Plus } from 'lucide-react';
-import { Button } from '@noema/ui';
-import type { SessionId } from '@noema/types';
 import { useSessions } from '@noema/api-client';
-import { useAbandonSession } from '@noema/api-client/session';
-import { toast } from '@/hooks/use-toast';
-import type { ISessionDto, SessionState } from '@noema/api-client';
+import type { ISessionDto } from '@noema/api-client';
+import type { SessionLifecycleState } from '@noema/types';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-const STATE_LABELS: Record<SessionState, string> = {
-  ACTIVE: 'Active',
-  PAUSED: 'Paused',
-  COMPLETED: 'Completed',
-  ABANDONED: 'Abandoned',
-  EXPIRED: 'Expired',
+const STATE_LABELS: Record<SessionLifecycleState, string> = {
+  planning: 'Planning',
+  execution: 'Execution',
+  diagnosis: 'Diagnosis',
+  adaptation: 'Adaptation',
+  evaluation: 'Evaluation',
+  completion: 'Completion',
 };
 
-const STATE_CLASSES: Record<SessionState, string> = {
-  ACTIVE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  PAUSED: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
-  COMPLETED: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  ABANDONED: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400',
-  EXPIRED: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400',
+const STATE_CLASSES: Record<SessionLifecycleState, string> = {
+  planning: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400',
+  execution: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+  diagnosis: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+  adaptation: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  evaluation: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+  completion: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400',
 };
 
 function formatDate(iso: string): string {
@@ -81,13 +80,13 @@ function SkeletonRow(): React.JSX.Element {
 // Filter type
 // ============================================================================
 
-type FilterValue = '' | 'COMPLETED' | 'ABANDONED' | 'EXPIRED';
+type FilterValue = '' | SessionLifecycleState;
 
 const FILTERS: { label: string; value: FilterValue }[] = [
   { label: 'All sessions', value: '' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Abandoned', value: 'ABANDONED' },
-  { label: 'Expired', value: 'EXPIRED' },
+  { label: 'Execution', value: 'execution' },
+  { label: 'Evaluation', value: 'evaluation' },
+  { label: 'Completion', value: 'completion' },
 ];
 
 // ============================================================================
@@ -96,19 +95,15 @@ const FILTERS: { label: string; value: FilterValue }[] = [
 
 interface ISessionRowProps {
   session: ISessionDto;
-  onStop?: (sessionId: SessionId) => void;
-  isStopping?: boolean;
 }
 
-function SessionRow({ session, onStop, isStopping }: ISessionRowProps): React.JSX.Element {
+function SessionRow({ session }: ISessionRowProps): React.JSX.Element {
   const sessionId = session.id;
-  const state = session.state;
-  const mode = session.mode;
+  const state = session.lifecycleState;
+  const mode = session.learningMode;
   const startedAt = session.startedAt;
   const completedAt = session.completedAt;
-  const cardIds = session.cardIds;
-  const isTerminable = state === 'ACTIVE' || state === 'PAUSED';
-  const shouldShowStopButton = isTerminable && typeof onStop === 'function';
+  const evaluatedSteps = session.stats.stepsEvaluated;
 
   return (
     <div
@@ -140,7 +135,7 @@ function SessionRow({ session, onStop, isStopping }: ISessionRowProps): React.JS
 
         {/* Spacer */}
         <span className="text-sm text-muted-foreground sm:ml-auto">
-          {String(cardIds.length)} {cardIds.length === 1 ? 'card' : 'cards'}
+          {String(evaluatedSteps)} {evaluatedSteps === 1 ? 'step' : 'steps'}
         </span>
 
         {/* Duration */}
@@ -154,24 +149,6 @@ function SessionRow({ session, onStop, isStopping }: ISessionRowProps): React.JS
           aria-hidden="true"
         />
       </Link>
-
-      {shouldShowStopButton && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="shrink-0 whitespace-nowrap text-destructive border-destructive/40 hover:border-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          disabled={Boolean(isStopping)}
-          aria-label="Stop session"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onStop(sessionId);
-          }}
-        >
-          {isStopping === true ? 'Stopping…' : 'Stop session'}
-        </Button>
-      )}
     </div>
   );
 }
@@ -186,36 +163,11 @@ export default function SessionsPage(): React.JSX.Element {
 
   const { data, isLoading, isError, error } = useSessions(
     stateFilter !== ''
-      ? { state: stateFilter as SessionState, studyMode: activeStudyMode, limit: 50 }
+      ? { lifecycleState: stateFilter, studyMode: activeStudyMode, limit: 50 }
       : { studyMode: activeStudyMode, limit: 50 }
   );
 
   const sessions: ISessionDto[] = data?.data ?? [];
-  const [stoppingSessionId, setStoppingSessionId] = React.useState<string | null>(null);
-  const abandonSession = useAbandonSession();
-
-  const handleStopSession = (sessionId: SessionId): void => {
-    if (
-      !confirm(
-        'Stop this session? Progress so far will be saved, but the session will be marked as abandoned.'
-      )
-    ) {
-      return;
-    }
-
-    setStoppingSessionId(sessionId);
-    abandonSession.mutate(sessionId, {
-      onSuccess: () => {
-        toast.success('Session stopped.');
-      },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : 'Failed to stop the session.');
-      },
-      onSettled: () => {
-        setStoppingSessionId(null);
-      },
-    });
-  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -301,14 +253,7 @@ export default function SessionsPage(): React.JSX.Element {
             </Link>
           </div>
         ) : (
-          sessions.map((session) => (
-            <SessionRow
-              key={session.id}
-              session={session}
-              onStop={handleStopSession}
-              isStopping={stoppingSessionId === session.id && abandonSession.isPending}
-            />
-          ))
+          sessions.map((session) => <SessionRow key={session.id} session={session} />)
         )}
       </div>
     </div>

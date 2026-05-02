@@ -2,12 +2,12 @@
 /**
  * @noema/web — Reviews / TodaysPlan
  *
- * Dual-lane plan visualization for today's review session.
- * Shows retention vs calibration counts as a split bar + "Start" CTA.
+ * Concept plan visualization for today's review session.
+ * Shows due concept counts by scheduler algorithm + "Start" CTA.
  */
 import * as React from 'react';
 import Link from 'next/link';
-import { useReviewQueue } from '@noema/api-client';
+import { useDueConcepts } from '@noema/api-client';
 import type { StudyMode, UserId } from '@noema/types';
 import { Button } from '@noema/ui';
 import { Loader2, PlayCircle } from 'lucide-react';
@@ -18,15 +18,15 @@ export interface ITodaysPlanProps {
 }
 
 export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.Element {
-  const { data: queueData, isLoading } = useReviewQueue(
+  const { data: dueConceptsData, isLoading } = useDueConcepts(
     { limit: 500, studyMode },
     { enabled: userId !== '' }
   );
 
-  const queue = queueData?.data;
-  const totalRetention = queue?.retentionDue ?? 0;
-  const totalCalibration = queue?.calibrationDue ?? 0;
-  const total = totalRetention + totalCalibration;
+  const concepts = dueConceptsData?.data.concepts ?? [];
+  const totalRetention = concepts.filter((concept) => concept.algorithm === 'fsrs').length;
+  const totalCalibration = concepts.filter((concept) => concept.algorithm === 'hlr').length;
+  const total = concepts.length;
 
   if (isLoading) {
     return (
@@ -45,7 +45,7 @@ export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.E
         </span>
         <h3 className="text-lg font-semibold text-foreground">All caught up!</h3>
         <p className="text-sm text-muted-foreground">
-          Your memory is consolidating. No reviews due today.
+          Your memory is consolidating. No concepts are due today.
         </p>
       </div>
     );
@@ -54,7 +54,7 @@ export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.E
   const retentionPct = total > 0 ? Math.round((totalRetention / total) * 100) : 50;
   const calibrationPct = 100 - retentionPct;
 
-  // Estimate: ~2 min per card average
+  // Estimate: ~2 min per concept step average
   const estimatedMinutes = Math.round(total * 2);
   const estimatedLabel =
     estimatedMinutes < 60
@@ -67,7 +67,7 @@ export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.E
         <div>
           <h3 className="text-base font-semibold text-foreground">Today's Review Plan</h3>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {String(total)} cards · {estimatedLabel}
+            {String(total)} concepts · {estimatedLabel}
           </p>
         </div>
         <Button asChild size="sm" className="gap-1.5">
@@ -84,7 +84,7 @@ export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.E
             Retention (FSRS)
           </p>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {String(totalRetention)} cards
+            {String(totalRetention)} concepts
           </p>
         </div>
         <div className="rounded-lg border border-border/70 bg-background/60 px-3 py-2">
@@ -92,7 +92,7 @@ export function TodaysPlan({ userId, studyMode }: ITodaysPlanProps): React.JSX.E
             Calibration (HLR)
           </p>
           <p className="mt-1 text-sm font-semibold text-foreground">
-            {String(totalCalibration)} cards
+            {String(totalCalibration)} concepts
           </p>
         </div>
       </div>

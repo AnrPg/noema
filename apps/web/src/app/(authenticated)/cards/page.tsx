@@ -1,8 +1,8 @@
 /**
- * Card Library Page — /cards
+ * Concept Payloads Page — /cards
  *
- * Displays the full card library with DeckQueryFilter sidebar,
- * CardCollection main area, view-mode toggle, and bulk actions.
+ * Displays content payloads with DeckQueryFilter sidebar, CardCollection main
+ * area, view-mode toggle, and bulk actions.
  */
 
 'use client';
@@ -12,12 +12,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useCards,
   useBatchCardStateTransition,
-  useDeleteCard,
+  useBatchDeleteCards,
   contentKeys,
 } from '@noema/api-client';
 import type { IDeckQueryInput } from '@noema/api-client';
 import type { CardId } from '@noema/types';
-import { LayoutGrid, List, Plus, Layers } from 'lucide-react';
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@noema/ui';
+import { ChevronDown, LayoutGrid, List, Plus, Layers, SlidersHorizontal, Trash2 } from 'lucide-react';
 import type { Route } from 'next';
 import { useRouter } from 'next/navigation';
 
@@ -50,6 +57,8 @@ export default function CardLibraryPage(): React.JSX.Element {
   const [query, setQuery] = React.useState<IDeckQueryInput>(DEFAULT_QUERY);
   const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
   const [bulkError, setBulkError] = React.useState<string | null>(null);
+  const [selectedCardIds, setSelectedCardIds] = React.useState<Set<string>>(new Set());
+  const [isFiltersOpen, setIsFiltersOpen] = React.useState(false);
 
   // --------------------------------------------------------------------------
   // Data fetching
@@ -67,10 +76,10 @@ export default function CardLibraryPage(): React.JSX.Element {
   // Mutations
   // --------------------------------------------------------------------------
 
-  const deleteCard = useDeleteCard();
+  const batchDeleteCards = useBatchDeleteCards();
   const batchStateTransition = useBatchCardStateTransition();
 
-  const isMutating = deleteCard.isPending || batchStateTransition.isPending;
+  const isMutating = batchDeleteCards.isPending || batchStateTransition.isPending;
 
   // --------------------------------------------------------------------------
   // Bulk action handlers
@@ -80,10 +89,26 @@ export default function CardLibraryPage(): React.JSX.Element {
     setBulkError(null);
     const idArray = Array.from(ids);
     try {
-      await Promise.all(idArray.map((id) => deleteCard.mutateAsync(id as CardId)));
+      const result = await batchDeleteCards.mutateAsync({
+        cardIds: idArray.map((id) => id as CardId),
+      });
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
+      setSelectedCardIds((current) => {
+        const next = new Set(current);
+        for (const id of result.data.succeeded) {
+          next.delete(id);
+        }
+        return next;
+      });
+      if (result.data.failed.length > 0) {
+        setBulkError(
+          `Deleted ${String(result.data.succeeded.length)} payload(s), but ${String(
+            result.data.failed.length
+          )} failed. ${result.data.failed[0]?.error ?? 'Please retry the failed payloads.'}`
+        );
+      }
     } catch (err) {
-      setBulkError(err instanceof Error ? err.message : 'Failed to delete one or more cards.');
+      setBulkError(err instanceof Error ? err.message : 'Failed to delete one or more payloads.');
     }
   }
 
@@ -185,22 +210,31 @@ export default function CardLibraryPage(): React.JSX.Element {
   return (
     <div className="flex flex-col gap-6">
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Card Library</h1>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-bold">Concept Payloads</h1>
           <p className="text-muted-foreground mt-1">
             {isLoading
-              ? 'Loading cards…'
+              ? 'Loading payloads…'
               : isError
-                ? 'Failed to load cards.'
-                : [String(totalCards), totalCards === 1 ? 'card' : 'cards'].join(
-                    ' '
-                  )}
+                ? 'Failed to load payloads.'
+                : [String(totalCards), totalCards === 1 ? 'payload' : 'payloads'].join(' ')}
           </p>
         </div>
 
         {/* Top-right controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsFiltersOpen((prev) => !prev);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring lg:hidden"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {isFiltersOpen ? 'Hide Filters' : 'Show Filters'}
+          </button>
+
           {/* View toggle */}
           <div className="flex items-center rounded-md border border-border">
             <button
@@ -242,21 +276,43 @@ export default function CardLibraryPage(): React.JSX.Element {
           </div>
 
           {/* Batch Operations */}
-          <button
-            type="button"
-            disabled={isMutating}
-            onClick={handleBatchOperations}
-            className={[
-              'inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5',
-              'text-sm font-medium text-muted-foreground transition-colors',
-              'hover:border-foreground/30 hover:text-foreground',
-              'focus:outline-none focus:ring-2 focus:ring-ring',
-              'disabled:pointer-events-none disabled:opacity-50',
-            ].join(' ')}
-          >
-            <Layers className="h-4 w-4" />
-            <span className="hidden sm:inline">Batch Operations</span>
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isMutating}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+              >
+                <Layers className="h-4 w-4" />
+                <span>Batch Operations</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={() => {
+                  handleBatchOperations();
+                }}
+              >
+                Open batch workspace
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={selectedCardIds.size === 0 || isMutating}
+                className="text-destructive focus:text-destructive"
+                onClick={() => {
+                  if (!isMutating && selectedCardIds.size > 0) {
+                    void handleBulkDelete(selectedCardIds);
+                  }
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {selectedCardIds.size > 0
+                  ? `Delete ${String(selectedCardIds.size)} selected`
+                  : 'Delete selected'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* New Card */}
           <button
@@ -272,7 +328,7 @@ export default function CardLibraryPage(): React.JSX.Element {
             ].join(' ')}
           >
             <Plus className="h-4 w-4" />
-            New Card
+            New Payload
           </button>
         </div>
       </div>
@@ -283,7 +339,7 @@ export default function CardLibraryPage(): React.JSX.Element {
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
-          {error instanceof Error ? error.message : 'An error occurred while loading cards.'}
+          {error instanceof Error ? error.message : 'An error occurred while loading payloads.'}
         </div>
       )}
 
@@ -298,17 +354,24 @@ export default function CardLibraryPage(): React.JSX.Element {
       )}
 
       {/* Main layout: filter sidebar + collection */}
-      <div className="flex gap-6 items-start">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
         {/* Sidebar filter */}
-        <DeckQueryFilter query={query} onChange={setQuery} className="w-64 shrink-0 sticky top-6" />
+        <div className={[isFiltersOpen ? 'block' : 'hidden', 'w-full lg:block lg:w-72 lg:flex-shrink-0'].join(' ')}>
+          <DeckQueryFilter
+            query={query}
+            onChange={setQuery}
+            className="w-full lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
+          />
+        </div>
 
-        {/* Card collection */}
+        {/* Payload collection */}
         <div className="min-w-0 flex-1">
           <CardCollection
             cards={cards}
             isLoading={isLoading}
             viewMode={viewMode}
             onCardClick={handleCardClick}
+            onSelectionChange={setSelectedCardIds}
             bulkActions={bulkActions}
           />
         </div>

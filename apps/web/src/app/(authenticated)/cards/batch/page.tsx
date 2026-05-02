@@ -81,7 +81,7 @@ const CARD_IMPORT_ERROR_FIELDS = {
   formatId: 'Import format',
   mappings: 'Field mapping',
   payload: 'Uploaded file',
-  recordMetadata: 'Per-card metadata',
+  recordMetadata: 'Per-payload metadata',
   sharedKnowledgeNodeIds: 'Shared knowledge node IDs',
   sharedTags: 'Shared tags',
   sheetName: 'Workbook sheet',
@@ -330,7 +330,7 @@ function BatchDetailsPanel({ batchId }: { batchId: JobId }): React.JSX.Element {
     return (
       <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading batch cards…
+        Loading batch payloads…
       </div>
     );
   }
@@ -395,7 +395,7 @@ function BatchRow({
           {truncateBatchId(batch.batchId)}
         </span>
         <span className="shrink-0 text-sm text-muted-foreground">
-          {String(batch.count)} {batch.count === 1 ? 'card' : 'cards'}
+          {String(batch.count)} {batch.count === 1 ? 'payload' : 'payloads'}
         </span>
         <span className="min-w-0 flex-1 text-sm text-muted-foreground">
           {formatDate(batch.createdAt)}
@@ -663,7 +663,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
 
   function handleMetadataStepStart(): void {
     if (preview === null) {
-      setError('Choose a file and preview it before reviewing card metadata.');
+      setError('Choose a file and preview it before reviewing payload metadata.');
       return;
     }
 
@@ -698,7 +698,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
   function validateRecordMetadataAt(index: number): boolean {
     const metadata = recordMetadata[index];
     if (metadata === undefined) {
-      setError('We could not find metadata for the current card.');
+      setError('We could not find metadata for the current payload.');
       return false;
     }
 
@@ -778,8 +778,8 @@ export default function BatchOperationsPage(): React.JSX.Element {
       setError(
         formatCardImportError(
           executeError,
-          'import these cards',
-          'We could not import these cards. Review the mapping and per-card metadata, then try again.'
+          'import these payloads',
+          'We could not import these payloads. Review the mapping and per-payload metadata, then try again.'
         )
       );
     }
@@ -822,7 +822,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
           <div>
             <h1 className="text-3xl font-bold">Batch Operations</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Import card-shaped data through an explicit, mapping-first wizard backed by the
+              Import concept payload data through an explicit, mapping-first wizard backed by the
               content import API.
             </p>
             <div className="mt-3 inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
@@ -839,7 +839,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
             <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted-foreground">
               Batch import is now a dedicated workflow. First choose the source file family, then
               the exact format closest to your data, then review an exhaustive mapping where every
-              source field is promoted to a card field or preserved in dump metadata.
+              source field is promoted to a payload field or preserved in dump metadata.
             </p>
           </div>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -858,7 +858,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
               {getStudyModeLabel(activeStudyMode)} defaults are active
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {getStudyModeDescription(activeStudyMode)} Imported cards created from this wizard
+              {getStudyModeDescription(activeStudyMode)} Imported payloads created from this wizard
               will carry the active mode as their initial membership.
             </p>
           </div>
@@ -1064,7 +1064,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
                           ))}
                         </select>
                         <span className="text-xs text-muted-foreground">
-                          Choose the worksheet whose columns should be mapped into cards.
+                          Choose the worksheet whose columns should be mapped into payloads.
                         </span>
                       </label>
                     </div>
@@ -1080,7 +1080,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
                             Explicit field mapping
                           </p>
                           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                            Every source field must end up somewhere. Map it into a card field or
+                            Every source field must end up somewhere. Map it into a payload field or
                             keep it explicitly in dump metadata.
                           </p>
                         </div>
@@ -1196,16 +1196,16 @@ export default function BatchOperationsPage(): React.JSX.Element {
 
                     <div className="rounded-xl border border-border bg-muted/10 p-4">
                       <div>
-                        <p className="text-sm font-semibold text-foreground">Next: card metadata</p>
+                        <p className="text-sm font-semibold text-foreground">Next: payload metadata</p>
                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                           After mapping, you will review tags, PKG links, difficulty, and state for
-                          each card individually. Each next card starts prefilled with the values
+                          each payload individually. Each next payload starts prefilled with the values
                           from the previous one so you can move quickly when the metadata repeats.
                         </p>
                       </div>
 
                       <div className="mt-4 rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm text-muted-foreground">
-                        {String(preview.records.length)} cards are ready for metadata review.
+                        {String(preview.records.length)} payloads are ready for metadata review.
                       </div>
 
                       {preview.warnings.length > 0 && (
@@ -1226,7 +1226,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
                           onClick={handleMetadataStepStart}
                           className={primaryBtnClass}
                         >
-                          Next: Card Metadata
+                          Next: Payload Metadata
                         </button>
                         <button
                           type="button"
@@ -1269,10 +1269,10 @@ export default function BatchOperationsPage(): React.JSX.Element {
                 <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">Card metadata review</p>
+                      <p className="text-sm font-semibold text-foreground">Payload metadata review</p>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Card {String(currentMetadataIndex + 1)} of {String(preview.records.length)}.
-                        Front and back are shown here so you always know which card you are editing.
+                        Payload {String(currentMetadataIndex + 1)} of {String(preview.records.length)}.
+                        Front and back are shown here so you always know which payload you are editing.
                       </p>
                     </div>
                     <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
@@ -1328,9 +1328,9 @@ export default function BatchOperationsPage(): React.JSX.Element {
 
                 <div className="rounded-xl border border-border bg-muted/10 p-5">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Metadata for this card</p>
+                    <p className="text-sm font-semibold text-foreground">Metadata for this payload</p>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      The next card starts with these same values unless you already changed it.
+                      The next payload starts with these same values unless you already changed it.
                     </p>
                   </div>
 
@@ -1355,7 +1355,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
                         updateCurrentRecordMetadata({ knowledgeNodeIds: nextValue });
                       }}
                       title="PKG node focus"
-                      description="Attach or create the local PKG node for this imported card, then add local relations around that selected node."
+                      description="Attach or create the local PKG node for this imported payload, then add local relations around that selected node."
                     />
                     <label className="flex flex-col gap-1.5">
                       <span className="text-sm font-medium">Difficulty</span>
@@ -1420,7 +1420,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
                       disabled={currentMetadataIndex === 0}
                       className={secondaryBtnClass}
                     >
-                      Previous Card
+                      Previous Payload
                     </button>
                     <button
                       type="button"
@@ -1434,8 +1434,8 @@ export default function BatchOperationsPage(): React.JSX.Element {
                         <Check className="h-4 w-4" />
                       ) : null}
                       {currentMetadataIndex === preview.records.length - 1
-                        ? 'Import Cards'
-                        : 'Next Card'}
+                        ? 'Import Payloads'
+                        : 'Next Payload'}
                     </button>
                   </div>
                 </div>
@@ -1454,7 +1454,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
                       <p className="text-sm font-semibold text-foreground">Import completed</p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         Batch {result.batchId} created {String(result.created.length)} of{' '}
-                        {String(result.total)} cards.
+                        {String(result.total)} payloads.
                       </p>
                     </div>
                   </div>
@@ -1494,7 +1494,7 @@ export default function BatchOperationsPage(): React.JSX.Element {
         <div>
           <h2 className="text-xl font-semibold">Recent batch history</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Expand a batch to inspect imported cards or roll the whole batch back.
+            Expand a batch to inspect imported payloads or roll the whole batch back.
           </p>
         </div>
 

@@ -1,7 +1,7 @@
 /**
- * Card Detail Page — /cards/[id]
+ * Concept Payload Detail Page — /cards/[id]
  *
- * View mode: renders the card using CardRenderer in interactive mode, shows
+ * View mode: renders the payload using CardRenderer in interactive mode, shows
  * metadata (type, state, difficulty, tags, nodes, dates) and action buttons
  * (Edit, Delete, state transitions).
  *
@@ -9,7 +9,7 @@
  * and difficulty. Saves via useUpdateCard with optimistic locking (version).
  * Phase 10 will replace the raw JSON editor with rich type-specific editors.
  *
- * Delete flow: confirmation dialog → useDeleteCard → navigate to /cards.
+ * Delete flow: confirmation dialog -> useDeleteCard -> navigate to /cards.
  *
  * State transitions: Activate / Suspend / Archive via useCardStateTransition.
  */
@@ -168,12 +168,12 @@ export default function CardDetailPage(): React.JSX.Element {
     try {
       await updateCard.mutateAsync({ id: cardId, data });
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
-      toast.success('Card updated successfully.');
+      toast.success('Payload updated successfully.');
       setIsEditing(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Update failed';
       if (message.toLowerCase().includes('version') || message.toLowerCase().includes('conflict')) {
-        toast.error('Card was modified elsewhere. Please refresh and try again.');
+        toast.error('Payload was modified elsewhere. Please refresh and try again.');
       } else {
         toast.error(message);
       }
@@ -189,7 +189,7 @@ export default function CardDetailPage(): React.JSX.Element {
     try {
       await deleteCard.mutateAsync(cardId);
       void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
-      toast.success('Card deleted.');
+      toast.success('Payload deleted.');
       router.push('/cards');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Delete failed';
@@ -209,7 +209,7 @@ export default function CardDetailPage(): React.JSX.Element {
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
-          toast.success(`Card ${state.toLowerCase()}.`);
+          toast.success(`Payload ${state.toLowerCase()}.`);
         },
         onError: (err) => {
           toast.error(err instanceof Error ? err.message : 'State change failed');
@@ -249,13 +249,13 @@ export default function CardDetailPage(): React.JSX.Element {
           }}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to cards
+          Back to payloads
         </Button>
         <div
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-6 text-center text-sm text-destructive"
         >
-          {error instanceof Error ? error.message : 'Card not found.'}
+          {error instanceof Error ? error.message : 'Payload not found.'}
         </div>
       </div>
     );
@@ -280,9 +280,9 @@ export default function CardDetailPage(): React.JSX.Element {
         </Button>
         <Card>
           <CardHeader>
-            <CardTitle>Delete Card</CardTitle>
+            <CardTitle>Delete Payload</CardTitle>
             <CardDescription>
-              This action is permanent and cannot be undone. The card and all its review history
+              This action is permanent and cannot be undone. The payload and all its history
               will be removed.
             </CardDescription>
           </CardHeader>
@@ -326,7 +326,7 @@ export default function CardDetailPage(): React.JSX.Element {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Cancel
           </Button>
-          <h1 className="text-2xl font-bold">Edit Card</h1>
+          <h1 className="text-2xl font-bold">Edit Payload</h1>
         </div>
 
         {/* Content JSON editor */}
@@ -334,13 +334,13 @@ export default function CardDetailPage(): React.JSX.Element {
           <CardHeader>
             <CardTitle>Content</CardTitle>
             <CardDescription>
-              Raw JSON for card content. Phase 10 will replace this with a rich editor.
+              Raw JSON for the concept payload. A later authoring pass will replace this with a rich editor.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <textarea
               name="editContentJson"
-              aria-label="Card content JSON"
+              aria-label="Payload content JSON"
               value={editContentJson}
               onChange={(e) => {
                 setEditContentJson(e.target.value);
@@ -449,10 +449,10 @@ export default function CardDetailPage(): React.JSX.Element {
             }}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Cards
+            Payloads
           </Button>
           <div>
-            <h1 className="text-2xl font-bold leading-tight">Card Detail</h1>
+            <h1 className="text-2xl font-bold leading-tight">Payload Detail</h1>
             <p className="text-xs text-muted-foreground font-mono">{String(card.id)}</p>
           </div>
         </div>
@@ -518,7 +518,7 @@ export default function CardDetailPage(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Card renderer */}
+      {/* Payload renderer */}
       <CardRenderer
         card={card}
         mode="interactive"
@@ -533,10 +533,10 @@ export default function CardDetailPage(): React.JSX.Element {
 
       {/* Metadata */}
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* Card info */}
+        {/* Payload info */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Card Info</CardTitle>
+            <CardTitle className="text-base">Payload Info</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             {/* Type badge */}

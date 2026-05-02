@@ -52,7 +52,9 @@ export default function DashboardPage(): React.JSX.Element | null {
         <h1 className="text-3xl font-bold">
           {getGreeting()}, {firstName}
         </h1>
-        <p className="text-muted-foreground mt-1">Here&apos;s your cognitive health at a glance.</p>
+        <p className="text-muted-foreground mt-1">
+          Stability, reasoning trend, and today&apos;s Step readiness.
+        </p>
       </div>
 
       {/* Vitals row */}

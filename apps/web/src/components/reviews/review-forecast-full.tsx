@@ -2,11 +2,11 @@
 /**
  * @noema/web — Reviews / ReviewForecastFull
  *
- * Full-width 7-day forecast with day-click expansion.
+ * Full-width 7-day concept forecast with day-click expansion.
  * Extends the compact ReviewForecast from the Dashboard.
  */
 import * as React from 'react';
-import { useForecast } from '@noema/api-client';
+import { useDueConcepts } from '@noema/api-client';
 import type { StudyMode, UserId } from '@noema/types';
 import { Loader2 } from 'lucide-react';
 
@@ -31,38 +31,27 @@ interface IDayData {
   label: string;
   date: string;
   isToday: boolean;
-  retention: number;
-  calibration: number;
+  fsrs: number;
+  hlr: number;
   windows: {
     startAt: string;
     endAt: string;
-    lane: 'retention' | 'calibration';
-    cardsDue: number;
+    lane: 'fsrs' | 'hlr';
+    conceptsDue: number;
   }[];
 }
 
-interface IForecastDayLike {
-  date: string;
-  retention: { total: number };
-  calibration: { total: number };
-  estimatedMinutes: number;
-}
-
-function buildWindows(
-  date: string,
-  retention: number,
-  calibration: number,
-  estimatedMinutes: number
-): IDayData['windows'] {
+function buildWindows(date: string, fsrs: number, hlr: number): IDayData['windows'] {
+  const estimatedMinutes = (fsrs + hlr) * 2;
   const blocks = [
-    { lane: 'retention' as const, cardsDue: retention, startHour: 9 },
-    { lane: 'calibration' as const, cardsDue: calibration, startHour: 13 },
-  ].filter((block) => block.cardsDue > 0);
+    { lane: 'fsrs' as const, conceptsDue: fsrs, startHour: 9 },
+    { lane: 'hlr' as const, conceptsDue: hlr, startHour: 13 },
+  ].filter((block) => block.conceptsDue > 0);
 
   return blocks.map((block) => {
     const durationMinutes = Math.max(
       20,
-      Math.round((estimatedMinutes * block.cardsDue) / Math.max(retention + calibration, 1))
+      Math.round((estimatedMinutes * block.conceptsDue) / Math.max(fsrs + hlr, 1))
     );
     const startAt = new Date(`${date}T${String(block.startHour).padStart(2, '0')}:00:00`);
     const endAt = new Date(startAt.getTime() + durationMinutes * 60_000);
@@ -70,29 +59,40 @@ function buildWindows(
       startAt: startAt.toISOString(),
       endAt: endAt.toISOString(),
       lane: block.lane,
-      cardsDue: block.cardsDue,
+      conceptsDue: block.conceptsDue,
     };
   });
 }
 
-function buildDays(forecastDays: IForecastDayLike[]): IDayData[] {
+function buildDays(concepts: { dueAt: string; algorithm: string }[]): IDayData[] {
   const today = localDateStr(new Date());
-  return Array.from({ length: 7 }, (_, i) => {
-    const source = forecastDays[i];
-    const d = source !== undefined ? new Date(`${source.date}T00:00:00`) : new Date();
-    if (source === undefined) {
-      d.setDate(d.getDate() + i);
+  const counts = new Map<string, { fsrs: number; hlr: number }>();
+
+  for (const concept of concepts) {
+    const dueDate = localDateStr(new Date(concept.dueAt));
+    const current = counts.get(dueDate) ?? { fsrs: 0, hlr: 0 };
+    if (concept.algorithm === 'hlr') {
+      current.hlr += 1;
+    } else {
+      current.fsrs += 1;
     }
+    counts.set(dueDate, current);
+  }
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
     const dateStr = localDateStr(d);
-    const retention = source?.retention.total ?? 0;
-    const calibration = source?.calibration.total ?? 0;
+    const source = counts.get(dateStr);
+    const fsrs = source?.fsrs ?? 0;
+    const hlr = source?.hlr ?? 0;
     return {
       label: DAY_LABELS[d.getDay()] ?? 'Day',
       date: dateStr,
       isToday: dateStr === today,
-      retention,
-      calibration,
-      windows: buildWindows(dateStr, retention, calibration, source?.estimatedMinutes ?? 0),
+      fsrs,
+      hlr,
+      windows: buildWindows(dateStr, fsrs, hlr),
     };
   });
 }
@@ -114,15 +114,18 @@ export function ReviewForecastFull({
   userId,
   studyMode,
 }: IReviewForecastFullProps): React.JSX.Element {
-  const { data: forecastData, isLoading } = useForecast(
-    { userId, days: 7, includeOverdue: true, studyMode },
+  const { data: dueConceptsData, isLoading } = useDueConcepts(
+    { studyMode, limit: 500 },
     { enabled: userId !== '' }
   );
 
   const [expandedDate, setExpandedDate] = React.useState<string | null>(null);
 
-  const days = React.useMemo(() => buildDays(forecastData?.data.days ?? []), [forecastData]);
-  const maxTotal = Math.max(...days.map((d) => d.retention + d.calibration), 1);
+  const days = React.useMemo(
+    () => buildDays(dueConceptsData?.data.concepts ?? []),
+    [dueConceptsData]
+  );
+  const maxTotal = Math.max(...days.map((d) => d.fsrs + d.hlr), 1);
   const expandedDay =
     expandedDate !== null ? (days.find((d) => d.date === expandedDate) ?? null) : null;
 
@@ -137,14 +140,14 @@ export function ReviewForecastFull({
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card px-6 py-6">
-      <h3 className="text-base font-semibold text-foreground">7-Day Review Forecast</h3>
+      <h3 className="text-base font-semibold text-foreground">7-Day Concept Forecast</h3>
 
       {/* Bar chart */}
       <div className="flex items-end gap-2" style={{ height: `${String(BAR_MAX_H + 24)}px` }}>
         {days.map((day) => {
-          const total = day.retention + day.calibration;
+          const total = day.fsrs + day.hlr;
           const barH = total > 0 ? Math.max(4, Math.round((total / maxTotal) * BAR_MAX_H)) : 2;
-          const retH = total > 0 ? Math.round((day.retention / total) * barH) : 0;
+          const retH = total > 0 ? Math.round((day.fsrs / total) * barH) : 0;
           const calH = barH - retH;
           const isExpanded = expandedDate === day.date;
 
@@ -203,11 +206,11 @@ export function ReviewForecastFull({
       <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-sm bg-synapse-400" />
-          Retention
+          FSRS
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-2 w-2 rounded-sm bg-myelin-400" />
-          Calibration
+          HLR
         </span>
       </div>
 
@@ -231,7 +234,7 @@ export function ReviewForecastFull({
             </button>
           </div>
           {expandedDay.windows.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No cards due this day.</p>
+            <p className="text-xs text-muted-foreground">No concepts due this day.</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {expandedDay.windows.map((w, i) => (
@@ -245,12 +248,14 @@ export function ReviewForecastFull({
                   <span
                     className={[
                       'font-medium',
-                      w.lane === 'retention' ? 'text-synapse-400' : 'text-myelin-400',
+                      w.lane === 'fsrs' ? 'text-synapse-400' : 'text-myelin-400',
                     ].join(' ')}
                   >
-                    {w.lane}
+                    {w.lane.toUpperCase()}
                   </span>
-                  <span className="tabular-nums text-foreground">{String(w.cardsDue)} cards</span>
+                  <span className="tabular-nums text-foreground">
+                    {String(w.conceptsDue)} concepts
+                  </span>
                 </div>
               ))}
             </div>

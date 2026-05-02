@@ -43,13 +43,13 @@ vi.mock('@/lib/cards/batch-import', () => ({
       label: 'CSV',
       extensions: '.csv',
       description: 'Comma-separated values',
-      insight: 'Good for lightweight imports.',
+      insight: 'Useful for lightweight imports.',
       formats: [
         {
           id: 'csv-front-back',
           label: 'Front / Back CSV',
           description: 'Two columns for front and back.',
-          insight: 'Use this when each row is already card-shaped.',
+          insight: 'Use this when each row is already payload-shaped.',
         },
       ],
     },
@@ -59,13 +59,13 @@ vi.mock('@/lib/cards/batch-import', () => ({
     label: 'CSV',
     extensions: '.csv',
     description: 'Comma-separated values',
-    insight: 'Good for lightweight imports.',
+    insight: 'Useful for lightweight imports.',
     formats: [
       {
         id: 'csv-front-back',
         label: 'Front / Back CSV',
         description: 'Two columns for front and back.',
-        insight: 'Use this when each row is already card-shaped.',
+        insight: 'Use this when each row is already payload-shaped.',
       },
     ],
   }),
@@ -199,7 +199,7 @@ beforeEach(() => {
   });
 });
 
-test('batch metadata step carries values forward card by card', async () => {
+test('batch metadata step carries values forward payload by payload', async () => {
   createNodeMock.mockResolvedValue({
     data: {
       id: 'node_abcdefghijklmnopqrstu',
@@ -246,10 +246,10 @@ test('batch metadata step carries values forward card by card', async () => {
     expect(screen.getByText(/preview ready/i)).not.toBeNull();
   });
 
-  fireEvent.click(screen.getByRole('button', { name: /next: card metadata/i }));
+  fireEvent.click(screen.getByRole('button', { name: /next: payload metadata/i }));
 
   await waitFor(() => {
-    expect(screen.getByText(/card 1 of 2/i)).not.toBeNull();
+    expect(screen.getByText(/payload 1 of 2/i)).not.toBeNull();
     expect(screen.getByText(/^q1$/i)).not.toBeNull();
     expect(screen.getByText(/^a1$/i)).not.toBeNull();
   });
@@ -280,10 +280,10 @@ test('batch metadata step carries values forward card by card', async () => {
     target: { value: 'active' },
   });
 
-  fireEvent.click(screen.getByRole('button', { name: /next card/i }));
+  fireEvent.click(screen.getByRole('button', { name: /next payload/i }));
 
   await waitFor(() => {
-    expect(screen.getByText(/card 2 of 2/i)).not.toBeNull();
+    expect(screen.getByText(/payload 2 of 2/i)).not.toBeNull();
     expect(screen.getByText(/^q2$/i)).not.toBeNull();
     expect(screen.getByText(/^a2$/i)).not.toBeNull();
   });
@@ -293,7 +293,7 @@ test('batch metadata step carries values forward card by card', async () => {
   expect((screen.getByLabelText(/^difficulty$/i) as HTMLSelectElement).value).toBe('advanced');
   expect((screen.getByLabelText(/initial state/i) as HTMLSelectElement).value).toBe('active');
 
-  fireEvent.click(screen.getByRole('button', { name: /import cards/i }));
+  fireEvent.click(screen.getByRole('button', { name: /import payloads/i }));
 
   await waitFor(() => {
     expect(executeImportMock).toHaveBeenCalledWith(
