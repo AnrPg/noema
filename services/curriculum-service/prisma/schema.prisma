@@ -1,0 +1,231 @@
+generator client {
+    provider = "prisma-client-js"
+    output   = "../generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model Curriculum {
+    id              String                  @id @db.VarChar(50)
+    userId          String                  @map("user_id") @db.VarChar(50)
+    title           String                  @db.VarChar(300)
+    description     String?                 @db.VarChar(2000)
+    goal            String?                 @db.VarChar(2000)
+    domain          String?                 @db.VarChar(200)
+    originMode      CurriculumOriginMode    @map("origin_mode")
+    state           CurriculumState         @default(DRAFT)
+    activeVersionId String?                 @unique @map("active_version_id") @db.VarChar(50)
+    metadata        Json                    @default("{}")
+    createdAt       DateTime                @default(now()) @map("created_at")
+    updatedAt       DateTime                @updatedAt @map("updated_at")
+    versions        CurriculumVersion[]
+    progress        CurriculumProgress[]
+    proposals       CurriculumRevisionProposal[]
+
+    @@index([userId, state])
+    @@map("curricula")
+}
+
+model CurriculumVersion {
+    id                   String                 @id @db.VarChar(50)
+    curriculumId         String                 @map("curriculum_id") @db.VarChar(50)
+    versionNumber        Int                    @map("version_number")
+    state                CurriculumVersionState @default(DRAFT)
+    parentVersionId      String?                @map("parent_version_id") @db.VarChar(50)
+    agentRunId           String?                @map("agent_run_id") @db.VarChar(100)
+    guardianValidationId String?                @map("guardian_validation_id") @db.VarChar(100)
+    createdAt            DateTime               @default(now()) @map("created_at")
+    finalizedAt          DateTime?              @map("finalized_at")
+    supersededAt         DateTime?              @map("superseded_at")
+    curriculum           Curriculum             @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+    nodes                CurriculumNode[]
+    edges                CurriculumEdge[]
+
+    @@unique([curriculumId, versionNumber])
+    @@index([curriculumId, state])
+    @@map("curriculum_versions")
+}
+
+model CurriculumNode {
+    id                  String            @id @db.VarChar(50)
+    curriculumVersionId String            @map("curriculum_version_id") @db.VarChar(50)
+    ckgConceptId        String?           @map("ckg_concept_id") @db.VarChar(50)
+    proposedConcept     Json?             @map("proposed_concept")
+    label               String            @db.VarChar(300)
+    learningObjective   String?           @map("learning_objective") @db.VarChar(1000)
+    masteryThreshold    Float             @map("mastery_threshold")
+    estimatedSessions   Int               @map("estimated_sessions")
+    traversalWeight     Float             @default(1.0) @map("traversal_weight")
+    metadata            Json              @default("{}")
+    stableNodeKey       String            @map("stable_node_key") @db.VarChar(200)
+    version             CurriculumVersion @relation(fields: [curriculumVersionId], references: [id], onDelete: Cascade)
+
+    @@index([curriculumVersionId])
+    @@index([stableNodeKey])
+    @@map("curriculum_nodes")
+}
+
+model CurriculumEdge {
+    id                  String             @id @db.VarChar(50)
+    curriculumVersionId String             @map("curriculum_version_id") @db.VarChar(50)
+    fromNodeId          String             @map("from_node_id") @db.VarChar(50)
+    toNodeId            String             @map("to_node_id") @db.VarChar(50)
+    type                CurriculumEdgeType
+    rationale           String?            @db.VarChar(2000)
+    orderingWeight      Float              @default(0) @map("ordering_weight")
+    version             CurriculumVersion  @relation(fields: [curriculumVersionId], references: [id], onDelete: Cascade)
+
+    @@index([curriculumVersionId])
+    @@unique([curriculumVersionId, fromNodeId, toNodeId, type])
+    @@map("curriculum_edges")
+}
+
+model CurriculumProgress {
+    id                String                     @id @db.VarChar(50)
+    curriculumId      String                     @map("curriculum_id") @db.VarChar(50)
+    userId            String                     @map("user_id") @db.VarChar(50)
+    stableNodeKey     String                     @map("stable_node_key") @db.VarChar(200)
+    runtimeState      CurriculumNodeRuntimeState @map("runtime_state")
+    firstTouchedAt    DateTime?                  @map("first_touched_at")
+    completedAt       DateTime?                  @map("completed_at")
+    lastSessionId     String?                    @map("last_session_id") @db.VarChar(50)
+    evaluationCount   Int                        @default(0) @map("evaluation_count")
+    correctStreak     Int                        @default(0) @map("correct_streak")
+    stabilitySnapshot Float?                     @map("stability_snapshot")
+    curriculum        Curriculum                 @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+
+    @@unique([curriculumId, userId, stableNodeKey])
+    @@index([userId, runtimeState])
+    @@map("curriculum_progress")
+}
+
+model CurriculumRevisionProposal {
+    id                    String                   @id @db.VarChar(50)
+    curriculumId          String                   @map("curriculum_id") @db.VarChar(50)
+    proposedFromVersionId String                   @map("proposed_from_version_id") @db.VarChar(50)
+    reason                CurriculumRevisionReason
+    evidence              Json
+    rationale             String                   @db.VarChar(4000)
+    expiresAt             DateTime                 @map("expires_at")
+    createdAt             DateTime                 @default(now()) @map("created_at")
+    appliedVersionId      String?                  @map("applied_version_id") @db.VarChar(50)
+    curriculum            Curriculum               @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+    changes               RevisionChange[]
+
+    @@index([curriculumId])
+    @@map("curriculum_revision_proposals")
+}
+
+model RevisionChange {
+    id              String                     @id @db.VarChar(50)
+    proposalId      String                     @map("proposal_id") @db.VarChar(50)
+    kind            RevisionChangeKind
+    payload         Json
+    rationale       String?                    @db.VarChar(2000)
+    state           RevisionChangeState        @default(PENDING)
+    decidedAt       DateTime?                  @map("decided_at")
+    rejectionReason String?                    @map("rejection_reason") @db.VarChar(200)
+    proposal        CurriculumRevisionProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+    @@index([proposalId])
+    @@map("revision_changes")
+}
+
+model RealignmentEvidence {
+    id                   String   @id @db.VarChar(50)
+    curriculumId         String   @map("curriculum_id") @db.VarChar(50)
+    stableNodeKey        String   @map("stable_node_key") @db.VarChar(200)
+    triggerType          String   @map("trigger_type") @db.VarChar(100)
+    sessionIds           String[] @map("session_ids")
+    accumulatedWeight    Float    @map("accumulated_weight")
+    threshold            Float
+    firstSeenAt          DateTime @default(now()) @map("first_seen_at")
+    lastSeenAt           DateTime @updatedAt @map("last_seen_at")
+    consumedByProposalId String?  @map("consumed_by_proposal_id") @db.VarChar(50)
+
+    @@unique([curriculumId, stableNodeKey, triggerType])
+    @@map("realignment_evidence")
+}
+
+enum CurriculumState {
+    DRAFT
+    FINALIZED
+    ARCHIVED
+
+    @@map("curriculum_state")
+}
+
+enum CurriculumVersionState {
+    DRAFT
+    VALIDATED
+    ACTIVE
+    SUPERSEDED
+
+    @@map("curriculum_version_state")
+}
+
+enum CurriculumNodeRuntimeState {
+    LOCKED
+    UNLOCKED
+    IN_PROGRESS
+    COMPLETED
+    BLOCKED
+    SKIPPED
+
+    @@map("curriculum_node_runtime_state")
+}
+
+enum CurriculumEdgeType {
+    PREREQUISITE
+    RECOMMENDED_BEFORE
+    REINFORCES
+
+    @@map("curriculum_edge_type")
+}
+
+enum CurriculumOriginMode {
+    AGENT_GENERATED
+    USER_AUTHORED
+    DOCUMENT_DERIVED
+
+    @@map("curriculum_origin_mode")
+}
+
+enum CurriculumRevisionReason {
+    PREREQUISITE_GAP
+    MISCONCEPTION
+    CONFUSION
+    STRUCTURAL_INVALIDATION
+    USER_EDIT
+    ZERO_RETENTION
+
+    @@map("curriculum_revision_reason")
+}
+
+enum RevisionChangeKind {
+    INSERT_PREREQUISITE
+    REORDER
+    ADD_NODE
+    REMOVE_EDGE
+    RETARGET_EDGE
+    RELABEL_NODE
+    ADJUST_THRESHOLD
+    ADD_REMEDIATION_PATH
+    SPLIT_NODE
+    FLAG_FOR_SKIP
+
+    @@map("revision_change_kind")
+}
+
+enum RevisionChangeState {
+    PENDING
+    APPROVED
+    REJECTED
+    APPLIED
+
+    @@map("revision_change_state")
+}
+
