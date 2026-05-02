@@ -163,6 +163,18 @@ export type RevisionProposalId = Brand<string, 'RevisionProposalId'>;
 /** Curriculum revision change identifier - prefix: rchg_ */
 export type RevisionChangeId = Brand<string, 'RevisionChangeId'>;
 
+/** Uploaded/derived document identifier - prefix: doc_ */
+export type DocumentId = Brand<string, 'DocumentId'>;
+
+/** Ingestion job identifier - prefix: ingest_ */
+export type IngestionJobId = Brand<string, 'IngestionJobId'>;
+
+/** Document chunk identifier - prefix: chunk_ */
+export type DocumentChunkId = Brand<string, 'DocumentChunkId'>;
+
+/** Extracted concept candidate identifier - prefix: ccand_ */
+export type ConceptCandidateId = Brand<string, 'ConceptCandidateId'>;
+
 /**
  * Identity of whoever proposes a CKG mutation.
  *
@@ -250,6 +262,10 @@ export const ID_PREFIXES = {
   CurriculumEdgeId: 'cedge_',
   RevisionProposalId: 'rprop_',
   RevisionChangeId: 'rchg_',
+  DocumentId: 'doc_',
+  IngestionJobId: 'ingest_',
+  DocumentChunkId: 'chunk_',
+  ConceptCandidateId: 'ccand_',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
@@ -608,11 +624,7 @@ export const CurriculumId = {
 // Curriculum Version ID
 export const CurriculumVersionId = {
   create: (value: string): CurriculumVersionId =>
-    createId<'CurriculumVersionId'>(
-      value,
-      ID_PREFIXES.CurriculumVersionId,
-      'CurriculumVersionId'
-    ),
+    createId<'CurriculumVersionId'>(value, ID_PREFIXES.CurriculumVersionId, 'CurriculumVersionId'),
   isValid: (value: unknown): value is CurriculumVersionId =>
     isValidId(value, ID_PREFIXES.CurriculumVersionId),
   prefix: ID_PREFIXES.CurriculumVersionId,
@@ -639,11 +651,7 @@ export const CurriculumEdgeId = {
 // Revision Proposal ID
 export const RevisionProposalId = {
   create: (value: string): RevisionProposalId =>
-    createId<'RevisionProposalId'>(
-      value,
-      ID_PREFIXES.RevisionProposalId,
-      'RevisionProposalId'
-    ),
+    createId<'RevisionProposalId'>(value, ID_PREFIXES.RevisionProposalId, 'RevisionProposalId'),
   isValid: (value: unknown): value is RevisionProposalId =>
     isValidId(value, ID_PREFIXES.RevisionProposalId),
   prefix: ID_PREFIXES.RevisionProposalId,
@@ -656,6 +664,41 @@ export const RevisionChangeId = {
   isValid: (value: unknown): value is RevisionChangeId =>
     isValidId(value, ID_PREFIXES.RevisionChangeId),
   prefix: ID_PREFIXES.RevisionChangeId,
+} as const;
+
+// Document ID
+export const DocumentId = {
+  create: (value: string): DocumentId =>
+    createId<'DocumentId'>(value, ID_PREFIXES.DocumentId, 'DocumentId'),
+  isValid: (value: unknown): value is DocumentId => isValidId(value, ID_PREFIXES.DocumentId),
+  prefix: ID_PREFIXES.DocumentId,
+} as const;
+
+// Ingestion Job ID
+export const IngestionJobId = {
+  create: (value: string): IngestionJobId =>
+    createId<'IngestionJobId'>(value, ID_PREFIXES.IngestionJobId, 'IngestionJobId'),
+  isValid: (value: unknown): value is IngestionJobId =>
+    isValidId(value, ID_PREFIXES.IngestionJobId),
+  prefix: ID_PREFIXES.IngestionJobId,
+} as const;
+
+// Document Chunk ID
+export const DocumentChunkId = {
+  create: (value: string): DocumentChunkId =>
+    createId<'DocumentChunkId'>(value, ID_PREFIXES.DocumentChunkId, 'DocumentChunkId'),
+  isValid: (value: unknown): value is DocumentChunkId =>
+    isValidId(value, ID_PREFIXES.DocumentChunkId),
+  prefix: ID_PREFIXES.DocumentChunkId,
+} as const;
+
+// Concept Candidate ID
+export const ConceptCandidateId = {
+  create: (value: string): ConceptCandidateId =>
+    createId<'ConceptCandidateId'>(value, ID_PREFIXES.ConceptCandidateId, 'ConceptCandidateId'),
+  isValid: (value: unknown): value is ConceptCandidateId =>
+    isValidId(value, ID_PREFIXES.ConceptCandidateId),
+  prefix: ID_PREFIXES.ConceptCandidateId,
 } as const;
 
 // ============================================================================
@@ -709,7 +752,11 @@ export type AnyBrandedId =
   | CurriculumNodeId
   | CurriculumEdgeId
   | RevisionProposalId
-  | RevisionChangeId;
+  | RevisionChangeId
+  | DocumentId
+  | IngestionJobId
+  | DocumentChunkId
+  | ConceptCandidateId;
 
 /**
  * Map of ID type names to their prefixes.

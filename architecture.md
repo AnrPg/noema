@@ -82,6 +82,8 @@ Noema's learning loop is:
 | Service                     | Realignment ownership                                                                                                                                    |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `content-service`           | Cards, templates, media, generated activity variants, payload candidates, `concepts.extracted` emission                                                  |
+| `ingestion-service`         | Uploaded documents, normalized document IR, chunks, concept candidates, ingestion jobs, document-to-curriculum/content handoff orchestration             |
+| `vector-service`            | Document chunk embeddings, Qdrant collection ownership, vector retrieval for ingestion and RAG grounding                                                 |
 | `session-service`           | LessonPlans, Goals, Steps, Activities, Step queue, lifecycle FSM, strategy/replanning                                                                    |
 | `metacognition-service`     | Canonical Evaluation persistence, trace scoring, combined score, scheduler rating mapping, transformation metadata, reasoning averages, Trigger emission |
 | `scheduler-service`         | ConceptScheduleState, concept evaluation logs, concept queues, transformation history, FSRS/HLR/SM-2/Leitner math                                        |
@@ -97,6 +99,8 @@ Noema's learning loop is:
 | ------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------ |
 | LessonPlan, Goal, Step, Activity, Step queue           | `session-service`                         | web app, metacognition, strategy, Guardian       |
 | Card/template/media/generated variant payloads         | `content-service`                         | session-service, agents, Guardian                |
+| Uploaded documents, IR, chunks, concept candidates     | `ingestion-service`                       | vector-service, KG, content, curriculum          |
+| Chunk embeddings and vector retrieval                  | `vector-service`                          | ingestion-service, content-service               |
 | Evaluation, reasoning quality, combined score, Trigger | `metacognition-service`                   | scheduler, KG, strategy, gamification, analytics |
 | Concept schedule state, queues, transformation history | `scheduler-service`                       | session-service, KG, agents                      |
 | Concept stability projection/history                   | `knowledge-graph-service`                 | web app, gamification, strategy, analytics       |
@@ -731,8 +735,22 @@ LessonPlans but do not bypass content-service persistence or Guardian
 validation.
 
 Legacy `source` and `knowledgeNodeIds` are transitional compatibility fields
-only. New domain logic and public contracts must use `originMode`,
-`reviewState`, `anchoredCkgNodeIds`, and `anchoredPkgNodeIds`; session selection
-excludes non-active review states by default. Session-service creates
-curriculum-bound LessonPlans and rejects plans whose Steps do not serve at least
-one selected curriculum node.
+
+## Batch 11 Ingestion and Vector Addendum
+
+Batch 11 materializes `ingestion-service` as the document orchestration
+boundary. It owns uploaded document records, normalized document IR, chunks,
+concept candidates, and ingestion jobs. It coordinates downstream ports for
+vector embedding/search, CKG mapping/proposal, document-derived curriculum
+generation, and RAG-grounded content generation, but it does not persist the
+curriculum DAG or generated activity variants itself.
+
+`vector-service` owns chunk embedding and vector retrieval. Its Qdrant adapter
+owns the `noema_document_chunks` collection, while the domain service remains
+behind an embedding/repository abstraction so production embeddings can replace
+the deterministic local model without changing ingestion-service. only. New
+domain logic and public contracts must use `originMode`, `reviewState`,
+`anchoredCkgNodeIds`, and `anchoredPkgNodeIds`; session selection excludes
+non-active review states by default. Session-service creates curriculum-bound
+LessonPlans and rejects plans whose Steps do not serve at least one selected
+curriculum node.

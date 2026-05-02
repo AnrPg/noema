@@ -15,6 +15,7 @@ import {
   CardType,
   CkgNodeStatus,
   CognitiveLoadLevel,
+  ConceptCandidateState,
   CurriculumEdgeType,
   CurriculumNodeRuntimeState,
   CurriculumOriginMode,
@@ -24,6 +25,8 @@ import {
   ConceptState,
   ContentGenerationJobStatus,
   DifficultyLevel,
+  DocumentMimeKind,
+  DocumentSourceKind,
   DocumentFormat,
   Environment,
   EventSource,
@@ -37,6 +40,8 @@ import {
   GraphType,
   HintDepth,
   IngestionState,
+  IngestionIntent,
+  IngestionJobStage,
   EligibilityGroup,
   LearningInterventionType,
   LearningMode,
@@ -174,6 +179,17 @@ export const AchievementRaritySchema = createEnumSchema(AchievementRarity, 'Achi
 export const StreakTypeSchema = createEnumSchema(StreakType, 'Streak type');
 export const DocumentFormatSchema = createEnumSchema(DocumentFormat, 'Document format');
 export const IngestionStateSchema = createEnumSchema(IngestionState, 'Ingestion state');
+export const DocumentSourceKindSchema = createEnumSchema(
+  DocumentSourceKind,
+  'Document source kind'
+);
+export const DocumentMimeKindSchema = createEnumSchema(DocumentMimeKind, 'Document MIME kind');
+export const IngestionIntentSchema = createEnumSchema(IngestionIntent, 'Ingestion intent');
+export const IngestionJobStageSchema = createEnumSchema(IngestionJobStage, 'Ingestion job stage');
+export const ConceptCandidateStateSchema = createEnumSchema(
+  ConceptCandidateState,
+  'Concept candidate state'
+);
 export const DifficultyLevelSchema = createEnumSchema(DifficultyLevel, 'Difficulty level');
 export const SessionTerminationReasonSchema = createEnumSchema(
   SessionTerminationReason,
