@@ -36,7 +36,7 @@ class ContentGenerationAgent:
         rejected: list[dict[str, Any]] = []
 
         for draft in drafts:
-            outcome = await self._guardian.validate_activity(draft)
+            outcome = await self._guardian.validate_activity(self._guardian_activity_for_draft(draft))
             if outcome.accepted:
                 draft["guardianValidationId"] = outcome.validation_id
                 accepted.append(draft)
@@ -59,7 +59,7 @@ class ContentGenerationAgent:
                 "front": request.prompt or request.card.get("content", {}).get("front", ""),
             },
         }
-        outcome = await self._guardian.validate_activity(draft)
+        outcome = await self._guardian.validate_activity(self._guardian_activity_for_draft(draft))
         if not outcome.accepted:
             raise ValueError(f"Guardian rejected transformed card: {', '.join(outcome.reasons)}")
         draft["guardianValidationId"] = outcome.validation_id
@@ -73,12 +73,27 @@ class ContentGenerationAgent:
             "cardType": card_type,
             "originMode": request.mode,
             "anchoredCkgNodeIds": [concept_id],
+            "conceptIds": [concept_id],
             "sourceDocumentIds": request.document_ids,
-            "factualityScore": 0.8 if request.mode == "agent_autonomous" else None,
+            "factualityScore": 0.8 if request.mode == "agent_autonomous" else 1.0,
             "content": {
                 "front": f"Explain the core idea behind {concept_id}.",
                 "back": "Generated draft pending domain-specific grounding.",
             },
             "tags": ["generated"],
             "difficulty": "intermediate",
+        }
+
+    def _guardian_activity_for_draft(self, draft: dict[str, Any]) -> dict[str, Any]:
+        content = draft.get("content", {})
+        concept_ids = draft.get("conceptIds", draft.get("anchoredCkgNodeIds", []))
+        concept_id = concept_ids[0] if concept_ids else "concept_unknown"
+        return {
+            "id": f"activity_{concept_id}",
+            "contentSourceType": "generated",
+            "generatedVariantId": f"variant_{concept_id}",
+            "prompt": str(content.get("front", "Practice this concept.")),
+            "expectedResponseType": "short_text",
+            "responseSchema": {"type": "string"},
+            "content": draft,
         }
