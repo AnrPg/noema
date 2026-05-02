@@ -28,7 +28,7 @@ import type {
   IOntologyMapping,
   ISubgraph,
   ISourceCoverageSummary,
-  MasteryLevel,
+  StabilityLevel,
   Metadata,
   NodeId,
   StudyMode,
@@ -288,7 +288,7 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     reviewMetadata,
     sourceCoverage,
     identityKeys: _identityKeys,
-    masteryLevel,
+    stabilityLevel,
     createdAt,
     updatedAt,
     isDeleted: _isDeleted,
@@ -337,7 +337,7 @@ export function mapNodeToGraphNode(node: Node): IGraphNode {
     ...(nodeReviewMetadata !== undefined ? { reviewMetadata: nodeReviewMetadata } : {}),
     ...(nodeSourceCoverage !== undefined ? { sourceCoverage: nodeSourceCoverage } : {}),
     properties: extraProps as Metadata,
-    ...(masteryLevel !== null ? { masteryLevel: masteryLevel as number as MasteryLevel } : {}),
+    ...(stabilityLevel !== null ? { stabilityLevel: stabilityLevel as number as StabilityLevel } : {}),
     createdAt: toIsoString(createdAt),
     updatedAt: toIsoString(updatedAt),
   };
@@ -456,7 +456,7 @@ export function buildNodeProperties(
     reviewMetadata?: INodeReviewMetadata | null;
     sourceCoverage?: ISourceCoverageSummary | null;
     properties?: Record<string, unknown>;
-    masteryLevel?: MasteryLevel;
+    stabilityLevel?: StabilityLevel;
   },
   nodeId: NodeId,
   graphType: string,
@@ -499,7 +499,7 @@ export function buildNodeProperties(
     ...(input.sourceCoverage !== undefined
       ? { sourceCoverage: serializeStructuredValue(input.sourceCoverage) }
       : {}),
-    ...(input.masteryLevel !== undefined ? { masteryLevel: input.masteryLevel as number } : {}),
+    ...(input.stabilityLevel !== undefined ? { stabilityLevel: input.stabilityLevel as number } : {}),
     ...flattenProperties(input.properties),
     createdAt: now,
     updatedAt: now,
@@ -529,7 +529,7 @@ export function buildNodeUpdateProperties(updates: {
   reviewMetadata?: INodeReviewMetadata | null;
   sourceCoverage?: ISourceCoverageSummary | null;
   properties?: Record<string, unknown>;
-  masteryLevel?: MasteryLevel;
+  stabilityLevel?: StabilityLevel;
 }): Record<string, unknown> {
   const props: Record<string, unknown> = {
     updatedAt: new Date().toISOString(),
@@ -562,7 +562,7 @@ export function buildNodeUpdateProperties(updates: {
   if (updates.sourceCoverage !== undefined) {
     props['sourceCoverage'] = serializeStructuredValue(updates.sourceCoverage);
   }
-  if (updates.masteryLevel !== undefined) props['masteryLevel'] = updates.masteryLevel as number;
+  if (updates.stabilityLevel !== undefined) props['stabilityLevel'] = updates.stabilityLevel as number;
   if (updates.properties !== undefined) {
     Object.assign(props, flattenProperties(updates.properties));
   }

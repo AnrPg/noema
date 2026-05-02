@@ -200,14 +200,14 @@ describe('GET /users/:userId/pkg/nodes', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `${BASE}?sortBy=masteryLevel&sortOrder=asc&studyMode=language_learning`,
+      url: `${BASE}?sortBy=stabilityLevel&sortOrder=asc&studyMode=language_learning`,
     });
 
     expect(res.statusCode).toBe(200);
     expect(service.listNodes).toHaveBeenCalledWith(
       TEST_USER_ID,
       expect.objectContaining({
-        sortBy: 'masteryLevel',
+        sortBy: 'stabilityLevel',
         sortOrder: 'asc',
         studyMode: 'language_learning',
       }),

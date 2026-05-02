@@ -204,7 +204,7 @@ export class MockGraphRepository implements IGraphRepository {
       domain: input.domain,
       ...(input.description !== undefined ? { description: input.description } : {}),
       properties: input.properties ?? {},
-      ...(input.masteryLevel !== undefined ? { masteryLevel: input.masteryLevel } : {}),
+      ...(input.stabilityLevel !== undefined ? { stabilityLevel: input.stabilityLevel } : {}),
       ...(userId !== undefined ? { userId } : {}),
       createdAt: now,
       updatedAt: now,
@@ -235,7 +235,7 @@ export class MockGraphRepository implements IGraphRepository {
       ...(updates.description !== undefined ? { description: updates.description } : {}),
       ...(updates.domain !== undefined ? { domain: updates.domain } : {}),
       ...(updates.properties !== undefined ? { properties: updates.properties } : {}),
-      ...(updates.masteryLevel !== undefined ? { masteryLevel: updates.masteryLevel } : {}),
+      ...(updates.stabilityLevel !== undefined ? { stabilityLevel: updates.stabilityLevel } : {}),
       updatedAt: new Date().toISOString(),
     } as IGraphNode;
 

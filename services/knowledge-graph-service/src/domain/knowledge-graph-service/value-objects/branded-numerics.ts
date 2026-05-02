@@ -2,7 +2,7 @@
  * @noema/knowledge-graph-service - Local Branded Numeric Types
  *
  * KG-specific branded numeric types that do not belong in the shared
- * @noema/types package. Cross-service types (EdgeWeight, MasteryLevel,
+ * @noema/types package. Cross-service types (EdgeWeight, StabilityLevel,
  * ConfidenceScore) live in @noema/types/branded-numerics.
  */
 

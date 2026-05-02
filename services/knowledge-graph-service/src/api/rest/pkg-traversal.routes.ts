@@ -556,7 +556,7 @@ export function registerPkgTraversalRoutes(
         tags: ['PKG Traversal'],
         summary: 'Get knowledge frontier for the user',
         description:
-          'Identify unmastered concepts whose prerequisites are mastered — the optimal next-study candidates.',
+          'Identify unstable concepts whose prerequisites are stable — the optimal next-study candidates.',
         params: {
           type: 'object',
           required: ['userId'],
@@ -568,7 +568,7 @@ export function registerPkgTraversalRoutes(
           properties: {
             domain: { type: 'string' },
             studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
-            masteryThreshold: { type: 'number', minimum: 0, maximum: 1 },
+            stabilityThreshold: { type: 'number', minimum: 0, maximum: 1 },
             maxResults: { type: 'number', minimum: 1, maximum: 100 },
             sortBy: { type: 'string', enum: ['readiness', 'centrality', 'depth'] },
             includePrerequisites: { type: 'string', enum: ['true', 'false'] },
@@ -587,13 +587,13 @@ export function registerPkgTraversalRoutes(
         const query = FrontierQuery.create({
           domain: parsed.domain,
           ...(parsed.studyMode !== undefined ? { studyMode: parsed.studyMode as StudyMode } : {}),
-          masteryThreshold: parsed.masteryThreshold,
+          stabilityThreshold: parsed.stabilityThreshold,
           maxResults: parsed.maxResults,
           sortBy: parsed.sortBy,
           includePrerequisites: parsed.includePrerequisites,
         });
 
-        // Cast needed: DeepReadonly<IFrontierQuery> wraps the MasteryLevel
+        // Cast needed: DeepReadonly<IFrontierQuery> wraps the StabilityLevel
         // branded type in a way that's not directly assignable.
         const result = await service.getKnowledgeFrontier(
           userId as UserId,

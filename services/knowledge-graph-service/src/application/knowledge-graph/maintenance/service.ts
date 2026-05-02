@@ -1,14 +1,20 @@
 import type {
   ICkgMaintenanceApplicationService,
+  ICkgMaintenancePort,
   ICkgResetInput,
-  ICkgResetPort,
   ICkgResetResult,
+  ICkgSourcePurgeInput,
+  ICkgSourcePurgeResult,
 } from './contracts.js';
 
 export class CkgMaintenanceApplicationService implements ICkgMaintenanceApplicationService {
-  constructor(private readonly resetPort: ICkgResetPort) {}
+  constructor(private readonly maintenancePort: ICkgMaintenancePort) {}
 
   async resetCkg(input?: ICkgResetInput): Promise<ICkgResetResult> {
-    return this.resetPort.reset(input);
+    return this.maintenancePort.reset(input);
+  }
+
+  async purgeCkgBySource(input: ICkgSourcePurgeInput): Promise<ICkgSourcePurgeResult> {
+    return this.maintenancePort.purgeBySource(input);
   }
 }

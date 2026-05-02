@@ -449,7 +449,7 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
   // ═══════════════════════════════════════════════════════════════════════════
 
   // ── prerequisite ────────────────────────────────────────────────────────
-  // Acyclic: YES — "A requires B requires A" is a logical impossibility.
+  // Acyclic: YES — "A is prerequisite of B is prerequisite of A" is impossible.
   [GraphEdgeType.PREREQUISITE]: EdgePolicy.create({
     edgeType: GraphEdgeType.PREREQUISITE,
     category: EdgeOntologicalCategory.STRUCTURAL_PEDAGOGICAL,
@@ -471,9 +471,9 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     maxWeight: 1.0,
     defaultWeight: 1.0,
     description:
-      'Learning dependency: "A requires B to be learned/understood first". ' +
+      'Learning dependency: "A must be learned/understood before B". ' +
       'This is a pedagogical ordering, not a logical one. ' +
-      'Use for curriculum sequencing — e.g., "Integration prerequisite Differentiation".',
+      'Use for curriculum sequencing — e.g., "Differentiation prerequisite Integration".',
   }),
 
   // ── derived_from ────────────────────────────────────────────────────────
@@ -659,7 +659,7 @@ export const EDGE_TYPE_POLICIES: Readonly<Record<GraphEdgeType, IEdgePolicy>> = 
     maxWeight: 1.0,
     defaultWeight: 0.8,
     description:
-      'Skill transfer: "Mastery of A transfers meaningfully to B". ' +
+      'Skill transfer: "Stability of A transfers meaningfully to B". ' +
       'Use when prior skill acquisition improves performance or comprehension in the target area.',
   }),
 });

@@ -72,7 +72,7 @@ function buildNodeFingerprint(node: IGraphNode): string {
     reviewMetadata: node.reviewMetadata,
     sourceCoverage: node.sourceCoverage,
     properties: node.properties,
-    masteryLevel: node.masteryLevel,
+    stabilityLevel: node.stabilityLevel,
   });
 }
 

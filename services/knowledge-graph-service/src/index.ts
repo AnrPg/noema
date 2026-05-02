@@ -31,13 +31,14 @@ import {
   registerCkgNodeRoutes,
   registerCkgTraversalRoutes,
   registerComparisonRoutes,
+  registerConceptStateRoutes,
   registerGraphCrdtRoutes,
   registerGraphSnapshotRoutes,
   registerMetricsRoutes,
   registerMisconceptionRoutes,
   registerOntologyImportRoutes,
   registerPkgEdgeRoutes,
-  registerPkgMasteryRoutes,
+  registerPkgMaintenanceRoutes,
   registerPkgNodeRoutes,
   registerPkgOperationLogRoutes,
   registerPkgTraversalRoutes,
@@ -57,15 +58,21 @@ import {
   StructuralIntegrityStage,
 } from './domain/knowledge-graph-service/ckg-validation-stages.js';
 import { KnowledgeGraphService } from './domain/knowledge-graph-service/knowledge-graph.service.impl.js';
+import { ConceptStateService } from './domain/knowledge-graph-service/concept-state.service.js';
 import {
   OntologyReasoningService,
   OntologyReasoningStage,
 } from './domain/knowledge-graph-service/ontology-reasoning.js';
 import { UnityInvariantStage } from './domain/knowledge-graph-service/unity-invariants.js';
-import { PkgAggregationConsumer, UserDeletedConsumer } from './events/consumers/index.js';
+import {
+  ConceptStateConsumer,
+  PkgAggregationConsumer,
+  UserDeletedConsumer,
+} from './events/consumers/index.js';
 import { CkgEdgeAuthoringService } from './application/knowledge-graph/edge-authoring/index.js';
 import { CkgMaintenanceApplicationService } from './application/knowledge-graph/maintenance/index.js';
 import { CkgNodeBatchAuthoringService } from './application/knowledge-graph/node-authoring/index.js';
+import { PkgMaintenanceApplicationService } from './application/knowledge-graph/pkg-maintenance/index.js';
 import {
   NoopNormalizationPublisher,
   OntologyImportsApplicationService,
@@ -73,12 +80,14 @@ import {
 import { GraphCanonicalNodeResolver } from './application/knowledge-graph/ontology-imports/mutation-generation/index.js';
 import { CachedGraphRepository } from './infrastructure/cache/cached-graph.repository.js';
 import { KgRedisCacheProvider } from './infrastructure/cache/kg-redis-cache.provider.js';
+import { Neo4jConceptStateRepository } from './infrastructure/database/neo4j-concept-state.repository.js';
 import { Neo4jClient } from './infrastructure/database/neo4j-client.js';
 import { Neo4jGraphRepository } from './infrastructure/database/neo4j-graph.repository.js';
 import { initializeNeo4jSchema } from './infrastructure/database/neo4j-schema.js';
 import {
   NoopGraphCrdtStatsRepository,
   PrismaAggregationEvidenceRepository,
+  PrismaConceptStateRepository,
   PrismaGraphCrdtStatsRepository,
   PrismaGraphRestoreTokenRepository,
   PrismaGraphSnapshotRepository,
@@ -106,7 +115,7 @@ import {
   YagoSourceNormalizer,
   YagoSourceParser,
 } from './infrastructure/ontology-imports/index.js';
-import { CkgResetService } from './infrastructure/maintenance/index.js';
+import { CkgResetService, PkgResetService } from './infrastructure/maintenance/index.js';
 import { FileBackedOntologyArtifactProvider } from './infrastructure/ontology/file-backed-ontology-artifact.provider.js';
 import { TlaProofRunner } from './infrastructure/proof/tla-proof-runner.js';
 import { PkgPostWriteRecoveryService } from './domain/knowledge-graph-service/post-write-recovery.service.js';
@@ -351,6 +360,7 @@ async function bootstrap(): Promise<void> {
 
   // 2. Prisma repositories (PostgreSQL)
   const metricsRepository = new PrismaMetricsRepository(prisma);
+  const conceptStateRepository = new PrismaConceptStateRepository(prisma);
   const mutationRepository = new PrismaMutationRepository(prisma);
   const misconceptionRepository = new PrismaMisconceptionRepository(prisma);
   const operationLogRepository = new PrismaOperationLogRepository(prisma);
@@ -386,6 +396,13 @@ async function bootstrap(): Promise<void> {
     logger
   );
   const ckgMaintenanceService = new CkgMaintenanceApplicationService(ckgResetService);
+  const pkgResetService = new PkgResetService(
+    prisma,
+    neo4jClient,
+    redis,
+    config.cache.prefix,
+    logger
+  );
 
   // 3. Event publisher (Redis Streams)
   const eventPublisher = new RedisEventPublisher(
@@ -398,6 +415,12 @@ async function bootstrap(): Promise<void> {
       environment: config.service.environment,
     },
     logger
+  );
+  const conceptStateGraphRepository = new Neo4jConceptStateRepository(neo4jClient, logger);
+  const conceptStateService = new ConceptStateService(
+    conceptStateRepository,
+    conceptStateGraphRepository,
+    eventPublisher
   );
   const postWriteRecoveryService = new PkgPostWriteRecoveryService(
     postWriteRecoveryRepository,
@@ -464,6 +487,7 @@ async function bootstrap(): Promise<void> {
     config.graphRestore,
     logger
   );
+  const pkgMaintenanceService = new PkgMaintenanceApplicationService(service, pkgResetService);
   const ckgEdgeAuthoringService = new CkgEdgeAuthoringService(graphRepository);
   const ckgNodeBatchAuthoringService = new CkgNodeBatchAuthoringService(graphRepository);
 
@@ -558,7 +582,8 @@ async function bootstrap(): Promise<void> {
   // PKG routes (user-scoped)
   registerPkgNodeRoutes(app, service, authMiddleware, routeOptions);
   registerPkgEdgeRoutes(app, service, authMiddleware, routeOptions);
-  registerPkgMasteryRoutes(app, service, authMiddleware, routeOptions);
+  registerPkgMaintenanceRoutes(app, pkgMaintenanceService, authMiddleware, routeOptions);
+  registerConceptStateRoutes(app, conceptStateService, authMiddleware, routeOptions);
   registerPkgTraversalRoutes(app, service, authMiddleware, routeOptions);
 
   // CKG routes (shared graph)
@@ -640,6 +665,23 @@ async function bootstrap(): Promise<void> {
     );
 
     consumers.push(pkgAggregationConsumer);
+
+    const conceptStateConsumerRedis = new Redis(config.redis.url, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+    await conceptStateConsumerRedis.connect();
+    consumerRedisClients.push(conceptStateConsumerRedis);
+
+    const conceptStateConsumer = new ConceptStateConsumer(
+      conceptStateConsumerRedis,
+      conceptStateService,
+      logger,
+      consumerName,
+      config.redis.eventStreamKey
+    );
+
+    consumers.push(conceptStateConsumer);
 
     // Initialize consumer groups (idempotent)
     await Promise.all(consumers.map((c) => c.initialize()));

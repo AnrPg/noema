@@ -25,9 +25,9 @@ import type {
   ICanonicalExternalRef,
   IGraphEdge,
   IGraphNode,
-  INodeMasterySummary,
+  INodeStabilitySummary,
   IOntologyMapping,
-  MasteryLevel,
+  StabilityLevel,
   ISubgraph,
   NodeId,
   StudyMode,
@@ -155,7 +155,7 @@ function buildRestoredNodeProperties(node: IGraphNode): Record<string, unknown> 
       ...(node.reviewMetadata !== undefined ? { reviewMetadata: node.reviewMetadata } : {}),
       ...(node.sourceCoverage !== undefined ? { sourceCoverage: node.sourceCoverage } : {}),
       properties: node.properties,
-      ...(node.masteryLevel !== undefined ? { masteryLevel: node.masteryLevel } : {}),
+      ...(node.stabilityLevel !== undefined ? { stabilityLevel: node.stabilityLevel } : {}),
     },
     node.nodeId,
     node.graphType,
@@ -219,39 +219,39 @@ function normalizeIdentityToken(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function studyModeMasteryPropertyKey(studyMode: StudyMode): string {
-  return `studyModeMastery_${studyMode}`;
+function studyModeStabilityPropertyKey(studyMode: StudyMode): string {
+  return `studyModeStability_${studyMode}`;
 }
 
-function buildNodeMasteryExpression(alias: string, studyMode?: StudyMode): string {
+function buildNodeStabilityExpression(alias: string, studyMode?: StudyMode): string {
   if (studyMode === undefined) {
-    return `${alias}.masteryLevel`;
+    return `${alias}.stabilityLevel`;
   }
-  return `coalesce(${alias}.${studyModeMasteryPropertyKey(studyMode)}, ${alias}.masteryLevel)`;
+  return `coalesce(${alias}.${studyModeStabilityPropertyKey(studyMode)}, ${alias}.stabilityLevel)`;
 }
 
-function resolveNodeMasteryLevel(
+function resolveNodeStabilityLevel(
   node: IGraphNode,
   studyMode?: StudyMode
-): MasteryLevel | undefined {
+): StabilityLevel | undefined {
   if (studyMode === undefined) {
-    return node.masteryLevel;
+    return node.stabilityLevel;
   }
-  const modeScopedValue = node.properties[studyModeMasteryPropertyKey(studyMode)];
+  const modeScopedValue = node.properties[studyModeStabilityPropertyKey(studyMode)];
   if (typeof modeScopedValue === 'number') {
-    return modeScopedValue as MasteryLevel;
+    return modeScopedValue as StabilityLevel;
   }
-  return node.masteryLevel;
+  return node.stabilityLevel;
 }
 
-function withResolvedNodeMastery(node: IGraphNode, studyMode?: StudyMode): IGraphNode {
+function withResolvedNodeStability(node: IGraphNode, studyMode?: StudyMode): IGraphNode {
   if (studyMode === undefined) {
     return node;
   }
-  const masteryLevel = resolveNodeMasteryLevel(node, studyMode);
+  const stabilityLevel = resolveNodeStabilityLevel(node, studyMode);
   return {
     ...node,
-    ...(masteryLevel !== undefined ? { masteryLevel } : {}),
+    ...(stabilityLevel !== undefined ? { stabilityLevel } : {}),
   };
 }
 
@@ -368,7 +368,7 @@ function buildNodeUpsertUpdateInput(input: ICreateNodeInput): IUpdateNodeInput {
     ...(input.reviewMetadata !== undefined ? { reviewMetadata: input.reviewMetadata } : {}),
     ...(input.sourceCoverage !== undefined ? { sourceCoverage: input.sourceCoverage } : {}),
     ...(input.properties !== undefined ? { properties: input.properties } : {}),
-    ...(input.masteryLevel !== undefined ? { masteryLevel: input.masteryLevel } : {}),
+    ...(input.stabilityLevel !== undefined ? { stabilityLevel: input.stabilityLevel } : {}),
   };
 }
 
@@ -634,7 +634,7 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
       });
 
       return result.records.map((r) =>
-        withResolvedNodeMastery(mapNodeToGraphNode(r.get('n') as neo4j.Node), filter.studyMode)
+        withResolvedNodeStability(mapNodeToGraphNode(r.get('n') as neo4j.Node), filter.studyMode)
       );
     } finally {
       await session.close();
@@ -672,19 +672,19 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
     }
   }
 
-  async getNodeMasterySummary(
+  async getNodeStabilitySummary(
     filter: INodeFilter,
-    masteryThreshold: MasteryLevel
-  ): Promise<INodeMasterySummary> {
+    stabilityThreshold: StabilityLevel
+  ): Promise<INodeStabilitySummary> {
     const { whereClauses, params } = this.buildNodeFilterClauses(filter);
     const labelFilter = this.buildLabelFilter(filter);
     const summarySession = this.neo4j.getSession();
     const domainSession = this.neo4j.getSession();
-    const threshold = masteryThreshold as number;
-    const masteryExpr = buildNodeMasteryExpression('n', filter.studyMode);
+    const threshold = stabilityThreshold as number;
+    const stabilityExpr = buildNodeStabilityExpression('n', filter.studyMode);
     const baseParams = {
       ...params,
-      masteryThreshold: threshold,
+      stabilityThreshold: threshold,
       developingThreshold: 0.4,
     };
 
@@ -696,25 +696,25 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
              ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
              RETURN
                count(n) AS totalNodes,
-               count(CASE WHEN ${masteryExpr} IS NOT NULL THEN 1 END) AS trackedNodes,
-               count(CASE WHEN ${masteryExpr} >= $masteryThreshold THEN 1 END) AS masteredNodes,
+               count(CASE WHEN ${stabilityExpr} IS NOT NULL THEN 1 END) AS trackedNodes,
+               count(CASE WHEN ${stabilityExpr} >= $stabilityThreshold THEN 1 END) AS stableNodes,
                count(
                  CASE
-                   WHEN ${masteryExpr} IS NOT NULL
-                    AND ${masteryExpr} < $masteryThreshold
-                    AND ${masteryExpr} >= $developingThreshold
+                   WHEN ${stabilityExpr} IS NOT NULL
+                    AND ${stabilityExpr} < $stabilityThreshold
+                    AND ${stabilityExpr} >= $developingThreshold
                    THEN 1
                  END
                ) AS developingNodes,
                count(
                  CASE
-                   WHEN ${masteryExpr} IS NOT NULL
-                    AND ${masteryExpr} < $developingThreshold
+                   WHEN ${stabilityExpr} IS NOT NULL
+                    AND ${stabilityExpr} < $developingThreshold
                    THEN 1
                  END
                ) AS emergingNodes,
-               count(CASE WHEN ${masteryExpr} IS NULL THEN 1 END) AS untrackedNodes,
-               coalesce(avg(${masteryExpr}), 0.0) AS averageMastery`,
+               count(CASE WHEN ${stabilityExpr} IS NULL THEN 1 END) AS untrackedNodes,
+               coalesce(avg(${stabilityExpr}), 0.0) AS averageStability`,
             baseParams
           )
         ),
@@ -724,10 +724,10 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
              ${whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : ''}
              WITH coalesce(n.domain, 'general') AS domain,
                   count(n) AS nodeCount,
-                  count(CASE WHEN ${masteryExpr} IS NOT NULL THEN 1 END) AS trackedNodes,
-                  count(CASE WHEN ${masteryExpr} >= $masteryThreshold THEN 1 END) AS masteredNodes,
-                  coalesce(avg(${masteryExpr}), 0.0) AS averageMastery
-             RETURN domain, nodeCount, trackedNodes, masteredNodes, averageMastery`,
+                  count(CASE WHEN ${stabilityExpr} IS NOT NULL THEN 1 END) AS trackedNodes,
+                  count(CASE WHEN ${stabilityExpr} >= $stabilityThreshold THEN 1 END) AS stableNodes,
+                  coalesce(avg(${stabilityExpr}), 0.0) AS averageStability
+             RETURN domain, nodeCount, trackedNodes, stableNodes, averageStability`,
             baseParams
           )
         ),
@@ -738,23 +738,23 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
         domain: String(record.get('domain')),
         nodeCount: toJsNumber(record.get('nodeCount')),
         trackedNodes: toJsNumber(record.get('trackedNodes')),
-        masteredNodes: toJsNumber(record.get('masteredNodes')),
-        averageMastery: toJsNumber(record.get('averageMastery')),
+        stableNodes: toJsNumber(record.get('stableNodes')),
+        averageStability: toJsNumber(record.get('averageStability')),
       }));
       const strongestDomains = [...domainBreakdown]
         .sort((a, b) => {
-          const masteryDifference = b.averageMastery - a.averageMastery;
-          if (masteryDifference !== 0) {
-            return masteryDifference;
+          const stabilityDifference = b.averageStability - a.averageStability;
+          if (stabilityDifference !== 0) {
+            return stabilityDifference;
           }
           return b.nodeCount - a.nodeCount;
         })
         .slice(0, 3);
       const weakestDomains = [...domainBreakdown]
         .sort((a, b) => {
-          const masteryDifference = a.averageMastery - b.averageMastery;
-          if (masteryDifference !== 0) {
-            return masteryDifference;
+          const stabilityDifference = a.averageStability - b.averageStability;
+          if (stabilityDifference !== 0) {
+            return stabilityDifference;
           }
           return b.nodeCount - a.nodeCount;
         })
@@ -764,20 +764,20 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
         userId: (filter.userId ?? '') as UserId,
         studyMode: filter.studyMode ?? 'knowledge_gaining',
         ...(filter.domain !== undefined ? { domain: filter.domain } : {}),
-        masteryThreshold,
+        stabilityThreshold,
         totalNodes: summaryRecord !== undefined ? toJsNumber(summaryRecord.get('totalNodes')) : 0,
         trackedNodes:
           summaryRecord !== undefined ? toJsNumber(summaryRecord.get('trackedNodes')) : 0,
-        masteredNodes:
-          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('masteredNodes')) : 0,
+        stableNodes:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('stableNodes')) : 0,
         developingNodes:
           summaryRecord !== undefined ? toJsNumber(summaryRecord.get('developingNodes')) : 0,
         emergingNodes:
           summaryRecord !== undefined ? toJsNumber(summaryRecord.get('emergingNodes')) : 0,
         untrackedNodes:
           summaryRecord !== undefined ? toJsNumber(summaryRecord.get('untrackedNodes')) : 0,
-        averageMastery:
-          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('averageMastery')) : 0,
+        averageStability:
+          summaryRecord !== undefined ? toJsNumber(summaryRecord.get('averageStability')) : 0,
         strongestDomains,
         weakestDomains,
       };
@@ -972,7 +972,11 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
     const relTypes =
       filter.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
 
-    const whereClauses: string[] = ['coalesce(r.isDeleted, false) = false'];
+    const whereClauses: string[] = [
+      'coalesce(r.isDeleted, false) = false',
+      'coalesce(source.isDeleted, false) = false',
+      'coalesce(target.isDeleted, false) = false',
+    ];
     const params: Record<string, unknown> = {};
 
     if (filter.sourceNodeId !== undefined) {
@@ -1095,7 +1099,11 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
     const relTypes =
       filter.edgeType !== undefined ? edgeTypeToRelType(filter.edgeType) : ALL_REL_TYPES.join('|');
 
-    const whereClauses: string[] = ['coalesce(r.isDeleted, false) = false'];
+    const whereClauses: string[] = [
+      'coalesce(r.isDeleted, false) = false',
+      'coalesce(source.isDeleted, false) = false',
+      'coalesce(target.isDeleted, false) = false',
+    ];
     const params: Record<string, unknown> = {};
 
     if (filter.sourceNodeId !== undefined) {
@@ -1817,7 +1825,7 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
       });
 
       const nodes = nodesResult.records.map((r) =>
-        withResolvedNodeMastery(mapNodeToGraphNode(r.get('n') as neo4j.Node), studyMode)
+        withResolvedNodeStability(mapNodeToGraphNode(r.get('n') as neo4j.Node), studyMode)
       );
 
       if (nodes.length === 0) {
@@ -1949,8 +1957,8 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
     userId: string
   ): Promise<IKnowledgeFrontierResult> {
     const session = this.neo4j.getSession();
-    const nodeMasteryExpr = buildNodeMasteryExpression('node', query.studyMode);
-    const prereqMasteryExpr = buildNodeMasteryExpression('prereq', query.studyMode);
+    const nodeStabilityExpr = buildNodeStabilityExpression('node', query.studyMode);
+    const prereqStabilityExpr = buildNodeStabilityExpression('prereq', query.studyMode);
     const studyModeNodeFilter =
       query.studyMode !== undefined
         ? 'AND (node.supportedStudyModes IS NULL OR size(node.supportedStudyModes) = 0 OR $studyMode IN node.supportedStudyModes)'
@@ -1960,33 +1968,33 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
         ? 'AND (prereq.supportedStudyModes IS NULL OR size(prereq.supportedStudyModes) = 0 OR $studyMode IN prereq.supportedStudyModes)'
         : '';
     try {
-      // Main frontier query: find unmastered nodes with at least one mastered prerequisite
+      // Main frontier query: find unstable nodes with at least one stable prerequisite
       const frontierResult = await session.executeRead(async (tx: ManagedTransaction) => {
         return tx.run(
           `MATCH (node:PkgNode {userId: $userId, domain: $domain})
            WHERE node.isDeleted = false
              ${studyModeNodeFilter}
-             AND (${nodeMasteryExpr} IS NULL OR ${nodeMasteryExpr} < $threshold)
+             AND (${nodeStabilityExpr} IS NULL OR ${nodeStabilityExpr} < $threshold)
            OPTIONAL MATCH (node)-[:PREREQUISITE]->(prereq:PkgNode {userId: $userId})
            WHERE prereq.isDeleted = false
              ${studyModePrereqFilter}
            WITH node,
                 collect(prereq) AS prereqs,
-                [p IN collect(prereq) WHERE ${prereqMasteryExpr.replaceAll('prereq', 'p')} >= $threshold] AS masteredPrereqs
-           WHERE size(masteredPrereqs) > 0 OR size(prereqs) = 0
+                [p IN collect(prereq) WHERE ${prereqStabilityExpr.replaceAll('prereq', 'p')} >= $threshold] AS stablePrereqs
+           WHERE size(stablePrereqs) > 0 OR size(prereqs) = 0
            RETURN node,
-                  masteredPrereqs,
-                  size(masteredPrereqs) AS masteredCount,
+                  stablePrereqs,
+                  size(stablePrereqs) AS stableCount,
                   size(prereqs) AS totalPrereqs,
                   CASE WHEN size(prereqs) = 0 THEN 1.0
-                       ELSE toFloat(size(masteredPrereqs)) / size(prereqs)
+                       ELSE toFloat(size(stablePrereqs)) / size(prereqs)
                   END AS readinessScore
            ORDER BY readinessScore DESC
            LIMIT $maxResults`,
           {
             userId,
             domain: query.domain,
-            threshold: query.masteryThreshold,
+            threshold: query.stabilityThreshold,
             maxResults: neo4j.int(query.maxResults),
             ...(query.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
           }
@@ -1995,41 +2003,41 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
 
       // Build frontier nodes
       const frontier = frontierResult.records.map((rec) => {
-        const node = withResolvedNodeMastery(
+        const node = withResolvedNodeStability(
           mapNodeToGraphNode(rec.get('node') as neo4j.Node),
           query.studyMode
         );
-        const masteredCount = (rec.get('masteredCount') as Integer).toNumber();
+        const stableCount = (rec.get('stableCount') as Integer).toNumber();
         const totalPrereqs = (rec.get('totalPrereqs') as Integer).toNumber();
         const readinessScore = rec.get('readinessScore') as number;
 
-        const masteredPrereqNodes = query.includePrerequisites
-          ? (rec.get('masteredPrereqs') as neo4j.Node[]).map((entry) =>
-              withResolvedNodeMastery(mapNodeToGraphNode(entry), query.studyMode)
+        const stablePrereqNodes = query.includePrerequisites
+          ? (rec.get('stablePrereqs') as neo4j.Node[]).map((entry) =>
+              withResolvedNodeStability(mapNodeToGraphNode(entry), query.studyMode)
             )
           : undefined;
 
-        // Compute average mastery of prerequisites
-        const masteredPrereqs = rec.get('masteredPrereqs') as neo4j.Node[];
-        const avgMastery =
-          masteredPrereqs.length > 0
-            ? masteredPrereqs.reduce((sum, p) => {
+        // Compute average stability of prerequisites
+        const stablePrereqs = rec.get('stablePrereqs') as neo4j.Node[];
+        const avgStability =
+          stablePrereqs.length > 0
+            ? stablePrereqs.reduce((sum, p) => {
                 const ml: unknown =
                   query.studyMode !== undefined
-                    ? (p.properties[studyModeMasteryPropertyKey(query.studyMode)] ??
-                      p.properties['masteryLevel'])
-                    : p.properties['masteryLevel'];
+                    ? (p.properties[studyModeStabilityPropertyKey(query.studyMode)] ??
+                      p.properties['stabilityLevel'])
+                    : p.properties['stabilityLevel'];
                 return sum + (typeof ml === 'number' ? ml : 0);
-              }, 0) / masteredPrereqs.length
+              }, 0) / stablePrereqs.length
             : 0;
 
         return {
           node,
-          prerequisiteMasteryAvg: avgMastery,
-          prerequisiteReadiness: `${String(masteredCount)}/${String(totalPrereqs)}`,
+          prerequisiteStabilityAvg: avgStability,
+          prerequisiteReadiness: `${String(stableCount)}/${String(totalPrereqs)}`,
           readinessScore,
-          ...(masteredPrereqNodes !== undefined
-            ? { masteredPrerequisites: masteredPrereqNodes }
+          ...(stablePrereqNodes !== undefined
+            ? { stablePrerequisites: stablePrereqNodes }
             : {}),
         };
       });
@@ -2040,13 +2048,13 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
           `MATCH (n:PkgNode {userId: $userId, domain: $domain})
            WHERE n.isDeleted = false
            WITH count(n) AS total,
-                sum(CASE WHEN ${buildNodeMasteryExpression('n', query.studyMode)} >= $threshold THEN 1 ELSE 0 END) AS mastered,
-                sum(CASE WHEN ${buildNodeMasteryExpression('n', query.studyMode)} IS NULL OR ${buildNodeMasteryExpression('n', query.studyMode)} < $threshold THEN 1 ELSE 0 END) AS unmastered
-           RETURN total, mastered, unmastered`,
+                sum(CASE WHEN ${buildNodeStabilityExpression('n', query.studyMode)} >= $threshold THEN 1 ELSE 0 END) AS stable,
+                sum(CASE WHEN ${buildNodeStabilityExpression('n', query.studyMode)} IS NULL OR ${buildNodeStabilityExpression('n', query.studyMode)} < $threshold THEN 1 ELSE 0 END) AS unstable
+           RETURN total, stable, unstable`,
           {
             userId,
             domain: query.domain,
-            threshold: query.masteryThreshold,
+            threshold: query.stabilityThreshold,
             ...(query.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
           }
         );
@@ -2055,21 +2063,21 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
       const summaryRec = summaryResult.records[0];
       const totalNodes =
         summaryRec !== undefined ? (summaryRec.get('total') as Integer).toNumber() : 0;
-      const totalMastered =
-        summaryRec !== undefined ? (summaryRec.get('mastered') as Integer).toNumber() : 0;
-      const totalUnmastered =
-        summaryRec !== undefined ? (summaryRec.get('unmastered') as Integer).toNumber() : 0;
+      const totalStable =
+        summaryRec !== undefined ? (summaryRec.get('stable') as Integer).toNumber() : 0;
+      const totalUnstable =
+        summaryRec !== undefined ? (summaryRec.get('unstable') as Integer).toNumber() : 0;
 
       return {
         domain: query.domain,
-        masteryThreshold: query.masteryThreshold,
+        stabilityThreshold: query.stabilityThreshold,
         frontier,
         summary: {
-          totalMastered,
-          totalUnmastered,
+          totalStable,
+          totalUnstable,
           totalFrontier: frontier.length,
-          totalDeepUnmastered: totalUnmastered - frontier.length,
-          masteryPercentage: totalNodes > 0 ? totalMastered / totalNodes : 0,
+          totalDeepUnstable: totalUnstable - frontier.length,
+          stabilityPercentage: totalNodes > 0 ? totalStable / totalNodes : 0,
         },
       };
     } finally {
@@ -2629,7 +2637,7 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
 
   /**
    * Build an ORDER BY fragment from an INodeFilter.
-   * Keeps null mastery values at the end for mastery-centric ordering.
+   * Keeps null stability values at the end for stability-centric ordering.
    */
   private buildNodeSortClause(
     filter: INodeFilter,
@@ -2638,7 +2646,7 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
     } = {}
   ): string {
     const direction = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
-    const masteryExpr = buildNodeMasteryExpression('n', filter.studyMode);
+    const stabilityExpr = buildNodeStabilityExpression('n', filter.studyMode);
     const scoreAlias = options.scoreAlias ?? 'score';
 
     switch (filter.sortBy) {
@@ -2648,8 +2656,8 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
         return `toLower(n.label) ${direction}, n.createdAt DESC`;
       case 'updatedAt':
         return `n.updatedAt ${direction}, n.createdAt DESC`;
-      case 'masteryLevel':
-        return `CASE WHEN ${masteryExpr} IS NULL THEN 1 ELSE 0 END ASC, ${masteryExpr} ${direction}, n.updatedAt DESC`;
+      case 'stabilityLevel':
+        return `CASE WHEN ${stabilityExpr} IS NULL THEN 1 ELSE 0 END ASC, ${stabilityExpr} ${direction}, n.updatedAt DESC`;
       case 'createdAt':
       default:
         if (filter.searchMode === 'fulltext') {

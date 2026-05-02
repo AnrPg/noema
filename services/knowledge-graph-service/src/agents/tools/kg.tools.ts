@@ -1,12 +1,11 @@
 /**
  * @noema/knowledge-graph-service - Knowledge Graph MCP Tool Handlers
  *
- * 19 MCP tools for the knowledge-graph-service (Phase 9):
+ * 17 MCP tools for the knowledge-graph-service (Phase 9):
  *
  * Task 1 — PKG tools (P0):
  *   get-concept-node, get-subgraph, find-prerequisites, find-related-concepts,
- *   add-concept-node, add-edge, update-mastery, get-node-mastery-summary,
- *   remove-node, remove-edge
+ *   add-concept-node, add-edge, remove-node, remove-edge
  *
  * Task 2 — CKG tools (P0):
  *   get-canonical-structure, propose-mutation, get-mutation-status
@@ -29,10 +28,8 @@ import type {
   EdgeId,
   EdgeWeight,
   GraphEdgeType,
-  MasteryLevel,
   MutationId,
   NodeId,
-  StudyMode,
   UserId,
 } from '@noema/types';
 
@@ -92,19 +89,6 @@ const AddEdgeInputSchema = z.object({
   edgeType: z.string().min(1),
   weight: z.number().optional(),
   skipAcyclicityCheck: z.boolean().optional(),
-});
-
-const UpdateMasteryInputSchema = z.object({
-  nodeId: z.string().min(1),
-  masteryLevel: z.number().min(0).max(1),
-  source: z.string().min(1),
-  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
-});
-
-const GetNodeMasterySummaryInputSchema = z.object({
-  studyMode: z.enum(['language_learning', 'knowledge_gaining']),
-  domain: z.string().min(1).optional(),
-  masteryThreshold: z.number().min(0).max(1).optional(),
 });
 
 const NodeIdReasonInputSchema = z.object({
@@ -410,63 +394,6 @@ export function createAddEdgeHandler(service: IKnowledgeGraphService) {
         createInput,
         context,
         validationOpts
-      );
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
-  };
-}
-
-/**
- * update-mastery — Update the mastery level of a specific PKG node.
- * P0 tool used by Calibration Agent after spaced repetition review.
- */
-export function createUpdateMasteryHandler(service: IKnowledgeGraphService) {
-  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const context = buildContext(userId, correlationId);
-      const body = UpdateMasteryInputSchema.parse(input);
-      const result = await service.updateNode(
-        userId as UserId,
-        body.nodeId as NodeId,
-        {
-          masteryLevel: body.masteryLevel as MasteryLevel,
-          ...(body.studyMode !== undefined ? { studyMode: body.studyMode as StudyMode } : {}),
-          properties: {
-            lastMasterySource: body.source,
-            lastMasteryUpdate: new Date().toISOString(),
-          },
-        },
-        context
-      );
-      return { success: true, data: result.data, agentHints: result.agentHints };
-    } catch (error) {
-      return errorResult(error);
-    }
-  };
-}
-
-/**
- * get-node-mastery-summary — Retrieve the explicit mastery read model for the
- * active study mode.
- */
-export function createGetNodeMasterySummaryHandler(service: IKnowledgeGraphService) {
-  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
-    try {
-      const context = buildContext(userId, correlationId);
-      const body = GetNodeMasterySummaryInputSchema.parse(input);
-      const filter = NodeFilter.create({
-        userId,
-        graphType: 'pkg',
-        studyMode: body.studyMode as StudyMode,
-        ...(body.domain !== undefined ? { domain: body.domain } : {}),
-      });
-      const result = await service.getNodeMasterySummary(
-        userId as UserId,
-        filter,
-        body.masteryThreshold ?? 0.7,
-        context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
@@ -1001,65 +928,6 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'boolean',
           description:
             'Skip cycle detection (default: false). Use only when certain no cycle exists.',
-        },
-      },
-    },
-  },
-  {
-    name: 'update-mastery',
-    description:
-      "Update the mastery level of a specific node in the user's PKG. Returns the updated node plus " +
-      'hints about mastery progression trend and related nodes that might also need mastery updates. ' +
-      'Use this tool after spaced repetition review, quiz results, or calibration updates.',
-    service: 'knowledge-graph-service',
-    priority: 'P0',
-    inputSchema: {
-      type: 'object',
-      required: ['nodeId', 'masteryLevel', 'source'],
-      properties: {
-        nodeId: { type: 'string', description: 'Node ID to update mastery for' },
-        masteryLevel: {
-          type: 'number',
-          description: 'New mastery level (0.0 to 1.0)',
-        },
-        studyMode: {
-          type: 'string',
-          enum: ['language_learning', 'knowledge_gaining'],
-          description:
-            'Optional study mode for mode-scoped mastery writes. If omitted, the service falls back to the node’s single supported mode or legacy global mastery.',
-        },
-        source: {
-          type: 'string',
-          description:
-            'Evidence source for this mastery update (e.g., "session_performance", "quiz_result", "calibration_update")',
-        },
-      },
-    },
-  },
-  {
-    name: 'get-node-mastery-summary',
-    description:
-      'Get the explicit mode-scoped mastery summary for the user. Returns tracked vs. untracked counts, ' +
-      'mastery band totals, average mastery, and strongest/weakest domains. Use this tool when planning ' +
-      'goals, campaign focus, or agent interventions without reconstructing progress from raw reviews.',
-    service: 'knowledge-graph-service',
-    priority: 'P0',
-    inputSchema: {
-      type: 'object',
-      required: ['studyMode'],
-      properties: {
-        studyMode: {
-          type: 'string',
-          enum: ['language_learning', 'knowledge_gaining'],
-          description: 'Active study mode to scope the mastery summary.',
-        },
-        domain: {
-          type: 'string',
-          description: 'Optional domain filter for narrower mastery planning.',
-        },
-        masteryThreshold: {
-          type: 'number',
-          description: 'Optional threshold used to classify nodes as mastered.',
         },
       },
     },

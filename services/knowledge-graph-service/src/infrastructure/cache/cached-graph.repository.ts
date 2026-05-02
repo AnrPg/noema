@@ -19,8 +19,8 @@ import type {
   GraphEdgeType,
   IGraphEdge,
   IGraphNode,
-  INodeMasterySummary,
-  MasteryLevel,
+  INodeStabilitySummary,
+  StabilityLevel,
   ISubgraph,
   NodeId,
   StudyMode,
@@ -59,7 +59,7 @@ import type { KgRedisCacheProvider } from './kg-redis-cache.provider.js';
 // ============================================================================
 
 export class CachedGraphRepository implements IGraphRepository {
-  /** Short TTL for mastery-sensitive data (frontier, centrality). */
+  /** Short TTL for stability-sensitive data (frontier, centrality). */
   private readonly shortTtl: number;
 
   constructor(
@@ -144,11 +144,11 @@ export class CachedGraphRepository implements IGraphRepository {
     return this.inner.countNodes(filter);
   }
 
-  async getNodeMasterySummary(
+  async getNodeStabilitySummary(
     filter: INodeFilter,
-    masteryThreshold: MasteryLevel
-  ): Promise<INodeMasterySummary> {
-    return this.inner.getNodeMasterySummary(filter, masteryThreshold);
+    stabilityThreshold: StabilityLevel
+  ): Promise<INodeStabilitySummary> {
+    return this.inner.getNodeStabilitySummary(filter, stabilityThreshold);
   }
 
   // ==========================================================================
@@ -369,7 +369,7 @@ export class CachedGraphRepository implements IGraphRepository {
     query: IFrontierQuery,
     userId: string
   ): Promise<IKnowledgeFrontierResult> {
-    const cacheKey = `frontier:${userId}:${query.domain}:${String(query.masteryThreshold)}:${String(query.maxResults)}:${query.sortBy}`;
+    const cacheKey = `frontier:${userId}:${query.domain}:${String(query.stabilityThreshold)}:${String(query.maxResults)}:${query.sortBy}`;
 
     return this.cache.getOrLoad(cacheKey, this.shortTtl, () =>
       this.inner.getKnowledgeFrontier(query, userId)

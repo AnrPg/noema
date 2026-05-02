@@ -48,7 +48,7 @@ describe('CreateNodeInputSchema', () => {
       ...validInput,
       description: 'The process by which plants convert light energy',
       properties: { difficulty: 'intermediate' },
-      masteryLevel: 0.75,
+      stabilityLevel: 0.75,
     });
     expect(result.success).toBe(true);
   });
@@ -92,25 +92,29 @@ describe('CreateNodeInputSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects masteryLevel below 0', () => {
+  it('rejects stabilityLevel below 0', () => {
     const result = CreateNodeInputSchema.safeParse({
       ...validInput,
-      masteryLevel: -0.1,
+      stabilityLevel: -0.1,
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejects masteryLevel above 1', () => {
+  it('rejects stabilityLevel above 1', () => {
     const result = CreateNodeInputSchema.safeParse({
       ...validInput,
-      masteryLevel: 1.01,
+      stabilityLevel: 1.01,
     });
     expect(result.success).toBe(false);
   });
 
-  it('accepts masteryLevel at boundaries (0 and 1)', () => {
-    expect(CreateNodeInputSchema.safeParse({ ...validInput, masteryLevel: 0 }).success).toBe(true);
-    expect(CreateNodeInputSchema.safeParse({ ...validInput, masteryLevel: 1 }).success).toBe(true);
+  it('accepts stabilityLevel at boundaries (0 and 1)', () => {
+    expect(CreateNodeInputSchema.safeParse({ ...validInput, stabilityLevel: 0 }).success).toBe(
+      true
+    );
+    expect(CreateNodeInputSchema.safeParse({ ...validInput, stabilityLevel: 1 }).success).toBe(
+      true
+    );
   });
 
   it('rejects missing required fields', () => {
@@ -127,14 +131,14 @@ describe('UpdateNodeInputSchema', () => {
   it('accepts single-field update', () => {
     expect(UpdateNodeInputSchema.safeParse({ label: 'NewLabel' }).success).toBe(true);
     expect(UpdateNodeInputSchema.safeParse({ domain: 'math' }).success).toBe(true);
-    expect(UpdateNodeInputSchema.safeParse({ masteryLevel: 0.5 }).success).toBe(true);
+    expect(UpdateNodeInputSchema.safeParse({ stabilityLevel: 0.5 }).success).toBe(true);
   });
 
   it('accepts multi-field update', () => {
     const result = UpdateNodeInputSchema.safeParse({
       label: 'Updated',
       description: 'New desc',
-      masteryLevel: 0.8,
+      stabilityLevel: 0.8,
     });
     expect(result.success).toBe(true);
   });
@@ -149,9 +153,9 @@ describe('UpdateNodeInputSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects masteryLevel out of range', () => {
-    expect(UpdateNodeInputSchema.safeParse({ masteryLevel: -1 }).success).toBe(false);
-    expect(UpdateNodeInputSchema.safeParse({ masteryLevel: 2 }).success).toBe(false);
+  it('rejects stabilityLevel out of range', () => {
+    expect(UpdateNodeInputSchema.safeParse({ stabilityLevel: -1 }).success).toBe(false);
+    expect(UpdateNodeInputSchema.safeParse({ stabilityLevel: 2 }).success).toBe(false);
   });
 });
 

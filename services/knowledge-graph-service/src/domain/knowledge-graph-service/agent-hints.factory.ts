@@ -745,23 +745,23 @@ export class AgentHintsFactory {
         }))
       )
       .withValidityPeriod('short')
-      .withAssumptions([`Mastery threshold set to ${String(result.masteryThreshold)}`])
+      .withAssumptions([`Stability threshold set to ${String(result.stabilityThreshold)}`])
       .withEstimatedImpact(0.8, 0.2, 4.0)
       .withReasoning(
-        `Knowledge frontier for "${result.domain}": ${String(frontierCount)} concept(s) ready to learn. Mastery: ${result.summary.masteryPercentage.toFixed(1)}% (${String(result.summary.totalMastered)}/${String(result.summary.totalMastered + result.summary.totalUnmastered)}).`
+        `Knowledge frontier for "${result.domain}": ${String(frontierCount)} concept(s) ready to learn. Stability: ${result.summary.stabilityPercentage.toFixed(1)}% (${String(result.summary.totalStable)}/${String(result.summary.totalStable + result.summary.totalUnstable)}).`
       );
 
     if (frontierCount === 0) {
-      if (result.summary.totalMastered === 0) {
+      if (result.summary.totalStable === 0) {
         builder.addAction({
           action: 'start_learning',
-          description: 'No mastered concepts yet — begin with foundational topics',
+          description: 'No stable concepts yet — begin with foundational topics',
           priority: 'high',
           category: 'exploration',
         });
       } else {
         builder.addAction({
-          action: 'deepen_mastery',
+          action: 'deepen_stability',
           description:
             'All frontier concepts already explored — deepen existing knowledge or branch to new domains',
           priority: 'medium',

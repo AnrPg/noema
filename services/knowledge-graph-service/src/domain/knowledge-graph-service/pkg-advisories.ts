@@ -145,7 +145,7 @@ export class PkgAdvisoryService {
         severity: 'medium',
         message:
           `A similar concept label already exists in "${node.domain}". ` +
-          'Duplicate nodes can fragment mastery and make PKG-to-CKG alignment noisier.',
+          'Duplicate nodes can fragment stability and make PKG-to-CKG alignment noisier.',
         relatedIds: duplicates.map((duplicate) => duplicate.nodeId as string),
         suggestedFix:
           'Merge or rename near-duplicate concepts unless they intentionally represent distinct meanings.',

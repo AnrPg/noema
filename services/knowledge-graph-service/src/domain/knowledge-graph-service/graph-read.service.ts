@@ -18,9 +18,9 @@ import type {
   EdgeId,
   IGraphEdge,
   IGraphNode,
-  INodeMasterySummary,
+  INodeStabilitySummary,
   IPaginatedResponse,
-  MasteryLevel,
+  StabilityLevel,
   ISubgraph,
   NodeId,
   UserId,
@@ -629,7 +629,7 @@ export class GraphReadService {
       {
         userId,
         domain: query.domain,
-        masteryThreshold: query.masteryThreshold,
+        stabilityThreshold: query.stabilityThreshold,
         sortBy: query.sortBy,
         maxResults: query.maxResults,
       },
@@ -681,21 +681,21 @@ export class GraphReadService {
     };
   }
 
-  async getNodeMasterySummary(
+  async getNodeStabilitySummary(
     userId: UserId,
     filters: INodeFilter,
-    masteryThreshold: number,
+    stabilityThreshold: number,
     context: IExecutionContext
-  ): Promise<IServiceResult<INodeMasterySummary>> {
+  ): Promise<IServiceResult<INodeStabilitySummary>> {
     requireAuth(context);
     this.logger.debug(
       {
         userId,
         studyMode: filters.studyMode,
         domain: filters.domain,
-        masteryThreshold,
+        stabilityThreshold,
       },
-      'Getting PKG node mastery summary'
+      'Getting PKG node stability summary'
     );
 
     const scopedFilter: INodeFilter = {
@@ -703,9 +703,9 @@ export class GraphReadService {
       userId,
       graphType: GraphType.PKG,
     };
-    const summary = await this.graphRepository.getNodeMasterySummary(
+    const summary = await this.graphRepository.getNodeStabilitySummary(
       scopedFilter,
-      masteryThreshold as MasteryLevel
+      stabilityThreshold as StabilityLevel
     );
 
     return {
@@ -714,7 +714,7 @@ export class GraphReadService {
         .withConfidence(0.9)
         .withValidityPeriod('short')
         .withEstimatedImpact(0.8, 0.1, 8)
-        .withReasoning('Mode-scoped mastery summary derived from explicit PKG node mastery state.')
+        .withReasoning('Mode-scoped stability summary derived from explicit PKG node stability state.')
         .build(),
     };
   }

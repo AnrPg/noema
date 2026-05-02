@@ -9,7 +9,7 @@
 import type {
   ConfidenceScore,
   InterventionId,
-  InterventionType,
+  MisconceptionInterventionType,
   Metadata,
   MisconceptionPatternId,
   MisconceptionSeverity,
@@ -386,7 +386,7 @@ export class PrismaMisconceptionRepository implements IMisconceptionRepository {
     return {
       templateId: record.id as InterventionId,
       misconceptionType: record.misconceptionPattern.misconceptionType as MisconceptionType,
-      interventionType: record.interventionType as InterventionType,
+      interventionType: record.interventionType as MisconceptionInterventionType,
       name: record.name,
       description: record.description ?? '',
       config: fromPrismaJson<Metadata>(record.spec),

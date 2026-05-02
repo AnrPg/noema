@@ -115,11 +115,11 @@ export function computeNodeChangedFields(
   if (updates.domain !== undefined && updates.domain !== existing.domain) {
     changes.push({ field: 'domain', before: existing.domain, after: updates.domain });
   }
-  if (updates.masteryLevel !== undefined && updates.masteryLevel !== existing.masteryLevel) {
+  if (updates.stabilityLevel !== undefined && updates.stabilityLevel !== existing.stabilityLevel) {
     changes.push({
-      field: 'masteryLevel',
-      before: existing.masteryLevel,
-      after: updates.masteryLevel,
+      field: 'stabilityLevel',
+      before: existing.stabilityLevel,
+      after: updates.stabilityLevel,
     });
   }
   if (updates.properties !== undefined) {

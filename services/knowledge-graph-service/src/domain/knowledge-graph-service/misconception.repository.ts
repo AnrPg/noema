@@ -14,7 +14,7 @@
 import type {
   ConfidenceScore,
   InterventionId,
-  InterventionType,
+  MisconceptionInterventionType,
   Metadata,
   MisconceptionPatternId,
   MisconceptionPatternKind,
@@ -77,7 +77,7 @@ export interface IInterventionTemplate {
   readonly misconceptionType: MisconceptionType;
 
   /** Type of remediation action */
-  readonly interventionType: InterventionType;
+  readonly interventionType: MisconceptionInterventionType;
 
   /** Human-readable name */
   readonly name: string;
@@ -179,7 +179,7 @@ export interface IUpsertPatternInput {
  */
 export interface IUpsertInterventionTemplateInput {
   readonly misconceptionType: MisconceptionType;
-  readonly interventionType: InterventionType;
+  readonly interventionType: MisconceptionInterventionType;
   readonly name: string;
   readonly description: string;
   readonly config: Metadata;

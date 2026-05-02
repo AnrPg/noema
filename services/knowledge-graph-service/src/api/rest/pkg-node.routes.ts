@@ -9,7 +9,7 @@
  */
 
 import type { CkgNodeStatus, GraphNodeType, NodeId, StudyMode, UserId } from '@noema/types';
-import { MasteryLevel } from '@noema/types';
+import { StabilityLevel } from '@noema/types';
 import type { FastifyInstance } from 'fastify';
 import type {
   ICreateNodeInput,
@@ -195,7 +195,7 @@ export function registerPkgNodeRoutes(
             pageSize: { type: 'number', minimum: 1, maximum: 200 },
             sortBy: {
               type: 'string',
-              enum: ['label', 'createdAt', 'updatedAt', 'masteryLevel', 'relevance'],
+              enum: ['label', 'createdAt', 'updatedAt', 'stabilityLevel', 'relevance'],
             },
             sortOrder: { type: 'string', enum: ['asc', 'desc'] },
           },
@@ -324,7 +324,7 @@ export function registerPkgNodeRoutes(
             },
             properties: { type: 'object' },
             metadata: { type: 'object' },
-            masteryLevel: { type: 'number', minimum: 0, maximum: 1 },
+            stabilityLevel: { type: 'number', minimum: 0, maximum: 1 },
           },
         },
       },
@@ -383,8 +383,8 @@ export function registerPkgNodeRoutes(
             ? { supportedStudyModes: parsed.supportedStudyModes as StudyMode[] }
             : {}),
           ...(parsed.properties !== undefined ? { properties: parsed.properties } : {}),
-          ...(parsed.masteryLevel !== undefined
-            ? { masteryLevel: MasteryLevel.create(parsed.masteryLevel) }
+          ...(parsed.stabilityLevel !== undefined
+            ? { stabilityLevel: StabilityLevel.create(parsed.stabilityLevel) }
             : {}),
         };
 

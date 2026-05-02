@@ -247,8 +247,22 @@ describe('CkgMutationPipeline applyOperations', () => {
           updatedAt: '2026-03-28T10:05:00.000Z',
         }) satisfies IGraphNode
     );
+    const getNode = vi.fn(
+      () =>
+        Promise.resolve({
+          nodeId: 'node_euler',
+          graphType: 'ckg',
+          nodeType: 'concept',
+          label: 'Leonhard Euler',
+          domain: 'world-knowledge',
+          properties: {},
+          createdAt: '2026-03-28T10:00:00.000Z',
+          updatedAt: '2026-03-28T10:00:00.000Z',
+        }) satisfies IGraphNode
+    );
 
     const txRepo = {
+      getNode,
       updateNode,
     };
 

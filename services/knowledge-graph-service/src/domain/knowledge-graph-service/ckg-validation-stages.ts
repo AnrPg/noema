@@ -299,17 +299,29 @@ export class StructuralIntegrityStage implements IValidationStage {
 
     // Acyclicity check (if policy requires it)
     if (policy.requiresAcyclicity && violations.length === 0) {
-      const cyclePath = await this.graphRepository.detectCycles(
+      if (op.sourceNodeId === op.targetNodeId) {
+        violations.push({
+          code: 'CYCLIC_EDGE_DETECTED',
+          message: `Adding edge would create a self-cycle in the '${op.edgeType}' graph`,
+          severity: 'error',
+          affectedOperationIndex: index,
+          metadata: { cyclePath: [op.sourceNodeId] },
+        });
+        return violations;
+      }
+
+      const reversePath = await this.graphRepository.findFilteredShortestPath(
         op.targetNodeId as NodeId,
-        op.edgeType
+        op.sourceNodeId as NodeId,
+        [op.edgeType]
       );
-      if (cyclePath.length > 0) {
+      if (reversePath.length > 0) {
         violations.push({
           code: 'CYCLIC_EDGE_DETECTED',
           message: `Adding edge would create a cycle in the '${op.edgeType}' graph`,
           severity: 'error',
           affectedOperationIndex: index,
-          metadata: { cyclePath },
+          metadata: { cyclePath: reversePath.map((node) => node.nodeId) },
         });
       }
     }

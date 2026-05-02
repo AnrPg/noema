@@ -22,13 +22,13 @@ import type {
   ICanonicalExternalRef,
   IGraphEdge,
   IGraphNode,
-  INodeMasterySummary,
+  INodeStabilitySummary,
   INodeProvenanceEntry,
   INodeReviewMetadata,
   IOntologyMapping,
   ISubgraph,
   ISourceCoverageSummary,
-  MasteryLevel,
+  StabilityLevel,
   NodeId,
   StudyMode,
 } from '@noema/types';
@@ -74,7 +74,7 @@ export interface ICreateNodeInput {
   readonly reviewMetadata?: INodeReviewMetadata | null;
   readonly sourceCoverage?: ISourceCoverageSummary | null;
   readonly properties?: Record<string, unknown>;
-  readonly masteryLevel?: MasteryLevel;
+  readonly stabilityLevel?: StabilityLevel;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface IUpdateNodeInput {
   readonly reviewMetadata?: INodeReviewMetadata | null;
   readonly sourceCoverage?: ISourceCoverageSummary | null;
   readonly properties?: Record<string, unknown>;
-  readonly masteryLevel?: MasteryLevel;
+  readonly stabilityLevel?: StabilityLevel;
   readonly studyMode?: StudyMode;
 }
 
@@ -194,12 +194,12 @@ export interface INodeRepository {
   countNodes(filter: INodeFilter): Promise<number>;
 
   /**
-   * Compute a mode-scoped mastery summary for the nodes matching the filter.
+   * Compute a mode-scoped stability summary for the nodes matching the filter.
    */
-  getNodeMasterySummary(
+  getNodeStabilitySummary(
     filter: INodeFilter,
-    masteryThreshold: MasteryLevel
-  ): Promise<INodeMasterySummary>;
+    stabilityThreshold: StabilityLevel
+  ): Promise<INodeStabilitySummary>;
 }
 
 // ============================================================================
@@ -399,9 +399,9 @@ export interface ITraversalRepository {
   /**
    * Get the knowledge frontier for a user in a domain.
    *
-   * The frontier is the set of unmastered nodes whose prerequisites are
-   * mastered — the optimal set for scheduling new study material.
-   * PKG-only (CKG has no mastery levels).
+   * The frontier is the set of unstable nodes whose prerequisites are
+   * stable — the optimal set for scheduling new study material.
+   * PKG-only (CKG has no stability levels).
    */
   getKnowledgeFrontier(query: IFrontierQuery, userId: string): Promise<IKnowledgeFrontierResult>;
 

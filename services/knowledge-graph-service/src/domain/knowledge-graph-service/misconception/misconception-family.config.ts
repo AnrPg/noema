@@ -120,7 +120,7 @@ export const MISCONCEPTION_FAMILIES: readonly IMisconceptionFamily[] = [
     key: 'metacognitive',
     label: 'Metacognitive',
     description: "Misconceptions about one's own learning state or strategy",
-    misconceptionTypes: ['illusory_mastery', 'strategy_mismatch', 'transfer_blindness'],
+    misconceptionTypes: ['illusory_stability', 'strategy_mismatch', 'transfer_blindness'],
   },
 
   // ── Catch-all ──────────────────────────────────────────────────────────

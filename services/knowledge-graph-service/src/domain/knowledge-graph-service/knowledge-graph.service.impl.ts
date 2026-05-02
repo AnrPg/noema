@@ -29,7 +29,7 @@ import type {
   ICanonicalExternalRef,
   IMetacognitiveStageAssessment,
   IMisconceptionDetection,
-  INodeMasterySummary,
+  INodeStabilitySummary,
   INodeProvenanceEntry,
   INodeReviewMetadata,
   IOntologyMapping,
@@ -583,13 +583,13 @@ export class KnowledgeGraphService implements IKnowledgeGraphService {
     return this.pkgWrite.listNodes(userId, filters, pagination, context);
   }
 
-  getNodeMasterySummary(
+  getNodeStabilitySummary(
     userId: UserId,
     filters: INodeFilter,
-    masteryThreshold: number,
+    stabilityThreshold: number,
     context: IExecutionContext
-  ): Promise<IServiceResult<INodeMasterySummary>> {
-    return this.graphRead.getNodeMasterySummary(userId, filters, masteryThreshold, context);
+  ): Promise<IServiceResult<INodeStabilitySummary>> {
+    return this.graphRead.getNodeStabilitySummary(userId, filters, stabilityThreshold, context);
   }
 
   // ========================================================================

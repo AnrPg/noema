@@ -91,7 +91,7 @@ const NodeEnrichmentSchema = {
 
 /**
  * Schema for creating a new graph node.
- * Validates label, nodeType, domain, and optional description/properties/mastery.
+ * Validates label, nodeType, domain, and optional description/properties/stability.
  */
 export const CreateNodeInputSchema = z.object({
   label: z.string().min(1, 'Node label is required').max(500, 'Node label too long'),
@@ -101,7 +101,7 @@ export const CreateNodeInputSchema = z.object({
   ...NodeEnrichmentSchema,
   supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
   properties: z.record(z.unknown()).optional(),
-  masteryLevel: z.number().min(0).max(1).optional(),
+  stabilityLevel: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -118,7 +118,7 @@ export const UpdateNodeInputSchema = z
     studyMode: StudyModeSchema.optional(),
     supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
     properties: z.record(z.unknown()).optional(),
-    masteryLevel: z.number().min(0).max(1).optional(),
+    stabilityLevel: z.number().min(0).max(1).optional(),
   })
   .refine(
     (data) =>
@@ -139,11 +139,11 @@ export const UpdateNodeInputSchema = z
       data.studyMode !== undefined ||
       data.supportedStudyModes !== undefined ||
       data.properties !== undefined ||
-      data.masteryLevel !== undefined,
+      data.stabilityLevel !== undefined,
     { message: 'At least one field must be provided for update' }
   )
-  .refine((data) => data.studyMode === undefined || data.masteryLevel !== undefined, {
-    message: 'studyMode can only be provided when masteryLevel is also provided',
+  .refine((data) => data.studyMode === undefined || data.stabilityLevel !== undefined, {
+    message: 'studyMode can only be provided when stabilityLevel is also provided',
   });
 
 // ============================================================================

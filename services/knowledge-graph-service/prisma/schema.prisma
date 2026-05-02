@@ -5,13 +5,13 @@
 // Graph data (PKG/CKG nodes, edges, traversals) lives in Neo4j.
 
 generator client {
-    provider = "prisma-client-js"
-    output   = "../generated/prisma"
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // ============================================================================
@@ -23,77 +23,77 @@ datasource db {
 // Mutations are expressed in a constrained DSL — no direct raw writes.
 
 model CkgMutation {
-    id     String @id @db.VarChar(50)
-    userId String @map("user_id") @db.VarChar(50)
+  id     String @id @db.VarChar(50)
+  userId String @map("user_id") @db.VarChar(50)
 
-    // Typestate — current position in the mutation pipeline
-    state CkgMutationState @default(PROPOSED)
+  // Typestate — current position in the mutation pipeline
+  state CkgMutationState @default(PROPOSED)
 
-    // Mutation type discriminator
-    mutationType String @map("mutation_type") @db.VarChar(100)
+  // Mutation type discriminator
+  mutationType String @map("mutation_type") @db.VarChar(100)
 
-    // DSL operation payload — the mutation expressed in the constrained DSL
-    operation Json
+  // DSL operation payload — the mutation expressed in the constrained DSL
+  operation Json
 
-    // Validation results accumulated during the pipeline
-    validationResult Json? @map("validation_result")
+  // Validation results accumulated during the pipeline
+  validationResult Json? @map("validation_result")
 
-    // Evidence references — links to aggregation evidence or external sources
-    evidenceRefs Json? @map("evidence_refs")
+  // Evidence references — links to aggregation evidence or external sources
+  evidenceRefs Json? @map("evidence_refs")
 
-    // Target graph location context (CKG node/edge IDs affected)
-    targetNodeIds String[] @default([]) @map("target_node_ids")
-    targetEdgeIds String[] @default([]) @map("target_edge_ids")
+  // Target graph location context (CKG node/edge IDs affected)
+  targetNodeIds String[] @default([]) @map("target_node_ids")
+  targetEdgeIds String[] @default([]) @map("target_edge_ids")
 
-    // Processing results from each pipeline stage
-    proofResult     Json?   @map("proof_result")
-    commitResult    Json?   @map("commit_result")
-    rejectionReason String? @map("rejection_reason") @db.VarChar(2000)
+  // Processing results from each pipeline stage
+  proofResult     Json?   @map("proof_result")
+  commitResult    Json?   @map("commit_result")
+  rejectionReason String? @map("rejection_reason") @db.VarChar(2000)
 
-    // Priority for processing queue
-    priority Int @default(0)
+  // Priority for processing queue
+  priority Int @default(0)
 
-    // Proposer's rationale for the mutation
-    rationale String? @db.VarChar(2000)
+  // Proposer's rationale for the mutation
+  rationale String? @db.VarChar(2000)
 
-    // Denormalized evidence count for promotion band lookup
-    evidenceCount Int @default(0) @map("evidence_count")
+  // Denormalized evidence count for promotion band lookup
+  evidenceCount Int @default(0) @map("evidence_count")
 
-    // Number of recovery attempts for stuck mutations (max retry enforcement)
-    recoveryAttempts Int @default(0) @map("recovery_attempts")
+  // Number of recovery attempts for stuck mutations (max retry enforcement)
+  recoveryAttempts Int @default(0) @map("recovery_attempts")
 
-    // Number of revision cycles this mutation has been through
-    revisionCount Int @default(0) @map("revision_count")
+  // Number of revision cycles this mutation has been through
+  revisionCount Int @default(0) @map("revision_count")
 
-    // Latest reviewer feedback requesting changes (null if no active revision)
-    revisionFeedback String? @map("revision_feedback") @db.VarChar(4000)
+  // Latest reviewer feedback requesting changes (null if no active revision)
+  revisionFeedback String? @map("revision_feedback") @db.VarChar(4000)
 
-    // Extensible metadata
-    metadata Json @default("{}")
+  // Extensible metadata
+  metadata Json @default("{}")
 
-    // Optimistic locking
-    version Int @default(1)
+  // Optimistic locking
+  version Int @default(1)
 
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-    createdBy String?  @map("created_by") @db.VarChar(50)
-    updatedBy String?  @map("updated_by") @db.VarChar(50)
+  // Audit fields
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by") @db.VarChar(50)
+  updatedBy String?  @map("updated_by") @db.VarChar(50)
 
-    // Relations
-    auditLog            CkgMutationAuditLog[]
-    aggregationEvidence AggregationEvidence[]
+  // Relations
+  auditLog            CkgMutationAuditLog[]
+  aggregationEvidence AggregationEvidence[]
 
-    // Indexes
-    @@index([state])
-    @@index([userId])
-    @@index([mutationType])
-    @@index([priority])
-    @@index([createdAt])
-    @@index([state, priority])
-    @@index([userId, state])
-    @@index([userId, createdAt])
-    @@map("ckg_mutations")
+  // Indexes
+  @@index([state])
+  @@index([userId])
+  @@index([mutationType])
+  @@index([priority])
+  @@index([createdAt])
+  @@index([state, priority])
+  @@index([userId, state])
+  @@index([userId, createdAt])
+  @@map("ckg_mutations")
 }
 
 // ============================================================================
@@ -103,37 +103,37 @@ model CkgMutation {
 // This table is append-only — no updates or deletes permitted.
 
 model CkgMutationAuditLog {
-    id         String @id @db.VarChar(50)
-    mutationId String @map("mutation_id") @db.VarChar(50)
+  id         String @id @db.VarChar(50)
+  mutationId String @map("mutation_id") @db.VarChar(50)
 
-    // State transition
-    fromState CkgMutationState @map("from_state")
-    toState   CkgMutationState @map("to_state")
+  // State transition
+  fromState CkgMutationState @map("from_state")
+  toState   CkgMutationState @map("to_state")
 
-    // Who/what triggered the transition
-    triggeredBy String  @map("triggered_by") @db.VarChar(100)
-    reason      String? @db.VarChar(2000)
+  // Who/what triggered the transition
+  triggeredBy String  @map("triggered_by") @db.VarChar(100)
+  reason      String? @db.VarChar(2000)
 
-    // Snapshot of relevant data at transition time
-    snapshot Json? @default("{}")
+  // Snapshot of relevant data at transition time
+  snapshot Json? @default("{}")
 
-    // Correlation for distributed tracing
-    correlationId String? @map("correlation_id") @db.VarChar(100)
+  // Correlation for distributed tracing
+  correlationId String? @map("correlation_id") @db.VarChar(100)
 
-    // Audit — no updatedAt because this table is append-only
-    createdAt DateTime @default(now()) @map("created_at")
+  // Audit — no updatedAt because this table is append-only
+  createdAt DateTime @default(now()) @map("created_at")
 
-    // Relations
-    mutation CkgMutation @relation(fields: [mutationId], references: [id], onDelete: Cascade)
+  // Relations
+  mutation CkgMutation @relation(fields: [mutationId], references: [id], onDelete: Cascade)
 
-    // Indexes
-    @@index([mutationId])
-    @@index([mutationId, createdAt])
-    @@index([fromState, toState])
-    @@index([triggeredBy])
-    @@index([correlationId])
-    @@index([createdAt])
-    @@map("ckg_mutation_audit_log")
+  // Indexes
+  @@index([mutationId])
+  @@index([mutationId, createdAt])
+  @@index([fromState, toState])
+  @@index([triggeredBy])
+  @@index([correlationId])
+  @@index([createdAt])
+  @@map("ckg_mutation_audit_log")
 }
 
 // ============================================================================
@@ -145,46 +145,46 @@ model CkgMutationAuditLog {
 // Actual computation happens in Neo4j; these are cached results.
 
 model StructuralMetricSnapshot {
-    id     String @id @db.VarChar(50)
-    userId String @map("user_id") @db.VarChar(50)
+  id     String @id @db.VarChar(50)
+  userId String @map("user_id") @db.VarChar(50)
 
-    // Optional scope: metrics can be global or domain-specific
-    domain String? @db.VarChar(200)
+  // Optional scope: metrics can be global or domain-specific
+  domain String? @db.VarChar(200)
 
-    // Study mode lens these metrics were computed under
-    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
+  // Study mode lens these metrics were computed under
+  studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
 
-    // The computed metrics as a JSON object
-    // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, SSG, BSI }
-    metrics Json
+  // The computed metrics as a JSON object
+  // Structure: { AD, DCG, SLI, SCE, ULS, TBS, SDF, SSE, SAA, SSG, BSI }
+  metrics Json
 
-    // Schema version for forward-compatible deserialization of metrics.
-    // Older snapshots missing new metric fields can be detected by checking this.
-    schemaVersion Int @default(1) @map("schema_version")
+  // Schema version for forward-compatible deserialization of metrics.
+  // Older snapshots missing new metric fields can be detected by checking this.
+  schemaVersion Int @default(1) @map("schema_version")
 
-    // Optional graph region identifier (for per-region staging)
-    graphRegion String? @map("graph_region") @db.VarChar(200)
+  // Optional graph region identifier (for per-region staging)
+  graphRegion String? @map("graph_region") @db.VarChar(200)
 
-    // Metacognitive stage at snapshot time (STAGE_1..STAGE_4)
-    metacognitiveStage Int? @map("metacognitive_stage")
+  // Metacognitive stage at snapshot time (STAGE_1..STAGE_4)
+  metacognitiveStage Int? @map("metacognitive_stage")
 
-    // Number of PKG nodes at snapshot time (for context)
-    nodeCount Int? @map("node_count")
+  // Number of PKG nodes at snapshot time (for context)
+  nodeCount Int? @map("node_count")
 
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  // Audit fields
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Indexes
-    @@index([userId])
-    @@index([userId, domain])
-    @@index([userId, domain, studyMode])
-    @@index([userId, createdAt])
-    @@index([domain])
-    @@index([studyMode])
-    @@index([createdAt])
-    @@index([metacognitiveStage])
-    @@map("structural_metric_snapshots")
+  // Indexes
+  @@index([userId])
+  @@index([userId, domain])
+  @@index([userId, domain, studyMode])
+  @@index([userId, createdAt])
+  @@index([domain])
+  @@index([studyMode])
+  @@index([createdAt])
+  @@index([metacognitiveStage])
+  @@map("structural_metric_snapshots")
 }
 
 // ============================================================================
@@ -192,109 +192,109 @@ model StructuralMetricSnapshot {
 // ============================================================================
 
 model GraphSnapshot {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    graphType String @map("graph_type") @db.VarChar(20)
-    scopeUserId String? @map("scope_user_id") @db.VarChar(50)
-    scopeDomain String? @map("scope_domain") @db.VarChar(200)
+  graphType   String  @map("graph_type") @db.VarChar(20)
+  scopeUserId String? @map("scope_user_id") @db.VarChar(50)
+  scopeDomain String? @map("scope_domain") @db.VarChar(200)
 
-    nodeCount Int @default(0) @map("node_count")
-    edgeCount Int @default(0) @map("edge_count")
-    schemaVersion Int @default(1) @map("schema_version")
+  nodeCount     Int @default(0) @map("node_count")
+  edgeCount     Int @default(0) @map("edge_count")
+  schemaVersion Int @default(1) @map("schema_version")
 
-    snapshotData Json @map("snapshot_data")
+  snapshotData Json @map("snapshot_data")
 
-    reason String? @db.VarChar(2000)
-    sourceCursor String? @map("source_cursor") @db.VarChar(100)
+  reason       String? @db.VarChar(2000)
+  sourceCursor String? @map("source_cursor") @db.VarChar(100)
 
-    createdAt DateTime @default(now()) @map("created_at")
-    createdBy String? @map("created_by") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by") @db.VarChar(50)
 
-    @@index([graphType, createdAt])
-    @@index([scopeUserId, createdAt])
-    @@index([scopeDomain, createdAt])
-    @@index([graphType, scopeUserId, scopeDomain, createdAt])
-    @@map("graph_snapshots")
+  @@index([graphType, createdAt])
+  @@index([scopeUserId, createdAt])
+  @@index([scopeDomain, createdAt])
+  @@index([graphType, scopeUserId, scopeDomain, createdAt])
+  @@map("graph_snapshots")
 }
 
 model GraphRestoreConfirmationToken {
-    tokenId String @id @map("token_id") @db.VarChar(100)
+  tokenId String @id @map("token_id") @db.VarChar(100)
 
-    snapshotId String @map("snapshot_id") @db.VarChar(50)
-    actorId String? @map("actor_id") @db.VarChar(50)
-    summaryHash String @map("summary_hash") @db.VarChar(128)
-    status String @db.VarChar(20)
-    expiresAt DateTime @map("expires_at")
-    consumedAt DateTime? @map("consumed_at")
+  snapshotId  String    @map("snapshot_id") @db.VarChar(50)
+  actorId     String?   @map("actor_id") @db.VarChar(50)
+  summaryHash String    @map("summary_hash") @db.VarChar(128)
+  status      String    @db.VarChar(20)
+  expiresAt   DateTime  @map("expires_at")
+  consumedAt  DateTime? @map("consumed_at")
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    @@index([snapshotId])
-    @@index([status, expiresAt])
-    @@map("graph_restore_confirmation_tokens")
+  @@index([snapshotId])
+  @@index([status, expiresAt])
+  @@map("graph_restore_confirmation_tokens")
 }
 
 model GraphCrdtStat {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    statKey String @unique @map("stat_key") @db.VarChar(500)
-    graphType String @map("graph_type") @db.VarChar(20)
-    targetKind String @map("target_kind") @db.VarChar(50)
-    targetNodeId String? @map("target_node_id") @db.VarChar(200)
-    proposedLabel String? @map("proposed_label") @db.VarChar(500)
-    evidenceType String @map("evidence_type") @db.VarChar(100)
+  statKey       String  @unique @map("stat_key") @db.VarChar(500)
+  graphType     String  @map("graph_type") @db.VarChar(20)
+  targetKind    String  @map("target_kind") @db.VarChar(50)
+  targetNodeId  String? @map("target_node_id") @db.VarChar(200)
+  proposedLabel String? @map("proposed_label") @db.VarChar(500)
+  evidenceType  String  @map("evidence_type") @db.VarChar(100)
 
-    metadata Json @default("{}")
+  metadata Json @default("{}")
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    appliedSignals GraphCrdtAppliedSignal[]
-    replicaStates  GraphCrdtReplicaState[]
+  appliedSignals GraphCrdtAppliedSignal[]
+  replicaStates  GraphCrdtReplicaState[]
 
-    @@index([graphType, targetKind])
-    @@index([targetNodeId])
-    @@index([proposedLabel])
-    @@index([evidenceType])
-    @@map("graph_crdt_stats")
+  @@index([graphType, targetKind])
+  @@index([targetNodeId])
+  @@index([proposedLabel])
+  @@index([evidenceType])
+  @@map("graph_crdt_stats")
 }
 
 model GraphCrdtAppliedSignal {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    statKey String @map("stat_key") @db.VarChar(500)
-    evidenceId String @unique @map("evidence_id") @db.VarChar(50)
-    replicaId String @map("replica_id") @db.VarChar(100)
+  statKey    String @map("stat_key") @db.VarChar(500)
+  evidenceId String @unique @map("evidence_id") @db.VarChar(50)
+  replicaId  String @map("replica_id") @db.VarChar(100)
 
-    createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-    stat GraphCrdtStat @relation(fields: [statKey], references: [statKey], onDelete: Cascade)
+  stat GraphCrdtStat @relation(fields: [statKey], references: [statKey], onDelete: Cascade)
 
-    @@index([statKey])
-    @@index([replicaId])
-    @@map("graph_crdt_applied_signals")
+  @@index([statKey])
+  @@index([replicaId])
+  @@map("graph_crdt_applied_signals")
 }
 
 model GraphCrdtReplicaState {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    statKey   String @map("stat_key") @db.VarChar(500)
-    replicaId String @map("replica_id") @db.VarChar(100)
+  statKey   String @map("stat_key") @db.VarChar(500)
+  replicaId String @map("replica_id") @db.VarChar(100)
 
-    supportCount    Int @default(0) @map("support_count")
-    opposeCount     Int @default(0) @map("oppose_count")
-    neutralCount    Int @default(0) @map("neutral_count")
-    confidenceCount Int @default(0) @map("confidence_count")
+  supportCount    Int @default(0) @map("support_count")
+  opposeCount     Int @default(0) @map("oppose_count")
+  neutralCount    Int @default(0) @map("neutral_count")
+  confidenceCount Int @default(0) @map("confidence_count")
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    stat GraphCrdtStat @relation(fields: [statKey], references: [statKey], onDelete: Cascade)
+  stat GraphCrdtStat @relation(fields: [statKey], references: [statKey], onDelete: Cascade)
 
-    @@unique([statKey, replicaId])
-    @@index([replicaId])
-    @@map("graph_crdt_replica_states")
+  @@unique([statKey, replicaId])
+  @@index([replicaId])
+  @@map("graph_crdt_replica_states")
 }
 
 // ============================================================================
@@ -304,77 +304,77 @@ model GraphCrdtReplicaState {
 // This provides auditability for the crowdsourced aggregation process.
 
 model AggregationEvidence {
-    id         String  @id @db.VarChar(50)
-    mutationId String? @map("mutation_id") @db.VarChar(50)
-    dedupeKey  String  @unique @map("dedupe_key") @db.VarChar(700)
-    orderingSeq BigInt @default(autoincrement()) @unique @map("ordering_seq")
+  id          String  @id @db.VarChar(50)
+  mutationId  String? @map("mutation_id") @db.VarChar(50)
+  dedupeKey   String  @unique @map("dedupe_key") @db.VarChar(700)
+  orderingSeq BigInt  @unique @default(autoincrement()) @map("ordering_seq")
 
-    // Source PKG information
-    sourceUserId    String @map("source_user_id") @db.VarChar(50)
-    sourcePkgNodeId String @map("source_pkg_node_id") @db.VarChar(200)
-    sourceEventId   String? @map("source_event_id") @db.VarChar(200)
-    sourceObservedAt DateTime? @map("source_observed_at")
+  // Source PKG information
+  sourceUserId     String    @map("source_user_id") @db.VarChar(50)
+  sourcePkgNodeId  String    @map("source_pkg_node_id") @db.VarChar(200)
+  sourceEventId    String?   @map("source_event_id") @db.VarChar(200)
+  sourceObservedAt DateTime? @map("source_observed_at")
 
-    // CKG target — the canonical node this evidence supports (null before linkage)
-    ckgTargetNodeId String? @map("ckg_target_node_id") @db.VarChar(200)
+  // CKG target — the canonical node this evidence supports (null before linkage)
+  ckgTargetNodeId String? @map("ckg_target_node_id") @db.VarChar(200)
 
-    // Label proposed by the PKG observation
-    proposedLabel String? @map("proposed_label") @db.VarChar(500)
+  // Label proposed by the PKG observation
+  proposedLabel String? @map("proposed_label") @db.VarChar(500)
 
-    // Type of evidence (e.g., "edge_agreement", "misconception_signal", "confidence_data")
-    evidenceType String @map("evidence_type") @db.VarChar(100)
+  // Type of evidence (e.g., "edge_agreement", "misconception_signal", "confidence_data")
+  evidenceType String @map("evidence_type") @db.VarChar(100)
 
-    // Evidence payload — the actual signal data
-    payload Json
+  // Evidence payload — the actual signal data
+  payload Json
 
-    // Confidence score of this evidence (branded ConfidenceScore at domain layer)
-    confidence Float @default(0.0)
+  // Confidence score of this evidence (branded ConfidenceScore at domain layer)
+  confidence Float @default(0.0)
 
-    // Strength/weight of this evidence in the aggregation
-    weight Float @default(1.0)
+  // Strength/weight of this evidence in the aggregation
+  weight Float @default(1.0)
 
-    // Whether this evidence supported or opposed the mutation
-    direction String @default("support") @db.VarChar(20) // support, oppose, neutral
+  // Whether this evidence supported or opposed the mutation
+  direction String @default("support") @db.VarChar(20) // support, oppose, neutral
 
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  // Audit fields
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Relations (optional — evidence can exist before mutation is proposed)
-    mutation CkgMutation? @relation(fields: [mutationId], references: [id], onDelete: Cascade)
+  // Relations (optional — evidence can exist before mutation is proposed)
+  mutation CkgMutation? @relation(fields: [mutationId], references: [id], onDelete: Cascade)
 
-    // Indexes
-    @@index([mutationId])
-    @@index([sourceUserId])
-    @@index([evidenceType])
-    @@index([mutationId, sourceUserId])
-    @@index([ckgTargetNodeId])
-    @@index([ckgTargetNodeId, sourceUserId])
-    @@index([sourceUserId, sourcePkgNodeId, evidenceType, sourceObservedAt])
-    @@index([createdAt])
-    @@map("aggregation_evidence")
+  // Indexes
+  @@index([mutationId])
+  @@index([sourceUserId])
+  @@index([evidenceType])
+  @@index([mutationId, sourceUserId])
+  @@index([ckgTargetNodeId])
+  @@index([ckgTargetNodeId, sourceUserId])
+  @@index([sourceUserId, sourcePkgNodeId, evidenceType, sourceObservedAt])
+  @@index([createdAt])
+  @@map("aggregation_evidence")
 }
 
 model PkgPostWriteTask {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    taskType String @map("task_type") @db.VarChar(50)
-    status   String @db.VarChar(20)
-    userId   String? @map("user_id") @db.VarChar(50)
+  taskType String  @map("task_type") @db.VarChar(50)
+  status   String  @db.VarChar(20)
+  userId   String? @map("user_id") @db.VarChar(50)
 
-    dedupeKey String? @unique @map("dedupe_key") @db.VarChar(300)
-    payload    Json
+  dedupeKey String? @unique @map("dedupe_key") @db.VarChar(300)
+  payload   Json
 
-    attempts      Int      @default(0)
-    nextAttemptAt DateTime @map("next_attempt_at")
-    lastError     String?  @map("last_error") @db.Text
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @map("next_attempt_at")
+  lastError     String?  @map("last_error") @db.Text
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    @@index([status, nextAttemptAt])
-    @@index([userId])
-    @@map("pkg_post_write_tasks")
+  @@index([status, nextAttemptAt])
+  @@index([userId])
+  @@map("pkg_post_write_tasks")
 }
 
 // ============================================================================
@@ -384,60 +384,60 @@ model PkgPostWriteTask {
 // executable specifications used by the diagnostic agent and reasoning layers.
 
 model MisconceptionPattern {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    // Human-readable identification
-    name        String  @db.VarChar(200)
-    description String? @db.VarChar(2000)
+  // Human-readable identification
+  name        String  @db.VarChar(200)
+  description String? @db.VarChar(2000)
 
-    // Which misconception type this pattern detects (maps to MisconceptionType enum)
-    misconceptionType String @map("misconception_type") @db.VarChar(100)
+  // Which misconception type this pattern detects (maps to MisconceptionType enum)
+  misconceptionType String @map("misconception_type") @db.VarChar(100)
 
-    // Pattern kind discriminator
-    patternKind String @map("pattern_kind") @db.VarChar(100)
+  // Pattern kind discriminator
+  patternKind String @map("pattern_kind") @db.VarChar(100)
 
-    // Pattern specification — the executable pattern definition
-    // Structure depends on patternKind (graph pattern, statistical, heuristic)
-    spec Json
+  // Pattern specification — the executable pattern definition
+  // Structure depends on patternKind (graph pattern, statistical, heuristic)
+  spec Json
 
-    // Scoring model configuration (reserved for future per-pattern scoring
-    // customization; not yet surfaced in domain IMisconceptionPattern)
-    scoringModel Json @default("{}") @map("scoring_model")
+  // Scoring model configuration (reserved for future per-pattern scoring
+  // customization; not yet surfaced in domain IMisconceptionPattern)
+  scoringModel Json @default("{}") @map("scoring_model")
 
-    // Domain scope — which knowledge domains this pattern applies to
-    // (reserved for future domain-scoped detection; not yet in domain model)
-    domains String[] @default([])
+  // Domain scope — which knowledge domains this pattern applies to
+  // (reserved for future domain-scoped detection; not yet in domain model)
+  domains String[] @default([])
 
-    // Severity level (how critical is this misconception type)
-    severity MisconceptionSeverity @default(MODERATE)
+  // Severity level (how critical is this misconception type)
+  severity MisconceptionSeverity @default(MODERATE)
 
-    // Minimum confidence to trigger detection (per-pattern configurable)
-    threshold Float @default(0.5)
+  // Minimum confidence to trigger detection (per-pattern configurable)
+  threshold Float @default(0.5)
 
-    // Whether this pattern is currently active
-    active Boolean @default(true)
+  // Whether this pattern is currently active
+  active Boolean @default(true)
 
-    // Extensible metadata
-    metadata Json @default("{}")
+  // Extensible metadata
+  metadata Json @default("{}")
 
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-    createdBy String?  @map("created_by") @db.VarChar(50)
-    updatedBy String?  @map("updated_by") @db.VarChar(50)
+  // Audit fields
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by") @db.VarChar(50)
+  updatedBy String?  @map("updated_by") @db.VarChar(50)
 
-    // Relations
-    interventions InterventionTemplate[]
-    detections    MisconceptionDetection[]
+  // Relations
+  interventions InterventionTemplate[]
+  detections    MisconceptionDetection[]
 
-    // Indexes
-    @@index([misconceptionType])
-    @@index([patternKind])
-    @@index([active])
-    @@index([severity])
-    @@index([domains], type: Gin)
-    @@index([createdAt])
-    @@map("misconception_patterns")
+  // Indexes
+  @@index([misconceptionType])
+  @@index([patternKind])
+  @@index([active])
+  @@index([severity])
+  @@index([domains], type: Gin)
+  @@index([createdAt])
+  @@map("misconception_patterns")
 }
 
 // ============================================================================
@@ -447,51 +447,51 @@ model MisconceptionPattern {
 // misconception pattern matches. Used by strategy and content generation agents.
 
 model InterventionTemplate {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    // Link to the misconception this intervention addresses
-    misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
+  // Link to the misconception this intervention addresses
+  misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
 
-    // Human-readable identification
-    name        String  @db.VarChar(200)
-    description String? @db.VarChar(2000)
+  // Human-readable identification
+  name        String  @db.VarChar(200)
+  description String? @db.VarChar(2000)
 
-    // Intervention type (e.g., "contrastive_pair", "boundary_case", "retrieval_cue")
-    interventionType String @map("intervention_type") @db.VarChar(100)
+  // Intervention type (e.g., "contrastive_pair", "boundary_case", "retrieval_cue")
+  interventionType String @map("intervention_type") @db.VarChar(100)
 
-    // Template specification — how to generate the intervention
-    spec Json
+  // Template specification — how to generate the intervention
+  spec Json
 
-    // Priority relative to other interventions for the same misconception
-    priority Int @default(0)
+  // Priority relative to other interventions for the same misconception
+  priority Int @default(0)
 
-    // Effectiveness tracking (reserved for future A/B testing of interventions;
-    // not yet surfaced in the domain model — written by background analytics job)
-    useCount    Int   @default(0) @map("use_count")
-    successRate Float @default(0.0) @map("success_rate")
+  // Effectiveness tracking (reserved for future A/B testing of interventions;
+  // not yet surfaced in the domain model — written by background analytics job)
+  useCount    Int   @default(0) @map("use_count")
+  successRate Float @default(0.0) @map("success_rate")
 
-    // Whether this template is currently active
-    active Boolean @default(true)
+  // Whether this template is currently active
+  active Boolean @default(true)
 
-    // Extensible metadata
-    metadata Json @default("{}")
+  // Extensible metadata
+  metadata Json @default("{}")
 
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-    createdBy String?  @map("created_by") @db.VarChar(50)
-    updatedBy String?  @map("updated_by") @db.VarChar(50)
+  // Audit fields
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by") @db.VarChar(50)
+  updatedBy String?  @map("updated_by") @db.VarChar(50)
 
-    // Relations
-    misconceptionPattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id], onDelete: Cascade)
+  // Relations
+  misconceptionPattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id], onDelete: Cascade)
 
-    // Indexes
-    @@index([misconceptionPatternId])
-    @@index([interventionType])
-    @@index([active])
-    @@index([priority])
-    @@index([createdAt])
-    @@map("intervention_templates")
+  // Indexes
+  @@index([misconceptionPatternId])
+  @@index([interventionType])
+  @@index([active])
+  @@index([priority])
+  @@index([createdAt])
+  @@map("intervention_templates")
 }
 
 // ============================================================================
@@ -502,68 +502,67 @@ model InterventionTemplate {
 // Read by Strategy Agent (adjust strategy), Diagnostic Agent (pattern analysis).
 
 model MisconceptionDetection {
-    id                     String @id @db.VarChar(50)
-    userId                 String @map("user_id") @db.VarChar(50)
-    misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
+  id                     String @id @db.VarChar(50)
+  userId                 String @map("user_id") @db.VarChar(50)
+  misconceptionPatternId String @map("misconception_pattern_id") @db.VarChar(50)
 
-    // Study mode lens in which this misconception was detected
-    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
+  // Study mode lens in which this misconception was detected
+  studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
 
-    // Which misconception type was detected (denormalized from pattern for querying)
-    misconceptionType String @map("misconception_type") @db.VarChar(100)
+  // Which misconception type was detected (denormalized from pattern for querying)
+  misconceptionType String @map("misconception_type") @db.VarChar(100)
 
-    // Graph nodes affected by this misconception
-    affectedNodeIds String[] @default([]) @map("affected_node_ids")
+  // Graph nodes affected by this misconception
+  affectedNodeIds String[] @default([]) @map("affected_node_ids")
 
-    // Detection confidence (branded ConfidenceScore at domain layer)
-    confidence Float @default(0.0)
+  // Detection confidence (branded ConfidenceScore at domain layer)
+  confidence Float @default(0.0)
 
-    // Per-detection severity (defaults from pattern but can be overridden)
-    severity MisconceptionSeverity @default(MODERATE)
+  // Per-detection severity (defaults from pattern but can be overridden)
+  severity MisconceptionSeverity @default(MODERATE)
 
-    // Normalised severity score (0.0–1.0) for ranking and triage
-    severityScore Float @default(0.5) @map("severity_score")
+  // Normalised severity score (0.0–1.0) for ranking and triage
+  severityScore Float @default(0.5) @map("severity_score")
 
-    // Family key (e.g. 'graph-structural') — resolved from config
-    family String @default("uncategorized") @db.VarChar(100)
+  // Family key (e.g. 'graph-structural') — resolved from config
+  family String @default("uncategorized") @db.VarChar(100)
 
-    // Human-readable description of this detection instance
-    description String? @db.VarChar(2000)
+  // Human-readable description of this detection instance
+  description String? @db.VarChar(2000)
 
-    // How many times this misconception has been detected (upsert counter)
-    detectionCount Int @default(1) @map("detection_count")
+  // How many times this misconception has been detected (upsert counter)
+  detectionCount Int @default(1) @map("detection_count")
 
-    // Status lifecycle: detected → confirmed → addressed → resolved → recurring
-    status String @default("detected") @map("status") @db.VarChar(50)
+  // Status lifecycle: detected → confirmed → addressed → resolved → recurring
+  status String @default("detected") @map("status") @db.VarChar(50)
 
-    // Extensible metadata (evidence details, agent reasoning, etc.)
-    metadata Json @default("{}")
+  // Extensible metadata (evidence details, agent reasoning, etc.)
+  metadata Json @default("{}")
 
-    // Lifecycle timestamps
-    detectedAt      DateTime  @default(now()) @map("detected_at")
-    lastDetectedAt  DateTime  @default(now()) @map("last_detected_at")
-    resolvedAt      DateTime? @map("resolved_at")
+  // Lifecycle timestamps
+  detectedAt     DateTime  @default(now()) @map("detected_at")
+  lastDetectedAt DateTime  @default(now()) @map("last_detected_at")
+  resolvedAt     DateTime? @map("resolved_at")
 
-    // Relations
-    pattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id])
+  // Relations
+  pattern MisconceptionPattern @relation(fields: [misconceptionPatternId], references: [id])
 
-    // Composite unique for upsert dedup (one active detection per user+pattern)
-    @@unique([userId, misconceptionPatternId, studyMode, status], name: "uq_user_pattern_mode_status")
-
-    // Indexes
-    @@index([userId])
-    @@index([userId, status])
-    @@index([userId, studyMode])
-    @@index([misconceptionType])
-    @@index([misconceptionPatternId])
-    @@index([status])
-    @@index([studyMode])
-    @@index([severity])
-    @@index([family])
-    @@index([affectedNodeIds], type: Gin)
-    @@index([detectedAt])
-    @@index([lastDetectedAt])
-    @@map("misconception_detections")
+  // Composite unique for upsert dedup (one active detection per user+pattern)
+  @@unique([userId, misconceptionPatternId, studyMode, status], name: "uq_user_pattern_mode_status")
+  // Indexes
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, studyMode])
+  @@index([misconceptionType])
+  @@index([misconceptionPatternId])
+  @@index([status])
+  @@index([studyMode])
+  @@index([severity])
+  @@index([family])
+  @@index([affectedNodeIds], type: Gin)
+  @@index([detectedAt])
+  @@index([lastDetectedAt])
+  @@map("misconception_detections")
 }
 
 // ============================================================================
@@ -575,41 +574,41 @@ model MisconceptionDetection {
 // log entries). Each user has a monotonically increasing sequence number.
 
 model PkgOperationLog {
-    id     String @id @db.VarChar(50)
-    userId String @map("user_id") @db.VarChar(50)
+  id     String @id @db.VarChar(50)
+  userId String @map("user_id") @db.VarChar(50)
 
-    // Monotonically increasing per-user sequence for ordering guarantees
-    // Used by offline sync reconciliation to detect gaps
-    sequenceNumber Int @map("sequence_number")
+  // Monotonically increasing per-user sequence for ordering guarantees
+  // Used by offline sync reconciliation to detect gaps
+  sequenceNumber Int @map("sequence_number")
 
-    // Operation type discriminator (matches PkgOperationType enum in domain layer)
-    operationType String @map("operation_type") @db.VarChar(50)
+  // Operation type discriminator (matches PkgOperationType enum in domain layer)
+  operationType String @map("operation_type") @db.VarChar(50)
 
-    // The full operation payload as a JSON discriminated union
-    // Structure depends on operationType (node_created, edge_deleted, etc.)
-    operation Json
+  // The full operation payload as a JSON discriminated union
+  // Structure depends on operationType (node_created, edge_deleted, etc.)
+  operation Json
 
-    // Affected entity IDs for indexed lookups
-    affectedNodeIds String[] @default([]) @map("affected_node_ids")
-    affectedEdgeIds String[] @default([]) @map("affected_edge_ids")
+  // Affected entity IDs for indexed lookups
+  affectedNodeIds String[] @default([]) @map("affected_node_ids")
+  affectedEdgeIds String[] @default([]) @map("affected_edge_ids")
 
-    // Correlation for distributed tracing
-    correlationId String? @map("correlation_id") @db.VarChar(100)
+  // Correlation for distributed tracing
+  correlationId String? @map("correlation_id") @db.VarChar(100)
 
-    // Audit — no updatedAt because this table is append-only
-    createdAt DateTime @default(now()) @map("created_at")
+  // Audit — no updatedAt because this table is append-only
+  createdAt DateTime @default(now()) @map("created_at")
 
-    // Indexes
-    @@unique([userId, sequenceNumber])
-    @@index([userId])
-    @@index([userId, createdAt])
-    @@index([userId, operationType])
-    @@index([operationType])
-    @@index([affectedNodeIds], type: Gin)
-    @@index([affectedEdgeIds], type: Gin)
-    @@index([createdAt])
-    @@index([correlationId])
-    @@map("pkg_operation_log")
+  // Indexes
+  @@unique([userId, sequenceNumber])
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([userId, operationType])
+  @@index([operationType])
+  @@index([affectedNodeIds], type: Gin)
+  @@index([affectedEdgeIds], type: Gin)
+  @@index([createdAt])
+  @@index([correlationId])
+  @@map("pkg_operation_log")
 }
 
 // ============================================================================
@@ -620,33 +619,107 @@ model PkgOperationLog {
 // to determine if recomputation is needed.
 
 model MetricsStaleness {
-    id     String @id @db.VarChar(50)
-    userId String @map("user_id") @db.VarChar(50)
+  id     String @id @db.VarChar(50)
+  userId String @map("user_id") @db.VarChar(50)
 
-    // Knowledge domain the staleness applies to
-    domain String @db.VarChar(200)
+  // Knowledge domain the staleness applies to
+  domain String @db.VarChar(200)
 
-    // Study mode lens
-    studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
+  // Study mode lens
+  studyMode StudyMode @default(KNOWLEDGE_GAINING) @map("study_mode")
 
-    // When the last structural change occurred (PKG node/edge mutation)
-    lastStructuralChangeAt DateTime @map("last_structural_change_at")
+  // When the last structural change occurred (PKG node/edge mutation)
+  lastStructuralChangeAt DateTime @map("last_structural_change_at")
 
-    // What type of mutation triggered staleness (for diagnostics)
-    lastMutationType String @map("last_mutation_type") @db.VarChar(50)
+  // What type of mutation triggered staleness (for diagnostics)
+  lastMutationType String @map("last_mutation_type") @db.VarChar(50)
 
-    // Audit fields
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  // Audit fields
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    // Constraints — one staleness record per user+domain
-    @@unique([userId, domain, studyMode])
-    @@index([userId])
-    @@index([userId, domain])
-    @@index([userId, domain, studyMode])
-    @@index([studyMode])
-    @@index([lastStructuralChangeAt])
-    @@map("metrics_staleness")
+  // Constraints — one staleness record per user+domain
+  @@unique([userId, domain, studyMode])
+  @@index([userId])
+  @@index([userId, domain])
+  @@index([userId, domain, studyMode])
+  @@index([studyMode])
+  @@index([lastStructuralChangeAt])
+  @@map("metrics_staleness")
+}
+
+// ============================================================================
+// Concept State Projection — revocable binary stability state (§3 / Batch 7)
+// ============================================================================
+
+model ConceptStateProjection {
+  userId              String       @map("user_id") @db.VarChar(50)
+  conceptId           String       @map("concept_id") @db.VarChar(50)
+  studyMode           StudyMode    @map("study_mode")
+  state               ConceptState @default(UNSTABLE)
+  fsrsStability       Float?       @map("fsrs_stability")
+  reasoningAverage    Float?       @map("reasoning_average")
+  evidenceWindow      Int          @default(10) @map("evidence_window")
+  lastEvaluationId    String?      @map("last_evaluation_id") @db.VarChar(50)
+  lastChangedAt       DateTime?    @map("last_changed_at")
+  attemptsSinceStable Int          @default(0) @map("attempts_since_stable")
+  computedAt          DateTime     @default(now()) @map("computed_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  @@id([userId, conceptId, studyMode])
+  @@index([userId, studyMode, state])
+  @@index([conceptId])
+  @@index([lastEvaluationId])
+  @@map("concept_state_projections")
+}
+
+model ConceptStateHistory {
+  id               String       @id @db.VarChar(50)
+  userId           String       @map("user_id") @db.VarChar(50)
+  conceptId        String       @map("concept_id") @db.VarChar(50)
+  studyMode        StudyMode    @map("study_mode")
+  previousState    ConceptState @map("previous_state")
+  newState         ConceptState @map("new_state")
+  fsrsStability    Float?       @map("fsrs_stability")
+  reasoningAverage Float?       @map("reasoning_average")
+  evaluationId     String?      @map("evaluation_id") @db.VarChar(50)
+  changedAt        DateTime     @map("changed_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  @@index([userId, conceptId, studyMode, changedAt])
+  @@index([userId, studyMode, newState])
+  @@index([evaluationId])
+  @@map("concept_state_history")
+}
+
+model ConceptReasoningEvidence {
+  id               String    @id @db.VarChar(50)
+  userId           String    @map("user_id") @db.VarChar(50)
+  conceptId        String    @map("concept_id") @db.VarChar(50)
+  studyMode        StudyMode @map("study_mode")
+  evaluationId     String    @map("evaluation_id") @db.VarChar(50)
+  stepId           String    @map("step_id") @db.VarChar(50)
+  reasoningQuality Float     @map("reasoning_quality")
+  evaluatedAt      DateTime  @map("evaluated_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, conceptId, studyMode, evaluationId])
+  @@index([userId, conceptId, studyMode, evaluatedAt])
+  @@map("concept_reasoning_evidence")
+}
+
+model ConceptStateEventInbox {
+  eventId       String     @id @map("event_id") @db.VarChar(100)
+  eventType     String     @map("event_type") @db.VarChar(100)
+  userId        String?    @map("user_id") @db.VarChar(50)
+  conceptId     String?    @map("concept_id") @db.VarChar(50)
+  studyMode     StudyMode? @map("study_mode")
+  processedAt   DateTime   @default(now()) @map("processed_at")
+  correlationId String?    @map("correlation_id") @db.VarChar(100)
+
+  @@index([eventType, processedAt])
+  @@index([userId, conceptId, studyMode])
+  @@map("concept_state_event_inbox")
 }
 
 // ============================================================================
@@ -654,124 +727,124 @@ model MetricsStaleness {
 // ============================================================================
 
 model OntologyImportSource {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    name        String @db.VarChar(200)
-    role        String @db.VarChar(50)
-    accessMode  String @map("access_mode") @db.VarChar(50)
-    description String @db.VarChar(2000)
+  name        String @db.VarChar(200)
+  role        String @db.VarChar(50)
+  accessMode  String @map("access_mode") @db.VarChar(50)
+  description String @db.VarChar(2000)
 
-    homepageUrl      String? @map("homepage_url") @db.VarChar(500)
-    documentationUrl String? @map("documentation_url") @db.VarChar(500)
+  homepageUrl      String? @map("homepage_url") @db.VarChar(500)
+  documentationUrl String? @map("documentation_url") @db.VarChar(500)
 
-    supportedLanguages String[] @default([]) @map("supported_languages")
-    supportsIncremental Boolean  @default(false) @map("supports_incremental")
-    enabled             Boolean  @default(true)
+  supportedLanguages  String[] @default([]) @map("supported_languages")
+  supportsIncremental Boolean  @default(false) @map("supports_incremental")
+  enabled             Boolean  @default(true)
 
-    latestReleaseVersion     String?   @map("latest_release_version") @db.VarChar(200)
-    latestReleasePublishedAt DateTime? @map("latest_release_published_at")
-    latestReleaseChecksum    String?   @map("latest_release_checksum") @db.VarChar(200)
+  latestReleaseVersion     String?   @map("latest_release_version") @db.VarChar(200)
+  latestReleasePublishedAt DateTime? @map("latest_release_published_at")
+  latestReleaseChecksum    String?   @map("latest_release_checksum") @db.VarChar(200)
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    runs OntologyImportRun[]
+  runs OntologyImportRun[]
 
-    @@index([role])
-    @@index([accessMode])
-    @@index([enabled])
-    @@map("ontology_import_sources")
+  @@index([role])
+  @@index([accessMode])
+  @@index([enabled])
+  @@map("ontology_import_sources")
 }
 
 model OntologyImportRun {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    sourceId String @map("source_id") @db.VarChar(50)
+  sourceId String @map("source_id") @db.VarChar(50)
 
-    sourceVersion String? @map("source_version") @db.VarChar(200)
-    configuration Json    @default("{}")
-    submittedMutationIds Json @default("[]") @map("submitted_mutation_ids")
-    status              String  @db.VarChar(50)
-    trigger             String  @db.VarChar(50)
-    initiatedBy         String? @map("initiated_by") @db.VarChar(100)
+  sourceVersion        String? @map("source_version") @db.VarChar(200)
+  configuration        Json    @default("{}")
+  submittedMutationIds Json    @default("[]") @map("submitted_mutation_ids")
+  status               String  @db.VarChar(50)
+  trigger              String  @db.VarChar(50)
+  initiatedBy          String? @map("initiated_by") @db.VarChar(100)
 
-    createdAt   DateTime  @default(now()) @map("created_at")
-    updatedAt   DateTime  @updatedAt @map("updated_at")
-    startedAt   DateTime? @map("started_at")
-    completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
 
-    failureReason String? @map("failure_reason") @db.VarChar(2000)
+  failureReason String? @map("failure_reason") @db.VarChar(2000)
 
-    source      OntologyImportSource       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-    artifacts   OntologyImportArtifact[]
-    checkpoints OntologyImportCheckpoint[]
-    parsedBatch OntologyParsedBatch?
+  source      OntologyImportSource       @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  artifacts   OntologyImportArtifact[]
+  checkpoints OntologyImportCheckpoint[]
+  parsedBatch OntologyParsedBatch?
 
-    @@index([sourceId])
-    @@index([status])
-    @@index([trigger])
-    @@index([createdAt])
-    @@index([sourceId, status])
-    @@map("ontology_import_runs")
+  @@index([sourceId])
+  @@index([status])
+  @@index([trigger])
+  @@index([createdAt])
+  @@index([sourceId, status])
+  @@map("ontology_import_runs")
 }
 
 model OntologyImportArtifact {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    runId    String @map("run_id") @db.VarChar(50)
-    sourceId String @map("source_id") @db.VarChar(50)
+  runId    String @map("run_id") @db.VarChar(50)
+  sourceId String @map("source_id") @db.VarChar(50)
 
-    kind        String  @db.VarChar(50)
-    storageKey  String  @map("storage_key") @db.VarChar(500)
-    contentType String? @map("content_type") @db.VarChar(200)
-    checksum    String? @db.VarChar(200)
-    sizeBytes   Int?    @map("size_bytes")
+  kind        String  @db.VarChar(50)
+  storageKey  String  @map("storage_key") @db.VarChar(500)
+  contentType String? @map("content_type") @db.VarChar(200)
+  checksum    String? @db.VarChar(200)
+  sizeBytes   Int?    @map("size_bytes")
 
-    createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-    run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-    @@index([runId])
-    @@index([sourceId])
-    @@index([kind])
-    @@map("ontology_import_artifacts")
+  @@index([runId])
+  @@index([sourceId])
+  @@index([kind])
+  @@map("ontology_import_artifacts")
 }
 
 model OntologyImportCheckpoint {
-    id String @id @db.VarChar(50)
+  id String @id @db.VarChar(50)
 
-    runId String @map("run_id") @db.VarChar(50)
+  runId String @map("run_id") @db.VarChar(50)
 
-    step   String @db.VarChar(50)
-    status String @db.VarChar(50)
+  step   String @db.VarChar(50)
+  status String @db.VarChar(50)
 
-    startedAt   DateTime? @map("started_at")
-    completedAt DateTime? @map("completed_at")
-    detail      String?   @db.VarChar(2000)
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  detail      String?   @db.VarChar(2000)
 
-    run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-    @@index([runId])
-    @@index([step])
-    @@index([status])
-    @@map("ontology_import_checkpoints")
+  @@index([runId])
+  @@index([step])
+  @@index([status])
+  @@map("ontology_import_checkpoints")
 }
 
 model OntologyParsedBatch {
-    runId String @id @map("run_id") @db.VarChar(50)
+  runId String @id @map("run_id") @db.VarChar(50)
 
-    sourceId      String  @map("source_id") @db.VarChar(50)
-    sourceVersion String? @map("source_version") @db.VarChar(200)
-    recordCount   Int     @map("record_count")
-    artifactId    String  @map("artifact_id") @db.VarChar(50)
+  sourceId      String  @map("source_id") @db.VarChar(50)
+  sourceVersion String? @map("source_version") @db.VarChar(200)
+  recordCount   Int     @map("record_count")
+  artifactId    String  @map("artifact_id") @db.VarChar(50)
 
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-    run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  run OntologyImportRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-    @@index([sourceId])
-    @@map("ontology_parsed_batches")
+  @@index([sourceId])
+  @@map("ontology_parsed_batches")
 }
 
 // ============================================================================
@@ -779,32 +852,39 @@ model OntologyParsedBatch {
 // ============================================================================
 
 enum CkgMutationState {
-    PROPOSED
-    VALIDATING
-    VALIDATED
-    PROVING
-    PROVEN
-    COMMITTING
-    COMMITTED
-    REJECTED
-    PENDING_REVIEW
-    REVISION_REQUESTED
+  PROPOSED
+  VALIDATING
+  VALIDATED
+  PROVING
+  PROVEN
+  COMMITTING
+  COMMITTED
+  REJECTED
+  PENDING_REVIEW
+  REVISION_REQUESTED
 
-    @@map("ckg_mutation_state")
+  @@map("ckg_mutation_state")
 }
 
 enum MisconceptionSeverity {
-    LOW
-    MODERATE
-    HIGH
-    CRITICAL
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
 
-    @@map("misconception_severity")
+  @@map("misconception_severity")
 }
 
 enum StudyMode {
-    LANGUAGE_LEARNING
-    KNOWLEDGE_GAINING
+  LANGUAGE_LEARNING
+  KNOWLEDGE_GAINING
 
-    @@map("study_mode")
+  @@map("study_mode")
+}
+
+enum ConceptState {
+  STABLE
+  UNSTABLE
+
+  @@map("concept_state")
 }

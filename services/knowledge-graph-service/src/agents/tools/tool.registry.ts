@@ -27,7 +27,6 @@ import {
   createGetCanonicalStructureHandler,
   createGetConceptNodeHandler,
   createGetLearningPathContextHandler,
-  createGetNodeMasterySummaryHandler,
   createGetMetacognitiveStageHandler,
   createGetMutationStatusHandler,
   createGetStructuralHealthHandler,
@@ -36,7 +35,6 @@ import {
   createRemoveEdgeHandler,
   createRemoveNodeHandler,
   createSuggestInterventionHandler,
-  createUpdateMasteryHandler,
 } from './kg.tools.js';
 import type {
   IToolDefinition,
@@ -419,8 +417,6 @@ const EXPECTED_KG_TOOL_NAMES = [
   'find-related-concepts',
   'add-concept-node',
   'add-edge',
-  'update-mastery',
-  'get-node-mastery-summary',
   'remove-node',
   'remove-edge',
   // Task 2: CKG tools
@@ -477,11 +473,6 @@ export function createToolRegistry(service: IKnowledgeGraphService): ToolRegistr
   );
   registry.register(requireDefinition('add-concept-node'), createAddConceptNodeHandler(service));
   registry.register(requireDefinition('add-edge'), createAddEdgeHandler(service));
-  registry.register(requireDefinition('update-mastery'), createUpdateMasteryHandler(service));
-  registry.register(
-    requireDefinition('get-node-mastery-summary'),
-    createGetNodeMasterySummaryHandler(service)
-  );
   registry.register(requireDefinition('remove-node'), createRemoveNodeHandler(service));
   registry.register(requireDefinition('remove-edge'), createRemoveEdgeHandler(service));
 

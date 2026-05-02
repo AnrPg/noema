@@ -77,19 +77,21 @@ import type {
 } from './value-objects/operation-log.js';
 import { PkgOperationType } from './value-objects/operation-log.js';
 
-function masteryPropertyKey(studyMode: StudyMode): string {
-  return `studyModeMastery_${studyMode}`;
+const PKG_ADVISORY_TIMEOUT_MS = 1_500;
+
+function stabilityPropertyKey(studyMode: StudyMode): string {
+  return `studyModeStability_${studyMode}`;
 }
 
-function masterySourcePropertyKey(studyMode: StudyMode): string {
-  return `studyModeMasterySource_${studyMode}`;
+function stabilitySourcePropertyKey(studyMode: StudyMode): string {
+  return `studyModeStabilitySource_${studyMode}`;
 }
 
-function masteryUpdatedAtPropertyKey(studyMode: StudyMode): string {
-  return `studyModeMasteryUpdatedAt_${studyMode}`;
+function stabilityUpdatedAtPropertyKey(studyMode: StudyMode): string {
+  return `studyModeStabilityUpdatedAt_${studyMode}`;
 }
 
-function resolveMasteryWriteMode(
+function resolveStabilityWriteMode(
   explicitStudyMode: StudyMode | undefined,
   supportedStudyModes: readonly StudyMode[] | undefined
 ): StudyMode | undefined {
@@ -233,26 +235,26 @@ export class PkgWriteService {
       throw new NodeNotFoundError(nodeId, GraphType.PKG);
     }
 
-    const masteryWriteMode = resolveMasteryWriteMode(
+    const stabilityWriteMode = resolveStabilityWriteMode(
       updates.studyMode,
       existingNode.supportedStudyModes
     );
     const normalizedUpdates: IUpdateNodeInput =
-      updates.masteryLevel === undefined
+      updates.stabilityLevel === undefined
         ? updates
         : {
             ...updates,
             properties: {
               ...(updates.properties ?? {}),
-              ...(masteryWriteMode !== undefined
+              ...(stabilityWriteMode !== undefined
                 ? {
-                    [masteryPropertyKey(masteryWriteMode)]: updates.masteryLevel,
-                    [masterySourcePropertyKey(masteryWriteMode)]:
-                      updates.properties?.['lastMasterySource'] ??
-                      existingNode.properties['lastMasterySource'] ??
+                    [stabilityPropertyKey(stabilityWriteMode)]: updates.stabilityLevel,
+                    [stabilitySourcePropertyKey(stabilityWriteMode)]:
+                      updates.properties?.['lastStabilitySource'] ??
+                      existingNode.properties['lastStabilitySource'] ??
                       'manual_update',
-                    [masteryUpdatedAtPropertyKey(masteryWriteMode)]:
-                      updates.properties?.['lastMasteryUpdate'] ?? new Date().toISOString(),
+                    [stabilityUpdatedAtPropertyKey(stabilityWriteMode)]:
+                      updates.properties?.['lastStabilityUpdate'] ?? new Date().toISOString(),
                   }
                 : {}),
             },
@@ -939,8 +941,24 @@ export class PkgWriteService {
     context: { entityType: 'node' | 'edge'; operation: 'create' | 'update'; entityId: string },
     compute: () => Promise<IWarning[]>
   ): Promise<IWarning[]> {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
     try {
-      return await compute();
+      return await Promise.race([
+        compute(),
+        new Promise<IWarning[]>((resolve) => {
+          timeoutHandle = setTimeout(() => {
+            this.logger.warn(
+              {
+                ...context,
+                timeoutMs: PKG_ADVISORY_TIMEOUT_MS,
+              },
+              'PKG advisory classification timed out (non-blocking)'
+            );
+            resolve([]);
+          }, PKG_ADVISORY_TIMEOUT_MS);
+        }),
+      ]);
     } catch (error) {
       this.logger.warn(
         {
@@ -950,6 +968,10 @@ export class PkgWriteService {
         'PKG advisory classification failed (non-blocking)'
       );
       return [];
+    } finally {
+      if (timeoutHandle !== undefined) {
+        clearTimeout(timeoutHandle);
+      }
     }
   }
 

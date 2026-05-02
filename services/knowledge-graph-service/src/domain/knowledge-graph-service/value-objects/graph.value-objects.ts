@@ -16,7 +16,7 @@ import type {
   GraphType,
   IGraphEdge,
   IGraphNode,
-  MasteryLevel,
+  StabilityLevel,
   NodeId,
   StudyMode,
 } from '@noema/types';
@@ -288,7 +288,7 @@ export interface INodeFilter {
   readonly graphType?: GraphType;
 
   /** Sort column for list reads */
-  readonly sortBy?: 'label' | 'createdAt' | 'updatedAt' | 'masteryLevel' | 'relevance';
+  readonly sortBy?: 'label' | 'createdAt' | 'updatedAt' | 'stabilityLevel' | 'relevance';
 
   /** Sort direction for list reads */
   readonly sortOrder?: 'asc' | 'desc';
@@ -724,18 +724,18 @@ export type FrontierSortBy = 'readiness' | 'centrality' | 'depth';
 /**
  * Query parameters for knowledge frontier detection.
  *
- * The knowledge frontier is the set of unmastered nodes whose prerequisites
- * are mastered — the optimal next-study candidates.
+ * The knowledge frontier is the set of unstable nodes whose prerequisites
+ * are stable — the optimal next-study candidates.
  */
 export interface IFrontierQuery {
   /** Knowledge domain */
   readonly domain: string;
 
-  /** Optional study-mode lens for node inclusion and mastery lookup */
+  /** Optional study-mode lens for node inclusion and stability lookup */
   readonly studyMode?: StudyMode;
 
-  /** Mastery level above which a node is considered "mastered" */
-  readonly masteryThreshold: MasteryLevel;
+  /** Stability level above which a node is considered "stable" */
+  readonly stabilityThreshold: StabilityLevel;
 
   /** Maximum frontier nodes to return */
   readonly maxResults: number;
@@ -743,7 +743,7 @@ export interface IFrontierQuery {
   /** Sort strategy */
   readonly sortBy: FrontierSortBy;
 
-  /** Whether to include each frontier node's mastered prerequisites */
+  /** Whether to include each frontier node's stable prerequisites */
   readonly includePrerequisites: boolean;
 }
 
@@ -754,7 +754,7 @@ export const FrontierQuery = {
   create(input: {
     domain: string;
     studyMode?: StudyMode;
-    masteryThreshold?: number;
+    stabilityThreshold?: number;
     maxResults?: number;
     sortBy?: FrontierSortBy;
     includePrerequisites?: boolean;
@@ -765,10 +765,10 @@ export const FrontierQuery = {
       });
     }
 
-    const masteryThreshold = input.masteryThreshold ?? 0.7;
-    if (masteryThreshold < 0 || masteryThreshold > 1) {
-      throw new ValidationError('FrontierQuery.masteryThreshold must be in [0, 1]', {
-        masteryThreshold: [`Received ${String(masteryThreshold)}`],
+    const stabilityThreshold = input.stabilityThreshold ?? 0.7;
+    if (stabilityThreshold < 0 || stabilityThreshold > 1) {
+      throw new ValidationError('FrontierQuery.stabilityThreshold must be in [0, 1]', {
+        stabilityThreshold: [`Received ${String(stabilityThreshold)}`],
       });
     }
 
@@ -782,7 +782,7 @@ export const FrontierQuery = {
     const query: IFrontierQuery = {
       domain: input.domain.trim(),
       ...(input.studyMode !== undefined ? { studyMode: input.studyMode } : {}),
-      masteryThreshold: masteryThreshold as MasteryLevel,
+      stabilityThreshold: stabilityThreshold as StabilityLevel,
       maxResults,
       sortBy: input.sortBy ?? 'readiness',
       includePrerequisites: input.includePrerequisites ?? false,
@@ -802,30 +802,30 @@ export const FrontierQuery = {
 export interface IFrontierNode {
   /** The frontier node */
   readonly node: IGraphNode;
-  /** Average mastery of its prerequisite parents */
-  readonly prerequisiteMasteryAvg: number;
-  /** Number of mastered prerequisites / total prerequisites */
+  /** Average stability of its prerequisite parents */
+  readonly prerequisiteStabilityAvg: number;
+  /** Number of stable prerequisites / total prerequisites */
   readonly prerequisiteReadiness: string;
   /** Readiness score (0–1): how prepared the learner is for this concept */
   readonly readinessScore: number;
-  /** Mastered prerequisites (if includePrerequisites=true) */
-  readonly masteredPrerequisites?: readonly IGraphNode[];
+  /** Stable prerequisites (if includePrerequisites=true) */
+  readonly stablePrerequisites?: readonly IGraphNode[];
 }
 
 /**
  * Summary statistics for the knowledge frontier analysis.
  */
 export interface IFrontierSummary {
-  /** Number of nodes with mastery ≥ threshold */
-  readonly totalMastered: number;
-  /** Number of nodes with mastery < threshold */
-  readonly totalUnmastered: number;
-  /** Number of frontier nodes (unmastered with mastered prereqs) */
+  /** Number of nodes with stability ≥ threshold */
+  readonly totalStable: number;
+  /** Number of nodes with stability < threshold */
+  readonly totalUnstable: number;
+  /** Number of frontier nodes (unstable with stable prereqs) */
   readonly totalFrontier: number;
-  /** Number of deep-unmastered nodes (unmastered with unmastered prereqs) */
-  readonly totalDeepUnmastered: number;
-  /** mastered / total */
-  readonly masteryPercentage: number;
+  /** Number of deep-unstable nodes (unstable with unstable prereqs) */
+  readonly totalDeepUnstable: number;
+  /** stable / total */
+  readonly stabilityPercentage: number;
 }
 
 /**
@@ -834,8 +834,8 @@ export interface IFrontierSummary {
 export interface IKnowledgeFrontierResult {
   /** Knowledge domain analyzed */
   readonly domain: string;
-  /** Mastery threshold used */
-  readonly masteryThreshold: number;
+  /** Stability threshold used */
+  readonly stabilityThreshold: number;
   /** Frontier nodes — ready to learn next */
   readonly frontier: readonly IFrontierNode[];
   /** Summary statistics */
@@ -934,8 +934,8 @@ export interface ICommonAncestorsResult {
  * service logic, and graph-analysis.ts without magic numbers.
  */
 export const GRAPH_ANALYSIS_DEFAULTS = Object.freeze({
-  /** Default mastery threshold for gap analysis (used in frontier + prerequisite chain) */
-  MASTERY_THRESHOLD: 0.7 as number,
+  /** Default stability threshold for gap analysis (used in frontier + prerequisite chain) */
+  STABILITY_THRESHOLD: 0.7 as number,
 
   /** Default maximum depth for prerequisite chain traversal */
   PREREQUISITE_MAX_DEPTH: 10,
@@ -1060,7 +1060,7 @@ export interface IPrerequisiteChainResult {
   readonly totalPrerequisites: number;
   /** Maximum chain depth */
   readonly maxChainDepth: number;
-  /** Prerequisite nodes that have low mastery (gaps) — PKG only */
+  /** Prerequisite nodes that have low stability (gaps) — PKG only */
   readonly gaps: readonly IPrerequisiteEntry[];
 }
 

@@ -43,7 +43,7 @@ export const NodeQueryParamsSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(20),
   sortBy: z
-    .enum(['label', 'createdAt', 'updatedAt', 'masteryLevel', 'relevance'])
+    .enum(['label', 'createdAt', 'updatedAt', 'stabilityLevel', 'relevance'])
     .default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });

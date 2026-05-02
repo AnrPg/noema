@@ -162,12 +162,12 @@ export const BridgeQueryParamsSchema = z.object({
 
 /**
  * Knowledge frontier query parameters.
- * `domain` is required. Returns unmastered nodes whose prerequisites are mastered.
+ * `domain` is required. Returns unstable nodes whose prerequisites are stable.
  */
 export const FrontierQueryParamsSchema = z.object({
   domain: z.string().min(1),
   studyMode: StudyModeSchema.optional(),
-  masteryThreshold: z.coerce.number().min(0).max(1).default(0.7),
+  stabilityThreshold: z.coerce.number().min(0).max(1).default(0.7),
   maxResults: z.coerce.number().int().min(1).max(100).default(20),
   sortBy: z.enum(['readiness', 'centrality', 'depth']).default('readiness'),
   includePrerequisites: z

@@ -89,6 +89,93 @@ import {
 
 /** Maximum recovery attempts before a stuck mutation is permanently rejected. */
 const MAX_RECOVERY_ATTEMPTS = 3;
+const AGGREGATION_PROPOSER_ID = 'agent_aggregation-pipeline';
+const AGGREGATION_STREAM_ID = 'users_aggregation';
+const AGENT_STREAM_ID = 'agents';
+const ADMIN_STREAM_ID = 'admin_manual';
+
+function normalizeMaintenanceStreamId(streamId: string): string {
+  return streamId.trim().toLowerCase();
+}
+
+function stringArrayFromUnknown(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+}
+
+function collectMaintenanceStreamIds(
+  operation:
+    | Extract<CkgMutationOperation, { type: 'add_node' }>
+    | Extract<CkgMutationOperation, { type: 'update_node' }>,
+  proposedBy: string,
+  existingProperties?: Record<string, unknown>
+): string[] {
+  const streamIds = new Set<string>(
+    stringArrayFromUnknown(existingProperties?.['maintenanceStreamIds']).map(
+      normalizeMaintenanceStreamId
+    )
+  );
+
+  if (proposedBy === AGGREGATION_PROPOSER_ID) {
+    streamIds.add(AGGREGATION_STREAM_ID);
+  } else if (proposedBy.startsWith('agent_')) {
+    streamIds.add(AGENT_STREAM_ID);
+  } else if (proposedBy.startsWith('user_')) {
+    streamIds.add(ADMIN_STREAM_ID);
+  }
+
+  const canonicalExternalRefs =
+    operation.type === CkgOperationType.ADD_NODE
+      ? operation.canonicalExternalRefs
+      : operation.updates.canonicalExternalRefs;
+  const ontologyMappings =
+    operation.type === CkgOperationType.ADD_NODE
+      ? operation.ontologyMappings
+      : operation.updates.ontologyMappings;
+  const provenance =
+    operation.type === CkgOperationType.ADD_NODE ? operation.provenance : operation.updates.provenance;
+  const sourceCoverage =
+    operation.type === CkgOperationType.ADD_NODE
+      ? operation.sourceCoverage
+      : operation.updates.sourceCoverage;
+
+  for (const entry of canonicalExternalRefs ?? []) {
+    streamIds.add(normalizeMaintenanceStreamId(entry.sourceId));
+  }
+  for (const entry of ontologyMappings ?? []) {
+    streamIds.add(normalizeMaintenanceStreamId(entry.sourceId));
+  }
+  for (const entry of provenance ?? []) {
+    streamIds.add(normalizeMaintenanceStreamId(entry.sourceId));
+  }
+  for (const entry of sourceCoverage?.contributingSourceIds ?? []) {
+    streamIds.add(normalizeMaintenanceStreamId(entry));
+  }
+
+  return [...streamIds];
+}
+
+function buildMaintenanceProperties(
+  streamIds: readonly string[],
+  proposedBy: string,
+  existingProperties?: Record<string, unknown>,
+  nextProperties?: Record<string, unknown>
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    ...(existingProperties ?? {}),
+    ...(nextProperties ?? {}),
+    maintenanceStreamIds: [...streamIds],
+    maintenanceProposedBy: proposedBy,
+  };
+
+  return properties;
+}
+
+function extractOntologyImportSourceId(text: string): string | null {
+  const match = /sourceId=([a-z0-9_-]+)/iu.exec(text);
+  return match?.[1] !== undefined ? normalizeMaintenanceStreamId(match[1]) : null;
+}
 
 const CkgMutationOperationsSchema = z.array(CkgMutationOperationSchema);
 
@@ -1558,6 +1645,7 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
       for (const op of operations) {
         switch (op.type) {
           case CkgOperationType.ADD_NODE: {
+            const maintenanceStreamIds = collectMaintenanceStreamIds(op, mutation.proposedBy);
             const node: IGraphNode = await txRepo.createNode(graphType, {
               label: op.label,
               nodeType: op.nodeType,
@@ -1577,7 +1665,12 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
               ...(op.provenance !== undefined ? { provenance: op.provenance } : {}),
               ...(op.reviewMetadata !== undefined ? { reviewMetadata: op.reviewMetadata } : {}),
               ...(op.sourceCoverage !== undefined ? { sourceCoverage: op.sourceCoverage } : {}),
-              properties: op.properties,
+              properties: buildMaintenanceProperties(
+                maintenanceStreamIds,
+                mutation.proposedBy,
+                undefined,
+                op.properties
+              ),
             });
             createdNodeIds.push(node.nodeId as string);
             break;
@@ -1590,6 +1683,12 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
           }
 
           case CkgOperationType.UPDATE_NODE: {
+            const existingNode = await txRepo.getNode(op.nodeId as NodeId);
+            const maintenanceStreamIds = collectMaintenanceStreamIds(
+              op,
+              mutation.proposedBy,
+              existingNode?.properties
+            );
             const updateInput: Record<string, unknown> = {};
             if (op.updates.nodeType !== undefined) updateInput['nodeType'] = op.updates.nodeType;
             if (op.updates.label !== undefined) updateInput['label'] = op.updates.label;
@@ -1618,8 +1717,12 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
             if (op.updates.sourceCoverage !== undefined) {
               updateInput['sourceCoverage'] = op.updates.sourceCoverage;
             }
-            if (op.updates.properties !== undefined)
-              updateInput['properties'] = op.updates.properties;
+            updateInput['properties'] = buildMaintenanceProperties(
+              maintenanceStreamIds,
+              mutation.proposedBy,
+              existingNode?.properties,
+              op.updates.properties
+            );
             await txRepo.updateNode(op.nodeId as NodeId, updateInput as IUpdateNodeInput);
             break;
           }
@@ -1631,6 +1734,27 @@ export class CkgMutationPipeline implements ICkgMutationPipeline {
               edgeType: op.edgeType,
               weight: EdgeWeight.clamp(op.weight),
             });
+            const maintenanceStreamIds = new Set<string>(
+              mutation.proposedBy === AGGREGATION_PROPOSER_ID
+                ? [AGGREGATION_STREAM_ID]
+                : mutation.proposedBy.startsWith('agent_')
+                  ? [AGENT_STREAM_ID]
+                  : mutation.proposedBy.startsWith('user_')
+                    ? [ADMIN_STREAM_ID]
+                    : []
+            );
+            const ontologyImportSourceId = extractOntologyImportSourceId(op.rationale);
+            if (ontologyImportSourceId !== null) {
+              maintenanceStreamIds.add(ontologyImportSourceId);
+            }
+            if (maintenanceStreamIds.size > 0) {
+              await txRepo.updateEdge(edge.edgeId as EdgeId, {
+                properties: buildMaintenanceProperties(
+                  [...maintenanceStreamIds],
+                  mutation.proposedBy
+                ),
+              });
+            }
             createdEdgeIds.push(edge.edgeId as string);
             break;
           }

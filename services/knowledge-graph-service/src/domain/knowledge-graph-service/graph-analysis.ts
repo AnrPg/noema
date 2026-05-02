@@ -816,7 +816,7 @@ export function computeTopologicalPrerequisiteOrder(
     topologicalOrder,
     totalPrerequisites: topologicalOrder.length,
     maxChainDepth,
-    gaps: [], // Populated by the service layer (needs mastery data)
+    gaps: [], // Populated by the service layer (needs stability data)
   };
 }
 

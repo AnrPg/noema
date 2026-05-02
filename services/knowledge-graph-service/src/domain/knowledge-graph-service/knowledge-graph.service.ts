@@ -17,7 +17,7 @@ import type {
   IGraphNode,
   IMetacognitiveStageAssessment,
   IMisconceptionDetection,
-  INodeMasterySummary,
+  INodeStabilitySummary,
   IPaginatedResponse,
   IStructuralHealthReport,
   IStructuralMetrics,
@@ -194,14 +194,14 @@ export interface IKnowledgeGraphService {
   ): Promise<IServiceResult<IPaginatedResponse<IGraphNode>>>;
 
   /**
-   * Get a mode-scoped mastery summary for the user's PKG nodes.
+   * Get a mode-scoped stability summary for the user's PKG nodes.
    */
-  getNodeMasterySummary(
+  getNodeStabilitySummary(
     userId: UserId,
     filters: INodeFilter,
-    masteryThreshold: number,
+    stabilityThreshold: number,
     context: IExecutionContext
-  ): Promise<IServiceResult<INodeMasterySummary>>;
+  ): Promise<IServiceResult<INodeStabilitySummary>>;
 
   /**
    * Create an edge in the user's PKG.
@@ -347,7 +347,7 @@ export interface IKnowledgeGraphService {
   /**
    * Get the knowledge frontier for a user in a domain.
    *
-   * Returns unmastered nodes whose prerequisites are mastered — the
+   * Returns unstable nodes whose prerequisites are stable — the
    * optimal set for scheduling new study material. PKG-only.
    */
   getKnowledgeFrontier(
@@ -378,7 +378,7 @@ export interface IKnowledgeGraphService {
    * Compute the prerequisite chain for a target node in the user's PKG.
    *
    * Returns a topologically-sorted layered structure of prerequisite concepts
-   * leading to the target node (Kahn's algorithm), annotated with mastery.
+   * leading to the target node (Kahn's algorithm), annotated with stability.
    */
   getPrerequisiteChain(
     userId: UserId,
@@ -518,7 +518,7 @@ export interface IKnowledgeGraphService {
   /**
    * Find common ancestors of two nodes in the CKG.
    * Same semantics as PKG getCommonAncestors, but without userId scoping.
-   * (No CKG frontier — CKG has no mastery levels.)
+   * (No CKG frontier — CKG has no stability levels.)
    */
   getCkgCommonAncestors(
     nodeIdA: NodeId,

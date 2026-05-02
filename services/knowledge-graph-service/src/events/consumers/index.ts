@@ -8,3 +8,4 @@
 
 export { UserDeletedConsumer } from './user-deleted.consumer.js';
 export { PkgAggregationConsumer } from './pkg-aggregation.consumer.js';
+export { ConceptStateConsumer } from './concept-state.consumer.js';
