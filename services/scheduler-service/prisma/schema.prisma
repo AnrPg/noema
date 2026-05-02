@@ -101,10 +101,9 @@ model ConceptEvaluationLog {
 }
 
 model ConceptCalibrationData {
-  id            String              @id @db.VarChar(50)
   userId        String              @map("user_id") @db.VarChar(50)
   studyMode     StudyMode           @map("study_mode")
-  conceptId     String?             @map("concept_id") @db.VarChar(50)
+  conceptId     String              @map("concept_id") @db.VarChar(50)
   algorithm     SchedulingAlgorithm
   parameters    Json
   sampleCount   Int                 @default(0) @map("sample_count")
@@ -113,7 +112,7 @@ model ConceptCalibrationData {
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
 
-  @@unique([userId, studyMode, algorithm, conceptId])
+  @@id([userId, studyMode, algorithm, conceptId])
   @@map("concept_calibration_data")
 }
 

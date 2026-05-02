@@ -1,4 +1,13 @@
 import type { ConceptId } from '@noema/types';
+import {
+  EpistemicMode,
+  GoalType,
+  LearningMode,
+  RigorLevel,
+  StepStatus,
+  StudyMode,
+  TransformationType,
+} from '@noema/types';
 
 import type {
   ICurriculumDesignAgentClient,
@@ -100,10 +109,8 @@ export class HttpPedagogyGuardianClient implements IPedagogyGuardianClient {
         method: 'POST',
         headers: buildHeaders(this.serviceToken),
         body: JSON.stringify({
-          kind: 'curriculum_version',
-          curriculumVersionId: graph.id,
-          nodes: graph.nodes,
-          edges: graph.edges,
+          lessonPlan: toGuardianLessonPlan(graph),
+          triggeredBy: 'curriculum-service.generateCurriculum',
         }),
       }
     );
@@ -113,6 +120,64 @@ export class HttpPedagogyGuardianClient implements IPedagogyGuardianClient {
       validationId: outcome?.validationId ?? `guardian_${graph.id}`,
     };
   }
+}
+
+function toGuardianLessonPlan(graph: CurriculumVersionGraph): Record<string, unknown> {
+  const goals = graph.nodes.map((node, index) => ({
+    id: `goal_${node.id}`,
+    type: GoalType.ACQUISITION,
+    state: 'active',
+    conceptRefs: [node.ckgConceptId ?? node.stableNodeKey],
+    position: index,
+  }));
+
+  const steps = graph.nodes.map((node, index) => {
+    const stepId = `step_${node.id}`;
+    const conceptRefs = [node.ckgConceptId ?? node.stableNodeKey];
+    return {
+      id: stepId,
+      lessonPlanId: graph.id,
+      sessionId: `curriculum_${graph.id}`,
+      userId: 'curriculum-service',
+      studyMode: StudyMode.KNOWLEDGE_GAINING,
+      position: index,
+      objective: node.learningObjective,
+      servesGoalIds: [goals[index]?.id],
+      eligibleModes: [EpistemicMode.GENERATIVE_RETRIEVAL],
+      selectedMode: EpistemicMode.GENERATIVE_RETRIEVAL,
+      transformationType: TransformationType.EXPLANATION,
+      expectedOutcome: node.learningObjective,
+      evaluationType: 'self_explanation',
+      difficulty: 0.5,
+      isRepair: false,
+      conceptRefs,
+      status: StepStatus.PLANNED,
+      activities: [
+        {
+          id: `activity_${node.id}`,
+          stepId,
+          contentSourceType: 'generated',
+          generatedVariantId: `curriculum_variant_${node.id}`,
+          prompt: node.learningObjective,
+          expectedResponseType: 'free_text',
+          responseSchema: { type: 'string' },
+        },
+      ],
+    };
+  });
+
+  return {
+    id: graph.id,
+    sessionId: `curriculum_${graph.id}`,
+    userId: 'curriculum-service',
+    studyMode: StudyMode.KNOWLEDGE_GAINING,
+    learningMode: LearningMode.GOAL_DRIVEN,
+    rigorLevel: RigorLevel.MINIMAL,
+    topic: `Curriculum ${graph.id}`,
+    prerequisites: [],
+    goals,
+    steps,
+  };
 }
 
 export class HttpCurriculumDesignAgentClient implements ICurriculumDesignAgentClient {

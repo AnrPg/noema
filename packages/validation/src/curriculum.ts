@@ -39,7 +39,7 @@ export const CurriculumNodeSchema = z.object({
   proposedConcept: CurriculumProposedConceptSchema.optional(),
   label: z.string().min(1).max(300),
   learningObjective: z.string().max(1000).optional(),
-  masteryThreshold: z.number().gt(0).lte(1),
+  stabilityThreshold: z.number().gt(0).lte(1),
   estimatedSessions: z.number().int().positive(),
   traversalWeight: z.number().positive().default(1),
   metadata: z.record(z.unknown()).default({}),

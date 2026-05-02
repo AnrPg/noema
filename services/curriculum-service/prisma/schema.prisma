@@ -56,7 +56,7 @@ model CurriculumNode {
     proposedConcept     Json?             @map("proposed_concept")
     label               String            @db.VarChar(300)
     learningObjective   String?           @map("learning_objective") @db.VarChar(1000)
-    masteryThreshold    Float             @map("mastery_threshold")
+    stabilityThreshold  Float             @map("stability_threshold")
     estimatedSessions   Int               @map("estimated_sessions")
     traversalWeight     Float             @default(1.0) @map("traversal_weight")
     metadata            Json              @default("{}")
@@ -228,4 +228,3 @@ enum RevisionChangeState {
 
     @@map("revision_change_state")
 }
-

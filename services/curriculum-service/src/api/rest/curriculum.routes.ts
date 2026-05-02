@@ -3,6 +3,7 @@ import {
   CreateCurriculumInputSchema,
   DecideRevisionChangeInputSchema,
   FreezeNodeInputSchema,
+  GenerateCurriculumInputSchema,
   RecordCurriculumEvaluationInputSchema,
   RecordRealignmentEvidenceInputSchema,
   SessionSliceRequestSchema,
@@ -40,6 +41,24 @@ export function registerCurriculumRoutes(
       originMode: input.originMode as CurriculumOriginMode | undefined,
     });
     await reply.status(201).send({ data: curriculum });
+  });
+
+  fastify.post('/v1/curricula/generate', { preHandler: agentAuth }, async (request, reply) => {
+    const userId = request.user?.sub as UserId;
+    const body = request.body as Record<string, unknown>;
+    const input = GenerateCurriculumInputSchema.parse(body);
+    const generateInput: Parameters<CurriculumService['generateCurriculum']>[1] = {
+      ...input,
+      sourceDocumentIds: Array.isArray(body['sourceDocumentIds'])
+        ? body['sourceDocumentIds'].filter((value): value is string => typeof value === 'string')
+        : [],
+    } as Parameters<CurriculumService['generateCurriculum']>[1];
+    if (typeof body['title'] === 'string') {
+      generateInput.title = body['title'];
+    }
+    await reply.status(202).send({
+      data: await curriculumService.generateCurriculum(userId, generateInput),
+    });
   });
 
   fastify.get('/v1/curricula/:id', { preHandler: readAuth }, async (request, reply) => {

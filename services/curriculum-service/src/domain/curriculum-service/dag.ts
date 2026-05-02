@@ -22,9 +22,9 @@ export function validateCurriculumDag(graph: CurriculumVersionGraph): void {
   }
 
   for (const node of graph.nodes) {
-    if (node.masteryThreshold <= 0 || node.masteryThreshold > 1) {
+    if (node.stabilityThreshold <= 0 || node.stabilityThreshold > 1) {
       throw new CurriculumValidationError(
-        `Node ${node.id} has an invalid mastery threshold.`,
+        `Node ${node.id} has an invalid stability threshold.`,
         'INVALID_THRESHOLD'
       );
     }

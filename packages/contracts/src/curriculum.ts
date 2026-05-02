@@ -27,7 +27,7 @@ export interface ICurriculumNode {
   proposedConcept?: Record<string, unknown> | undefined;
   label: string;
   learningObjective?: string | undefined;
-  masteryThreshold: number;
+  stabilityThreshold: number;
   estimatedSessions: number;
   traversalWeight: number;
   metadata?: Record<string, unknown> | undefined;

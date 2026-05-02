@@ -191,7 +191,7 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
             proposedConcept: node.proposedConcept,
             label: node.label,
             learningObjective: node.learningObjective,
-            masteryThreshold: node.masteryThreshold,
+            stabilityThreshold: node.stabilityThreshold,
             estimatedSessions: node.estimatedSessions,
             traversalWeight: node.traversalWeight,
             metadata: node.metadata ?? {},
@@ -291,8 +291,11 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     });
     if (proposal === null) throw new Error('Revision proposal not found.');
     const mapped = mapProposal(proposal);
-    const approved = mapped.changes.filter((change) => change.state === RevisionChangeState.APPROVED);
-    if (approved.length === 0) throw new Error('Cannot apply revision proposal with zero approved changes.');
+    const approved = mapped.changes.filter(
+      (change) => change.state === RevisionChangeState.APPROVED
+    );
+    if (approved.length === 0)
+      throw new Error('Cannot apply revision proposal with zero approved changes.');
 
     await this.prisma.revisionChange.updateMany({
       where: {
@@ -444,7 +447,7 @@ function mapNode(row: unknown): NonNullable<ICurriculum['activeVersion']>['nodes
     proposedConcept: value['proposedConcept'] as Record<string, unknown> | undefined,
     label: value['label'] as string,
     learningObjective: value['learningObjective'] as string | undefined,
-    masteryThreshold: value['masteryThreshold'] as number,
+    stabilityThreshold: value['stabilityThreshold'] as number,
     estimatedSessions: value['estimatedSessions'] as number,
     traversalWeight: value['traversalWeight'] as number,
     metadata: (value['metadata'] as Record<string, unknown>) ?? {},

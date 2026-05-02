@@ -23,6 +23,10 @@ deterministic rules, persists a `GuardianValidation`, and returns:
 
 Blocking responses use HTTP 422 and also emit `pedagogy.validation.rejected`.
 
+Warning responses are non-blocking and are selected only when all reason codes
+belong to the explicit Guardian warning set. Mixed warning/blocking reason-code
+sets are rejected.
+
 ## Producer Integration
 
 `session-service` owns a `IPedagogyGuardianPort` and calls Guardian before

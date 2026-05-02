@@ -25,7 +25,7 @@ const graph: CurriculumVersionGraph = {
       stableNodeKey: 'algebra-basics',
       ckgConceptId: 'concept_123456789012345678901' as never,
       label: 'Algebra basics',
-      masteryThreshold: 0.7,
+      stabilityThreshold: 0.7,
       estimatedSessions: 2,
       traversalWeight: 2,
     },
@@ -35,7 +35,7 @@ const graph: CurriculumVersionGraph = {
       stableNodeKey: 'linear-equations',
       ckgConceptId: 'concept_223456789012345678901' as never,
       label: 'Linear equations',
-      masteryThreshold: 0.8,
+      stabilityThreshold: 0.8,
       estimatedSessions: 3,
       traversalWeight: 1,
     },
@@ -54,7 +54,9 @@ const graph: CurriculumVersionGraph = {
 
 describe('curriculum DAG validation', () => {
   it('accepts a valid anchored DAG', () => {
-    expect(() => validateCurriculumDag(graph)).not.toThrow();
+    expect(() => {
+      validateCurriculumDag(graph);
+    }).not.toThrow();
   });
 
   it('rejects cycles', () => {
@@ -70,7 +72,9 @@ describe('curriculum DAG validation', () => {
         },
       ],
     };
-    expect(() => validateCurriculumDag(cyclic)).toThrow(CurriculumValidationError);
+    expect(() => {
+      validateCurriculumDag(cyclic);
+    }).toThrow(CurriculumValidationError);
   });
 
   it('rejects nodes without a CKG anchor or proposed concept', () => {
@@ -78,7 +82,9 @@ describe('curriculum DAG validation', () => {
       ...graph,
       nodes: [{ ...graph.nodes[0], ckgConceptId: undefined, proposedConcept: undefined }],
     };
-    expect(() => validateCurriculumDag(unanchored)).toThrow(/anchor/);
+    expect(() => {
+      validateCurriculumDag(unanchored);
+    }).toThrow(/anchor/);
   });
 });
 

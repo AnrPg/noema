@@ -34,6 +34,12 @@ import {
   ValidateStepInputSchema,
 } from './guardian.schemas.js';
 
+const WARNING_REASON_CODES = new Set([
+  'GOAL_CAP_EXCEEDED',
+  'REPLAN_SCOPE_ESCALATED',
+  'CARD_TRANSFORMATION_INCOMPATIBLE',
+]);
+
 export interface IGuardianExecutionContext {
   userId?: UserId;
   correlationId: CorrelationId;
@@ -352,12 +358,7 @@ export class PedagogyGuardianService {
     triggeredBy: string;
     context: IGuardianExecutionContext;
   }): Promise<IGuardianValidationOutcome> {
-    const result =
-      input.reasonCodes.length === 0
-        ? GuardianResult.ACCEPTED
-        : input.reasonCodes.some((code) => code.endsWith('_WARNING'))
-          ? GuardianResult.WARNING
-          : GuardianResult.REJECTED;
+    const result = classifyGuardianResult(input.reasonCodes);
     const blocking = result === GuardianResult.REJECTED;
     const validation = await this.repository.createValidation({
       artifactType: input.artifactType,
@@ -407,6 +408,13 @@ export class PedagogyGuardianService {
       validationId: validation.id,
     };
   }
+}
+
+function classifyGuardianResult(reasonCodes: readonly string[]): GuardianResult {
+  if (reasonCodes.length === 0) return GuardianResult.ACCEPTED;
+  return reasonCodes.every((code) => WARNING_REASON_CODES.has(code))
+    ? GuardianResult.WARNING
+    : GuardianResult.REJECTED;
 }
 
 function keyPair(a: GoalType, b: GoalType): string {
