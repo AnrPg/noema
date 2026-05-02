@@ -81,6 +81,10 @@ coverage/
 .rts2_cache_umd/
 *.tscache
 
+# Local agent/runtime artifacts
+.claude/worktrees/
+**/.data/
+
 # Python
 __pycache__/
 *.py[cod]

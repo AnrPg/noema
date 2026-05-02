@@ -63,12 +63,5 @@ scrape_configs:
     metrics_path: "/metrics"
     scrape_interval: 10s
 
-  # Redis Metrics (if redis_exporter is configured)
-  - job_name: "redis"
-    static_configs:
-      - targets: ["redis:6379"]
-
-  # PostgreSQL Metrics (if postgres_exporter is configured)
-  - job_name: "postgresql"
-    static_configs:
-      - targets: ["postgres:5432"]
+  # Redis/PostgreSQL require exporter services. Scraping their native ports
+  # sends HTTP to non-HTTP protocols and causes noisy connection resets.
