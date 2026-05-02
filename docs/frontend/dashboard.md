@@ -22,7 +22,8 @@ Current mode-aware dashboard sources:
 - knowledge-graph stability summary for revocable concept stability and
   reasoning trend
 - misconceptions for active error pressure
-- session-service streaks for continuity
+- gamification-service summary/streak projections for XP, continuity, and
+  revocable reward state
 
 ## Cognitive Vitals
 
@@ -46,6 +47,14 @@ have:
 - a large deck but low tracked coverage
 - a stable mature base with only a small urgent backlog
 
+The fourth tile is now sourced from `gamification-service`. It should
+communicate:
+
+- current streak as the primary value
+- current level or active reward state as the supporting delta
+- projection-pending fallback copy rather than reviving legacy permanent-streak
+  assumptions
+
 ## UX Notes
 
 - All dashboard sections should respect the active global study mode.
@@ -63,3 +72,7 @@ have:
 by `useStabilitySummary`. They expose the same primary closed-loop signals that
 drive gamification and strategy: stable/unstable concept counts, global
 stability ratio, and domain-level reasoning averages.
+
+Gamification should not replace these widgets. Stability and reasoning remain
+knowledge-graph/metacognition-owned truth; gamification only reuses those
+signals for learner-facing projection state.

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-05-03 - Realignment Batch 12 Gamification Service
+
+- standardized `session.completed` on the Step-first shared payload so derived
+  consumers receive `studyMode`, `completedAt`, and termination semantics
+- added `@noema/gamification-service` with Prisma projection models, Fastify
+  read routes, Redis event publishing, and consumers for metacognition,
+  knowledge-graph, and session events
+- added shared gamification DTO contracts plus `@noema/api-client` gamification
+  APIs and hooks
+- replaced the dashboard placeholder session-momentum tile with a
+  gamification-backed learner streak tile while keeping stability and reasoning
+  widgets on their KG/metacognition-owned summaries
+
 ## 2026-05-02 - Closed-Loop Audit Fixes
 
 - fixed KG concept-state consumption to read metacognition and scheduler source
