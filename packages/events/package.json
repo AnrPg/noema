@@ -34,6 +34,14 @@
       "types": "./dist/knowledge-graph/index.d.ts",
       "import": "./dist/knowledge-graph/index.js"
     },
+    "./realignment": {
+      "types": "./dist/realignment/index.d.ts",
+      "import": "./dist/realignment/index.js"
+    },
+    "./curriculum": {
+      "types": "./dist/curriculum/index.d.ts",
+      "import": "./dist/curriculum/index.js"
+    },
     "./consumer": {
       "types": "./dist/consumer/index.d.ts",
       "import": "./dist/consumer/index.js",

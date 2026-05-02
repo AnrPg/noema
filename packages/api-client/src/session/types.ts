@@ -1,370 +1,289 @@
-/**
- * @noema/api-client - Session Service Types
- *
- * DTOs for Session Service API requests and responses.
- */
-
-import type { IApiResponse } from '@noema/contracts';
+import type { IApiResponse, ISevenFrameTraceDto } from '@noema/contracts';
 import type {
-  AttemptId,
-  AttemptOutcome,
-  CardId,
-  HintDepth,
-  Rating,
-  SchedulingAlgorithm,
+  ConceptId,
+  CurriculumId,
+  CurriculumNodeId,
+  CurriculumVersionId,
+  EpistemicMode,
+  GoalId,
+  GoalSource,
+  GoalState,
+  GoalType,
+  LearningMode,
+  LessonPlanId,
+  LessonPlanState,
+  RigorLevel,
   SessionId,
+  SessionLifecycleState,
   SessionTerminationReason,
+  StepId,
+  StepSelfRating,
+  StepStatus,
   StudyMode,
-  TeachingApproach,
+  TransformationType,
   UserId,
 } from '@noema/types';
 
-// ============================================================================
-// Enums
-// ============================================================================
-
-export type SessionState = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ABANDONED' | 'EXPIRED';
-
-export type SessionMode = 'standard' | 'cram' | 'preview' | 'test';
-export type LearningMode = 'exploration' | 'goal_driven' | 'exam_oriented' | 'synthesis';
-export type SessionRevealMode = 'all_at_once' | 'one_then_more';
-
-export interface ISessionPresentationConfig {
-  promptSide?: string;
-  answerSide?: string;
-  revealMode?: SessionRevealMode;
-}
+export type StepQueueStatus = 'pending' | 'presented' | 'completed' | 'skipped' | 'injected';
+export type ActivityContentSourceType = 'card' | 'template' | 'generated';
 
 export interface ISessionConfigDto {
-  maxCards?: number;
+  curriculumId?: CurriculumId;
+  curriculumVersionId?: CurriculumVersionId;
+  topic?: string;
+  sourceDecks?: string[];
+  sourceCategories?: string[];
+  maxSteps?: number;
   maxDurationMinutes?: number;
-  sessionTimeoutHours: number;
-  categoryIds?: string[];
-  cardTypes?: string[];
-  presentation?: ISessionPresentationConfig;
+  sessionTimeoutHours?: number;
+  [key: string]: unknown;
 }
 
-// ============================================================================
-// Session DTO
-// ============================================================================
+export interface ISessionStatsDto {
+  stepsPlanned: number;
+  stepsPresented: number;
+  stepsEvaluated: number;
+  stepsSkipped: number;
+}
 
 export interface ISessionDto {
   id: SessionId;
   userId: UserId;
-  state: SessionState;
-  mode: SessionMode;
-  learningMode: LearningMode;
+  curriculumId: CurriculumId;
+  curriculumVersionId: CurriculumVersionId | null;
   studyMode: StudyMode;
-  teachingApproach: TeachingApproach;
-  schedulingAlgorithm: SchedulingAlgorithm;
+  learningMode: LearningMode;
+  lifecycleState: SessionLifecycleState;
   config: ISessionConfigDto;
-  cardIds: CardId[];
-  currentCardIndex: number;
-  stats: {
-    totalAttempts: number;
-    correctCount: number;
-    incorrectCount: number;
-    skippedCount: number;
-    averageResponseTimeMs: number;
-    averageConfidence: number | null;
-    averageCalibrationDelta: number | null;
-    retentionRate: number;
-    streakCurrent: number;
-    streakBest: number;
-    totalHintsUsed: number;
-    uniqueCardsReviewed: number;
-    newCardsIntroduced: number;
-    lapsedCards: number;
-    ratingDistribution: Record<string, number>;
-  };
-  initialQueueSize: number;
+  stats: ISessionStatsDto;
   pauseCount: number;
-  totalPausedDurationMs: number;
+  totalPausedMs: number;
   startedAt: string;
   lastActivityAt: string;
-  pausedAt: string | null;
   completedAt: string | null;
-  abandonedAt: string | null;
   terminationReason: SessionTerminationReason | null;
   version: number;
-  expiresAt: string;
   createdAt: string;
   updatedAt: string;
 }
 
-// ============================================================================
-// Attempt DTO (with metacognitive signals)
-// ============================================================================
-
-export interface IAttemptDto {
-  id: AttemptId;
+export interface ILessonPlanDto {
+  id: LessonPlanId;
   sessionId: SessionId;
-  cardId: CardId;
-  grade: number;
-  confidenceBefore: number | null;
-  confidenceAfter: number | null;
-  calibrationDelta: number | null;
-  hintDepthUsed: number;
-  dwellTimeMs: number;
-  selfReportedGuess: boolean;
-  reviewedAt: string;
+  userId: UserId;
+  curriculumId: CurriculumId;
+  curriculumVersionId: CurriculumVersionId;
+  selectedNodeIds: CurriculumNodeId[];
+  studyMode: StudyMode;
+  learningMode: LearningMode;
+  rigorLevel: RigorLevel;
+  topic: string;
+  prerequisites: ConceptId[];
+  sourceDecks: string[];
+  sourceCategories: string[];
+  assessmentStrategy: string | null;
+  adaptationRules: string | null;
+  guardianValidationId: string | null;
+  state: LessonPlanState;
+  version: number;
   createdAt: string;
+  updatedAt: string;
 }
 
-export interface IRecordAttemptInput {
-  cardId: CardId;
-  outcome: AttemptOutcome;
-  rating: Rating;
-  ratingValue: number;
-  responseTimeMs: number;
-  dwellTimeMs: number;
-  timeToFirstInteractionMs?: number;
-  confidenceBefore?: number;
-  confidenceAfter?: number;
-  wasRevisedBeforeCommit: boolean;
-  revisionCount?: number;
-  hintRequestCount?: number;
-  hintDepthReached: HintDepth;
-  contextSnapshot: {
-    learningMode: LearningMode;
-    studyMode?: StudyMode;
-    teachingApproach: string;
-    loadoutArchetype?: string;
-    forceLevel?: string;
-    cognitiveLoad?: string;
-    fatigueLevel?: string;
-    motivationSignal?: string;
-    activeInterventionIds: string[];
-  };
-  priorSchedulingState?: {
-    algorithm: SchedulingAlgorithm;
-    stability?: number;
-    difficulty?: number;
-    elapsedDays: number;
-    retrievability?: number;
-    intervalDays?: number;
-    lapseCount?: number;
-    reviewCount?: number;
-    leitnerBox?: number;
-    sm2EaseFactor?: number;
-  };
+export interface ILessonPlanGoalDto {
+  id: GoalId;
+  lessonPlanId: LessonPlanId;
+  description: string;
+  type: GoalType;
+  parentGoalId: GoalId | null;
+  state: GoalState;
+  source: GoalSource;
+  conceptRefs: ConceptId[];
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface IRequestHintInput {
-  cardId?: CardId;
-  hintDepth: HintDepth;
-  hintRequestNumber: number;
-  responseTimeMsAtRequest: number;
-}
-
-export interface IEvaluateCheckpointInput {
-  trigger: 'confidence_drift' | 'latency_spike' | 'error_cascade' | 'streak_break' | 'manual';
-  lastAttemptResponseTimeMs?: number;
-  rollingAverageResponseTimeMs?: number;
-  recentIncorrectStreak?: number;
-  confidenceDrift?: number;
-}
-
-// ============================================================================
-// Session Queue
-// ============================================================================
-
-export interface ISessionQueueItem {
-  cardId: CardId;
-  lane: 'retention' | 'calibration';
+export interface IActivityDto {
+  id: string;
+  stepId: StepId;
   position: number;
-  injected: boolean;
+  contentSourceType: ActivityContentSourceType;
+  cardId: string | null;
+  templateId: string | null;
+  generatedVariantId: string | null;
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+  responseSchema: Record<string, unknown>;
+  variantSeed: string;
+  generationFallbackReason: string | null;
 }
 
-export interface ISessionQueueDto {
+export interface IStepDto {
+  id: StepId;
+  lessonPlanId: LessonPlanId;
   sessionId: SessionId;
-  items: ISessionQueueItem[];
-  remaining: number;
+  userId: UserId;
+  studyMode: StudyMode;
+  position: number;
+  objective: string;
+  servesGoalIds: GoalId[];
+  eligibleModes: EpistemicMode[];
+  selectedMode: EpistemicMode;
+  transformationType: TransformationType;
+  expectedOutcome: string;
+  evaluationType: string;
+  difficulty: number;
+  isRepair: boolean;
+  conceptRefs: ConceptId[];
+  variantSeed: string;
+  status: StepStatus;
+  evaluationId: string | null;
+  guardianValidationId: string | null;
+  presentedAt: string | null;
+  answeredAt: string | null;
+  evaluatedAt: string | null;
+  supersededByStepId: StepId | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  activities?: IActivityDto[];
 }
 
-// ============================================================================
-// Hints
-// ============================================================================
-
-export interface IHintResponseDto {
-  acknowledged: boolean;
+export interface IStepLoopSnapshotDto {
+  session: ISessionDto;
+  lessonPlan: ILessonPlanDto;
+  nextStep: IStepDto | null;
 }
-
-// ============================================================================
-// Checkpoints
-// ============================================================================
-
-export interface IAdaptiveCheckpointDirectiveDto {
-  action:
-    | 'rebalance_queue'
-    | 'slowdown'
-    | 'increase_support'
-    | 'reduce_calibration_lane'
-    | 'switch_teaching_approach'
-    | 'continue';
-  reason: string;
-  priority: 'critical' | 'high' | 'medium' | 'low';
-}
-
-export interface IEvaluateCheckpointResultDto {
-  shouldAdapt: boolean;
-  directives: IAdaptiveCheckpointDirectiveDto[];
-  reason: string;
-}
-
-// ============================================================================
-// Cohort Handshake
-// ============================================================================
-
-export interface ICohortHandshakeDto {
-  cohortId: string;
-  status: 'proposed' | 'accepted' | 'revised' | 'committed';
-  cardIds: CardId[];
-  proposedAt: string;
-}
-
-// ============================================================================
-// Mid-session Updates
-// ============================================================================
-
-export interface IUpdateStrategyInput {
-  strategy: string;
-  parameters?: Record<string, unknown>;
-}
-
-export interface IUpdateTeachingInput {
-  approach: string;
-  parameters?: Record<string, unknown>;
-}
-
-// ============================================================================
-// Blueprint
-// ============================================================================
-
-export interface IBlueprintValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-}
-
-// ============================================================================
-// Offline Intents
-// ============================================================================
-
-export interface IOfflineIntentTokenDto {
-  token: string;
-  expiresAt: string;
-  cardIds: CardId[];
-}
-
-export interface IOfflineIntentVerifyInput {
-  token: string;
-  attempts: IRecordAttemptInput[];
-}
-
-// ============================================================================
-// Create Inputs
-// ============================================================================
 
 export interface IStartSessionInput {
-  cardIds?: CardId[];
-  mode?: SessionMode;
-  blueprintId?: string;
-  deckQueryId?: string;
-  learningMode?: LearningMode;
+  curriculumId: CurriculumId;
+  curriculumVersionId?: CurriculumVersionId;
   studyMode?: StudyMode;
-  teachingApproach?: string;
-  schedulingAlgorithm?: 'fsrs' | 'hlr' | 'sm2';
-  loadoutId?: string;
-  loadoutArchetype?: string;
-  config?: {
-    maxCards?: number;
-    maxDurationMinutes?: number;
-    sessionTimeoutHours?: number;
-    categoryIds?: string[];
-    cardTypes?: string[];
-    presentation?: ISessionPresentationConfig;
-  };
-  initialCardIds?: CardId[];
-  initialCardLanes?: Record<string, 'retention' | 'calibration'>;
-  blueprint?: unknown;
+  learningMode?: LearningMode;
+  config?: ISessionConfigDto;
+  topic?: string;
+  sourceDecks?: string[];
+  sourceCategories?: string[];
   offlineIntentToken?: string;
 }
 
 export interface ISessionFilters {
-  state?: SessionState;
-  mode?: SessionMode;
+  lifecycleState?: SessionLifecycleState;
+  learningMode?: LearningMode;
   studyMode?: StudyMode;
   limit?: number;
   offset?: number;
+  createdAfter?: string;
+  createdBefore?: string;
+  completedAfter?: string;
+  completedBefore?: string;
 }
 
-export interface IStreakHistoryEntryDto {
-  sessionsCompleted: number;
-  totalAttempts: number;
-  totalMinutes: number;
+export interface ICreateLessonPlanInput {
+  curriculumId?: CurriculumId;
+  curriculumVersionId?: CurriculumVersionId;
+  selectedNodeIds?: CurriculumNodeId[];
+  rigorLevel?: RigorLevel;
+  topic?: string;
+  prerequisites?: ConceptId[];
+  sourceDecks?: string[];
+  sourceCategories?: string[];
+  assessmentStrategy?: string;
+  adaptationRules?: string;
+  steps?: IPlannedStepInput[];
 }
 
-export interface IHeatmapEntryDto {
-  date: string;
-  intensity: 0 | 1 | 2 | 3 | 4;
+export interface IPlannedStepInput {
+  objective: string;
+  servesGoalIds?: GoalId[];
+  eligibleModes?: EpistemicMode[];
+  selectedMode?: EpistemicMode;
+  transformationType?: TransformationType;
+  expectedOutcome: string;
+  evaluationType?: string;
+  difficulty?: number;
+  isRepair?: boolean;
+  conceptRefs?: ConceptId[];
+  variantSeed?: string;
+  activities?: IPlannedActivityInput[];
 }
 
-export interface IStreakQuery {
-  days?: number;
-  timezone?: string;
-  studyMode?: StudyMode;
+export interface IPlannedActivityInput {
+  contentSourceType?: ActivityContentSourceType;
+  cardId?: string;
+  templateId?: string;
+  generatedVariantId?: string;
+  prompt: string;
+  renderPayload?: Record<string, unknown>;
+  expectedResponseType?: string;
+  responseSchema?: Record<string, unknown>;
+  variantSeed?: string;
+  generationFallbackReason?: string;
 }
 
-export interface IStreakDto {
-  studyMode: StudyMode;
-  currentStreak: number;
-  longestStreak: number;
-  lastActiveDate: string | null;
-  isActiveToday: boolean;
-  streakHistory: Record<string, IStreakHistoryEntryDto>;
-  heatmapData: IHeatmapEntryDto[];
+export interface ICreateLessonPlanResultDto {
+  lessonPlan: ILessonPlanDto;
+  steps: IStepDto[];
 }
 
-// ============================================================================
-// Backward-compat aliases
-// ============================================================================
+export interface ICreateGoalInput {
+  description: string;
+  type: GoalType;
+  parentGoalId?: GoalId;
+  state?: GoalState;
+  source?: GoalSource;
+  conceptRefs?: ConceptId[];
+}
+
+export interface IAnswerStepInput {
+  response?: unknown;
+  correct: boolean;
+  selfRating: StepSelfRating;
+  evaluationId?: string;
+  trace: ISevenFrameTraceDto;
+  responseTimeMs?: number;
+}
+
+export interface ISkipStepInput {
+  reason?: string;
+  skippedBy?: string;
+}
+
+export interface IOfflineIntentTokenInput {
+  userId: UserId;
+  sessionBlueprint: unknown;
+  expiresInSeconds: number;
+}
+
+export interface IOfflineIntentTokenDto {
+  token: string;
+  expiresAt: string;
+  nonce: string;
+}
+
+export interface IOfflineIntentVerifyInput {
+  token: string;
+}
 
 export type SessionDto = ISessionDto;
-export type AttemptDto = IAttemptDto;
-export type AttemptInput = IRecordAttemptInput;
-export type RecordAttemptInput = IRecordAttemptInput;
-export type RequestHintInput = IRequestHintInput;
-export type EvaluateCheckpointInput = IEvaluateCheckpointInput;
-export type SessionQueueItem = ISessionQueueItem;
-export type SessionQueueDto = ISessionQueueDto;
-export type HintResponseDto = IHintResponseDto;
-export type AdaptiveCheckpointDirectiveDto = IAdaptiveCheckpointDirectiveDto;
-export type CheckpointDirectiveDto = IAdaptiveCheckpointDirectiveDto;
-export type EvaluateCheckpointResultDto = IEvaluateCheckpointResultDto;
-export type CohortHandshakeDto = ICohortHandshakeDto;
-export type UpdateStrategyInput = IUpdateStrategyInput;
-export type UpdateTeachingInput = IUpdateTeachingInput;
-export type BlueprintValidationResult = IBlueprintValidationResult;
-export type OfflineIntentTokenDto = IOfflineIntentTokenDto;
-export type OfflineIntentVerifyInput = IOfflineIntentVerifyInput;
+export type LessonPlanDto = ILessonPlanDto;
+export type LessonPlanGoalDto = ILessonPlanGoalDto;
+export type StepDto = IStepDto;
 export type StartSessionInput = IStartSessionInput;
 export type SessionFilters = ISessionFilters;
-export type StreakDto = IStreakDto;
-export type StreakQuery = IStreakQuery;
-
-// ============================================================================
-// Response aliases
-// ============================================================================
+export type CreateLessonPlanInput = ICreateLessonPlanInput;
+export type CreateGoalInput = ICreateGoalInput;
+export type AnswerStepInput = IAnswerStepInput;
+export type SkipStepInput = ISkipStepInput;
+export type OfflineIntentTokenInput = IOfflineIntentTokenInput;
+export type OfflineIntentVerifyInput = IOfflineIntentVerifyInput;
 
 export type SessionResponse = IApiResponse<ISessionDto>;
 export type SessionsListResponse = IApiResponse<ISessionDto[]>;
-export type AttemptResponse = IApiResponse<IAttemptDto>;
-export type AttemptsListResponse = IApiResponse<IAttemptDto[]>;
-export type SessionQueueResponse = IApiResponse<ISessionQueueDto>;
-export type HintResponse = IApiResponse<IHintResponseDto>;
-export type CheckpointResponse = IApiResponse<IEvaluateCheckpointResultDto>;
-export type CohortResponse = IApiResponse<ICohortHandshakeDto>;
-export type BlueprintValidationResponse = IApiResponse<IBlueprintValidationResult>;
+export type CreateLessonPlanResponse = IApiResponse<ICreateLessonPlanResultDto>;
+export type CreateGoalResponse = IApiResponse<ILessonPlanGoalDto>;
+export type StepResponse = IApiResponse<IStepDto>;
+export type StepLoopSnapshotResponse = IApiResponse<IStepLoopSnapshotDto>;
 export type OfflineTokenResponse = IApiResponse<IOfflineIntentTokenDto>;
-export type StreakResponse = IApiResponse<IStreakDto>;
+export type OfflineVerifyResponse = IApiResponse<unknown>;

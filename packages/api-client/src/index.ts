@@ -33,10 +33,12 @@ export * from './session/index.js';
 export * from './knowledge-graph/index.js';
 export type * from './knowledge-graph/types.js';
 
+// Curriculum Service
+export * from './curriculum/index.js';
+export type * from './curriculum/types.js';
+
 // HLR Sidecar
 export * from './hlr/index.js';
 
-// React Query Hooks (user + scheduler - for backward compat)
+// React Query Hooks
 export * from './hooks/index.js';
-export { useSchedulerCardFocusSummary } from './scheduler/hooks.js';
-export { useSchedulerStudyGuidanceSummary } from './scheduler/hooks.js';

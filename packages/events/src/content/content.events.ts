@@ -11,8 +11,14 @@
 
 import type {
   CardId,
+  CardOriginMode,
+  CardReviewState,
   CardState,
+  CardTransformKind,
   CardType,
+  ConceptId,
+  ContentGenerationJobId,
+  ContentGenerationJobStatus,
   DifficultyLevel,
   EventSource,
   NodeId,
@@ -35,6 +41,14 @@ export const ContentEventType = {
   CARD_TAGS_UPDATED: 'card.tags.updated',
   CARD_NODES_UPDATED: 'card.nodes.updated',
   BATCH_CREATED: 'card.batch.created',
+  CONCEPTS_EXTRACTED: 'concepts.extracted',
+  CARD_TRANSFORMATION_CREATED: 'card.transformation.created',
+  CARD_REVIEW_STATE_CHANGED: 'card.review_state.changed',
+  CARD_METADATA_COMPLETED: 'card.metadata.completed',
+  CONTENT_GENERATION_REQUESTED: 'content.generation.requested',
+  CONTENT_GENERATION_COMPLETED: 'content.generation.completed',
+  CONTENT_GENERATION_FAILED: 'content.generation.failed',
+  CONTENT_COVERAGE_UPDATED: 'content.coverage.updated',
 } as const;
 
 export type ContentEventType = (typeof ContentEventType)[keyof typeof ContentEventType];
@@ -58,8 +72,14 @@ export interface ICardEntitySnapshot {
   difficulty: DifficultyLevel;
   content: Record<string, unknown>;
   knowledgeNodeIds: NodeId[];
+  anchoredCkgNodeIds: ConceptId[];
+  anchoredPkgNodeIds: NodeId[];
   tags: string[];
   source: EventSource;
+  originMode: CardOriginMode;
+  reviewState: CardReviewState;
+  sourceDocumentIds: string[];
+  factualityScore: number | null;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -91,6 +111,8 @@ export interface ICardUpdateChanges {
 export interface ICardCreatedPayload {
   entity: ICardEntitySnapshot;
   source: string;
+  originMode: CardOriginMode;
+  reviewState: CardReviewState;
   batchOperation?: boolean;
 }
 
@@ -143,6 +165,62 @@ export interface IBatchCreatedPayload {
   cardIds: CardId[];
 }
 
+/**
+ * Payload for concepts.extracted event.
+ */
+export interface IConceptsExtractedPayload {
+  conceptIds: NodeId[];
+  cardIds: CardId[];
+  source: string;
+}
+
+export interface ICardTransformationCreatedPayload {
+  parentCardId: CardId;
+  variantCardId: CardId;
+  transformationKind: CardTransformKind;
+  transformationAgentRunId?: string | null;
+}
+
+export interface ICardReviewStateChangedPayload {
+  previousReviewState: CardReviewState;
+  newReviewState: CardReviewState;
+  reason?: string;
+}
+
+export interface ICardMetadataCompletedPayload {
+  cardId: CardId;
+  anchoredCkgNodeIds: ConceptId[];
+  anchoredPkgNodeIds: NodeId[];
+  tags: string[];
+}
+
+export interface IContentGenerationJobPayload {
+  jobId: ContentGenerationJobId;
+  userId: string;
+  mode: CardOriginMode;
+  status: ContentGenerationJobStatus;
+  conceptIds: ConceptId[];
+  documentIds: string[];
+}
+
+export interface IContentGenerationCompletedPayload extends IContentGenerationJobPayload {
+  createdCardIds: CardId[];
+  rejectedDraftCount: number;
+}
+
+export interface IContentGenerationFailedPayload extends IContentGenerationJobPayload {
+  errorMessage: string;
+}
+
+export interface IContentCoverageUpdatedPayload {
+  userId: string;
+  conceptId: ConceptId;
+  activeCardCount: number;
+  distinctActiveCardTypes: number;
+  pendingReviewCount: number;
+  metadataIncompleteCount: number;
+}
+
 // ============================================================================
 // Typed Events
 // ============================================================================
@@ -166,6 +244,46 @@ export type CardNodesUpdatedEvent = ITypedEvent<
   ICardNodesUpdatedPayload
 >;
 export type BatchCreatedEvent = ITypedEvent<'card.batch.created', 'Card', IBatchCreatedPayload>;
+export type ConceptsExtractedEvent = ITypedEvent<
+  'concepts.extracted',
+  'ContentImport',
+  IConceptsExtractedPayload
+>;
+export type CardTransformationCreatedEvent = ITypedEvent<
+  'card.transformation.created',
+  'Card',
+  ICardTransformationCreatedPayload
+>;
+export type CardReviewStateChangedEvent = ITypedEvent<
+  'card.review_state.changed',
+  'Card',
+  ICardReviewStateChangedPayload
+>;
+export type CardMetadataCompletedEvent = ITypedEvent<
+  'card.metadata.completed',
+  'Card',
+  ICardMetadataCompletedPayload
+>;
+export type ContentGenerationRequestedEvent = ITypedEvent<
+  'content.generation.requested',
+  'ContentGenerationJob',
+  IContentGenerationJobPayload
+>;
+export type ContentGenerationCompletedEvent = ITypedEvent<
+  'content.generation.completed',
+  'ContentGenerationJob',
+  IContentGenerationCompletedPayload
+>;
+export type ContentGenerationFailedEvent = ITypedEvent<
+  'content.generation.failed',
+  'ContentGenerationJob',
+  IContentGenerationFailedPayload
+>;
+export type ContentCoverageUpdatedEvent = ITypedEvent<
+  'content.coverage.updated',
+  'ConceptCardCoverage',
+  IContentCoverageUpdatedPayload
+>;
 
 /**
  * Union of all content domain events.
@@ -177,4 +295,12 @@ export type ContentDomainEvent =
   | CardStateChangedEvent
   | CardTagsUpdatedEvent
   | CardNodesUpdatedEvent
-  | BatchCreatedEvent;
+  | BatchCreatedEvent
+  | ConceptsExtractedEvent
+  | CardTransformationCreatedEvent
+  | CardReviewStateChangedEvent
+  | CardMetadataCompletedEvent
+  | ContentGenerationRequestedEvent
+  | ContentGenerationCompletedEvent
+  | ContentGenerationFailedEvent
+  | ContentCoverageUpdatedEvent;

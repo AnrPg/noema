@@ -4,7 +4,7 @@
  * Events emitted by the Session Service covering:
  * - Session lifecycle (start, pause, resume, complete, abandon, expire)
  * - Dynamic queue management (inject, remove cards)
- * - Strategy & teaching approach changes
+ * - Strategy & Epistemic mode changes
  * - Attempt recording (the most critical event in Noema)
  * - Hint requests
  *
@@ -12,8 +12,6 @@
  */
 
 import type {
-  AttemptId,
-  AttemptOutcome,
   CardId,
   CardType,
   CategoryId,
@@ -26,16 +24,20 @@ import type {
   LoadoutArchetype,
   LoadoutId,
   MotivationSignal,
-  Rating,
   RemediationCardType,
   SchedulingAlgorithm,
+  SchedulerRating,
   SessionId,
   SessionTerminationReason,
   StudyMode,
-  TeachingApproach,
+  EpistemicMode,
   UserId,
 } from '@noema/types';
 import type { ITypedEvent } from '../types.js';
+
+type LegacyAttemptIdentifier = string;
+type LegacyAttemptOutcome = 'correct' | 'incorrect' | 'partial' | 'skipped';
+type LegacyRating = SchedulerRating;
 
 // ============================================================================
 // Session Event Types
@@ -68,12 +70,6 @@ export const SessionEventType = {
   // Adaptive checkpoints
   SESSION_CHECKPOINT_EVALUATED: 'session.checkpoint.evaluated',
 
-  // Scheduler orchestration handshake
-  SESSION_COHORT_PROPOSED: 'session.cohort.proposed',
-  SESSION_COHORT_ACCEPTED: 'session.cohort.accepted',
-  SESSION_COHORT_REVISED: 'session.cohort.revised',
-  SESSION_COHORT_COMMITTED: 'session.cohort.committed',
-
   // Offline intent tokens
   SESSION_INTENT_TOKEN_ISSUED: 'session.intent_token.issued',
 } as const;
@@ -101,14 +97,14 @@ export interface ISessionStatsSnapshot {
   newCardsIntroduced: number;
   lapsedCards: number;
   /** Breakdown by rating */
-  ratingDistribution: Record<Rating, number>;
+  ratingDistribution: Record<LegacyRating, number>;
 }
 
 /** Snapshot of context at the time of an attempt. */
 export interface IAttemptContextSnapshot {
   learningMode: LearningMode;
   studyMode?: StudyMode;
-  teachingApproach: TeachingApproach;
+  epistemicMode: EpistemicMode;
   loadoutArchetype?: LoadoutArchetype;
   forceLevel?: ForceLevel;
   cognitiveLoad?: CognitiveLoadLevel;
@@ -142,7 +138,7 @@ export interface ISessionStartedPayload {
   deckQueryId: DeckQueryLogId;
   learningMode: LearningMode;
   studyMode?: StudyMode;
-  teachingApproach: TeachingApproach;
+  epistemicMode: EpistemicMode;
   schedulingAlgorithm: SchedulingAlgorithm;
   loadoutId?: LoadoutId;
   loadoutArchetype?: LoadoutArchetype;
@@ -229,8 +225,8 @@ export interface ISessionStrategyUpdatedPayload {
 
 export interface ISessionTeachingChangedPayload {
   userId: UserId;
-  previousApproach: TeachingApproach;
-  newApproach: TeachingApproach;
+  previousApproach: EpistemicMode;
+  newApproach: EpistemicMode;
   trigger: string;
 }
 
@@ -248,7 +244,7 @@ export interface ISessionTeachingChangedPayload {
  * - Learning Agent (adaptation decisions)
  */
 export interface IAttemptRecordedPayload {
-  attemptId: AttemptId;
+  attemptId: LegacyAttemptIdentifier;
   sessionId: SessionId;
   cardId: CardId;
   userId: UserId;
@@ -257,8 +253,8 @@ export interface IAttemptRecordedPayload {
   lane?: 'retention' | 'calibration';
 
   // Response
-  outcome: AttemptOutcome;
-  rating: Rating;
+  outcome: LegacyAttemptOutcome;
+  rating: LegacyRating;
   ratingValue: number;
 
   // Timing
@@ -287,7 +283,7 @@ export interface IAttemptRecordedPayload {
 }
 
 export interface IAttemptHintRequestedPayload {
-  attemptId: AttemptId;
+  attemptId: LegacyAttemptIdentifier;
   sessionId: SessionId;
   cardId: CardId;
   userId: UserId;
@@ -306,7 +302,7 @@ export interface ISessionCheckpointEvaluatedDirective {
     | 'slowdown'
     | 'increase_support'
     | 'reduce_calibration_lane'
-    | 'switch_teaching_approach'
+    | 'switch_epistemic_mode'
     | 'continue';
   reason: string;
   priority: 'critical' | 'high' | 'medium' | 'low';
@@ -316,49 +312,6 @@ export interface ISessionCheckpointEvaluatedPayload {
   trigger: 'confidence_drift' | 'latency_spike' | 'error_cascade' | 'streak_break' | 'manual';
   shouldAdapt: boolean;
   directives: ISessionCheckpointEvaluatedDirective[];
-}
-
-// ============================================================================
-// Scheduler Handshake Payloads
-// ============================================================================
-
-export interface ISessionCohortLinkage {
-  proposalId: string;
-  decisionId: string;
-  sessionId: SessionId;
-  sessionRevision: number;
-  correlationId: string;
-}
-
-export interface ISessionCohortProposedPayload {
-  userId: UserId;
-  linkage: ISessionCohortLinkage;
-  candidateCardIds: CardId[];
-  constraints?: Record<string, unknown>;
-}
-
-export interface ISessionCohortAcceptedPayload {
-  userId: UserId;
-  linkage: ISessionCohortLinkage;
-  acceptedCardIds: CardId[];
-  excludedCardIds: CardId[];
-}
-
-export interface ISessionCohortRevisedPayload {
-  userId: UserId;
-  linkage: ISessionCohortLinkage;
-  revisionFrom: number;
-  revisionTo: number;
-  candidateCardIds: CardId[];
-  reason: string;
-}
-
-export interface ISessionCohortCommittedPayload {
-  userId: UserId;
-  linkage: ISessionCohortLinkage;
-  committedCardIds: CardId[];
-  rejectedCardIds: CardId[];
-  policyVersion?: string;
 }
 
 // ============================================================================
@@ -438,30 +391,6 @@ export type SessionIntentTokenIssuedEvent = ITypedEvent<
   ISessionIntentTokenIssuedPayload
 >;
 
-export type SessionCohortProposedEvent = ITypedEvent<
-  'session.cohort.proposed',
-  'Session',
-  ISessionCohortProposedPayload
->;
-
-export type SessionCohortAcceptedEvent = ITypedEvent<
-  'session.cohort.accepted',
-  'Session',
-  ISessionCohortAcceptedPayload
->;
-
-export type SessionCohortRevisedEvent = ITypedEvent<
-  'session.cohort.revised',
-  'Session',
-  ISessionCohortRevisedPayload
->;
-
-export type SessionCohortCommittedEvent = ITypedEvent<
-  'session.cohort.committed',
-  'Session',
-  ISessionCohortCommittedPayload
->;
-
 /** Union of all session domain events */
 export type SessionDomainEvent =
   | SessionStartedEvent
@@ -477,8 +406,4 @@ export type SessionDomainEvent =
   | AttemptRecordedEvent
   | AttemptHintRequestedEvent
   | SessionCheckpointEvaluatedEvent
-  | SessionIntentTokenIssuedEvent
-  | SessionCohortProposedEvent
-  | SessionCohortAcceptedEvent
-  | SessionCohortRevisedEvent
-  | SessionCohortCommittedEvent;
+  | SessionIntentTokenIssuedEvent;

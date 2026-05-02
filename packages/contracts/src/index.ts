@@ -21,3 +21,12 @@ export * from './health.js';
 
 // Session blueprint / dual-lane / offline intent contracts
 export * from './session-blueprint.js';
+
+// Step-first realignment learning loop contracts
+export * from './learning-loop.js';
+
+// Curriculum-service contracts
+export * from './curriculum.js';
+
+// Content generation and provenance contracts
+export * from './content.js';

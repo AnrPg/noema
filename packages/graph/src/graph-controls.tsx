@@ -82,7 +82,7 @@ export function GraphControls({
   }, [nodes, searchQuery]);
 
   return (
-    <aside className="flex h-full w-[320px] flex-shrink-0 flex-col gap-4 overflow-hidden border-r border-border bg-card p-3">
+    <aside className="flex h-full min-h-0 w-[320px] flex-shrink-0 flex-col gap-4 overflow-hidden border-r border-border bg-card p-3">
       {onClose !== undefined && (
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

@@ -42,8 +42,10 @@ interface IForceNode {
 
 interface IForceLink {
   id: string;
-  source: string;
-  target: string;
+  source: string | IForceNode;
+  target: string | IForceNode;
+  sourceId: string;
+  targetId: string;
   type: string;
   weight: number;
 }
@@ -104,10 +106,7 @@ const ForceGraph2D = dynamic<IForceGraph2DProps>(
     const forceGraphModule = await import('react-force-graph');
     const ForceGraph2DRaw = forceGraphModule.ForceGraph2D as unknown as React.ElementType;
 
-    function ForceGraph2DWrapper({
-      graphRef,
-      ...props
-    }: IForceGraph2DProps): React.JSX.Element {
+    function ForceGraph2DWrapper({ graphRef, ...props }: IForceGraph2DProps): React.JSX.Element {
       const forceGraphProps =
         graphRef === undefined || graphRef === null ? props : { ...props, ref: graphRef };
 
@@ -166,6 +165,47 @@ function seededNodePosition(index: number, total: number): { x: number; y: numbe
   };
 }
 
+function hasUsablePositionSpread(positionMap: Map<string, { x: number; y: number }>): boolean {
+  if (positionMap.size <= 1) {
+    return false;
+  }
+
+  const positions = [...positionMap.values()];
+  const xs = positions.map((position) => position.x);
+  const ys = positions.map((position) => position.y);
+  const width = Math.max(...xs) - Math.min(...xs);
+  const height = Math.max(...ys) - Math.min(...ys);
+
+  return width > 24 || height > 24;
+}
+
+function resolveEndpointId(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const id = (value as { id?: unknown }).id;
+    if (typeof id === 'string') {
+      return id;
+    }
+  }
+
+  return '';
+}
+
+function resolveEndpointNode(value: unknown, nodeById: Map<string, IForceNode>): IForceNode | null {
+  if (typeof value === 'object' && value !== null) {
+    const maybeNode = value as IForceNode;
+    if (typeof maybeNode.id === 'string') {
+      return maybeNode;
+    }
+  }
+
+  const nodeId = resolveEndpointId(value);
+  return nodeId !== '' ? (nodeById.get(nodeId) ?? null) : null;
+}
+
 // ============================================================================
 // GraphCanvas
 // ============================================================================
@@ -215,16 +255,24 @@ export function GraphCanvas({
     };
   }, []);
 
+  const visibleNodeIds = React.useMemo(
+    () => new Set(nodes.map((node) => String(node.id))),
+    [nodes]
+  );
+
   const degreeMap = React.useMemo<Record<string, number>>(() => {
     const map: Record<string, number> = {};
     for (const edge of edges) {
-      const src: string = edge.sourceId as unknown as string;
-      const tgt: string = edge.targetId as unknown as string;
+      const src = resolveEndpointId(edge.sourceId);
+      const tgt = resolveEndpointId(edge.targetId);
+      if (!visibleNodeIds.has(src) || !visibleNodeIds.has(tgt)) {
+        continue;
+      }
       map[src] = (map[src] ?? 0) + 1;
       map[tgt] = (map[tgt] ?? 0) + 1;
     }
     return map;
-  }, [edges]);
+  }, [edges, visibleNodeIds]);
 
   const forceNodes = React.useMemo(
     () =>
@@ -235,25 +283,35 @@ export function GraphCanvas({
     [nodes, degreeMap]
   );
 
-  const forceLinks: IForceLink[] = React.useMemo(
-    () =>
-      (
-        edges as unknown as {
-          id: string;
-          sourceId: string;
-          targetId: string;
-          type: string;
-          weight: number;
-        }[]
-      ).map((e) => ({
-        id: e.id,
-        source: e.sourceId,
-        target: e.targetId,
-        type: e.type,
-        weight: e.weight,
-      })),
-    [edges]
-  );
+  const forceLinks: IForceLink[] = React.useMemo(() => {
+    return (
+      edges as unknown as {
+        id: string;
+        sourceId: unknown;
+        targetId: unknown;
+        type: string;
+        weight: number;
+      }[]
+    )
+      .map((edge) => {
+        const sourceId = resolveEndpointId(edge.sourceId);
+        const targetId = resolveEndpointId(edge.targetId);
+        return {
+          id: edge.id,
+          source: sourceId,
+          target: targetId,
+          sourceId,
+          targetId,
+          type: edge.type,
+          weight: edge.weight,
+        };
+      })
+      .filter((edge) => visibleNodeIds.has(edge.sourceId) && visibleNodeIds.has(edge.targetId));
+  }, [edges, visibleNodeIds]);
+
+  const forceNodeById = React.useMemo(() => {
+    return new Map(forceNodes.map((node) => [node.id, node]));
+  }, [forceNodes]);
 
   const graphData = React.useMemo(
     () => ({ nodes: forceNodes, links: forceLinks }),
@@ -267,8 +325,8 @@ export function GraphCanvas({
       if (savedPosition !== undefined && layoutMode === 'force') {
         node.x = savedPosition.x;
         node.y = savedPosition.y;
-        node.fx = savedPosition.x;
-        node.fy = savedPosition.y;
+        node.fx = null;
+        node.fy = null;
         node.vx = 0;
         node.vy = 0;
       } else if (layoutMode === 'force') {
@@ -428,6 +486,14 @@ export function GraphCanvas({
   }, [hoverRepelForce, spacingForce, nodes.length]);
 
   React.useEffect(() => {
+    if (layoutMode !== 'force') {
+      for (const node of forceNodes) {
+        node.fx = null;
+        node.fy = null;
+      }
+      return;
+    }
+
     const basePositions = basePositionMapRef.current;
     const focusNode =
       interactionFocusId !== null
@@ -442,13 +508,15 @@ export function GraphCanvas({
 
     for (const node of forceNodes) {
       const basePosition = basePositions.get(node.id);
-      if (basePosition === undefined) {
+      if (focusNode === undefined || focusAnchor === undefined) {
+        node.fx = null;
+        node.fy = null;
         continue;
       }
 
-      if (focusNode === undefined || focusAnchor === undefined) {
-        node.fx = basePosition.x;
-        node.fy = basePosition.y;
+      if (basePosition === undefined) {
+        node.fx = null;
+        node.fy = null;
         continue;
       }
 
@@ -468,8 +536,8 @@ export function GraphCanvas({
       const effectRadius = (selectedFocusActive ? 420 : 320) + nodeRadius(nodeDegree) * 8;
 
       if (distance > effectRadius) {
-        node.fx = basePosition.x;
-        node.fy = basePosition.y;
+        node.fx = null;
+        node.fy = null;
         continue;
       }
 
@@ -483,7 +551,7 @@ export function GraphCanvas({
     }
 
     graphRef.current?.d3ReheatSimulation();
-  }, [forceNodes, interactionFocusId, selectedNodeId]);
+  }, [forceNodes, interactionFocusId, layoutMode, selectedNodeId]);
 
   const nodeCanvasObject = React.useCallback(
     (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -543,8 +611,12 @@ export function GraphCanvas({
   const linkCanvasObject = React.useCallback(
     (link: any, ctx: CanvasRenderingContext2D) => {
       // force-graph mutates source/target from string → resolved node object at runtime
-      const src = link.source as IForceNode;
-      const tgt = link.target as IForceNode;
+      const src = resolveEndpointNode(link.source, forceNodeById);
+      const tgt = resolveEndpointNode(link.target, forceNodeById);
+      if (src === null || tgt === null) {
+        return;
+      }
+
       drawEdge({
         ctx,
         sourceX: src.x ?? 0,
@@ -563,7 +635,7 @@ export function GraphCanvas({
           tgt.id === hoveredNodeId,
       });
     },
-    [hoveredNodeId, selectedEdgeId, selectedNodeId, selectedNodeIds]
+    [forceNodeById, hoveredNodeId, selectedEdgeId, selectedNodeId, selectedNodeIds]
   );
 
   const handleNodeClick = React.useCallback(
@@ -582,7 +654,19 @@ export function GraphCanvas({
 
   const handleEdgeClick = React.useCallback(
     (edge: any, event?: MouseEvent) => {
-      onEdgeClick?.(edge as IGraphEdgeDto, event);
+      const forceLink = edge as IForceLink;
+      onEdgeClick?.(
+        {
+          id: forceLink.id as IGraphEdgeDto['id'],
+          sourceId: forceLink.sourceId as IGraphEdgeDto['sourceId'],
+          targetId: forceLink.targetId as IGraphEdgeDto['targetId'],
+          type: forceLink.type as IGraphEdgeDto['type'],
+          weight: forceLink.weight,
+          metadata: {},
+          createdAt: '',
+        },
+        event
+      );
     },
     [onEdgeClick]
   );
@@ -674,11 +758,9 @@ export function GraphCanvas({
             for (const node of forceNodes) {
               if (typeof node.x === 'number' && typeof node.y === 'number') {
                 nextBasePositions.set(node.id, { x: node.x, y: node.y });
-                node.fx = node.x;
-                node.fy = node.y;
               }
             }
-            if (nextBasePositions.size > 0) {
+            if (hasUsablePositionSpread(nextBasePositions)) {
               basePositionMapRef.current = nextBasePositions;
             }
           }

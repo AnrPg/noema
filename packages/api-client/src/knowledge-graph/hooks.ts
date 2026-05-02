@@ -23,11 +23,13 @@ import {
   ckgNodesApi,
   comparisonApi,
   healthApi,
-  masteryApi,
+  conceptStateApi,
+  stabilityApi,
   metricsApi,
   misconceptionsApi,
   ontologyImportsApi,
   pkgEdgesApi,
+  pkgMaintenanceApi,
   pkgNodesApi,
   pkgOperationsApi,
   pkgTraversalApi,
@@ -42,6 +44,7 @@ import type {
   ICkgMutationFilters,
   ICkgMutationProposalInput,
   ICkgResetInput,
+  ICkgSourcePurgeInput,
   ICommonAncestorsInput,
   IComparisonQueryParams,
   ICreateOntologyImportRunInput,
@@ -52,7 +55,10 @@ import type {
   IGraphEdgeDto,
   IGraphNodeDto,
   IMetacognitiveStageAssessmentDto,
-  INodeMasterySummaryDto,
+  IConceptStateHistoryDto,
+  IConceptStateProjectionDto,
+  IPrerequisiteGapsDto,
+  IUserStabilitySummaryDto,
   IListOntologyImportRunsParams,
   IOntologyImportRunDetailDto,
   IOntologyImportRunDto,
@@ -76,6 +82,7 @@ import type {
   CkgMutationResponse,
   CkgMutationsResponse,
   CkgResetResponse,
+  CkgSourcePurgeResponse,
   ComparisonResponse,
   EdgeResponse,
   EdgesListResponse,
@@ -83,13 +90,18 @@ import type {
   HealthResponse,
   MetricHistoryResponse,
   MetricsResponse,
-  NodeMasterySummaryResponse,
+  ConceptStateHistoryResponse,
+  ConceptStateResponse,
   MisconceptionDetectionResponse,
   MisconceptionResponse,
   MisconceptionsResponse,
   NodeResponse,
   NodesListResponse,
   OperationsResponse,
+  PkgBulkDeleteResponse,
+  PkgResetResponse,
+  IPkgBulkDeleteInput,
+  IPkgResetInput,
   OntologyImportRunDetailResponse,
   OntologyImportArtifactContentResponse,
   OntologyImportRunResponse,
@@ -99,8 +111,10 @@ import type {
   OntologyImportsSystemStatusResponse,
   OntologyMutationPreviewSubmissionResponse,
   PrerequisiteChainResponse,
+  PrerequisiteGapsResponse,
   StageResponse,
   SubgraphResponse,
+  UserStabilitySummaryResponse,
 } from './types.js';
 
 function extractListData<T>(value: unknown): T[] {
@@ -490,11 +504,11 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
         ? [domain]
         : [];
   const supportedStudyModes = stringArrayValue(parsedValue(entry['supportedStudyModes']));
-  const masteryLevelRaw = entry['masteryLevel'];
-  const masteryLevel =
-    typeof masteryLevelRaw === 'number' && Number.isFinite(masteryLevelRaw)
-      ? masteryLevelRaw
-      : masteryLevelRaw === null
+  const stabilityLevelRaw = entry['stabilityLevel'];
+  const stabilityLevel =
+    typeof stabilityLevelRaw === 'number' && Number.isFinite(stabilityLevelRaw)
+      ? stabilityLevelRaw
+      : stabilityLevelRaw === null
         ? null
         : undefined;
 
@@ -526,7 +540,7 @@ function normalizeGraphNodeEntry(entry: Record<string, unknown>): IGraphNodeDto 
     reviewMetadata: normalizeNodeReviewMetadata(entry),
     sourceCoverage: normalizeNodeSourceCoverage(entry, metadata),
     metadata,
-    ...(masteryLevel !== undefined ? { masteryLevel } : {}),
+    ...(stabilityLevel !== undefined ? { stabilityLevel } : {}),
     createdAt: pickIsoDate(entry['createdAt'], metadata['createdAt']),
     updatedAt: pickIsoDate(
       entry['updatedAt'],
@@ -908,6 +922,7 @@ export const kgKeys = {
   ckgNodes: (params?: IGraphNodeQueryParams) =>
     [...kgKeys.ckg(), 'nodes', ...(params !== undefined ? [params] : [])] as const,
   ckgEdges: () => [...kgKeys.ckg(), 'edges'] as const,
+  ckgMutationsRoot: () => [...kgKeys.ckg(), 'mutations'] as const,
   ckgMutations: (filters?: ICkgMutationFilters) => [...kgKeys.ckg(), 'mutations', filters] as const,
   ckgMutation: (id: MutationId) => [...kgKeys.ckg(), 'mutations', id] as const,
   ontologyImports: () => [...kgKeys.ckg(), 'ontology-imports'] as const,
@@ -918,10 +933,16 @@ export const kgKeys = {
   ontologyImportRun: (runId: string) => [...kgKeys.ontologyImports(), 'runs', runId] as const,
   metrics: (userId: UserId, studyMode?: StudyMode) =>
     [...kgKeys.all, 'metrics', userId, studyMode ?? null] as const,
-  masterySummary: (
-    userId: UserId,
-    params: { studyMode: StudyMode; domain?: string; masteryThreshold?: number }
-  ) => [...kgKeys.pkg(userId), 'mastery-summary', params] as const,
+  stabilitySummary: (userId: UserId, params: { studyMode: StudyMode }) =>
+    [...kgKeys.all, 'stability-summary', userId, params] as const,
+  conceptState: (conceptId: NodeId, params: { userId: UserId; studyMode: StudyMode }) =>
+    [...kgKeys.all, 'concept-state', conceptId, params] as const,
+  conceptStateHistory: (
+    conceptId: NodeId,
+    params: { userId: UserId; studyMode: StudyMode; limit?: number }
+  ) => [...kgKeys.all, 'concept-state-history', conceptId, params] as const,
+  prerequisiteGaps: (conceptId: NodeId, params: { userId: UserId; studyMode: StudyMode }) =>
+    [...kgKeys.all, 'prerequisite-gaps', conceptId, params] as const,
   metricHistory: (userId: UserId, studyMode?: StudyMode) =>
     [...kgKeys.metrics(userId, studyMode), 'history'] as const,
   health: (userId: UserId, studyMode?: StudyMode) =>
@@ -930,6 +951,7 @@ export const kgKeys = {
     [...kgKeys.health(userId, studyMode), 'stage'] as const,
   misconceptions: (userId: UserId, studyMode?: StudyMode) =>
     [...kgKeys.all, 'misconceptions', userId, studyMode ?? null] as const,
+  comparisonRoot: (userId: UserId) => [...kgKeys.all, 'comparison', userId] as const,
   comparison: (userId: UserId, params?: IComparisonQueryParams) =>
     [...kgKeys.all, 'comparison', userId, params] as const,
 };
@@ -940,6 +962,16 @@ async function invalidateCkgGraphQueries(
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: kgKeys.ckgNodes() }),
     queryClient.invalidateQueries({ queryKey: kgKeys.ckgEdges() }),
+  ]);
+}
+
+async function invalidatePkgGraphQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  userId: UserId
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: kgKeys.pkg(userId) }),
+    queryClient.invalidateQueries({ queryKey: kgKeys.comparisonRoot(userId) }),
   ]);
 }
 
@@ -1022,8 +1054,7 @@ export function useCreatePKGNode(
   return useMutation({
     mutationFn: (data) => pkgNodesApi.create(userId, data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: kgKeys.pkgNodes(userId) });
-      void queryClient.invalidateQueries({ queryKey: kgKeys.comparison(userId) });
+      void invalidatePkgGraphQueries(queryClient, userId);
     },
     ...options,
   });
@@ -1039,7 +1070,7 @@ export function useUpdatePKGNode(
     mutationFn: (data) => pkgNodesApi.update(userId, nodeId, data),
     onSuccess: (response) => {
       queryClient.setQueryData(kgKeys.pkgNode(userId, nodeId), normalizeNodeResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.pkgNodes(userId) });
+      void invalidatePkgGraphQueries(queryClient, userId);
     },
     ...options,
   });
@@ -1055,8 +1086,37 @@ export function useDeletePKGNode(
     mutationFn: () => pkgNodesApi.delete(userId, nodeId),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: kgKeys.pkgNode(userId, nodeId) });
-      void queryClient.invalidateQueries({ queryKey: kgKeys.pkg(userId) });
-      void queryClient.invalidateQueries({ queryKey: kgKeys.comparison(userId) });
+      void invalidatePkgGraphQueries(queryClient, userId);
+      void queryClient.invalidateQueries({ queryKey: ['content', 'cards'] });
+    },
+    ...options,
+  });
+}
+
+export function useBulkDeletePKGNodes(
+  userId: UserId,
+  options?: UseMutationOptions<PkgBulkDeleteResponse, Error, IPkgBulkDeleteInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => pkgMaintenanceApi.bulkDeleteNodes(userId, input),
+    onSuccess: () => {
+      void invalidatePkgGraphQueries(queryClient, userId);
+      void queryClient.invalidateQueries({ queryKey: ['content', 'cards'] });
+    },
+    ...options,
+  });
+}
+
+export function useResetPKG(
+  userId: UserId,
+  options?: UseMutationOptions<PkgResetResponse, Error, IPkgResetInput>
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => pkgMaintenanceApi.reset(userId, input),
+    onSuccess: () => {
+      void invalidatePkgGraphQueries(queryClient, userId);
       void queryClient.invalidateQueries({ queryKey: ['content', 'cards'] });
     },
     ...options,
@@ -1095,7 +1155,7 @@ export function useCreatePKGEdge(
   return useMutation({
     mutationFn: (data) => pkgEdgesApi.create(userId, data),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: kgKeys.pkgEdges(userId) });
+      void invalidatePkgGraphQueries(queryClient, userId);
     },
     ...options,
   });
@@ -1110,7 +1170,7 @@ export function useDeletePKGEdge(
   return useMutation({
     mutationFn: () => pkgEdgesApi.delete(userId, edgeId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: kgKeys.pkgEdges(userId) });
+      void invalidatePkgGraphQueries(queryClient, userId);
     },
     ...options,
   });
@@ -1463,7 +1523,7 @@ export function useProposeCkgMutation(
     onSuccess: async (response) => {
       const normalized = normalizeMutationResponse(response);
       queryClient.setQueryData(kgKeys.ckgMutation(normalized.data.id), normalized);
-      await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() });
     },
     ...options,
   });
@@ -1478,7 +1538,7 @@ export function useApproveMutation(
     onSuccess: async (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() }),
         invalidateCkgGraphQueries(queryClient),
       ]);
     },
@@ -1494,7 +1554,7 @@ export function useRejectMutation(
     mutationFn: ({ id, note }) => ckgMutationsApi.reject(id, note),
     onSuccess: (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() });
     },
     ...options,
   });
@@ -1509,7 +1569,7 @@ export function useReconcileMutation(
     onSuccess: async (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() }),
         invalidateCkgGraphQueries(queryClient),
       ]);
     },
@@ -1526,7 +1586,7 @@ export function useRecoverRejectMutation(
     onSuccess: async (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() }),
         invalidateCkgGraphQueries(queryClient),
       ]);
     },
@@ -1566,7 +1626,7 @@ export function useBulkReviewMutations(
         })
       );
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() }),
         invalidateCkgGraphQueries(queryClient),
       ]);
       if (input.importRunId !== undefined) {
@@ -1579,15 +1639,30 @@ export function useBulkReviewMutations(
   });
 }
 
-export function useResetCKG(
-  options?: UseMutationOptions<CkgResetResponse, Error, ICkgResetInput>
-) {
+export function useResetCKG(options?: UseMutationOptions<CkgResetResponse, Error, ICkgResetInput>) {
   const queryClient = useQueryClient();
   const { onSuccess, ...mutationOptions } = options ?? {};
   return useMutation({
     mutationFn: (input) => ckgMaintenanceApi.reset(input),
     onSuccess: async (...args) => {
       await queryClient.invalidateQueries({ queryKey: kgKeys.ckg() });
+      await onSuccess?.(...args);
+    },
+    ...mutationOptions,
+  });
+}
+
+export function usePurgeCKGSource(
+  options?: UseMutationOptions<CkgSourcePurgeResponse, Error, ICkgSourcePurgeInput>
+) {
+  const queryClient = useQueryClient();
+  const { onSuccess, ...mutationOptions } = options ?? {};
+  return useMutation({
+    mutationFn: (input) => ckgMaintenanceApi.purgeSource(input),
+    onSuccess: async (...args) => {
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ckg() });
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() });
+      await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImports() });
       await onSuccess?.(...args);
     },
     ...mutationOptions,
@@ -1618,7 +1693,7 @@ export function useRequestRevision(
     mutationFn: ({ id, feedback }) => ckgMutationsApi.requestRevision(id, feedback),
     onSuccess: (response, { id }) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() });
     },
     ...options,
   });
@@ -1632,7 +1707,7 @@ export function useCancelMutation(
     mutationFn: (id) => ckgMutationsApi.cancel(id),
     onSuccess: (response, id) => {
       queryClient.setQueryData(kgKeys.ckgMutation(id), normalizeMutationResponse(response));
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() });
     },
     ...options,
   });
@@ -1652,7 +1727,7 @@ export function useRetryMutation(
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutation(id) }),
-        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() }),
         invalidateCkgGraphQueries(queryClient),
       ]);
     },
@@ -1859,7 +1934,7 @@ export function useSubmitOntologyImportRunPreview(
     onSuccess: async (_response, input) => {
       await queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRun(input.runId) });
       void queryClient.invalidateQueries({ queryKey: kgKeys.ontologyImportRuns() });
-      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutations() });
+      void queryClient.invalidateQueries({ queryKey: kgKeys.ckgMutationsRoot() });
     },
     ...options,
   });
@@ -1924,30 +1999,96 @@ export function useStructuralMetrics(
   });
 }
 
-export function useNodeMasterySummary(
+export function useStabilitySummary(
   userId: UserId,
   options: Omit<
-    UseQueryOptions<NodeMasterySummaryResponse, Error, INodeMasterySummaryDto>,
+    UseQueryOptions<UserStabilitySummaryResponse, Error, IUserStabilitySummaryDto>,
     'queryKey' | 'queryFn'
   > & {
     studyMode: StudyMode;
-    domain?: string;
-    masteryThreshold?: number;
   }
 ) {
-  const { studyMode, domain, masteryThreshold, ...queryOptions } = options;
+  const { studyMode, ...queryOptions } = options;
   const params = {
     studyMode,
-    ...(domain !== undefined ? { domain } : {}),
-    ...(masteryThreshold !== undefined ? { masteryThreshold } : {}),
   };
 
   return useQuery({
-    queryKey: kgKeys.masterySummary(userId, params),
-    queryFn: () => masteryApi.getSummary(userId, params),
+    queryKey: kgKeys.stabilitySummary(userId, params),
+    queryFn: () => stabilityApi.getSummary(userId, params),
     select: (response) => response.data,
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,
+    ...queryOptions,
+  });
+}
+
+export function useConceptState(
+  conceptId: NodeId,
+  options: Omit<
+    UseQueryOptions<ConceptStateResponse, Error, IConceptStateProjectionDto>,
+    'queryKey' | 'queryFn'
+  > & {
+    userId: UserId;
+    studyMode: StudyMode;
+  }
+) {
+  const { userId, studyMode, ...queryOptions } = options;
+  const params = { userId, studyMode };
+
+  return useQuery({
+    queryKey: kgKeys.conceptState(conceptId, params),
+    queryFn: () => conceptStateApi.getState(conceptId, params),
+    select: (response) => response.data,
+    enabled: userId !== '' && conceptId !== '',
+    staleTime: 60 * 1000,
+    ...queryOptions,
+  });
+}
+
+export function useConceptStateHistory(
+  conceptId: NodeId,
+  options: Omit<
+    UseQueryOptions<ConceptStateHistoryResponse, Error, IConceptStateHistoryDto>,
+    'queryKey' | 'queryFn'
+  > & {
+    userId: UserId;
+    studyMode: StudyMode;
+    limit?: number;
+  }
+) {
+  const { userId, studyMode, limit, ...queryOptions } = options;
+  const params = { userId, studyMode, ...(limit !== undefined ? { limit } : {}) };
+
+  return useQuery({
+    queryKey: kgKeys.conceptStateHistory(conceptId, params),
+    queryFn: () => conceptStateApi.getHistory(conceptId, params),
+    select: (response) => response.data,
+    enabled: userId !== '' && conceptId !== '',
+    staleTime: 60 * 1000,
+    ...queryOptions,
+  });
+}
+
+export function usePrerequisiteGaps(
+  conceptId: NodeId,
+  options: Omit<
+    UseQueryOptions<PrerequisiteGapsResponse, Error, IPrerequisiteGapsDto>,
+    'queryKey' | 'queryFn'
+  > & {
+    userId: UserId;
+    studyMode: StudyMode;
+  }
+) {
+  const { userId, studyMode, ...queryOptions } = options;
+  const params = { userId, studyMode };
+
+  return useQuery({
+    queryKey: kgKeys.prerequisiteGaps(conceptId, params),
+    queryFn: () => conceptStateApi.getPrerequisiteGaps(conceptId, params),
+    select: (response) => response.data,
+    enabled: userId !== '' && conceptId !== '',
+    staleTime: 60 * 1000,
     ...queryOptions,
   });
 }

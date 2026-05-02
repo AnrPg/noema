@@ -8,44 +8,68 @@
 import {
   AchievementRarity,
   AggregationStage,
-  AttemptOutcome,
-  CardLearningState,
   CardQueueStatus,
+  CardOriginMode,
+  CardReviewState,
   CardState,
+  CardTransformKind,
   CardType,
   CkgNodeStatus,
   CognitiveLoadLevel,
+  CurriculumEdgeType,
+  CurriculumNodeRuntimeState,
+  CurriculumOriginMode,
+  CurriculumRevisionReason,
+  CurriculumState,
+  CurriculumVersionState,
+  ConceptState,
+  ContentGenerationJobStatus,
   DifficultyLevel,
   DocumentFormat,
   Environment,
   EventSource,
   FatigueLevel,
   ForceLevel,
+  GoalSource,
+  GoalState,
+  GoalType,
   GraphEdgeType,
   GraphNodeType,
   GraphType,
   HintDepth,
   IngestionState,
-  InterventionType,
+  EligibilityGroup,
+  LearningInterventionType,
   LearningMode,
   LoadoutArchetype,
   MetacognitiveStage,
+  MisconceptionInterventionType,
   MisconceptionPatternKind,
   MisconceptionStatus,
   MisconceptionType,
   MotivationSignal,
   MutationState,
   PromotionBand,
-  Rating,
+  ReplanScope,
   RemediationCardType,
+  RevisionChangeKind,
+  RevisionChangeState,
+  RigorLevel,
   SchedulingAlgorithm,
-  SessionState,
+  SchedulerQueue,
+  SchedulerRating,
+  SessionLifecycleState,
   SessionTerminationReason,
+  StepSelfRating,
+  StepStatus,
   StreakType,
   StudyMode,
   StructuralMetricType,
-  TeachingApproach,
-  TeachingApproachCategory,
+  EpistemicMode,
+  EpistemicModeCategory,
+  TransformationType,
+  TriggerStatus,
+  TriggerType,
   ToolCategory,
   ToolResponseTime,
 } from '@noema/types';
@@ -72,13 +96,69 @@ export const RemediationCardTypeSchema = createEnumSchema(
   RemediationCardType,
   'Remediation card type'
 );
-export const SessionStateSchema = createEnumSchema(SessionState, 'Session state');
 export const CardStateSchema = createEnumSchema(CardState, 'Card state');
-export const AttemptOutcomeSchema = createEnumSchema(AttemptOutcome, 'Attempt outcome');
+export const CardOriginModeSchema = createEnumSchema(CardOriginMode, 'Card origin mode');
+export const CardReviewStateSchema = createEnumSchema(CardReviewState, 'Card review state');
+export const CardTransformKindSchema = createEnumSchema(CardTransformKind, 'Card transform kind');
+export const ContentGenerationJobStatusSchema = createEnumSchema(
+  ContentGenerationJobStatus,
+  'Content generation job status'
+);
 export const EnvironmentSchema = createEnumSchema(Environment, 'Environment');
 export const LoadoutArchetypeSchema = createEnumSchema(LoadoutArchetype, 'Loadout archetype');
 export const LearningModeSchema = createEnumSchema(LearningMode, 'Learning mode');
 export const StudyModeSchema = createEnumSchema(StudyMode, 'Study mode');
+export const RigorLevelSchema = createEnumSchema(RigorLevel, 'Rigor level');
+export const GoalTypeSchema = createEnumSchema(GoalType, 'Goal type');
+export const GoalStateSchema = createEnumSchema(GoalState, 'Goal state');
+export const GoalSourceSchema = createEnumSchema(GoalSource, 'Goal source');
+export const EligibilityGroupSchema = createEnumSchema(EligibilityGroup, 'Eligibility group');
+export const TransformationTypeSchema = createEnumSchema(TransformationType, 'Transformation type');
+export const StepStatusSchema = createEnumSchema(StepStatus, 'Step status');
+export const StepSelfRatingSchema = createEnumSchema(StepSelfRating, 'Step self-rating');
+export const ConceptStateSchema = createEnumSchema(ConceptState, 'Concept state');
+export const SessionLifecycleStateSchema = createEnumSchema(
+  SessionLifecycleState,
+  'Session lifecycle state'
+);
+export const TriggerTypeSchema = createEnumSchema(TriggerType, 'Trigger type');
+export const TriggerStatusSchema = createEnumSchema(TriggerStatus, 'Trigger status');
+export const LearningInterventionTypeSchema = createEnumSchema(
+  LearningInterventionType,
+  'Learning intervention type'
+);
+export const ReplanScopeSchema = createEnumSchema(ReplanScope, 'Replan scope');
+export const SchedulerQueueSchema = createEnumSchema(SchedulerQueue, 'Scheduler queue');
+export const SchedulerRatingSchema = createEnumSchema(SchedulerRating, 'Scheduler rating');
+export const CurriculumStateSchema = createEnumSchema(CurriculumState, 'Curriculum state');
+export const CurriculumVersionStateSchema = createEnumSchema(
+  CurriculumVersionState,
+  'Curriculum version state'
+);
+export const CurriculumNodeRuntimeStateSchema = createEnumSchema(
+  CurriculumNodeRuntimeState,
+  'Curriculum node runtime state'
+);
+export const CurriculumEdgeTypeSchema = createEnumSchema(
+  CurriculumEdgeType,
+  'Curriculum edge type'
+);
+export const CurriculumOriginModeSchema = createEnumSchema(
+  CurriculumOriginMode,
+  'Curriculum origin mode'
+);
+export const CurriculumRevisionReasonSchema = createEnumSchema(
+  CurriculumRevisionReason,
+  'Curriculum revision reason'
+);
+export const RevisionChangeKindSchema = createEnumSchema(
+  RevisionChangeKind,
+  'Revision change kind'
+);
+export const RevisionChangeStateSchema = createEnumSchema(
+  RevisionChangeState,
+  'Revision change state'
+);
 export const ForceLevelSchema = createEnumSchema(ForceLevel, 'Force level');
 export const SchedulingAlgorithmSchema = createEnumSchema(
   SchedulingAlgorithm,
@@ -96,8 +176,6 @@ export const StreakTypeSchema = createEnumSchema(StreakType, 'Streak type');
 export const DocumentFormatSchema = createEnumSchema(DocumentFormat, 'Document format');
 export const IngestionStateSchema = createEnumSchema(IngestionState, 'Ingestion state');
 export const DifficultyLevelSchema = createEnumSchema(DifficultyLevel, 'Difficulty level');
-export const RatingSchema = createEnumSchema(Rating, 'Review rating');
-export const CardLearningStateSchema = createEnumSchema(CardLearningState, 'Card learning state');
 export const CardQueueStatusSchema = createEnumSchema(CardQueueStatus, 'Card queue status');
 export const SessionTerminationReasonSchema = createEnumSchema(
   SessionTerminationReason,
@@ -110,10 +188,10 @@ export const CognitiveLoadLevelSchema = createEnumSchema(
 export const FatigueLevelSchema = createEnumSchema(FatigueLevel, 'Fatigue level');
 export const MotivationSignalSchema = createEnumSchema(MotivationSignal, 'Motivation signal');
 export const HintDepthSchema = createEnumSchema(HintDepth, 'Hint depth');
-export const TeachingApproachSchema = createEnumSchema(TeachingApproach, 'Teaching approach');
-export const TeachingApproachCategorySchema = createEnumSchema(
-  TeachingApproachCategory,
-  'Teaching approach category'
+export const EpistemicModeSchema = createEnumSchema(EpistemicMode, 'Epistemic mode');
+export const EpistemicModeCategorySchema = createEnumSchema(
+  EpistemicModeCategory,
+  'Epistemic mode category'
 );
 export const GraphTypeSchema = createEnumSchema(GraphType, 'Graph type');
 export const MisconceptionTypeSchema = createEnumSchema(MisconceptionType, 'Misconception type');
@@ -121,7 +199,10 @@ export const MisconceptionPatternKindSchema = createEnumSchema(
   MisconceptionPatternKind,
   'Misconception pattern kind'
 );
-export const InterventionTypeSchema = createEnumSchema(InterventionType, 'Intervention type');
+export const MisconceptionInterventionTypeSchema = createEnumSchema(
+  MisconceptionInterventionType,
+  'Misconception intervention type'
+);
 export const MisconceptionStatusSchema = createEnumSchema(
   MisconceptionStatus,
   'Misconception status'
@@ -140,13 +221,39 @@ export const StructuralMetricTypeSchema = createEnumSchema(
 
 export type CardTypeInput = z.input<typeof CardTypeSchema>;
 export type RemediationCardTypeInput = z.input<typeof RemediationCardTypeSchema>;
-export type SessionStateInput = z.input<typeof SessionStateSchema>;
 export type CardStateInput = z.input<typeof CardStateSchema>;
-export type AttemptOutcomeInput = z.input<typeof AttemptOutcomeSchema>;
+export type CardOriginModeInput = z.input<typeof CardOriginModeSchema>;
+export type CardReviewStateInput = z.input<typeof CardReviewStateSchema>;
+export type CardTransformKindInput = z.input<typeof CardTransformKindSchema>;
+export type ContentGenerationJobStatusInput = z.input<typeof ContentGenerationJobStatusSchema>;
 export type EnvironmentInput = z.input<typeof EnvironmentSchema>;
 export type LoadoutArchetypeInput = z.input<typeof LoadoutArchetypeSchema>;
 export type LearningModeInput = z.input<typeof LearningModeSchema>;
 export type StudyModeInput = z.input<typeof StudyModeSchema>;
+export type RigorLevelInput = z.input<typeof RigorLevelSchema>;
+export type GoalTypeInput = z.input<typeof GoalTypeSchema>;
+export type GoalStateInput = z.input<typeof GoalStateSchema>;
+export type GoalSourceInput = z.input<typeof GoalSourceSchema>;
+export type EligibilityGroupInput = z.input<typeof EligibilityGroupSchema>;
+export type TransformationTypeInput = z.input<typeof TransformationTypeSchema>;
+export type StepStatusInput = z.input<typeof StepStatusSchema>;
+export type StepSelfRatingInput = z.input<typeof StepSelfRatingSchema>;
+export type ConceptStateInput = z.input<typeof ConceptStateSchema>;
+export type SessionLifecycleStateInput = z.input<typeof SessionLifecycleStateSchema>;
+export type TriggerTypeInput = z.input<typeof TriggerTypeSchema>;
+export type TriggerStatusInput = z.input<typeof TriggerStatusSchema>;
+export type LearningInterventionTypeInput = z.input<typeof LearningInterventionTypeSchema>;
+export type ReplanScopeInput = z.input<typeof ReplanScopeSchema>;
+export type SchedulerQueueInput = z.input<typeof SchedulerQueueSchema>;
+export type SchedulerRatingInput = z.input<typeof SchedulerRatingSchema>;
+export type CurriculumStateInput = z.input<typeof CurriculumStateSchema>;
+export type CurriculumVersionStateInput = z.input<typeof CurriculumVersionStateSchema>;
+export type CurriculumNodeRuntimeStateInput = z.input<typeof CurriculumNodeRuntimeStateSchema>;
+export type CurriculumEdgeTypeInput = z.input<typeof CurriculumEdgeTypeSchema>;
+export type CurriculumOriginModeInput = z.input<typeof CurriculumOriginModeSchema>;
+export type CurriculumRevisionReasonInput = z.input<typeof CurriculumRevisionReasonSchema>;
+export type RevisionChangeKindInput = z.input<typeof RevisionChangeKindSchema>;
+export type RevisionChangeStateInput = z.input<typeof RevisionChangeStateSchema>;
 export type ForceLevelInput = z.input<typeof ForceLevelSchema>;
 export type SchedulingAlgorithmInput = z.input<typeof SchedulingAlgorithmSchema>;
 export type GraphNodeTypeInput = z.input<typeof GraphNodeTypeSchema>;
@@ -161,20 +268,20 @@ export type StreakTypeInput = z.input<typeof StreakTypeSchema>;
 export type DocumentFormatInput = z.input<typeof DocumentFormatSchema>;
 export type IngestionStateInput = z.input<typeof IngestionStateSchema>;
 export type DifficultyLevelInput = z.input<typeof DifficultyLevelSchema>;
-export type RatingInput = z.input<typeof RatingSchema>;
-export type CardLearningStateInput = z.input<typeof CardLearningStateSchema>;
 export type CardQueueStatusInput = z.input<typeof CardQueueStatusSchema>;
 export type SessionTerminationReasonInput = z.input<typeof SessionTerminationReasonSchema>;
 export type CognitiveLoadLevelInput = z.input<typeof CognitiveLoadLevelSchema>;
 export type FatigueLevelInput = z.input<typeof FatigueLevelSchema>;
 export type MotivationSignalInput = z.input<typeof MotivationSignalSchema>;
 export type HintDepthInput = z.input<typeof HintDepthSchema>;
-export type TeachingApproachInput = z.input<typeof TeachingApproachSchema>;
-export type TeachingApproachCategoryInput = z.input<typeof TeachingApproachCategorySchema>;
+export type EpistemicModeInput = z.input<typeof EpistemicModeSchema>;
+export type EpistemicModeCategoryInput = z.input<typeof EpistemicModeCategorySchema>;
 export type GraphTypeInput = z.input<typeof GraphTypeSchema>;
 export type MisconceptionTypeInput = z.input<typeof MisconceptionTypeSchema>;
 export type MisconceptionPatternKindInput = z.input<typeof MisconceptionPatternKindSchema>;
-export type InterventionTypeInput = z.input<typeof InterventionTypeSchema>;
+export type MisconceptionInterventionTypeInput = z.input<
+  typeof MisconceptionInterventionTypeSchema
+>;
 export type MisconceptionStatusInput = z.input<typeof MisconceptionStatusSchema>;
 export type PromotionBandInput = z.input<typeof PromotionBandSchema>;
 export type MetacognitiveStageInput = z.input<typeof MetacognitiveStageSchema>;

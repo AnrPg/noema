@@ -4,7 +4,7 @@
  * Type-safe branded numerics with factory functions for runtime validation.
  * These constrained numeric types prevent accidentally mixing semantically
  * different values that share the same underlying numeric representation
- * (e.g., passing a MasteryLevel where an EdgeWeight is expected).
+ * (e.g., passing a StabilityLevel where an EdgeWeight is expected).
  *
  * Follows the same Brand<T, TBrand> pattern used for branded IDs.
  */
@@ -59,47 +59,47 @@ export const EdgeWeight = {
 } as const;
 
 // ============================================================================
-// MasteryLevel — concept mastery [0.0, 1.0]
+// StabilityLevel — concept stability [0.0, 1.0]
 // ============================================================================
 
 /**
- * A number in [0.0, 1.0] representing a user's mastery of a concept.
+ * A number in [0.0, 1.0] representing a user's stability of a concept.
  *
- * 0.0 = no mastery (brand new concept), 1.0 = full mastery.
+ * 0.0 = no stability (brand new concept), 1.0 = full stability.
  * Used in PKG nodes and scheduling algorithms.
  */
-export type MasteryLevel = Brand<number, 'MasteryLevel'>;
+export type StabilityLevel = Brand<number, 'StabilityLevel'>;
 
 /**
- * Factory and utilities for MasteryLevel branded numeric.
+ * Factory and utilities for StabilityLevel branded numeric.
  */
-export const MasteryLevel = {
+export const StabilityLevel = {
   /**
-   * Create a MasteryLevel from a raw number.
+   * Create a StabilityLevel from a raw number.
    * @param value - Must be in [0.0, 1.0]
    * @throws RangeError if value is outside [0.0, 1.0] or not finite
    */
-  create(value: number): MasteryLevel {
+  create(value: number): StabilityLevel {
     if (!Number.isFinite(value) || value < 0 || value > 1) {
-      throw new RangeError(`MasteryLevel must be in [0.0, 1.0], got: ${String(value)}`);
+      throw new RangeError(`StabilityLevel must be in [0.0, 1.0], got: ${String(value)}`);
     }
-    return value as MasteryLevel;
+    return value as StabilityLevel;
   },
 
   /**
-   * Create a MasteryLevel, clamping to [0.0, 1.0] instead of throwing.
+   * Create a StabilityLevel, clamping to [0.0, 1.0] instead of throwing.
    */
-  clamp(value: number): MasteryLevel {
+  clamp(value: number): StabilityLevel {
     if (!Number.isFinite(value)) {
-      return 0 as MasteryLevel;
+      return 0 as StabilityLevel;
     }
-    return Math.max(0, Math.min(1, value)) as MasteryLevel;
+    return Math.max(0, Math.min(1, value)) as StabilityLevel;
   },
 
   /**
-   * Check if a value is a valid MasteryLevel.
+   * Check if a value is a valid StabilityLevel.
    */
-  isValid(value: unknown): value is MasteryLevel {
+  isValid(value: unknown): value is StabilityLevel {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
   },
 } as const;
@@ -112,7 +112,7 @@ export const MasteryLevel = {
  * A number in [0.0, 1.0] representing confidence in a detection or metric.
  *
  * Used in misconception detection, aggregation evidence, and structural
- * metric confidence. Semantically distinct from EdgeWeight and MasteryLevel
+ * metric confidence. Semantically distinct from EdgeWeight and StabilityLevel
  * despite sharing the same numeric range.
  */
 export type ConfidenceScore = Brand<number, 'ConfidenceScore'>;

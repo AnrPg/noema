@@ -39,12 +39,6 @@ export * from './session/session-event.schemas.js';
 export type * from './session/session.events.js';
 
 // ============================================================================
-// Scheduler Domain Events
-// ============================================================================
-export * from './scheduler/scheduler-event.schemas.js';
-export type * from './scheduler/scheduler.events.js';
-
-// ============================================================================
 // Content Domain Events
 // ============================================================================
 export * from './content/content-event.schemas.js';
@@ -61,6 +55,18 @@ export type * from './user/user.events.js';
 // ============================================================================
 export * from './knowledge-graph/knowledge-graph-event.schemas.js';
 export * from './knowledge-graph/knowledge-graph.events.js';
+
+// ============================================================================
+// Step-First Learning Loop Domain Events
+// ============================================================================
+export * from './realignment/realignment-event.schemas.js';
+export * from './realignment/realignment.events.js';
+
+// ============================================================================
+// Curriculum Domain Events
+// ============================================================================
+export * from './curriculum/curriculum-event.schemas.js';
+export * from './curriculum/curriculum.events.js';
 
 // ============================================================================
 // Event Consumer Infrastructure

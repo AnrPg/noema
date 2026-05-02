@@ -136,6 +136,19 @@ function extractLocalizedText(value: unknown): string | null {
   return null;
 }
 
+function getNodeLabel(nodeIndex: Record<string, IGraphNodeDto>, nodeId: string): string {
+  const node = nodeIndex[nodeId];
+  if (node === undefined) {
+    return nodeId;
+  }
+
+  return extractLocalizedText((node as any).label) ?? String((node as any).label);
+}
+
+function formatEdgeType(type: unknown): string {
+  return String(type).replaceAll('_', ' ');
+}
+
 function humanizeIdentifier(value: string): string {
   return value
     .replace(/[_-]+/g, ' ')
@@ -246,7 +259,8 @@ export function NodeDetailPanel({
       : String(nodeAny.id));
   const badgeText = deriveBadge(nodeAny as Record<string, unknown>);
   const descriptionText = deriveDescription(nodeAny as Record<string, unknown>);
-  const connectedTitle = connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
+  const connectedTitle =
+    connectedEdges.length === 0 ? 'Connected (0)' : `Connected (${String(connectedEdges.length)})`;
   const editController =
     isEditing && editDraft !== null && onEditDraftChange !== undefined
       ? { draft: editDraft, setDraft: onEditDraftChange }
@@ -268,10 +282,10 @@ export function NodeDetailPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+    <div className="flex h-auto min-h-0 max-h-[min(75vh,48rem)] w-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg xl:h-full xl:max-h-full">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <span
             className="inline-block h-2.5 w-2.5 flex-shrink-0 rounded-full"
             style={{ backgroundColor: color }}
@@ -281,7 +295,7 @@ export function NodeDetailPanel({
           </span>
           <span className="truncate text-sm font-semibold text-foreground">{titleText}</span>
         </div>
-        <div className="ml-2 flex flex-shrink-0 items-center gap-2">
+        <div className="ml-auto flex flex-shrink-0 flex-wrap items-center justify-end gap-2">
           {headerActions}
           {!isEditMode && onStartEdit !== undefined && (
             <Button variant="outline" size="sm" onClick={onStartEdit}>
@@ -304,9 +318,9 @@ export function NodeDetailPanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="noema-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto">
         {/* Left: Description + mastery + actions */}
-        <div className="noema-scrollbar flex min-h-0 w-1/2 flex-col gap-3 overflow-y-auto border-r border-border p-3">
+        <div className="flex min-h-0 w-full flex-col gap-3 border-b border-border p-3">
           {editController !== null ? (
             <>
               <div className="grid gap-3 md:grid-cols-2">
@@ -534,7 +548,7 @@ export function NodeDetailPanel({
         </div>
 
         {/* Right: Connected edges grouped by type */}
-        <div className="noema-scrollbar flex min-h-0 w-1/2 flex-col overflow-y-auto p-3">
+        <div className="flex min-h-0 w-full flex-shrink-0 flex-col p-3">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {connectedTitle}
           </p>
@@ -546,21 +560,28 @@ export function NodeDetailPanel({
                 </p>
                 {typeEdges.slice(0, 6).map((edge) => {
                   const edgeAny = edge as any;
-                  const otherId =
-                    String(edgeAny.sourceId) === String(nodeAny.id)
-                      ? String(edgeAny.targetId)
-                      : String(edgeAny.sourceId);
-                  const other = nodeIndex[otherId];
+                  const sourceId = String(edgeAny.sourceId);
+                  const targetId = String(edgeAny.targetId);
+                  const direction = sourceId === String(nodeAny.id) ? 'outgoing' : 'incoming';
+                  const sourceLabel = getNodeLabel(nodeIndex, sourceId);
+                  const targetLabel = getNodeLabel(nodeIndex, targetId);
                   return (
                     <div
                       key={String(edgeAny.id)}
-                      className="flex items-center justify-between text-xs"
+                      className="flex items-start justify-between gap-2 text-xs"
                     >
-                      <span className="truncate text-foreground">
-                        {other !== undefined
-                          ? (extractLocalizedText((other as any).label) ??
-                            String((other as any).label))
-                          : otherId}
+                      <span className="min-w-0 text-foreground">
+                        <span className="block truncate">
+                          {formatEdgeType(edgeAny.type)} · {direction}
+                        </span>
+                        <span className="block truncate text-muted-foreground">
+                          {sourceLabel} -&gt; {targetLabel}
+                        </span>
+                        {String(edgeAny.type) === 'prerequisite' && (
+                          <span className="block truncate text-muted-foreground">
+                            {sourceLabel} is a prerequisite of {targetLabel}
+                          </span>
+                        )}
                       </span>
                       <span className="ml-2 flex-shrink-0 tabular-nums text-muted-foreground">
                         {Number(edgeAny.weight).toFixed(2)}

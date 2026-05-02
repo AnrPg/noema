@@ -12,17 +12,21 @@ import type { EdgeId, MutationId, NodeId, StudyMode, UserId } from '@noema/types
 import type {
   BridgeNodesResponse,
   CentralityResponse,
+  ConceptStateHistoryResponse,
+  ConceptStateResponse,
   CkgBulkReviewResponse,
   CkgEdgeAuthoringPreviewResponse,
   CkgNodeBatchAuthoringPreviewResponse,
   CkgMutationAuditLogResponse,
   CkgResetResponse,
+  CkgSourcePurgeResponse,
   ICkgBulkReviewInput,
   ICkgEdgeAuthoringPreviewInput,
   ICkgNodeBatchAuthoringPreviewInput,
   ICkgMutationFilters,
   ICkgMutationProposalInput,
   ICkgResetInput,
+  ICkgSourcePurgeInput,
   CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
@@ -44,13 +48,16 @@ import type {
   IListOntologyImportRunsParams,
   MetricHistoryResponse,
   MetricsResponse,
-  NodeMasterySummaryResponse,
   MisconceptionDetectionResponse,
   MisconceptionResponse,
   MisconceptionsResponse,
   NodeResponse,
   NodesListResponse,
   OperationsResponse,
+  PkgBulkDeleteResponse,
+  PkgResetResponse,
+  IPkgBulkDeleteInput,
+  IPkgResetInput,
   OntologyImportRunDetailResponse,
   OntologyImportArtifactContentResponse,
   OntologyImportRunResponse,
@@ -60,10 +67,12 @@ import type {
   OntologyImportsSystemStatusResponse,
   OntologyMutationPreviewSubmissionResponse,
   PrerequisiteChainResponse,
+  PrerequisiteGapsResponse,
   StageResponse,
   ISubgraphParams,
   SubgraphResponse,
   TopologyResponse,
+  UserStabilitySummaryResponse,
   IUpdateMisconceptionStatusInput,
   IUpdateNodeInput,
 } from './types.js';
@@ -79,6 +88,42 @@ function normalizeCreateNodeInput(data: ICreateNodeInput): ICreateNodeInput {
   return {
     ...data,
     domain: data.domain.trim() === '' ? DEFAULT_DOMAIN : data.domain.trim(),
+  };
+}
+
+function normalizeCreateEdgeInput(data: ICreateEdgeInput): {
+  edgeType: NonNullable<ICreateEdgeInput['edgeType']>;
+  sourceNodeId: NonNullable<ICreateEdgeInput['sourceNodeId']>;
+  targetNodeId: NonNullable<ICreateEdgeInput['targetNodeId']>;
+  weight?: number;
+  properties?: Record<string, unknown>;
+  skipAcyclicityCheck?: boolean;
+} {
+  const edgeType = data.edgeType ?? data.type;
+  const sourceNodeId = data.sourceNodeId ?? data.sourceId;
+  const targetNodeId = data.targetNodeId ?? data.targetId;
+
+  if (edgeType === undefined) {
+    throw new Error('edgeType is required');
+  }
+  if (sourceNodeId === undefined) {
+    throw new Error('sourceNodeId is required');
+  }
+  if (targetNodeId === undefined) {
+    throw new Error('targetNodeId is required');
+  }
+
+  return {
+    edgeType,
+    sourceNodeId,
+    targetNodeId,
+    ...(data.weight !== undefined ? { weight: data.weight } : {}),
+    ...(data.properties !== undefined || data.metadata !== undefined
+      ? { properties: data.properties ?? data.metadata }
+      : {}),
+    ...(data.skipAcyclicityCheck !== undefined
+      ? { skipAcyclicityCheck: data.skipAcyclicityCheck }
+      : {}),
   };
 }
 
@@ -110,13 +155,21 @@ export const pkgNodesApi = {
     http.delete(`${pkgBase(userId)}/nodes/${nodeId}`),
 };
 
+export const pkgMaintenanceApi = {
+  bulkDeleteNodes: (userId: UserId, input: IPkgBulkDeleteInput): Promise<PkgBulkDeleteResponse> =>
+    http.post(`${pkgBase(userId)}/maintenance/bulk-delete`, input),
+
+  reset: (userId: UserId, input: IPkgResetInput): Promise<PkgResetResponse> =>
+    http.post(`${pkgBase(userId)}/maintenance/reset`, input),
+};
+
 // ============================================================================
 // PKG Edges API
 // ============================================================================
 
 export const pkgEdgesApi = {
   create: (userId: UserId, data: ICreateEdgeInput): Promise<EdgeResponse> =>
-    http.post(`${pkgBase(userId)}/edges`, data),
+    http.post(`${pkgBase(userId)}/edges`, normalizeCreateEdgeInput(data)),
 
   list: (
     userId: UserId,
@@ -135,16 +188,43 @@ export const pkgEdgesApi = {
     http.delete(`${pkgBase(userId)}/edges/${edgeId}`),
 };
 
-export const masteryApi = {
+export const stabilityApi = {
   getSummary: (
     userId: UserId,
     params: {
       studyMode: StudyMode;
-      domain?: string;
-      masteryThreshold?: number;
     }
-  ): Promise<NodeMasterySummaryResponse> =>
-    http.get(`${pkgBase(userId)}/mastery/summary`, { params }),
+  ): Promise<UserStabilitySummaryResponse> =>
+    http.get(`/v1/users/${userId}/stability-summary`, { params }),
+};
+
+export const conceptStateApi = {
+  getState: (
+    conceptId: NodeId,
+    params: {
+      userId: UserId;
+      studyMode: StudyMode;
+    }
+  ): Promise<ConceptStateResponse> => http.get(`/v1/concepts/${conceptId}/state`, { params }),
+
+  getHistory: (
+    conceptId: NodeId,
+    params: {
+      userId: UserId;
+      studyMode: StudyMode;
+      limit?: number;
+    }
+  ): Promise<ConceptStateHistoryResponse> =>
+    http.get(`/v1/concepts/${conceptId}/state/history`, { params }),
+
+  getPrerequisiteGaps: (
+    conceptId: NodeId,
+    params: {
+      userId: UserId;
+      studyMode: StudyMode;
+    }
+  ): Promise<PrerequisiteGapsResponse> =>
+    http.get(`/v1/concepts/${conceptId}/prerequisite-gaps`, { params }),
 };
 
 // ============================================================================
@@ -314,6 +394,9 @@ export const ckgMutationsApi = {
 export const ckgMaintenanceApi = {
   reset: (input: ICkgResetInput): Promise<CkgResetResponse> =>
     http.post(`${ckgBase}/maintenance/reset`, input),
+
+  purgeSource: (input: ICkgSourcePurgeInput): Promise<CkgSourcePurgeResponse> =>
+    http.post(`${ckgBase}/maintenance/purge-source`, input),
 };
 
 // ============================================================================

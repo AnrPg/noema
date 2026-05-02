@@ -1,213 +1,34 @@
-/**
- * @noema/api-client - Scheduler Service API
- *
- * API methods for Scheduler Service endpoints.
- */
-
-import type { CardId } from '@noema/types';
+import type { ConceptId } from '@noema/types';
 
 import { http } from '../client.js';
 import type {
-  BatchScheduleCommitInput,
-  BatchScheduleCommitResponse,
-  DualLanePlanInput,
-  DualLanePlanResponse,
-  ForecastInput,
-  ForecastResponse,
-  PredictRetentionInput,
-  RetentionPredictionResponse,
-  ReviewListParams,
-  SchedulerCardFocusSummaryParams,
-  SchedulerCardFocusSummaryResponse,
-  SchedulerProgressSummaryParams,
-  SchedulerProgressSummaryResponse,
-  SchedulerStudyGuidanceSummaryParams,
-  SchedulerStudyGuidanceSummaryResponse,
-  ReviewQueueParams,
-  ReviewQueueResponse,
-  ReviewHistoryListResponse,
-  ReviewStatsParams,
-  ReviewStatsResponse,
-  ReviewWindowInput,
-  ReviewWindowsResponse,
-  ScheduleCommitInput,
-  ScheduleCommitResponse,
-  SchedulerCardListParams,
-  SchedulerCardListResponse,
-  SchedulerCardResponse,
-  SessionCandidatesInput,
-  SessionCandidatesResponse,
-  SimulationInput,
-  SimulationResponse,
+  ConceptScheduleQuery,
+  ConceptScheduleResponse,
+  DueConceptsQuery,
+  DueConceptsResponse,
+  TransformationHistoryQuery,
+  TransformationHistoryResponse,
 } from './types.js';
 
-function createTimezoneHeaders(): HeadersInit | undefined {
-  try {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return typeof timezone === 'string' && timezone.length > 0
-      ? { 'x-user-timezone': timezone }
-      : undefined;
-  } catch {
-    return undefined;
-  }
+type QueryParams = Record<string, string | number | boolean | readonly string[] | undefined>;
+
+function withParams(query: object | undefined): { params?: QueryParams } {
+  return query === undefined ? {} : { params: query as QueryParams };
 }
 
-function withTimezoneHeaders<T extends Record<string, unknown>>(
-  config: T
-): T & { headers?: HeadersInit } {
-  const headers = createTimezoneHeaders();
-  return headers !== undefined ? { ...config, headers } : config;
-}
+export const schedulerApi = {
+  getDueConcepts: (query?: DueConceptsQuery): Promise<DueConceptsResponse> =>
+    http.get('/v1/concepts/due', withParams(query)),
 
-// ============================================================================
-// Review Queue API (H5)
-// ============================================================================
+  getConceptSchedule: (
+    conceptId: ConceptId,
+    query?: ConceptScheduleQuery
+  ): Promise<ConceptScheduleResponse> =>
+    http.get(`/v1/concepts/${conceptId}/schedule`, withParams(query)),
 
-export const reviewQueueApi = {
-  /**
-   * Get cards due for review.
-   */
-  getReviewQueue: (params?: ReviewQueueParams): Promise<ReviewQueueResponse> =>
-    http.get('/v1/scheduler/review-queue', { params: params as Record<string, string> }),
-};
-
-export const reviewHistoryApi = {
-  /**
-   * List historical reviews with scheduler-native filters.
-   */
-  listReviews: (params: ReviewListParams): Promise<ReviewHistoryListResponse> =>
-    http.get('/v1/scheduler/reviews', { params: params as unknown as Record<string, string> }),
-
-  /**
-   * Fetch aggregate review analytics for the current filter scope.
-   */
-  getReviewStats: (params: ReviewStatsParams): Promise<ReviewStatsResponse> =>
-    http.get('/v1/scheduler/reviews/stats', {
-      params: params as unknown as Record<string, string>,
-    }),
-};
-
-export const progressApi = {
-  /**
-   * Fetch the authenticated learner's mode-scoped scheduler progress summary.
-   */
-  getSummary: (
-    params?: SchedulerProgressSummaryParams
-  ): Promise<SchedulerProgressSummaryResponse> =>
-    http.get(
-      '/v1/scheduler/progress/summary',
-      withTimezoneHeaders({
-        params: params as unknown as Record<string, string>,
-      })
-    ),
-
-  /**
-   * Fetch the authenticated learner's card-level focus summary.
-   */
-  getCardFocus: (
-    params?: SchedulerCardFocusSummaryParams
-  ): Promise<SchedulerCardFocusSummaryResponse> =>
-    http.get(
-      '/v1/scheduler/progress/focus',
-      withTimezoneHeaders({
-        params: params as unknown as Record<string, string>,
-      })
-    ),
-
-  /**
-   * Fetch the authenticated learner's study-guidance summary.
-   */
-  getGuidance: (
-    params?: SchedulerStudyGuidanceSummaryParams
-  ): Promise<SchedulerStudyGuidanceSummaryResponse> =>
-    http.get(
-      '/v1/scheduler/progress/guidance',
-      withTimezoneHeaders({
-        params: params as unknown as Record<string, string>,
-      })
-    ),
-};
-
-// ============================================================================
-// Retention Prediction API (H6)
-// ============================================================================
-
-export const retentionApi = {
-  /**
-   * Predict retention probability for a set of cards.
-   */
-  predictRetention: (input: PredictRetentionInput): Promise<RetentionPredictionResponse> =>
-    http.post('/v1/scheduler/retention/predict', input),
-};
-
-// ============================================================================
-// Scheduler Cards API
-// ============================================================================
-
-export const schedulerCardsApi = {
-  /**
-   * Get a single scheduler card by ID.
-   */
-  getCard: (cardId: CardId): Promise<SchedulerCardResponse> =>
-    http.get(`/v1/scheduler/cards/${cardId}`),
-
-  /**
-   * List scheduler cards with filters and pagination.
-   */
-  listCards: (params: SchedulerCardListParams): Promise<SchedulerCardListResponse> =>
-    http.get('/v1/scheduler/cards', { params: params as unknown as Record<string, string> }),
-};
-
-// ============================================================================
-// Phase 02 — Dual-Lane Plan API
-// ============================================================================
-
-export const dualLanePlanApi = {
-  /** Generate a dual-lane review plan. */
-  getPlan: (input: DualLanePlanInput): Promise<DualLanePlanResponse> =>
-    http.post('/v1/scheduler/dual-lane/plan', input),
-};
-
-// ============================================================================
-// Phase 02 — Proposals API
-// ============================================================================
-
-export const proposalsApi = {
-  /** Get optimal review windows for a user. */
-  getReviewWindows: (input: ReviewWindowInput): Promise<ReviewWindowsResponse> =>
-    http.post('/v1/scheduler/proposals/review-windows', input),
-
-  /** Get card candidates for a potential session. */
-  getSessionCandidates: (input: SessionCandidatesInput): Promise<SessionCandidatesResponse> =>
-    http.post('/v1/scheduler/proposals/session-candidates', input),
-};
-
-// ============================================================================
-// Phase 02 — Simulations API
-// ============================================================================
-
-export const simulationsApi = {
-  /** Run a "what-if" scheduling simulation. */
-  simulateSession: (input: SimulationInput): Promise<SimulationResponse> =>
-    http.post('/v1/scheduler/simulations/session-candidates', input),
-};
-
-export const forecastApi = {
-  /** Generate a multi-day review forecast. */
-  getForecast: (input: ForecastInput): Promise<ForecastResponse> =>
-    http.post('/v1/scheduler/forecast', input),
-};
-
-// ============================================================================
-// Phase 02 — Commits API
-// ============================================================================
-
-export const commitsApi = {
-  /** Commit a single card's schedule after review. */
-  commitSchedule: (cardId: CardId, data: ScheduleCommitInput): Promise<ScheduleCommitResponse> =>
-    http.post(`/v1/scheduler/commits/cards/${cardId}/schedule`, data),
-
-  /** Batch commit schedules for multiple cards. */
-  batchCommitSchedule: (data: BatchScheduleCommitInput): Promise<BatchScheduleCommitResponse> =>
-    http.post('/v1/scheduler/commits/cards/schedule/batch', data),
+  getTransformationHistory: (
+    conceptId: ConceptId,
+    query?: TransformationHistoryQuery
+  ): Promise<TransformationHistoryResponse> =>
+    http.get(`/v1/concepts/${conceptId}/transformation-history`, withParams(query)),
 };

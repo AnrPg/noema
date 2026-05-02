@@ -17,7 +17,7 @@ import {
   GraphEdgeTypeSchema,
   GraphNodeTypeSchema,
   InterventionIdSchema,
-  InterventionTypeSchema,
+  MisconceptionInterventionTypeSchema,
   MetacognitiveStageSchema,
   MetadataSchema,
   MisconceptionPatternIdSchema,
@@ -296,7 +296,7 @@ export const InterventionTriggeredPayloadSchema = z.object({
   interventionId: InterventionIdSchema,
   userId: UserIdSchema,
   misconceptionType: MisconceptionTypeSchema,
-  interventionType: InterventionTypeSchema,
+  interventionType: MisconceptionInterventionTypeSchema,
   targetNodeIds: z.array(NodeIdSchema).min(1),
   content: MetadataSchema.optional(),
 });

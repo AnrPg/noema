@@ -6,7 +6,7 @@
 
 import * as React from 'react';
 import { cn } from '../lib/utils.js';
-import { Label } from '../primitives/label.js';
+import { FieldLabel } from './field-label.js';
 
 export interface FormFieldProps {
   label?: string;
@@ -28,10 +28,12 @@ export function FormField({
   return (
     <div className={cn('space-y-2', className)}>
       {label && (
-        <Label className={cn(error && 'text-destructive')}>
+        <FieldLabel
+          className={cn(error && 'text-destructive')}
+          {...(required === true ? { required: true } : {})}
+        >
           {label}
-          {required && <span className="text-destructive ml-1">*</span>}
-        </Label>
+        </FieldLabel>
       )}
       {children}
       {description && !error && <p className="text-sm text-muted-foreground">{description}</p>}

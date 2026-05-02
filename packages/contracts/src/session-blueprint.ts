@@ -55,7 +55,7 @@ export interface IAdaptiveCheckpointDirective {
     | 'slowdown'
     | 'increase_support'
     | 'reduce_calibration_lane'
-    | 'switch_teaching_approach'
+    | 'switch_epistemic_mode'
     | 'continue';
   reason: string;
   priority: 'critical' | 'high' | 'medium' | 'low';

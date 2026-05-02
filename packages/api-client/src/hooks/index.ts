@@ -13,8 +13,8 @@ import {
 } from '@tanstack/react-query';
 import type { StudyMode } from '@noema/types';
 
-import { useSchedulerProgressSummary } from '../scheduler/hooks.js';
-import type { SchedulerProgressSummaryResponse } from '../scheduler/types.js';
+import { useDueConcepts } from '../scheduler/hooks.js';
+import type { DueConceptsQuery, DueConceptsResponse } from '../scheduler/types.js';
 import { authApi, meApi, usersApi } from '../user/api.js';
 import type {
   AuthResponse,
@@ -191,27 +191,24 @@ export function useDeleteAccount(options?: UseMutationOptions<void>) {
   });
 }
 
-type MyProgressOptions = Omit<
-  UseQueryOptions<SchedulerProgressSummaryResponse>,
-  'queryKey' | 'queryFn'
->;
+type MyDueConceptsOptions = Omit<UseQueryOptions<DueConceptsResponse>, 'queryKey' | 'queryFn'>;
 
-export function useMyProgress(
+export function useMyDueConcepts(
   studyMode?: StudyMode,
-  options?: MyProgressOptions
-): ReturnType<typeof useSchedulerProgressSummary>;
-export function useMyProgress(
-  options?: MyProgressOptions
-): ReturnType<typeof useSchedulerProgressSummary>;
-export function useMyProgress(
-  studyModeOrOptions?: StudyMode | MyProgressOptions,
-  maybeOptions?: MyProgressOptions
-): ReturnType<typeof useSchedulerProgressSummary> {
+  options?: MyDueConceptsOptions
+): ReturnType<typeof useDueConcepts>;
+export function useMyDueConcepts(
+  options?: MyDueConceptsOptions
+): ReturnType<typeof useDueConcepts>;
+export function useMyDueConcepts(
+  studyModeOrOptions?: StudyMode | MyDueConceptsOptions,
+  maybeOptions?: MyDueConceptsOptions
+): ReturnType<typeof useDueConcepts> {
   if (typeof studyModeOrOptions === 'string') {
-    return useSchedulerProgressSummary({ studyMode: studyModeOrOptions }, maybeOptions);
+    return useDueConcepts({ studyMode: studyModeOrOptions } satisfies DueConceptsQuery, maybeOptions);
   }
 
-  return useSchedulerProgressSummary(undefined, studyModeOrOptions);
+  return useDueConcepts(undefined, studyModeOrOptions);
 }
 
 // ============================================================================
@@ -323,12 +320,8 @@ export function useRequestPasswordReset(
 
 // Scheduler Service Hooks
 export {
-  useForecast,
   schedulerKeys,
-  usePredictRetention,
-  useReviews,
-  useReviewStats,
-  useReviewQueue,
-  useSchedulerCard,
-  useSchedulerCards,
+  useConceptSchedule,
+  useDueConcepts,
+  useTransformationHistory,
 } from './scheduler.js';

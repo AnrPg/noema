@@ -120,24 +120,6 @@ export type RemediationCardType = (typeof RemediationCardType)[keyof typeof Reme
 // ============================================================================
 
 /**
- * Learning session lifecycle states.
- */
-export const SessionState = {
-  /** Session created but not started */
-  PLANNED: 'planned',
-  /** Session in progress */
-  ACTIVE: 'active',
-  /** Session temporarily paused */
-  PAUSED: 'paused',
-  /** Session completed normally */
-  COMPLETED: 'completed',
-  /** Session abandoned before completion */
-  ABANDONED: 'abandoned',
-} as const;
-
-export type SessionState = (typeof SessionState)[keyof typeof SessionState];
-
-/**
  * Card lifecycle states.
  */
 export const CardState = {
@@ -154,20 +136,58 @@ export const CardState = {
 export type CardState = (typeof CardState)[keyof typeof CardState];
 
 /**
- * Attempt outcome states.
+ * Provenance mode for a card's durable instructional content.
  */
-export const AttemptOutcome = {
-  /** Fully correct answer */
-  CORRECT: 'correct',
-  /** Wrong answer */
-  INCORRECT: 'incorrect',
-  /** Partially correct */
-  PARTIAL: 'partial',
-  /** User gave up */
-  SKIPPED: 'skipped',
+export const CardOriginMode = {
+  /** Human-authored content; metadata gate is required, Guardian is not. */
+  AUTHORED: 'authored',
+  /** Generated from uploaded documents; citations and Guardian validation are required. */
+  RAG_GROUNDED: 'rag_grounded',
+  /** Generated from CKG/metacognition context; anchors, factuality, and Guardian are required. */
+  AGENT_AUTONOMOUS: 'agent_autonomous',
 } as const;
 
-export type AttemptOutcome = (typeof AttemptOutcome)[keyof typeof AttemptOutcome];
+export type CardOriginMode = (typeof CardOriginMode)[keyof typeof CardOriginMode];
+
+/**
+ * Review eligibility state for card use in sessions and indexing.
+ */
+export const CardReviewState = {
+  ACTIVE: 'active',
+  METADATA_INCOMPLETE: 'metadata_incomplete',
+  PENDING_REVIEW: 'pending_review',
+  REJECTED: 'rejected',
+} as const;
+
+export type CardReviewState = (typeof CardReviewState)[keyof typeof CardReviewState];
+
+/**
+ * Durable transformation lineage operation for card variants.
+ */
+export const CardTransformKind = {
+  REPHRASE: 'rephrase',
+  SIMPLIFY: 'simplify',
+  INCREASE_DIFFICULTY: 'increase_difficulty',
+  CHANGE_CARD_TYPE: 'change_card_type',
+  REMEDIATION: 'remediation',
+  REANCHOR: 'reanchor',
+} as const;
+
+export type CardTransformKind = (typeof CardTransformKind)[keyof typeof CardTransformKind];
+
+/**
+ * Lifecycle state for async content generation jobs.
+ */
+export const ContentGenerationJobStatus = {
+  REQUESTED: 'requested',
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type ContentGenerationJobStatus =
+  (typeof ContentGenerationJobStatus)[keyof typeof ContentGenerationJobStatus];
 
 // ============================================================================
 // Environment & Deployment
@@ -239,6 +259,329 @@ export const StudyMode = {
 } as const;
 
 export type StudyMode = (typeof StudyMode)[keyof typeof StudyMode];
+
+/**
+ * Validation depth for LessonPlans.
+ */
+export const RigorLevel = {
+  /** Structural validation for review/minimal plans */
+  MINIMAL: 'minimal',
+  /** Full objective/activity/assessment alignment validation */
+  FULL: 'full',
+} as const;
+
+export type RigorLevel = (typeof RigorLevel)[keyof typeof RigorLevel];
+
+/**
+ * Goal type in a LessonPlan.
+ */
+export const GoalType = {
+  DISCRIMINATION: 'discrimination',
+  REASONING: 'reasoning',
+  TRANSFER: 'transfer',
+  ACQUISITION: 'acquisition',
+  REINFORCEMENT: 'reinforcement',
+} as const;
+
+export type GoalType = (typeof GoalType)[keyof typeof GoalType];
+
+/**
+ * Goal state derived from concept stability.
+ */
+export const GoalState = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  STABLE: 'stable',
+  UNSTABLE: 'unstable',
+} as const;
+
+export type GoalState = (typeof GoalState)[keyof typeof GoalState];
+
+/**
+ * Origin of a LessonPlan goal.
+ */
+export const GoalSource = {
+  SYSTEM_PROPOSED: 'system_proposed',
+  USER_ACCEPTED: 'user_accepted',
+  USER_EDITED: 'user_edited',
+} as const;
+
+export type GoalSource = (typeof GoalSource)[keyof typeof GoalSource];
+
+/**
+ * LessonPlan lifecycle state owned by session-service.
+ */
+export const LessonPlanState = {
+  DRAFT: 'draft',
+  VALIDATED: 'validated',
+  ACTIVE: 'active',
+  COMPLETED: 'completed',
+  ABANDONED: 'abandoned',
+} as const;
+
+export type LessonPlanState = (typeof LessonPlanState)[keyof typeof LessonPlanState];
+
+/**
+ * Eligibility group for epistemic mode routing.
+ */
+export const EligibilityGroup = {
+  NEW_CONCEPT: 'new_concept',
+  REINFORCEMENT: 'reinforcement',
+  CONFUSION: 'confusion',
+  WEAK_REASONING: 'weak_reasoning',
+  TRANSFER: 'transfer',
+  META: 'meta',
+  PRESSURE: 'pressure',
+} as const;
+
+export type EligibilityGroup = (typeof EligibilityGroup)[keyof typeof EligibilityGroup];
+
+/**
+ * Cognitive transformation applied when revisiting a concept.
+ */
+export const TransformationType = {
+  RECALL: 'recall',
+  EXPLANATION: 'explanation',
+  COMPARISON: 'comparison',
+  APPLICATION: 'application',
+  PERTURBATION: 'perturbation',
+  ERROR_DETECTION: 'error_detection',
+} as const;
+
+export type TransformationType = (typeof TransformationType)[keyof typeof TransformationType];
+
+/**
+ * Step lifecycle state.
+ */
+export const StepStatus = {
+  PLANNED: 'planned',
+  QUEUED: 'queued',
+  PRESENTED: 'presented',
+  ANSWERED: 'answered',
+  EVALUATED: 'evaluated',
+  SUPERSEDED: 'superseded',
+  SKIPPED: 'skipped',
+} as const;
+
+export type StepStatus = (typeof StepStatus)[keyof typeof StepStatus];
+
+/**
+ * Learner self-rating for a completed Step.
+ */
+export const StepSelfRating = {
+  KNEW_IT: 'knew_it',
+  HESITATED: 'hesitated',
+  DIDNT_KNOW: 'didnt_know',
+} as const;
+
+export type StepSelfRating = (typeof StepSelfRating)[keyof typeof StepSelfRating];
+
+/**
+ * Confidence signal derived from StepSelfRating.
+ */
+export const SELF_RATING_TO_CONFIDENCE: Record<StepSelfRating, number> = {
+  [StepSelfRating.KNEW_IT]: 1.0,
+  [StepSelfRating.HESITATED]: 0.5,
+  [StepSelfRating.DIDNT_KNOW]: 0.0,
+};
+
+/**
+ * Revocable concept stability state.
+ */
+export const ConceptState = {
+  STABLE: 'stable',
+  UNSTABLE: 'unstable',
+} as const;
+
+export type ConceptState = (typeof ConceptState)[keyof typeof ConceptState];
+
+/**
+ * Session lifecycle states for the realignment Step loop.
+ */
+export const SessionLifecycleState = {
+  PLANNING: 'planning',
+  EXECUTION: 'execution',
+  DIAGNOSIS: 'diagnosis',
+  ADAPTATION: 'adaptation',
+  EVALUATION: 'evaluation',
+  COMPLETION: 'completion',
+} as const;
+
+export type SessionLifecycleState =
+  (typeof SessionLifecycleState)[keyof typeof SessionLifecycleState];
+
+/**
+ * First-class trigger types emitted from metacognitive Evaluation.
+ */
+export const TriggerType = {
+  FAILURE: 'failure',
+  CONFUSION: 'confusion',
+  SLOW_THINKING: 'slow_thinking',
+  OVERCONFIDENCE: 'overconfidence',
+  BOREDOM: 'boredom',
+  PREREQUISITE_GAP: 'prerequisite_gap',
+} as const;
+
+export type TriggerType = (typeof TriggerType)[keyof typeof TriggerType];
+
+/**
+ * Trigger resolution state.
+ */
+export const TriggerStatus = {
+  OPEN: 'open',
+  ADDRESSED: 'addressed',
+  RECURRING: 'recurring',
+} as const;
+
+export type TriggerStatus = (typeof TriggerStatus)[keyof typeof TriggerStatus];
+
+/**
+ * Intervention selected by the trigger-to-strategy loop.
+ */
+export const LearningInterventionType = {
+  INSERT_REPAIR_STEP: 'insert_repair_step',
+  INSERT_CONTRASTIVE_STEP: 'insert_contrastive_step',
+  INSERT_CALIBRATION_STEP: 'insert_calibration_step',
+  SWITCH_EPISTEMIC_MODE: 'switch_epistemic_mode',
+  SWITCH_TRANSFORMATION: 'switch_transformation',
+  CHANGE_ACTIVITY: 'change_activity',
+  REDUCE_DIFFICULTY: 'reduce_difficulty',
+  INCREASE_DIFFICULTY: 'increase_difficulty',
+  TRANSITION_TO_TRANSFER: 'transition_to_transfer',
+  BRANCH_TO_PREREQUISITE: 'branch_to_prerequisite',
+} as const;
+
+export type LearningInterventionType =
+  (typeof LearningInterventionType)[keyof typeof LearningInterventionType];
+
+/**
+ * Scope of a strategy replan.
+ */
+export const ReplanScope = {
+  LOCAL: 'local',
+  STRUCTURAL: 'structural',
+  FULL: 'full',
+} as const;
+
+export type ReplanScope = (typeof ReplanScope)[keyof typeof ReplanScope];
+
+/**
+ * Concept-first scheduler logical queue.
+ */
+export const SchedulerQueue = {
+  REPAIR: 'repair',
+  REINFORCEMENT: 'reinforcement',
+  NEW_LEARNING: 'new_learning',
+} as const;
+
+export type SchedulerQueue = (typeof SchedulerQueue)[keyof typeof SchedulerQueue];
+
+/**
+ * Internal scheduler rating derived from combined score.
+ */
+export const SchedulerRating = {
+  AGAIN: 'again',
+  HARD: 'hard',
+  GOOD: 'good',
+  EASY: 'easy',
+} as const;
+
+export type SchedulerRating = (typeof SchedulerRating)[keyof typeof SchedulerRating];
+
+// ============================================================================
+// Curriculum
+// ============================================================================
+
+/** Lifecycle state of a user-owned curriculum. */
+export const CurriculumState = {
+  DRAFT: 'draft',
+  FINALIZED: 'finalized',
+  ARCHIVED: 'archived',
+} as const;
+
+export type CurriculumState = (typeof CurriculumState)[keyof typeof CurriculumState];
+
+/** Lifecycle state of a concrete curriculum DAG version. */
+export const CurriculumVersionState = {
+  DRAFT: 'draft',
+  VALIDATED: 'validated',
+  ACTIVE: 'active',
+  SUPERSEDED: 'superseded',
+} as const;
+
+export type CurriculumVersionState =
+  (typeof CurriculumVersionState)[keyof typeof CurriculumVersionState];
+
+/** Runtime traversal state of a stable curriculum node for one learner. */
+export const CurriculumNodeRuntimeState = {
+  LOCKED: 'locked',
+  UNLOCKED: 'unlocked',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  BLOCKED: 'blocked',
+  SKIPPED: 'skipped',
+} as const;
+
+export type CurriculumNodeRuntimeState =
+  (typeof CurriculumNodeRuntimeState)[keyof typeof CurriculumNodeRuntimeState];
+
+/** Edge semantics inside a curriculum DAG. */
+export const CurriculumEdgeType = {
+  PREREQUISITE: 'prerequisite',
+  RECOMMENDED_BEFORE: 'recommended_before',
+  REINFORCES: 'reinforces',
+} as const;
+
+export type CurriculumEdgeType = (typeof CurriculumEdgeType)[keyof typeof CurriculumEdgeType];
+
+/** How a curriculum originated. */
+export const CurriculumOriginMode = {
+  AGENT_GENERATED: 'agent_generated',
+  USER_AUTHORED: 'user_authored',
+  DOCUMENT_DERIVED: 'document_derived',
+} as const;
+
+export type CurriculumOriginMode =
+  (typeof CurriculumOriginMode)[keyof typeof CurriculumOriginMode];
+
+/** Durable reason a curriculum revision was proposed. */
+export const CurriculumRevisionReason = {
+  PREREQUISITE_GAP: 'prerequisite_gap',
+  MISCONCEPTION: 'misconception',
+  CONFUSION: 'confusion',
+  STRUCTURAL_INVALIDATION: 'structural_invalidation',
+  USER_EDIT: 'user_edit',
+  ZERO_RETENTION: 'zero_retention',
+} as const;
+
+export type CurriculumRevisionReason =
+  (typeof CurriculumRevisionReason)[keyof typeof CurriculumRevisionReason];
+
+/** Atomic structural operation inside a revision proposal. */
+export const RevisionChangeKind = {
+  INSERT_PREREQUISITE: 'insert_prerequisite',
+  REORDER: 'reorder',
+  ADD_NODE: 'add_node',
+  REMOVE_EDGE: 'remove_edge',
+  RETARGET_EDGE: 'retarget_edge',
+  RELABEL_NODE: 'relabel_node',
+  ADJUST_THRESHOLD: 'adjust_threshold',
+  ADD_REMEDIATION_PATH: 'add_remediation_path',
+  SPLIT_NODE: 'split_node',
+  FLAG_FOR_SKIP: 'flag_for_skip',
+} as const;
+
+export type RevisionChangeKind = (typeof RevisionChangeKind)[keyof typeof RevisionChangeKind];
+
+/** User decision state for a revision change. */
+export const RevisionChangeState = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  APPLIED: 'applied',
+} as const;
+
+export type RevisionChangeState = (typeof RevisionChangeState)[keyof typeof RevisionChangeState];
 
 /**
  * Intervention force levels (from Strategy spec).
@@ -401,7 +744,7 @@ export const GraphEdgeType = {
   OPTIONAL_FOR_OCCUPATION: 'optional_for_occupation',
   /** Occupation-to-skill inverse: "An occupation benefits from this optional skill" */
   OCCUPATION_BENEFITS_FROM_OPTIONAL_SKILL: 'occupation_benefits_from_optional_skill',
-  /** Skill transfer: "Mastery of A transfers meaningfully to B" */
+  /** Skill transfer: "Stability of A transfers meaningfully to B" */
   TRANSFERABLE_TO: 'transferable_to',
 } as const;
 
@@ -637,57 +980,6 @@ export const IngestionState = {
 export type IngestionState = (typeof IngestionState)[keyof typeof IngestionState];
 
 // ============================================================================
-// Rating & Review
-// ============================================================================
-
-/**
- * User's self-assessment of recall quality during a review.
- * Maps directly to FSRS rating values 1-4.
- * Other algorithms derive their ratings from these canonical values.
- */
-export const Rating = {
-  /** Complete failure to recall — FSRS value: 1 */
-  AGAIN: 'again',
-  /** Recalled with significant difficulty — FSRS value: 2 */
-  HARD: 'hard',
-  /** Recalled with acceptable effort — FSRS value: 3 */
-  GOOD: 'good',
-  /** Recalled effortlessly — FSRS value: 4 */
-  EASY: 'easy',
-} as const;
-
-export type Rating = (typeof Rating)[keyof typeof Rating];
-
-/**
- * Numeric values for Rating, aligned with FSRS convention.
- * SM-2 quality (0-5), Leitner pass/fail, and HLR binary recall
- * should be derived from these canonical values by each algorithm's adapter.
- */
-export const RATING_VALUES: Record<Rating, number> = {
-  [Rating.AGAIN]: 1,
-  [Rating.HARD]: 2,
-  [Rating.GOOD]: 3,
-  [Rating.EASY]: 4,
-};
-
-/**
- * Card learning states within the spaced repetition lifecycle.
- * Shared across all scheduling algorithms (FSRS, SM-2, Leitner, HLR).
- */
-export const CardLearningState = {
-  /** Card has never been reviewed */
-  NEW: 'new',
-  /** Card is in the initial learning phase (short-term memory) */
-  LEARNING: 'learning',
-  /** Card is in the long-term review cycle */
-  REVIEW: 'review',
-  /** Card lapsed (forgotten) and is being relearned */
-  RELEARNING: 'relearning',
-} as const;
-
-export type CardLearningState = (typeof CardLearningState)[keyof typeof CardLearningState];
-
-// ============================================================================
 // Session Queue & Termination
 // ============================================================================
 
@@ -804,11 +1096,11 @@ export const HintDepth = {
 export type HintDepth = (typeof HintDepth)[keyof typeof HintDepth];
 
 // ============================================================================
-// Teaching Approaches (31 Epistemic Modes of Engagement)
+// Epistemic modes (30 Epistemic Modes of Engagement)
 // ============================================================================
 
 /**
- * All 31 teaching/learning approaches supported by Noema.
+ * All 30 epistemic modes supported by Noema.
  * Each mode represents a distinct epistemic mode of engagement
  * with specific cognitive mechanisms and pedagogical goals.
  *
@@ -819,12 +1111,9 @@ export type HintDepth = (typeof HintDepth)[keyof typeof HintDepth];
  *   M = Metacognitive Activation (5 levels)
  *   C = Constraint Profile (6 types)
  *
- * @see FEATURE_teaching_approaches.md for detailed descriptions
+ * @see FEATURE_EPISTEMIC_MODES.md for detailed descriptions
  */
-export const TeachingApproach = {
-  /** Standard flashcard review — baseline mode with no special pedagogical framing */
-  STANDARD: 'standard',
-
+export const EpistemicMode = {
   // ── I. Inquiry & Discovery ──────────────────────────────────────────────
 
   /** Διερευνητική Μάθηση — hypothesis → experiment → reflection → revision */
@@ -916,12 +1205,12 @@ export const TeachingApproach = {
   EXPLAIN_YOUR_ALGORITHM: 'explain_your_algorithm',
 } as const;
 
-export type TeachingApproach = (typeof TeachingApproach)[keyof typeof TeachingApproach];
+export type EpistemicMode = (typeof EpistemicMode)[keyof typeof EpistemicMode];
 
 /**
- * Categories grouping the teaching approaches into pedagogical families.
+ * Categories grouping the Epistemic modes into pedagogical families.
  */
-export const TeachingApproachCategory = {
+export const EpistemicModeCategory = {
   /** Hypothesis-driven, scenario-based, case-analysis modes */
   INQUIRY_AND_DISCOVERY: 'inquiry_and_discovery',
   /** Mistake detection, adversarial reasoning, contradiction resolution */
@@ -944,8 +1233,8 @@ export const TeachingApproachCategory = {
   ADVANCED_EXPERIMENTAL: 'advanced_experimental',
 } as const;
 
-export type TeachingApproachCategory =
-  (typeof TeachingApproachCategory)[keyof typeof TeachingApproachCategory];
+export type EpistemicModeCategory =
+  (typeof EpistemicModeCategory)[keyof typeof EpistemicModeCategory];
 
 // ============================================================================
 // Knowledge Graph — Graph Type
@@ -1011,7 +1300,7 @@ export const MisconceptionType = {
   // ── Temporal family ────────────────────────────────────────────────────
   /** Concepts ordered incorrectly in learning sequence */
   ANACHRONISTIC_ORDERING: 'anachronistic_ordering',
-  /** Abstract concept introduced before prerequisites mastered */
+  /** Abstract concept introduced before prerequisites stable */
   PREMATURE_ABSTRACTION: 'premature_abstraction',
   /** Related concepts not connected when they should be */
   DELAYED_INTEGRATION: 'delayed_integration',
@@ -1031,8 +1320,8 @@ export const MisconceptionType = {
   POLYSEMY_BLINDNESS: 'polysemy_blindness',
 
   // ── Metacognitive family ───────────────────────────────────────────────
-  /** Belief in mastery without actual understanding */
-  ILLUSORY_MASTERY: 'illusory_mastery',
+  /** Belief in stability without actual understanding */
+  ILLUSORY_STABILITY: 'illusory_stability',
   /** Significant gap between perceived and actual performance */
   CALIBRATION_FAILURE: 'calibration_failure',
   /** Using wrong learning strategy for the material */
@@ -1066,14 +1355,14 @@ export type MisconceptionPatternKind =
   (typeof MisconceptionPatternKind)[keyof typeof MisconceptionPatternKind];
 
 // ============================================================================
-// Knowledge Graph — Intervention Type
+// Knowledge Graph — Misconception Intervention Type
 // ============================================================================
 
 /**
  * Remediation action types the system can take in response to misconceptions.
  * Each maps to a content generation strategy.
  */
-export const InterventionType = {
+export const MisconceptionInterventionType = {
   /** Generate a counterexample to disprove the misconception */
   COUNTEREXAMPLE_CARD: 'counterexample_card',
   /** Exercise to distinguish confusable concepts */
@@ -1092,7 +1381,8 @@ export const InterventionType = {
   METACOGNITIVE_PROMPT: 'metacognitive_prompt',
 } as const;
 
-export type InterventionType = (typeof InterventionType)[keyof typeof InterventionType];
+export type MisconceptionInterventionType =
+  (typeof MisconceptionInterventionType)[keyof typeof MisconceptionInterventionType];
 
 // ============================================================================
 // Knowledge Graph — Misconception Status

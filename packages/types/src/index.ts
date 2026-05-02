@@ -33,3 +33,8 @@ export * from './branded-numerics/index.js';
 // Knowledge Graph Domain Types
 // ============================================================================
 export type * from './knowledge-graph/index.js';
+
+// ============================================================================
+// Eligibility and Transformation Rules
+// ============================================================================
+export * from './eligibility/index.js';

@@ -25,7 +25,7 @@ import type {
   GraphEdgeType,
   GraphNodeType,
   InterventionId,
-  InterventionType,
+  MisconceptionInterventionType,
   IStructuralMetrics,
   MetacognitiveStage,
   Metadata,
@@ -423,7 +423,7 @@ export interface IInterventionTriggeredPayload {
   /** Misconception type being addressed */
   misconceptionType: MisconceptionType;
   /** Type of remediation action */
-  interventionType: InterventionType;
+  interventionType: MisconceptionInterventionType;
   /** Nodes targeted by the intervention */
   targetNodeIds: NodeId[];
   /** Optional generated content for the intervention */

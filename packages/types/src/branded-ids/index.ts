@@ -46,8 +46,32 @@ export type CategoryId = Brand<string, 'CategoryId'>;
 /** Session identifier - prefix: sess_ */
 export type SessionId = Brand<string, 'SessionId'>;
 
-/** Attempt identifier - prefix: att_ */
-export type AttemptId = Brand<string, 'AttemptId'>;
+/** Lesson plan identifier - prefix: lesson_ */
+export type LessonPlanId = Brand<string, 'LessonPlanId'>;
+
+/** Lesson goal identifier - prefix: goal_ */
+export type GoalId = Brand<string, 'GoalId'>;
+
+/** Step identifier - prefix: step_ */
+export type StepId = Brand<string, 'StepId'>;
+
+/** Step activity identifier - prefix: activity_ */
+export type ActivityId = Brand<string, 'ActivityId'>;
+
+/** Evaluation identifier - prefix: eval_ */
+export type EvaluationId = Brand<string, 'EvaluationId'>;
+
+/** Trigger identifier - prefix: trigger_ */
+export type TriggerId = Brand<string, 'TriggerId'>;
+
+/** Concept identifier - prefix: concept_ */
+export type ConceptId = Brand<string, 'ConceptId'>;
+
+/** Generated activity variant identifier - prefix: variant_ */
+export type GeneratedVariantId = Brand<string, 'GeneratedVariantId'>;
+
+/** Content generation job identifier - prefix: cjob_ */
+export type ContentGenerationJobId = Brand<string, 'ContentGenerationJobId'>;
 
 /** Trace identifier (thinking trace) - prefix: trace_ */
 export type TraceId = Brand<string, 'TraceId'>;
@@ -121,6 +145,24 @@ export type MisconceptionPatternId = Brand<string, 'MisconceptionPatternId'>;
 /** Remediation intervention identifier - prefix: intv_ */
 export type InterventionId = Brand<string, 'InterventionId'>;
 
+/** Curriculum identifier - prefix: curr_ */
+export type CurriculumId = Brand<string, 'CurriculumId'>;
+
+/** Curriculum version identifier - prefix: cver_ */
+export type CurriculumVersionId = Brand<string, 'CurriculumVersionId'>;
+
+/** Curriculum node identifier - prefix: cnode_ */
+export type CurriculumNodeId = Brand<string, 'CurriculumNodeId'>;
+
+/** Curriculum edge identifier - prefix: cedge_ */
+export type CurriculumEdgeId = Brand<string, 'CurriculumEdgeId'>;
+
+/** Curriculum revision proposal identifier - prefix: rprop_ */
+export type RevisionProposalId = Brand<string, 'RevisionProposalId'>;
+
+/** Curriculum revision change identifier - prefix: rchg_ */
+export type RevisionChangeId = Brand<string, 'RevisionChangeId'>;
+
 /**
  * Identity of whoever proposes a CKG mutation.
  *
@@ -169,7 +211,15 @@ export const ID_PREFIXES = {
   DeckQueryLogId: 'deck_',
   CategoryId: 'category_',
   SessionId: 'session_',
-  AttemptId: 'attempt_',
+  LessonPlanId: 'lesson_',
+  GoalId: 'goal_',
+  StepId: 'step_',
+  ActivityId: 'activity_',
+  EvaluationId: 'eval_',
+  TriggerId: 'trigger_',
+  ConceptId: 'concept_',
+  GeneratedVariantId: 'variant_',
+  ContentGenerationJobId: 'cjob_',
   TraceId: 'trace_',
   DiagnosisId: 'diagnosis_',
   PatchId: 'patch_',
@@ -194,6 +244,12 @@ export const ID_PREFIXES = {
   MutationId: 'mut_',
   MisconceptionPatternId: 'mpat_',
   InterventionId: 'intv_',
+  CurriculumId: 'curr_',
+  CurriculumVersionId: 'cver_',
+  CurriculumNodeId: 'cnode_',
+  CurriculumEdgeId: 'cedge_',
+  RevisionProposalId: 'rprop_',
+  RevisionChangeId: 'rchg_',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
@@ -275,12 +331,80 @@ export const SessionId = {
   prefix: ID_PREFIXES.SessionId,
 } as const;
 
-// Attempt ID
-export const AttemptId = {
-  create: (value: string): AttemptId =>
-    createId<'AttemptId'>(value, ID_PREFIXES.AttemptId, 'AttemptId'),
-  isValid: (value: unknown): value is AttemptId => isValidId(value, ID_PREFIXES.AttemptId),
-  prefix: ID_PREFIXES.AttemptId,
+// Lesson Plan ID
+export const LessonPlanId = {
+  create: (value: string): LessonPlanId =>
+    createId<'LessonPlanId'>(value, ID_PREFIXES.LessonPlanId, 'LessonPlanId'),
+  isValid: (value: unknown): value is LessonPlanId => isValidId(value, ID_PREFIXES.LessonPlanId),
+  prefix: ID_PREFIXES.LessonPlanId,
+} as const;
+
+// Goal ID
+export const GoalId = {
+  create: (value: string): GoalId => createId<'GoalId'>(value, ID_PREFIXES.GoalId, 'GoalId'),
+  isValid: (value: unknown): value is GoalId => isValidId(value, ID_PREFIXES.GoalId),
+  prefix: ID_PREFIXES.GoalId,
+} as const;
+
+// Step ID
+export const StepId = {
+  create: (value: string): StepId => createId<'StepId'>(value, ID_PREFIXES.StepId, 'StepId'),
+  isValid: (value: unknown): value is StepId => isValidId(value, ID_PREFIXES.StepId),
+  prefix: ID_PREFIXES.StepId,
+} as const;
+
+// Activity ID
+export const ActivityId = {
+  create: (value: string): ActivityId =>
+    createId<'ActivityId'>(value, ID_PREFIXES.ActivityId, 'ActivityId'),
+  isValid: (value: unknown): value is ActivityId => isValidId(value, ID_PREFIXES.ActivityId),
+  prefix: ID_PREFIXES.ActivityId,
+} as const;
+
+// Evaluation ID
+export const EvaluationId = {
+  create: (value: string): EvaluationId =>
+    createId<'EvaluationId'>(value, ID_PREFIXES.EvaluationId, 'EvaluationId'),
+  isValid: (value: unknown): value is EvaluationId => isValidId(value, ID_PREFIXES.EvaluationId),
+  prefix: ID_PREFIXES.EvaluationId,
+} as const;
+
+// Trigger ID
+export const TriggerId = {
+  create: (value: string): TriggerId =>
+    createId<'TriggerId'>(value, ID_PREFIXES.TriggerId, 'TriggerId'),
+  isValid: (value: unknown): value is TriggerId => isValidId(value, ID_PREFIXES.TriggerId),
+  prefix: ID_PREFIXES.TriggerId,
+} as const;
+
+// Concept ID
+export const ConceptId = {
+  create: (value: string): ConceptId =>
+    createId<'ConceptId'>(value, ID_PREFIXES.ConceptId, 'ConceptId'),
+  isValid: (value: unknown): value is ConceptId => isValidId(value, ID_PREFIXES.ConceptId),
+  prefix: ID_PREFIXES.ConceptId,
+} as const;
+
+// Generated Variant ID
+export const GeneratedVariantId = {
+  create: (value: string): GeneratedVariantId =>
+    createId<'GeneratedVariantId'>(value, ID_PREFIXES.GeneratedVariantId, 'GeneratedVariantId'),
+  isValid: (value: unknown): value is GeneratedVariantId =>
+    isValidId(value, ID_PREFIXES.GeneratedVariantId),
+  prefix: ID_PREFIXES.GeneratedVariantId,
+} as const;
+
+// Content Generation Job ID
+export const ContentGenerationJobId = {
+  create: (value: string): ContentGenerationJobId =>
+    createId<'ContentGenerationJobId'>(
+      value,
+      ID_PREFIXES.ContentGenerationJobId,
+      'ContentGenerationJobId'
+    ),
+  isValid: (value: unknown): value is ContentGenerationJobId =>
+    isValidId(value, ID_PREFIXES.ContentGenerationJobId),
+  prefix: ID_PREFIXES.ContentGenerationJobId,
 } as const;
 
 // Trace ID
@@ -473,6 +597,67 @@ export const InterventionId = {
   prefix: ID_PREFIXES.InterventionId,
 } as const;
 
+// Curriculum ID
+export const CurriculumId = {
+  create: (value: string): CurriculumId =>
+    createId<'CurriculumId'>(value, ID_PREFIXES.CurriculumId, 'CurriculumId'),
+  isValid: (value: unknown): value is CurriculumId => isValidId(value, ID_PREFIXES.CurriculumId),
+  prefix: ID_PREFIXES.CurriculumId,
+} as const;
+
+// Curriculum Version ID
+export const CurriculumVersionId = {
+  create: (value: string): CurriculumVersionId =>
+    createId<'CurriculumVersionId'>(
+      value,
+      ID_PREFIXES.CurriculumVersionId,
+      'CurriculumVersionId'
+    ),
+  isValid: (value: unknown): value is CurriculumVersionId =>
+    isValidId(value, ID_PREFIXES.CurriculumVersionId),
+  prefix: ID_PREFIXES.CurriculumVersionId,
+} as const;
+
+// Curriculum Node ID
+export const CurriculumNodeId = {
+  create: (value: string): CurriculumNodeId =>
+    createId<'CurriculumNodeId'>(value, ID_PREFIXES.CurriculumNodeId, 'CurriculumNodeId'),
+  isValid: (value: unknown): value is CurriculumNodeId =>
+    isValidId(value, ID_PREFIXES.CurriculumNodeId),
+  prefix: ID_PREFIXES.CurriculumNodeId,
+} as const;
+
+// Curriculum Edge ID
+export const CurriculumEdgeId = {
+  create: (value: string): CurriculumEdgeId =>
+    createId<'CurriculumEdgeId'>(value, ID_PREFIXES.CurriculumEdgeId, 'CurriculumEdgeId'),
+  isValid: (value: unknown): value is CurriculumEdgeId =>
+    isValidId(value, ID_PREFIXES.CurriculumEdgeId),
+  prefix: ID_PREFIXES.CurriculumEdgeId,
+} as const;
+
+// Revision Proposal ID
+export const RevisionProposalId = {
+  create: (value: string): RevisionProposalId =>
+    createId<'RevisionProposalId'>(
+      value,
+      ID_PREFIXES.RevisionProposalId,
+      'RevisionProposalId'
+    ),
+  isValid: (value: unknown): value is RevisionProposalId =>
+    isValidId(value, ID_PREFIXES.RevisionProposalId),
+  prefix: ID_PREFIXES.RevisionProposalId,
+} as const;
+
+// Revision Change ID
+export const RevisionChangeId = {
+  create: (value: string): RevisionChangeId =>
+    createId<'RevisionChangeId'>(value, ID_PREFIXES.RevisionChangeId, 'RevisionChangeId'),
+  isValid: (value: unknown): value is RevisionChangeId =>
+    isValidId(value, ID_PREFIXES.RevisionChangeId),
+  prefix: ID_PREFIXES.RevisionChangeId,
+} as const;
+
 // ============================================================================
 // Union Types for Generic Handling
 // ============================================================================
@@ -486,7 +671,15 @@ export type AnyBrandedId =
   | DeckQueryLogId
   | CategoryId
   | SessionId
-  | AttemptId
+  | LessonPlanId
+  | GoalId
+  | StepId
+  | ActivityId
+  | EvaluationId
+  | TriggerId
+  | ConceptId
+  | GeneratedVariantId
+  | ContentGenerationJobId
   | TraceId
   | DiagnosisId
   | PatchId
@@ -510,7 +703,13 @@ export type AnyBrandedId =
   | AlgorithmConfigId
   | MutationId
   | MisconceptionPatternId
-  | InterventionId;
+  | InterventionId
+  | CurriculumId
+  | CurriculumVersionId
+  | CurriculumNodeId
+  | CurriculumEdgeId
+  | RevisionProposalId
+  | RevisionChangeId;
 
 /**
  * Map of ID type names to their prefixes.

@@ -49,6 +49,7 @@
     "db:push": "turbo run db:push",
     "db:studio": "turbo run db:studio",
     "scheduler:backfill:attempts": "pnpm --filter @noema/scheduler-service exec tsx ../../scripts/backfill-scheduler-from-session-attempts.ts",
+    "seed:card-templates": "pnpm --filter @noema/content-service exec tsx ../../scripts/seed-card-templates.ts",
     "docker:up": "docker compose -f docker-compose.yml -f docker-compose.local.yml up -d",
     "docker:down": "docker compose -f docker-compose.yml -f docker-compose.local.yml down",
     "docker:logs": "docker compose -f docker-compose.yml -f docker-compose.local.yml logs -f",

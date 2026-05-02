@@ -1,82 +1,53 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { httpGet } = vi.hoisted(() => ({
+const { httpGet, httpPost } = vi.hoisted(() => ({
   httpGet: vi.fn(),
+  httpPost: vi.fn(),
 }));
 
 vi.mock('../client.js', () => ({
   http: {
     get: httpGet,
+    post: httpPost,
   },
 }));
 
-import { queueApi } from './api.js';
+import { sessionsApi, stepsApi } from './api.js';
 
-describe('queueApi.getQueue', () => {
+describe('session Step-loop api', () => {
   beforeEach(() => {
     httpGet.mockReset();
+    httpPost.mockReset();
   });
 
-  it('normalizes queue items from envelope responses', async () => {
-    httpGet.mockResolvedValue({
-      success: true,
-      data: {
-        sessionId: 'session_123',
-        items: [
-          {
-            cardId: 'card_1',
-            status: 'pending',
-            position: 4,
-          },
-          {
-            cardId: 'card_2',
-            lane: 'calibration',
-            position: 5,
-            injectedBy: 'teacher',
-          },
-        ],
-      },
-    });
+  it('fetches the next Step-loop snapshot from the Batch 4 endpoint', async () => {
+    httpGet.mockResolvedValue({ data: { nextStep: null } });
 
-    const response = await queueApi.getQueue('session_123' as never);
+    await sessionsApi.getNextStep('session_123' as never);
 
-    expect(response.data.sessionId).toBe('session_123');
-    expect(response.data.remaining).toBe(1);
-    expect(response.data.items).toEqual([
-      {
-        cardId: 'card_1',
-        lane: 'retention',
-        position: 4,
-        injected: false,
-      },
-      {
-        cardId: 'card_2',
-        lane: 'calibration',
-        position: 5,
-        injected: true,
-      },
-    ]);
+    expect(httpGet).toHaveBeenCalledWith('/v1/sessions/session_123/next-step');
   });
 
-  it('defaults malformed array items safely', async () => {
-    httpGet.mockResolvedValue({
-      success: true,
-      data: [null],
-    });
-
-    const response = await queueApi.getQueue('session_456' as never);
-
-    expect(response.data).toEqual({
-      sessionId: '',
-      items: [
-        {
-          cardId: '',
-          lane: 'retention',
-          position: 0,
-          injected: false,
+  it('answers Steps through the canonical Step endpoint', async () => {
+    httpPost.mockResolvedValue({ data: { id: 'step_123' } });
+    const input = {
+      correct: true,
+      selfRating: 'knew_it',
+      trace: {
+        frames: {
+          f0: { score: 0.8, notes: 'goal clear' },
+          f1: { score: 0.8, notes: 'parsed prompt' },
+          f2: { score: 0.8, notes: 'selected diagnostic cue' },
+          f3: { score: 0.8, notes: 'retrieved from memory' },
+          f4: { score: 0.8, notes: 'reasoned through response' },
+          f5: { score: 0.8, notes: 'checked answer' },
+          f6: { score: 0.8, notes: 'attributed outcome' },
         },
-      ],
-      remaining: 0,
-    });
+      },
+    } as const;
+
+    await stepsApi.answerStep('step_123' as never, input);
+
+    expect(httpPost).toHaveBeenCalledWith('/v1/steps/step_123/answer', input);
   });
 });

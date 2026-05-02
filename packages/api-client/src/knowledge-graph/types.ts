@@ -9,6 +9,7 @@
 import type { IApiResponse } from '@noema/contracts';
 import type {
   CkgNodeStatus,
+  ConceptState,
   EdgeOntologicalCategory,
   EdgeId,
   GraphEdgeType,
@@ -86,9 +87,9 @@ export type OntologyMergeConflictKind =
   | 'domain_mismatch'
   | 'mapping_conflict'
   | 'weak_mapping_only';
-export type MasteryBand = 'untracked' | 'emerging' | 'developing' | 'mastered';
+export type StabilityBand = 'untracked' | 'emerging' | 'developing' | 'stable';
 export type NodeSearchMode = 'substring' | 'fulltext';
-export type NodeSortBy = 'label' | 'createdAt' | 'updatedAt' | 'masteryLevel' | 'relevance';
+export type NodeSortBy = 'label' | 'createdAt' | 'updatedAt' | 'stabilityLevel' | 'relevance';
 
 export interface IOntologyImportRunConfigurationDto {
   mode: string | null;
@@ -130,7 +131,7 @@ export interface IGraphNodeDto {
   reviewMetadata: INodeReviewMetadata | null;
   sourceCoverage: ISourceCoverageSummary | null;
   metadata: Record<string, unknown>;
-  masteryLevel?: number | null;
+  stabilityLevel?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -189,11 +190,16 @@ export interface IGraphEdgeDto {
 }
 
 export interface ICreateEdgeInput {
-  sourceId: NodeId;
-  targetId: NodeId;
-  type: EdgeType;
+  sourceId?: NodeId;
+  targetId?: NodeId;
+  sourceNodeId?: NodeId;
+  targetNodeId?: NodeId;
+  edgeType?: EdgeType;
+  type?: EdgeType;
   weight?: number;
   metadata?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+  skipAcyclicityCheck?: boolean;
 }
 
 export interface ICkgEdgeAuthoringBlockedReasonDto {
@@ -346,30 +352,6 @@ export interface ITopologyDto {
   edgeCount: number;
   isAcyclic: boolean;
   stronglyConnectedComponents: number;
-}
-
-export interface IMasteryDomainBreakdownEntryDto {
-  domain: string;
-  nodeCount: number;
-  trackedNodes: number;
-  masteredNodes: number;
-  averageMastery: number;
-}
-
-export interface INodeMasterySummaryDto {
-  userId: UserId;
-  studyMode: StudyMode;
-  domain?: string;
-  masteryThreshold: number;
-  totalNodes: number;
-  trackedNodes: number;
-  masteredNodes: number;
-  developingNodes: number;
-  emergingNodes: number;
-  untrackedNodes: number;
-  averageMastery: number;
-  strongestDomains: IMasteryDomainBreakdownEntryDto[];
-  weakestDomains: IMasteryDomainBreakdownEntryDto[];
 }
 
 export interface ICommonAncestorsInput {
@@ -625,10 +607,77 @@ export interface ICkgBulkReviewResult {
 }
 
 export type CkgResetConfirmation = 'DELETE_ALL_CKG_CONTENTS';
+export type CkgSourcePurgeConfirmation = 'DELETE_SELECTED_CKG_STREAM';
+export type PkgResetConfirmation = 'DELETE_ALL_PKG_CONTENTS';
 
 export interface ICkgResetInput {
   confirmation: CkgResetConfirmation;
   includeSources?: boolean;
+}
+
+export interface IConceptStateProjectionDto {
+  userId: UserId;
+  conceptId: NodeId;
+  studyMode: StudyMode;
+  state: ConceptState;
+  fsrsStability: number | null;
+  reasoningAverage: number | null;
+  evidenceWindow: number;
+  lastEvaluationId: string | null;
+  lastChangedAt: string | null;
+  attemptsSinceStable: number;
+  computedAt: string;
+  updatedAt: string;
+}
+
+export interface IConceptStateHistoryEntryDto {
+  id: string;
+  userId: UserId;
+  conceptId: NodeId;
+  studyMode: StudyMode;
+  previousState: ConceptState;
+  newState: ConceptState;
+  fsrsStability: number | null;
+  reasoningAverage: number | null;
+  evaluationId: string | null;
+  changedAt: string;
+  createdAt: string;
+}
+
+export interface IConceptStateHistoryDto {
+  history: IConceptStateHistoryEntryDto[];
+}
+
+export interface IPrerequisiteGapsDto {
+  gaps: IConceptStateProjectionDto[];
+}
+
+export interface IConceptStabilityDomainSummaryDto {
+  domain: string;
+  totalConcepts: number;
+  stableConcepts: number;
+  unstableConcepts: number;
+  stabilityRatio: number;
+  averageReasoning: number | null;
+  averageFsrsStability: number | null;
+}
+
+export interface IUserStabilitySummaryDto {
+  userId: UserId;
+  studyMode: StudyMode;
+  totalConcepts: number;
+  stableConcepts: number;
+  unstableConcepts: number;
+  stabilityRatio: number;
+  averageReasoning: number | null;
+  averageFsrsStability: number | null;
+  domains: IConceptStabilityDomainSummaryDto[];
+}
+
+export interface ICkgSourcePurgeInput {
+  confirmation: CkgSourcePurgeConfirmation;
+  streamId: string;
+  includeSourceRegistration?: boolean;
 }
 
 export interface ICkgResetResultDto {
@@ -637,6 +686,54 @@ export interface ICkgResetResultDto {
   deletedNeo4jCkgNodes: number;
   clearedCachePatterns: string[];
   artifactRootDirectory: string;
+  resetAt: string;
+}
+
+export interface ICkgSourcePurgeResultDto {
+  streamId: string;
+  deletedNeo4jCkgNodes: number;
+  deletedNeo4jCkgEdges: number;
+  deletedMutationCount: number;
+  deletedAggregationEvidenceCount: number;
+  deletedImportRunCount: number;
+  deletedImportArtifactCount: number;
+  deletedImportCheckpointCount: number;
+  deletedParsedBatchCount: number;
+  deletedSourceRegistrationCount: number;
+  clearedCachePatterns: string[];
+  artifactDirectoriesRemoved: string[];
+  purgedAt: string;
+}
+
+export interface IPkgBulkDeleteInput {
+  nodeIds: string[];
+}
+
+export interface IPkgBulkDeleteResultDto {
+  userId: string;
+  deletedNodeIds: string[];
+  deletedEdgeCount: number;
+  failed: {
+    nodeId: string;
+    reason: string;
+  }[];
+  deletedAt: string;
+}
+
+export interface IPkgResetInput {
+  confirmation: PkgResetConfirmation;
+}
+
+export interface IPkgResetResultDto {
+  userId: string;
+  deletedNeo4jPkgNodes: number;
+  deletedNeo4jPkgEdges: number;
+  deletedOperationLogCount: number;
+  deletedMetricSnapshotCount: number;
+  deletedMetricsStalenessCount: number;
+  deletedMisconceptionCount: number;
+  deletedAggregationEvidenceCount: number;
+  clearedCachePatterns: string[];
   resetAt: string;
 }
 
@@ -946,6 +1043,12 @@ export type CkgBulkReviewInput = ICkgBulkReviewInput;
 export type CkgBulkReviewResult = ICkgBulkReviewResult;
 export type CkgResetInput = ICkgResetInput;
 export type CkgResetResultDto = ICkgResetResultDto;
+export type CkgSourcePurgeInput = ICkgSourcePurgeInput;
+export type CkgSourcePurgeResultDto = ICkgSourcePurgeResultDto;
+export type PkgBulkDeleteInput = IPkgBulkDeleteInput;
+export type PkgBulkDeleteResultDto = IPkgBulkDeleteResultDto;
+export type PkgResetInput = IPkgResetInput;
+export type PkgResetResultDto = IPkgResetResultDto;
 export type PkgCkgComparisonDto = IPkgCkgComparisonDto;
 export type CkgMutationAuditEntry = ICkgMutationAuditEntry;
 export type CkgMutationAuditLogDto = ICkgMutationAuditLogDto;
@@ -979,7 +1082,10 @@ export type CkgNodeBatchAuthoringPreviewResponse = IApiResponse<ICkgNodeBatchAut
 export type SubgraphResponse = IApiResponse<ISubgraphDto>;
 export type PrerequisiteChainResponse = IApiResponse<IPrerequisiteChainDto>;
 export type FrontierResponse = IApiResponse<IKnowledgeFrontierDto>;
-export type NodeMasterySummaryResponse = IApiResponse<INodeMasterySummaryDto>;
+export type ConceptStateResponse = IApiResponse<IConceptStateProjectionDto>;
+export type ConceptStateHistoryResponse = IApiResponse<IConceptStateHistoryDto>;
+export type PrerequisiteGapsResponse = IApiResponse<IPrerequisiteGapsDto>;
+export type UserStabilitySummaryResponse = IApiResponse<IUserStabilitySummaryDto>;
 export type BridgeNodesResponse = IApiResponse<IBridgeNodesDto>;
 export type CentralityResponse = IApiResponse<ICentralityDto>;
 export type TopologyResponse = IApiResponse<ITopologyDto>;
@@ -997,6 +1103,9 @@ export type CkgMutationResponse = IApiResponse<ICkgMutationDto>;
 export type CkgMutationRecoveryCheckResponse = IApiResponse<ICkgMutationRecoveryCheckDto>;
 export type CkgBulkReviewResponse = IApiResponse<ICkgBulkReviewResult>;
 export type CkgResetResponse = IApiResponse<ICkgResetResultDto>;
+export type CkgSourcePurgeResponse = IApiResponse<ICkgSourcePurgeResultDto>;
+export type PkgBulkDeleteResponse = IApiResponse<IPkgBulkDeleteResultDto>;
+export type PkgResetResponse = IApiResponse<IPkgResetResultDto>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
 export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;
 export type OntologyImportSourceResponse = IApiResponse<IOntologyImportSourceDto>;

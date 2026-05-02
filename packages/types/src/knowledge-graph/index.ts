@@ -7,7 +7,7 @@
 
 import type { Metadata } from '../base/index.js';
 import type { EdgeId, MisconceptionPatternId, NodeId, UserId } from '../branded-ids/index.js';
-import type { ConfidenceScore, EdgeWeight, MasteryLevel } from '../branded-numerics/index.js';
+import type { ConfidenceScore, EdgeWeight, StabilityLevel } from '../branded-numerics/index.js';
 import type {
   CkgNodeStatus,
   GraphEdgeType,
@@ -206,8 +206,8 @@ export interface IGraphNode {
   /** Extensible key-value properties */
   properties: Metadata;
 
-  /** Mastery level (0–1) — present only for PKG nodes */
-  masteryLevel?: MasteryLevel;
+  /** Stability level (0–1) — present only for PKG nodes */
+  stabilityLevel?: StabilityLevel;
 
   /** When this node was created (ISO 8601) */
   readonly createdAt: string;
@@ -269,42 +269,42 @@ export interface ISubgraph {
 }
 
 // ============================================================================
-// Mastery Read Model
+// Stability Read Model
 // ============================================================================
 
 /**
- * Coarse mastery classification used by learner-facing dashboards, goals, and
+ * Coarse stability classification used by learner-facing dashboards, goals, and
  * agent tools. Bands are intentionally stable and mode-scoped.
  */
-export type MasteryBand = 'untracked' | 'emerging' | 'developing' | 'mastered';
+export type StabilityBand = 'untracked' | 'emerging' | 'developing' | 'stable';
 
 /**
- * Domain-level mastery rollup used for prioritisation and reporting.
+ * Domain-level stability rollup used for prioritisation and reporting.
  */
-export interface IMasteryDomainBreakdownEntry {
+export interface IStabilityDomainBreakdownEntry {
   /** Domain represented by this rollup */
   readonly domain: string;
 
   /** Total nodes in this domain for the active filter */
   readonly nodeCount: number;
 
-  /** Nodes that have explicit mastery evidence */
+  /** Nodes that have explicit stability evidence */
   readonly trackedNodes: number;
 
-  /** Nodes at or above the active mastery threshold */
-  readonly masteredNodes: number;
+  /** Nodes at or above the active stability threshold */
+  readonly stableNodes: number;
 
-  /** Mean mastery across tracked nodes in the domain */
-  readonly averageMastery: number;
+  /** Mean stability across tracked nodes in the domain */
+  readonly averageStability: number;
 }
 
 /**
- * Mode-scoped mastery summary for a user's PKG.
+ * Mode-scoped stability summary for a user's PKG.
  *
  * This is an explicit read model, not an inferred UI-only calculation.
  */
-export interface INodeMasterySummary {
-  /** User whose mastery state is being summarized */
+export interface INodeStabilitySummary {
+  /** User whose stability state is being summarized */
   readonly userId: UserId;
 
   /** Study mode used to scope the summary */
@@ -313,35 +313,35 @@ export interface INodeMasterySummary {
   /** Domain filter applied to the summary, if any */
   readonly domain?: string;
 
-  /** Threshold at or above which nodes are considered mastered */
-  readonly masteryThreshold: MasteryLevel;
+  /** Threshold at or above which nodes are considered stable */
+  readonly stabilityThreshold: StabilityLevel;
 
   /** Total nodes in scope */
   readonly totalNodes: number;
 
-  /** Nodes with explicit mastery evidence */
+  /** Nodes with explicit stability evidence */
   readonly trackedNodes: number;
 
-  /** Nodes at or above the mastery threshold */
-  readonly masteredNodes: number;
+  /** Nodes at or above the stability threshold */
+  readonly stableNodes: number;
 
-  /** Nodes with low but non-zero mastery evidence */
+  /** Nodes with low but non-zero stability evidence */
   readonly developingNodes: number;
 
-  /** Nodes with very early mastery evidence */
+  /** Nodes with very early stability evidence */
   readonly emergingNodes: number;
 
-  /** Nodes without explicit mastery evidence */
+  /** Nodes without explicit stability evidence */
   readonly untrackedNodes: number;
 
-  /** Mean mastery across tracked nodes */
-  readonly averageMastery: number;
+  /** Mean stability across tracked nodes */
+  readonly averageStability: number;
 
   /** Strongest domain slices in the active scope */
-  readonly strongestDomains: readonly IMasteryDomainBreakdownEntry[];
+  readonly strongestDomains: readonly IStabilityDomainBreakdownEntry[];
 
   /** Weakest domain slices in the active scope */
-  readonly weakestDomains: readonly IMasteryDomainBreakdownEntry[];
+  readonly weakestDomains: readonly IStabilityDomainBreakdownEntry[];
 }
 
 // ============================================================================
@@ -747,30 +747,30 @@ export interface IBridgeNodesResult {
 export interface IFrontierNode {
   /** The frontier node */
   readonly node: IGraphNode;
-  /** Average mastery of its prerequisite parents */
-  readonly prerequisiteMasteryAvg: number;
-  /** Number of mastered prerequisites / total prerequisites */
+  /** Average stability of its prerequisite parents */
+  readonly prerequisiteStabilityAvg: number;
+  /** Number of stable prerequisites / total prerequisites */
   readonly prerequisiteReadiness: string;
   /** Readiness score (0–1): how prepared the learner is for this concept */
   readonly readinessScore: number;
-  /** Mastered prerequisites (if includePrerequisites=true) */
-  readonly masteredPrerequisites?: readonly IGraphNode[];
+  /** Stable prerequisites (if includePrerequisites=true) */
+  readonly stablePrerequisites?: readonly IGraphNode[];
 }
 
 /**
  * Summary statistics for the knowledge frontier analysis.
  */
 export interface IFrontierSummary {
-  /** Number of nodes with mastery ≥ threshold */
-  readonly totalMastered: number;
-  /** Number of nodes with mastery < threshold */
-  readonly totalUnmastered: number;
-  /** Number of frontier nodes (unmastered with mastered prereqs) */
+  /** Number of nodes with stability ≥ threshold */
+  readonly totalStable: number;
+  /** Number of nodes with stability < threshold */
+  readonly totalUnstable: number;
+  /** Number of frontier nodes (unstable with stable prereqs) */
   readonly totalFrontier: number;
-  /** Number of deep-unmastered nodes (unmastered with unmastered prereqs) */
-  readonly totalDeepUnmastered: number;
-  /** mastered / total */
-  readonly masteryPercentage: number;
+  /** Number of deep-unstable nodes (unstable with unstable prereqs) */
+  readonly totalDeepUnstable: number;
+  /** stable / total */
+  readonly stabilityPercentage: number;
 }
 
 /**
@@ -779,8 +779,8 @@ export interface IFrontierSummary {
 export interface IKnowledgeFrontierResult {
   /** Knowledge domain analyzed */
   readonly domain: string;
-  /** Mastery threshold used */
-  readonly masteryThreshold: number;
+  /** Stability threshold used */
+  readonly stabilityThreshold: number;
   /** Frontier nodes — ready to learn next */
   readonly frontier: readonly IFrontierNode[];
   /** Summary statistics */
@@ -841,10 +841,10 @@ export interface IPrerequisiteEntry {
   readonly nodeId: string;
   /** Display label */
   readonly label: string;
-  /** Mastery level (0–1), if available from the PKG */
-  readonly masteryLevel?: number;
-  /** Whether the prerequisite is mastered (above threshold) */
-  readonly isMastered: boolean;
+  /** Stability level (0–1), if available from the PKG */
+  readonly stabilityLevel?: number;
+  /** Whether the prerequisite is stable (above threshold) */
+  readonly isStable: boolean;
 }
 
 /**

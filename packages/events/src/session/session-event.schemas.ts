@@ -9,8 +9,6 @@
  */
 
 import {
-  AttemptIdSchema,
-  AttemptOutcomeSchema,
   CardIdSchema,
   CardTypeSchema,
   CategoryIdSchema,
@@ -23,16 +21,19 @@ import {
   LoadoutArchetypeSchema,
   LoadoutIdSchema,
   MotivationSignalSchema,
-  RatingSchema,
   RemediationCardTypeSchema,
   SchedulingAlgorithmSchema,
+  SchedulerRatingSchema,
   SessionIdSchema,
   SessionTerminationReasonSchema,
-  TeachingApproachSchema,
+  EpistemicModeSchema,
   UserIdSchema,
 } from '@noema/validation';
 import { z } from 'zod';
 import { createEventSchema } from '../schemas.js';
+
+const LegacyAttemptIdSchema = z.string().min(1);
+const LegacyAttemptOutcomeSchema = z.enum(['correct', 'incorrect', 'partial', 'skipped']);
 
 // ============================================================================
 // Shared Sub-Schemas
@@ -54,13 +55,13 @@ export const SessionStatsSnapshotSchema = z.object({
   uniqueCardsReviewed: z.number().int().nonnegative(),
   newCardsIntroduced: z.number().int().nonnegative(),
   lapsedCards: z.number().int().nonnegative(),
-  ratingDistribution: z.record(RatingSchema, z.number().int().nonnegative()),
+  ratingDistribution: z.record(SchedulerRatingSchema, z.number().int().nonnegative()),
 });
 
 /** Zod schema for attempt context snapshot. */
 export const AttemptContextSnapshotSchema = z.object({
   learningMode: LearningModeSchema,
-  teachingApproach: TeachingApproachSchema,
+  epistemicMode: EpistemicModeSchema,
   loadoutArchetype: LoadoutArchetypeSchema.optional(),
   forceLevel: ForceLevelSchema.optional(),
   cognitiveLoad: CognitiveLoadLevelSchema.optional(),
@@ -91,7 +92,7 @@ export const SessionStartedPayloadSchema = z.object({
   userId: UserIdSchema,
   deckQueryId: DeckQueryLogIdSchema,
   learningMode: LearningModeSchema,
-  teachingApproach: TeachingApproachSchema,
+  epistemicMode: EpistemicModeSchema,
   schedulingAlgorithm: SchedulingAlgorithmSchema,
   loadoutId: LoadoutIdSchema.optional(),
   loadoutArchetype: LoadoutArchetypeSchema.optional(),
@@ -178,8 +179,8 @@ export const SessionStrategyUpdatedPayloadSchema = z.object({
 
 export const SessionTeachingChangedPayloadSchema = z.object({
   userId: UserIdSchema,
-  previousApproach: TeachingApproachSchema,
-  newApproach: TeachingApproachSchema,
+  previousApproach: EpistemicModeSchema,
+  newApproach: EpistemicModeSchema,
   trigger: z.string(),
 });
 
@@ -188,7 +189,7 @@ export const SessionTeachingChangedPayloadSchema = z.object({
 // ============================================================================
 
 export const AttemptRecordedPayloadSchema = z.object({
-  attemptId: AttemptIdSchema,
+  attemptId: LegacyAttemptIdSchema,
   sessionId: SessionIdSchema,
   cardId: CardIdSchema,
   userId: UserIdSchema,
@@ -197,8 +198,8 @@ export const AttemptRecordedPayloadSchema = z.object({
   lane: z.enum(['retention', 'calibration']).optional(),
 
   // Response
-  outcome: AttemptOutcomeSchema,
-  rating: RatingSchema,
+  outcome: LegacyAttemptOutcomeSchema,
+  rating: SchedulerRatingSchema,
   ratingValue: z.number().int().min(1).max(4),
 
   // Timing
@@ -227,7 +228,7 @@ export const AttemptRecordedPayloadSchema = z.object({
 });
 
 export const AttemptHintRequestedPayloadSchema = z.object({
-  attemptId: AttemptIdSchema,
+  attemptId: LegacyAttemptIdSchema,
   sessionId: SessionIdSchema,
   cardId: CardIdSchema,
   userId: UserIdSchema,
@@ -242,7 +243,7 @@ export const SessionCheckpointEvaluatedDirectiveSchema = z.object({
     'slowdown',
     'increase_support',
     'reduce_calibration_lane',
-    'switch_teaching_approach',
+    'switch_epistemic_mode',
     'continue',
   ]),
   reason: z.string().min(1),
@@ -253,45 +254,6 @@ export const SessionCheckpointEvaluatedPayloadSchema = z.object({
   trigger: z.enum(['confidence_drift', 'latency_spike', 'error_cascade', 'streak_break', 'manual']),
   shouldAdapt: z.boolean(),
   directives: z.array(SessionCheckpointEvaluatedDirectiveSchema),
-});
-
-export const SessionCohortLinkageSchema = z.object({
-  proposalId: z.string().min(1),
-  decisionId: z.string().min(1),
-  sessionId: SessionIdSchema,
-  sessionRevision: z.number().int().nonnegative(),
-  correlationId: z.string().min(1),
-});
-
-export const SessionCohortProposedPayloadSchema = z.object({
-  userId: UserIdSchema,
-  linkage: SessionCohortLinkageSchema,
-  candidateCardIds: z.array(CardIdSchema),
-  constraints: z.record(z.unknown()).optional(),
-});
-
-export const SessionCohortAcceptedPayloadSchema = z.object({
-  userId: UserIdSchema,
-  linkage: SessionCohortLinkageSchema,
-  acceptedCardIds: z.array(CardIdSchema),
-  excludedCardIds: z.array(CardIdSchema),
-});
-
-export const SessionCohortRevisedPayloadSchema = z.object({
-  userId: UserIdSchema,
-  linkage: SessionCohortLinkageSchema,
-  revisionFrom: z.number().int().nonnegative(),
-  revisionTo: z.number().int().nonnegative(),
-  candidateCardIds: z.array(CardIdSchema),
-  reason: z.string().min(1),
-});
-
-export const SessionCohortCommittedPayloadSchema = z.object({
-  userId: UserIdSchema,
-  linkage: SessionCohortLinkageSchema,
-  committedCardIds: z.array(CardIdSchema),
-  rejectedCardIds: z.array(CardIdSchema),
-  policyVersion: z.string().min(1).optional(),
 });
 
 export const SessionIntentTokenIssuedPayloadSchema = z.object({
@@ -387,30 +349,6 @@ export const SessionIntentTokenIssuedEventSchema = createEventSchema(
   SessionIntentTokenIssuedPayloadSchema
 );
 
-export const SessionCohortProposedEventSchema = createEventSchema(
-  'session.cohort.proposed',
-  'Session',
-  SessionCohortProposedPayloadSchema
-);
-
-export const SessionCohortAcceptedEventSchema = createEventSchema(
-  'session.cohort.accepted',
-  'Session',
-  SessionCohortAcceptedPayloadSchema
-);
-
-export const SessionCohortRevisedEventSchema = createEventSchema(
-  'session.cohort.revised',
-  'Session',
-  SessionCohortRevisedPayloadSchema
-);
-
-export const SessionCohortCommittedEventSchema = createEventSchema(
-  'session.cohort.committed',
-  'Session',
-  SessionCohortCommittedPayloadSchema
-);
-
 // ============================================================================
 // Type Inference from Schemas
 // ============================================================================
@@ -433,7 +371,3 @@ export type SessionCheckpointEvaluatedEventInput = z.input<
 export type SessionIntentTokenIssuedEventInput = z.input<
   typeof SessionIntentTokenIssuedEventSchema
 >;
-export type SessionCohortProposedEventInput = z.input<typeof SessionCohortProposedEventSchema>;
-export type SessionCohortAcceptedEventInput = z.input<typeof SessionCohortAcceptedEventSchema>;
-export type SessionCohortRevisedEventInput = z.input<typeof SessionCohortRevisedEventSchema>;
-export type SessionCohortCommittedEventInput = z.input<typeof SessionCohortCommittedEventSchema>;
