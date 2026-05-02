@@ -161,7 +161,10 @@ export function registerSessionRoutes(
     { preHandler: authMiddleware },
     async (request, reply) => {
       try {
-        const result = await sessionService.getSession(request.params.sessionId, buildContext(request));
+        const result = await sessionService.getSession(
+          request.params.sessionId,
+          buildContext(request)
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
@@ -224,7 +227,10 @@ export function registerSessionRoutes(
     { preHandler: authMiddleware },
     async (request, reply) => {
       try {
-        const result = await sessionService.presentStep(request.params.stepId, buildContext(request));
+        const result = await sessionService.presentStep(
+          request.params.stepId,
+          buildContext(request)
+        );
         reply.send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
@@ -266,12 +272,32 @@ export function registerSessionRoutes(
     }
   );
 
+  fastify.post<{ Params: SessionIdParams; Body: unknown }>(
+    '/v1/sessions/:sessionId/complete',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const result = await sessionService.completeSession(
+          request.params.sessionId,
+          request.body,
+          buildContext(request)
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
   fastify.post<{ Body: unknown }>(
     '/v1/offline-intents',
     { preHandler: authMiddleware },
     async (request, reply) => {
       try {
-        const result = await sessionService.issueOfflineIntentToken(request.body, buildContext(request));
+        const result = await sessionService.issueOfflineIntentToken(
+          request.body,
+          buildContext(request)
+        );
         reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);

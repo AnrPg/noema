@@ -1,3 +1,4 @@
+import { MetacognitionEventType } from '@noema/events';
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import { BaseEventConsumer } from '@noema/events/consumer';
 import {
@@ -47,7 +48,7 @@ export class MetacognitionTriggerConsumer extends BaseEventConsumer {
   }
 
   protected async handleEvent(envelope: IStreamEventEnvelope): Promise<boolean> {
-    if (envelope.eventType !== 'metacognition.trigger.fired') {
+    if (envelope.eventType !== MetacognitionEventType.METACOGNITION_TRIGGER_FIRED) {
       return true;
     }
 

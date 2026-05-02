@@ -64,6 +64,7 @@ class StrategyRepo implements ISessionRepository {
   goals: ILessonPlanGoal[] = [];
   steps: IStep[] = [makeStep()];
   inserted: IStep[] = [];
+  superseded: { stepId: StepId; supersededByStepId: StepId }[] = [];
 
   async findSessionById(id: SessionId): Promise<ISession | null> {
     return id === this.session.id ? this.session : null;
@@ -164,8 +165,20 @@ class StrategyRepo implements ISessionRepository {
     return created;
   }
 
-  async markStepsSuperseded(): Promise<void> {
-    return undefined;
+  async markStepsSuperseded(
+    replacements: { stepId: StepId; supersededByStepId: StepId }[]
+  ): Promise<void> {
+    this.superseded.push(...replacements);
+    this.steps = this.steps.map((step) => {
+      const replacement = replacements.find((entry) => entry.stepId === step.id);
+      return replacement === undefined
+        ? step
+        : {
+            ...step,
+            status: StepStatus.SUPERSEDED,
+            supersededByStepId: replacement.supersededByStepId,
+          };
+    });
   }
 
   async findNextQueueItem(): Promise<IStepQueueItem | null> {
@@ -258,6 +271,42 @@ describe('StrategyService', () => {
     expect(result.scope).toBe(ReplanScope.STRUCTURAL);
     expect(repo.inserted).toHaveLength(2);
     expect(repo.inserted.every((step) => step.conceptRefs.includes(ids.conceptId))).toBe(true);
+  });
+
+  it('supersedes pending future Steps replaced by a structural replan', async () => {
+    const repo = new StrategyRepo();
+    const pendingStep = {
+      ...makeStep(),
+      id: 'step_pending_ABCDEFGHIJK' as StepId,
+      position: 1,
+      status: StepStatus.PLANNED,
+      evaluationId: null,
+      presentedAt: null,
+      answeredAt: null,
+      evaluatedAt: null,
+    };
+    repo.steps = [makeStep(), pendingStep];
+    const strategy = makeStrategy(repo);
+
+    const result = await strategy.handleTrigger(
+      {
+        triggerId: ids.triggerId,
+        userId: ids.userId,
+        type: TriggerType.PREREQUISITE_GAP,
+        severity: 0.7,
+        conceptRefs: [ids.conceptId],
+        stepId: ids.stepId,
+        sessionId: ids.sessionId,
+        recommendedIntervention: LearningInterventionType.BRANCH_TO_PREREQUISITE,
+      },
+      { userId: ids.userId, correlationId: ids.correlationId }
+    );
+
+    expect(result.supersededStepIds).toEqual([pendingStep.id]);
+    expect(repo.superseded[0]?.supersededByStepId).toBe(result.insertedStepIds[0]);
+    expect(repo.steps.find((step) => step.id === pendingStep.id)?.status).toBe(
+      StepStatus.SUPERSEDED
+    );
   });
 
   it('chooses full scope only when the plan is fundamentally invalidated', () => {
