@@ -14,6 +14,7 @@ import {
   LessonPlanState,
   RigorLevel,
   SessionLifecycleState,
+  SessionTerminationReason,
   StepStatus,
   TransformationType,
   type ActivityId,
@@ -112,6 +113,22 @@ export interface ISessionServiceOptions {
   lessonPlanAgentUrl?: string;
   metacognitionClient?: IMetacognitionEvaluationPort;
   pedagogyGuardianClient?: IPedagogyGuardianPort;
+}
+
+function normalizeTerminationReason(reason?: string): SessionTerminationReason {
+  switch (reason) {
+    case SessionTerminationReason.CARD_LIMIT_REACHED:
+    case SessionTerminationReason.TIME_LIMIT_REACHED:
+    case SessionTerminationReason.AUTO_EXPIRED:
+    case SessionTerminationReason.ERROR:
+    case SessionTerminationReason.USER_ENDED:
+    case SessionTerminationReason.COMPLETED_NORMALLY:
+      return reason;
+    default:
+      return reason === undefined
+        ? SessionTerminationReason.COMPLETED_NORMALLY
+        : SessionTerminationReason.USER_ENDED;
+  }
 }
 
 function id<T extends string>(prefix: string): T {
@@ -586,6 +603,7 @@ export class SessionService {
     }
 
     const completedAt = isoNow();
+    const terminationReason = normalizeTerminationReason(payload.reason);
     const completed = await this.runInTransaction(async (tx) => {
       const updated = await this.repository.updateSession(
         session.id,
@@ -593,7 +611,7 @@ export class SessionService {
           lifecycleState: SessionLifecycleState.COMPLETION,
           completedAt,
           lastActivityAt: completedAt,
-          terminationReason: payload.reason ?? 'completed',
+          terminationReason,
         },
         session.version,
         tx
@@ -605,8 +623,16 @@ export class SessionService {
         {
           sessionId: session.id,
           userId: session.userId,
+          studyMode: session.studyMode,
           completedAt,
-          reason: payload.reason ?? 'completed',
+          terminationReason,
+          learningMode: session.learningMode,
+          sourceCategories: Array.isArray(session.config.sourceCategories)
+            ? (session.config.sourceCategories as string[])
+            : [],
+          sourceDecks: Array.isArray(session.config.sourceDecks)
+            ? (session.config.sourceDecks as string[])
+            : [],
         },
         ctx,
         tx

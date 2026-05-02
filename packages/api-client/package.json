@@ -34,6 +34,10 @@
       "types": "./dist/hlr/index.d.ts",
       "import": "./dist/hlr/index.js"
     },
+    "./gamification": {
+      "types": "./dist/gamification/index.d.ts",
+      "import": "./dist/gamification/index.js"
+    },
     "./hooks": {
       "types": "./dist/hooks/index.d.ts",
       "import": "./dist/hooks/index.js"

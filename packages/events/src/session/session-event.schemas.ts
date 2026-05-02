@@ -26,6 +26,7 @@ import {
   SchedulerRatingSchema,
   SessionIdSchema,
   SessionTerminationReasonSchema,
+  StudyModeSchema,
   EpistemicModeSchema,
   UserIdSchema,
 } from '@noema/validation';
@@ -123,11 +124,14 @@ export const SessionResumedPayloadSchema = z.object({
 });
 
 export const SessionCompletedPayloadSchema = z.object({
+  sessionId: SessionIdSchema,
   userId: UserIdSchema,
   terminationReason: SessionTerminationReasonSchema,
-  stats: SessionStatsSnapshotSchema,
-  totalDurationMs: z.number().nonnegative(),
-  activeDurationMs: z.number().nonnegative(),
+  studyMode: StudyModeSchema,
+  completedAt: z.string().datetime(),
+  learningMode: LearningModeSchema.optional(),
+  sourceCategories: z.array(z.string().min(1)).optional(),
+  sourceDecks: z.array(z.string().min(1)).optional(),
 });
 
 export const SessionAbandonedPayloadSchema = z.object({

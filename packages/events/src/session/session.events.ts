@@ -169,11 +169,14 @@ export interface ISessionResumedPayload {
 }
 
 export interface ISessionCompletedPayload {
+  sessionId: SessionId;
   userId: UserId;
   terminationReason: SessionTerminationReason;
-  stats: ISessionStatsSnapshot;
-  totalDurationMs: number;
-  activeDurationMs: number;
+  studyMode: StudyMode;
+  completedAt: string;
+  learningMode?: LearningMode;
+  sourceCategories?: string[];
+  sourceDecks?: string[];
 }
 
 export interface ISessionAbandonedPayload {
