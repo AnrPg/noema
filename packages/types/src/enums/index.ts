@@ -541,8 +541,7 @@ export const CurriculumOriginMode = {
   DOCUMENT_DERIVED: 'document_derived',
 } as const;
 
-export type CurriculumOriginMode =
-  (typeof CurriculumOriginMode)[keyof typeof CurriculumOriginMode];
+export type CurriculumOriginMode = (typeof CurriculumOriginMode)[keyof typeof CurriculumOriginMode];
 
 /** Durable reason a curriculum revision was proposed. */
 export const CurriculumRevisionReason = {
@@ -982,24 +981,6 @@ export type IngestionState = (typeof IngestionState)[keyof typeof IngestionState
 // ============================================================================
 // Session Queue & Termination
 // ============================================================================
-
-/**
- * Status of a card within a session's review queue.
- */
-export const CardQueueStatus = {
-  /** Card is waiting to be presented */
-  PENDING: 'pending',
-  /** Card is currently being presented to the learner */
-  PRESENTED: 'presented',
-  /** Card has been reviewed and completed */
-  COMPLETED: 'completed',
-  /** Card was skipped by the learner */
-  SKIPPED: 'skipped',
-  /** Card was dynamically injected into the queue by an agent */
-  INJECTED: 'injected',
-} as const;
-
-export type CardQueueStatus = (typeof CardQueueStatus)[keyof typeof CardQueueStatus];
 
 /**
  * Reason a session was terminated.

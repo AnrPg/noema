@@ -8,7 +8,6 @@
 import {
   AchievementRarity,
   AggregationStage,
-  CardQueueStatus,
   CardOriginMode,
   CardReviewState,
   CardState,
@@ -176,7 +175,6 @@ export const StreakTypeSchema = createEnumSchema(StreakType, 'Streak type');
 export const DocumentFormatSchema = createEnumSchema(DocumentFormat, 'Document format');
 export const IngestionStateSchema = createEnumSchema(IngestionState, 'Ingestion state');
 export const DifficultyLevelSchema = createEnumSchema(DifficultyLevel, 'Difficulty level');
-export const CardQueueStatusSchema = createEnumSchema(CardQueueStatus, 'Card queue status');
 export const SessionTerminationReasonSchema = createEnumSchema(
   SessionTerminationReason,
   'Session termination reason'
@@ -268,7 +266,6 @@ export type StreakTypeInput = z.input<typeof StreakTypeSchema>;
 export type DocumentFormatInput = z.input<typeof DocumentFormatSchema>;
 export type IngestionStateInput = z.input<typeof IngestionStateSchema>;
 export type DifficultyLevelInput = z.input<typeof DifficultyLevelSchema>;
-export type CardQueueStatusInput = z.input<typeof CardQueueStatusSchema>;
 export type SessionTerminationReasonInput = z.input<typeof SessionTerminationReasonSchema>;
 export type CognitiveLoadLevelInput = z.input<typeof CognitiveLoadLevelSchema>;
 export type FatigueLevelInput = z.input<typeof FatigueLevelSchema>;
