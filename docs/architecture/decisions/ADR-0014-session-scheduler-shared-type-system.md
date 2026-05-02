@@ -2,7 +2,14 @@
 
 ## Status
 
-**Accepted** — 2025-07-26
+**Partially superseded by docs/adr/ADR-011-direct-rename-no-alias-policy.md,
+docs/adr/ADR-014-scheduler-is-concept-first.md, and
+docs/adr/ADR-016-three-choice-self-rating.md** — 2026-05-01
+
+The original shared-package pattern remains useful, but realignment replaces
+`TeachingApproach` with `EpistemicMode`, removes learner-facing `Rating`, drops
+the `STANDARD` baseline, and moves scheduler/session contracts away from
+card-attempt semantics.
 
 ## Context
 

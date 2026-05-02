@@ -1,5 +1,147 @@
 # Changelog
 
+## 2026-05-02 - Realignment Batch 10 Step-Focused Web Cutover
+
+- accepted ADR-035 for the concept-oriented, Step-focused learner web cutover
+- added reusable three-choice self-rating controls plus a learner-visible
+  seven-frame trace builder and evaluation summary on the active session page
+- updated dashboard vitals to show concept stability and reasoning trend
+- moved navigation, command palette, session setup, content list/detail,
+  creation, and batch import copy from card-first language to concept payload
+  language while preserving backend payload contracts
+- added focused session-page coverage for Step rendering, self-rating, trace,
+  and answer payload shape
+
+## 2026-05-02 - Realignment Batch 9 Session Strategy Replanning
+
+- accepted ADR-034 for keeping deterministic Strategy inside `session-service`
+- added `domain/strategy` with trigger-to-intervention mapping,
+  lowest-sufficient scope selection, loadout prompt modifiers, and
+  Guardian-gated replan commits
+- added `metacognition.trigger.fired` consumption in `session-service`
+- added repository support for Strategy-owned Step insertion, StepQueueItem
+  injection, and supersession bookkeeping
+- covered failure repair insertion, prerequisite branch insertion, and full
+  scope selection with focused tests
+
+## 2026-05-02 - Realignment Batch 8 Pedagogy Guardian Service
+
+- accepted ADR-033 for materializing the Pedagogy Guardian validation gate
+- added `@noema/pedagogy-guardian-service` with Fastify REST, Prisma
+  `GuardianValidation` persistence, health routes, and deterministic Batch 8
+  validation rules
+- wired `session-service` to call Guardian before LessonPlan activation and Step
+  queueing
+- wired `content-service` to call Guardian before storing generated activity
+  variants
+- expanded realignment validation events so Guardian can publish rejected
+  Activity decisions
+
+## 2026-05-02 - Realignment Batch 7 Knowledge Graph Stability Projection
+
+- accepted ADR-032 for knowledge-graph-service owned, revocable concept
+  stability projection
+- added concept-state projection/history/evidence/inbox persistence and KG
+  recomputation around FSRS stability plus recent reasoning evidence
+- wired metacognition and scheduler event consumption to update KG stability,
+  maintain Neo4j concept state, and emit concept-state flip events
+- exposed concept state, state history, prerequisite gaps, and user stability
+  summary through KG REST and `@noema/api-client`
+- removed active source references to the legacy mastery-summary contract and
+  refreshed active docs around stable/unstable vocabulary
+
+## 2026-05-02 - Realignment Batch 6 Scheduler Concept-First Refactor
+
+- accepted ADR-028 for the destructive scheduler-service concept-first cutover
+- replaced card/cohort scheduler persistence with `ConceptScheduleState`,
+  `ConceptEvaluationLog`, `ConceptCalibrationData`, and
+  `ConceptTransformationHistory`
+- added `metacognition.evaluation.recorded` consumption and
+  `scheduler.concept_state.updated` emission
+- replaced card-centric scheduler REST/tool surfaces with concept schedule, due
+  concept, and transformation-history endpoints
+- refactored FSRS/HLR and added SM-2/Leitner adapters over Evaluation-shaped
+  inputs
+- enriched Batch 5 metacognition events with optional `studyMode` and
+  `transformation` metadata so scheduler can persist transformation history
+
+## 2026-05-02 - Realignment Batch 5 Metacognition Service
+
+- accepted ADR-027 for the metacognition Evaluation and Trigger loop
+- added `@noema/metacognition-service` as a real workspace service with Fastify,
+  Prisma, Redis event publishing, health routes, and Batch 5 REST endpoints
+- added Evaluation, Trigger, and concept reasoning-average persistence
+- implemented deterministic 7-frame trace scoring, reasoning-dominant signal
+  combination, scheduler rating mapping, and trigger rules
+- added focused tests for the Batch 5 acceptance cases and trigger routing
+
+## 2026-05-02 - Realignment Batch 4 Session Service
+
+- accepted ADR-026 for the Step-first session-service cutover
+- replaced the legacy card-attempt/session-queue/cohort/streak Prisma model with
+  LessonPlan, Goal, Step, Activity, StepQueueItem, and session lifecycle state
+- added the destructive session-service migration and applied it to the local
+  dev database
+- replaced legacy attempt and card queue REST routes with the Batch 4 Step-loop
+  endpoints
+- added lifecycle transition event emission and focused coverage for session
+  start -> minimal LessonPlan -> present Step -> answer Step -> EVALUATED
+
+## 2026-05-01 - Realignment Batch 3 Content Service
+
+- accepted ADR-019 for content-service as the Step Activity payload source
+  boundary
+- added card compatibility metadata, generated activity variant persistence, and
+  candidate selection for cards/templates/generated variants
+- exposed `POST /v1/activity-payload-candidates` through content-service and
+  `@noema/api-client`
+- moved transformation/default eligibility derivation into shared `@noema/types`
+  helpers and made card creation reject explicit empty transformations while
+  filling defaults from card type
+- added `concepts.extracted` emission after import creates graph-linked cards
+  and regenerated the content-service Prisma client
+
+## 2026-05-01 - Realignment Batch 2 Eligibility Rules
+
+- accepted ADR-018 for deterministic epistemic-mode eligibility and
+  transformation selection
+- replaced provisional mode groups with the full source-of-truth §5 mapping over
+  all 30 epistemic modes
+- added pure shared helpers for group selection, LRU mode selection,
+  transformation cycling, reverse mode lookups, and card-type transformation
+  defaults
+- expanded `@noema/types` tests to cover every mode, every group, trigger
+  routing priority, transformation cycling, scheduler-style history entries, and
+  every card/remediation-card default transformation
+
+## 2026-05-01 - Realignment Batch 1 Shared Contracts
+
+- accepted ADR-017 for the shared Step-first vocabulary, DTO contracts, event
+  contracts, and config defaults
+- removed shared cohort/handshake event contracts from `@noema/events` while
+  preserving service-local legacy types until the later deletion batches
+- split learning-loop event constants into domain-specific event maps and added
+  focused tests for validation vocabulary, learning-loop DTOs, event schemas,
+  and realignment config defaults
+- verified the five touched shared packages with package tests, typechecks, and
+  builds; repo-level typecheck is still blocked by the pre-existing Batch 3
+  content-service draft edits
+
+## 2026-04-19 - Graph Maintenance Controls
+
+- added admin CKG danger-zone controls for full canonical reset and
+  source-targeted purge by stream identifiers such as `yago`, `esco`,
+  `users_aggregation`, `agents`, and `admin_manual`
+- extended `knowledge-graph-service` with dedicated PKG maintenance endpoints
+  for batch node deletion and full personal graph reset
+- made canonical cleanup provenance-aware so matching CKG nodes, edges, mutation
+  rows, aggregation evidence, ontology-import artifacts, and cache entries are
+  deleted together
+- exposed learner-facing knowledge-map actions for deleting selected PKG nodes
+  and wiping the full PKG with explicit confirmation text
+- documented the new deletion model in frontend/backend docs and accepted
+  `ADR-0063` for provenance-aware graph maintenance
+
 ## 2026-03-28 - Navbar Pomodoro Timer
 
 - added a configurable pomodoro timer to the authenticated header beside the
@@ -252,3 +394,24 @@
 - replaced the right-side incident visual with a cognitive recovery panel that
   offers retry plus two panel-native mini-games: `Neural Timing` and
   `Brain Maze`
+
+# 2026-05-02 — Batch 11 Curriculum Service
+
+- Added shared curriculum IDs, enums, validation schemas, contracts, and event
+  schemas.
+- Introduced `@noema/curriculum-service` with Prisma schema, REST routes, domain
+  DAG/frontier/slice/progress/revision policy logic, and unit tests.
+- Added session curriculum binding fields and initial learner curriculum pages.
+- Recorded ADR-036 for the curriculum-service boundary and CKG proposal gate.
+
+# 2026-05-02 — Batch 11 Curriculum + Content Completion Pass
+
+- Added curriculum operational surfaces for active versions, progress
+  evaluation, realignment evidence, revision proposal apply, and curriculum MCP
+  tool registry entries.
+- Extended content generation orchestration with a content-agent HTTP port and
+  explicit generation-job runner.
+- Added curriculum API-client hooks for vault, frontier, progress, session
+  slices, evidence, freeze controls, and revision workflows.
+- Validated shared packages, content-service, and curriculum-service
+  lint/typecheck/test/Prisma generation suites.

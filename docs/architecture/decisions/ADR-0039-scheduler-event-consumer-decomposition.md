@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Partially superseded by `docs/adr/ADR-015-cohort-handshake-protocol-removed.md`
+
+The `BaseEventConsumer` decomposition remains valid. The `SessionCohortConsumer`
+and `session.cohort.*` handling described here are superseded by the
+Step/evaluation/trigger/replan loop.
 
 ## Date
 
@@ -50,12 +54,12 @@ infrastructure:
 
 ### 2) Create Per-Stream Concrete Consumers
 
-| Consumer                   | Events handled                                                                 | Lines |
-| -------------------------- | ------------------------------------------------------------------------------ | ----- |
-| `SessionStartedConsumer`   | `session.started`                                                              | ~93   |
-| `ReviewRecordedConsumer`   | `attempt.recorded`, `review.submitted`                                         | ~394  |
-| `ContentSeededConsumer`    | `content.seeded`                                                               | ~102  |
-| `SessionCohortConsumer`    | `session.cohort.proposed/accepted/revised/committed`                          | ~216  |
+| Consumer                 | Events handled                                       | Lines |
+| ------------------------ | ---------------------------------------------------- | ----- |
+| `SessionStartedConsumer` | `session.started`                                    | ~93   |
+| `ReviewRecordedConsumer` | `attempt.recorded`, `review.submitted`               | ~394  |
+| `ContentSeededConsumer`  | `content.seeded`                                     | ~102  |
+| `SessionCohortConsumer`  | `session.cohort.proposed/accepted/revised/committed` | ~216  |
 
 Each consumer:
 
@@ -98,8 +102,8 @@ src/infrastructure/events/
 - **Extensible**: Adding a new event type means adding a new consumer file and
   registering it in the facade — no modifications to existing consumers.
 - **Cross-service consistency**: Scheduler now mirrors the content-service's
-  `BaseEventConsumer` pattern (ADR-0038), reducing cognitive load for
-  developers moving between services.
+  `BaseEventConsumer` pattern (ADR-0038), reducing cognitive load for developers
+  moving between services.
 - **Preserved API**: The facade keeps the original public interface; no upstream
   changes needed.
 
@@ -112,11 +116,10 @@ src/infrastructure/events/
 
 ### Neutral
 
-- All 123 scheduler-service tests continue to pass without modification to
-  test assertions (only import paths were updated for phase-5 reliability
-  tests).
-- The facade pattern ensures backward compatibility for any code that
-  constructs `SchedulerEventConsumer` directly.
+- All 123 scheduler-service tests continue to pass without modification to test
+  assertions (only import paths were updated for phase-5 reliability tests).
+- The facade pattern ensures backward compatibility for any code that constructs
+  `SchedulerEventConsumer` directly.
 
 ## References
 

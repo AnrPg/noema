@@ -2,7 +2,13 @@
 
 ## Status
 
-Accepted
+Partially superseded by `docs/adr/ADR-010-step-is-the-atomic-learning-unit.md`,
+`docs/adr/ADR-014-scheduler-is-concept-first.md`, and
+`docs/adr/ADR-016-three-choice-self-rating.md`
+
+Mode-scoped state remains valid. The card/attempt/mastery vocabulary in this ADR
+is superseded by Step evaluations, concept-first scheduling, and revocable
+concept stability.
 
 ## Date
 

@@ -188,7 +188,7 @@ components:
           $ref: "#/components/schemas/SessionState"
         learningMode:
           $ref: "#/components/schemas/LearningMode"
-        teachingApproach:
+        epistemicMode:
           type: string
         schedulingAlgorithm:
           type: string
@@ -234,7 +234,7 @@ components:
         - deckQueryId
         - state
         - learningMode
-        - teachingApproach
+        - EpistemicMode
         - schedulingAlgorithm
         - config
         - stats
@@ -437,7 +437,7 @@ components:
           $ref: "#/components/schemas/DeckQueryLogId"
         learningMode:
           $ref: "#/components/schemas/LearningMode"
-        teachingApproach:
+        epistemicMode:
           type: string
           default: standard
         schedulingAlgorithm:
@@ -1838,9 +1838,9 @@ paths:
     post:
       operationId: changeTeaching
       tags: [Strategy]
-      summary: Change teaching approach mid-session
+      summary: Change Epistemic mode mid-session
       description: |
-        Switches the teaching approach (one of 31 epistemic modes) for the session.
+        Switches the Epistemic mode (one of 31 epistemic modes) for the session.
         Publishes `session.teaching.changed`.
       parameters:
         - name: sessionId
@@ -1856,7 +1856,7 @@ paths:
               $ref: "#/components/schemas/ChangeTeachingInput"
       responses:
         "200":
-          description: Teaching approach changed
+          description: Epistemic mode changed
           content:
             application/json:
               schema:

@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Superseded by `docs/adr/ADR-015-cohort-handshake-protocol-removed.md`
+
+The durable consumer reliability ideas can still inform new event consumers, but
+the session/scheduler cohort handshake taxonomy, lineage state, and handshake
+tables no longer govern realignment implementation.
 
 ## Date
 

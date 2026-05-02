@@ -21,7 +21,7 @@ type LearningMode = 'language_learning' | 'knowledge_gaining';
 - card-generation defaults
 - scheduling policy
 - session semantics
-- mastery and analytics meaning
+- concept stability and analytics meaning
 
 It does **not** create:
 
@@ -41,7 +41,7 @@ Already implemented:
 - mode-aware graph reads
 - mode-aware content and batch flows
 - mode-aware scheduler/session/streak/reporting reads
-- explicit node mastery summary
+- explicit concept stability summary
 - explicit scheduler readiness summary
 - explicit scheduler card-focus summary
 
@@ -84,7 +84,7 @@ Meaning:
 
 - `supportedModes` defines where the node is eligible and meaningful
 - graph lenses may still hide or de-emphasize the node depending on context
-- node identity does not imply shared mastery or readiness
+- node identity does not imply shared stability or readiness
 
 ## Cards
 
@@ -111,11 +111,11 @@ The following records must be mode-scoped:
 - scheduler state
 - session records
 - attempts
-- node mastery
+- concept stability
 - remediation and misconception instances
 - analytics rollups that summarize user performance
 
-Phase 6 now formalizes node mastery as an explicit read model rather than a
+Batch 7 formalizes concept stability as an explicit read model rather than a
 frontend-only interpretation of raw PKG node state.
 
 ## Record-Keying Rules
@@ -133,7 +133,7 @@ Rationale:
 - same card can be reviewed under different pedagogical semantics
 - spacing and readiness cannot be shared by default
 
-## Node mastery
+## Concept stability
 
 Minimum key:
 
@@ -143,7 +143,7 @@ Minimum key:
 
 Rationale:
 
-- same node label or shared node identity may represent different mastery
+- same node label or shared node identity may represent different stability
   contexts
 
 ## Session
@@ -184,31 +184,31 @@ Write APIs should:
   defaulted
 - never silently merge mode-scoped state
 
-## Mastery Read Model
+## Stability Read Model
 
-Node-level mastery remains stored on PKG nodes today, but learner-facing and
-agent-facing consumers should no longer reconstruct progress ad hoc.
+Learner-facing and agent-facing consumers should not reconstruct concept
+progress ad hoc.
 
-The mode-aware contract now includes an explicit mastery summary read model:
+The realignment contract now includes an explicit stability summary read model:
 
 ```ts
-GET /api/v1/users/:userId/pkg/mastery/summary?studyMode=...
+GET /v1/users/:userId/stability-summary?studyMode=...
 ```
 
 This endpoint returns:
 
-- total nodes in scope
-- tracked vs untracked nodes
-- mastered / developing / emerging counts
-- average mastery across tracked nodes
-- strongest and weakest domain rollups
+- total concepts in scope
+- stable and unstable counts
+- stability ratio
+- average reasoning and FSRS stability evidence
+- domain rollups
 
 Important implementation rule:
 
 - route and service contracts accept `studyMode` explicitly
 - the summary is produced in the backend and shared across UI and agent
   consumers
-- the frontend should not invent its own banding logic for dashboard-grade
+- the frontend should not invent its own state logic for dashboard-grade
   reporting
 
 ## Events
@@ -220,7 +220,7 @@ Examples:
 - card study attempt recorded
 - schedule updated
 - session created
-- mastery updated
+- concept state updated
 
 Events that only describe mode-neutral identity changes may omit it if the
 semantics truly do not depend on mode.

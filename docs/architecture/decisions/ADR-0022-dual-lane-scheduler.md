@@ -2,7 +2,12 @@
 
 ## Status
 
-**Accepted** — 2026-02-22
+**Partially superseded by `docs/adr/ADR-014-scheduler-is-concept-first.md` and
+`docs/adr/ADR-022-repetition-uses-transformation-cycling.md`** — 2026-05-01
+
+The idea of deterministic planner lanes remains useful, but card-budgeted
+retention/calibration lanes are superseded by concept-first `repair`,
+`reinforcement`, and `new_learning` queues.
 
 ## Context
 

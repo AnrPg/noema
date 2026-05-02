@@ -1,10 +1,148 @@
 # Noema Mode-Aware Dual-Use Architecture
 
 - **Date:** 2026-03-27
-- **Status:** Proposed architecture baseline for implementation implementation
-  with active rollout in progress
+- **Status:** Superseded where conflicting by the 2026-05-01 Noema realignment
+  baseline; mode-aware substrate remains active
 - **Scope:** Shared graph, content, scheduler, session, analytics, and frontend
   shell
+
+## 2026-05-01 Realignment Baseline
+
+`IMPLEMENTATION_PLAN_FINAL.md` is now the implementation source of truth. The
+mode-aware shared core remains a valid substrate, but the pedagogical runtime is
+realigned around a Step-first, reasoning-dominant closed loop.
+
+### Governing ADRs
+
+- `docs/adr/ADR-009-realignment-batch-0-architecture-records.md`
+- `docs/adr/ADR-010-step-is-the-atomic-learning-unit.md`
+- `docs/adr/ADR-011-direct-rename-no-alias-policy.md`
+- `docs/adr/ADR-012-realignment-service-boundaries.md`
+- `docs/adr/ADR-013-evaluation-owned-by-metacognition-service.md`
+- `docs/adr/ADR-014-scheduler-is-concept-first.md`
+- `docs/adr/ADR-015-cohort-handshake-protocol-removed.md`
+- `docs/adr/ADR-016-three-choice-self-rating.md`
+- `docs/adr/ADR-020-every-session-has-a-lesson-plan.md`
+- `docs/adr/ADR-021-revocable-concept-stability.md`
+- `docs/adr/ADR-022-repetition-uses-transformation-cycling.md`
+- `docs/adr/ADR-023-pedagogy-guardian-independent-validation-gate.md`
+- `docs/adr/ADR-024-gamification-is-derived-projection.md`
+- `docs/adr/ADR-025-deterministic-mode-routing.md`
+- `docs/adr/ADR-027-realignment-batch-5-metacognition-evaluation-loop.md`
+- `docs/adr/ADR-028-realignment-batch-6-scheduler-concept-first.md`
+- `docs/adr/ADR-033-realignment-batch-8-pedagogy-guardian-service.md`
+- `docs/adr/ADR-034-realignment-batch-9-session-strategy-replanning.md`
+- `docs/adr/ADR-035-realignment-batch-10-step-focused-web-cutover.md`
+
+### Implementation Authority
+
+Batch 0 is an architecture and ADR baseline only. It authorizes the decisions
+above and the target service boundaries; it does not sign off any later-batch
+source implementation. Any existing Batch 1+ code in the worktree must be
+reviewed again when that batch receives an explicit go-ahead.
+
+### Core Loop
+
+Noema's learning loop is:
+
+1. `session-service` owns one LessonPlan per session and presents the next Step.
+2. The learner completes a Step Activity and provides a three-choice
+   self-rating.
+3. `metacognition-service` scores the 7-frame trace, records the canonical
+   Evaluation, combines reasoning quality with self-rating confidence, and emits
+   Triggers.
+4. `scheduler-service` consumes Evaluations to update concept-first schedule
+   state, queues, and transformation history.
+5. `knowledge-graph-service` projects concept state as `stable` or `unstable`
+   from retention plus reasoning evidence.
+6. The strategy module inside `session-service` responds to Triggers with the
+   minimum sufficient replan.
+7. `pedagogy-guardian-service` validates LessonPlans, Steps, replans, and
+   generated variants before learner exposure.
+8. `gamification-service` derives XP, streaks, badges, capability tiers, and
+   Memory Integrity Score from source-of-truth learning state.
+
+### Realignment Invariants
+
+- Step is the atomic learner-visible unit. Cards are content payloads/templates.
+- Evaluation is canonical and owned only by `metacognition-service`.
+- Reasoning quality dominates correctness and self-rating in combined score.
+- Scheduling is concept-first, not card-first.
+- Concept status is `stable` or `unstable`; learner-facing mastery language is
+  replaced by stability language.
+- Repetition must transform the concept and must not repeat the latest
+  transformation until the cycle is exhausted.
+- Cohort handshakes are removed. The closed loop uses Step, Evaluation, Trigger,
+  Replan, Guardian, scheduler, KG, and gamification events.
+- `TeachingApproach` is renamed to `EpistemicMode`; `STANDARD` is removed.
+- The old four-button grade UI is replaced by three-choice Step self-rating.
+
+### Service Ownership
+
+| Service                     | Realignment ownership                                                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content-service`           | Cards, templates, media, generated activity variants, payload candidates, `concepts.extracted` emission                                                  |
+| `session-service`           | LessonPlans, Goals, Steps, Activities, Step queue, lifecycle FSM, strategy/replanning                                                                    |
+| `metacognition-service`     | Canonical Evaluation persistence, trace scoring, combined score, scheduler rating mapping, transformation metadata, reasoning averages, Trigger emission |
+| `scheduler-service`         | ConceptScheduleState, concept evaluation logs, concept queues, transformation history, FSRS/HLR/SM-2/Leitner math                                        |
+| `knowledge-graph-service`   | PKG/CKG, prerequisite gaps, concept stability projection/history                                                                                         |
+| `pedagogy-guardian-service` | Validation gate for plans, Steps, replans, and generated variants                                                                                        |
+| `gamification-service`      | Derived projection/cache for XP, streaks, badges, tiers, Memory Integrity Score                                                                          |
+| `hlr-sidecar`               | HLR math support                                                                                                                                         |
+| `agents/`                   | LLM-heavy LessonPlan generation, activity variant generation, optional mode tiebreaking                                                                  |
+
+### Fact Ownership
+
+| Fact                                                   | Source of truth                           | Consumers                                        |
+| ------------------------------------------------------ | ----------------------------------------- | ------------------------------------------------ |
+| LessonPlan, Goal, Step, Activity, Step queue           | `session-service`                         | web app, metacognition, strategy, Guardian       |
+| Card/template/media/generated variant payloads         | `content-service`                         | session-service, agents, Guardian                |
+| Evaluation, reasoning quality, combined score, Trigger | `metacognition-service`                   | scheduler, KG, strategy, gamification, analytics |
+| Concept schedule state, queues, transformation history | `scheduler-service`                       | session-service, KG, agents                      |
+| Concept stability projection/history                   | `knowledge-graph-service`                 | web app, gamification, strategy, analytics       |
+| Guardian validation result                             | `pedagogy-guardian-service`               | session-service, content-service, agents         |
+| XP, streaks, badges, tiers, Memory Integrity Score     | `gamification-service` derived projection | web app                                          |
+
+### Batch 11 Curriculum Service Addendum
+
+`curriculum-service` is the source of truth for durable user-vault curricula,
+versioned curriculum DAGs, stable node traversal progress, session slices, and
+structural revision proposals. Curriculum DAGs are persisted separately from the
+CKG/PKG; curriculum nodes reference CKG concept IDs or carry proposed concepts
+that must pass through the CKG mutation DSL before canonical anchoring.
+
+### Batch-Sequencing Contract
+
+Implementation follows `IMPLEMENTATION_PLAN_FINAL.md` order. A later batch may
+refactor or replace earlier premature edits if they fail the ADR contracts.
+
+| Batch | Architectural checkpoint                                                              |
+| ----- | ------------------------------------------------------------------------------------- |
+| 1     | Shared vocabulary/contracts/events/config expose canonical names without aliases      |
+| 2     | Deterministic mode routing and transformation helpers are tested                      |
+| 3     | Content-service supports Step Activity payload candidates while preserving cards      |
+| 4     | Session-service owns LessonPlan/Step lifecycle and deletes card-attempt runtime paths |
+| 5     | Metacognition-service owns Evaluation and Trigger production                          |
+| 6     | Scheduler-service drops card-centric scheduling and cohort protocol state             |
+| 7     | Knowledge-graph-service projects revocable concept stability                          |
+| 8     | Pedagogy Guardian rejects malformed plans, Steps, replans, and generated variants     |
+| 9     | Session strategy module commits minimum-sufficient replans                            |
+| 10    | Web app cuts over to Step view, trace, and three-choice self-rating                   |
+| 11    | Agents generate LessonPlans and activity variants through Guardian                    |
+| 12    | Gamification is derived from source-of-truth learning events                          |
+| 13    | Closed-loop E2E proves replay convergence                                             |
+
+### Superseded Concepts
+
+The following concepts no longer govern new implementation:
+
+- card-attempt runtime flow
+- `SessionQueueItem` card queue
+- session-owned `UserStreak`
+- scheduler `SchedulerCard`, `Review`, and card-centric calibration records
+- session/scheduler cohort handshake protocol
+- learner-facing "mastery/mastered" status
+- learner-facing four-button grade controls
 
 ## Summary
 
@@ -580,3 +718,21 @@ Mitigation:
 - `docs/architecture/decisions/ADR-0057-mode-aware-batch-creation-and-card-generation.md`
 - `docs/architecture/decisions/ADR-0058-mode-aware-migration-and-backward-compatibility.md`
 - `docs/plans/2026-03-27-mode-aware-dual-use-learning-architecture.md`
+
+## Batch 11 Content Generation Addendum
+
+Batch 11 promotes content-service from a loose card archive to the durable
+provenance boundary for authored, RAG-grounded, and autonomous generated
+content. Content-service owns `originMode`, `reviewState`, citation/source
+metadata, CKG/PKG anchors, transformation lineage, async generation jobs, and
+concept-card coverage projections. Pedagogy Guardian remains the validation gate
+for generated and transformed instructional payloads; agents draft content and
+LessonPlans but do not bypass content-service persistence or Guardian
+validation.
+
+Legacy `source` and `knowledgeNodeIds` are transitional compatibility fields
+only. New domain logic and public contracts must use `originMode`,
+`reviewState`, `anchoredCkgNodeIds`, and `anchoredPkgNodeIds`; session selection
+excludes non-active review states by default. Session-service creates
+curriculum-bound LessonPlans and rejects plans whose Steps do not serve at least
+one selected curriculum node.

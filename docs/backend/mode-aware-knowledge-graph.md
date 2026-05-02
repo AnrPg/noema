@@ -22,15 +22,63 @@ Implemented today:
 - node mode membership metadata
 - PKG node filtering by active study mode
 - knowledge-map mode propagation
-- explicit PKG mastery summary read model
+- explicit concept stability summary read model
 - legacy learner-facing consumers such as goals and session summary using that
-  explicit summary instead of inventing their own graph mastery aggregation
+  explicit summary instead of inventing their own graph stability aggregation
 
 Still to expand later:
 
 - richer language-specific relation families at scale
 - more advanced comparative graph read models
 - deeper campaign/recommendation logic that combines graph and scheduler state
+
+## Maintenance and deletion surfaces
+
+The graph stack now has explicit maintenance flows for both canonical and
+personal cleanup rather than relying on ad hoc database operations.
+
+### Canonical graph maintenance
+
+Admin-only maintenance endpoints now support:
+
+- full CKG reset
+- provenance-targeted CKG purge by stream/source
+
+Canonical edge reads exclude soft-deleted relationships and relations whose
+source or target node is soft-deleted. This keeps maintenance cleanup from
+leaving orphan relation references in graph clients.
+
+The source purge path is intentionally provenance-aware. It matches canonical
+content using persisted import-source identifiers and maintenance stream markers
+attached during mutation commit. Supported operational streams currently
+include:
+
+- ontology sources such as `yago` and `esco`
+- `users_aggregation`
+- `agents`
+- `admin_manual`
+
+When a canonical source purge runs, the service deletes:
+
+- matching Neo4j CKG nodes
+- associated Neo4j edges
+- related mutation records
+- related aggregation evidence
+- ontology import runs, checkpoints, parsed batches, and artifact metadata for
+  that source
+- matching cache entries
+
+### Personal graph maintenance
+
+User-scoped maintenance endpoints now support:
+
+- batch deletion of selected PKG nodes
+- full PKG reset
+
+Batch deletion reuses the existing PKG node delete path so connected edges are
+removed together with their deleted nodes. Full reset uses a dedicated
+maintenance service that clears the user's PKG graph, maintenance records, and
+graph cache keys.
 
 ## Architectural Position
 
@@ -187,7 +235,7 @@ A node shared across modes may:
 
 - have different neighboring relations emphasized
 - have different side-panel summaries
-- have different readiness/mastery overlays
+- have different readiness/stability overlays
 - participate in different card-generation strategies
 
 This is expected. The lens changes interpretation, not identity.
@@ -201,7 +249,7 @@ Node reads should support:
 - `learningMode`
 - optional `supportedModes` filter
 - optional lens configuration
-- stable mode-scoped mastery reads
+- stable mode-scoped concept-state reads
 
 Behavior:
 
@@ -218,30 +266,27 @@ Traversal APIs should be able to:
 - filter or rank visible edges by relation family
 - preserve neutral admin/audit access when needed
 
-## Mastery Semantics
+## Stability Semantics
 
-The PKG graph now exposes explicit mastery reporting in addition to raw node
-reads.
+The PKG graph now exposes explicit revocable stability reporting in addition to
+raw node reads.
 
 ### Stored state
 
-- node-local `masteryLevel` remains the current persisted mastery signal
+- concept-local `state` is maintained as `stable` or `unstable`
+- `fsrsStability` and recent `reasoningAverage` are retained as projection
+  evidence
 - learner-facing reads must still be scoped by `studyMode`
 
 ### Explicit summary read model
 
 The graph service exposes:
 
-- `GET /api/v1/users/:userId/pkg/mastery/summary`
+- `GET /v1/users/:userId/stability-summary`
 
 Required query parameter:
 
 - `studyMode`
-
-Optional query parameters:
-
-- `domain`
-- `masteryThreshold`
 
 The summary is intentionally backend-owned so that:
 
@@ -250,19 +295,18 @@ The summary is intentionally backend-owned so that:
 - agent tools
 - future campaign planning flows
 
-all consume the same interpretation of mastery bands and domain rollups.
+all consume the same interpretation of stable/unstable state and domain rollups.
 
-### Mastery bands
+### Stability states
 
-The current summary bands are:
+The current state model is binary:
 
-- `untracked`
-- `emerging`
-- `developing`
-- `mastered`
+- `stable`
+- `unstable`
 
-These bands are stable read-model concepts. They are not a license for each
-frontend surface to invent new thresholds silently.
+There is no completed, achieved, or permanent success state. A concept can
+regress to `unstable` whenever new retention or reasoning evidence falls below
+the configured thresholds.
 
 The same physical graph can therefore yield different learner-facing subgraphs
 depending on the active mode.

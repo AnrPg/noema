@@ -2,10 +2,16 @@
 
 | Field       | Value                                                       |
 | ----------- | ----------------------------------------------------------- |
-| **Status**  | Accepted                                                    |
+| **Status**  | Superseded where card-centric by ADR-014                    |
 | **Date**    | 2026-03-04                                                  |
 | **Phase**   | Phase 03 — Circadian Rhythm (Scheduler Read API & Forecast) |
 | **Authors** | Claude (AI), approved by project owner                      |
+
+> 2026-05-01 realignment note: read-only CQRS separation and forecast ergonomics
+> remain useful patterns, but per-card scheduler state, review-history
+> ownership, and card-focused forecast contracts are superseded by
+> `docs/adr/ADR-014-scheduler-is-concept-first.md`. New scheduler reads must be
+> concept-first and Evaluation-shaped.
 
 ---
 

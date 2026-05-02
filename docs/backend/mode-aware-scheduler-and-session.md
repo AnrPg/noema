@@ -31,7 +31,7 @@ Planner inputs should include:
 - `learningMode`
 - candidate card IDs or selection filters
 - relevant policy/loadout data
-- optional graph/mastery context
+- optional graph/stability context
 
 If planner inputs omit `learningMode`, application services may temporarily
 default during migration, but the long-term contract should be explicit.
@@ -337,6 +337,5 @@ local day boundaries for due, overdue, streak, and guidance calculations.
 
 ## Related Documents
 
-- `docs/architecture/decisions/ADR-0055-mode-scoped-scheduling-sessions-and-mastery.md`
 - `docs/backend/mode-aware-learning-core.md`
 - `docs/guides/mode-aware-data-migration.md`

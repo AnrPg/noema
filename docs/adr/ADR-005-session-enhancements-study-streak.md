@@ -2,7 +2,7 @@
 
 | Field       | Value                                           |
 | ----------- | ----------------------------------------------- |
-| **Status**  | Accepted                                        |
+| **Status**  | Superseded by ADR-012 and ADR-016               |
 | **Date**    | 2026-03-03                                      |
 | **Phase**   | Phase 05 — Basal Ganglia (Session Enhancements) |
 | **Authors** | Claude (AI), approved by project owner          |
@@ -10,6 +10,13 @@
 ---
 
 ## Context
+
+> Supersession note, 2026-05-01: the realignment moves streaks out of
+> session-service source-of-truth state and into the derived
+> gamification-service projection. The historical list/filter improvements in
+> this ADR remain useful background, but the `UserStreak` table,
+> `IUserStreakRepository`, and session-owned streak update path no longer govern
+> new implementation.
 
 The session-service tracks spaced-repetition study sessions end-to-end (create →
 resume → answer → pause → complete). However, it lacked:

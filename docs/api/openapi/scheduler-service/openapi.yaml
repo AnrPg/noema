@@ -3,14 +3,11 @@ info:
   title: Noema Scheduler Service API
   version: 0.1.0
   description: |
-    Scheduler Service manages dual-lane queue planning, scheduler tool execution,
-    and operational health probes.
+    Scheduler Service owns concept-first scheduling state for the realigned
+    learning loop. Cards are content payloads only and do not appear in the
+    scheduler public API.
 
-    This contract follows API-first governance and includes:
-    - Runtime endpoints implemented in scheduler-service.
-    - Planned endpoints (explicitly marked) aligned with scheduler bounded-context roadmap.
-
-    Planned operations use `x-noema-lifecycle: planned` and are not yet implemented.
+    Runtime endpoints are learner-scoped by the authenticated principal.
   contact:
     name: Noema Platform
   license:
@@ -21,11 +18,9 @@ servers:
 
 tags:
   - name: Scheduler
-    description: Dual-lane scheduling and queue planning
-  - name: Tools
-    description: MCP tool discovery and execution for scheduler capabilities
+    description: Concept schedule reads
   - name: Health
-    description: Liveness and readiness probes
+    description: Liveness, readiness, metrics, and consumer status
 
 security:
   - bearerAuth: []
@@ -42,41 +37,12 @@ paths:
   /metrics:
     $ref: ./paths/health.yaml#/metrics
 
-  /v1/scheduler/dual-lane/plan:
-    $ref: ./paths/scheduler.yaml#/planDualLaneCanonical
-  /v1/schedule/dual-lane-plan:
-    $ref: ./paths/scheduler.yaml#/planDualLaneAlias
-
-  /v1/tools:
-    $ref: ./paths/tools.yaml#/listTools
-  /v1/tools/execute:
-    $ref: ./paths/tools.yaml#/executeTool
-
-  /v1/scheduler/review-queue:
-    $ref: ./paths/scheduler.yaml#/getReviewQueuePlanned
-  /v1/scheduler/cards/{cardId}/schedule:
-    $ref: ./paths/scheduler.yaml#/updateCardSchedulePlanned
-  /v1/scheduler/cards/schedule/batch:
-    $ref: ./paths/scheduler.yaml#/updateCardScheduleBatchPlanned
-  /v1/scheduler/cards/{cardId}/projection:
-    $ref: ./paths/scheduler.yaml#/getCardProjectionPlanned
-  /v1/scheduler/retention/predict:
-    $ref: ./paths/scheduler.yaml#/predictRetentionPlanned
-
-  /v1/scheduler/proposals/review-windows:
-    $ref: ./paths/scheduler.yaml#/proposeReviewWindows
-  /v1/scheduler/proposals/session-candidates:
-    $ref: ./paths/scheduler.yaml#/proposeSessionCandidates
-  /v1/scheduler/simulations/session-candidates:
-    $ref: ./paths/scheduler.yaml#/simulateSessionCandidates
-  /v1/scheduler/commits/cards/{cardId}/schedule:
-    $ref: ./paths/scheduler.yaml#/commitCardSchedule
-  /v1/scheduler/commits/cards/schedule/batch:
-    $ref: ./paths/scheduler.yaml#/commitCardScheduleBatch
-  /v1/scheduler/sessions/{sessionId}/reconcile:
-    $ref: ./paths/scheduler.yaml#/reconcileSessionCandidatesPlanned
-  /v1/scheduler/sessions/{sessionId}/apply-adjustments:
-    $ref: ./paths/scheduler.yaml#/applySessionAdjustmentsPlanned
+  /v1/concepts/due:
+    $ref: ./paths/scheduler.yaml#/getDueConcepts
+  /v1/concepts/{conceptId}/schedule:
+    $ref: ./paths/scheduler.yaml#/getConceptSchedule
+  /v1/concepts/{conceptId}/transformation-history:
+    $ref: ./paths/scheduler.yaml#/getConceptTransformationHistory
 
 components:
   securitySchemes:
@@ -92,121 +58,34 @@ components:
       $ref: ./components/schemas/common.yaml#/ErrorEnvelope
     ApiResponseMetadata:
       $ref: ./components/schemas/common.yaml#/ApiResponseMetadata
-    PrincipalContext:
-      $ref: ./components/schemas/common.yaml#/PrincipalContext
-    ScopeRequirement:
-      $ref: ./components/schemas/common.yaml#/ScopeRequirement
-    AgentHintAction:
-      $ref: ./components/schemas/common.yaml#/AgentHintAction
-    EstimatedImpact:
-      $ref: ./components/schemas/common.yaml#/EstimatedImpact
-    AgentHints:
-      $ref: ./components/schemas/common.yaml#/AgentHints
-    OrchestrationMetadata:
-      $ref: ./components/schemas/common.yaml#/OrchestrationMetadata
-    ScoringBreakdown:
-      $ref: ./components/schemas/common.yaml#/ScoringBreakdown
-    PolicyVersion:
-      $ref: ./components/schemas/common.yaml#/PolicyVersion
     BackpressureSignal:
       $ref: ./components/schemas/common.yaml#/BackpressureSignal
-
     UserId:
       $ref: ./components/schemas/scheduler.yaml#/UserId
-    CardId:
-      $ref: ./components/schemas/scheduler.yaml#/CardId
-    CorrelationId:
-      $ref: ./components/schemas/scheduler.yaml#/CorrelationId
-    SessionId:
-      $ref: ./components/schemas/scheduler.yaml#/SessionId
-    SchedulerLaneMix:
-      $ref: ./components/schemas/scheduler.yaml#/SchedulerLaneMix
-    DualLanePlanRequest:
-      $ref: ./components/schemas/scheduler.yaml#/DualLanePlanRequest
-    DualLanePlan:
-      $ref: ./components/schemas/scheduler.yaml#/DualLanePlan
-    DualLanePlanResponse:
-      $ref: ./components/schemas/scheduler.yaml#/DualLanePlanResponse
-    SchedulerAlgorithm:
-      $ref: ./components/schemas/scheduler.yaml#/SchedulerAlgorithm
-    CardScheduleInput:
-      $ref: ./components/schemas/scheduler.yaml#/CardScheduleInput
-    CardScheduleDecision:
-      $ref: ./components/schemas/scheduler.yaml#/CardScheduleDecision
-    BatchScheduleUpdateRequest:
-      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleUpdateRequest
-    BatchScheduleUpdateResponse:
-      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleUpdateResponse
-    CardProjection:
-      $ref: ./components/schemas/scheduler.yaml#/CardProjection
-    CardProjectionResponse:
-      $ref: ./components/schemas/scheduler.yaml#/CardProjectionResponse
-    ReviewWindowProposalRequest:
-      $ref: ./components/schemas/scheduler.yaml#/ReviewWindowProposalRequest
-    ReviewWindowProposal:
-      $ref: ./components/schemas/scheduler.yaml#/ReviewWindowProposal
-    ReviewWindowProposalResponse:
-      $ref: ./components/schemas/scheduler.yaml#/ReviewWindowProposalResponse
-    SessionConstraints:
-      $ref: ./components/schemas/scheduler.yaml#/SessionConstraints
-    SessionCandidateCard:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateCard
-    SessionCandidateProposalRequest:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateProposalRequest
-    CandidateScore:
-      $ref: ./components/schemas/scheduler.yaml#/CandidateScore
-    SessionCandidateProposal:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateProposal
-    SessionCandidateProposalResponse:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateProposalResponse
-    SessionCandidateSimulationRequest:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateSimulationRequest
-    SessionCandidateSimulationResponse:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCandidateSimulationResponse
-    SessionTelemetrySnapshot:
-      $ref: ./components/schemas/scheduler.yaml#/SessionTelemetrySnapshot
-    SessionReconcileRequest:
-      $ref: ./components/schemas/scheduler.yaml#/SessionReconcileRequest
-    SessionReconcileResponse:
-      $ref: ./components/schemas/scheduler.yaml#/SessionReconcileResponse
-    SessionCardAdjustment:
-      $ref: ./components/schemas/scheduler.yaml#/SessionCardAdjustment
-    SessionAdjustmentRequest:
-      $ref: ./components/schemas/scheduler.yaml#/SessionAdjustmentRequest
-    SessionAdjustmentResponse:
-      $ref: ./components/schemas/scheduler.yaml#/SessionAdjustmentResponse
-    CardScheduleCommitRequest:
-      $ref: ./components/schemas/scheduler.yaml#/CardScheduleCommitRequest
-    CardScheduleCommitResponse:
-      $ref: ./components/schemas/scheduler.yaml#/CardScheduleCommitResponse
-    BatchScheduleCommitRequest:
-      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleCommitRequest
-    BatchScheduleCommitResponse:
-      $ref: ./components/schemas/scheduler.yaml#/BatchScheduleCommitResponse
-
-    ToolPriority:
-      $ref: ./components/schemas/tools.yaml#/ToolPriority
-    ToolDefinition:
-      $ref: ./components/schemas/tools.yaml#/ToolDefinition
-    ToolListResponse:
-      $ref: ./components/schemas/tools.yaml#/ToolListResponse
-    ToolExecuteRequest:
-      $ref: ./components/schemas/tools.yaml#/ToolExecuteRequest
-    ToolExecutionMetadata:
-      $ref: ./components/schemas/tools.yaml#/ToolExecutionMetadata
-    ToolExecutionError:
-      $ref: ./components/schemas/tools.yaml#/ToolExecutionError
-    ToolExecutionResult:
-      $ref: ./components/schemas/tools.yaml#/ToolExecutionResult
-    ToolExecuteResponse:
-      $ref: ./components/schemas/tools.yaml#/ToolExecuteResponse
-    ToolFailureClass:
-      $ref: ../shared/components/schemas/tooling.yaml#/ToolFailureClass
-    ToolFailureClassificationEntry:
-      $ref: ../shared/components/schemas/tooling.yaml#/ToolFailureClassificationEntry
-    ToolFailureClassificationCatalog:
-      $ref: ../shared/components/schemas/tooling.yaml#/ToolFailureClassificationCatalog
-
+    ConceptId:
+      $ref: ./components/schemas/scheduler.yaml#/ConceptId
+    EvaluationId:
+      $ref: ./components/schemas/scheduler.yaml#/EvaluationId
+    StepId:
+      $ref: ./components/schemas/scheduler.yaml#/StepId
+    StudyMode:
+      $ref: ./components/schemas/scheduler.yaml#/StudyMode
+    SchedulerQueue:
+      $ref: ./components/schemas/scheduler.yaml#/SchedulerQueue
+    SchedulingAlgorithm:
+      $ref: ./components/schemas/scheduler.yaml#/SchedulingAlgorithm
+    TransformationType:
+      $ref: ./components/schemas/scheduler.yaml#/TransformationType
+    ConceptScheduleState:
+      $ref: ./components/schemas/scheduler.yaml#/ConceptScheduleState
+    ConceptScheduleResponse:
+      $ref: ./components/schemas/scheduler.yaml#/ConceptScheduleResponse
+    DueConceptsResponse:
+      $ref: ./components/schemas/scheduler.yaml#/DueConceptsResponse
+    ConceptTransformationHistory:
+      $ref: ./components/schemas/scheduler.yaml#/ConceptTransformationHistory
+    TransformationHistoryResponse:
+      $ref: ./components/schemas/scheduler.yaml#/TransformationHistoryResponse
     HealthStatus:
       $ref: ./components/schemas/common.yaml#/HealthStatus
     HealthCheckEntry:
@@ -227,146 +106,27 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            invalidDualLaneInput:
-              value:
-                error:
-                  code: SCHEDULER_ERROR
-                  message: Invalid dual-lane plan input
-                  retryable: false
-                  category: validation
-                metadata:
-                  requestId: cor_abc123
-                  correlationId: cor_abc123
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 3
     Unauthorized:
       description: Missing or invalid authentication token.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            missingBearerToken:
-              value:
-                error:
-                  code: AUTH_UNAUTHORIZED
-                  message: Missing or invalid bearer token
-                  retryable: false
-                  category: auth
-                metadata:
-                  requestId: cor_auth_unauthorized
-                  correlationId: cor_auth_unauthorized
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 1
     Forbidden:
       description: Principal is authenticated but lacks required scope.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            missingScope:
-              value:
-                error:
-                  code: AUTH_FORBIDDEN_SCOPE
-                  message: Missing required scope `scheduler:commit`
-                  retryable: false
-                  category: auth
-                metadata:
-                  requestId: cor_auth_forbidden
-                  correlationId: cor_auth_forbidden
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 2
     TooManyRequests:
       description: Principal exceeded quota or throttling policy.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            principalRateLimited:
-              value:
-                error:
-                  code: RATE_LIMIT_EXCEEDED
-                  message: Principal request quota exceeded
-                  retryable: true
-                  category: dependency
-                metadata:
-                  requestId: cor_rate_limited
-                  correlationId: cor_rate_limited
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 1
-                  additional:
-                    retryAfterMs: 500
     InternalServerError:
       description: Internal dependency or execution failure.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            dependencyFailure:
-              value:
-                error:
-                  code: SCHEDULER_INTERNAL_ERROR
-                  message: Failed to process scheduler request
-                  retryable: true
-                  category: internal
-                metadata:
-                  requestId: cor_internal_error
-                  correlationId: cor_internal_error
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 7
-    PlannedNotImplemented:
-      description: Planned operation contract exists but runtime implementation is pending.
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            endpointPlanned:
-              value:
-                error:
-                  code: SCHEDULER_PLANNED_OPERATION
-                  message: Endpoint is documented but not implemented yet
-                  retryable: false
-                  category: conflict
-                metadata:
-                  requestId: cor_planned_operation
-                  correlationId: cor_planned_operation
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 0
-    ToolNotFound:
-      description: Requested tool is not registered.
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ErrorEnvelope"
-          examples:
-            notFound:
-              value:
-                error:
-                  code: TOOL_NOT_FOUND
-                  message: "Unknown tool: get-srs-schedule"
-                  retryable: false
-                  category: validation
-                metadata:
-                  requestId: cor_abc123
-                  correlationId: cor_abc123
-                  timestamp: "2026-02-23T12:00:00.000Z"
-                  serviceName: scheduler-service
-                  serviceVersion: 0.1.0
-                  executionTime: 2

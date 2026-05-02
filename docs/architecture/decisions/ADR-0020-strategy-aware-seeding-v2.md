@@ -2,7 +2,14 @@
 
 ## Status
 
-**Accepted** — 2026-02-22
+**Partially superseded by
+`docs/adr/ADR-010-step-is-the-atomic-learning-unit.md`,
+`docs/adr/ADR-020-every-session-has-a-lesson-plan.md`, and
+`docs/adr/ADR-022-repetition-uses-transformation-cycling.md`** — 2026-05-01
+
+The idea that content-service can provide strategy-aware handoff metadata
+remains useful. The specific card-ID session seed contract is superseded by
+LessonPlan/Step creation and Activity payload candidate selection.
 
 ## Context
 

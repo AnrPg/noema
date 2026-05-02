@@ -8,13 +8,13 @@ between one study session and longer-term progress in the active mode.
 It should answer:
 
 - what happened in this session
-- how that session fits into current mode-scoped mastery and readiness
+- how that session fits into current mode-scoped stability and readiness
 
 ## Mode-Scoped Snapshot
 
 The summary page now combines two read models:
 
-- node mastery summary from the knowledge-graph service
+- concept stability summary from the knowledge-graph service
 - scheduler progress summary from the scheduler service
 
 This matters because a strong session can still leave the learner with:
@@ -38,11 +38,11 @@ healthy and stable.
 ## Data Boundaries
 
 - session-service owns the session and attempt history
-- knowledge-graph-service owns node mastery summary
+- knowledge-graph-service owns concept stability summary
 - scheduler-service owns deck/readiness summary
 
 The UI composes these sources, but it should not infer scheduler health or graph
-mastery by itself.
+stability by itself.
 
 ## Shared Progress UI
 

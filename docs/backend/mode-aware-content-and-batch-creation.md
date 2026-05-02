@@ -27,7 +27,7 @@ This field answers:
 - where it may be scheduled
 - which session contexts may include it
 
-It does not itself store scheduling or mastery state.
+It does not itself store scheduling or concept stability state.
 
 ## Mode-Aware Authoring Defaults
 
@@ -146,6 +146,33 @@ Recommended batch metadata:
 - unresolved warnings
 
 ## Current Implementation Notes
+
+Realignment Batch 3 makes content-service the payload source boundary for the
+Step loop.
+
+Cards now persist:
+
+- `compatibleTransformations`
+- `defaultEligibilityGroups`
+- `supportedStudyModes`
+
+New card creation fills these defaults from the shared realignment
+card-type/transformation table. Explicit empty `compatibleTransformations` are
+rejected so new cards cannot enter the archive without at least one compatible
+Step Activity transformation.
+
+The Step loop can request payload sources through:
+
+```http
+POST /v1/activity-payload-candidates
+```
+
+The request is keyed by concept, transformation, eligibility group, epistemic
+mode, difficulty bucket, and study mode. The response returns matching active
+cards, compatible templates, and non-expired generated activity variants.
+
+Generated activity variants are stored in `generated_activity_variants` with a
+TTL and hit count. Expired variants are excluded from candidate selection.
 
 The current batch-import rollout now supports a dedicated per-record metadata
 review step before execution.

@@ -6,7 +6,7 @@
 
 - batch: 1
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Define ontology import domain/application contracts inside
   `knowledge-graph-service` and expose typed client contracts for the admin app
@@ -40,7 +40,7 @@
 
 - batch: 1
 - owner: frontend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Build the admin ontology-imports dashboard shell, source catalog,
   and run-detail placeholder pages with frontend-first states
@@ -70,7 +70,7 @@
 
 - batch: 1
 - owner: docs-agent
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Document the ontology-imports architecture, admin workflow, and
   batch changelog
@@ -97,7 +97,7 @@
 
 - batch: 2
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Add persistent storage for ontology sources, runs, artifacts,
   checkpoints, and parsed staging manifests
@@ -125,7 +125,7 @@
 
 - batch: 2
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Implement import-run orchestration endpoints and internal
   job-stage transitions without source-specific fetching yet
@@ -150,7 +150,7 @@
 
 - batch: 2
 - owner: frontend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Wire the admin imports pages to real run/source data contracts
   and operational empty/loading/error states
@@ -177,7 +177,7 @@
 
 - batch: 3
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Implement the YAGO bulk-import fetch adapter and manifest
   emission
@@ -199,7 +199,7 @@
 
 - batch: 3
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Implement the ESCO linked-data fetch adapter and manifest
   emission
@@ -220,7 +220,7 @@
 
 - batch: 3
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Implement the ConceptNet import adapter with source-mode support
   for bulk and targeted fetches
@@ -242,7 +242,7 @@
 
 - batch: 4
 - owner: backend-implementer
-- status: in-progress
+- status: done
 - claimed_by: codex
 - description: Build shared staging parsers and the common parsed-record schema
   for YAGO, ESCO, and ConceptNet
@@ -574,3 +574,26 @@
   - `C:\Users\anr\Apps\noema\docs\backend\ontology-imports.md`
   - `C:\Users\anr\Apps\noema\docs\frontend\ontology-imports.md`
   - `C:\Users\anr\Apps\noema\CHANGELOG.md`
+
+## Batch 11 — Content Generation + Curriculum-Aware Sessions
+
+- status: in-progress
+- architecture: ADR-037, content-service provenance boundary, curriculum-aware
+  LessonPlan selection
+- implementation:
+  - shared IDs/enums/contracts/events for provenance, review state, generation
+    jobs, lineage, and coverage
+  - content-service Prisma persistence for canonical anchors, review state,
+    lineage, jobs, and coverage
+  - REST and MCP surfaces for metadata completion, review promotion,
+    transformations, generation jobs, lineage, and coverage
+  - Python agent scaffolds for Guardian-backed LessonPlan and content generation
+  - session-service guard that curriculum-bound LessonPlans serve selected nodes
+- validation:
+  - `pnpm --filter @noema/content-service db:generate`
+  - `pnpm --filter @noema/types typecheck`
+  - `pnpm --filter @noema/validation test`
+  - `pnpm --filter @noema/contracts test`
+  - `pnpm --filter @noema/events test`
+  - `pnpm --filter @noema/content-service typecheck`
+  - `pnpm --filter @noema/session-service typecheck`

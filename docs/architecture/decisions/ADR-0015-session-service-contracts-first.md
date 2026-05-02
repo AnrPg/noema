@@ -2,7 +2,12 @@
 
 ## Status
 
-**Accepted** — 2025-07-26
+**Superseded by docs/adr/ADR-010-step-is-the-atomic-learning-unit.md and
+docs/adr/ADR-011-direct-rename-no-alias-policy.md** — 2026-05-01
+
+The contracts-first implementation approach remains a useful engineering
+pattern, but its card-attempt and `SessionQueueItem` contract is replaced by
+LessonPlan, Step, Activity, Evaluation, and StepQueueItem contracts.
 
 ## Context
 
@@ -16,20 +21,22 @@ The service was implemented following a **contracts-first** protocol:
 
 1. OpenAPI 3.1.0 specification written and validated before any code
 2. Prisma schema designed to match event payloads exactly
-3. Domain types, repository interface, and Zod schemas defined before implementation
-4. Domain service, infrastructure, REST routes, and MCP tools built layer-by-layer
+3. Domain types, repository interface, and Zod schemas defined before
+   implementation
+4. Domain service, infrastructure, REST routes, and MCP tools built
+   layer-by-layer
 5. Each layer was type-checked against the shared packages before proceeding
 
 ### Key Design Constraints
 
-| Constraint                      | Detail                                                                              |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| FSM-based state transitions     | `active → paused → active`, `active → completed/abandoned/expired`                  |
-| One active session per user     | Enforced in domain service before session creation                                  |
-| Optimistic concurrency control  | `version` column with increment-on-write in repository                              |
-| Event-driven architecture       | 12 domain events published to Redis Streams                                         |
-| exactOptionalPropertyTypes      | Monorepo uses strict TypeScript; all optional assignments use conditional spread     |
-| Branded IDs                     | SessionId, AttemptId, CardId, DeckQueryLogId, etc. — casts required after Zod parse |
+| Constraint                     | Detail                                                                              |
+| ------------------------------ | ----------------------------------------------------------------------------------- |
+| FSM-based state transitions    | `active → paused → active`, `active → completed/abandoned/expired`                  |
+| One active session per user    | Enforced in domain service before session creation                                  |
+| Optimistic concurrency control | `version` column with increment-on-write in repository                              |
+| Event-driven architecture      | 12 domain events published to Redis Streams                                         |
+| exactOptionalPropertyTypes     | Monorepo uses strict TypeScript; all optional assignments use conditional spread    |
+| Branded IDs                    | SessionId, AttemptId, CardId, DeckQueryLogId, etc. — casts required after Zod parse |
 
 ## Decision
 
@@ -68,30 +75,31 @@ session-service/
 
 Three models with PostgreSQL-backed storage:
 
-- **Session** — Main entity with FSM state, config JSON, stats JSON, optimistic locking
+- **Session** — Main entity with FSM state, config JSON, stats JSON, optimistic
+  locking
 - **Attempt** — Individual card review attempts linked to a session
 - **SessionQueueItem** — Ordered card queue per session with injection support
 
 Enum mapping between `@noema/types` (lowercase: `active`, `correct`) and Prisma
-(UPPERCASE: `ACTIVE`, `CORRECT`) is handled entirely in the repository layer
-via `toPrisma*`/`fromPrisma*` helper functions.
+(UPPERCASE: `ACTIVE`, `CORRECT`) is handled entirely in the repository layer via
+`toPrisma*`/`fromPrisma*` helper functions.
 
 ### 3. Domain Events (12)
 
-| Event                       | Trigger                              |
-| --------------------------- | ------------------------------------ |
-| `session.started`           | New session created                  |
-| `session.paused`            | User pauses session                  |
-| `session.resumed`           | User resumes paused session          |
-| `session.completed`         | Session ends (normal/limit/timeout)  |
-| `session.abandoned`         | User abandons session                |
-| `session.expired`           | Timeout-based expiration             |
-| `attempt.recorded`          | Card attempt recorded (most critical)|
-| `attempt.hint.requested`    | Hint requested during review         |
-| `session.queue.injected`    | Agent injects card into queue        |
-| `session.queue.removed`     | Card removed from queue              |
-| `session.strategy.updated`  | Learning mode or algorithm changed   |
-| `session.teaching.changed`  | Teaching approach changed mid-session|
+| Event                      | Trigger                               |
+| -------------------------- | ------------------------------------- |
+| `session.started`          | New session created                   |
+| `session.paused`           | User pauses session                   |
+| `session.resumed`          | User resumes paused session           |
+| `session.completed`        | Session ends (normal/limit/timeout)   |
+| `session.abandoned`        | User abandons session                 |
+| `session.expired`          | Timeout-based expiration              |
+| `attempt.recorded`         | Card attempt recorded (most critical) |
+| `attempt.hint.requested`   | Hint requested during review          |
+| `session.queue.injected`   | Agent injects card into queue         |
+| `session.queue.removed`    | Card removed from queue               |
+| `session.strategy.updated` | Learning mode or algorithm changed    |
+| `session.teaching.changed` | Teaching approach changed mid-session |
 
 Events are published as string literals (not imported from `@noema/events`)
 because the events index uses `export type *`, making `SessionEventType` const
@@ -101,47 +109,48 @@ unavailable as a runtime value.
 
 Per `AGENT_MCP_TOOL_REGISTRY.md`:
 
-| Tool                    | Priority | Status   |
-| ----------------------- | -------- | -------- |
-| `get-session-history`   | P2       | Active   |
-| `record-attempt`        | P0       | Active   |
-| `get-attempt-history`   | P0       | Active   |
-| `get-thinking-trace`    | P0       | **Stub** |
-| `record-dialogue-turn`  | P1       | Stub     |
+| Tool                   | Priority | Status   |
+| ---------------------- | -------- | -------- |
+| `get-session-history`  | P2       | Active   |
+| `record-attempt`       | P0       | Active   |
+| `get-attempt-history`  | P0       | Active   |
+| `get-thinking-trace`   | P0       | **Stub** |
+| `record-dialogue-turn` | P1       | Stub     |
 
-Tool handlers return a simplified `IToolHandlerResult` (`{ success, data, error }`).
-The `ToolRegistry.execute()` method enriches this into a full `IToolExecutionResult`
-with `agentHints` (via `createEmptyAgentHints()`) and proper error objects.
+Tool handlers return a simplified `IToolHandlerResult`
+(`{ success, data, error }`). The `ToolRegistry.execute()` method enriches this
+into a full `IToolExecutionResult` with `agentHints` (via
+`createEmptyAgentHints()`) and proper error objects.
 
 ### 5. REST API (15 endpoints)
 
 Full OpenAPI 3.1.0 specification at `docs/api/openapi/session-service.yaml`.
 
-| Method | Path                                              | Purpose                    |
-| ------ | ------------------------------------------------- | -------------------------- |
-| POST   | `/v1/sessions`                                    | Start session              |
-| GET    | `/v1/sessions`                                    | List sessions              |
-| GET    | `/v1/sessions/:id`                                | Get session                |
-| POST   | `/v1/sessions/:id/pause`                          | Pause                      |
-| POST   | `/v1/sessions/:id/resume`                         | Resume                     |
-| POST   | `/v1/sessions/:id/complete`                       | Complete                   |
-| POST   | `/v1/sessions/:id/abandon`                        | Abandon                    |
-| POST   | `/v1/sessions/:id/attempts`                       | Record attempt             |
-| GET    | `/v1/sessions/:id/attempts`                       | List attempts              |
-| POST   | `/v1/sessions/:id/attempts/:aid/hints`            | Request hint               |
-| GET    | `/v1/sessions/:id/queue`                          | Get queue                  |
-| POST   | `/v1/sessions/:id/queue/inject`                   | Inject into queue          |
-| POST   | `/v1/sessions/:id/queue/remove`                   | Remove from queue          |
-| POST   | `/v1/sessions/:id/strategy`                       | Update strategy            |
-| POST   | `/v1/sessions/:id/teaching`                       | Change teaching approach   |
+| Method | Path                                   | Purpose                  |
+| ------ | -------------------------------------- | ------------------------ |
+| POST   | `/v1/sessions`                         | Start session            |
+| GET    | `/v1/sessions`                         | List sessions            |
+| GET    | `/v1/sessions/:id`                     | Get session              |
+| POST   | `/v1/sessions/:id/pause`               | Pause                    |
+| POST   | `/v1/sessions/:id/resume`              | Resume                   |
+| POST   | `/v1/sessions/:id/complete`            | Complete                 |
+| POST   | `/v1/sessions/:id/abandon`             | Abandon                  |
+| POST   | `/v1/sessions/:id/attempts`            | Record attempt           |
+| GET    | `/v1/sessions/:id/attempts`            | List attempts            |
+| POST   | `/v1/sessions/:id/attempts/:aid/hints` | Request hint             |
+| GET    | `/v1/sessions/:id/queue`               | Get queue                |
+| POST   | `/v1/sessions/:id/queue/inject`        | Inject into queue        |
+| POST   | `/v1/sessions/:id/queue/remove`        | Remove from queue        |
+| POST   | `/v1/sessions/:id/strategy`            | Update strategy          |
+| POST   | `/v1/sessions/:id/teaching`            | Change teaching approach |
 
 ### 6. Deferred: Thinking Traces
 
 The `get-thinking-trace` MCP tool is registered but returns a stub response.
 Full thinking-trace capture (recording and retrieving the agent's reasoning
 chain during card reviews) is deferred to **Phase 3+** when the metacognition
-service and agent orchestration layer are implemented. The tool definition is
-in place so that agent protocols can reference it now.
+service and agent orchestration layer are implemented. The tool definition is in
+place so that agent protocols can reference it now.
 
 ## Consequences
 
@@ -159,8 +168,8 @@ in place so that agent protocols can reference it now.
 
 ### Negative
 
-- **Enum mapping overhead**: The toPrisma/fromPrisma layer adds boilerplate
-  in the repository. This is the cost of using lowercase in domain types and
+- **Enum mapping overhead**: The toPrisma/fromPrisma layer adds boilerplate in
+  the repository. This is the cost of using lowercase in domain types and
   UPPERCASE in Prisma (PostgreSQL convention)
 - **exactOptionalPropertyTypes burden**: Many assignments require conditional
   spread patterns (`...(x !== undefined ? { x } : {})`) instead of simple
