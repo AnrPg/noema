@@ -1,28 +1,45 @@
 -- Align metacognition persistence with the Step-first closed-loop spec.
 
-CREATE TYPE "step_self_rating" AS ENUM ('knew_it', 'hesitated', 'didnt_know');
-CREATE TYPE "scheduler_rating" AS ENUM ('again', 'hard', 'good', 'easy');
-CREATE TYPE "trigger_type" AS ENUM (
-  'failure',
-  'confusion',
-  'slow_thinking',
-  'overconfidence',
-  'boredom',
-  'prerequisite_gap'
-);
-CREATE TYPE "trigger_status" AS ENUM ('open', 'addressed', 'recurring');
-CREATE TYPE "learning_intervention_type" AS ENUM (
-  'insert_repair_step',
-  'insert_contrastive_step',
-  'insert_calibration_step',
-  'switch_epistemic_mode',
-  'switch_transformation',
-  'change_activity',
-  'reduce_difficulty',
-  'increase_difficulty',
-  'transition_to_transfer',
-  'branch_to_prerequisite'
-);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'study_mode') THEN
+    CREATE TYPE "study_mode" AS ENUM ('language_learning', 'knowledge_gaining');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'step_self_rating') THEN
+    CREATE TYPE "step_self_rating" AS ENUM ('knew_it', 'hesitated', 'didnt_know');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'scheduler_rating') THEN
+    CREATE TYPE "scheduler_rating" AS ENUM ('again', 'hard', 'good', 'easy');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trigger_type') THEN
+    CREATE TYPE "trigger_type" AS ENUM (
+      'failure',
+      'confusion',
+      'slow_thinking',
+      'overconfidence',
+      'boredom',
+      'prerequisite_gap'
+    );
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trigger_status') THEN
+    CREATE TYPE "trigger_status" AS ENUM ('open', 'addressed', 'recurring');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'learning_intervention_type') THEN
+    CREATE TYPE "learning_intervention_type" AS ENUM (
+      'insert_repair_step',
+      'insert_contrastive_step',
+      'insert_calibration_step',
+      'switch_epistemic_mode',
+      'switch_transformation',
+      'change_activity',
+      'reduce_difficulty',
+      'increase_difficulty',
+      'transition_to_transfer',
+      'branch_to_prerequisite'
+    );
+  END IF;
+END
+$$;
 
 ALTER TABLE "evaluations" DROP CONSTRAINT IF EXISTS "evaluations_study_mode_check";
 
@@ -88,12 +105,12 @@ ALTER TABLE "metacognitive_triggers"
   ADD CONSTRAINT "metacognitive_triggers_evaluation_id_fkey"
   FOREIGN KEY ("evaluation_id") REFERENCES "evaluations"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
-CREATE INDEX "metacognitive_triggers_user_id_status_idx" ON "metacognitive_triggers"("user_id", "status");
-CREATE INDEX "metacognitive_triggers_session_id_idx" ON "metacognitive_triggers"("session_id");
-CREATE INDEX "metacognitive_triggers_concept_refs_idx" ON "metacognitive_triggers" USING GIN ("concept_refs");
-CREATE INDEX "evaluations_trigger_ids_idx" ON "evaluations" USING GIN ("trigger_ids");
+CREATE INDEX IF NOT EXISTS "metacognitive_triggers_user_id_status_idx" ON "metacognitive_triggers"("user_id", "status");
+CREATE INDEX IF NOT EXISTS "metacognitive_triggers_session_id_idx" ON "metacognitive_triggers"("session_id");
+CREATE INDEX IF NOT EXISTS "metacognitive_triggers_concept_refs_idx" ON "metacognitive_triggers" USING GIN ("concept_refs");
+CREATE INDEX IF NOT EXISTS "evaluations_trigger_ids_idx" ON "evaluations" USING GIN ("trigger_ids");
 
-CREATE TABLE "concept_reasoning_rollups" (
+CREATE TABLE IF NOT EXISTS "concept_reasoning_rollups" (
   "user_id" VARCHAR(50) NOT NULL,
   "concept_id" VARCHAR(50) NOT NULL,
   "study_mode" "study_mode" NOT NULL,
@@ -131,4 +148,4 @@ FROM "concept_reasoning_averages" a
 LEFT JOIN "evaluations" e ON e."id" = a."latest_evaluation"
 ON CONFLICT ("user_id", "concept_id", "study_mode") DO NOTHING;
 
-DROP TABLE "concept_reasoning_averages";
+DROP TABLE IF EXISTS "concept_reasoning_averages";

@@ -38,6 +38,7 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
         sessionId: evaluation.sessionId,
         userId: evaluation.userId,
         conceptRefs: evaluation.conceptRefs,
+        selectedNodeIds: evaluation.selectedNodeIds,
         correct: evaluation.correct,
         correctnessScore: evaluation.correctnessScore,
         selfRating: evaluation.selfRating,
@@ -170,6 +171,34 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
     };
   }
 
+  public async findRecentEvaluations(query: {
+    userId: UserId;
+    conceptIds?: ConceptId[];
+    studyMode?: StudyMode;
+    since?: string;
+    limit: number;
+  }): Promise<IEvaluation[]> {
+    const records = await this.prisma.evaluation.findMany({
+      where: {
+        userId: query.userId,
+        ...(query.conceptIds !== undefined && query.conceptIds.length > 0
+          ? { conceptRefs: { hasSome: query.conceptIds } }
+          : {}),
+        ...(query.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
+        ...(query.since !== undefined ? { createdAt: { gte: new Date(query.since) } } : {}),
+      },
+      include: { triggers: true },
+      orderBy: { createdAt: 'desc' },
+      take: query.limit,
+    });
+    return records.map((record) =>
+      this.toEvaluation(
+        record,
+        record.triggers.map((trigger) => trigger.id)
+      )
+    );
+  }
+
   private toEvaluation(record: NonNullable<EvaluationRecord>, triggerIds: string[]): IEvaluation {
     const evaluation: IEvaluation = {
       id: record.id as IEvaluation['id'],
@@ -178,6 +207,7 @@ export class PrismaMetacognitionRepository implements IMetacognitionRepository {
       sessionId: record.sessionId as IEvaluation['sessionId'],
       userId: record.userId as IEvaluation['userId'],
       conceptRefs: record.conceptRefs as IEvaluation['conceptRefs'],
+      selectedNodeIds: record.selectedNodeIds as IEvaluation['selectedNodeIds'],
       correct: record.correct,
       correctnessScore: record.correctnessScore,
       selfRating: record.selfRating as IEvaluation['selfRating'],

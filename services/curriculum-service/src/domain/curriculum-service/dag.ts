@@ -1,5 +1,6 @@
 import { CurriculumEdgeType } from '@noema/types';
 import type { CurriculumEdge, CurriculumNode, CurriculumVersionGraph } from './curriculum.types.js';
+import { branchInfoForNode } from './branching.js';
 
 export class CurriculumValidationError extends Error {
   constructor(
@@ -75,6 +76,52 @@ export function validateCurriculumDag(graph: CurriculumVersionGraph): void {
       'Curriculum version must have at least one terminal.',
       'NO_TERMINAL'
     );
+  }
+
+  const branchGroupRoots = new Map<string, Set<string>>();
+  for (const node of graph.nodes) {
+    const branchInfo = branchInfoForNode(node);
+    if (branchInfo?.branchGroupKey === undefined) continue;
+    if (!branchGroupRoots.has(branchInfo.branchGroupKey)) {
+      branchGroupRoots.set(branchInfo.branchGroupKey, new Set<string>());
+    }
+    const incomingHard = prerequisiteEdges.filter((edge) => edge.toNodeId === node.id);
+    const bucket = branchGroupRoots.get(branchInfo.branchGroupKey);
+    if (bucket !== undefined && incomingHard.length === 0) {
+      bucket.add(node.id);
+    }
+  }
+  for (const [branchGroupKey, rootIds] of branchGroupRoots.entries()) {
+    if (rootIds.size > 1) {
+      throw new CurriculumValidationError(
+        `Branch group ${branchGroupKey} has multiple hard-entry roots.`,
+        'MULTIPLE_BRANCH_ROOTS'
+      );
+    }
+  }
+
+  for (const edge of graph.edges) {
+    if (
+      edge.type !== CurriculumEdgeType.DIVERSION_TO &&
+      edge.type !== CurriculumEdgeType.BRANCH_OPTION
+    ) {
+      continue;
+    }
+    const source = graph.nodes.find((node) => node.id === edge.fromNodeId);
+    const target = graph.nodes.find((node) => node.id === edge.toNodeId);
+    const sourceBranch = source === undefined ? undefined : branchInfoForNode(source);
+    const targetBranch = target === undefined ? undefined : branchInfoForNode(target);
+    if (
+      edge.type === CurriculumEdgeType.BRANCH_OPTION &&
+      sourceBranch?.branchGroupKey !== undefined &&
+      targetBranch?.branchGroupKey !== undefined &&
+      sourceBranch.branchGroupKey === targetBranch.branchGroupKey
+    ) {
+      throw new CurriculumValidationError(
+        `Branch option edge ${edge.id} cannot loop within the same branch group.`,
+        'INVALID_BRANCH_OPTION'
+      );
+    }
   }
 }
 

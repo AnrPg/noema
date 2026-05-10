@@ -22,7 +22,7 @@ export class Email {
    * @throws Error if email is invalid
    */
   public static create(email: string): Email {
-    if (!email || typeof email !== 'string') {
+    if (email === '') {
       throw new Error('Email is required');
     }
 
@@ -70,16 +70,14 @@ export class Email {
    * Gets the domain part of the email.
    */
   public getDomain(): string {
-    // Email is validated to contain @, so this is safe
-    return this.value.split('@')[1]!;
+    return this.value.slice(this.value.indexOf('@') + 1);
   }
 
   /**
    * Gets the local part of the email (before @).
    */
   public getLocalPart(): string {
-    // Email is validated to contain @, so this is safe
-    return this.value.split('@')[0]!;
+    return this.value.slice(0, this.value.indexOf('@'));
   }
 
   /**

@@ -1,4 +1,10 @@
-import type { ConceptId } from '@noema/types';
+import type {
+  ConceptId,
+  CurriculumId,
+  CurriculumVersionId,
+  SessionId,
+  UserId,
+} from '@noema/types';
 import {
   EpistemicMode,
   GoalType,
@@ -14,6 +20,8 @@ import type {
   IKnowledgeGraphClient,
   IPedagogyGuardianClient,
   ISchedulerClient,
+  ISessionLearningContext,
+  ISessionLearningContextClient,
 } from '../../domain/curriculum-service/external-ports.js';
 import type {
   CurriculumNode,
@@ -207,10 +215,16 @@ export class HttpCurriculumDesignAgentClient implements ICurriculumDesignAgentCl
       headers: buildHeaders(this.serviceToken),
       body: JSON.stringify(input),
     });
-    if (response.data === undefined) {
+    const data = unwrapAgentResult(response.data);
+    if (data === undefined) {
       throw new Error('Curriculum Design Agent returned no draft data.');
     }
-    return response.data;
+    return data as {
+      agentRunId: string;
+      nodes: CurriculumNode[];
+      edges: CurriculumVersionGraph['edges'];
+      rationale: string;
+    };
   }
 
   async proposeRevision(input: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -222,7 +236,68 @@ export class HttpCurriculumDesignAgentClient implements ICurriculumDesignAgentCl
         body: JSON.stringify(input),
       }
     );
-    return response.data ?? {};
+    return unwrapAgentResult(response.data) ?? {};
+  }
+}
+
+function unwrapAgentResult(data: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (data === undefined) return undefined;
+  const execution = data['execution'];
+  if (typeof execution === 'object' && execution !== null) {
+    const result = (execution as Record<string, unknown>)['result'];
+    if (typeof result === 'object' && result !== null) {
+      return result as Record<string, unknown>;
+    }
+  }
+  return data;
+}
+
+export class HttpSessionLearningContextClient implements ISessionLearningContextClient {
+  private readonly baseUrl: string;
+  private readonly serviceToken: string | undefined;
+
+  constructor(config: IHttpClientConfig) {
+    this.baseUrl = normalizeBaseUrl(config.baseUrl);
+    this.serviceToken = config.serviceToken;
+  }
+
+  async getSessionLearningContext(input: {
+    userId: UserId;
+    sessionId: SessionId;
+  }): Promise<ISessionLearningContext | null> {
+    const response = await fetch(
+      `${this.baseUrl}/v1/sessions/${encodeURIComponent(input.sessionId)}`,
+      { headers: buildServiceHeaders(this.serviceToken, input.userId) }
+    );
+    if (response.status === 404) return null;
+    const body = await readJson<{ data?: Record<string, unknown> | null }>(response);
+    if (!response.ok) {
+      throw new Error(body.error?.message ?? `Session request failed: ${String(response.status)}`);
+    }
+    const session = body.data;
+    if (session === null || session === undefined) return null;
+    const curriculumId = session['curriculumId'];
+    const curriculumVersionId = session['curriculumVersionId'];
+    const studyMode = session['studyMode'];
+    const learningMode = session['learningMode'];
+    if (
+      typeof curriculumId !== 'string' ||
+      typeof studyMode !== 'string' ||
+      typeof learningMode !== 'string'
+    ) {
+      return null;
+    }
+    return {
+      sessionId: input.sessionId,
+      userId: input.userId,
+      curriculumId: curriculumId as CurriculumId,
+      curriculumVersionId:
+        typeof curriculumVersionId === 'string'
+          ? (curriculumVersionId as CurriculumVersionId)
+          : null,
+      studyMode: studyMode as ISessionLearningContext['studyMode'],
+      learningMode: learningMode as LearningMode,
+    };
   }
 }
 
@@ -252,6 +327,19 @@ function buildHeaders(
     headers['authorization'] = `Bearer ${serviceToken}`;
   }
   return headers;
+}
+
+function buildServiceHeaders(
+  serviceToken: string | undefined,
+  userId: UserId
+): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    'x-user-id': userId,
+    ...(serviceToken !== undefined && serviceToken.trim().length > 0
+      ? { 'x-service-token': serviceToken }
+      : {}),
+  };
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

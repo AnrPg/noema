@@ -5,6 +5,8 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerGuardianRoutes } from './api/rest/guardian.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
@@ -44,6 +46,7 @@ async function bootstrap(): Promise<void> {
   const repository = new PrismaGuardianRepository(prisma);
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
   const guardianService = new PedagogyGuardianService(repository, eventPublisher, logger);
+  const toolRegistry = createToolRegistry(guardianService);
 
   const fastify = Fastify({
     loggerInstance: logger,
@@ -78,6 +81,7 @@ async function bootstrap(): Promise<void> {
 
   registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
   registerGuardianRoutes(fastify as unknown as FastifyInstance, guardianService, authMiddleware);
+  registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');

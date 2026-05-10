@@ -1,4 +1,10 @@
 import {
+  ConceptIdSchema,
+  GoalIdSchema,
+  LessonPlanIdSchema,
+  StepIdSchema,
+} from '@noema/learning-kernel';
+import {
   EpistemicMode,
   GoalType,
   LearningInterventionType,
@@ -24,11 +30,6 @@ export const JsonSchemaFragmentSchema: z.ZodType<unknown> = z.lazy(() =>
     z.record(JsonSchemaFragmentSchema),
   ])
 );
-
-export const ConceptIdSchema = z.string().min(1).max(100);
-export const GoalIdSchema = z.string().min(1).max(100);
-export const StepIdSchema = z.string().min(1).max(100);
-export const LessonPlanIdSchema = z.string().min(1).max(100);
 
 export const GuardianActivitySchema = z.object({
   id: z.string().min(1).max(100),

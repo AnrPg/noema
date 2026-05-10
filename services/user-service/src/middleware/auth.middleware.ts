@@ -11,6 +11,7 @@ import type {
 } from '../infrastructure/external-apis/token.service.js';
 
 declare module 'fastify' {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   interface FastifyRequest {
     user?: ITokenPayload;
   }
@@ -20,7 +21,7 @@ export function createAuthMiddleware(tokenService: JwtTokenService) {
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const authHeader = request.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (authHeader?.startsWith('Bearer ') !== true) {
       return reply.status(401).send({
         error: 'Unauthorized',
         message: 'Missing or invalid authorization header',

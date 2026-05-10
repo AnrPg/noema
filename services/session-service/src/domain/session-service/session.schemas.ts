@@ -3,6 +3,14 @@
  */
 
 import {
+  ConceptIdSchema,
+  CurriculumIdSchema,
+  CurriculumNodeIdSchema,
+  CurriculumVersionIdSchema,
+  EvaluationIdSchema,
+  GoalIdSchema,
+} from '@noema/learning-kernel';
+import {
   EpistemicMode,
   GoalSource,
   GoalState,
@@ -32,12 +40,6 @@ export const EpistemicModeSchema = z.enum(values(EpistemicMode));
 export const TransformationTypeSchema = z.enum(values(TransformationType));
 export const StepSelfRatingSchema = z.enum(values(StepSelfRating));
 export const ActivityContentSourceTypeSchema = z.enum(values(ActivityContentSourceType));
-
-const ConceptIdSchema = z.string().min(1).max(100);
-const CurriculumIdSchema = z.string().min(1).max(100);
-const CurriculumVersionIdSchema = z.string().min(1).max(100);
-const CurriculumNodeIdSchema = z.string().min(1).max(100);
-const GoalIdSchema = z.string().min(1).max(100);
 
 const SevenFrameTraceFrameSchema = z.object({
   score: z.number().min(0).max(1),
@@ -109,22 +111,6 @@ export const PlannedStepInputSchema = z.object({
   activities: z.array(PlannedActivityInputSchema).optional(),
 });
 
-export const CreateLessonPlanInputSchema = z.object({
-  curriculumId: CurriculumIdSchema.optional(),
-  curriculumVersionId: CurriculumVersionIdSchema.optional(),
-  selectedNodeIds: z.array(CurriculumNodeIdSchema).default([]),
-  rigorLevel: RigorLevelSchema.default(RigorLevel.MINIMAL),
-  topic: z.string().min(1).max(500).optional(),
-  prerequisites: z.array(ConceptIdSchema).default([]),
-  sourceDecks: z.array(z.string().min(1)).default([]),
-  sourceCategories: z.array(z.string().min(1)).default([]),
-  assessmentStrategy: z.string().min(1).max(2000).optional(),
-  adaptationRules: z.string().min(1).max(2000).optional(),
-  steps: z.array(PlannedStepInputSchema).optional(),
-});
-
-export type CreateLessonPlanInput = z.input<typeof CreateLessonPlanInputSchema>;
-
 export const CreateGoalInputSchema = z.object({
   description: z.string().min(1).max(1000),
   type: GoalTypeSchema,
@@ -136,11 +122,30 @@ export const CreateGoalInputSchema = z.object({
 
 export type CreateGoalInput = z.input<typeof CreateGoalInputSchema>;
 
+export const CreateLessonPlanInputSchema = z.object({
+  curriculumId: CurriculumIdSchema.optional(),
+  curriculumVersionId: CurriculumVersionIdSchema.optional(),
+  selectedNodeIds: z.array(CurriculumNodeIdSchema).min(1),
+  conceptRefs: z.array(ConceptIdSchema).default([]),
+  rigorLevel: RigorLevelSchema.default(RigorLevel.MINIMAL),
+  topic: z.string().min(1).max(500).optional(),
+  prerequisites: z.array(ConceptIdSchema).default([]),
+  sourceDecks: z.array(z.string().min(1)).default([]),
+  sourceCategories: z.array(z.string().min(1)).default([]),
+  assessmentStrategy: z.string().min(1).max(2000).optional(),
+  adaptationRules: z.string().min(1).max(2000).optional(),
+  goals: z.array(CreateGoalInputSchema).optional(),
+  steps: z.array(PlannedStepInputSchema).optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export type CreateLessonPlanInput = z.input<typeof CreateLessonPlanInputSchema>;
+
 export const AnswerStepInputSchema = z.object({
   response: z.unknown().optional(),
   correct: z.boolean(),
   selfRating: StepSelfRatingSchema,
-  evaluationId: z.string().min(1).max(50).optional(),
+  evaluationId: EvaluationIdSchema.optional(),
   trace: SevenFrameTraceSchema,
   responseTimeMs: z.number().int().nonnegative().optional(),
 });

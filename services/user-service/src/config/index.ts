@@ -123,6 +123,9 @@ function optionalEnvBool(name: string, defaultValue: boolean): boolean {
 export function loadConfig(): IServiceConfig {
   const environment = optionalEnv('NODE_ENV', 'development') as Environment;
 
+  const devAccessTokenExpiresIn = '3650d';
+  const devRefreshTokenExpiresIn = '3650d';
+
   return {
     service: {
       name: 'user-service',
@@ -144,8 +147,14 @@ export function loadConfig(): IServiceConfig {
     auth: {
       accessTokenSecret: requireEnv('ACCESS_TOKEN_SECRET'),
       refreshTokenSecret: requireEnv('REFRESH_TOKEN_SECRET'),
-      accessTokenExpiresIn: optionalEnv('ACCESS_TOKEN_EXPIRES_IN', '15m'),
-      refreshTokenExpiresIn: optionalEnv('REFRESH_TOKEN_EXPIRES_IN', '7d'),
+      accessTokenExpiresIn: optionalEnv(
+        'ACCESS_TOKEN_EXPIRES_IN',
+        environment === 'development' ? devAccessTokenExpiresIn : '15m'
+      ),
+      refreshTokenExpiresIn: optionalEnv(
+        'REFRESH_TOKEN_EXPIRES_IN',
+        environment === 'development' ? devRefreshTokenExpiresIn : '7d'
+      ),
       issuer: optionalEnv('JWT_ISSUER', 'noema.app'),
       audience: optionalEnv('JWT_AUDIENCE', 'noema.app'),
       bcryptRounds: optionalEnvInt('BCRYPT_ROUNDS', 12),

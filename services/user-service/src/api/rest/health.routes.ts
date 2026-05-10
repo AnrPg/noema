@@ -10,6 +10,7 @@ import type { PrismaClient } from '../../../generated/prisma/index.js';
 
 // Module augmentation to extend FastifySchema with OpenAPI properties
 declare module 'fastify' {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   interface FastifySchema {
     tags?: string[];
     summary?: string;
@@ -22,7 +23,7 @@ declare module 'fastify' {
 /**
  * Health check response.
  */
-interface HealthResponse {
+interface IHealthResponse {
   status: 'healthy' | 'unhealthy' | 'degraded';
   timestamp: string;
   version: string;
@@ -37,20 +38,70 @@ interface HealthResponse {
   >;
 }
 
+interface IDependencyCheckResult {
+  status: 'pass' | 'fail';
+  latency: number;
+}
+
+async function checkDatabase(prisma: PrismaClient): Promise<IDependencyCheckResult> {
+  const startedAt = Date.now();
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return { status: 'pass', latency: Date.now() - startedAt };
+  } catch {
+    return { status: 'fail', latency: Date.now() - startedAt };
+  }
+}
+
+async function checkRedis(redis: Redis): Promise<IDependencyCheckResult> {
+  const startedAt = Date.now();
+  try {
+    await redis.ping();
+    return { status: 'pass', latency: Date.now() - startedAt };
+  } catch {
+    return { status: 'fail', latency: Date.now() - startedAt };
+  }
+}
+
+function renderPrometheusMetrics(
+  uptimeSeconds: number,
+  database: IDependencyCheckResult,
+  cache: IDependencyCheckResult
+): string {
+  return [
+    '# HELP user_service_uptime_seconds Process uptime in seconds.',
+    '# TYPE user_service_uptime_seconds gauge',
+    `user_service_uptime_seconds ${uptimeSeconds.toFixed(3)}`,
+    '# HELP user_service_database_up Database readiness state (1 = pass, 0 = fail).',
+    '# TYPE user_service_database_up gauge',
+    `user_service_database_up ${String(database.status === 'pass' ? 1 : 0)}`,
+    '# HELP user_service_database_latency_ms Database readiness latency in milliseconds.',
+    '# TYPE user_service_database_latency_ms gauge',
+    `user_service_database_latency_ms ${String(database.latency)}`,
+    '# HELP user_service_redis_up Redis readiness state (1 = pass, 0 = fail).',
+    '# TYPE user_service_redis_up gauge',
+    `user_service_redis_up ${String(cache.status === 'pass' ? 1 : 0)}`,
+    '# HELP user_service_redis_latency_ms Redis readiness latency in milliseconds.',
+    '# TYPE user_service_redis_latency_ms gauge',
+    `user_service_redis_latency_ms ${String(cache.latency)}`,
+    '',
+  ].join('\n');
+}
+
 /**
  * Register health routes.
  */
-export async function registerHealthRoutes(
+export function registerHealthRoutes(
   fastify: FastifyInstance,
   prisma: PrismaClient,
   redis: Redis
-): Promise<void> {
+): void {
   const startTime = Date.now();
 
   /**
    * GET /health - Overall health check
    */
-  fastify.get<{ Reply: HealthResponse }>(
+  fastify.get<{ Reply: IHealthResponse }>(
     '/health',
     {
       schema: {
@@ -72,30 +123,11 @@ export async function registerHealthRoutes(
     },
     async (_request, reply) => {
       const uptime = (Date.now() - startTime) / 1000;
+      const database = await checkDatabase(prisma);
+      const cache = await checkRedis(redis);
 
-      // Database check
-      let dbStatus: 'pass' | 'fail' = 'pass';
-      let dbLatency = 0;
-      try {
-        const dbStart = Date.now();
-        await prisma.$queryRaw`SELECT 1`;
-        dbLatency = Date.now() - dbStart;
-      } catch {
-        dbStatus = 'fail';
-      }
-
-      // Redis check
-      let redisStatus: 'pass' | 'fail' = 'pass';
-      let redisLatency = 0;
-      try {
-        const redisStart = Date.now();
-        await redis.ping();
-        redisLatency = Date.now() - redisStart;
-      } catch {
-        redisStatus = 'fail';
-      }
-
-      const overallStatus = dbStatus === 'fail' || redisStatus === 'fail' ? 'unhealthy' : 'healthy';
+      const overallStatus =
+        database.status === 'fail' || cache.status === 'fail' ? 'unhealthy' : 'healthy';
 
       reply.send({
         status: overallStatus,
@@ -103,8 +135,8 @@ export async function registerHealthRoutes(
         version: '0.1.0',
         uptime,
         checks: {
-          database: { status: dbStatus, latency: dbLatency },
-          cache: { status: redisStatus, latency: redisLatency },
+          database,
+          cache,
         },
       });
     }
@@ -161,31 +193,46 @@ export async function registerHealthRoutes(
       },
     },
     async (_request, reply) => {
-      // Check database connection
-      let ready = true;
-      let reason = '';
-
-      try {
-        await prisma.$queryRaw`SELECT 1`;
-      } catch {
-        ready = false;
-        reason = 'Database unavailable';
-      }
-
-      if (ready) {
-        try {
-          await redis.ping();
-        } catch {
-          ready = false;
-          reason = 'Redis unavailable';
-        }
-      }
+      const database = await checkDatabase(prisma);
+      const cache = database.status === 'pass' ? await checkRedis(redis) : null;
+      const ready = database.status === 'pass' && cache?.status === 'pass';
+      const reason =
+        database.status === 'fail'
+          ? 'Database unavailable'
+          : cache?.status === 'fail'
+            ? 'Redis unavailable'
+            : '';
 
       if (ready) {
         reply.send({ status: 'ready' });
       } else {
         reply.status(503).send({ status: 'not ready', reason });
       }
+    }
+  );
+
+  fastify.get(
+    '/metrics',
+    {
+      schema: {
+        tags: ['Health'],
+        summary: 'Prometheus metrics endpoint',
+        response: {
+          200: {
+            type: 'string',
+          },
+        },
+      },
+    },
+    async (_request, reply) => {
+      const uptime = (Date.now() - startTime) / 1000;
+      const database = await checkDatabase(prisma);
+      const cache = await checkRedis(redis);
+
+      await reply
+        .status(200)
+        .type('text/plain; version=0.0.4; charset=utf-8')
+        .send(renderPrometheusMetrics(uptime, database, cache));
     }
   );
 }

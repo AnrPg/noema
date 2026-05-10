@@ -51,7 +51,7 @@ export class Username {
    * @throws Error if username is invalid
    */
   public static create(username: string): Username {
-    if (!username || typeof username !== 'string') {
+    if (username === '') {
       throw new Error('Username is required');
     }
 
@@ -80,14 +80,14 @@ export class Username {
     if (username.length < Username.MIN_LENGTH) {
       return {
         valid: false,
-        error: `Username must be at least ${Username.MIN_LENGTH} characters`,
+        error: `Username must be at least ${String(Username.MIN_LENGTH)} characters`,
       };
     }
 
     if (username.length > Username.MAX_LENGTH) {
       return {
         valid: false,
-        error: `Username must be at most ${Username.MAX_LENGTH} characters`,
+        error: `Username must be at most ${String(Username.MAX_LENGTH)} characters`,
       };
     }
 

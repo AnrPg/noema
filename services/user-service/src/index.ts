@@ -291,7 +291,7 @@ async function bootstrap(): Promise<void> {
   const authMiddleware = createAuthMiddleware(tokenService);
 
   // Register routes
-  await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
+  registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);
   registerUserRoutes(
     fastify as unknown as FastifyInstance,
     userService,

@@ -1,12 +1,15 @@
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import pino from 'pino';
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerVectorRoutes } from './api/rest/vector.routes.js';
 import { loadConfig } from './config/index.js';
 import { HashEmbeddingModel } from './domain/vector-service/embedding.js';
 import { VectorService } from './domain/vector-service/vector.service.js';
 import { QdrantVectorRepository } from './infrastructure/qdrant/qdrant-vector.repository.js';
+import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -30,6 +33,11 @@ async function bootstrap(): Promise<void> {
 
   registerHealthRoutes(app as unknown as FastifyInstance);
   registerVectorRoutes(app as unknown as FastifyInstance, vectorService);
+  registerToolRoutes(
+    app as unknown as FastifyInstance,
+    createToolRegistry(vectorService),
+    createAuthMiddleware('vector:agent')
+  );
 
   const shutdown = async (): Promise<void> => {
     await app.close();

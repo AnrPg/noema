@@ -8,10 +8,18 @@ export interface IAuthConfig {
 }
 
 export function createAuthMiddleware(config: IAuthConfig) {
+  const authDisabled = process.env['AUTH_DISABLED'] === 'true';
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const isDevLikeEnvironment = nodeEnv === 'development' || nodeEnv === 'test';
+
+  if (authDisabled && !isDevLikeEnvironment) {
+    throw new Error('AUTH_DISABLED=true is only allowed in development or test environments');
+  }
+
   const secret = new TextEncoder().encode(config.jwtSecret);
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    if (process.env['AUTH_DISABLED'] === 'true') {
+    if (authDisabled) {
       request.user = { sub: request.headers['x-user-id'] ?? 'anonymous' };
       return;
     }
@@ -28,7 +36,15 @@ export function createAuthMiddleware(config: IAuthConfig) {
         issuer: config.issuer,
         audience: config.audience,
       });
-      request.user = payload;
+      request.user = {
+        ...(payload as Record<string, unknown>),
+        sub:
+          typeof payload['userId'] === 'string'
+            ? payload['userId']
+            : typeof payload.sub === 'string'
+              ? payload.sub
+              : 'anonymous',
+      };
     } catch {
       reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid bearer token' } });
     }

@@ -45,6 +45,8 @@ model Session {
     lessonPlan LessonPlan?
     steps      Step[]
     queueItems StepQueueItem[]
+    feedbackActions LearnerFeedbackAction[]
+    surfaceExposures AgentSurfaceExposure[]
 
     @@index([curriculumId])
     @@index([userId, lifecycleState])
@@ -122,7 +124,7 @@ model Step {
     eligibleModes      String[]           @map("eligible_modes")
     selectedMode       String             @map("selected_mode") @db.VarChar(100)
     transformationType TransformationType @map("transformation_type")
-    expectedOutcome    String             @db.VarChar(2000)
+    expectedOutcome    String             @map("expected_outcome") @db.VarChar(2000)
     evaluationType     String             @map("evaluation_type") @db.VarChar(100)
     difficulty         Float
     isRepair           Boolean            @default(false) @map("is_repair")
@@ -146,11 +148,76 @@ model Step {
     session    Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
     activities Activity[]
     queueItem  StepQueueItem?
+    answerArtifact StepAnswerArtifact?
 
     @@index([sessionId, position])
     @@index([userId, evaluatedAt])
     @@index([conceptRefs], type: Gin)
     @@map("steps")
+}
+
+model StepAnswerArtifact {
+    id     String @id @db.VarChar(50)
+    stepId String @unique @map("step_id") @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    responseShape              String @map("response_shape") @db.VarChar(100)
+    learnerAnswerSummaryText   String @map("learner_answer_summary_text") @db.VarChar(2000)
+    rawResponse                Json?  @map("raw_response")
+    rawResponseRef             String @map("raw_response_ref") @db.VarChar(100)
+    responseTimeMs             Int?   @map("response_time_ms")
+    hintRequestCount           Int    @default(0) @map("hint_request_count")
+    revisionCount              Int    @default(0) @map("revision_count")
+
+    recordedAt DateTime @default(now()) @map("recorded_at")
+    updatedAt  DateTime @updatedAt @map("updated_at")
+
+    step Step @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+    @@index([userId, recordedAt])
+    @@map("step_answer_artifacts")
+}
+
+model LearnerFeedbackAction {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    sessionId String? @map("session_id") @db.VarChar(50)
+    stepId    String? @map("step_id") @db.VarChar(50)
+
+    surface    String @db.VarChar(80)
+    actionType String @map("action_type") @db.VarChar(100)
+    noteText   String? @map("note_text") @db.VarChar(1000)
+    reasonText String? @map("reason_text") @db.VarChar(1000)
+    conceptIds String[] @map("concept_ids")
+    metadata   Json @default("{}")
+
+    createdAt DateTime @default(now()) @map("created_at")
+
+    session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+    @@index([userId, surface, createdAt])
+    @@index([sessionId, createdAt])
+    @@index([stepId])
+    @@map("learner_feedback_actions")
+}
+
+model AgentSurfaceExposure {
+    id     String @id @db.VarChar(50)
+    userId String @map("user_id") @db.VarChar(50)
+
+    sessionId String @map("session_id") @db.VarChar(50)
+    stepId    String? @map("step_id") @db.VarChar(50)
+
+    surface String @db.VarChar(80)
+    shownAt DateTime @default(now()) @map("shown_at")
+    metadata Json @default("{}")
+
+    session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+    @@index([userId, sessionId, surface, shownAt])
+    @@index([stepId])
+    @@map("agent_surface_exposures")
 }
 
 model StepQueueItem {

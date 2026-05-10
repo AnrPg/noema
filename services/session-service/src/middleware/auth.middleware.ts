@@ -19,6 +19,7 @@ export interface IAuthConfig {
   jwtSecret: string;
   issuer?: string;
   audience?: string;
+  serviceToken?: string;
 }
 
 const DEV_USER_ID_FALLBACK = 'user_devuser00000000000000';
@@ -37,6 +38,13 @@ function normalizeDevUserId(value: unknown): string {
   }
 
   return DEV_USER_ID_FALLBACK;
+}
+
+function normalizeRequestedUserId(payload: jose.JWTPayload): string {
+  if (typeof payload['userId'] === 'string' && payload['userId'].trim().length > 0) {
+    return normalizeDevUserId(payload['userId']);
+  }
+  return normalizeDevUserId(payload.sub);
 }
 
 /**
@@ -78,6 +86,28 @@ export function createAuthMiddleware(config: IAuthConfig) {
       return;
     }
 
+    const serviceTokenHeader = request.headers['x-service-token'];
+    if (
+      config.serviceToken !== undefined &&
+      config.serviceToken.trim().length > 0 &&
+      typeof serviceTokenHeader === 'string' &&
+      serviceTokenHeader === config.serviceToken
+    ) {
+      const requestedUserId = request.headers['x-user-id'];
+      if (typeof requestedUserId !== 'string' || requestedUserId.trim().length === 0) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
+          message: 'Service-token requests must include x-user-id',
+        });
+      }
+      request.user = {
+        sub: normalizeDevUserId(requestedUserId),
+        roles: ['service'],
+        scopes: ['session:read', 'session:internal:read'],
+      };
+      return;
+    }
+
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return reply.status(401).send({
@@ -96,7 +126,7 @@ export function createAuthMiddleware(config: IAuthConfig) {
       const { payload } = await jose.jwtVerify(token, secret, verifyOptions);
 
       request.user = {
-        sub: payload.sub ?? '',
+        sub: normalizeRequestedUserId(payload),
         roles: (payload['roles'] as string[]) ?? ['user'],
         scopes: (payload['scopes'] as string[]) ?? [],
       };

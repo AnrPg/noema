@@ -23,6 +23,7 @@ model Curriculum {
     updatedAt       DateTime                @updatedAt @map("updated_at")
     versions        CurriculumVersion[]
     progress        CurriculumProgress[]
+    processedEvaluationEvents CurriculumProgressEvaluationEvent[]
     proposals       CurriculumRevisionProposal[]
 
     @@index([userId, state])
@@ -148,6 +149,45 @@ model RealignmentEvidence {
 
     @@unique([curriculumId, stableNodeKey, triggerType])
     @@map("realignment_evidence")
+}
+
+model CurriculumProgressEvaluationEvent {
+    id            String   @id @db.VarChar(50)
+    curriculumId  String   @map("curriculum_id") @db.VarChar(50)
+    userId        String   @map("user_id") @db.VarChar(50)
+    stableNodeKey String   @map("stable_node_key") @db.VarChar(200)
+    evaluationId  String   @map("evaluation_id") @db.VarChar(50)
+    sourceEventId String?  @map("source_event_id") @db.VarChar(50)
+    sessionId     String   @map("session_id") @db.VarChar(50)
+    processedAt   DateTime @default(now()) @map("processed_at")
+    curriculum    Curriculum @relation(fields: [curriculumId], references: [id], onDelete: Cascade)
+
+    @@unique([curriculumId, userId, stableNodeKey, evaluationId])
+    @@index([sourceEventId])
+    @@map("curriculum_progress_evaluation_events")
+}
+
+model EventOutbox {
+    id            String   @id @db.VarChar(50)
+    eventType     String   @map("event_type") @db.VarChar(100)
+    aggregateType String   @map("aggregate_type") @db.VarChar(50)
+    aggregateId   String   @map("aggregate_id") @db.VarChar(50)
+    payload       Json
+    metadata      Json
+    publishedAt   DateTime? @map("published_at")
+    claimOwner    String?   @map("claim_owner") @db.VarChar(100)
+    claimUntil    DateTime? @map("claim_until")
+    nextAttemptAt DateTime? @map("next_attempt_at")
+    attempts      Int      @default(0)
+    lastError     String?  @map("last_error") @db.VarChar(1000)
+    createdAt     DateTime @default(now()) @map("created_at")
+    updatedAt     DateTime @updatedAt @map("updated_at")
+
+    @@index([publishedAt, createdAt])
+    @@index([attempts])
+    @@index([publishedAt, claimUntil, nextAttemptAt, createdAt])
+    @@index([claimOwner, claimUntil])
+    @@map("event_outbox")
 }
 
 enum CurriculumState {

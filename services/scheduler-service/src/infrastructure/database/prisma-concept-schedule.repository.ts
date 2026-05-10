@@ -250,6 +250,26 @@ export class PrismaConceptScheduleRepository implements IConceptScheduleReposito
     });
     return records.map(toDomainTransformation);
   }
+
+  public async findEvaluationLogs(query: {
+    userId: IConceptEvaluationLog['userId'];
+    conceptIds?: IConceptEvaluationLog['conceptId'][];
+    studyMode?: IConceptEvaluationLog['studyMode'];
+    limit: number;
+  }): Promise<IConceptEvaluationLog[]> {
+    const records = await this.prisma.conceptEvaluationLog.findMany({
+      where: {
+        userId: query.userId,
+        ...(query.conceptIds !== undefined && query.conceptIds.length > 0
+          ? { conceptId: { in: query.conceptIds } }
+          : {}),
+        ...(query.studyMode !== undefined ? { studyMode: toPrismaStudyMode(query.studyMode) } : {}),
+      },
+      orderBy: { reviewedAt: 'desc' },
+      take: query.limit,
+    });
+    return records.map(toDomainLog);
+  }
 }
 
 function toDomainState(record: PrismaConceptScheduleState): IConceptScheduleState {

@@ -57,10 +57,18 @@ export function registerSessionRoutes(
     const user = request.user as { sub?: string } | undefined;
     const ua = request.headers['user-agent'];
     const timezone = readUserTimezone(request);
+    const correlationHeader = request.headers['x-correlation-id'];
+    const idempotencyHeader = request.headers['x-idempotency-key'];
     return {
       userId: (user?.sub ?? 'anonymous') as UserId,
       correlationId:
-        (request.id as CorrelationId) || (`correlation_${Date.now()}` as CorrelationId),
+        ((typeof correlationHeader === 'string' && correlationHeader.trim().length > 0
+          ? correlationHeader
+          : request.id) as CorrelationId) ||
+        (`correlation_${Date.now()}` as CorrelationId),
+      ...(typeof idempotencyHeader === 'string' && idempotencyHeader.trim().length > 0
+        ? { idempotencyKey: idempotencyHeader.trim() }
+        : {}),
       clientIp: request.ip,
       ...(ua !== undefined ? { userAgent: ua } : {}),
       ...(timezone !== undefined ? { timezone } : {}),
@@ -211,7 +219,7 @@ export function registerSessionRoutes(
     { preHandler: authMiddleware },
     async (request, reply) => {
       try {
-        const result = await sessionService.getNextStep(
+        const result = await sessionService.getStepLoopSnapshot(
           request.params.sessionId,
           buildContext(request)
         );
@@ -283,6 +291,86 @@ export function registerSessionRoutes(
           buildContext(request)
         );
         reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  fastify.post<{ Body: unknown }>(
+    '/v1/learner-feedback-actions',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const result = await sessionService.recordLearnerFeedbackAction(
+          request.body,
+          buildContext(request)
+        );
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  fastify.get<{ Querystring: Record<string, string> }>(
+    '/v1/learner-feedback-history',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const result = await sessionService.getLearnerFeedbackHistory(
+          request.query,
+          buildContext(request)
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  fastify.get<{ Params: SessionIdParams }>(
+    '/v1/sessions/:sessionId/learner-load-state',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const result = await sessionService.getLearnerLoadState(
+          { sessionId: request.params.sessionId },
+          buildContext(request)
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  fastify.get<{ Params: SessionIdParams }>(
+    '/v1/sessions/:sessionId/exposure-budget-state',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const result = await sessionService.getExposureBudgetState(
+          { sessionId: request.params.sessionId },
+          buildContext(request)
+        );
+        reply.send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply);
+      }
+    }
+  );
+
+  fastify.post<{ Body: unknown }>(
+    '/v1/agent-surface-exposures',
+    { preHandler: authMiddleware },
+    async (request, reply) => {
+      try {
+        const result = await sessionService.recordAgentSurfaceExposure(
+          request.body,
+          buildContext(request)
+        );
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
       } catch (error) {
         handleError(error, request, reply);
       }

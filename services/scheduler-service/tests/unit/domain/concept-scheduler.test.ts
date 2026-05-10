@@ -96,6 +96,19 @@ class InMemoryConceptScheduleRepository implements IConceptScheduleRepository {
         (query.studyMode === undefined || entry.studyMode === query.studyMode)
     );
   }
+
+  public async findEvaluationLogs(query: {
+    userId: IConceptEvaluationLog['userId'];
+    conceptIds?: IConceptEvaluationLog['conceptId'][];
+    studyMode?: IConceptEvaluationLog['studyMode'];
+    limit: number;
+  }): Promise<IConceptEvaluationLog[]> {
+    return this.logs
+      .filter((log) => log.userId === query.userId)
+      .filter((log) => query.conceptIds === undefined || query.conceptIds.includes(log.conceptId))
+      .filter((log) => query.studyMode === undefined || log.studyMode === query.studyMode)
+      .slice(0, query.limit);
+  }
 }
 
 class InMemoryEventPublisher implements IEventPublisher {
@@ -111,20 +124,26 @@ class InMemoryEventPublisher implements IEventPublisher {
 }
 
 describe('SchedulerService concept-first loop', () => {
+  const userId = 'user_123456789012345678901';
+  const sessionId = 'session_123456789012345678901';
+  const conceptA = 'concept_123456789012345678901';
+  const conceptB = 'concept_abcdefabcdefabcdefabc';
+  const conceptC = 'concept_ABCDEFGHIJKLMNO123456';
+
   it('transitions one concept through new learning, reinforcement, and repair', async () => {
     const repository = new InMemoryConceptScheduleRepository();
     const publisher = new InMemoryEventPublisher();
     const service = new SchedulerService(repository, publisher, pino({ enabled: false }));
     const context = {
-      userId: 'user_123456789012345678901',
+      userId,
       correlationId: 'correlation_test',
     } as const;
 
     const base = {
-      stepId: 'step_1',
-      sessionId: 'session_1',
+      stepId: 'step_123456789012345678901',
+      sessionId,
       userId: context.userId,
-      conceptRefs: ['concept_C'],
+      conceptRefs: [conceptC],
       reasoningQuality: 0.8,
       confidenceSignal: 0.8,
       combinedScore: 0.8,
@@ -134,7 +153,11 @@ describe('SchedulerService concept-first loop', () => {
     };
 
     const first = await service.recordEvaluation(
-      { ...base, evaluationId: 'eval_1', transformation: TransformationType.RECALL },
+      {
+        ...base,
+        evaluationId: 'eval_123456789012345678901',
+        transformation: TransformationType.RECALL,
+      },
       context
     );
     expect(first[0]?.previousQueue).toBe(SchedulerQueue.NEW_LEARNING);
@@ -143,8 +166,8 @@ describe('SchedulerService concept-first loop', () => {
     const second = await service.recordEvaluation(
       {
         ...base,
-        evaluationId: 'eval_2',
-        stepId: 'step_2',
+        evaluationId: 'eval_abcdefabcdefabcdefabc',
+        stepId: 'step_abcdefabcdefabcdefabc',
         recordedAt: '2026-05-03T10:00:00.000Z',
         transformation: TransformationType.EXPLANATION,
       },
@@ -155,8 +178,8 @@ describe('SchedulerService concept-first loop', () => {
     const third = await service.recordEvaluation(
       {
         ...base,
-        evaluationId: 'eval_3',
-        stepId: 'step_3',
+        evaluationId: 'eval_ABCDEFGHIJKLMNO123456',
+        stepId: 'step_ABCDEFGHIJKLMNO123456',
         correct: false,
         reasoningQuality: 0.2,
         combinedScore: 0.2,
@@ -181,16 +204,16 @@ describe('SchedulerService concept-first loop', () => {
     const publisher = new InMemoryEventPublisher();
     const service = new SchedulerService(repository, publisher, pino({ enabled: false }));
     const context = {
-      userId: 'user_123456789012345678901',
+      userId,
       correlationId: 'correlation_test',
     } as const;
 
     const input = {
-      evaluationId: 'eval_duplicate',
-      stepId: 'step_duplicate',
-      sessionId: 'session_1',
+      evaluationId: 'eval_123456789012345678901',
+      stepId: 'step_123456789012345678901',
+      sessionId,
       userId: context.userId,
-      conceptRefs: ['concept_C'],
+      conceptRefs: [conceptC],
       reasoningQuality: 0.8,
       confidenceSignal: 0.8,
       combinedScore: 0.8,
@@ -215,17 +238,17 @@ describe('SchedulerService concept-first loop', () => {
     const publisher = new InMemoryEventPublisher();
     const service = new SchedulerService(repository, publisher, pino({ enabled: false }));
     const context = {
-      userId: 'user_123456789012345678901',
+      userId,
       correlationId: 'correlation_test',
     } as const;
 
     const results = await service.recordEvaluation(
       {
-        evaluationId: 'eval_multi',
-        stepId: 'step_multi',
-        sessionId: 'session_1',
+        evaluationId: 'eval_123456789012345678901',
+        stepId: 'step_123456789012345678901',
+        sessionId,
         userId: context.userId,
-        conceptRefs: ['concept_A', 'concept_B'],
+        conceptRefs: [conceptA, conceptB],
         reasoningQuality: 0.8,
         confidenceSignal: 0.8,
         combinedScore: 0.8,
@@ -238,10 +261,10 @@ describe('SchedulerService concept-first loop', () => {
     );
 
     expect(results).toHaveLength(2);
-    expect(repository.logs.map((log) => log.conceptId).sort()).toEqual(['concept_A', 'concept_B']);
+    expect(repository.logs.map((log) => log.conceptId).sort()).toEqual([conceptA, conceptB]);
     expect(repository.transformations.map((entry) => entry.conceptId).sort()).toEqual([
-      'concept_A',
-      'concept_B',
+      conceptA,
+      conceptB,
     ]);
     expect(publisher.events).toHaveLength(2);
   });
@@ -251,17 +274,17 @@ describe('SchedulerService concept-first loop', () => {
     const publisher = new InMemoryEventPublisher();
     const service = new SchedulerService(repository, publisher, pino({ enabled: false }));
     const context = {
-      userId: 'user_123456789012345678901',
+      userId,
       correlationId: 'correlation_test',
     } as const;
 
     const results = await service.recordEvaluation(
       {
-        evaluationId: 'eval_without_transformation',
-        stepId: 'step_without_transformation',
-        sessionId: 'session_1',
+        evaluationId: 'eval_123456789012345678901',
+        stepId: 'step_123456789012345678901',
+        sessionId,
         userId: context.userId,
-        conceptRefs: ['concept_C'],
+        conceptRefs: [conceptC],
         reasoningQuality: 0.8,
         confidenceSignal: 0.8,
         combinedScore: 0.8,
@@ -272,9 +295,54 @@ describe('SchedulerService concept-first loop', () => {
       context
     );
 
-    expect(results[0]?.state.conceptId).toBe('concept_C');
+    expect(results[0]?.state.conceptId).toBe(conceptC);
     expect(repository.logs).toHaveLength(1);
     expect(repository.transformations).toHaveLength(0);
+  });
+
+  it('projects calibration cadence and drill history without raw drill records', async () => {
+    const repository = new InMemoryConceptScheduleRepository();
+    const publisher = new InMemoryEventPublisher();
+    const service = new SchedulerService(repository, publisher, pino({ enabled: false }));
+    const context = {
+      userId,
+      correlationId: 'correlation_test',
+    } as const;
+
+    await service.recordEvaluation(
+      {
+        evaluationId: 'eval_123456789012345678901',
+        stepId: 'step_123456789012345678901',
+        sessionId,
+        userId: context.userId,
+        conceptRefs: [conceptC],
+        reasoningQuality: 0.2,
+        confidenceSignal: 0.9,
+        combinedScore: 0.2,
+        correct: false,
+        studyMode: StudyMode.KNOWLEDGE_GAINING,
+        recordedAt: '2026-05-02T10:00:00.000Z',
+      },
+      context
+    );
+
+    const projection = await service.getConceptCalibrationProjection(
+      context.userId,
+      conceptC,
+      StudyMode.KNOWLEDGE_GAINING
+    );
+    const drills = await service.getPriorCalibrationDrillHistory(context, {
+      conceptIds: [conceptC],
+      studyMode: StudyMode.KNOWLEDGE_GAINING,
+    });
+    const cadence = await service.getInterventionCadenceState(context, {
+      conceptIds: [conceptC],
+      surfaces: ['calibration_coach'],
+    });
+
+    expect(projection.scheduleProjectionText).toContain('repair queue');
+    expect(drills.lastDrillOutcomeText).toContain('again');
+    expect(cadence.coachingFrequencyBudgetText).toContain('two notes per session');
   });
 });
 

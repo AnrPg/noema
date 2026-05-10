@@ -59,16 +59,14 @@ export class Email {
    * Get the domain portion of the email.
    */
   get domain(): string {
-    // Email is validated to contain @
-    return this._value.split('@')[1]!;
+    return this._value.slice(this._value.indexOf('@') + 1);
   }
 
   /**
    * Get the local portion of the email (before @).
    */
   get local(): string {
-    // Email is validated to contain @
-    return this._value.split('@')[0]!;
+    return this._value.slice(0, this._value.indexOf('@'));
   }
 
   /**
@@ -172,7 +170,7 @@ export const PasswordSchema = z
   .refine((val) => /[A-Z]/.test(val), 'Password must contain an uppercase letter')
   .refine((val) => /[0-9]/.test(val), 'Password must contain a number')
   .refine(
-    (val) => /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(val),
+    (val) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(val),
     'Password must contain a special character'
   )
   .describe('Password (8-128 chars, mixed case, number, special char)');
@@ -228,7 +226,7 @@ export class Password {
     if (/[a-z]/.test(this._value)) score += 10;
     if (/[A-Z]/.test(this._value)) score += 10;
     if (/[0-9]/.test(this._value)) score += 10;
-    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(this._value)) score += 20;
+    if (/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(this._value)) score += 20;
 
     return Math.min(score, 100);
   }

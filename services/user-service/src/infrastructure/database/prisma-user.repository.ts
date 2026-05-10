@@ -104,6 +104,14 @@ function mergePomodoroSettings(
   };
 }
 
+function readJsonArray<T>(value: Prisma.JsonValue): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return value !== undefined && value !== '';
+}
+
 // ============================================================================
 // Repository Implementation
 // ============================================================================
@@ -196,10 +204,10 @@ export class PrismaUserRepository implements IUserRepository {
   async create(input: ICreateUserInput & { id: UserId; passwordHash?: string }): Promise<IUser> {
     const profile: IUserProfile = {
       ...DEFAULT_PROFILE,
-      displayName: input.displayName || input.username,
+      displayName: isNonEmptyString(input.displayName) ? input.displayName : input.username,
       languages: input.languages.length > 0 ? input.languages : [Language.EN],
-      timezone: input.timezone || 'UTC',
-      country: input.country || null,
+      timezone: input.timezone ?? 'UTC',
+      country: input.country ?? null,
     };
     const persistedProfile = {
       ...profile,
@@ -215,7 +223,8 @@ export class PrismaUserRepository implements IUserRepository {
         status: UserStatus.ACTIVE,
         emailVerified: false,
         roles: [UserRole.LEARNER],
-        authProviders: input.authProvider ? [input.authProvider] : [AuthProvider.LOCAL],
+        authProviders:
+          input.authProvider !== undefined ? [input.authProvider] : [AuthProvider.LOCAL],
         profile: persistedProfile as unknown as Prisma.JsonObject,
         settings: DEFAULT_SETTINGS as unknown as Prisma.JsonObject,
         mfaEnabled: false,
@@ -266,7 +275,7 @@ export class PrismaUserRepository implements IUserRepository {
       throw new VersionConflictError(version, existing.version);
     }
 
-    const currentSettings = existing.settings as unknown as IUserSettings;
+    const currentSettings = existing.settings as unknown as Partial<IUserSettings>;
     const newSettings: IUserSettings = {
       ...DEFAULT_SETTINGS,
       ...currentSettings,
@@ -274,26 +283,26 @@ export class PrismaUserRepository implements IUserRepository {
       pomodoro: mergePomodoroSettings(currentSettings.pomodoro, input.pomodoro),
       cognitivePolicy: {
         ...DEFAULT_SETTINGS.cognitivePolicy,
-        ...(currentSettings.cognitivePolicy ?? {}),
+        ...currentSettings.cognitivePolicy,
         ...(input.cognitivePolicy ?? {}),
         pacingPolicy: {
           ...DEFAULT_SETTINGS.cognitivePolicy.pacingPolicy,
-          ...(currentSettings.cognitivePolicy?.pacingPolicy ?? {}),
+          ...currentSettings.cognitivePolicy?.pacingPolicy,
           ...(input.cognitivePolicy?.pacingPolicy ?? {}),
         },
         hintPolicy: {
           ...DEFAULT_SETTINGS.cognitivePolicy.hintPolicy,
-          ...(currentSettings.cognitivePolicy?.hintPolicy ?? {}),
+          ...currentSettings.cognitivePolicy?.hintPolicy,
           ...(input.cognitivePolicy?.hintPolicy ?? {}),
         },
         commitPolicy: {
           ...DEFAULT_SETTINGS.cognitivePolicy.commitPolicy,
-          ...(currentSettings.cognitivePolicy?.commitPolicy ?? {}),
+          ...currentSettings.cognitivePolicy?.commitPolicy,
           ...(input.cognitivePolicy?.commitPolicy ?? {}),
         },
         reflectionPolicy: {
           ...DEFAULT_SETTINGS.cognitivePolicy.reflectionPolicy,
-          ...(currentSettings.cognitivePolicy?.reflectionPolicy ?? {}),
+          ...currentSettings.cognitivePolicy?.reflectionPolicy,
           ...(input.cognitivePolicy?.reflectionPolicy ?? {}),
         },
       },
@@ -320,8 +329,9 @@ export class PrismaUserRepository implements IUserRepository {
     if (!existing) throw new Error(`User not found: ${id}`);
 
     // Build updated password change history
-    let passwordChangeHistory =
-      (existing.passwordChangeHistory as unknown as IPasswordChangeHistoryEntry[]) || [];
+    let passwordChangeHistory = readJsonArray<IPasswordChangeHistoryEntry>(
+      existing.passwordChangeHistory
+    );
     const newEntry: IPasswordChangeHistoryEntry = {
       timestamp: new Date().toISOString(),
       changedBy,
@@ -380,8 +390,8 @@ export class PrismaUserRepository implements IUserRepository {
     if (!existing) return;
 
     // Build updated login history
-    let loginHistory = (existing.loginHistory as unknown as ILoginHistoryEntry[]) || [];
-    if (loginEntry) {
+    let loginHistory = readJsonArray<ILoginHistoryEntry>(existing.loginHistory);
+    if (loginEntry !== undefined) {
       loginHistory = [loginEntry, ...loginHistory].slice(0, MAX_HISTORY_ITEMS);
     }
 
@@ -391,7 +401,7 @@ export class PrismaUserRepository implements IUserRepository {
         lastLoginAt: new Date(data.lastLoginAt),
         loginCount: data.loginCount,
         failedLoginAttempts: data.failedLoginAttempts,
-        lockedUntil: data.lockedUntil ? new Date(data.lockedUntil) : null,
+        lockedUntil: data.lockedUntil !== null ? new Date(data.lockedUntil) : null,
         loginHistory: loginHistory as unknown as Prisma.JsonArray,
       },
     });
@@ -405,9 +415,8 @@ export class PrismaUserRepository implements IUserRepository {
     if (!existing) return 0;
 
     // Build updated failed login history
-    let failedLoginHistory =
-      (existing.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];
-    if (entry) {
+    let failedLoginHistory = readJsonArray<IFailedLoginHistoryEntry>(existing.failedLoginHistory);
+    if (entry !== undefined) {
       failedLoginHistory = [entry, ...failedLoginHistory].slice(0, MAX_HISTORY_ITEMS);
     }
 
@@ -454,7 +463,7 @@ export class PrismaUserRepository implements IUserRepository {
 
   async removeAuthProvider(id: UserId, provider: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id } });
-    if (user) {
+    if (user !== null) {
       const providers = user.authProviders.filter((p) => p !== provider);
       await this.prisma.user.update({
         where: { id },
@@ -500,7 +509,7 @@ export class PrismaUserRepository implements IUserRepository {
 
   async removeRole(id: UserId, role: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id } });
-    if (user) {
+    if (user !== null) {
       const roles = user.roles.filter((r) => r !== role);
       await this.prisma.user.update({
         where: { id },
@@ -555,35 +564,35 @@ export class PrismaUserRepository implements IUserRepository {
     };
 
     // Core filters
-    if (filters.status) {
-      where.status = filters.status as UserStatus;
+    if (filters.status !== undefined) {
+      where.status = filters.status;
     }
 
     if (filters.emailVerified !== undefined) {
       where.emailVerified = filters.emailVerified;
     }
 
-    if (filters.roles && filters.roles.length > 0) {
+    if (filters.roles !== undefined && filters.roles.length > 0) {
       where.roles = { hasSome: filters.roles };
     }
 
-    if (filters.authProvider) {
+    if (filters.authProvider !== undefined) {
       where.authProviders = { has: filters.authProvider };
     }
 
     // Profile filters (using JSON path queries)
-    if (filters.username) {
+    if (isNonEmptyString(filters.username)) {
       where.username = { contains: filters.username, mode: 'insensitive' };
     }
 
-    if (filters.displayName) {
+    if (isNonEmptyString(filters.displayName)) {
       where.profile = {
         path: ['displayName'],
         string_contains: filters.displayName,
       };
     }
 
-    if (filters.country) {
+    if (isNonEmptyString(filters.country)) {
       where.profile = {
         ...(where.profile as object),
         path: ['country'],
@@ -591,7 +600,7 @@ export class PrismaUserRepository implements IUserRepository {
       };
     }
 
-    if (filters.language) {
+    if (filters.language !== undefined) {
       where.profile = {
         ...(where.profile as object),
         path: ['languages'],
@@ -599,7 +608,7 @@ export class PrismaUserRepository implements IUserRepository {
       };
     }
 
-    if (filters.timezone) {
+    if (isNonEmptyString(filters.timezone)) {
       where.profile = {
         ...(where.profile as object),
         path: ['timezone'],
@@ -608,32 +617,32 @@ export class PrismaUserRepository implements IUserRepository {
     }
 
     // Date range filters
-    if (filters.createdAfter || filters.createdBefore) {
+    if (filters.createdAfter !== undefined || filters.createdBefore !== undefined) {
       where.createdAt = {};
-      if (filters.createdAfter) {
+      if (filters.createdAfter !== undefined) {
         (where.createdAt as Prisma.DateTimeFilter).gte = new Date(filters.createdAfter);
       }
-      if (filters.createdBefore) {
+      if (filters.createdBefore !== undefined) {
         (where.createdAt as Prisma.DateTimeFilter).lte = new Date(filters.createdBefore);
       }
     }
 
-    if (filters.updatedAfter || filters.updatedBefore) {
+    if (filters.updatedAfter !== undefined || filters.updatedBefore !== undefined) {
       where.updatedAt = {};
-      if (filters.updatedAfter) {
+      if (filters.updatedAfter !== undefined) {
         (where.updatedAt as Prisma.DateTimeFilter).gte = new Date(filters.updatedAfter);
       }
-      if (filters.updatedBefore) {
+      if (filters.updatedBefore !== undefined) {
         (where.updatedAt as Prisma.DateTimeFilter).lte = new Date(filters.updatedBefore);
       }
     }
 
-    if (filters.lastLoginAfter || filters.lastLoginBefore) {
+    if (filters.lastLoginAfter !== undefined || filters.lastLoginBefore !== undefined) {
       where.lastLoginAt = {};
-      if (filters.lastLoginAfter) {
+      if (filters.lastLoginAfter !== undefined) {
         (where.lastLoginAt as Prisma.DateTimeNullableFilter).gte = new Date(filters.lastLoginAfter);
       }
-      if (filters.lastLoginBefore) {
+      if (filters.lastLoginBefore !== undefined) {
         (where.lastLoginAt as Prisma.DateTimeNullableFilter).lte = new Date(
           filters.lastLoginBefore
         );
@@ -641,7 +650,7 @@ export class PrismaUserRepository implements IUserRepository {
     }
 
     // Full-text search
-    if (filters.search) {
+    if (isNonEmptyString(filters.search)) {
       where.OR = [
         { username: { contains: filters.search, mode: 'insensitive' } },
         { email: { contains: filters.search, mode: 'insensitive' } },
@@ -669,11 +678,11 @@ export class PrismaUserRepository implements IUserRepository {
       ...DEFAULT_SETTINGS,
       ...((user.settings as unknown as Partial<IUserSettings> | null) ?? {}),
     } satisfies IUserSettings;
-    const loginHistory = (user.loginHistory as unknown as ILoginHistoryEntry[]) || [];
-    const failedLoginHistory =
-      (user.failedLoginHistory as unknown as IFailedLoginHistoryEntry[]) || [];
-    const passwordChangeHistory =
-      (user.passwordChangeHistory as unknown as IPasswordChangeHistoryEntry[]) || [];
+    const loginHistory = readJsonArray<ILoginHistoryEntry>(user.loginHistory);
+    const failedLoginHistory = readJsonArray<IFailedLoginHistoryEntry>(user.failedLoginHistory);
+    const passwordChangeHistory = readJsonArray<IPasswordChangeHistoryEntry>(
+      user.passwordChangeHistory
+    );
 
     return {
       id: user.id as UserId,
@@ -686,13 +695,13 @@ export class PrismaUserRepository implements IUserRepository {
       authProviders: user.authProviders as AuthProvider[],
       profile,
       settings,
-      lastLoginAt: user.lastLoginAt?.toISOString() || null,
+      lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
       loginHistory,
       loginCount: user.loginCount,
       failedLoginAttempts: user.failedLoginAttempts,
       failedLoginHistory,
-      lockedUntil: user.lockedUntil?.toISOString() || null,
-      passwordChangedAt: user.passwordChangedAt?.toISOString() || null,
+      lockedUntil: user.lockedUntil?.toISOString() ?? null,
+      passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
       passwordChangeHistory,
       mfaEnabled: user.mfaEnabled,
       mfaSecret: user.mfaSecret,
@@ -700,9 +709,9 @@ export class PrismaUserRepository implements IUserRepository {
       usernameChangedAt: user.usernameChangedAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
-      deletedAt: user.deletedAt?.toISOString() || null,
-      createdBy: user.createdBy || '',
-      updatedBy: user.updatedBy || '',
+      deletedAt: user.deletedAt?.toISOString() ?? null,
+      createdBy: user.createdBy ?? '',
+      updatedBy: user.updatedBy ?? '',
       version: user.version,
     };
   }

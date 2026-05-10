@@ -45,12 +45,12 @@ class FakeGuardianRepository implements IGuardianRepository {
 
 const ids = {
   userId: 'user_ABCDEFGHIJKLMNOPQRSTU' as UserId,
-  sessionId: 'session_ABCDEFGHIJKLMNOPQ' as SessionId,
-  lessonPlanId: 'lesson_ABCDEFGHIJKLMNOP' as LessonPlanId,
-  goalId: 'goal_ABCDEFGHIJKLMNOPQRS' as GoalId,
-  stepId: 'step_ABCDEFGHIJKLMNOPQRS' as StepId,
-  stepId2: 'step_BBCDEFGHIJKLMNOPQRST' as StepId,
-  conceptId: 'concept_ABCDEFGHIJKLMNOP' as ConceptId,
+  sessionId: 'session_ABCDEFGHIJKLMNOPQRSTU' as SessionId,
+  lessonPlanId: 'lesson_ABCDEFGHIJKLMNOPQRSTU' as LessonPlanId,
+  goalId: 'goal_ABCDEFGHIJKLMNOPQRSTU' as GoalId,
+  stepId: 'step_ABCDEFGHIJKLMNOPQRSTU' as StepId,
+  stepId2: 'step_BBCDEFGHIJKLMNOPQRSTU' as StepId,
+  conceptId: 'concept_ABCDEFGHIJKLMNOPQRSTU' as ConceptId,
   correlationId: 'correlation_ABCDEFGHIJ' as CorrelationId,
 };
 
@@ -160,7 +160,7 @@ describe('PedagogyGuardianService', () => {
             ...validPlan().goals,
             {
               ...validPlan().goals[0],
-              id: 'goal_BBCDEFGHIJKLMNOPQRS' as GoalId,
+              id: 'goal_BBCDEFGHIJKLMNOPQRSTU' as GoalId,
               type: GoalType.ACQUISITION,
             },
           ],

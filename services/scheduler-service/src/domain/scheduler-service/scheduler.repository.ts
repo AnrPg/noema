@@ -35,4 +35,11 @@ export interface IConceptScheduleRepository {
   findTransformationHistory(
     query: ITransformationHistoryQuery
   ): Promise<IConceptTransformationHistory[]>;
+
+  findEvaluationLogs(query: {
+    userId: UserId;
+    conceptIds?: ConceptId[];
+    studyMode?: StudyMode;
+    limit: number;
+  }): Promise<IConceptEvaluationLog[]>;
 }

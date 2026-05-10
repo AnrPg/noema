@@ -86,6 +86,57 @@ describe('curriculum DAG validation', () => {
       validateCurriculumDag(unanchored);
     }).toThrow(/anchor/);
   });
+
+  it('accepts branch-aware edge semantics in an acyclic graph', () => {
+    const branchGraph: CurriculumVersionGraph = {
+      ...graph,
+      nodes: [
+        {
+          ...graph.nodes[0],
+          branchInfo: { pathRole: 'foundation', isMainPath: true },
+        },
+        {
+          ...graph.nodes[1],
+          id: 'cnode_323456789012345678901' as never,
+          stableNodeKey: 'focus-probability',
+          branchInfo: {
+            pathRole: 'focus_area',
+            branchGroupKey: 'branch_probability',
+            branchEntryStrategy: 'learner_choice',
+            isMainPath: false,
+          },
+        },
+        {
+          ...graph.nodes[1],
+          id: 'cnode_423456789012345678901' as never,
+          stableNodeKey: 'focus-geometry',
+          branchInfo: {
+            pathRole: 'focus_area',
+            branchGroupKey: 'branch_geometry',
+            branchEntryStrategy: 'learner_choice',
+            isMainPath: false,
+          },
+        },
+      ],
+      edges: [
+        {
+          ...graph.edges[0],
+          toNodeId: 'cnode_323456789012345678901' as never,
+          type: CurriculumEdgeType.BRANCH_OPTION,
+        },
+        {
+          ...graph.edges[0],
+          id: 'cedge_223456789012345678901' as never,
+          toNodeId: 'cnode_423456789012345678901' as never,
+          type: CurriculumEdgeType.BRANCH_OPTION,
+        },
+      ],
+    };
+
+    expect(() => {
+      validateCurriculumDag(branchGraph);
+    }).not.toThrow();
+  });
 });
 
 describe('frontier and slice composition', () => {
@@ -123,6 +174,54 @@ describe('frontier and slice composition', () => {
       'linear-equations',
       'algebra-basics',
     ]);
+  });
+
+  it('prefers the learner active branch and returns branch slice metadata', () => {
+    const frontier = [
+      {
+        ...graph.nodes[0],
+        stableNodeKey: 'probability-path',
+        branchInfo: {
+          pathRole: 'focus_area',
+          branchGroupKey: 'branch_probability',
+          branchEntryStrategy: 'learner_choice',
+          isMainPath: false,
+        },
+      },
+      {
+        ...graph.nodes[1],
+        stableNodeKey: 'geometry-path',
+        traversalWeight: 5,
+        branchInfo: {
+          pathRole: 'focus_area',
+          branchGroupKey: 'branch_geometry',
+          branchEntryStrategy: 'learner_choice',
+          isMainPath: false,
+        },
+      },
+    ];
+    const slice = composeSessionSlice(
+      frontier,
+      [],
+      [],
+      { maxNewNodes: 2, maxNodes: 2, preferredBranchGroupKeys: ['branch_geometry'] },
+      [
+        {
+          branchGroupKey: 'branch_geometry',
+          selectedPathRole: 'focus_area',
+          selectedNodeKey: 'geometry-path',
+          selectionSource: 'learner_progress',
+          selectedAt: '2026-05-09T10:00:00.000Z',
+          lastConfirmedAt: '2026-05-09T10:00:00.000Z',
+          driftState: 'on_path',
+        },
+      ]
+    );
+
+    expect(slice.selectedNodes[0]?.stableNodeKey).toBe('geometry-path');
+    expect(slice.selectedBranchGroupKeys).toContain('branch_geometry');
+    expect(slice.branchDecisionState).toBe('on_path');
+    expect(slice.selectionReason).toMatch(/preferred branch/i);
   });
 });
 

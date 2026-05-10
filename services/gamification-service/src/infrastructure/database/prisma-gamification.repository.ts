@@ -16,7 +16,7 @@ import type {
 import type { ISessionCompletedPayload } from '@noema/events/session';
 import { ID_PREFIXES, type ConceptId, type StudyMode, type UserId } from '@noema/types';
 import { nanoid } from 'nanoid';
-import type { Prisma, PrismaClient } from '../../../generated/prisma/index.js';
+import { Prisma, type PrismaClient } from '../../../generated/prisma/index.js';
 import {
   buildConceptStabilityBadge,
   computeAverageReasoning,
@@ -54,12 +54,12 @@ export class PrismaGamificationRepository implements IGamificationRepository {
     context: IProcessingContext,
     config: IGamificationConfig
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    await this.serializableTransaction(async (tx) => {
       if (!(await this.claimEvent(tx, context))) return;
       const snapshot = await this.ensureSnapshot(
         tx,
         payload.userId,
-        payload.studyMode ?? 'knowledge_gaining'
+        payload.studyMode
       );
       const day = isoDay(new Date().toISOString());
       const streakDay = await tx.gamificationStreakDay.upsert({
@@ -483,6 +483,34 @@ export class PrismaGamificationRepository implements IGamificationRepository {
       },
     });
     return true;
+  }
+
+  private async serializableTransaction<T>(
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    maxAttempts = 3
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(fn, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        lastError = error;
+        if (!this.isRetryableTransactionError(error) || attempt === maxAttempts) {
+          throw error;
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  private isRetryableTransactionError(error: unknown): boolean {
+    if (error !== null && typeof error === 'object' && 'code' in error) {
+      const code = (error as { code?: string }).code;
+      return code === 'P2034' || code === 'P2002';
+    }
+    return false;
   }
 
   private async ensureSnapshot(

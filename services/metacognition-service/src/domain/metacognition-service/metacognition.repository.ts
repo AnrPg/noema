@@ -19,4 +19,11 @@ export interface IMetacognitionRepository {
     conceptId: ConceptId,
     studyMode: StudyMode
   ): Promise<IReasoningAverage | null>;
+  findRecentEvaluations(query: {
+    userId: UserId;
+    conceptIds?: ConceptId[];
+    studyMode?: StudyMode;
+    since?: string;
+    limit: number;
+  }): Promise<IEvaluation[]>;
 }

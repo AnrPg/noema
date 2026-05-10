@@ -1,15 +1,37 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type {
+  CurriculumBranchDriftState,
+  CurriculumBranchEntryStrategy,
   ConceptId,
   CurriculumEdgeId,
   CurriculumEdgeType,
   CurriculumNodeId,
   CurriculumNodeRuntimeState,
+  CurriculumPathRole,
   CurriculumVersionId,
   RevisionChangeKind,
   RevisionChangeState,
   SessionId,
 } from '@noema/types';
+
+export interface CurriculumBranchInfo {
+  pathRole?: CurriculumPathRole | undefined;
+  branchGroupKey?: string | undefined;
+  branchEntryStrategy?: CurriculumBranchEntryStrategy | undefined;
+  branchExitTargets?: string[] | undefined;
+  focusTags?: string[] | undefined;
+  isMainPath?: boolean | undefined;
+}
+
+export interface CurriculumBranchState {
+  branchGroupKey: string;
+  selectedPathRole?: CurriculumPathRole | undefined;
+  selectedNodeKey?: string | undefined;
+  selectionSource?: string | undefined;
+  selectedAt?: Date | string | undefined;
+  lastConfirmedAt?: Date | string | undefined;
+  driftState: CurriculumBranchDriftState;
+}
 
 export interface CurriculumNode {
   id: CurriculumNodeId;
@@ -22,6 +44,7 @@ export interface CurriculumNode {
   stabilityThreshold: number;
   estimatedSessions: number;
   traversalWeight: number;
+  branchInfo?: CurriculumBranchInfo | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
@@ -60,6 +83,7 @@ export interface ScheduleSnapshot {
 export interface SessionSlicePolicy {
   maxNewNodes: number;
   maxNodes: number;
+  preferredBranchGroupKeys?: string[] | undefined;
 }
 
 export interface CompletionPolicy {

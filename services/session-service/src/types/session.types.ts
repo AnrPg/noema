@@ -2,7 +2,11 @@
  * @noema/session-service - Step-first service-internal types.
  */
 
-import type { ISevenFrameTraceDto } from '@noema/contracts';
+import type {
+  IAgentSurfaceExposureDto,
+  ILearnerFeedbackActionDto,
+  ISevenFrameTraceDto,
+} from '@noema/contracts';
 import type {
   ActivityId,
   ConceptId,
@@ -210,7 +214,8 @@ export interface IStartSessionInput {
 export interface ICreateLessonPlanInput {
   curriculumId?: CurriculumId | undefined;
   curriculumVersionId?: CurriculumVersionId | undefined;
-  selectedNodeIds?: CurriculumNodeId[] | undefined;
+  selectedNodeIds: CurriculumNodeId[];
+  conceptRefs?: ConceptId[] | undefined;
   rigorLevel?: RigorLevel | undefined;
   topic?: string | undefined;
   prerequisites?: ConceptId[] | undefined;
@@ -218,7 +223,9 @@ export interface ICreateLessonPlanInput {
   sourceCategories?: string[] | undefined;
   assessmentStrategy?: string | undefined;
   adaptationRules?: string | undefined;
+  goals?: ICreateGoalInput[] | undefined;
   steps?: IPlannedStepInput[] | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface ICreateGoalInput {
@@ -266,6 +273,29 @@ export interface IAnswerStepInput {
   trace: ISevenFrameTraceDto;
   responseTimeMs?: number;
 }
+
+export interface IStepAnswerArtifact {
+  id: string;
+  stepId: StepId;
+  userId: UserId;
+  responseShape: string;
+  learnerAnswerSummaryText: string;
+  rawResponse: unknown;
+  rawResponseRef: string;
+  responseTimeMs: number | null;
+  hintRequestCount: number;
+  revisionCount: number;
+  recordedAt: string;
+  updatedAt: string;
+}
+
+export type ILearnerFeedbackAction = ILearnerFeedbackActionDto & {
+  metadata: Record<string, unknown>;
+};
+
+export type IAgentSurfaceExposure = IAgentSurfaceExposureDto & {
+  metadata: Record<string, unknown>;
+};
 
 export interface ISkipStepInput {
   reason?: string;

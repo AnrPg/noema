@@ -4,6 +4,8 @@ import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
 
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes, registerSchedulerRoutes } from './api/rest/index.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
@@ -43,6 +45,7 @@ async function bootstrap(): Promise<void> {
   const repository = new PrismaConceptScheduleRepository(prisma);
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
   const schedulerService = new SchedulerService(repository, eventPublisher, logger);
+  const toolRegistry = createToolRegistry(schedulerService);
 
   const consumers: MetacognitionEvaluationRecordedConsumer[] = [];
   const consumerRedisClients: Redis[] = [];
@@ -132,6 +135,7 @@ async function bootstrap(): Promise<void> {
     deadLetterStreamKey: 'noema:dlq:scheduler-service:metacognition-evaluation-recorded',
   });
   await registerSchedulerRoutes(fastify as unknown as FastifyInstance, schedulerService);
+  registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry);
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');

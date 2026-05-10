@@ -1,5 +1,6 @@
 import type {
   ConceptId,
+  CurriculumNodeId,
   EpistemicMode,
   EvaluationId,
   LearningInterventionType,
@@ -24,6 +25,7 @@ export interface IRecordEvaluationInput {
   sessionId: SessionId;
   userId: UserId;
   conceptRefs: ConceptId[];
+  selectedNodeIds: CurriculumNodeId[];
   correct: boolean;
   selfRating: StepSelfRating;
   trace: ISevenFrameTraceDto;
@@ -47,6 +49,8 @@ export interface ITrigger {
   severity: number;
   detectedFromFrames: string[];
   conceptRefs: ConceptId[];
+  selectedNodeIds: CurriculumNodeId[];
+  studyMode: StudyMode;
   stepId?: StepId;
   sessionId?: SessionId;
   misconceptionRef: string;
@@ -63,6 +67,7 @@ export interface IEvaluation {
   sessionId: SessionId;
   userId: UserId;
   conceptRefs: ConceptId[];
+  selectedNodeIds: CurriculumNodeId[];
   correct: boolean;
   correctnessScore: number;
   selfRating: StepSelfRating;

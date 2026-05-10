@@ -97,7 +97,7 @@ export interface IEvaluationRecordedInput {
   confidenceSignal: number;
   combinedScore: number;
   correct: boolean;
-  studyMode?: StudyMode;
+  studyMode: StudyMode;
   transformation?: TransformationType;
   recordedAt?: string;
 }

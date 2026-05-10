@@ -1,17 +1,25 @@
-import { SchedulerQueueSchema, StudyModeSchema, TransformationTypeSchema } from '@noema/validation';
+import {
+  ConceptIdSchema,
+  EvaluationIdSchema,
+  SessionIdSchema,
+  StepIdSchema,
+  StudyModeSchema,
+  UserIdSchema,
+} from '@noema/learning-kernel';
+import { SchedulerQueueSchema, TransformationTypeSchema } from '@noema/validation';
 import { z } from 'zod';
 
 export const EvaluationRecordedInputSchema = z.object({
-  evaluationId: z.string().min(1).max(100),
-  stepId: z.string().min(1).max(100),
-  sessionId: z.string().min(1).max(100),
-  userId: z.string().min(1).max(100),
-  conceptRefs: z.array(z.string().min(1).max(100)).min(1),
+  evaluationId: EvaluationIdSchema,
+  stepId: StepIdSchema,
+  sessionId: SessionIdSchema,
+  userId: UserIdSchema,
+  conceptRefs: z.array(ConceptIdSchema).min(1),
   reasoningQuality: z.number().min(0).max(1),
   confidenceSignal: z.number().min(0).max(1),
   combinedScore: z.number().min(0).max(1),
   correct: z.boolean(),
-  studyMode: StudyModeSchema.optional(),
+  studyMode: StudyModeSchema,
   transformation: TransformationTypeSchema.optional(),
   recordedAt: z.string().datetime().optional(),
 });
@@ -21,6 +29,11 @@ export const GetDueConceptsQuerySchema = z.object({
   queue: SchedulerQueueSchema.optional(),
   asOf: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
+export const GetConceptScheduleInputSchema = z.object({
+  conceptId: ConceptIdSchema,
+  studyMode: StudyModeSchema,
 });
 
 export const GetTransformationHistoryQuerySchema = z.object({

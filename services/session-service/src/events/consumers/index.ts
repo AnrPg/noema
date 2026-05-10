@@ -8,3 +8,4 @@
 
 export { UserDeletedConsumer } from './user-deleted.consumer.js';
 export { MetacognitionTriggerConsumer } from './metacognition-trigger.consumer.js';
+export { MetacognitionEvaluationRecordedConsumer } from './metacognition-evaluation-recorded.consumer.js';

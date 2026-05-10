@@ -6,7 +6,7 @@ import type {
   ICreateCurriculumInput,
   IRealignmentEvidence,
 } from '@noema/contracts';
-import { CurriculumOriginMode, CurriculumState, RevisionChangeState } from '@noema/types';
+import { CurriculumOriginMode, CurriculumState, ID_PREFIXES, RevisionChangeState } from '@noema/types';
 import type {
   CurriculumId,
   CurriculumNodeRuntimeState,
@@ -16,6 +16,7 @@ import type {
   SessionId,
   UserId,
 } from '@noema/types';
+import type { Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import type { CurriculumRepository } from '../../domain/curriculum-service/curriculum.repository.js';
 import type { CurriculumVersionGraph } from '../../domain/curriculum-service/curriculum.types.js';
@@ -30,6 +31,8 @@ interface PrismaLike {
   curriculumVersion: {
     findFirst(args: unknown): Promise<unknown>;
     create(args: unknown): Promise<unknown>;
+    update(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<unknown>;
   };
   curriculumProgress: {
     findMany(args: unknown): Promise<unknown[]>;
@@ -38,6 +41,7 @@ interface PrismaLike {
   curriculumRevisionProposal: {
     findMany(args: unknown): Promise<unknown[]>;
     findFirst(args: unknown): Promise<unknown>;
+    create(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
   };
   revisionChange: {
@@ -48,11 +52,16 @@ interface PrismaLike {
     findMany(args: unknown): Promise<unknown[]>;
     upsert(args: unknown): Promise<unknown>;
   };
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
   $transaction<T>(fn: (tx: PrismaLike) => Promise<T>): Promise<T>;
 }
 
 export class PrismaCurriculumRepository implements CurriculumRepository {
   constructor(private readonly prisma: PrismaLike) {}
+
+  private db(tx?: PrismaLike): PrismaLike {
+    return tx ?? this.prisma;
+  }
 
   async listByUser(userId: UserId, includeHidden = false): Promise<ICurriculum[]> {
     const rows = await this.prisma.curriculum.findMany({
@@ -67,8 +76,12 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     });
   }
 
-  async create(userId: UserId, input: ICreateCurriculumInput): Promise<ICurriculum> {
-    const row = await this.prisma.curriculum.create({
+  async create(
+    userId: UserId,
+    input: ICreateCurriculumInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<ICurriculum> {
+    const row = await this.db(tx as unknown as PrismaLike).curriculum.create({
       data: {
         id: `curr_${nanoid(21)}`,
         userId,
@@ -117,8 +130,12 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     return this.getActiveVersion(curriculumId);
   }
 
-  async listProgress(userId: UserId, curriculumId: CurriculumId): Promise<ICurriculumProgress[]> {
-    const rows = await this.prisma.curriculumProgress.findMany({
+  async listProgress(
+    userId: UserId,
+    curriculumId: CurriculumId,
+    tx?: Prisma.TransactionClient
+  ): Promise<ICurriculumProgress[]> {
+    const rows = await this.db(tx as unknown as PrismaLike).curriculumProgress.findMany({
       where: { userId, curriculumId },
       orderBy: { stableNodeKey: 'asc' },
     });
@@ -135,8 +152,8 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     correctStreak: number;
     stabilitySnapshot?: number;
     completedAt?: Date | string;
-  }): Promise<ICurriculumProgress> {
-    const row = await this.prisma.curriculumProgress.upsert({
+  }, tx?: Prisma.TransactionClient): Promise<ICurriculumProgress> {
+    const row = await this.db(tx as unknown as PrismaLike).curriculumProgress.upsert({
       where: {
         curriculumId_userId_stableNodeKey: {
           curriculumId: input.curriculumId,
@@ -169,18 +186,62 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     return mapProgress(row);
   }
 
+  async markEvaluationEventProcessed(input: {
+    userId: UserId;
+    curriculumId: CurriculumId;
+    stableNodeKey: string;
+    evaluationId: string;
+    sourceEventId?: string;
+    sessionId: SessionId;
+  }, tx?: Prisma.TransactionClient): Promise<boolean> {
+    const db = this.db(tx as unknown as PrismaLike);
+    const rows = await db.$queryRawUnsafe<unknown[]>(
+      `INSERT INTO "curriculum_progress_evaluation_events" (
+         "id",
+         "curriculum_id",
+         "user_id",
+         "stable_node_key",
+         "evaluation_id",
+         "source_event_id",
+         "session_id"
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT ("curriculum_id", "user_id", "stable_node_key", "evaluation_id")
+       DO NOTHING
+       RETURNING "id"`,
+      `cpevt_${nanoid(21)}`,
+      input.curriculumId,
+      input.userId,
+      input.stableNodeKey,
+      input.evaluationId,
+      input.sourceEventId ?? null,
+      input.sessionId
+    );
+    return rows.length > 0;
+  }
+
   async saveDraftVersion(input: {
     curriculumId: CurriculumId;
     parentVersionId?: CurriculumVersionId;
     graph: CurriculumVersionGraph;
     agentRunId?: string;
-  }): Promise<CurriculumVersionId> {
+  }, tx?: Prisma.TransactionClient): Promise<CurriculumVersionId> {
     const id = input.graph.id;
-    await this.prisma.curriculumVersion.create({
+    const db = this.db(tx as unknown as PrismaLike);
+    const latest = await db.curriculumVersion.findFirst({
+      where: { curriculumId: input.curriculumId },
+      orderBy: { versionNumber: 'desc' },
+      select: { versionNumber: true },
+    });
+    const versionNumber =
+      typeof (latest as { versionNumber?: unknown } | null)?.versionNumber === 'number'
+        ? ((latest as { versionNumber: number }).versionNumber + 1)
+        : 1;
+    await db.curriculumVersion.create({
       data: {
         id,
         curriculumId: input.curriculumId,
-        versionNumber: 1,
+        versionNumber,
         state: 'DRAFT',
         parentVersionId: input.parentVersionId,
         agentRunId: input.agentRunId,
@@ -218,11 +279,41 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     curriculumId: CurriculumId;
     curriculumVersionId: CurriculumVersionId;
     guardianValidationId: string;
-  }): Promise<void> {
-    await this.prisma.curriculum.update({
-      where: { id: input.curriculumId, userId: input.userId },
-      data: { activeVersionId: input.curriculumVersionId, state: 'FINALIZED' },
-    });
+  }, tx?: Prisma.TransactionClient): Promise<void> {
+    const run = async (db: PrismaLike): Promise<void> => {
+      const now = new Date();
+      await db.curriculum.findFirst({
+        where: { id: input.curriculumId, userId: input.userId },
+      }).then((curriculum) => {
+        if (curriculum === null) throw new Error('Curriculum not found.');
+      });
+      await db.curriculumVersion.updateMany({
+        where: {
+          curriculumId: input.curriculumId,
+          state: 'ACTIVE',
+          id: { not: input.curriculumVersionId },
+        },
+        data: { state: 'SUPERSEDED', supersededAt: now },
+      });
+      await db.curriculumVersion.update({
+        where: { id: input.curriculumVersionId, curriculumId: input.curriculumId },
+        data: {
+          state: 'ACTIVE',
+          guardianValidationId: input.guardianValidationId,
+          finalizedAt: now,
+          supersededAt: null,
+        },
+      });
+      await db.curriculum.update({
+        where: { id: input.curriculumId, userId: input.userId },
+        data: { activeVersionId: input.curriculumVersionId, state: 'FINALIZED' },
+      });
+    };
+    if (tx !== undefined) {
+      await run(this.db(tx as unknown as PrismaLike));
+      return;
+    }
+    await this.prisma.$transaction(run);
   }
 
   async setFrozenNode(input: {
@@ -230,15 +321,26 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     curriculumId: CurriculumId;
     stableNodeKey: string;
     frozen: boolean;
-  }): Promise<void> {
+  }, tx?: Prisma.TransactionClient): Promise<void> {
     const current = await this.getById(input.userId, input.curriculumId);
     const metadata = current?.metadata ?? {};
     const frozen = new Set(metadata.frozenStableNodeKeys ?? []);
     if (input.frozen) frozen.add(input.stableNodeKey);
     else frozen.delete(input.stableNodeKey);
-    await this.prisma.curriculum.update({
+    await this.db(tx as unknown as PrismaLike).curriculum.update({
       where: { id: input.curriculumId, userId: input.userId },
       data: { metadata: { ...metadata, frozenStableNodeKeys: [...frozen].sort() } },
+    });
+  }
+
+  async updateCurriculumMetadata(input: {
+    userId: UserId;
+    curriculumId: CurriculumId;
+    metadata: ICurriculum['metadata'];
+  }, tx?: Prisma.TransactionClient): Promise<void> {
+    await this.db(tx as unknown as PrismaLike).curriculum.update({
+      where: { id: input.curriculumId, userId: input.userId },
+      data: { metadata: input.metadata },
     });
   }
 
@@ -256,25 +358,80 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     return rows.map(mapProposal);
   }
 
+  async createRevisionProposal(input: {
+    userId: UserId;
+    curriculumId: CurriculumId;
+    proposedFromVersionId: CurriculumVersionId;
+    reason: ICurriculumRevisionProposal['reason'];
+    evidence: Record<string, unknown>;
+    rationale: string;
+    changes: Array<{
+      kind: ICurriculumRevisionProposal['changes'][number]['kind'];
+      payload: Record<string, unknown>;
+      rationale?: string;
+    }>;
+    expiresAt?: Date | string;
+  }, tx?: Prisma.TransactionClient): Promise<ICurriculumRevisionProposal> {
+    const curriculum = await this.getById(input.userId, input.curriculumId);
+    if (curriculum === undefined) throw new Error('Curriculum not found.');
+    const proposalId = `${ID_PREFIXES.RevisionProposalId}${nanoid(21)}` as RevisionProposalId;
+    const expiresAt =
+      input.expiresAt !== undefined
+        ? new Date(input.expiresAt)
+        : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const row = await this.db(tx as unknown as PrismaLike).curriculumRevisionProposal.create({
+      data: {
+        id: proposalId,
+        curriculumId: input.curriculumId,
+        proposedFromVersionId: input.proposedFromVersionId,
+        reason: toDbEnum(input.reason),
+        evidence: input.evidence,
+        rationale: input.rationale,
+        expiresAt,
+        changes: {
+          create: input.changes.map((change) => ({
+            id: `${ID_PREFIXES.RevisionChangeId}${nanoid(21)}`,
+            kind: toDbEnum(change.kind),
+            payload: change.payload,
+            rationale: change.rationale,
+            state: toDbEnum(RevisionChangeState.PENDING),
+          })),
+        },
+      },
+      include: { changes: true },
+    });
+    return mapProposal(row);
+  }
+
   async decideRevisionChange(input: {
     userId: UserId;
     curriculumId: CurriculumId;
     proposalId: RevisionProposalId;
     changeId: RevisionChangeId;
     state: RevisionChangeState;
-  }): Promise<ICurriculumRevisionProposal> {
+  }, tx?: Prisma.TransactionClient): Promise<ICurriculumRevisionProposal> {
     const curriculum = await this.getById(input.userId, input.curriculumId);
     if (curriculum === undefined) throw new Error('Curriculum not found.');
-    await this.prisma.revisionChange.update({
-      where: { id: input.changeId, proposalId: input.proposalId },
-      data: { state: toDbEnum(input.state), decidedAt: new Date() },
-    });
-    const proposal = await this.prisma.curriculumRevisionProposal.findFirst({
+    const db = this.db(tx as unknown as PrismaLike);
+    const proposal = await db.curriculumRevisionProposal.findFirst({
       where: { id: input.proposalId, curriculumId: input.curriculumId },
       include: { changes: true },
     });
     if (proposal === null) throw new Error('Revision proposal not found.');
-    return mapProposal(proposal);
+    const mapped = mapProposal(proposal);
+    if (!mapped.changes.some((change) => change.id === input.changeId)) {
+      throw new Error('Revision change not found.');
+    }
+    await db.revisionChange.update({
+      where: { id: input.changeId, proposalId: input.proposalId },
+      data: { state: toDbEnum(input.state), decidedAt: new Date() },
+    });
+    const updated = await db.curriculumRevisionProposal.findFirst({
+      where: { id: input.proposalId, curriculumId: input.curriculumId },
+      include: { changes: true },
+    });
+    if (updated === null) throw new Error('Revision proposal not found.');
+    return mapProposal(updated);
   }
 
   async applyRevisionProposal(input: {
@@ -282,10 +439,10 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     curriculumId: CurriculumId;
     proposalId: RevisionProposalId;
     guardianValidationId?: string;
-  }): Promise<ICurriculumRevisionProposal> {
+  }, tx?: Prisma.TransactionClient): Promise<ICurriculumRevisionProposal> {
     const curriculum = await this.getById(input.userId, input.curriculumId);
     if (curriculum === undefined) throw new Error('Curriculum not found.');
-    const proposal = await this.prisma.curriculumRevisionProposal.findFirst({
+    const proposal = await this.db(tx as unknown as PrismaLike).curriculumRevisionProposal.findFirst({
       where: { id: input.proposalId, curriculumId: input.curriculumId },
       include: { changes: true },
     });
@@ -297,14 +454,14 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     if (approved.length === 0)
       throw new Error('Cannot apply revision proposal with zero approved changes.');
 
-    await this.prisma.revisionChange.updateMany({
+    await this.db(tx as unknown as PrismaLike).revisionChange.updateMany({
       where: {
         proposalId: input.proposalId,
         state: toDbEnum(RevisionChangeState.APPROVED),
       },
       data: { state: toDbEnum(RevisionChangeState.APPLIED), decidedAt: new Date() },
     });
-    const updated = await this.prisma.curriculumRevisionProposal.update({
+    const updated = await this.db(tx as unknown as PrismaLike).curriculumRevisionProposal.update({
       where: { id: input.proposalId },
       data: { appliedVersionId: curriculum.activeVersionId ?? mapped.proposedFromVersionId },
       include: { changes: true },
@@ -334,41 +491,55 @@ export class PrismaCurriculumRepository implements CurriculumRepository {
     sessionId: SessionId;
     weight: number;
     threshold: number;
-  }): Promise<IRealignmentEvidence> {
-    const currentRows = await this.prisma.realignmentEvidence.findMany({
-      where: {
-        curriculumId: input.curriculumId,
-        stableNodeKey: input.stableNodeKey,
-        triggerType: input.triggerType,
-      },
-      take: 1,
-    });
-    const current = currentRows.length > 0 ? mapEvidence(currentRows[0]) : undefined;
-    const sessionIds = Array.from(new Set([...(current?.sessionIds ?? []), input.sessionId]));
-    const accumulatedWeight = (current?.accumulatedWeight ?? 0) + input.weight;
-    const row = await this.prisma.realignmentEvidence.upsert({
-      where: {
-        curriculumId_stableNodeKey_triggerType: {
-          curriculumId: input.curriculumId,
-          stableNodeKey: input.stableNodeKey,
-          triggerType: input.triggerType,
-        },
-      },
-      create: {
-        id: `revd_${nanoid(21)}`,
-        curriculumId: input.curriculumId,
-        stableNodeKey: input.stableNodeKey,
-        triggerType: input.triggerType,
-        sessionIds,
-        accumulatedWeight,
-        threshold: input.threshold,
-      },
-      update: {
-        sessionIds,
-        accumulatedWeight,
-        threshold: input.threshold,
-      },
-    });
+  }, tx?: Prisma.TransactionClient): Promise<IRealignmentEvidence> {
+    const db = this.db(tx as unknown as PrismaLike);
+    const [row] = await db.$queryRawUnsafe<unknown[]>(
+      `INSERT INTO "realignment_evidence" (
+         "id",
+         "curriculum_id",
+         "stable_node_key",
+         "trigger_type",
+         "session_ids",
+         "accumulated_weight",
+         "threshold"
+       )
+       VALUES ($1, $2, $3, $4, ARRAY[$5]::TEXT[], $6, $7)
+       ON CONFLICT ("curriculum_id", "stable_node_key", "trigger_type")
+       DO UPDATE SET
+         "session_ids" = (
+           SELECT ARRAY(
+             SELECT DISTINCT session_id
+             FROM unnest("realignment_evidence"."session_ids" || EXCLUDED."session_ids") AS session_id
+             ORDER BY session_id
+           )
+         ),
+         "accumulated_weight" =
+           "realignment_evidence"."accumulated_weight" +
+           CASE
+             WHEN $5 = ANY("realignment_evidence"."session_ids") THEN 0
+             ELSE EXCLUDED."accumulated_weight"
+           END,
+         "threshold" = EXCLUDED."threshold"
+       RETURNING
+         "id",
+         "curriculum_id" AS "curriculumId",
+         "stable_node_key" AS "stableNodeKey",
+         "trigger_type" AS "triggerType",
+         "session_ids" AS "sessionIds",
+         "accumulated_weight" AS "accumulatedWeight",
+         "threshold",
+         "first_seen_at" AS "firstSeenAt",
+         "last_seen_at" AS "lastSeenAt",
+         "consumed_by_proposal_id" AS "consumedByProposalId"`,
+      `revd_${nanoid(21)}`,
+      input.curriculumId,
+      input.stableNodeKey,
+      input.triggerType,
+      input.sessionId,
+      input.weight,
+      input.threshold
+    );
+    if (row === undefined) throw new Error('Realignment evidence upsert returned no row.');
     void input.userId;
     return mapEvidence(row);
   }

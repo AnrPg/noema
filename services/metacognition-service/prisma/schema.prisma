@@ -73,6 +73,7 @@ model Evaluation {
   sessionId         String          @map("session_id") @db.VarChar(50)
   userId            String          @map("user_id") @db.VarChar(50)
   conceptRefs       String[]        @map("concept_refs")
+  selectedNodeIds   String[]        @map("selected_node_ids")
   correct           Boolean
   correctnessScore  Float           @map("correctness_score")
   selfRating        StepSelfRating  @map("self_rating")
@@ -99,6 +100,7 @@ model Evaluation {
   @@index([lessonPlanId])
   @@index([sessionId])
   @@index([conceptRefs], type: Gin)
+  @@index([selectedNodeIds], type: Gin)
   @@index([triggerIds], type: Gin)
   @@map("evaluations")
 }

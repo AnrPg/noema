@@ -36,10 +36,14 @@ export function registerCurriculumRoutes(
   fastify.post('/v1/curricula', { preHandler: writeAuth }, async (request, reply) => {
     const userId = request.user?.sub as UserId;
     const input = CreateCurriculumInputSchema.parse(request.body);
-    const curriculum = await curriculumService.createCurriculum(userId, {
-      ...input,
-      originMode: input.originMode as CurriculumOriginMode | undefined,
-    });
+    const curriculum = await curriculumService.createCurriculum(
+      userId,
+      {
+        ...input,
+        originMode: input.originMode as CurriculumOriginMode | undefined,
+      },
+      request.id as never
+    );
     await reply.status(201).send({ data: curriculum });
   });
 
@@ -57,9 +61,24 @@ export function registerCurriculumRoutes(
       generateInput.title = body['title'];
     }
     await reply.status(202).send({
-      data: await curriculumService.generateCurriculum(userId, generateInput),
+      data: await curriculumService.generateCurriculum(userId, generateInput, request.id as never),
     });
   });
+
+  fastify.post(
+    '/v1/curricula/agent-results/import',
+    { preHandler: agentAuth },
+    async (request, reply) => {
+      const userId = request.user?.sub as UserId;
+      await reply.status(201).send({
+        data: await curriculumService.importAgentResult(
+          userId,
+          request.body as Record<string, unknown>,
+          request.id as never
+        ),
+      });
+    }
+  );
 
   fastify.get('/v1/curricula/:id', { preHandler: readAuth }, async (request, reply) => {
     const userId = request.user?.sub as UserId;
@@ -111,10 +130,15 @@ export function registerCurriculumRoutes(
       const { id } = request.params as { id: CurriculumId };
       const body = RecordCurriculumEvaluationInputSchema.parse(request.body);
       await reply.send({
-        data: await curriculumService.recordEvaluation(userId, id, {
-          ...body,
-          sessionId: body.sessionId as SessionId,
-        }),
+        data: await curriculumService.recordEvaluation(
+          userId,
+          id,
+          {
+            ...body,
+            sessionId: body.sessionId as SessionId,
+          },
+          request.id as never
+        ),
       });
     }
   );
@@ -126,7 +150,14 @@ export function registerCurriculumRoutes(
       const userId = request.user?.sub as UserId;
       const { id } = request.params as { id: CurriculumId };
       const body = SessionSliceRequestSchema.parse(request.body ?? {});
-      await reply.send({ data: await curriculumService.getSessionSlice(userId, id, body) });
+      await reply.send({
+        data: await curriculumService.getSessionSlice(
+          userId,
+          id,
+          { ...body, sessionId: body.sessionId as SessionId },
+          request.id as never
+        ),
+      });
     }
   );
 
@@ -177,6 +208,7 @@ export function registerCurriculumRoutes(
         userId,
         curriculumId: id,
         proposalId,
+        correlationId: request.id as never,
       };
       if (body.guardianValidationId !== undefined) {
         applyInput.guardianValidationId = body.guardianValidationId;
@@ -227,10 +259,15 @@ export function registerCurriculumRoutes(
       const { id } = request.params as { id: CurriculumId };
       const body = RecordRealignmentEvidenceInputSchema.parse(request.body);
       await reply.status(202).send({
-        data: await curriculumService.recordRealignmentEvidence(userId, id, {
-          ...body,
-          sessionId: body.sessionId as SessionId,
-        }),
+        data: await curriculumService.recordRealignmentEvidence(
+          userId,
+          id,
+          {
+            ...body,
+            sessionId: body.sessionId as SessionId,
+          },
+          request.id as never
+        ),
       });
     }
   );

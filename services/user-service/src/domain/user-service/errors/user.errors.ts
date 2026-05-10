@@ -66,7 +66,7 @@ export class ValidationError extends DomainError {
  * Thrown when authentication fails.
  */
 export class AuthenticationError extends DomainError {
-  constructor(message: string = 'Authentication failed') {
+  constructor(message = 'Authentication failed') {
     super('AUTHENTICATION_ERROR', message);
   }
 }
@@ -105,7 +105,7 @@ export class AccountLockedError extends AuthenticationError {
  * Thrown when token is invalid or expired.
  */
 export class InvalidTokenError extends AuthenticationError {
-  constructor(message: string = 'Invalid or expired token') {
+  constructor(message = 'Invalid or expired token') {
     super(message);
   }
 }
@@ -151,7 +151,7 @@ export class TokenNotFoundError extends DomainError {
  * Thrown when user lacks permission.
  */
 export class AuthorizationError extends DomainError {
-  constructor(message: string = 'Access denied') {
+  constructor(message = 'Access denied') {
     super('AUTHORIZATION_ERROR', message);
   }
 }
@@ -220,7 +220,7 @@ export class VersionConflictError extends DomainError {
   constructor(expectedVersion: number, actualVersion: number) {
     super(
       'VERSION_CONFLICT',
-      `Version conflict: expected ${expectedVersion}, found ${actualVersion}`,
+      `Version conflict: expected ${String(expectedVersion)}, found ${String(actualVersion)}`,
       { expectedVersion, actualVersion }
     );
     this.expectedVersion = expectedVersion;
@@ -282,7 +282,7 @@ export class TooManyLoginAttemptsError extends BusinessRuleError {
   constructor(remainingAttempts: number) {
     super(
       remainingAttempts > 0
-        ? `Too many failed login attempts. ${remainingAttempts} attempts remaining.`
+        ? `Too many failed login attempts. ${String(remainingAttempts)} attempts remaining.`
         : 'Account has been locked due to too many failed login attempts.'
     );
     this.remainingAttempts = remainingAttempts;
@@ -297,7 +297,7 @@ export class UsernameChangeTooSoonError extends BusinessRuleError {
 
   constructor(nextAllowedAt: string) {
     super(
-      `Username can only be changed once every 30 days. Next change allowed at ${nextAllowedAt}`,
+      `Username can only be changed once every ${String(30)} days. Next change allowed at ${nextAllowedAt}`,
       {
         nextAllowedAt,
       }

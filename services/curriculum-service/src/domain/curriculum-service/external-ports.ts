@@ -1,4 +1,4 @@
-import type { ConceptId } from '@noema/types';
+import type { ConceptId, CurriculumId, CurriculumVersionId, LearningMode, SessionId, StudyMode, UserId } from '@noema/types';
 
 import type { CurriculumNode, CurriculumVersionGraph, ScheduleSnapshot } from './curriculum.types.js';
 
@@ -24,4 +24,20 @@ export interface ICurriculumDesignAgentClient {
     rationale: string;
   }>;
   proposeRevision(input: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+
+export interface ISessionLearningContext {
+  sessionId: SessionId;
+  userId: UserId;
+  curriculumId: CurriculumId;
+  curriculumVersionId: CurriculumVersionId | null;
+  studyMode: StudyMode;
+  learningMode: LearningMode;
+}
+
+export interface ISessionLearningContextClient {
+  getSessionLearningContext(input: {
+    userId: UserId;
+    sessionId: SessionId;
+  }): Promise<ISessionLearningContext | null>;
 }

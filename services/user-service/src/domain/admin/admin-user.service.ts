@@ -27,6 +27,7 @@ import type {
   IUserStatusChangeResponse,
 } from '../../types/admin.types.js';
 import { PasswordResetInitiator, StatusChangeAction } from '../../types/admin.types.js';
+import type { IUser } from '../../types/user.types.js';
 import { UserRole, UserStatus } from '../../types/user.types.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
 import {
@@ -43,6 +44,7 @@ import type { ISessionRepository, IUserStatusChangeRepository } from './admin.re
 // ============================================================================
 
 const ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = 60;
+const ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_LABEL = String(ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_MINUTES);
 const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'http://localhost:3000';
 
 // ============================================================================
@@ -101,6 +103,7 @@ export class AdminUserService {
     context: IExecutionContext
   ): Promise<IServiceResult<{ userId: string; status: string; message: string }>> {
     this.requireScope(context, 'admin:users');
+    const adminUserId = this.requireAuthenticatedAdmin(context);
 
     this.logger.info(
       { targetUserId, newStatus: input.status, adminId: context.userId },
@@ -149,7 +152,7 @@ export class AdminUserService {
     // Create audit log entry
     await this.statusChangeRepository.create({
       userId: targetUserId,
-      changedBy: context.userId!,
+      changedBy: adminUserId,
       action: StatusChangeAction.STATUS_CHANGE,
       previousValue: { status: previousStatus },
       newValue: {
@@ -158,11 +161,11 @@ export class AdminUserService {
         ...(tokensRevoked > 0 ? { tokensRevoked } : {}),
       },
       reason: input.reason,
-      expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+      expiresAt: input.expiresAt !== undefined ? new Date(input.expiresAt) : undefined,
     });
 
     // Emit domain event
-    await this.publishStatusChangeEvent(targetUserId, input, previousStatus, context);
+    await this.publishStatusChangeEvent(targetUserId, input, previousStatus, context, adminUserId);
 
     this.logger.info(
       { targetUserId, previousStatus, newStatus: input.status },
@@ -177,7 +180,7 @@ export class AdminUserService {
       },
       agentHints: this.createAgentHints(
         'changeUserStatus',
-        `Admin ${context.userId} changed user ${targetUserId} status: ${previousStatus} → ${input.status}`
+        `Admin ${adminUserId} changed user ${targetUserId} status: ${previousStatus} → ${input.status}`
       ),
     };
   }
@@ -203,6 +206,7 @@ export class AdminUserService {
     context: IExecutionContext
   ): Promise<IServiceResult<{ userId: string; roles: string[]; message: string }>> {
     this.requireScope(context, 'admin:users');
+    const adminUserId = this.requireAuthenticatedAdmin(context);
 
     this.logger.info(
       { targetUserId, newRoles: input.roles, adminId: context.userId },
@@ -250,7 +254,7 @@ export class AdminUserService {
     // Create audit log entry
     await this.statusChangeRepository.create({
       userId: targetUserId,
-      changedBy: context.userId!,
+      changedBy: adminUserId,
       action: StatusChangeAction.ROLE_CHANGE,
       previousValue: { roles: previousRoles },
       newValue: { roles: newRoles },
@@ -264,11 +268,11 @@ export class AdminUserService {
       payload: {
         oldRoles: previousRoles,
         newRoles,
-        changedBy: context.userId,
+        changedBy: adminUserId,
       },
       metadata: {
         correlationId: context.correlationId,
-        userId: context.userId,
+        userId: adminUserId,
       },
     });
 
@@ -282,7 +286,7 @@ export class AdminUserService {
       },
       agentHints: this.createAgentHints(
         'setUserRoles',
-        `Admin ${context.userId} changed roles for ${targetUserId}`
+        `Admin ${adminUserId} changed roles for ${targetUserId}`
       ),
     };
   }
@@ -309,6 +313,7 @@ export class AdminUserService {
     IServiceResult<{ userId: string; resetUrl: string; expiresInMinutes: number; message: string }>
   > {
     this.requireScope(context, 'admin:users');
+    const adminUserId = this.requireAuthenticatedAdmin(context);
 
     this.logger.info({ targetUserId, adminId: context.userId }, 'Admin triggering password reset');
 
@@ -323,13 +328,12 @@ export class AdminUserService {
     expiresAt.setMinutes(expiresAt.getMinutes() + ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_MINUTES);
 
     // Store token with admin initiator tracking
-    const initiatedBy = context.userId ?? undefined;
     await this.userRepository.createPasswordResetToken({
       userId: targetUserId,
       tokenHash,
       expiresAt,
       initiator: PasswordResetInitiator.ADMIN,
-      ...(initiatedBy !== undefined ? { initiatedBy } : {}),
+      initiatedBy: adminUserId,
     });
 
     const resetUrl = `${FRONTEND_URL}/auth/reset-password?token=${rawToken}`;
@@ -337,7 +341,7 @@ export class AdminUserService {
     // Create audit log entry
     await this.statusChangeRepository.create({
       userId: targetUserId,
-      changedBy: context.userId!,
+      changedBy: adminUserId,
       action: StatusChangeAction.PASSWORD_RESET,
       previousValue: {},
       newValue: {
@@ -352,12 +356,12 @@ export class AdminUserService {
       aggregateType: 'User',
       aggregateId: targetUserId,
       payload: {
-        triggeredBy: context.userId,
+        triggeredBy: adminUserId,
         email: targetUser.email,
       },
       metadata: {
         correlationId: context.correlationId,
-        userId: context.userId,
+        userId: adminUserId,
       },
     });
 
@@ -371,11 +375,11 @@ export class AdminUserService {
         userId: targetUserId,
         resetUrl,
         expiresInMinutes: ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_MINUTES,
-        message: `Password reset link generated for user ${targetUser.email}. Expires in ${ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_MINUTES} minutes.`,
+        message: `Password reset link generated for user ${targetUser.email}. Expires in ${ADMIN_PASSWORD_RESET_TOKEN_EXPIRY_LABEL} minutes.`,
       },
       agentHints: this.createAgentHints(
         'adminResetPassword',
-        `Admin ${context.userId} triggered password reset for ${targetUserId}`
+        `Admin ${adminUserId} triggered password reset for ${targetUserId}`
       ),
     };
   }
@@ -440,7 +444,7 @@ export class AdminUserService {
       },
       agentHints: this.createAgentHints(
         'getLoginHistory',
-        `Retrieved ${mappedItems.length} sessions for user ${targetUserId}`
+        `Retrieved ${String(mappedItems.length)} sessions for user ${targetUserId}`
       ),
     };
   }
@@ -503,7 +507,7 @@ export class AdminUserService {
       },
       agentHints: this.createAgentHints(
         'getAuditLog',
-        `Retrieved ${mappedItems.length} audit entries for user ${targetUserId}`
+        `Retrieved ${String(mappedItems.length)} audit entries for user ${targetUserId}`
       ),
     };
   }
@@ -524,11 +528,19 @@ export class AdminUserService {
     }
   }
 
+  private requireAuthenticatedAdmin(context: IExecutionContext): UserId {
+    if (context.userId === null) {
+      throw new AuthorizationError('Authenticated admin user required');
+    }
+
+    return context.userId;
+  }
+
   /**
    * Validate that a target user exists and return it.
    * Throws UserNotFoundError if not found.
    */
-  private async validateTargetUser(userId: UserId) {
+  private async validateTargetUser(userId: UserId): Promise<IUser> {
     const user = await this.userRepository.findById(userId);
     if (user === null) {
       throw new UserNotFoundError(userId);
@@ -558,7 +570,8 @@ export class AdminUserService {
     targetUserId: UserId,
     input: IChangeUserStatusInput,
     previousStatus: string,
-    context: IExecutionContext
+    context: IExecutionContext,
+    adminUserId: UserId
   ): Promise<void> {
     let eventType: string;
     let payload: Record<string, unknown>;
@@ -567,8 +580,8 @@ export class AdminUserService {
       case UserStatus.SUSPENDED:
         eventType = 'user.suspended';
         payload = {
-          suspendedBy: context.userId,
-          reason: input.reason!,
+          suspendedBy: adminUserId,
+          reason: input.reason ?? '',
           expiresAt: input.expiresAt ?? null,
         };
         break;
@@ -576,15 +589,15 @@ export class AdminUserService {
       case UserStatus.BANNED:
         eventType = 'user.banned';
         payload = {
-          bannedBy: context.userId,
-          reason: input.reason!,
+          bannedBy: adminUserId,
+          reason: input.reason ?? '',
         };
         break;
 
       case UserStatus.ACTIVE:
         eventType = 'user.reactivated';
         payload = {
-          reactivatedBy: context.userId,
+          reactivatedBy: adminUserId,
           previousStatus,
         };
         break;
@@ -602,7 +615,7 @@ export class AdminUserService {
       payload,
       metadata: {
         correlationId: context.correlationId,
-        userId: context.userId,
+        userId: adminUserId,
       },
     });
   }

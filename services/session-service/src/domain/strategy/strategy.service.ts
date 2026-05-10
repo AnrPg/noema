@@ -381,7 +381,7 @@ export class StrategyService {
       isRepair: true,
       conceptRefs: concepts,
       variantSeed,
-      status: StepStatus.PLANNED,
+      status: StepStatus.QUEUED,
       evaluationId: null,
       guardianValidationId: null,
       presentedAt: null,

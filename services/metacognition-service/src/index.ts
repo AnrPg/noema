@@ -3,12 +3,15 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
 import { PrismaClient } from '../generated/prisma/index.js';
+import type { BaseEventConsumer } from '@noema/events/consumer';
 
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerMetacognitionRoutes } from './api/rest/metacognition.routes.js';
 import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { MetacognitionService } from './domain/metacognition-service/index.js';
-import { KgMisconceptionDetectedConsumer } from './events/consumers/index.js';
+import { KgMisconceptionDetectedConsumer, StepAnsweredConsumer } from './events/consumers/index.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import { PrismaMetacognitionRepository } from './infrastructure/database/index.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
@@ -47,26 +50,39 @@ async function bootstrap(): Promise<void> {
   const metacognitionService = new MetacognitionService(repository, eventPublisher, logger, {
     reasoningAverageWindowSize: config.scoring.reasoningAverageWindowSize,
   });
-  const consumers: KgMisconceptionDetectedConsumer[] = [];
+  const toolRegistry = createToolRegistry(metacognitionService);
+  const consumers: BaseEventConsumer[] = [];
   const consumerRedisClients: Redis[] = [];
 
   if (config.consumers.enabled) {
-    const consumerRedis = redis.duplicate({ maxRetriesPerRequest: 3, lazyConnect: true });
-    await consumerRedis.connect();
-    consumerRedisClients.push(consumerRedis);
+    const createConsumerRedisClient = async (): Promise<Redis> => {
+      const consumerRedis = redis.duplicate({ maxRetriesPerRequest: 3, lazyConnect: true });
+      await consumerRedis.connect();
+      consumerRedisClients.push(consumerRedis);
+      return consumerRedis;
+    };
 
     const kgMisconceptionConsumer = new KgMisconceptionDetectedConsumer(
-      consumerRedis,
+      await createConsumerRedisClient(),
       logger,
       config.consumers.consumerName,
       metacognitionService,
       config.consumers.streams.knowledgeGraphService
     );
-    consumers.push(kgMisconceptionConsumer);
-    await kgMisconceptionConsumer.initialize();
-    kgMisconceptionConsumer.start().catch((error: unknown) => {
-      logger.error({ error, consumer: kgMisconceptionConsumer.constructor.name }, 'Consumer crashed');
-    });
+    const stepAnsweredConsumer = new StepAnsweredConsumer(
+      await createConsumerRedisClient(),
+      logger,
+      config.consumers.consumerName,
+      metacognitionService,
+      config.consumers.streams.sessionService
+    );
+    consumers.push(kgMisconceptionConsumer, stepAnsweredConsumer);
+    await Promise.all(consumers.map((consumer) => consumer.initialize()));
+    for (const consumer of consumers) {
+      consumer.start().catch((error: unknown) => {
+        logger.error({ error, consumer: consumer.constructor.name }, 'Consumer crashed');
+      });
+    }
   }
 
   const fastify = Fastify({
@@ -106,6 +122,7 @@ async function bootstrap(): Promise<void> {
     metacognitionService,
     authMiddleware
   );
+  registerToolRoutes(fastify as unknown as FastifyInstance, toolRegistry, authMiddleware);
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'Received shutdown signal');

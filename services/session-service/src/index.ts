@@ -20,14 +20,17 @@ import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { NoopPedagogyGuardianClient } from './domain/session-service/pedagogy-guardian.port.js';
 import { SessionService } from './domain/session-service/session.service.js';
 import { StrategyService } from './domain/strategy/index.js';
-import { MetacognitionTriggerConsumer, UserDeletedConsumer } from './events/consumers/index.js';
+import {
+  MetacognitionEvaluationRecordedConsumer,
+  MetacognitionTriggerConsumer,
+  UserDeletedConsumer,
+} from './events/consumers/index.js';
 import { RedisEventPublisher } from './infrastructure/cache/redis-event-publisher.js';
 import {
   PrismaOutboxRepository,
   PrismaSessionRepository,
 } from './infrastructure/database/index.js';
 import { SessionOutboxWorker } from './infrastructure/events/index.js';
-import { HttpMetacognitionEvaluationClient } from './infrastructure/metacognition/index.js';
 import { HttpPedagogyGuardianClient } from './infrastructure/pedagogy-guardian/index.js';
 import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
@@ -94,12 +97,6 @@ async function bootstrap(): Promise<void> {
   const sessionRepository = new PrismaSessionRepository(prisma, logger);
   const outboxRepository = new PrismaOutboxRepository(prisma);
   const eventPublisher = new RedisEventPublisher(redis, getEventPublisherConfig(config), logger);
-  const metacognitionClient = new HttpMetacognitionEvaluationClient({
-    baseUrl: config.metacognition.serviceUrl,
-    ...(config.metacognition.serviceToken !== undefined
-      ? { serviceToken: config.metacognition.serviceToken }
-      : {}),
-  });
   const pedagogyGuardianClient = config.pedagogyGuardian.enabled
     ? new HttpPedagogyGuardianClient({
         baseUrl: config.pedagogyGuardian.serviceUrl,
@@ -143,7 +140,6 @@ async function bootstrap(): Promise<void> {
       session: {
         maxConcurrentSessions: config.session.maxConcurrentSessions,
       },
-      metacognitionClient,
       ...(pedagogyGuardianClient !== undefined ? { pedagogyGuardianClient } : {}),
     }
   );
@@ -171,6 +167,7 @@ async function bootstrap(): Promise<void> {
 
     const userDeletedRedis = await createConsumerRedisClient();
     const metacognitionTriggerRedis = await createConsumerRedisClient();
+    const metacognitionEvaluationRecordedRedis = await createConsumerRedisClient();
 
     const userDeletedConsumer = new UserDeletedConsumer(
       userDeletedRedis,
@@ -186,8 +183,19 @@ async function bootstrap(): Promise<void> {
       consumerName,
       streams.metacognitionService
     );
+    const metacognitionEvaluationRecordedConsumer = new MetacognitionEvaluationRecordedConsumer(
+      metacognitionEvaluationRecordedRedis,
+      sessionService,
+      logger,
+      consumerName,
+      streams.metacognitionService
+    );
 
-    consumers.push(userDeletedConsumer, metacognitionTriggerConsumer);
+    consumers.push(
+      userDeletedConsumer,
+      metacognitionTriggerConsumer,
+      metacognitionEvaluationRecordedConsumer
+    );
 
     // Initialize consumer groups (idempotent)
     await Promise.all(consumers.map((c) => c.initialize()));
@@ -233,11 +241,15 @@ async function bootstrap(): Promise<void> {
   }
 
   // Create auth middleware
-  const authMiddleware = createAuthMiddleware({
+  const authConfig = {
     jwtSecret,
     issuer: process.env['JWT_ISSUER'] || 'noema.app',
     audience: process.env['JWT_AUDIENCE'] || 'noema.app',
-  });
+    ...(process.env['SERVICE_AUTH_TOKEN'] !== undefined
+      ? { serviceToken: process.env['SERVICE_AUTH_TOKEN'] }
+      : {}),
+  };
+  const authMiddleware = createAuthMiddleware(authConfig);
 
   // Register routes
   await registerHealthRoutes(fastify as unknown as FastifyInstance, prisma, redis);

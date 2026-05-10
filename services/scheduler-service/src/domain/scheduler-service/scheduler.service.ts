@@ -2,8 +2,12 @@ import {
   SchedulerLearningEventType,
   type ISchedulerConceptStateUpdatedPayload,
 } from '@noema/events';
+import type {
+  IInterventionCadenceStateDto,
+  IPriorCalibrationDrillHistoryDto,
+} from '@noema/contracts';
 import type { IEventPublisher } from '@noema/events/publisher';
-import { SchedulingAlgorithm, SchedulerQueue, SchedulerRating, StudyMode } from '@noema/types';
+import { SchedulingAlgorithm, SchedulerQueue, SchedulerRating } from '@noema/types';
 import { randomUUID } from 'node:crypto';
 import type pino from 'pino';
 
@@ -14,6 +18,7 @@ import { applySM2Evaluation } from './algorithms/sm2.js';
 import type { IConceptScheduleRepository } from './scheduler.repository.js';
 import {
   EvaluationRecordedInputSchema,
+  GetConceptScheduleInputSchema,
   GetDueConceptsQuerySchema,
   GetTransformationHistoryQuerySchema,
 } from './scheduler.schemas.js';
@@ -44,9 +49,7 @@ export class SchedulerService {
       throw new Error(`Invalid evaluation payload: ${parsed.error.message}`);
     }
 
-    const studyMode = (parsed.data.studyMode ?? StudyMode.KNOWLEDGE_GAINING) as NonNullable<
-      IEvaluationRecordedInput['studyMode']
-    >;
+    const studyMode = parsed.data.studyMode as NonNullable<IEvaluationRecordedInput['studyMode']>;
     const input: IEvaluationRecordedInput = {
       evaluationId: parsed.data.evaluationId as IEvaluationRecordedInput['evaluationId'],
       stepId: parsed.data.stepId as IEvaluationRecordedInput['stepId'],
@@ -68,7 +71,7 @@ export class SchedulerService {
         : {}),
     };
     const reviewedAt = input.recordedAt ?? new Date().toISOString();
-    const inputStudyMode = input.studyMode ?? StudyMode.KNOWLEDGE_GAINING;
+    const inputStudyMode = input.studyMode;
 
     const results: IConceptScheduleResult[] = [];
     for (const conceptId of input.conceptRefs) {
@@ -144,9 +147,14 @@ export class SchedulerService {
   public async getConceptSchedule(
     userId: IExecutionContext['userId'],
     conceptId: IConceptScheduleState['conceptId'],
-    studyMode: IConceptScheduleState['studyMode'] = StudyMode.KNOWLEDGE_GAINING
+    studyMode: IConceptScheduleState['studyMode']
   ): Promise<IConceptScheduleState | null> {
-    return this.repository.findState(userId, conceptId, studyMode);
+    const input = GetConceptScheduleInputSchema.parse({ conceptId, studyMode });
+    return this.repository.findState(
+      userId,
+      input.conceptId as IConceptScheduleState['conceptId'],
+      input.studyMode as IConceptScheduleState['studyMode']
+    );
   }
 
   public async getDueConcepts(
@@ -185,6 +193,80 @@ export class SchedulerService {
     return this.repository.findTransformationHistory(historyQuery);
   }
 
+  public async getConceptCalibrationProjection(
+    userId: IExecutionContext['userId'],
+    conceptId: IConceptScheduleState['conceptId'],
+    studyMode: IConceptScheduleState['studyMode']
+  ): Promise<Record<string, unknown>> {
+    const state = await this.getConceptSchedule(userId, conceptId, studyMode);
+    if (state === null) {
+      return {
+        conceptId,
+        studyMode,
+        scheduleProjectionText: 'No schedule state exists for this concept yet.',
+        recommendedCalibrationMoveText: 'Use a light check-step before making confidence claims.',
+        serviceReferences: { conceptId },
+      };
+    }
+    return {
+      conceptId: state.conceptId,
+      studyMode: state.studyMode,
+      scheduleProjectionText: describeScheduleProjection(state),
+      recommendedCalibrationMoveText:
+        state.queue === SchedulerQueue.REPAIR
+          ? 'Use a short evidence-alignment check before introducing new material.'
+          : 'Use normal calibration; the schedule does not currently require repair cadence.',
+      serviceReferences: {
+        conceptId: state.conceptId,
+        lastEvaluationId: state.lastEvaluationId,
+        lastStepId: state.lastStepId,
+      },
+    };
+  }
+
+  public async getPriorCalibrationDrillHistory(
+    context: IExecutionContext,
+    query: { conceptIds?: IConceptScheduleState['conceptId'][]; studyMode?: IConceptScheduleState['studyMode']; limit?: number }
+  ): Promise<IPriorCalibrationDrillHistoryDto> {
+    const logs = await this.repository.findEvaluationLogs({
+      userId: context.userId,
+      ...(query.conceptIds !== undefined ? { conceptIds: query.conceptIds } : {}),
+      ...(query.studyMode !== undefined ? { studyMode: query.studyMode } : {}),
+      limit: query.limit ?? 10,
+    });
+    return {
+      userId: context.userId,
+      conceptIds: query.conceptIds ?? [],
+      windowLabelText: `Last ${query.limit ?? 10} scheduler evaluation log(s)`,
+      priorDrillsText: ['No prior calibration drills recorded in scheduler-owned drill history yet.'],
+      lastDrillOutcomeText:
+        logs.length > 0
+          ? `Most recent schedule update rated ${logs[0]!.schedulerRating} for concept ${logs[0]!.conceptId}.`
+          : 'No prior calibration drills recorded.',
+      drillFatigueText: 'No drill decline/accept fatigue state is recorded by scheduler-service yet.',
+      recommendedNextDrillTypeText:
+        logs.some((log) => log.schedulerRating === SchedulerRating.AGAIN || log.schedulerRating === SchedulerRating.HARD)
+          ? 'Prefer a short confidence-before-evidence drill.'
+          : 'Use an optional check-step drill only if the learner asks for more calibration support.',
+      serviceReferences: { feedbackActionIds: [] },
+    };
+  }
+
+  public async getInterventionCadenceState(
+    context: IExecutionContext,
+    query: { conceptIds?: IConceptScheduleState['conceptId'][]; surfaces?: string[] }
+  ): Promise<IInterventionCadenceStateDto> {
+    return {
+      userId: context.userId,
+      conceptIds: query.conceptIds ?? [],
+      surfaces: (query.surfaces ?? ['mental_debugger', 'calibration_coach']) as never,
+      coachingFrequencyBudgetText: 'Prominent calibration coaching should stay below two notes per session unless the learner asks for more.',
+      debuggerExposureBudgetText: 'Prominent Mental Debugger reflections should stay below two notes per session unless risk is high and the learner opts in.',
+      shouldDeferText: 'Scheduler has no global cadence block; session-service exposure budget remains authoritative for this session.',
+      serviceReferences: { exposureIds: [] },
+    };
+  }
+
   private initialState(
     input: IEvaluationRecordedInput,
     conceptId: IConceptScheduleState['conceptId'],
@@ -193,7 +275,7 @@ export class SchedulerService {
     return {
       userId: input.userId,
       conceptId,
-      studyMode: input.studyMode ?? StudyMode.KNOWLEDGE_GAINING,
+      studyMode: input.studyMode,
       algorithm: SchedulingAlgorithm.FSRS,
       queue: SchedulerQueue.NEW_LEARNING,
       dueAt: now,
@@ -352,6 +434,16 @@ function addDays(fromIso: string, days: number): Date {
   const date = new Date(fromIso);
   date.setTime(date.getTime() + Math.max(0, days) * 86_400_000);
   return date;
+}
+
+function describeScheduleProjection(state: IConceptScheduleState): string {
+  if (state.queue === SchedulerQueue.REPAIR) {
+    return `Concept is in repair queue after ${state.reviewCount} review(s); next due ${state.dueAt}.`;
+  }
+  if (state.queue === SchedulerQueue.NEW_LEARNING) {
+    return `Concept is still in new-learning queue; next due ${state.dueAt}.`;
+  }
+  return `Concept is in reinforcement queue with ${state.consecutiveCorrect} consecutive non-again rating(s); next due ${state.dueAt}.`;
 }
 
 function snapshot(state: IConceptScheduleState): Record<string, unknown> {

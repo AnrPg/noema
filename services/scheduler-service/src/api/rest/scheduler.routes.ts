@@ -22,14 +22,14 @@ export async function registerSchedulerRoutes(
 
   app.get<{
     Params: { conceptId: string };
-    Querystring: { studyMode?: string };
+    Querystring: { studyMode: string };
   }>('/v1/concepts/:conceptId/schedule', async (request, reply) => {
     if (!(await requireSchedulerRead(request, reply))) return;
     try {
       const state = await schedulerService.getConceptSchedule(
         buildContext(request).userId,
         request.params.conceptId as ConceptId,
-        request.query.studyMode as StudyMode | undefined
+        request.query.studyMode as StudyMode
       );
       if (state === null) {
         await reply.status(404).send({ data: null });

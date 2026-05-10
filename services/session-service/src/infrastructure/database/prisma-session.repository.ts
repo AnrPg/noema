@@ -36,7 +36,13 @@ import {
 import type {
   ICreateLessonPlanRecord,
   ICreateStepRecord,
+  IMarkStepAnsweredResult,
+  IFindAgentSurfaceExposuresQuery,
+  IFindLearnerFeedbackActionsQuery,
+  IRecordAgentSurfaceExposureInput,
+  IRecordLearnerFeedbackActionInput,
   ISessionRepository,
+  IUpsertStepAnswerArtifactInput,
 } from '../../domain/session-service/session.repository.js';
 import type {
   ActivityContentSourceType,
@@ -49,6 +55,9 @@ import type {
   ISessionFilters,
   ISessionStats,
   IStep,
+  IStepAnswerArtifact,
+  IAgentSurfaceExposure,
+  ILearnerFeedbackAction,
   IStepQueueItem,
   StepQueueStatus,
 } from '../../types/index.js';
@@ -205,6 +214,56 @@ function toQueueItemDomain(row: any): IStepQueueItem {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     ...(step !== undefined ? { step } : {}),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toStepAnswerArtifactDomain(row: any): IStepAnswerArtifact {
+  return {
+    id: row.id,
+    stepId: row.step_id as StepId,
+    userId: row.user_id as UserId,
+    responseShape: row.response_shape,
+    learnerAnswerSummaryText: row.learner_answer_summary_text,
+    rawResponse: row.raw_response,
+    rawResponseRef: row.raw_response_ref,
+    responseTimeMs: row.response_time_ms,
+    hintRequestCount: row.hint_request_count,
+    revisionCount: row.revision_count,
+    recordedAt: row.recorded_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toLearnerFeedbackActionDomain(row: any): ILearnerFeedbackAction {
+  const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at);
+  return {
+    id: row.id,
+    userId: row.user_id as UserId,
+    ...(row.session_id !== null ? { sessionId: row.session_id as SessionId } : {}),
+    ...(row.step_id !== null ? { stepId: row.step_id as StepId } : {}),
+    surface: row.surface,
+    actionType: row.action_type,
+    ...(row.note_text !== null ? { noteText: row.note_text } : {}),
+    ...(row.reason_text !== null ? { reasonText: row.reason_text } : {}),
+    conceptIds: (row.concept_ids ?? []) as ConceptId[],
+    createdAt,
+    metadata: (row.metadata ?? {}) as Record<string, unknown>,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toAgentSurfaceExposureDomain(row: any): IAgentSurfaceExposure {
+  const shownAt = row.shown_at instanceof Date ? row.shown_at.toISOString() : String(row.shown_at);
+  return {
+    id: row.id,
+    userId: row.user_id as UserId,
+    sessionId: row.session_id as SessionId,
+    ...(row.step_id !== null ? { stepId: row.step_id as StepId } : {}),
+    surface: row.surface,
+    shownAt,
+    metadata: (row.metadata ?? {}) as Record<string, unknown>,
   };
 }
 
@@ -368,7 +427,7 @@ export class PrismaSessionRepository implements ISessionRepository {
   async createLessonPlanWithSteps(
     plan: ICreateLessonPlanRecord,
     tx?: Prisma.TransactionClient
-  ): Promise<{ lessonPlan: ILessonPlan; steps: IStep[] }> {
+  ): Promise<{ lessonPlan: ILessonPlan; goals: ILessonPlanGoal[]; steps: IStep[] }> {
     const db = this.db(tx);
     const row = await db.lessonPlan.create({
       data: {
@@ -392,6 +451,23 @@ export class PrismaSessionRepository implements ISessionRepository {
         version: plan.version,
       },
     });
+
+    const goals: ILessonPlanGoal[] = [];
+    for (const goal of plan.goals) {
+      const createdGoal = await db.lessonPlanGoal.create({
+        data: {
+          id: goal.id,
+          lessonPlanId: plan.id,
+          description: goal.description,
+          type: toPrismaEnum(goal.type),
+          parentGoalId: goal.parentGoalId,
+          state: toPrismaEnum(goal.state),
+          source: toPrismaEnum(goal.source),
+          conceptRefs: goal.conceptRefs,
+        },
+      });
+      goals.push(toGoalDomain(createdGoal));
+    }
 
     const steps: IStep[] = [];
     for (const step of plan.steps) {
@@ -452,7 +528,7 @@ export class PrismaSessionRepository implements ISessionRepository {
       steps.push(toStepDomain(created));
     }
 
-    return { lessonPlan: toLessonPlanDomain(row), steps };
+    return { lessonPlan: toLessonPlanDomain(row), goals, steps };
   }
 
   async activateLessonPlan(id: LessonPlanId, tx?: Prisma.TransactionClient): Promise<ILessonPlan> {
@@ -610,6 +686,15 @@ export class PrismaSessionRepository implements ISessionRepository {
     return row ? toQueueItemDomain(row) : null;
   }
 
+  async findCurrentOrNextQueueItem(sessionId: SessionId): Promise<IStepQueueItem | null> {
+    const row = await this.prisma.stepQueueItem.findFirst({
+      where: { sessionId, status: { in: ['PRESENTED', 'PENDING', 'INJECTED'] } },
+      orderBy: [{ position: 'asc' }],
+      include: { step: { include: { activities: { orderBy: { position: 'asc' } } } } },
+    });
+    return row ? toQueueItemDomain(row) : null;
+  }
+
   async markStepPresented(stepId: StepId, tx?: Prisma.TransactionClient): Promise<IStep> {
     const db = this.db(tx);
     const now = new Date();
@@ -629,22 +714,198 @@ export class PrismaSessionRepository implements ISessionRepository {
     return toStepDomain(row);
   }
 
-  async markStepAnsweredAndEvaluated(
+  async markStepAnswered(
+    stepId: StepId,
+    tx?: Prisma.TransactionClient
+  ): Promise<IMarkStepAnsweredResult> {
+    const db = this.db(tx);
+    const now = new Date();
+    const updateResult = await db.step.updateMany({
+      where: {
+        id: stepId,
+        status: 'PRESENTED',
+      },
+      data: {
+        status: 'ANSWERED',
+        answeredAt: now,
+        version: { increment: 1 },
+      },
+    });
+    const row = await db.step.findUniqueOrThrow({
+      where: { id: stepId },
+      include: { activities: { orderBy: { position: 'asc' } } },
+    });
+    return {
+      step: toStepDomain(row),
+      transitioned: updateResult.count === 1,
+    };
+  }
+
+  async upsertStepAnswerArtifact(
+    input: IUpsertStepAnswerArtifactInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<IStepAnswerArtifact> {
+    const db = this.db(tx);
+    const rows = await db.$queryRaw<Array<Record<string, unknown>>>`
+      INSERT INTO step_answer_artifacts (
+        id,
+        step_id,
+        user_id,
+        response_shape,
+        learner_answer_summary_text,
+        raw_response,
+        raw_response_ref,
+        response_time_ms,
+        hint_request_count,
+        revision_count
+      )
+      VALUES (
+        ${input.id},
+        ${input.stepId},
+        ${input.userId},
+        ${input.responseShape},
+        ${input.learnerAnswerSummaryText},
+        ${input.rawResponse === undefined ? Prisma.JsonNull : (input.rawResponse as Prisma.InputJsonValue)},
+        ${input.rawResponseRef},
+        ${input.responseTimeMs ?? null},
+        ${input.hintRequestCount ?? 0},
+        ${input.revisionCount ?? 0}
+      )
+      ON CONFLICT (step_id) DO UPDATE SET
+        response_shape = EXCLUDED.response_shape,
+        learner_answer_summary_text = EXCLUDED.learner_answer_summary_text,
+        raw_response = EXCLUDED.raw_response,
+        raw_response_ref = EXCLUDED.raw_response_ref,
+        response_time_ms = EXCLUDED.response_time_ms,
+        hint_request_count = EXCLUDED.hint_request_count,
+        revision_count = EXCLUDED.revision_count,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `;
+    return toStepAnswerArtifactDomain(rows[0]);
+  }
+
+  async findStepAnswerArtifactByStepId(stepId: StepId): Promise<IStepAnswerArtifact | null> {
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT * FROM step_answer_artifacts WHERE step_id = ${stepId} LIMIT 1
+    `;
+    return rows[0] ? toStepAnswerArtifactDomain(rows[0]) : null;
+  }
+
+  async recordLearnerFeedbackAction(
+    input: IRecordLearnerFeedbackActionInput
+  ): Promise<ILearnerFeedbackAction> {
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      INSERT INTO learner_feedback_actions (
+        id,
+        user_id,
+        session_id,
+        step_id,
+        surface,
+        action_type,
+        note_text,
+        reason_text,
+        concept_ids,
+        metadata
+      )
+      VALUES (
+        ${input.id},
+        ${input.userId},
+        ${input.sessionId ?? null},
+        ${input.stepId ?? null},
+        ${input.surface},
+        ${input.actionType},
+        ${input.noteText ?? null},
+        ${input.reasonText ?? null},
+        ${input.conceptIds},
+        ${(input.metadata ?? {}) as Prisma.InputJsonValue}
+      )
+      RETURNING *
+    `;
+    return toLearnerFeedbackActionDomain(rows[0]);
+  }
+
+  async findLearnerFeedbackActions(
+    query: IFindLearnerFeedbackActionsQuery
+  ): Promise<ILearnerFeedbackAction[]> {
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT *
+      FROM learner_feedback_actions
+      WHERE user_id = ${query.userId}
+        AND (${query.surface ?? null}::text IS NULL OR surface = ${query.surface ?? null})
+        AND (${query.since ?? null}::timestamp IS NULL OR created_at >= ${query.since ?? null}::timestamp)
+      ORDER BY created_at DESC
+      LIMIT ${query.limit}
+    `;
+    return rows.map(toLearnerFeedbackActionDomain);
+  }
+
+  async recordAgentSurfaceExposure(
+    input: IRecordAgentSurfaceExposureInput
+  ): Promise<IAgentSurfaceExposure> {
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      INSERT INTO agent_surface_exposures (
+        id,
+        user_id,
+        session_id,
+        step_id,
+        surface,
+        metadata
+      )
+      VALUES (
+        ${input.id},
+        ${input.userId},
+        ${input.sessionId},
+        ${input.stepId ?? null},
+        ${input.surface},
+        ${(input.metadata ?? {}) as Prisma.InputJsonValue}
+      )
+      RETURNING *
+    `;
+    return toAgentSurfaceExposureDomain(rows[0]);
+  }
+
+  async findAgentSurfaceExposures(
+    query: IFindAgentSurfaceExposuresQuery
+  ): Promise<IAgentSurfaceExposure[]> {
+    const surfaces = query.surfaces ?? [];
+    const rows = await this.prisma.$queryRaw<Array<Record<string, unknown>>>`
+      SELECT *
+      FROM agent_surface_exposures
+      WHERE user_id = ${query.userId}
+        AND (${query.sessionId ?? null}::text IS NULL OR session_id = ${query.sessionId ?? null})
+        AND (${surfaces.length}::int = 0 OR surface = ANY(${surfaces}))
+        AND (${query.since ?? null}::timestamp IS NULL OR shown_at >= ${query.since ?? null}::timestamp)
+      ORDER BY shown_at DESC
+      LIMIT ${query.limit}
+    `;
+    return rows.map(toAgentSurfaceExposureDomain);
+  }
+
+  async markStepEvaluatedIfPending(
     stepId: StepId,
     evaluationId: string,
     tx?: Prisma.TransactionClient
-  ): Promise<IStep> {
+  ): Promise<IStep | null> {
     const db = this.db(tx);
     const now = new Date();
-    const row = await db.step.update({
-      where: { id: stepId },
+    const updateResult = await db.step.updateMany({
+      where: {
+        id: stepId,
+        status: 'ANSWERED',
+      },
       data: {
         status: 'EVALUATED',
         evaluationId,
-        answeredAt: now,
         evaluatedAt: now,
         version: { increment: 1 },
       },
+    });
+    if (updateResult.count === 0) {
+      return null;
+    }
+    const row = await db.step.findUniqueOrThrow({
+      where: { id: stepId },
       include: { activities: { orderBy: { position: 'asc' } } },
     });
     await db.stepQueueItem.update({

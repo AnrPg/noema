@@ -4,6 +4,7 @@ import type {
   CurriculumProgress,
   CurriculumVersionGraph,
 } from './curriculum.types.js';
+import { branchInfoForNode } from './branching.js';
 
 export function computeFrontier(
   graph: CurriculumVersionGraph,
@@ -51,8 +52,35 @@ export function computeFrontier(
       const rightRank =
         rightProgress?.runtimeState === CurriculumNodeRuntimeState.IN_PROGRESS ? 0 : 1;
       if (leftRank !== rightRank) return leftRank - rightRank;
+      const leftBranch = branchInfoForNode(left);
+      const rightBranch = branchInfoForNode(right);
+      const leftPathRank = pathRoleRank(leftBranch?.pathRole);
+      const rightPathRank = pathRoleRank(rightBranch?.pathRole);
+      if (leftPathRank !== rightPathRank) return leftPathRank - rightPathRank;
+      if ((leftBranch?.isMainPath ?? false) !== (rightBranch?.isMainPath ?? false)) {
+        return leftBranch?.isMainPath ? -1 : 1;
+      }
       if (left.traversalWeight !== right.traversalWeight)
         return right.traversalWeight - left.traversalWeight;
       return left.stableNodeKey.localeCompare(right.stableNodeKey);
     });
+}
+
+function pathRoleRank(pathRole: string | undefined): number {
+  switch (pathRole) {
+    case 'foundation':
+      return 0;
+    case 'core':
+      return 1;
+    case 'focus_area':
+      return 2;
+    case 'diversion':
+      return 3;
+    case 'remediation':
+      return 4;
+    case 'capstone':
+      return 5;
+    default:
+      return 6;
+  }
 }

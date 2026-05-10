@@ -44,6 +44,7 @@ import {
   type ISession,
   type ISessionFilters,
   type IStep,
+  type IStepAnswerArtifact,
   type IStepQueueItem,
 } from '../../../src/types/index.js';
 
@@ -109,10 +110,11 @@ class StrategyRepo implements ISessionRepository {
 
   async createLessonPlanWithSteps(
     plan: ICreateLessonPlanRecord
-  ): Promise<{ lessonPlan: ILessonPlan; steps: IStep[] }> {
+  ): Promise<{ lessonPlan: ILessonPlan; goals: ILessonPlanGoal[]; steps: IStep[] }> {
     this.lessonPlan = { ...plan, createdAt: now(), updatedAt: now() };
+    this.goals = plan.goals.map((goal) => ({ ...goal, createdAt: now(), updatedAt: now() }));
     this.steps = plan.steps.map(toStep);
-    return { lessonPlan: this.lessonPlan, steps: this.steps };
+    return { lessonPlan: this.lessonPlan, goals: this.goals, steps: this.steps };
   }
 
   async activateLessonPlan(): Promise<ILessonPlan> {
@@ -191,6 +193,46 @@ class StrategyRepo implements ISessionRepository {
 
   async markStepAnsweredAndEvaluated(): Promise<IStep> {
     return this.steps[0]!;
+  }
+
+  async markStepEvaluatedIfPending(): Promise<IStep | null> {
+    return this.steps[0]!;
+  }
+
+  async markStepAnswered(): Promise<{ step: IStep; transitioned: boolean }> {
+    return { step: this.steps[0]!, transitioned: true };
+  }
+
+  async upsertStepAnswerArtifact(input: {
+    id: string;
+    stepId: StepId;
+    userId: UserId;
+    responseShape: string;
+    learnerAnswerSummaryText: string;
+    rawResponse: unknown;
+    rawResponseRef: string;
+    responseTimeMs?: number;
+    hintRequestCount?: number;
+    revisionCount?: number;
+  }): Promise<IStepAnswerArtifact> {
+    return {
+      id: input.id,
+      stepId: input.stepId,
+      userId: input.userId,
+      responseShape: input.responseShape,
+      learnerAnswerSummaryText: input.learnerAnswerSummaryText,
+      rawResponse: input.rawResponse,
+      rawResponseRef: input.rawResponseRef,
+      responseTimeMs: input.responseTimeMs ?? null,
+      hintRequestCount: input.hintRequestCount ?? 0,
+      revisionCount: input.revisionCount ?? 0,
+      recordedAt: now(),
+      updatedAt: now(),
+    };
+  }
+
+  async findStepAnswerArtifactByStepId(): Promise<IStepAnswerArtifact | null> {
+    return null;
   }
 
   async markStepSkipped(): Promise<IStep> {

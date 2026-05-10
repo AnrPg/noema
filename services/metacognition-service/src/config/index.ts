@@ -24,6 +24,7 @@ export interface IServiceConfig {
     consumerName: string;
     streams: {
       knowledgeGraphService: string;
+      sessionService: string;
     };
   };
   auth: {
@@ -106,6 +107,10 @@ export function loadConfig(): IServiceConfig {
         knowledgeGraphService: optionalEnv(
           'CONSUMER_STREAM_KNOWLEDGE_GRAPH_SERVICE',
           'noema:events:knowledge-graph-service'
+        ),
+        sessionService: optionalEnv(
+          'CONSUMER_STREAM_SESSION_SERVICE',
+          'noema:events:session-service'
         ),
       },
     },

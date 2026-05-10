@@ -15,18 +15,79 @@ import type {
   ISession,
   ISessionFilters,
   IStep,
+  IStepAnswerArtifact,
+  ILearnerFeedbackAction,
+  IAgentSurfaceExposure,
   IStepQueueItem,
   SessionTerminationReason,
   StepQueueStatus,
 } from '../../types/index.js';
 
 export interface ICreateLessonPlanRecord extends Omit<ILessonPlan, 'createdAt' | 'updatedAt'> {
+  goals: ICreateGoalRecord[];
   steps: ICreateStepRecord[];
 }
+
+export interface ICreateGoalRecord extends Omit<ILessonPlanGoal, 'createdAt' | 'updatedAt'> {}
 
 export interface ICreateStepRecord extends Omit<IStep, 'createdAt' | 'updatedAt' | 'activities'> {
   activities: Omit<IActivity, 'createdAt' | 'updatedAt'>[];
   queueStatus?: StepQueueStatus;
+}
+
+export interface IMarkStepAnsweredResult {
+  step: IStep;
+  transitioned: boolean;
+}
+
+export interface IUpsertStepAnswerArtifactInput {
+  id: string;
+  stepId: StepId;
+  userId: UserId;
+  responseShape: string;
+  learnerAnswerSummaryText: string;
+  rawResponse: unknown;
+  rawResponseRef: string;
+  responseTimeMs?: number;
+  hintRequestCount?: number;
+  revisionCount?: number;
+}
+
+export interface IRecordLearnerFeedbackActionInput {
+  id: string;
+  userId: UserId;
+  sessionId?: SessionId;
+  stepId?: StepId;
+  surface: ILearnerFeedbackAction['surface'];
+  actionType: ILearnerFeedbackAction['actionType'];
+  noteText?: string;
+  reasonText?: string;
+  conceptIds: ILearnerFeedbackAction['conceptIds'];
+  metadata?: Record<string, unknown>;
+}
+
+export interface IFindLearnerFeedbackActionsQuery {
+  userId: UserId;
+  surface?: ILearnerFeedbackAction['surface'];
+  since?: string;
+  limit: number;
+}
+
+export interface IRecordAgentSurfaceExposureInput {
+  id: string;
+  userId: UserId;
+  sessionId: SessionId;
+  stepId?: StepId;
+  surface: IAgentSurfaceExposure['surface'];
+  metadata?: Record<string, unknown>;
+}
+
+export interface IFindAgentSurfaceExposuresQuery {
+  userId: UserId;
+  sessionId?: SessionId;
+  surfaces?: IAgentSurfaceExposure['surface'][];
+  since?: string;
+  limit: number;
 }
 
 export interface ISessionRepository {
@@ -66,7 +127,7 @@ export interface ISessionRepository {
   createLessonPlanWithSteps(
     plan: ICreateLessonPlanRecord,
     tx?: Prisma.TransactionClient
-  ): Promise<{ lessonPlan: ILessonPlan; steps: IStep[] }>;
+  ): Promise<{ lessonPlan: ILessonPlan; goals: ILessonPlanGoal[]; steps: IStep[] }>;
   activateLessonPlan(id: LessonPlanId, tx?: Prisma.TransactionClient): Promise<ILessonPlan>;
 
   countActiveGoals(lessonPlanId: LessonPlanId): Promise<number>;
@@ -85,13 +146,32 @@ export interface ISessionRepository {
     replacements: { stepId: StepId; supersededByStepId: StepId }[],
     tx?: Prisma.TransactionClient
   ): Promise<void>;
+  findCurrentOrNextQueueItem(sessionId: SessionId): Promise<IStepQueueItem | null>;
   findNextQueueItem(sessionId: SessionId): Promise<IStepQueueItem | null>;
   markStepPresented(stepId: StepId, tx?: Prisma.TransactionClient): Promise<IStep>;
-  markStepAnsweredAndEvaluated(
+  markStepAnswered(stepId: StepId, tx?: Prisma.TransactionClient): Promise<IMarkStepAnsweredResult>;
+  upsertStepAnswerArtifact(
+    input: IUpsertStepAnswerArtifactInput,
+    tx?: Prisma.TransactionClient
+  ): Promise<IStepAnswerArtifact>;
+  findStepAnswerArtifactByStepId(stepId: StepId): Promise<IStepAnswerArtifact | null>;
+  recordLearnerFeedbackAction(
+    input: IRecordLearnerFeedbackActionInput
+  ): Promise<ILearnerFeedbackAction>;
+  findLearnerFeedbackActions(
+    query: IFindLearnerFeedbackActionsQuery
+  ): Promise<ILearnerFeedbackAction[]>;
+  recordAgentSurfaceExposure(
+    input: IRecordAgentSurfaceExposureInput
+  ): Promise<IAgentSurfaceExposure>;
+  findAgentSurfaceExposures(
+    query: IFindAgentSurfaceExposuresQuery
+  ): Promise<IAgentSurfaceExposure[]>;
+  markStepEvaluatedIfPending(
     stepId: StepId,
     evaluationId: string,
     tx?: Prisma.TransactionClient
-  ): Promise<IStep>;
+  ): Promise<IStep | null>;
   markStepSkipped(
     stepId: StepId,
     reason: string | null,
