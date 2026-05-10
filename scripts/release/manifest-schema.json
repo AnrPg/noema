@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Noema Release Rollback Manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "releaseId",
+    "createdAt",
+    "envFile",
+    "repo",
+    "services",
+    "redis",
+    "status"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "releaseId": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "minLength": 1 },
+    "envFile": { "type": "string", "minLength": 1 },
+    "repo": {
+      "type": "object",
+      "required": ["root", "gitSha", "gitBranch"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1 },
+        "gitSha": { "type": "string", "minLength": 1 },
+        "gitBranch": { "type": "string", "minLength": 1 }
+      }
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "dbEnvVar",
+          "databaseExisted",
+          "databaseUrlRedacted",
+          "databaseSource",
+          "statusBefore",
+          "migrationsDir"
+        ],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "dbEnvVar": { "type": "string", "minLength": 1 },
+          "databaseExisted": { "type": "boolean" },
+          "databaseUrlRedacted": { "type": "string", "minLength": 1 },
+          "databaseSource": { "type": "string", "minLength": 1 },
+          "dumpFile": { "type": "string" },
+          "dumpSha256": { "type": "string" },
+          "statusBefore": { "type": "string", "minLength": 1 },
+          "statusAfter": { "type": "string" },
+          "migrationsDir": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "required": ["urlRedacted", "source", "dumpFile", "dumpSha256", "restoreMode"],
+      "properties": {
+        "urlRedacted": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "dumpFile": { "type": "string", "minLength": 1 },
+        "dumpSha256": { "type": "string", "minLength": 1 },
+        "restoreMode": { "type": "string", "enum": ["manual-rdb-swap"] }
+      }
+    },
+    "status": {
+      "type": "object",
+      "required": ["snapshotCreated"],
+      "properties": {
+        "snapshotCreated": { "type": "boolean" },
+        "migrationsApplied": { "type": "boolean" },
+        "migrationsAppliedAt": { "type": "string" }
+      }
+    }
+  }
+}
