@@ -109,16 +109,22 @@ learning.**
 
 ## System Architecture
 
+> **Realignment note:** This older architecture block is superseded for agent
+> authority boundaries. Agents may propose, generate, explain, and recommend;
+> services own truth. Step is the runtime learning unit, every session has a
+> LessonPlan, and learner-facing pedagogical artifacts pass through Pedagogy
+> Guardian. See `docs/architecture/agents/` for the current agent council model.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                  AGENT ORCHESTRATION LAYER                       │
 │              (Primary Intelligence & Coordination)               │
 ├─────────────────────────────────────────────────────────────────┤
-│  Learning Agent | Diagnostic Agent | Strategy Agent             │
+│  LessonPlan Generator | Mental Debugger | Strategy/Replanning   │
 │  Content Gen Agent | Ingestion Agent | Knowledge Graph Agent    │
-│  Socratic Tutor | Calibration Agent | Governance Agent          │
+│  Socratic Tutor | Calibration Coach | Watchtower / Guardian     │
 │                                                                  │
-│  • Agents coordinate all services via tool calls                │
+│  • Agents propose/explain/generate; services own truth          │
 │  • MCP/Function Calling interfaces                              │
 │  • LangChain/LlamaIndex orchestration                           │
 └─────────────────────────────────────────────────────────────────┘
@@ -383,8 +389,9 @@ depend on higher layers.
 
 ### Mental Debugger - 7-Frame Cognitive Stack Trace
 
-The Mental Debugger creates a "stack trace of thinking" for each learning
-attempt:
+`metacognition-service` creates and owns the canonical trace/Evaluation facts
+for each Step. Mental Debugger explains the resulting "stack trace of thinking"
+to the learner:
 
 **Frame 0: Context & Intent**
 
@@ -414,7 +421,10 @@ attempt:
 
 - Why did this happen? Process-based vs emotional attribution
 
-### 20 Special Remediation Card Types
+### Remediation Content Payload Types
+
+These can exist as content payloads, but repair Steps are the runtime learning
+units owned by `session-service`.
 
 1. Contrastive Pair Card
 2. Minimal Pair Card
@@ -692,20 +702,27 @@ await eventBus.publish('domain.entity.action', {
 
 ### Agent Roles
 
+> **Realignment note:** This list preserves the older role inventory for
+> historical context. Current specs live in `docs/architecture/agents/`. The old
+> Learning Agent and Governance Agent are superseded/redistributed, Calibration
+> Agent is now Calibration Coach, and Diagnostic Agent/Mental Debugger explains
+> `metacognition-service` facts rather than owning them.
+
 **Online Agents:**
 
-1. **Learning Agent** - Session planning, content selection, mode switching
-2. **Diagnostic Agent** - Trace analysis, failure diagnosis, pattern detection
-3. **Strategy Agent** - Loadout selection, policy enforcement, adaptation
-4. **Content Generation Agent** - Card creation, enhancement, adaptation
+1. **LessonPlan Generator / former Learning Agent responsibilities** - Reviewable Step-first session planning; next-Step presentation belongs to `session-service`
+2. **Mental Debugger / Diagnostic Agent** - Learner-facing explanation of `metacognition-service` trace/Evaluation facts
+3. **Strategy / Replanning Agent** - Minimum-sufficient runtime adaptation inside `session-service`
+4. **Content Creation Orchestrator** - Card creation, enhancement, adaptation
 5. **Socratic Tutor Agent** - Inquiry dialogue, adversarial questioning
-6. **Calibration Agent** - Confidence tracking, metacognitive feedback
+6. **Calibration Coach** - Confidence/evidence alignment; self-rating is evidence, not a grade
 7. **Ingestion Agent** - Document parsing, hint generation, transformation
 8. **Knowledge Graph Agent** - PKG evolution, CKG proposals
 
 **Offline/Admin Agents:** 9. **Taxonomy Curator Agent** - Failure type
-evolution, pattern refinement 10. **Governance Agent** - Safety monitoring,
-budget enforcement, compliance
+evolution, pattern refinement 10. **Watchtower / Governance Layer** - Privacy,
+intrusiveness, auditability, transparency, and review escalation. Pedagogy
+Guardian separately owns deterministic pedagogical validation.
 
 ### Agent Constraints
 
@@ -990,7 +1007,7 @@ noema/
 │   ├── learning-agent/
 │   ├── diagnostic-agent/
 │   ├── strategy-agent/
-│   ├── content-generation-agent/
+│   ├── content-creation-orchestrator/
 │   ├── socratic-tutor-agent/
 │   ├── calibration-agent/
 │   ├── ingestion-agent/

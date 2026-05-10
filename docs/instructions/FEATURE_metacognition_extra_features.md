@@ -34,7 +34,7 @@ Each of your systems **owns one segment**, but also **feeds others**.
 | Intent      | Strategy Loadouts                  | AI Mirror, Quests       |
 | Strategy    | Strategy Loadouts                  | Timeline, KG            |
 | Action      | Content Layer                      | Mental Debugger         |
-| Signal      | Telemetry \+ Cognitive State Layer | Debugger, Liar Detector |
+| Signal      | Telemetry \+ Cognitive State Layer | Debugger, Calibration Coach |
 | Attribution | Mental Debugger                    | AI Mirror, Timeline     |
 | Adjustment  | Strategy Engine                    | Loadouts, Quests        |
 
@@ -44,14 +44,18 @@ This is crucial:
 
 ---
 
-## **3.2 Mental Debugger as the Attribution Hub**
+## **3.2 Mental Debugger as the Attribution Explanation Layer**
 
-The Mental Debugger is _not_ just one feature; it is the **epistemic authority**
-of the system.
+**Realignment note:** `metacognition-service` is the source of truth for
+canonical Evaluations, 7-frame trace scoring, Trigger facts, and persisted
+diagnostic facts. Mental Debugger is the learner-facing explanation layer over
+those service-owned facts. It may explain likely causes cautiously; it is not the
+epistemic authority of the whole system.
 
-It does three things other systems are forbidden to do:
+It does three things other learner-facing surfaces should not invent on their
+own:
 
-1. Assign _cause_ (not outcome)
+1. Explain likely _cause_ from service-owned evidence (not merely outcome)
 
 2. Separate _error type_ from _error frequency_
 
@@ -59,17 +63,18 @@ It does three things other systems are forbidden to do:
 
 ### **Interactions**
 
-- **Feeds Strategy Loadouts**  
+- **Feeds Strategy / Replanning**
    → “Your dominant failures are parsing-related, not memory-related.”
 
-- **Feeds Confidence vs Accuracy**  
+- **Feeds Calibration Coach**
    → Overconfidence is not a personality trait; it’s a frame-7 pattern.
 
 - **Feeds Knowledge Graph**  
    → Nodes don’t just have mastery; they have _failure composition_.
 
 - **Feeds AI Mirror**  
-   → The AI never “diagnoses”; it _quotes_ the debugger.
+   → The AI Mirror does not invent diagnoses; it summarizes validated
+   metacognitive/debugger observations.
 
 This prevents:
 
@@ -79,7 +84,9 @@ This prevents:
 
 - moralizing language
 
-**Debugger \= single source of cognitive truth.**
+**Debugger = learner-facing diagnostic explanation layer.**
+
+**Metacognition-service = canonical Evaluation and trace truth owner.**
 
 ---
 
@@ -567,11 +574,11 @@ This is not an implementation choice — it is a **philosophical constraint**.
 
 ### **Mental Debugger**
 
-- Allowed to claim: _cause of failure_
+- Allowed to claim: _likely cause of failure from service-owned evidence_
 
 - Forbidden to claim: _what to do next_
 
-- Role: attribution engine
+- Role: diagnostic explanation layer over `metacognition-service` facts
 
 ### **Strategy Loadouts**
 
@@ -587,7 +594,8 @@ This is not an implementation choice — it is a **philosophical constraint**.
 
 - Forbidden to claim: _truth or understanding_
 
-- Role: epistemic pressure system
+- Role: calibration evidence/read model; learner-facing coaching belongs to
+  Calibration Coach
 
 ### **Knowledge Graph**
 
@@ -672,13 +680,16 @@ Consider what happens in ordinary apps:
 
 Your interlock prevents this because:
 
-- **Mental Debugger is the only source of causal explanation**
+- **metacognition-service owns Evaluation and trace facts; Mental Debugger is the
+  learner-facing explanation layer for likely causal interpretation**
 
-- **Strategy Engine is the only source of adjustment**
+- **Strategy/Replanning inside session-service is the source of runtime Step
+  adjustment**
 
 - **Timeline is the only source of longitudinal truth**
 
-So when the AI speaks, it quotes the debugger.  
+So when the AI speaks, it cites service-owned Evaluation/trace facts and may
+summarize the debugger's learner-facing explanation.
  When the graph glows, it reflects debugger output.  
  When a strategy is graded, it uses the same attribution.
 

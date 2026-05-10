@@ -2,9 +2,14 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build the Cognitive Copilot sidebar — an ambient, non-intrusive panel that surfaces `agentHints` from every API call, sorted by priority, grouped by category, expired by validity period, with full transparency into the system's reasoning.
+**Goal:** Build the Cognitive Copilot sidebar — an ambient, non-intrusive panel that receives `agentHints` envelopes from every API call and surfaces the fresh, relevant, learner-safe subset, sorted by priority, grouped by category, expired by validity period, with full transparency into the system's reasoning.
 
-**Architecture:** The data pipeline already exists (Phase 3): `useAgentHintsInterceptor` subscribes to TanStack QueryCache and pushes `IAgentHints` into `useCopilotStore` keyed by route. Phase 10 adds the UI layer (7 new component files + 1 barrel export), enhances the store with freshness tracking and fade-expiry state, and wires the copilot into the authenticated layout. The store's `hintsByPage[activePageKey]` is the single source of truth for all sidebar sections. All components read from it — no new API calls in this phase.
+**Architecture:** The data pipeline already exists (Phase 3): `useAgentHintsInterceptor` subscribes to TanStack QueryCache and pushes `IAgentHints` envelopes into `useCopilotStore` keyed by route. Phase 10 adds the UI layer (7 new component files + 1 barrel export), enhances the store with freshness tracking and fade-expiry state, and wires the copilot into the authenticated layout. The store's `hintsByPage[activePageKey]` is the single UI read model for sidebar sections, not a canonical fact owner. All components read from it — no new API calls in this phase.
+
+**AgentHints realignment:** every response still carries the envelope, but
+Copilot is not obligated to show every item. Learner-facing surfacing must be
+fresh, relevant, policy-safe, and quiet enough to respect the Watchtower
+intrusiveness budget. Canonical facts remain owned by the producing services.
 
 **Tech Stack:** Next.js 15, React, TypeScript, Tailwind CSS, Zustand (`@/stores/copilot-store`), `@noema/ui` (NeuralGauge, StateChip, ConfidenceMeter, Button, PulseIndicator), `@noema/contracts` (IAgentHints, ISuggestedAction, IRiskFactor, IAlternative, IWarning — type-only imports), `lucide-react` icons, `next/navigation` (useRouter, usePathname).
 
@@ -407,8 +412,9 @@ git commit -m "feat(web): T10.A — copilot store freshness tracking, fade-expir
 /**
  * @noema/web — Copilot / CopilotSidebar
  *
- * Persistent, toggleable right-aligned panel. Surfaces agentHints from all
- * API calls on the current page. Does not push main content — overlays it.
+ * Persistent, toggleable right-aligned panel. Receives agentHints from all API
+ * calls on the current page and surfaces only fresh, relevant, policy-safe
+ * items. Does not push main content — overlays it.
  */
 import * as React from 'react';
 import type { IAgentHints, ActionPriority, SourceQuality } from '@noema/contracts';

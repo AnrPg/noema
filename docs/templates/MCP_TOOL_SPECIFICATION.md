@@ -500,6 +500,12 @@ Breaking changes require:
 
 ## Examples
 
+Realignment note: examples below use Step-first wording. Cards are content
+payloads; `session-service` owns the active Step queue and next-Step
+presentation. Tools may recommend or provide content candidates, but they do not
+select the next runtime unit unless they are part of the session-service Step
+loop.
+
 ### Minimal Valid Tool
 
 ```
@@ -523,16 +529,16 @@ Handler: Returns ToolResult with:
 ### Tool with Rich Hints
 
 ```
-Name: "review-card"
-Description: "Records a card review session. Use after user completes review."
+Name: "record-step-response"
+Description: "Records a learner response for a Step. Use after the learner completes a Step activity."
 [...all required fields...]
 Handler returns agentHints:
   - suggestedNextActions: [
       {
-        action: "review-next-card",
+        action: "present-next-step",
         priority: "high",
         category: "learning",
-        expectedOutcome: "Continue learning momentum",
+        expectedOutcome: "Continue the active LessonPlan",
         confidence: 0.92
       },
       {
@@ -544,9 +550,9 @@ Handler returns agentHints:
     ]
   - relatedResources: [
       {
-        type: "deck",
-        id: "deck_456",
-        label: "Math Deck",
+        type: "lesson-plan",
+        id: "lesson_plan_456",
+        label: "Current LessonPlan",
         relevance: 1.0,
         metadata: { quality: "high", freshness: "current" }
       }
@@ -568,7 +574,7 @@ Handler returns agentHints:
   - dependencies: [
       {
         action: "adjust-difficulty",
-        dependsOn: ["review-next-card"],
+        dependsOn: ["present-next-step"],
         type: "recommended",
         reason: "Need more data points before adjustment"
       }
@@ -581,7 +587,7 @@ Handler returns agentHints:
     }
   - preferenceAlignment: [
       {
-        action: "review-next-card",
+        action: "present-next-step",
         preference: "continuous_learning",
         alignment: "strong",
         score: 0.9

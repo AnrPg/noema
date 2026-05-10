@@ -13,12 +13,14 @@ Batch 6 replaces card scheduling with concept scheduling.
 
 ## REST
 
-- `GET /v1/concepts/:conceptId/schedule`
+- `GET /v1/concepts/:conceptId/schedule?studyMode=<mode>`
 - `GET /v1/concepts/due`
 - `GET /v1/concepts/:conceptId/transformation-history`
 
-All routes are learner-scoped by authenticated principal context. Public
-card-centric scheduler APIs were removed for Batch 6.
+All routes are learner-scoped by authenticated principal context. Schedule reads
+require canonical `ConceptId` and explicit `studyMode`; agent tools use the same
+validation boundary. Public card-centric scheduler APIs were removed for
+Batch 6.
 
 ## Events
 

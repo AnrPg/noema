@@ -421,6 +421,10 @@ const strategy =
 
 ```typescript
 // 8 metacognitive layers
+// Realignment note: these names are conceptual pipeline stages, not fact owners.
+// metacognition-service owns Evaluation/trace facts, session-service owns Step
+// mutations, content-service owns remediation payloads, and Calibration Coach is
+// learner-facing coaching rather than a "liar detector" layer.
 class MetacognitionPipeline {
   private layers = [
     new TelemetryLayer(),

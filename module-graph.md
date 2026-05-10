@@ -12,10 +12,11 @@ flowchart TD
   end
 
   subgraph Shared["Shared Packages"]
+    Kernel["@noema/learning-kernel\ncanonical closed-loop contracts"]
     Types["@noema/types\nEpistemicMode + Step vocabulary"]
     Contracts["@noema/contracts\nLessonPlan/Step/Evaluation/Trigger DTOs"]
-    Validation["@noema/validation\nZod schemas"]
-    Events["@noema/events\nclosed-loop events"]
+    Validation["@noema/validation\nnon-kernel Zod schemas"]
+    Events["@noema/events\ntransport/event infra"]
     Config["@noema/config\nthresholds + weights"]
   end
 
@@ -176,6 +177,7 @@ flowchart TD
   end
 
   subgraph Shared["Shared Packages"]
+    Kernel["@noema/learning-kernel"]
     Types["@noema/types\nLearningMode + shared contracts"]
     Contracts["@noema/contracts"]
     Validation["@noema/validation"]

@@ -2,7 +2,7 @@
 
 **Status:** Draft **Date:** 2026-05-02 **Scope:** Content-service additions for
 Batch 11 of `IMPLEMENTATION_PLAN_FINAL.md` covering the three card-creation
-modes, transformation persistence, and the Content Generation Agent contract.
+modes, transformation persistence, and the Content Creation Orchestrator contract.
 **Depends on:**
 
 - Existing content-service (ADRs 0010, 0033–0038)
@@ -23,7 +23,7 @@ another representation, with the transformation persisted as a new card linked
 to its parent.
 
 The content-service remains the authoritative store for card payloads (per
-ADR-0010). It does **not** become an LLM service; the Content Generation Agent
+ADR-0010). It does **not** become an LLM service; the Content Creation Orchestrator
 is a separate Python process. Content-service exposes the persistence,
 provenance, validation, and transformation surface the agent calls into.
 
@@ -48,7 +48,7 @@ model Card {
   // existing fields ...
 
   originMode            CardOriginMode      // AUTHORED | RAG_GROUNDED | AGENT_AUTONOMOUS
-  originAgentRunId      String?             // back-reference to ContentGenerationAgent run
+  originAgentRunId      String?             // back-reference to ContentCreationOrchestrator run
   authorUserId          String?             // user id when AUTHORED, null otherwise
   sourceDocumentIds     String[]            // RAG: ingestion document ids
   sources               Json?               // [{ url, title, retrievedAt, snippet }]
@@ -182,7 +182,7 @@ with `originMode = AUTHORED` regardless of how much agent assistance was used.
 ## 4. Mode 2: RAG_GROUNDED — Document-Anchored Cards
 
 Cards generated from uploaded documents (ingestion-service hands off to the
-Content Generation Agent, which calls content-service). Required fields:
+Content Creation Orchestrator, which calls content-service). Required fields:
 
 - `sourceDocumentIds.length ≥ 1`
 - `sources` array with at least one entry per source document referenced
@@ -268,6 +268,11 @@ variants" group.
 ADR-0033 already requires content-service to call Pedagogy Guardian before
 storing a generated activity variant. Batch 11 extends the integration:
 
+Guardian is a broad hard validation gate here, but it owns only the validation
+decision (`accepted` / `warning` / `rejected`, reason codes, blocking flag, and
+validation id). Content-service remains the owner of card payloads, provenance,
+review state, factuality thresholds, lineage, and session eligibility.
+
 | Path                                       | Guardian called? | Block on failure |
 | ------------------------------------------ | ---------------- | ---------------- |
 | `AUTHORED` create                          | No               | n/a              |
@@ -283,7 +288,7 @@ session-eligible.
 
 ---
 
-## 8. Content Generation Agent Contract
+## 8. Content Creation Orchestrator Contract
 
 The agent runs out-of-process (Python). Content-service depends only on its HTTP
 contract.
@@ -291,52 +296,82 @@ contract.
 ### 8.1 Generation Request
 
 ```
-POST {AGENT_URL}/v1/content/generate
+POST {AGENT_URL}/v1/agents/content-creation-orchestrator/run
 Body: {
   userId: UserId
-  mode: CardOriginMode             // RAG_GROUNDED or AGENT_AUTONOMOUS
-  conceptIds: NodeId[]             // CKG anchors — required ≥1
-  documentIds?: string[]           // required when mode = RAG_GROUNDED
-  curriculumContext?: {
-    curriculumId: CurriculumId
-    versionId: CurriculumVersionId
-    nodeKeys: string[]
-  }
-  studentContext: {
-    metacognitiveStage: 1 | 2 | 3 | 4
-    masteryByConcept: { conceptId, stability }[]
-    recentMisconceptions: string[]
-  }
-  desiredCardTypes: CardType[]     // hint, agent may produce others
-  varietyMandate: {
-    minDistinctTypes: number
-    excludeTypes?: CardType[]
-  }
-  budget: {
-    maxCards: number
-    timeoutMs: number
+  curriculumId?: CurriculumId | null
+  conceptIds: NodeId[]
+  selectedNodeIds?: string[]
+  desiredCardTypes?: CardType[]
+  documentIds?: string[]
+  executionPreference?: "auto" | "realtime" | "batch"
+  payload: {
+    mode: CardOriginMode
+    budget?: {
+      maxCards?: number
+      timeoutMs?: number
+    }
+    curriculumContext?: {
+      curriculumId?: CurriculumId
+      versionId?: CurriculumVersionId
+      nodeKeys?: string[]
+      selectedNodeIds?: string[]
+    }
+    studentContext?: {
+      metacognitiveStage?: 1 | 2 | 3 | 4
+      masteryByConcept?: { conceptId, stability }[]
+      recentMisconceptions?: string[]
+    }
+    varietyMandate?: {
+      minDistinctTypes?: number
+      excludeTypes?: CardType[]
+    }
   }
 }
 Response: {
-  agentRunId: string
-  cards: ICreateCardInput[]        // each carries provenance + factualityScore
-  rejectedDrafts: { reason, draft }[]
-  costEstimate: { tokens, durationMs }
+  runId: string
+  jobId?: string | null
+  status: "completed" | "queued"
+  executionPlan: { strategy: "realtime" | "batch" }
+  execution?: {
+    result?: {
+      agentRunId: string
+      cards: ICreateCardInput[]
+      rejectedDrafts: { reason, draft }[]
+      costEstimate?: { tokens, durationMs }
+    }
+  }
+  providerBatchId?: string | null
+  pollAfterSeconds?: number | null
 }
 ```
 
 ### 8.2 Transformation Request
 
 ```
-POST {AGENT_URL}/v1/content/transform
+POST {AGENT_URL}/v1/agents/content-transform-agent/run
 Body: {
-  parentCardId: CardId
-  transformationKind: CardTransformKind
-  studentContext: ...
+  userId: UserId
+  selectedCardIds: [CardId]
+  desiredCardTypes?: [CardType]
+  executionPreference?: "realtime"
+  payload: {
+    parentCardId: CardId
+    transformationKind: CardTransformKind
+    targetCardType?: CardType
+    prompt?: string
+    card: { content: Record<string, unknown> }
+  }
 }
 Response: {
-  agentRunId: string
-  cards: ICreateCardInput[]
+  runId: string
+  status: "completed"
+  execution: {
+    result: {
+      agentRunId: string
+      card: ICreateCardInput
+    }
+  }
 }
 ```
 
@@ -351,16 +386,21 @@ agent and surfaces review UX.
 
 ## 9. Session Pool & Gap Filling
 
-The Learning Agent's `query-cards` tool already exists. Batch 11 adds:
+The legacy Learning Agent's useful content-pool responsibilities move to
+LessonPlan Generator, Strategy/Replanning, and session-service planning loops.
+`query-cards` remains a content-service candidate lookup tool; it does not
+select the next runtime unit. Batch 11 adds:
 
 - `query-cards` accepts `conceptIds`, `originModes` (filter), `studyMode`, and
   `excludeReviewStates` (defaults to excluding `PendingReview`,
   `MetadataIncomplete`, `Rejected`, `Archived`).
 - A new tool `gap-fill-concepts` returns `{ conceptId → cardCount }` so the
-  Learning Agent can detect gaps before invoking the Content Generation Agent.
-- A new tool `request-generation` triggers a generation job asynchronously and
-  returns the `agentRunId`. The Learning Agent polls or subscribes to
-  `content.generation.completed`.
+  LessonPlan Generator or Strategy/Replanning can detect content-payload gaps
+  before invoking the Content Creation Orchestrator.
+- A new tool `request-generation` triggers a generation job asynchronously
+  through the generic agent runtime and returns the runtime `runId` plus
+  optional `jobId`. The requesting planner/replanner polls
+  `GET /v1/batch-jobs/{jobId}` or subscribes to `agent_batch_job.completed`.
 
 In-session injection (Strategy local replan needs a remediation card that
 doesn't exist) uses a tight 5s budget. If the agent doesn't return in time,
@@ -407,7 +447,9 @@ get-card-lineage               # P1, side-effect=false
 get-coverage                   # P1, side-effect=false
 ```
 
-All write tools route through Pedagogy Guardian per section 7.
+All learner-facing generated or transformed write tools route through Pedagogy
+Guardian per section 7. Content-service still performs its own schema,
+provenance, review-state, lineage, and authorization checks.
 
 ---
 
@@ -443,10 +485,11 @@ curriculum.frontier.updated          # opportunity to gap-fill ahead of next ses
    `ConceptCardCoverage`, and the `CardReviewState` enum.
 3. Domain layer changes: card validation gate for forced metadata;
    transformation service; coverage projection; review-state lifecycle.
-4. Pedagogy Guardian integration extended to all generation/transformation
-   paths.
-5. Content Generation Agent HTTP adapter under `LESSON_PLAN_AGENT_URL` style env
-   var (separate `CONTENT_GENERATION_AGENT_URL`).
+4. Pedagogy Guardian integration extended to all learner-facing
+   generation/transformation paths without moving content ownership into
+   Guardian.
+5. Content Creation Orchestrator HTTP adapter under `LESSON_PLAN_AGENT_URL` style env
+   var (separate `content_creation_orchestrator_URL`).
 6. New REST routes per section 10.
 7. New MCP tools per section 11.
 8. Event publishing additions.

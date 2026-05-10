@@ -133,6 +133,8 @@ The full knowledge graph experience at `/knowledge`.
 - **Legend**: filterable by node type — toggling a type hides/shows those nodes
 - **Node list**: scrollable list of all nodes, sorted by label. Clicking scrolls
   the graph to that node.
+- **Selection actions**: when one or more nodes are selected, the controls show
+  a destructive delete action and advertise the `Delete` keyboard shortcut.
 - **System-guided review**: canonical comparison signals (`missingFromPkg`,
   alignment score, personal-only nodes) plus actions to apply the next suggested
   concepts into the PKG.

@@ -5,6 +5,17 @@
 **Philosophy:** Design APIs before writing code. Contracts are the source of
 truth.
 
+**Realignment note (2026-05 agent council):** this older checklist remains a
+contracting inventory, but several names are historical. `agentHints` envelopes
+remain required on all 2xx tool/API responses, while Cognitive Copilot surfaces
+only fresh, relevant, learner-safe hints after Watchtower/intrusiveness policy.
+Canonical calibration and Evaluation facts belong to `metacognition-service`;
+analytics may expose derived reporting read models. Strategy loadouts and
+teaching approaches are future/product-language concepts, while current runtime
+Strategy/Replanning lives inside `session-service`. The broad Governance Agent
+is split into Pedagogy Guardian, Watchtower, graph review, Taxonomy Curator, and
+Research/Evaluator duties.
+
 ---
 
 ## 📋 Overview Checklist
@@ -19,27 +30,32 @@ truth.
 
 **Location:** `packages/contracts/src/agents/`
 
-### 1.1 Learning Agent Contract
+### 1.1 LessonPlan / Step Selection Contracts
 
-**File:** `packages/contracts/src/agents/learning-agent.contract.ts`
+**File:** `packages/contracts/src/agents/lesson-plan-generator.contract.ts`
+
+Realignment: the standalone Learning Agent / next-card selector is superseded.
+Step is the runtime unit. LessonPlan Generator proposes session plans and Steps;
+`session-service` owns the active LessonPlan/Step queue; `scheduler-service`
+owns readiness projections; `content-service` owns content payload candidates;
+Mode Preference Helper only chooses among deterministic eligible modes.
 
 - [ ] **Define Input Interface**
-  - [ ] `SelectNextCardInput` with userId, mode, sessionContext
-  - [ ] `PlanSessionInput` with goals, duration, constraints
-  - [ ] `AdaptModeInput` with performance data
+  - [ ] `PlanSessionInput` with userId, curriculumId, goal, duration, constraints
+  - [ ] `SuggestStepCandidatesInput` with selected curriculum nodes, schedule context, and content-candidate context
 - [ ] **Define Output Interface**
-  - [ ] `SelectNextCardOutput` with selectedCard, reasoning, alternatives
-  - [ ] `SessionPlanOutput` with cardSequence, estimatedDuration, strategy
+  - [ ] `SessionPlanOutput` with LessonPlan, goals, Step sequence, estimatedDuration, and rationale
+  - [ ] `StepCandidateOutput` with proposed Steps, content payload references, mode rationale, and alternatives
   - [ ] All outputs include AgentHints v2.0.0 (8 required fields)
 
 - [ ] **Define Tool Requirements**
-  - [ ] List of required tools: `get-candidate-cards`,
-        `get-knowledge-graph-context`, `get-dueness-scores`
+  - [ ] List of required tools: `query-cards` for content payload candidates,
+        `get-knowledge-graph-context`, `get-srs-schedule`, `get-frontier`
   - [ ] Tool input/output schemas for each
 - [ ] **Define Configuration Schema**
   - [ ] LLM config (model, temperature, maxTokens)
   - [ ] Behavior config (maxIterations, timeoutMs)
-  - [ ] Mode strategies (exploration, goal-driven, exam, synthesis)
+  - [ ] Step-first session strategies (exploration, goal-driven, exam, synthesis)
 
 - [ ] **Define Reasoning Trace Schema**
   - [ ] Steps array with thought/action/observation
@@ -97,9 +113,13 @@ truth.
 
 ---
 
-### 1.3 Strategy Agent Contract
+### 1.3 Strategy Agent Contract (Future Loadout Concept)
 
 **File:** `packages/contracts/src/agents/strategy-agent.contract.ts`
+
+Realignment: keep this contract as future strategy-loadout product work. Current
+runtime replanning is owned by `session-service`; this future agent may evaluate
+preferences and durable loadout concepts once they have independent state.
 
 - [ ] **Define Input Interface**
   - [ ] `SelectLoadoutInput` with userState, goals, history
@@ -130,9 +150,9 @@ truth.
 
 ---
 
-### 1.4 Content Generation Agent Contract
+### 1.4 Content Creation Orchestrator Contract
 
-**File:** `packages/contracts/src/agents/content-generation-agent.contract.ts`
+**File:** `packages/contracts/src/agents/content-creation-orchestrator.contract.ts`
 
 - [ ] **Define Input Interface**
   - [ ] `GenerateCardsInput` with topic, count, cardType, difficulty
@@ -165,6 +185,10 @@ truth.
 ### 1.5 Socratic Tutor Agent Contract
 
 **File:** `packages/contracts/src/agents/socratic-tutor-agent.contract.ts`
+
+Realignment: Socratic is a Step/activity interaction mode. Teaching approaches
+are learner/admin-facing vocabulary over deterministic epistemic-mode
+eligibility, not a separate global selector.
 
 - [ ] **Define Input Interface**
   - [ ] `ConductDialogueInput` with concept, userUnderstanding, approach
@@ -329,9 +353,15 @@ truth.
 
 ---
 
-### 1.10 Governance Agent Contract
+### 1.10 Watchtower / Split Governance Contracts
 
-**File:** `packages/contracts/src/agents/governance-agent.contract.ts`
+**File:** `packages/contracts/src/agents/watchtower-governance.contract.ts`
+
+Realignment: use Watchtower for privacy, audit, overload, transparency, and
+intrusiveness controls. Mixed historical Governance Agent duties must be split:
+Pedagogy Guardian validates pedagogical artifacts, graph review owns graph
+proposal guardrails, Taxonomy Curator proposes taxonomy changes, and
+Research/Evaluator studies system quality.
 
 - [ ] **Define Input Interface**
   - [ ] `MonitorAgentInput` with agentId, actions, budget
@@ -945,9 +975,13 @@ truth.
 
 ---
 
-### 3.8 Strategy Service API
+### 3.8 Strategy Service API (Future / Speculative)
 
 **File:** `docs/api/strategy-service.openapi.yaml`
+
+Realignment: this API is not part of the current runtime path. Current
+Strategy/Replanning is inside `session-service`; loadout APIs remain future
+product design until an ADR grants a separate service durable ownership.
 
 - [ ] **Info Section**
 - [ ] **Components/Schemas**
@@ -1001,6 +1035,10 @@ truth.
 ### 3.10 Analytics Service API
 
 **File:** `docs/api/analytics-service.openapi.yaml`
+
+Realignment: analytics can publish dashboards and derived reports, but it must
+not own canonical calibration, Evaluation, or confidence evidence. Those facts
+belong to `metacognition-service`, with scheduler projections where relevant.
 
 - [ ] **Info Section**
 - [ ] **Components/Schemas**
@@ -1157,9 +1195,9 @@ truth.
 
 For each agent (10 tests):
 
-- [ ] **Learning Agent Contract Test**
-  - [ ] Test selectNextCard contract
+- [ ] **LessonPlan / Step Selection Contract Test**
   - [ ] Test planSession contract
+  - [ ] Test Step candidate proposal contract
   - [ ] Verify AgentHints v2.0.0 structure
   - [ ] Verify required tools are called correctly
 
@@ -1170,13 +1208,13 @@ For each agent (10 tests):
   - [ ] Verify patch plan structure
 
 - [ ] **Strategy Agent Contract Test**
-- [ ] **Content Generation Agent Contract Test**
+- [ ] **Content Creation Orchestrator Contract Test**
 - [ ] **Socratic Tutor Agent Contract Test**
 - [ ] **Calibration Agent Contract Test**
 - [ ] **Ingestion Agent Contract Test**
 - [ ] **Knowledge Graph Agent Contract Test**
 - [ ] **Taxonomy Curator Agent Contract Test**
-- [ ] **Governance Agent Contract Test**
+- [ ] **Watchtower / split governance contract tests**
 
 ---
 
@@ -1397,7 +1435,7 @@ For each service (15 tests):
 ### 6.2 Cross-Reference Check
 
 - [ ] **Agent ↔ Service Contract Alignment**
-  - [ ] Learning Agent uses correct Content Service endpoints
+  - [ ] LessonPlan/Step planning uses correct Content Service candidate endpoints
   - [ ] Diagnostic Agent uses correct Metacognition Service endpoints
   - [ ] All agent tool requirements match service capabilities
 

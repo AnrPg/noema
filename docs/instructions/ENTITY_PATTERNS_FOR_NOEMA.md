@@ -259,15 +259,25 @@ Patterns: Strategy, Builder, Prototype (clone archetypes), Composite
 
 ### 2.3 Mental Debugger Diagnosis
 
-**What:** Analysis result from 7-frame trace producing failure taxonomy and
-patch plan
+**Realignment note:** `metacognition-service` owns canonical Evaluations,
+7-frame trace scoring, Trigger facts, and persisted diagnostic facts. Mental
+Debugger is the learner-facing explanation layer over those facts. Patch Planner
+proposes repair shapes; `session-service`, `content-service`, and
+`curriculum-service` own the resulting repair Steps, content payloads, and
+durable repair branches.
+
+**What:** Analysis/explanation result from service-owned 7-frame trace and
+Evaluation data, producing learner-facing diagnostic interpretation and possible
+repair recommendations.
 
 **Why for Noema:**
 
 - Categorizes failures into 10 families (Parsing, Retrieval, Prior Knowledge,
   Confusable, etc.)
-- Generates targeted patch plans (immediate, optional, escalation)
-- Creates 20 special remediation card types
+- Recommends targeted repair shapes (immediate, optional, escalation) through
+  Patch Planner
+- Requests remediation content payload drafts through Content Creation Orchestrator
+  and `content-service`
 - Separates process errors from content gaps
 
 **Implementation:**
@@ -278,12 +288,12 @@ Failure Taxonomy:
                VERIFICATION, TIME_PRESSURE, MONITORING, COMMITMENT,
                CALIBRATION, ATTRIBUTION
 
-Patch Plan:
+Repair Recommendation:
   Immediate: verification gates, contrast cards, slow-down prompts
   Optional: practice recommendations, strategy suggestions
   Escalation: concept prerequisite learning, strategy override
 
-20 Remediation Card Types:
+Remediation Content Payload Types:
   contrastive_pair, minimal_pair, false_friend, old_vs_new_definition,
   boundary_case, rule_scope, discriminant_feature, assumption_check,
   counterexample, representation_switch, retrieval_cue, encoding_repair,
@@ -291,18 +301,26 @@ Patch Plan:
   process_trace, worked_example, error_spotting, confidence_drill,
   metamemory_calibration
 
-Patterns: Visitor (visit frames), Strategy (patch per family), Factory (remediation cards)
+Patterns: Visitor (visit frames), Strategy (repair shape per family), Factory
+(remediation content payloads)
 ```
 
 ---
 
 ### 2.4 Calibration Data
 
-**What:** Statistical aggregate tracking confidence vs accuracy alignment
+**Realignment note:** learner-facing product language is Calibration Coach, not
+"Liar Detector". Three-choice self-rating is evidence, not a grade.
+`metacognition-service` owns Evaluation facts and derived confidence signals;
+reasoning quality remains dominant over self-rating.
+
+**What:** Statistical aggregate/read model tracking confidence vs evidence
+alignment.
 
 **Why for Noema:**
 
-- Trains "Liar Detector" - exposes illusions of knowing
+- Trains calibration awareness by showing confidence/evidence mismatch without
+  accusation-oriented language
 - Calculates Brier score and Expected Calibration Error
 - Segments by difficulty, concept, time
 - Tracks overconfidence/underconfidence trends
@@ -606,45 +624,47 @@ Patterns: Template Method, ReAct, Strategy, Chain of Responsibility
 
 ### 5.2 Learning Agent
 
-**What:** Selects next card based on learning mode, knowledge graph context, and
-scheduler
+**Realignment note:** the standalone Learning Agent is superseded. Step is the
+runtime unit; `session-service` presents the next Step from the active
+LessonPlan/Step queue. Scheduler, graph, content, mode, strategy, and explanation
+responsibilities are redistributed to their owning services and agents.
+
+**What:** Historical role formerly responsible for next-card selection.
 
 **Why for Noema:**
 
-- Adapts to 4 learning modes (exploration, goal-driven, exam, synthesis)
-- Uses knowledge graph to inform selection
-- Balances dueness, difficulty, and serendipity
-- Strategy pattern for mode-specific selection
+- LessonPlan Generator builds reviewable session intent
+- `scheduler-service` provides readiness/due summaries
+- `knowledge-graph-service` provides graph context
+- `content-service` provides eligible content payload candidates
+- Strategy/Replanning adapts the active Step queue after Triggers
+- AI Mirror / Cognitive Copilot explains "why this Step?"
 
 **Implementation:**
 
 ```
-Selection Process:
-  1. Get candidate cards (due soon + random exploration)
-  2. Get knowledge graph context (prerequisites, relationships)
-  3. Get dueness scores from scheduler
-  4. Apply mode-specific strategy:
-     - Exploration: breadth + serendipity
-     - Goal-driven: target optimization
-     - Exam: coverage + weak spots
-     - Synthesis: cross-domain connections
-  5. LLM selects card with reasoning
+Replacement Process:
+  1. LessonPlan Generator builds a Step-first plan from goal/curriculum/readiness context
+  2. Pedagogy Guardian validates learner-facing artifacts
+  3. session-service presents the next Step from the active Step queue
+  4. metacognition-service records Evaluation and emits Triggers
+  5. Strategy/Replanning commits minimum-sufficient Step queue changes when needed
 
-Patterns: Strategy (modes), Observer (user progress), Planner
+Patterns: Planner, Observer (service-owned progress), Strategy (runtime replanning)
 ```
 
 ---
 
 ### 5.3 Diagnostic Agent
 
-**What:** Analyzes 7-frame thinking traces to diagnose failures and generate
-patch plans
+**What:** Explains service-owned 7-frame thinking traces and Evaluation facts,
+then recommends possible repair directions without owning repair state.
 
 **Why for Noema:**
 
 - Visitor pattern to analyze each frame
 - Classifies into 10 failure families
-- Generates immediate/optional/escalation patches
+- Recommends immediate/optional/escalation repair shapes to Patch Planner
 - Respects intrusiveness budget
 
 **Implementation:**
@@ -654,16 +674,16 @@ Analysis Process:
   1. Visit each frame (0-6) with frame-specific analyzers
   2. Extract frame-level features
   3. Load failure taxonomy
-  4. LLM synthesizes diagnosis with confidence
-  5. Generate patch plan based on failure family
+  4. LLM or deterministic interpreter drafts learner-facing explanation with confidence
+  5. Recommend repair shape based on failure family
   6. Respect intrusiveness and time budgets
 
-Patterns: Visitor (frames), Strategy (patches), Factory (remediation cards)
+Patterns: Visitor (frames), Strategy (repair shapes), Factory (remediation payload requests)
 ```
 
 ---
 
-### 5.4 Content Generation Agent
+### 5.4 Content Creation Orchestrator
 
 **What:** Generates and enhances cards using knowledge graph context and AI
 

@@ -2,6 +2,13 @@ Excellent. Since you’re building a **research-grounded, AI-enhanced learning
 platform**, you should not think only in terms of “flashcards”, but in terms of
 **epistemic modes of engagement**.
 
+> **Realignment note (2026-05 agent council):** teaching approaches in this
+> document are product/UX vocabulary and design inspiration layered over
+> Noema's deterministic epistemic-mode routing. They are not a separate
+> `TeachingApproach` selector above the 30 epistemic modes. Socratic behavior is
+> surfaced as a Step/activity interaction mode, not as a global teaching mode
+> that overrides LessonPlan, Guardian, or session-service routing.
+
 Below is a structured taxonomy of _learning/teaching paradigms_ — including
 classical ones (like διερευνητική μάθηση) and more novel cognitive designs (like
 loophole learning).

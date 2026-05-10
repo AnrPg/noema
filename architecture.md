@@ -64,6 +64,11 @@ Noema's learning loop is:
 
 ### Realignment Invariants
 
+- `@noema/learning-kernel` is the canonical owner for closed-loop branded ID
+  schemas, event payload schemas, event registry metadata, envelope builders,
+  runtime validators, and golden fixtures. `@noema/events`,
+  `@noema/contracts`, and `@noema/validation` must not define independent
+  closed-loop semantics where the kernel owns them.
 - Step is the atomic learner-visible unit. Cards are content payloads/templates.
 - Evaluation is canonical and owned only by `metacognition-service`.
 - Reasoning quality dominates correctness and self-rating in combined score.
@@ -135,6 +140,37 @@ refactor or replace earlier premature edits if they fail the ADR contracts.
 | 11    | Agents generate LessonPlans and activity variants through Guardian                    |
 | 12    | Gamification is derived from source-of-truth learning events                          |
 | 13    | Closed-loop E2E proves replay convergence                                             |
+
+### Batch 13 Verification Addendum
+
+Batch 13 is the convergence-proof layer for the realigned runtime. It does not
+change the learner-facing product contract unless a correctness gap forces it.
+Its architectural deliverable is a reusable verification harness that can:
+
+- boot the full Step-first platform topology, including document ingestion,
+  vector retrieval, curriculum/content generation, Guardian validation,
+  session-runtime services, KG projections, and gamification projections
+- drive real HTTP surfaces end to end, while using direct projection reads only
+  for eventual-consistency assertions and artifact capture
+- prove replay convergence as a first-class invariant instead of a best-effort
+  implementation detail
+- separate deterministic CI proof from heavier load and destructive chaos
+  profiles
+
+The accepted operational shape is:
+
+- `scripts/closed-loop/stack.cjs` owns full-platform bootstrap and shutdown
+- `scripts/closed-loop/run.cjs` owns deterministic, replay, load, chaos, and
+  browser proof modes
+- `.closed-loop/artifacts/` is the durable evidence bundle location for health
+  snapshots, scenario outputs, timings, and replay comparisons
+
+Batch 13 therefore turns the closed loop into an explicit platform contract:
+
+- one Step answer must converge to one canonical Evaluation
+- one adaptive trigger path must converge to one committed repair effect
+- one concept-state truth must converge to one revocable KG projection history
+- one learner truth must converge to one gamification projection state
 
 ### Superseded Concepts
 

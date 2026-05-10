@@ -19,16 +19,22 @@ pattern implementation, complete reasoning traces, and proper observability.
 
 Noema has 10 LLM agents that perform various tasks:
 
-- Learning Agent (next card selection)
+- LessonPlan Generator / Step planning agents (session plan and Step proposals)
 - Diagnostic Agent (learning pattern analysis)
 - Strategy Agent (learning strategy adjustment)
-- Content Generation Agent (card creation)
+- Content Creation Orchestrator (card creation)
 - Socratic Tutor Agent (guided questioning)
 - Calibration Agent (self-assessment)
 - Ingestion Agent (content processing)
 - Knowledge Graph Agent (concept linking)
 - Taxonomy Curator Agent (category organization)
-- Governance Agent (quality control)
+- Watchtower / split governance agents (privacy, audit, intrusiveness, and validation coordination)
+
+Realignment note: the historical standalone Learning Agent / next-card selector
+is superseded. Step is the runtime unit; `session-service` owns the active Step
+queue, `scheduler-service` owns readiness, `content-service` owns content
+payload candidates, and LessonPlan/Strategy/Mode Preference agents may only
+propose or explain.
 
 All agents must follow ReAct pattern (Reason → Act → Observe), produce complete
 reasoning traces, and provide cost/performance metrics.
@@ -635,12 +641,13 @@ interface {Agent}Input {
   // Agent-specific input fields
   // Examples:
 
-  // For Learning Agent
+  // For LessonPlan Generator / Step planning agents
   userId: string;
-  deckId: string;
+  curriculumId: string;
   sessionMode: 'exploration' | 'goal-driven' | 'exam' | 'synthesis';
+  selectedConceptIds?: string[];
 
-  // For Content Generation Agent
+  // For Content Creation Orchestrator
   topic: string;
   cardType: 'atomic' | 'cloze' | 'image_occlusion';
   count: number;

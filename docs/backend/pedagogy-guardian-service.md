@@ -40,6 +40,15 @@ the variant.
 Both producers use HTTP adapters only when `PEDAGOGY_GUARDIAN_ENABLED=true`;
 otherwise they use a no-op adapter for local batch-by-batch development.
 
+## Authority Boundary
+
+Guardian is a broad hard validation gate, not a generic business-rule owner. It
+may accept, warn, or veto learner-facing pedagogical artifacts and creation
+pipeline proposals, but it does not own graph state, curriculum state, content
+provenance, scheduling, Evaluation facts, or session runtime. Producing
+services must still enforce their own schemas, domain invariants,
+authorization, provenance, typestate, and persistence rules.
+
 ## Validation Families
 
 - LessonPlan structure: active-goal limit, duplicate Step IDs, contradictory

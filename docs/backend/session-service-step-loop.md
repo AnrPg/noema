@@ -21,14 +21,17 @@ aggregate boundary.
 
 - `POST /v1/sessions` creates a session in `planning`.
 - `POST /v1/sessions/:sessionId/lesson-plan` creates and activates one
-  LessonPlan for that session.
+  LessonPlan for that session. The request must carry a real
+  `curriculumVersionId` and at least one selected curriculum node; the service
+  no longer fabricates maintenance fallback bindings.
 - `POST /v1/lesson-plans/:lessonPlanId/goals` adds a goal and enforces the
   4-active-goal cap.
-- `GET /v1/sessions/:sessionId/next-step` returns the next pending Step.
+- `GET /v1/sessions/:sessionId/next-step` returns the canonical active-session
+  snapshot `{ session, lessonPlan, nextStep }`.
 - `POST /v1/steps/:stepId/present` marks the Step presented and transitions the
   session to `execution` when needed.
-- `POST /v1/steps/:stepId/answer` accepts the learner response and marks the
-  Step `evaluated`.
+- `POST /v1/steps/:stepId/answer` accepts the learner response, marks the Step
+  `answered`, and durably enqueues asynchronous evaluation.
 - `POST /v1/steps/:stepId/skip` marks the Step skipped.
 - `POST /v1/sessions/:sessionId/complete` moves the session to `completion` and
   writes `completedAt`.
@@ -51,9 +54,11 @@ The service writes events through the durable outbox. Batch 4 emits:
 ## Factories
 
 `MinimalLessonPlanFactory` is deterministic and creates a structural review plan
-with one queued Step. `FullLessonPlanFactory` is an adapter boundary to the
-Python LessonPlan Generation Agent and requires `LESSON_PLAN_AGENT_URL`; the
-full planner implementation itself belongs to a later realignment batch.
+with one queued Step, but only when the request binds it to a concrete
+curriculum version and non-empty curriculum slice. `FullLessonPlanFactory` is an
+adapter boundary to the Python LessonPlan Generation Agent and requires
+`LESSON_PLAN_AGENT_URL`; the full planner implementation itself belongs to a
+later realignment batch.
 
 ## Strategy Replanning
 
@@ -61,8 +66,12 @@ full planner implementation itself belongs to a later realignment batch.
 `MetacognitionTriggerConsumer`. Strategy selects the default intervention and
 lowest sufficient scope:
 
-- answering a Step transitions the session through `diagnosis` while
-  metacognition records the Evaluation, then to `evaluation`
+- answering a Step transitions the session through `diagnosis`, writes the
+  durable `step.answered` fact, and returns immediately
+- `metacognition-service` consumes `step.answered`, records the Evaluation
+  idempotently by `stepId`, and emits `metacognition.evaluation.recorded`
+- `session-service` consumes `metacognition.evaluation.recorded`, finalizes the
+  Step to `evaluated`, and then transitions the session to `evaluation`
 - handling a trigger transitions through `adaptation` while the Strategy module
   commits the replan
 - replans insert replacement Steps and mark replaced pending Steps as

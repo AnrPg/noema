@@ -3,6 +3,14 @@ same level of importance as the Mental Debugger.
 I’ll design them with the **same rigor and completeness**, treating them as
 **first-class system objects**, not UI presets.
 
+> **Realignment note (2026-05 agent council):** this document remains valuable
+> product architecture for future strategy-loadout work. It is not the current
+> runtime authority model. Today, runtime Strategy/Replanning lives inside
+> `session-service`, LessonPlans/Steps are validated by Pedagogy Guardian, and
+> deterministic epistemic-mode eligibility controls valid Step modes. A future
+> `strategy-service` or Strategy Loadout Agent needs a separate ADR before it
+> owns durable loadout state or changes runtime replanning behavior.
+
 I will follow the _same design depth_ you used for the Mental Debugger:
 
 1. What a **Strategy Loadout really is** (conceptual object, not a feature)

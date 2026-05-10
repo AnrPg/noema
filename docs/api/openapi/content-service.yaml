@@ -1,0 +1,657 @@
+openapi: 3.1.0
+info:
+  title: Noema Content Service API
+  version: 0.1.0
+  description: |
+    Content authoring, batch import, generation-job, and activity-payload APIs
+    for Noema.
+
+    This checked-in contract focuses on the agent-relevant content surfaces:
+
+    - bulk card creation and recovery
+    - content generation jobs
+    - canonical import of finalized agent-generated results
+    - activity payload candidate lookup for the Step loop
+servers:
+  - url: http://localhost:3002
+    description: Local development
+tags:
+  - name: Cards
+  - name: Content Generation
+  - name: Activity Payloads
+  - name: Content Coverage
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    CorrelationIdHeader:
+      name: x-correlation-id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional cross-service correlation id.
+    IdempotencyKeyHeader:
+      name: x-idempotency-key
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Required for replay-safe batch imports and agent result finalization.
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        data: {}
+        agentHints:
+          type: object
+          additionalProperties: true
+      required: [data, agentHints]
+    StudyMode:
+      type: string
+      enum: [language_learning, knowledge_gaining]
+    CardState:
+      type: string
+      enum: [draft, active, suspended, archived]
+    Difficulty:
+      type: string
+      enum: [beginner, elementary, intermediate, advanced, expert]
+    GenerationJobStatus:
+      type: string
+      enum: [requested, running, completed, failed]
+    CardInput:
+      type: object
+      required: [cardType, content]
+      properties:
+        cardType:
+          type: string
+        content:
+          type: object
+          additionalProperties: true
+        difficulty:
+          $ref: "#/components/schemas/Difficulty"
+        knowledgeNodeIds:
+          type: array
+          items:
+            type: string
+        anchoredCkgNodeIds:
+          type: array
+          items:
+            type: string
+            pattern: "^concept_[A-Za-z0-9_-]{21}$"
+        anchoredPkgNodeIds:
+          type: array
+          items:
+            type: string
+        compatibleTransformations:
+          type: array
+          items:
+            type: string
+        defaultEligibilityGroups:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        supportedStudyModes:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyMode"
+        source:
+          type: string
+        sourceDocumentId:
+          type: string
+          nullable: true
+        originMode:
+          type: string
+          nullable: true
+        originAgentRunId:
+          type: string
+          nullable: true
+        generationRationale:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+    Card:
+      allOf:
+        - $ref: "#/components/schemas/CardInput"
+        - type: object
+          properties:
+            id:
+              type: string
+            userId:
+              type: string
+            state:
+              $ref: "#/components/schemas/CardState"
+            batchId:
+              type: string
+              nullable: true
+            generationJobId:
+              type: string
+              nullable: true
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+          required: [id, userId, state, createdAt, updatedAt]
+    BatchCreateResult:
+      type: object
+      properties:
+        batchId:
+          type: string
+        created:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        failed:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        total:
+          type: integer
+        successCount:
+          type: integer
+        failureCount:
+          type: integer
+      required: [batchId, created, failed, total, successCount, failureCount]
+    CreateContentGenerationJobInput:
+      type: object
+      required: [mode, requestedCount]
+      properties:
+        mode:
+          type: string
+        requestedCount:
+          type: integer
+          minimum: 1
+        conceptIds:
+          type: array
+          items:
+            type: string
+        documentIds:
+          type: array
+          items:
+            type: string
+        desiredCardTypes:
+          type: array
+          items:
+            type: string
+        curriculumContext:
+          type: object
+          additionalProperties: true
+        studentContext:
+          type: object
+          additionalProperties: true
+        varietyMandate:
+          type: object
+          additionalProperties: true
+        budget:
+          type: object
+          additionalProperties: true
+        prompt:
+          type: string
+    ContentGenerationJob:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        mode:
+          type: string
+        status:
+          $ref: "#/components/schemas/GenerationJobStatus"
+        requestedCount:
+          type: integer
+        conceptIds:
+          type: array
+          items:
+            type: string
+        documentIds:
+          type: array
+          items:
+            type: string
+        agentRunId:
+          type: string
+          nullable: true
+        createdCardIds:
+          type: array
+          items:
+            type: string
+        rejectedDrafts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        resultPayload:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - mode
+        - status
+        - requestedCount
+        - conceptIds
+        - documentIds
+        - createdCardIds
+        - createdAt
+        - updatedAt
+    ImportGeneratedContentBatchInput:
+      type: object
+      required: [job, cards]
+      properties:
+        job:
+          $ref: "#/components/schemas/CreateContentGenerationJobInput"
+        cards:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        agentRunId:
+          type: string
+        rejectedDrafts:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        resultPayload:
+          type: object
+          additionalProperties: true
+    ImportedGeneratedContentBatch:
+      type: object
+      properties:
+        job:
+          $ref: "#/components/schemas/ContentGenerationJob"
+        batch:
+          $ref: "#/components/schemas/BatchCreateResult"
+      required: [job, batch]
+    QueryCardsInput:
+      type: object
+      properties:
+        cardTypes:
+          type: array
+          items:
+            type: string
+        states:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardState"
+        difficulties:
+          type: array
+          items:
+            $ref: "#/components/schemas/Difficulty"
+        compatibleTransformations:
+          type: array
+          items:
+            type: string
+        defaultEligibilityGroups:
+          type: array
+          items:
+            type: string
+        supportedStudyModes:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyMode"
+        knowledgeNodeIds:
+          type: array
+          items:
+            type: string
+        anchoredCkgNodeIds:
+          type: array
+          items:
+            type: string
+            pattern: "^concept_[A-Za-z0-9_-]{21}$"
+        anchoredPkgNodeIds:
+          type: array
+          items:
+            type: string
+        knowledgeNodeIdMode:
+          type: string
+          enum: [any, all, exact, subtree, prerequisites, related]
+        tags:
+          type: array
+          items:
+            type: string
+        sources:
+          type: array
+          items:
+            type: string
+        search:
+          type: string
+        offset:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+    QueryCardsResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+      required: [items, total, hasMore]
+    ActivityPayloadCandidatesInput:
+      type: object
+      required:
+        - conceptId
+        - transformationType
+        - eligibilityGroup
+        - epistemicMode
+        - difficultyBucket
+      properties:
+        conceptId:
+          type: string
+          pattern: "^concept_[A-Za-z0-9_-]{21}$"
+        transformationType:
+          type: string
+          enum: [recall, explanation, comparison, application, perturbation, error_detection]
+        eligibilityGroup:
+          type: string
+          enum: [new_concept, reinforcement, confusion, weak_reasoning, transfer, meta, pressure]
+        epistemicMode:
+          type: string
+        difficultyBucket:
+          type: integer
+          minimum: 0
+          maximum: 4
+        studyMode:
+          $ref: "#/components/schemas/StudyMode"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+        includeTemplates:
+          type: boolean
+        includeGeneratedVariants:
+          type: boolean
+    ActivityPayloadCandidatesResult:
+      type: object
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/Card"
+        templates:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        generatedVariants:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required: [cards, templates, generatedVariants]
+paths:
+  /v1/cards/batch:
+    post:
+      tags: [Cards]
+      summary: Batch create cards
+      description: Create up to 100 cards in a single request.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cards]
+              properties:
+                cards:
+                  type: array
+                  maxItems: 100
+                  items:
+                    $ref: "#/components/schemas/CardInput"
+      responses:
+        "201":
+          description: Cards created or replayed from the same batch id.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/BatchCreateResult"
+  /v1/cards/query:
+    post:
+      tags: [Cards]
+      summary: Query cards
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryCardsInput"
+      responses:
+        "200":
+          description: Matching cards and pagination metadata.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/QueryCardsResult"
+  /v1/cards/batch/{batchId}:
+    get:
+      tags: [Cards]
+      summary: Recover cards by batch id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cards created in the batch.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Card"
+  /v1/activity-payload-candidates:
+    post:
+      tags: [Activity Payloads]
+      summary: Find activity payload candidates
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivityPayloadCandidatesInput"
+      responses:
+        "200":
+          description: Compatible cards, templates, and generated variants.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ActivityPayloadCandidatesResult"
+  /v1/content/generation-jobs:
+    post:
+      tags: [Content Generation]
+      summary: Request content generation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContentGenerationJobInput"
+      responses:
+        "202":
+          description: Generation job accepted.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ContentGenerationJob"
+    get:
+      tags: [Content Generation]
+      summary: List content generation jobs
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/GenerationJobStatus"
+      responses:
+        "200":
+          description: Matching generation jobs.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ContentGenerationJob"
+  /v1/content/generation-jobs/import-result:
+    post:
+      tags: [Content Generation]
+      summary: Import completed generated content
+      description: |
+        Canonical content-service-owned import path for finalized agent output.
+        This endpoint requires `x-idempotency-key` for replay-safe finalization.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+        - name: x-idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Replay boundary for agent-result finalization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportGeneratedContentBatchInput"
+      responses:
+        "201":
+          description: Generated content imported and bound to a durable generation job.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ImportedGeneratedContentBatch"
+  /v1/content/generation-jobs/{id}:
+    get:
+      tags: [Content Generation]
+      summary: Get content generation job
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Generation job found.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ContentGenerationJob"
+  /v1/content/generation-jobs/{id}/run:
+    post:
+      tags: [Content Generation]
+      summary: Run content generation job
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CorrelationIdHeader"
+      responses:
+        "202":
+          description: Generation run accepted.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ContentGenerationJob"

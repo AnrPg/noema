@@ -613,7 +613,7 @@ await eventBus.publish('domain.entity.action', {
 1. **Learning Agent** - Session planning, content selection, mode switching
 2. **Diagnostic Agent** - Trace analysis, failure diagnosis, pattern detection
 3. **Strategy Agent** - Loadout selection, policy enforcement, adaptation
-4. **Content Generation Agent** - Card creation, enhancement, adaptation
+4. **Content Creation Orchestrator** - Card creation, enhancement, adaptation
 5. **Socratic Tutor Agent** - Inquiry dialogue, adversarial questioning
 6. **Calibration Agent** - Confidence tracking, metacognitive feedback
 7. **Ingestion Agent** - Document parsing, hint generation, transformation
@@ -882,7 +882,7 @@ noema/
 │   ├── learning-agent/
 │   ├── diagnostic-agent/
 │   ├── strategy-agent/
-│   ├── content-generation-agent/
+│   ├── content-creation-orchestrator/
 │   ├── socratic-tutor-agent/
 │   ├── calibration-agent/
 │   ├── ingestion-agent/

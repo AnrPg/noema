@@ -2,7 +2,7 @@
 
 **Status:** Draft **Date:** 2026-05-02 **Scope:** `@noema/ingestion-service` —
 document upload pipeline that produces intermediate representations, concept
-extractions, RAG indexes, and seeds for the Content Generation Agent and the
+extractions, RAG indexes, and seeds for the Content Creation Orchestrator and the
 Curriculum Design Agent. **Depends on:**
 
 - knowledge-graph-service (CKG concept lookup, node proposals)
@@ -17,7 +17,7 @@ Curriculum Design Agent. **Depends on:**
 
 The ingestion-service owns document processing end-to-end: upload, parse, IR
 extraction, concept extraction, CKG mapping, chunking + embedding, and handoffs
-to the Content Generation Agent (for RAG-grounded cards) and the Curriculum
+to the Content Creation Orchestrator (for RAG-grounded cards) and the Curriculum
 Design Agent (for document-derived curricula).
 
 It does **not** own the cards or the curricula it seeds — those live in
@@ -58,7 +58,7 @@ their IR, their chunks/embeddings, and the audit trail of jobs.
 [Curriculum Seed Hand-off]         [Card Seed Hand-off]
         ↓                                      ↓
  curriculum-service                     content-service
- (Curriculum Design Agent)              (Content Generation Agent)
+ (Curriculum Design Agent)              (Content Creation Orchestrator)
 ```
 
 Each stage is a step in a job state machine with idempotent retries and explicit
@@ -287,7 +287,7 @@ content-service `/v1/content/generation-jobs` with:
 - Optional `curriculumContext` if the curriculum hand-off has already produced a
   finalized curriculum
 
-Content-service spawns the Content Generation Agent which uses chunks (via
+Content-service spawns the Content Creation Orchestrator which uses chunks (via
 vector-service, scoped to the documents) for retrieval and produces RAG-grounded
 cards.
 
@@ -337,6 +337,12 @@ Guardian integration. Ingestion-service does call Guardian for one purpose:
   pipeline. Rejection blocks the proposal and the candidate stays `Extracted`
   (with a recorded rejection rationale).
 
+This is dual control, not transferred ownership. Guardian hard-gates the
+pedagogical/safety shape of the extracted concept proposal; the
+knowledge-graph-service still owns CKG guardrails, mutation typestate, graph
+acceptance/rejection, and canonical graph state. Ingestion-service owns
+documents, IR, chunks, concept-candidate state, and job audit history.
+
 ---
 
 ## 8. Public API Surface
@@ -371,7 +377,7 @@ Upload endpoint accepts multipart with metadata fields:
 
 ## 9. MCP Tool Surface
 
-Exposed for the Curriculum Design Agent and Content Generation Agent:
+Exposed for the Curriculum Design Agent and Content Creation Orchestrator:
 
 ```
 list-documents              (read)

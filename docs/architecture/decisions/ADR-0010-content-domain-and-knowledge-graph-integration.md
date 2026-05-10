@@ -13,7 +13,7 @@ Accepted
 
 Noema's content layer is the vertical slice connecting the **Content Service**
 (card persistence), the **Knowledge Graph Service** (PKG/CKG structural
-storage), and the **Content Generation Agent** (LLM-powered card authoring).
+storage), and the **Content Creation Orchestrator** (LLM-powered card authoring).
 
 During the design of this vertical slice, several fundamental questions arose:
 
@@ -23,7 +23,7 @@ During the design of this vertical slice, several fundamental questions arose:
 3. **What graph topology is allowed?** Trees, DAGs, or general directed graphs?
 4. **How does the Content Service store cards without owning the graph?**
 5. **How does the graph layer handle reads and writes efficiently?**
-6. **What does the Content Generation Agent need, and what exists today?**
+6. **What does the Content Creation Orchestrator need, and what exists today?**
 
 These questions are interconnected — the answers to each constrain the others.
 This ADR documents the decisions made, their rationale, and their consequences
@@ -388,15 +388,15 @@ interface PkgStructureChanged {
   the stage progression state machine.
 - UI adapts based on current stage — Stage 0 hides graph editing, Stage 3
   surfaces full graph tools.
-- The Content Generation Agent adjusts card generation strategy based on
+- The Content Creation Orchestrator adjusts card generation strategy based on
   metacognitive stage (more structural cards at Stage 1–2, more autonomous
   prompts at Stage 3).
 
 ---
 
-### Decision 7: Content Generation Agent Tool Contract
+### Decision 7: Content Creation Orchestrator Tool Contract
 
-**The Content Generation Agent requires 34 MCP tools from 9 services. Most
+**The Content Creation Orchestrator requires 34 MCP tools from 9 services. Most
 depend on services not yet built. The interim strategy generates cards from
 minimal inputs with text-based deduplication.**
 
@@ -502,7 +502,7 @@ not yet implemented.
   cases where a just-added edge isn't reflected in subtree queries.
 - **No offline deck snapshots** — dynamic queries require service availability.
   Offline/mobile may need cached query results.
-- **Agent degradation** — Content Generation Agent works at reduced capability
+- **Agent degradation** — Content Creation Orchestrator works at reduced capability
   until KG and Vector services are built.
 
 ### Mitigations

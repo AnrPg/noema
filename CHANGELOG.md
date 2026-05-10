@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-05-09 - Agent Input Readiness Phase 4
+
+- added a runtime readiness gate before `mental-debugger` and `calibration-coach`
+  that blocks missing Step evidence, rubric summaries, frame evidence, policy
+  hidden surfaces, and blocked prerequisite artifacts
+- added Watchtower, lesson-plan, Patch Planner, Strategy/Replanning, and
+  debugger-summary handoff sections to learner-facing agent context packs before
+  prompt rendering
+- added composite readiness context tools for learner-facing agents and tests for
+  no-call, policy-hidden, prerequisite sequencing, and realtime/batch gate parity
+
+## 2026-05-04 - Closed-Loop Audit Remediation Follow-up
+
+- fixed learner session start to request a curriculum slice and create the
+  LessonPlan before entering the active Step loop
+- moved ingestion event publishing onto the shared Redis envelope/stream and
+  added atomic queued-job claiming
+- tightened selected-node, session-slice, scheduler tool, OpenAPI, and client
+  contracts around the learning-kernel hard cutover
+- rejected mismatched duplicate metacognition evaluations and service-token
+  requests without explicit user identity
+- renumbered the learning-kernel hard-cutover ADR to ADR-039 to avoid the
+  existing ADR-036 collision
+
+## 2026-05-03 - Realignment Batch 13 Closed-Loop Proof Harness
+
+- expanded local closed-loop startup coverage from the legacy five-service dev
+  set to the full realigned topology, including curriculum, metacognition,
+  guardian, ingestion, vector, and gamification services
+- added a repo-native closed-loop harness under `scripts/closed-loop/` with
+  deterministic, replay, load, chaos, and browser-proof entrypoints plus
+  artifact capture in `.closed-loop/artifacts/`
+- added a learner-facing Playwright proof for Step answer -> repair step ->
+  dashboard convergence using the real authenticated pages and mocked transport
+  edges
+- documented the Batch 13 verification contract, operational commands, and CI
+  adoption path for dedicated closed-loop environments
+
 ## 2026-05-03 - Realignment Batch 12 Gamification Service
 
 - standardized `session.completed` on the Step-first shared payload so derived
@@ -449,6 +487,17 @@
 - Added session curriculum binding fields and initial learner curriculum pages.
 - Recorded ADR-036 for the curriculum-service boundary and CKG proposal gate.
 
+# 2026-05-09 — Embedded Learner Agent UX
+
+- Added a contextual learner-agent integration layer for capability metadata,
+  preflight/run wrappers, async polling, proposal normalization, status badges,
+  review panels, and provenance drawers.
+- Embedded agent actions into dashboard, active session, session summary,
+  curriculum, content, and knowledge-map workflows.
+- Moved the raw wrapper workbench behind `/agents/debug` and removed the
+  workbench from primary learner navigation.
+- Documented the embedded-agent UX model in `docs/frontend/embedded-agents.md`.
+
 # 2026-05-02 — Batch 11 Curriculum + Content Completion Pass
 
 - Added curriculum operational surfaces for active versions, progress
@@ -477,3 +526,34 @@
   widgets.
 - Removed dead `CardQueueStatus` public exports and switched strategy trigger
   consumption to the shared metacognition event enum.
+
+# 2026-05-04 — Agent Platform Phase 6 Product Surfaces
+
+- Added `@noema/api-client/agents` with typed wrapper discovery, composite tool
+  discovery, preflight, and run APIs for the shared Python agent runtime.
+- Wired the learner web app to the agent runtime through
+  `configureAgentsClient()` and the new `NEXT_PUBLIC_AGENTS_URL` environment
+  variable.
+- Added an authenticated `Agent Workbench` route with wrapper catalog,
+  request-composer, review-routing, and run-artifact surfaces powered by the
+  Phase 4/5 runtime contracts.
+- Added dashboard and Copilot entry points into the workbench so agent flows are
+  visible from the main learner shell instead of remaining a hidden
+  endpoint-only capability.
+
+# 2026-05-04 — Agent Admin Observability And Configuration
+
+- Added SQLite-backed run telemetry, tool-call timelines, transcript export
+  caching, and versioned wrapper/tool-belt config persistence to the Python
+  `agents` runtime.
+- Exposed admin runtime APIs for aggregate stats, run listing/detail, tool
+  usage, completed-run monitoring, transcript download, and config
+  draft/update/activate/history workflows.
+- Extended `@noema/api-client/agents` with typed admin telemetry/config APIs and
+  React Query hooks.
+- Added a first-class `Agents` section to `apps/web-admin` with overview, runs,
+  run detail, live monitor, and config management screens.
+- Updated older admin session pages to the current Step-first session-service
+  contract while closing the new admin-agent validation path.
+- Added backend, frontend, and ops documentation for the new agent-admin
+  subsystem.

@@ -1,3 +1,13 @@
+> **Realignment note:** This is an older, expansive product sketch. In the
+> current Step-first architecture, `metacognition-service` owns canonical
+> Evaluations, 7-frame trace scoring, Trigger facts, reasoning quality, and
+> persisted diagnostic facts. Mental Debugger is the learner-facing explanation
+> layer over those facts. Patch Planner proposes repair shapes; `session-service`
+> owns repair Steps and Step queue mutations; `content-service` owns remediation
+> content payloads; `curriculum-service` owns durable repair branches. Treat any
+> wording below that says Mental Debugger "owns", "creates", or "generates"
+> patch state as historical shorthand.
+
 Good — this confusion is actually a signal that the concept is **new in kind**,
 not just in complexity. I’ll now explain the **“Stack Trace of Thinking”** as a
 _single coherent mental process unfolding over time_, not as a list of parts.
@@ -258,7 +268,8 @@ The debugger can trigger on:
 - The system generates a “patch”:
   - A micro-explanation (why you failed)
   - A micro-intervention (what to do next time)
-  - Optional: an **auto-created remediation card** or **contrast card** or
+- Optional: a **recommended remediation content payload** or **contrast payload**
+  routed through Patch Planner, Content Creation Orchestrator, and `content-service`, or
     **anti-confusion pair**
 
 **Step D — Regression prevention**
@@ -1103,7 +1114,7 @@ Patches are **primitives** that can be composed into sequences. Each patch has:
 
 - `trigger_conditions` (rule \+ model)
 - `delivery_mode` (UI)
-- `content_generation_mode` (static template vs LLM vs hybrid)
+- `content_creation_mode` (static template vs LLM vs hybrid)
 - `duration_cost` (seconds)
 - `expected_effect` (what metric should improve)
 - `escalation_path` (if repeats)
@@ -1396,7 +1407,8 @@ complete agent system with all parameters/options.
 
 3. **Patch Planner Agent**
 
-- Output: patch plan object (immediate/optional/escalation)
+- Output: repair proposal object (immediate/optional/escalation); services own
+  committed repair state.
 - Must respect: intrusiveness budget, time cost budget, user settings
 - Tools: coach-service, content-gen-service, scheduler-service
 
@@ -1446,8 +1458,8 @@ You want microservices \+ API-first. This is the complete decomposition.
 - **trace-service**: assembles F0–F7 traces
 - **taxonomy-service**: versioned ontology \+ mapping records
 - **debugger-service**: owns sessions, diagnoses, evidence
-- **coach-service**: patch planning \+ delivery payloads
-- **content-service**: creates remediation/contrast cards (optionally
+- **session-service**: owns committed repair Steps and Step queue mutations
+- **content-service**: owns remediation/contrast content payload drafts (optionally
   human-reviewed)
 - **scheduler-service**: FSRS/HLR scheduling \+ overrides \+ confusable policies
 - **watchtower-service**: streaming detection \+ enforcement
@@ -1482,7 +1494,7 @@ Here’s the practical way to execute this “full-blown design”:
 ## **Phase 2 — Diagnose \+ Patch minimal loop**
 
 - Add classifier agent (rules+LLM)
-- Add patch planner (limited subset)
+- Add patch planner (limited subset) as a repair proposal layer, not a state owner
 - Start collecting labels (“user-reported cause”) for learning
 
 ## **Phase 3 — Expand coverage**

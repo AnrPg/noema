@@ -136,6 +136,8 @@ Execution should:
 - preserve the selected mode in created cards
 - preserve mode-aware graph link decisions
 - store enough metadata for later inspection of how the batch was interpreted
+- preserve idempotency and provenance when the batch originated from an agent
+  queue instead of a user-driven import UI
 
 Recommended batch metadata:
 
@@ -173,6 +175,59 @@ cards, compatible templates, and non-expired generated activity variants.
 
 Generated activity variants are stored in `generated_activity_variants` with a
 TTL and hit count. Expired variants are excluded from candidate selection.
+
+## Agent-Finalized Content Imports
+
+Agent-driven batch generation now flows through the same canonical generation
+job lifecycle as first-party content generation.
+
+The agents runtime does not write finalized cards directly to the card batch
+endpoint anymore. Instead, it imports completed agent output through:
+
+```http
+POST /v1/content/generation-jobs/import-result
+```
+
+This endpoint is the content-service-owned adapter for durable agent results.
+It:
+
+- requires `x-idempotency-key`
+- accepts a normalized generation-job payload plus finalized card drafts
+- creates or reuses a stable `ContentGenerationJob`
+- persists cards through the standard batch creation path
+- completes the generation job and emits the canonical content-generation events
+
+This keeps agent-originated content aligned with the same lifecycle semantics
+used by other generation flows instead of creating a parallel persistence path.
+
+### Idempotency contract
+
+The import endpoint treats `x-idempotency-key` as the replay boundary:
+
+- the generation job id is derived deterministically from the idempotency key
+- the created card batch also reuses that key as its batch id
+- a retried finalization returns the existing completed job and created cards
+  instead of writing duplicates
+
+This makes the batch worker safe to retry after provider timeouts, partial
+network failures, or process restarts.
+
+## Session-Start Missing Practice Fallback
+
+Curriculum-bound Build mode sessions can now use agent-backed content creation
+as a just-in-time fallback:
+
+- the learner chooses an explicit frontier node, not only a curriculum id
+- session setup checks whether the chosen node has compatible payloads
+- if not, the content-creation orchestrator generates the requested mix of cards
+  and activity variants for that node
+- the generated artifacts are imported through
+  `POST /v1/content/generation-jobs/import-result`
+- the session then creates its LessonPlan against that same explicit node
+
+This keeps the persistence boundary unchanged: the web app may trigger the
+generation, but `content-service` still owns durable cards, variants,
+provenance, generation jobs, and review state.
 
 The current batch-import rollout now supports a dedicated per-record metadata
 review step before execution.

@@ -25,6 +25,9 @@ API-backed import wizard with:
   PKG, then attaches the local PKG copy to the card.
 - If the user keeps typing without choosing a suggestion, the workflow pivots
   into local-node creation inside the PKG.
+- Local PKG node creation does not require a matching CKG node. The panel now
+  tolerates partial mutation responses until the newly created node is
+  normalized back through the PKG queries.
 - The selected card node can also be edited inline and enriched with local
   relation edges without leaving the card flow.
 - Local node and edge edits trigger structural analytics refresh so

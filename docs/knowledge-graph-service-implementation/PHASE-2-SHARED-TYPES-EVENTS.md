@@ -273,7 +273,7 @@ These fire when the system's understanding of a user's learning state changes:
 
 - **InterventionTriggered** — a remediation intervention was initiated. Payload:
   interventionId, userId, misconceptionType, interventionType, targetNodeIds,
-  content (if applicable). Downstream: content-generation-agent, session
+  content (if applicable). Downstream: content-creation-orchestrator, session
   scheduling.
 
 - **MetacognitiveStageTransitioned** — a user progressed (or regressed) in the

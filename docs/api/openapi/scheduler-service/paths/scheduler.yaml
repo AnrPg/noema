@@ -64,7 +64,7 @@ getConceptSchedule:
           $ref: ../openapi.yaml#/components/schemas/ConceptId
       - name: studyMode
         in: query
-        required: false
+        required: true
         schema:
           $ref: ../openapi.yaml#/components/schemas/StudyMode
     responses:

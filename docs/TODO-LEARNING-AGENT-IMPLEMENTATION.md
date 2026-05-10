@@ -76,7 +76,7 @@ and blends contextual signals to produce the final session deck.
       concept, invoke Diagnostic Agent for trace analysis + patch plan
 - [ ] Implement Strategy Agent consultation: before finalizing deck, query
       Strategy Agent for policy overrides and cognitive control adjustments
-- [ ] Implement Content Generation Agent request: when gap analysis reveals
+- [ ] Implement Content Creation Orchestrator request: when gap analysis reveals
       concepts with no cards, request card generation
 - [ ] Define inter-agent protocol (event-based vs direct tool call vs message
       passing)

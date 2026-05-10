@@ -346,7 +346,12 @@ Learners don’t just “study”—they **equip strategies**.
 
 ---
 
-### **🎭 3\. Confidence vs Accuracy Split (The “Liar Detector”)**
+### **🎭 3\. Confidence vs Accuracy Split (Calibration Coach)**
+
+> **Realignment note:** older drafts used "Liar Detector" as a metaphor. Do not
+> use that framing in learner-facing product language. The current agent is
+> Calibration Coach: three-choice self-rating is evidence, not a grade, and
+> reasoning quality from `metacognition-service` remains dominant.
 
 **What it is**  
 A system that **systematically exposes illusions of knowing**.
@@ -632,6 +637,11 @@ These features **observe** cognition but don’t intervene yet.
 
 What we just designed.
 
+> **Realignment note:** `metacognition-service` owns canonical Evaluations,
+> 7-frame trace scoring, Trigger facts, and persisted diagnostic facts. Mental
+> Debugger explains those facts to the learner and recommends possible next
+> actions; it does not own Evaluation truth or repair state.
+
 Features:
 
 1. Thinking stack trace reconstruction
@@ -644,12 +654,14 @@ Features:
 
 5. Mismatch detection (wrong diagnosis)
 
-6. Patch planning (but not execution yet)
+6. Repair-shape recommendation to Patch Planner (but not execution or state
+   ownership)
 
 7. Regression detection rules
 
 **Consumes:** A  
- **Produces:** structured diagnoses \+ meta-signals
+**Produces:** learner-facing diagnostic explanations + meta-signals from
+service-owned evidence
 
 ---
 
@@ -664,6 +676,8 @@ These features **change the learning experience**.
 3. Forced slow / commit policies
 
 4. Remediation card generation
+   - realigned: remediation cards are content payloads owned by
+     `content-service`; repair Steps are runtime units owned by `session-service`
 
 5. Contrast & minimal-pair drills
 

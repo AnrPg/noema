@@ -4,7 +4,13 @@
 
 **Goal:** Build the four Zustand stores, agent-hints interceptor, command palette, keyboard shortcut system, error boundary, and toast manager that all subsequent feature phases depend on.
 
-**Architecture:** Zustand stores live in `apps/web/src/stores/` (app-local, not a shared package) following the same pattern as `@noema/auth`'s `useAuthStore` with `create<T>()` and `persist` only where specified. The `useAgentHintsInterceptor` subscribes to TanStack Query's `QueryCache` to extract `agentHints` from every `IApiResponse<T>` automatically. All global UI pieces (command palette, error boundary, toast) slot into the existing `Providers` tree in `apps/web/src/app/providers.tsx`.
+**Architecture:** Zustand stores live in `apps/web/src/stores/` (app-local, not a shared package) following the same pattern as `@noema/auth`'s `useAuthStore` with `create<T>()` and `persist` only where specified. The `useAgentHintsInterceptor` subscribes to TanStack Query's `QueryCache` to extract `agentHints` envelopes from every `IApiResponse<T>` automatically. All global UI pieces (command palette, error boundary, toast) slot into the existing `Providers` tree in `apps/web/src/app/providers.tsx`.
+
+**AgentHints realignment:** every response still carries an `agentHints`
+envelope. Phase 3 stores and expires those envelopes; learner-facing Cognitive
+Copilot surfaces only fresh, relevant, learner-safe hints after
+Watchtower/intrusiveness filtering. Internal agent context can remain in the
+envelope without becoming visible UI.
 
 **Tech Stack:** Zustand 5, TanStack Query v5 QueryCache subscription, Radix UI Dialog (direct import), `@noema/ui` Toast primitives, Next.js `usePathname`, React class component for error boundary (hooks cannot be error boundaries), lucide-react icons.
 
@@ -331,7 +337,7 @@ Expected: zero errors.
 **Files:**
 - Create: `apps/web/src/stores/copilot-store.ts`
 
-**Context:** The Cognitive Copilot sidebar shows AI-generated hints from `agentHints` fields. This store tracks whether the sidebar is open (persisted to localStorage) and the current hint set per page route (not persisted — hints expire or change per page visit).
+**Context:** The Cognitive Copilot sidebar shows learner-visible hints derived from `agentHints` fields. This store tracks whether the sidebar is open (persisted to localStorage) and the current hint set per page route (not persisted — hints expire or change per page visit).
 
 Use `partialize` to persist only `isOpen` — same pattern as `useAuthStore`.
 
@@ -460,7 +466,7 @@ git commit -m "feat(web): add T3.1 Zustand stores (session, graph, schedule, cop
 **Files:**
 - Create: `apps/web/src/hooks/use-agent-hints-interceptor.ts`
 
-**Context:** Every `IApiResponse<T>` contains an `agentHints: IAgentHints` field. This hook subscribes to TanStack Query's `QueryCache` and automatically pushes hints into `useCopilotStore` whenever a query succeeds. It:
+**Context:** Every `IApiResponse<T>` contains an `agentHints: IAgentHints` envelope. This hook subscribes to TanStack Query's `QueryCache` and automatically pushes eligible hints into `useCopilotStore` whenever a query succeeds. Downstream Copilot components and Watchtower policy decide which hints become visible to the learner. It:
 1. Runs once at the app root (inside `Providers`)
 2. Inspects `event.query.state.data` for `agentHints`
 3. Keys hints by the current `pathname`
@@ -484,8 +490,9 @@ The validity period mapping:
  * Agent Hints Interceptor
  *
  * Subscribes to TanStack Query's QueryCache and automatically extracts
- * agentHints from every IApiResponse<T>, pushing them into useCopilotStore
- * keyed by the current route.
+ * agentHints envelopes from every IApiResponse<T>, pushing eligible hints
+ * into useCopilotStore keyed by the current route. Copilot/Watchtower policy
+ * decides learner-visible surfacing.
  */
 
 'use client';

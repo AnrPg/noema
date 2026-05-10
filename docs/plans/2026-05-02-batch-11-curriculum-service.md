@@ -143,7 +143,7 @@ model CurriculumVersion {
   versionNumber      Int                     // monotonic, scoped to curriculumId
   state              CurriculumVersionState  @default(Draft)
   parentVersionId    String?                 // version this was revised from
-  agentRunId         String?                 // ContentGenerationAgent / CurriculumDesignAgent run trace
+  agentRunId         String?                 // ContentCreationOrchestrator / CurriculumDesignAgent run trace
   guardianValidationId String?               // pedagogy-guardian-service decision id
   createdAt          DateTime                @default(now())
   finalizedAt        DateTime?
@@ -266,7 +266,10 @@ change re-locks downstream nodes if the new ancestor is not already completed.
 8. **Edge consistency.** No duplicate `(from, to, type)` edges.
 
 Validation is cached on the version row as `guardianValidationId` referencing
-the pedagogy-guardian-service decision.
+the pedagogy-guardian-service decision. Guardian is a broad hard validation gate
+for curriculum drafts, revisions, activation paths, and generated LessonPlans
+that bind to curricula, but curriculum-service still owns curriculum state,
+DAG invariants, progress, frontier computation, and revision lifecycle.
 
 ---
 
@@ -388,6 +391,10 @@ independently:
   prior active version is `Superseded` and the draft is `Active`.
 - Frozen nodes (`Curriculum.metadata.frozenStableNodeKeys`) are excluded — any
   change touching a frozen key auto-rejects with reason `node_frozen`.
+
+Guardian rejection blocks activation, not persistence of the inspectable draft
+or proposal record. The validation id is stored for audit and review; it does
+not make Guardian the owner of the curriculum graph.
 
 ### 5.5 Preferred Structural Response
 
@@ -610,7 +617,10 @@ propose-curriculum-draft    (write, agent only)
 propose-revision            (write, agent only)
 ```
 
-All write tools route through Pedagogy Guardian for activation paths.
+All write tools that create, revise, or activate learner-facing curriculum
+artifacts route through Pedagogy Guardian for activation paths. Curriculum
+service still performs graph/DAG invariants, authorization, stable-node-key
+rules, and progress-state checks.
 
 ---
 
@@ -626,7 +636,8 @@ All write tools route through Pedagogy Guardian for activation paths.
 6. Curriculum Design Agent HTTP adapter with config-gated URL.
 7. REST routes (vault, versions, frontier, slice, revisions).
 8. Pedagogy Guardian integration for version validation and post-revision
-   re-validation.
+   re-validation, while keeping DAG and progress ownership inside
+   curriculum-service.
 9. session-service contract changes: `curriculumId` required on
    `StartSessionInput`; LessonPlan linkage fields; slice request before plan
    factory.
@@ -696,9 +707,10 @@ All write tools route through Pedagogy Guardian for activation paths.
    user with two active curricula runs them in separate sessions. Confirmed.
 3. **Concept proposal flow** — when the agent proposes a curriculum node
    referencing a concept not yet in the CKG, how is the KG ingestion gated?
-   Suggestion: reuse the knowledge-graph-service's CKG mutation DSL gate;
+   Suggestion: reuse the knowledge-graph-service's CKG mutation DSL gate.
+   Guardian may hard-gate the pedagogical/safety shape of the proposal, but the
    proposed concept becomes a `Proposed → Validated → Committed` typestate
-   transition initiated by the curriculum agent and approved by Guardian.
+   transition owned and accepted by knowledge-graph-service guardrails.
 4. **Freeze granularity** — node-level only, or also edge-level? Plan:
    node-level for v1; revisit if revision UX shows demand.
 5. **Proposal expiry default** — 14 days. Expired proposals stay in history for

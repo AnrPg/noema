@@ -9,6 +9,12 @@ functionality as needed for your specific use case. The skeletons ensure
 consistency at the foundational level while allowing for rich, domain-specific
 extensions.
 
+**AgentHints realignment:** every tool/API response still includes
+`agentHints`. This is a machine-readable context envelope for agents and UI
+infrastructure, not a requirement to show every hint to the learner. Cognitive
+Copilot surfaces only hints that are fresh, relevant, learner-safe, and allowed
+by Watchtower/intrusiveness policy.
+
 ---
 
 ## 📦 What You Received
@@ -27,10 +33,10 @@ extensions.
 
 ```
 API_SPEC_SPECIFICATION.md
-  ↓ defines responses with agentHints
+  ↓ defines responses with agentHints envelopes
   ↓
 MCP_TOOL_SPECIFICATION.md
-  ↓ defines tools that return agentHints
+  ↓ defines tools that return agentHints envelopes
   ↓ used by
 AGENT_CLASS_SPECIFICATION.md
   ↓ agents execute tools and publish events
@@ -93,7 +99,7 @@ domain.
 ### For Tools (Minimum + Your Additions)
 
 - [ ] Implements `Tool<TParams, TResult>` with ALL required fields
-- [ ] Returns `ToolResult` with agentHints, data, metadata
+- [ ] Returns `ToolResult` with agentHints envelope, data, metadata
 - [ ] Zod schema for parameters validation
 - [ ] Permissions array defined (can be empty)
 - [ ] Category specified
@@ -114,7 +120,7 @@ domain.
 
 ### For APIs (Minimum + Your Additions)
 
-- [ ] All responses include AgentHints (NEVER omit!)
+- [ ] All responses include AgentHints envelopes (NEVER omit the envelope!)
 - [ ] All CRUD endpoints implemented (POST, GET, PATCH, DELETE)
 - [ ] Pagination implemented for list endpoints
 - [ ] All required error responses defined (400, 401, 404, 409, 429)
@@ -154,7 +160,7 @@ domain.
 
 1. ❌ Skip ANY required fields from the minimum structure
 2. ❌ Change the overall skeleton structure
-3. ❌ Omit agentHints from tool/API responses
+3. ❌ Omit the agentHints envelope from tool/API responses
 4. ❌ Skip validation steps
 5. ❌ Skip event publishing on state changes
 6. ❌ Use different error handling patterns than specified
@@ -168,7 +174,7 @@ domain.
 4. ✅ Extend beyond the minimum with domain-specific functionality
 5. ✅ Validate inputs with Zod
 6. ✅ Publish events on ALL state changes
-7. ✅ Return agentHints in ALL tool/API responses
+7. ✅ Return agentHints envelopes in ALL tool/API responses
 8. ✅ Handle errors consistently using the specified patterns
 9. ✅ Document your additions to the skeleton
 
@@ -181,7 +187,7 @@ RICHER and MORE COMPLETE.**
 
 | Skeleton                       | Purpose     | Size | Key Requirement                 | Extensibility                                  |
 | ------------------------------ | ----------- | ---- | ------------------------------- | ---------------------------------------------- |
-| MCP_TOOL_SPECIFICATION.md      | Agent tools | 9KB  | Always return agentHints        | Add domain-specific tools, validation, caching |
+| MCP_TOOL_SPECIFICATION.md      | Agent tools | 9KB  | Always return agentHints envelope | Add domain-specific tools, validation, caching |
 | EVENT_SCHEMA_SPECIFICATION.md  | Events      | 11KB | Immutable, versioned, traceable | Add payload fields, compliance metadata        |
 | API_SPEC_SPECIFICATION.md      | REST APIs   | 28KB | Agent-friendly responses        | Add endpoints, batch ops, webhooks             |
 | SERVICE_CLASS_SPECIFICATION.md | Services    | 15KB | Consistent CRUD + events        | Add domain methods, transactions, caching      |
@@ -209,8 +215,8 @@ RICHER and MORE COMPLETE.**
    - Additional validation and logic expected
 
 4. **Agent-First Architecture**
-   - Every API returns agentHints (REQUIRED)
-   - Every tool guides next action (REQUIRED)
+   - Every API returns an agentHints envelope (REQUIRED)
+   - Every tool can guide next action when a fresh, useful hint exists
    - Agents can effectively orchestrate
    - Easy to add agent-specific enhancements
 
