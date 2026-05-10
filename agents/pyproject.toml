@@ -109,10 +109,6 @@ warn_no_return = true
 follow_imports = "silent"
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-
 # =============================================================================
 # Pytest Configuration
 # =============================================================================
@@ -122,6 +118,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+cache_dir = ".artifacts/pytest_cache"
 addopts = [
     "-ra",
     "-q",

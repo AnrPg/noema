@@ -27,6 +27,27 @@ class GuardianClient:
     async def validate_activity(self, activity: dict[str, Any]) -> GuardianOutcome:
         return await self._post("/v1/validate/activity", {"activity": activity})
 
+    async def validate_replan(self, replan: dict[str, Any]) -> GuardianOutcome:
+        return await self._post("/v1/validate/replan", replan)
+
+    async def validate_step(self, step: dict[str, Any]) -> GuardianOutcome:
+        return await self._post("/v1/validate/step", step)
+
+    async def validate_coaching_artifact(self, artifact: dict[str, Any]) -> GuardianOutcome:
+        activity = {
+            "id": str(artifact.get("id") or artifact.get("artifactId") or "calibration_coaching_artifact"),
+            "contentSourceType": "generated",
+            "generatedVariantId": str(artifact.get("id") or artifact.get("artifactId") or "calibration_coaching_artifact"),
+            "prompt": str(artifact.get("learnerFacingText") or artifact.get("summary") or ""),
+            "expectedResponseType": "reflection",
+            "responseSchema": {"type": "string"},
+            "content": artifact,
+        }
+        return await self._post(
+            "/v1/validate/activity",
+            {"activity": activity, "triggeredBy": str(artifact.get("triggeredBy") or "calibration-coach")},
+        )
+
     async def _post(self, path: str, payload: dict[str, Any]) -> GuardianOutcome:
         headers = {"authorization": f"Bearer {self._token}"} if self._token else {}
         async with httpx.AsyncClient(timeout=10.0) as client:
