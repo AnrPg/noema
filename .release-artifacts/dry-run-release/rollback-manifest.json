@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "dry-run-release",
+  "createdAt": "2026-05-03T21:26:02.110Z",
+  "envFile": "C:\\Users\\anr\\Apps\\noema\\.env",
+  "repo": {
+    "root": "C:\\Users\\anr\\Apps\\noema",
+    "gitSha": "ec83f1303f6b39004bdcec077f86fdb5dcd95bdd",
+    "gitBranch": "mvp_dev"
+  },
+  "services": [
+    {
+      "name": "user-service",
+      "packageName": "@noema/user-service",
+      "dbEnvVar": "DATABASE_URL_USER",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_user",
+      "databaseSource": "DATABASE_URL_USER",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\user-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\user-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\user-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_user\", schema \"public\" at \"127.0.0.1:5434\"\n\n4 migrations found in prisma/migrations\n\nDatabase schema is up to date!",
+      "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_user\", schema \"public\" at \"127.0.0.1:5434\"\n\n4 migrations found in prisma/migrations\n\nDatabase schema is up to date!"
+    },
+    {
+      "name": "content-service",
+      "packageName": "@noema/content-service",
+      "dbEnvVar": "DATABASE_URL_CONTENT",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_content",
+      "databaseSource": "DATABASE_URL_CONTENT",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\content-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\content-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\content-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_content\", schema \"public\" at \"127.0.0.1:5434\"\n\n6 migrations found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502140000_content_generation_provenance\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_content\", schema \"public\" at \"127.0.0.1:5434\"\n\n6 migrations found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502140000_content_generation_provenance\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    },
+    {
+      "name": "scheduler-service",
+      "packageName": "@noema/scheduler-service",
+      "dbEnvVar": "DATABASE_URL_SCHEDULER",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_scheduler",
+      "databaseSource": "DATABASE_URL_SCHEDULER",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\scheduler-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\scheduler-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\scheduler-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_scheduler\", schema \"public\" at \"127.0.0.1:5434\"\n\n10 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502010000_scheduler_concept_first\n20260502024500_evaluation_id_idempotency\n20260502213000_concept_calibration_composite_key\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.\nEnvironment variables loaded from .env",
+      "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_scheduler\", schema \"public\" at \"127.0.0.1:5434\"\n\n10 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502010000_scheduler_concept_first\n20260502024500_evaluation_id_idempotency\n20260502213000_concept_calibration_composite_key\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.\nEnvironment variables loaded from .env"
+    },
+    {
+      "name": "session-service",
+      "packageName": "@noema/session-service",
+      "dbEnvVar": "DATABASE_URL_SESSION",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_session",
+      "databaseSource": "DATABASE_URL_SESSION",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\session-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\session-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\session-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_session\", schema \"public\" at \"127.0.0.1:5434\"\n\n8 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502024500_session_learning_mode_snake_case\n20260502113000_session_curriculum_binding\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_session\", schema \"public\" at \"127.0.0.1:5434\"\n\n8 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502024500_session_learning_mode_snake_case\n20260502113000_session_curriculum_binding\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    },
+    {
+      "name": "gamification-service",
+      "packageName": "@noema/gamification-service",
+      "dbEnvVar": "DATABASE_URL_GAMIFICATION",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_gamification",
+      "databaseSource": "DATABASE_URL_GAMIFICATION",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\gamification-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\gamification-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\gamification-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_gamification\", schema \"public\" at \"127.0.0.1:5434\"\n\nNo migration found in prisma/migrations\nThe current database is not managed by Prisma Migrate.\n        \nRead more about how to baseline an existing production database:\nhttps://pris.ly/d/migrate-baseline\n[dry-run] Would recreate unmanaged database before migrate deploy.",
+      "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_gamification\", schema \"public\" at \"127.0.0.1:5434\"\n\nNo migration found in prisma/migrations\nThe current database is not managed by Prisma Migrate.\n        \nRead more about how to baseline an existing production database:\nhttps://pris.ly/d/migrate-baseline"
+    },
+    {
+      "name": "knowledge-graph-service",
+      "packageName": "@noema/knowledge-graph-service",
+      "dbEnvVar": "DATABASE_URL_KNOWLEDGE_GRAPH",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_knowledge_graph",
+      "databaseSource": "DATABASE_URL_KNOWLEDGE_GRAPH",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\knowledge-graph-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\knowledge-graph-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\knowledge-graph-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_knowledge_graph\", schema \"public\" at \"127.0.0.1:5434\"\n\n12 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502020000_concept_state_projection\n20260502210500_align_concept_state_history\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_knowledge_graph\", schema \"public\" at \"127.0.0.1:5434\"\n\n12 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502020000_concept_state_projection\n20260502210500_align_concept_state_history\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    },
+    {
+      "name": "metacognition-service",
+      "packageName": "@noema/metacognition-service",
+      "dbEnvVar": "DATABASE_URL_METACOGNITION",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_metacognition",
+      "databaseSource": "DATABASE_URL_METACOGNITION",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\metacognition-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\metacognition-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\metacognition-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_metacognition\", schema \"public\" at \"127.0.0.1:5434\"\n\n5 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502000000_batch5_metacognition_evaluation_loop\n20260502023000_persist_evaluation_context\n20260502024500_mode_scoped_reasoning_averages\n20260502031000_require_evaluation_plan_and_study_mode\n20260502210000_align_metacognition_closed_loop_schema\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_metacognition\", schema \"public\" at \"127.0.0.1:5434\"\n\n5 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502000000_batch5_metacognition_evaluation_loop\n20260502023000_persist_evaluation_context\n20260502024500_mode_scoped_reasoning_averages\n20260502031000_require_evaluation_plan_and_study_mode\n20260502210000_align_metacognition_closed_loop_schema\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    },
+    {
+      "name": "ingestion-service",
+      "packageName": "@noema/ingestion-service",
+      "dbEnvVar": "DATABASE_URL_INGESTION",
+      "databaseExisted": true,
+      "databaseUrlRedacted": "postgresql://***:***@127.0.0.1:5434/noema_ingestion",
+      "databaseSource": "DATABASE_URL_INGESTION",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\ingestion-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\ingestion-service\\prisma\\migrations",
+      "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\ingestion-service.dump",
+      "dumpSha256": "dry-run",
+      "statusBefore": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_ingestion\", schema \"public\" at \"127.0.0.1:5434\"\n\n1 migration found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502180000_ingestion_service\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_ingestion\", schema \"public\" at \"127.0.0.1:5434\"\n\n1 migration found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502180000_ingestion_service\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    },
+    {
+      "name": "pedagogy-guardian-service",
+      "packageName": "@noema/pedagogy-guardian-service",
+      "dbEnvVar": "DATABASE_URL_PEDAGOGY_GUARDIAN",
+      "databaseExisted": false,
+      "databaseUrlRedacted": "postgresql://***:***@localhost:5434/noema_pedagogy_guardian",
+      "databaseSource": "POSTGRES_* derived",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\pedagogy-guardian-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\pedagogy-guardian-service\\prisma\\migrations",
+      "dumpFile": "",
+      "dumpSha256": "",
+      "statusBefore": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_pedagogy_guardian\", schema \"public\" at \"localhost:5434\"\n\n1 migration found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502030000_pedagogy_guardian_validation\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_pedagogy_guardian\", schema \"public\" at \"localhost:5434\"\n\n1 migration found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502030000_pedagogy_guardian_validation\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    },
+    {
+      "name": "curriculum-service",
+      "packageName": "@noema/curriculum-service",
+      "dbEnvVar": "DATABASE_URL_CURRICULUM",
+      "databaseExisted": false,
+      "databaseUrlRedacted": "postgresql://***:***@localhost:5434/noema_curriculum",
+      "databaseSource": "POSTGRES_* derived",
+      "schemaPath": "C:\\Users\\anr\\Apps\\noema\\services\\curriculum-service\\prisma\\schema.prisma",
+      "migrationsDir": "C:\\Users\\anr\\Apps\\noema\\services\\curriculum-service\\prisma\\migrations",
+      "dumpFile": "",
+      "dumpSha256": "",
+      "statusBefore": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_curriculum\", schema \"public\" at \"localhost:5434\"\n\n3 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502110000_curriculum_service\n20260502213500_rename_mastery_threshold\n20260503233000_add_event_outbox\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.",
+      "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_curriculum\", schema \"public\" at \"localhost:5434\"\n\n3 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502110000_curriculum_service\n20260502213500_rename_mastery_threshold\n20260503233000_add_event_outbox\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+    }
+  ],
+  "redis": {
+    "urlRedacted": "redis://127.0.0.1:6380",
+    "source": "REDIS_URL",
+    "dumpFile": "C:\\Users\\anr\\Apps\\noema\\.release-artifacts\\dry-run-release\\dumps\\redis-dump.rdb",
+    "dumpSha256": "dry-run",
+    "restoreMode": "manual-rdb-swap"
+  },
+  "status": {
+    "snapshotCreated": false,
+    "migrationsApplied": false,
+    "migrationsAppliedAt": "2026-05-03T21:27:54.641Z"
+  },
+  "migrationRun": {
+    "envFile": "C:\\Users\\anr\\Apps\\noema\\.env",
+    "ensureDatabases": true,
+    "resetUnmanagedDatabases": true,
+    "dryRun": true,
+    "results": [
+      {
+        "name": "user-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_user\", schema \"public\" at \"127.0.0.1:5434\"\n\n4 migrations found in prisma/migrations\n\nDatabase schema is up to date!"
+      },
+      {
+        "name": "content-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_content\", schema \"public\" at \"127.0.0.1:5434\"\n\n6 migrations found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502140000_content_generation_provenance\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      },
+      {
+        "name": "scheduler-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_scheduler\", schema \"public\" at \"127.0.0.1:5434\"\n\n10 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502010000_scheduler_concept_first\n20260502024500_evaluation_id_idempotency\n20260502213000_concept_calibration_composite_key\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy.\nEnvironment variables loaded from .env"
+      },
+      {
+        "name": "session-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_session\", schema \"public\" at \"127.0.0.1:5434\"\n\n8 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502024500_session_learning_mode_snake_case\n20260502113000_session_curriculum_binding\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      },
+      {
+        "name": "gamification-service",
+        "createdDatabase": false,
+        "resetUnmanaged": true,
+        "applied": "dry-run",
+        "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_gamification\", schema \"public\" at \"127.0.0.1:5434\"\n\nNo migration found in prisma/migrations\nThe current database is not managed by Prisma Migrate.\n        \nRead more about how to baseline an existing production database:\nhttps://pris.ly/d/migrate-baseline"
+      },
+      {
+        "name": "knowledge-graph-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Environment variables loaded from .env\nPrisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_knowledge_graph\", schema \"public\" at \"127.0.0.1:5434\"\n\n12 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502020000_concept_state_projection\n20260502210500_align_concept_state_history\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      },
+      {
+        "name": "metacognition-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_metacognition\", schema \"public\" at \"127.0.0.1:5434\"\n\n5 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502000000_batch5_metacognition_evaluation_loop\n20260502023000_persist_evaluation_context\n20260502024500_mode_scoped_reasoning_averages\n20260502031000_require_evaluation_plan_and_study_mode\n20260502210000_align_metacognition_closed_loop_schema\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      },
+      {
+        "name": "ingestion-service",
+        "createdDatabase": false,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_ingestion\", schema \"public\" at \"127.0.0.1:5434\"\n\n1 migration found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502180000_ingestion_service\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      },
+      {
+        "name": "pedagogy-guardian-service",
+        "createdDatabase": true,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_pedagogy_guardian\", schema \"public\" at \"localhost:5434\"\n\n1 migration found in prisma/migrations\nFollowing migration have not yet been applied:\n20260502030000_pedagogy_guardian_validation\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      },
+      {
+        "name": "curriculum-service",
+        "createdDatabase": true,
+        "resetUnmanaged": false,
+        "applied": "dry-run",
+        "statusAfter": "Prisma schema loaded from prisma\\schema.prisma\nDatasource \"db\": PostgreSQL database \"noema_curriculum\", schema \"public\" at \"localhost:5434\"\n\n3 migrations found in prisma/migrations\nFollowing migrations have not yet been applied:\n20260502110000_curriculum_service\n20260502213500_rename_mastery_threshold\n20260503233000_add_event_outbox\n\nTo apply migrations in development run prisma migrate dev.\nTo apply migrations in production run prisma migrate deploy."
+      }
+    ]
+  }
+}
