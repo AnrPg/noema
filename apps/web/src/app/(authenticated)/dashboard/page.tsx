@@ -13,6 +13,7 @@ import { getUserFirstName } from '@noema/auth/user-display';
 import { SectionErrorBoundary } from '@/components/section-error-boundary';
 import { CognitiveVitals } from '@/components/dashboard/cognitive-vitals';
 import { CopilotSuggestions } from '@/components/dashboard/copilot-suggestions';
+import { ContextualAgentSuggestions } from '@/components/dashboard/contextual-agent-suggestions';
 import { KnowledgePulse } from '@/components/dashboard/knowledge-pulse';
 import { ReasoningTrend } from '@/components/dashboard/reasoning-trend';
 import { RecentSessions } from '@/components/dashboard/recent-sessions';
@@ -98,10 +99,16 @@ export default function DashboardPage(): React.JSX.Element | null {
         </SectionErrorBoundary>
       </div>
 
-      {/* Copilot Suggestions */}
-      <div className="animate-fade-slide-in" style={{ animationDelay: '400ms' }}>
+      {/* Copilot + contextual agent nudges */}
+      <div
+        className="grid gap-6 animate-fade-slide-in md:grid-cols-2"
+        style={{ animationDelay: '400ms' }}
+      >
         <SectionErrorBoundary>
           <CopilotSuggestions />
+        </SectionErrorBoundary>
+        <SectionErrorBoundary>
+          <ContextualAgentSuggestions userId={userId} studyMode={activeStudyMode} />
         </SectionErrorBoundary>
       </div>
     </div>

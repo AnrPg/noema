@@ -1,6 +1,6 @@
 'use client';
 /**
- * @noema/web — Copilot / TransparencySection
+ * @noema/web - Copilot / TransparencySection
  *
  * Shows: Reasoning (blockquote), Assumptions (bulleted list),
  * Context Needed (amber prompts), Constraints (muted list).
@@ -10,7 +10,7 @@ import * as React from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCopilotStore } from '@/stores/copilot-store';
 
-// ── CollapsibleSection helper ─────────────────────────────────────────────────
+// CollapsibleSection helper
 
 interface ICollapsibleSectionProps {
   title: string;
@@ -45,7 +45,7 @@ function CollapsibleSection({
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// Main component
 
 export function TransparencySection(): React.JSX.Element {
   const hintsByPage = useCopilotStore((s) => s.hintsByPage);
@@ -92,7 +92,7 @@ export function TransparencySection(): React.JSX.Element {
           <ul className="flex flex-col gap-1.5">
             {assumptions.map((a) => (
               <li key={a} className="flex items-start gap-2 text-xs text-foreground/80">
-                <span className="mt-0.5 text-muted-foreground">•</span>
+                <span className="mt-0.5 text-muted-foreground">*</span>
                 <span>{a}</span>
               </li>
             ))}
@@ -117,7 +117,7 @@ export function TransparencySection(): React.JSX.Element {
           <ul className="flex flex-col gap-1.5">
             {constraints.map((c) => (
               <li key={c} className="flex items-start gap-2 text-xs text-muted-foreground">
-                <span className="mt-0.5">—</span>
+                <span className="mt-0.5">-</span>
                 <span>{c}</span>
               </li>
             ))}

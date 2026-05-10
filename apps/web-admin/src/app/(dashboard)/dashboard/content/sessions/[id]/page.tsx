@@ -1,16 +1,16 @@
 /**
  * Session Detail Page
  *
- * Admin view of a single learning session: header with state/mode, metadata
- * card, card-IDs list, and attempts log.
+ * Admin view of a single learning session: header with lifecycle state/study mode,
+ * metadata card, and session stats/config.
  */
 
 'use client';
 
 import * as React from 'react';
 import type { JSX } from 'react';
-import type { IAttemptDto, UserDto } from '@noema/api-client';
-import { useSession, useSessionAttempts, usersApi } from '@noema/api-client';
+import type { UserDto } from '@noema/api-client';
+import { useSession, usersApi } from '@noema/api-client';
 import { getUserDisplayName } from '@noema/auth/user-display';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
@@ -59,39 +59,6 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function isAttemptDto(value: unknown): value is IAttemptDto {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-
-  return (
-    typeof candidate['id'] === 'string' &&
-    typeof candidate['cardId'] === 'string' &&
-    typeof candidate['reviewedAt'] === 'string'
-  );
-}
-
-function getAttemptsFromResponse(value: unknown): IAttemptDto[] {
-  if (Array.isArray(value)) {
-    return value.filter(isAttemptDto);
-  }
-
-  if (typeof value !== 'object' || value === null) {
-    return [];
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const nestedAttempts = candidate['attempts'] ?? candidate['items'] ?? candidate['data'];
-
-  if (nestedAttempts === value) {
-    return [];
-  }
-
-  return getAttemptsFromResponse(nestedAttempts);
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -107,10 +74,6 @@ export default function SessionDetailPage(): JSX.Element {
     isLoading: sessionLoading,
     error: sessionError,
   } = useSession(sessionId as Parameters<typeof useSession>[0]);
-
-  const { data: attemptsResponse, isLoading: attemptsLoading } = useSessionAttempts(
-    sessionId as Parameters<typeof useSessionAttempts>[0]
-  );
 
   if (sessionLoading) {
     return (
@@ -141,7 +104,6 @@ export default function SessionDetailPage(): JSX.Element {
   }
 
   const session = sessionResponse.data;
-  const attempts = getAttemptsFromResponse(attemptsResponse?.data);
 
   const sessionUserId = session.userId;
   const sessionUserQuery = useQuery({
@@ -195,14 +157,14 @@ export default function SessionDetailPage(): JSX.Element {
               {session.id}
             </code>
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateBadgeClass(session.state)}`}
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateBadgeClass(session.lifecycleState)}`}
             >
-              {session.state}
+              {session.lifecycleState}
             </span>
             <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadgeClass(session.mode)}`}
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${modeBadgeClass(session.studyMode)}`}
             >
-              {session.mode}
+              {session.studyMode}
             </span>
           </div>
           <p className="text-sm text-muted-foreground pt-1">
@@ -235,121 +197,52 @@ export default function SessionDetailPage(): JSX.Element {
             <InfoRow label="Session ID">
               <code className="font-mono text-xs">{session.id}</code>
             </InfoRow>
-            <InfoRow label="State">{session.state}</InfoRow>
-            <InfoRow label="Mode">{session.mode}</InfoRow>
-            <InfoRow label="Card count">{String(session.cardIds.length)}</InfoRow>
-            <InfoRow label="Current card index">{String(session.currentCardIndex)}</InfoRow>
+            <InfoRow label="Lifecycle">{session.lifecycleState}</InfoRow>
+            <InfoRow label="Study mode">{session.studyMode}</InfoRow>
+            <InfoRow label="Learning mode">{session.learningMode}</InfoRow>
+            <InfoRow label="Curriculum ID">
+              <code className="font-mono text-xs">{session.curriculumId}</code>
+            </InfoRow>
+            <InfoRow label="Curriculum version">
+              {session.curriculumVersionId ?? '—'}
+            </InfoRow>
+            <InfoRow label="Pause count">{String(session.pauseCount)}</InfoRow>
+            <InfoRow label="Total paused ms">{String(session.totalPausedMs)}</InfoRow>
             <InfoRow label="Started at">{formatDate(session.startedAt)}</InfoRow>
-            <InfoRow label="Expires at">{formatDate(session.expiresAt)}</InfoRow>
-            {session.pausedAt !== null && (
-              <InfoRow label="Paused at">{formatDate(session.pausedAt)}</InfoRow>
-            )}
+            <InfoRow label="Last activity">{formatDate(session.lastActivityAt)}</InfoRow>
             {session.completedAt !== null && (
               <InfoRow label="Completed at">{formatDate(session.completedAt)}</InfoRow>
             )}
-            {session.abandonedAt !== null && (
-              <InfoRow label="Abandoned at">{formatDate(session.abandonedAt)}</InfoRow>
-            )}
+            <InfoRow label="Termination reason">{session.terminationReason ?? '—'}</InfoRow>
+            <InfoRow label="Version">{String(session.version)}</InfoRow>
             <InfoRow label="Created at">{formatDate(session.createdAt)}</InfoRow>
             <InfoRow label="Updated at">{formatDate(session.updatedAt)}</InfoRow>
           </CardContent>
         </Card>
 
-        {/* Card IDs */}
+        {/* Session Stats */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">
-              Cards in Session ({String(session.cardIds.length)})
-            </CardTitle>
+            <CardTitle className="text-lg">Session Stats</CardTitle>
           </CardHeader>
-          <CardContent>
-            {session.cardIds.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No cards in this session.</p>
-            ) : (
-              <div className="max-h-64 overflow-y-auto space-y-1">
-                {session.cardIds.map((cardId, index) => (
-                  <div key={cardId} className="flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground w-6 text-right shrink-0">
-                      {String(index + 1)}.
-                    </span>
-                    <code className="font-mono text-muted-foreground truncate" title={cardId}>
-                      {truncateId(cardId)}
-                    </code>
-                    <code
-                      className="font-mono text-muted-foreground/50 hidden lg:block truncate flex-1"
-                      title={cardId}
-                    >
-                      {cardId}
-                    </code>
-                  </div>
-                ))}
-              </div>
-            )}
+          <CardContent className="space-y-1">
+            <InfoRow label="Steps planned">{String(session.stats.stepsPlanned)}</InfoRow>
+            <InfoRow label="Steps presented">{String(session.stats.stepsPresented)}</InfoRow>
+            <InfoRow label="Steps evaluated">{String(session.stats.stepsEvaluated)}</InfoRow>
+            <InfoRow label="Steps skipped">{String(session.stats.stepsSkipped)}</InfoRow>
           </CardContent>
         </Card>
       </div>
 
-      {/* Attempts */}
+      {/* Session Config */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">
-            Attempts {attemptsLoading ? '…' : `(${String(attempts.length)})`}
-          </CardTitle>
+          <CardTitle className="text-lg">Session Config</CardTitle>
         </CardHeader>
         <CardContent>
-          {attemptsLoading ? (
-            <div className="py-4 text-center text-muted-foreground">Loading attempts…</div>
-          ) : attempts.length === 0 ? (
-            <div className="py-4 text-center text-muted-foreground">No attempts recorded.</div>
-          ) : (
-            <>
-              {/* Column headers */}
-              <div className="flex items-center gap-3 pb-2 border-b text-xs font-medium text-muted-foreground">
-                <span className="w-28 shrink-0">Attempt ID</span>
-                <span className="w-28 shrink-0 hidden md:block">Card ID</span>
-                <span className="shrink-0 w-12 text-right">Grade</span>
-                <span className="shrink-0 w-16 text-right hidden sm:block">Conf. Before</span>
-                <span className="shrink-0 w-16 text-right hidden sm:block">Conf. After</span>
-                <span className="shrink-0 w-20 text-right hidden lg:block">Dwell (ms)</span>
-                <span className="shrink-0 w-20 text-right">Reviewed</span>
-              </div>
-              <div className="divide-y">
-                {attempts.map((attempt) => (
-                  <div key={attempt.id} className="flex items-center gap-3 py-2 text-xs">
-                    <span
-                      className="font-mono text-muted-foreground shrink-0 w-28 truncate"
-                      title={attempt.id}
-                    >
-                      {truncateId(attempt.id)}
-                    </span>
-                    <span
-                      className="font-mono text-muted-foreground shrink-0 w-28 truncate hidden md:block"
-                      title={attempt.cardId}
-                    >
-                      {truncateId(attempt.cardId)}
-                    </span>
-                    <span className="shrink-0 w-12 text-right font-medium">
-                      {String(attempt.grade)}
-                    </span>
-                    <span className="shrink-0 w-16 text-right hidden sm:block text-muted-foreground">
-                      {attempt.confidenceBefore !== null
-                        ? attempt.confidenceBefore.toFixed(2)
-                        : '—'}
-                    </span>
-                    <span className="shrink-0 w-16 text-right hidden sm:block text-muted-foreground">
-                      {attempt.confidenceAfter !== null ? attempt.confidenceAfter.toFixed(2) : '—'}
-                    </span>
-                    <span className="shrink-0 w-20 text-right hidden lg:block text-muted-foreground">
-                      {String(attempt.dwellTimeMs)}
-                    </span>
-                    <span className="shrink-0 w-20 text-right text-muted-foreground">
-                      {formatDate(attempt.reviewedAt)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          <pre className="overflow-x-auto rounded-md border bg-muted/40 p-4 text-xs">
+            {JSON.stringify(session.config, null, 2)}
+          </pre>
         </CardContent>
       </Card>
     </div>

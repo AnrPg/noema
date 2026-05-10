@@ -8,12 +8,33 @@
  */
 
 import * as React from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Loader2, Play } from 'lucide-react';
 import { useAuth } from '@noema/auth';
-import { useCards, useCard, useCurricula, useDueConcepts, useStartSession } from '@noema/api-client';
-import type { IDeckQueryInput } from '@noema/api-client';
-import type { CardId, CurriculumId } from '@noema/types';
+import {
+  agentsApi,
+  http,
+  useCards,
+  useCard,
+  useCurriculum,
+  useCurriculumFrontier,
+  useCurricula,
+  useDueConcepts,
+  useStartSession,
+  sessionsApi,
+} from '@noema/api-client';
+import type { IDeckQueryInput, ICurriculum } from '@noema/api-client';
+import type {
+  CardId,
+  CurriculumId,
+  CurriculumNodeId,
+  DifficultyLevel,
+  EpistemicMode,
+  StudyMode,
+  TransformationType,
+} from '@noema/types';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@noema/ui';
 
 import { ModeSelector } from '@/components/session/mode-selector';
@@ -28,10 +49,47 @@ import {
   getDefaultPromptSide,
   type SessionRevealMode,
 } from '@/lib/session-card-sides';
+import { CurriculumDag } from '@/features/curricula/curriculum-dag';
 
 const SESSION_CANDIDATE_QUERY_LIMIT = 100;
 const SESSION_SIZE_MIN = 5;
 const SESSION_SIZE_MAX = 100;
+const DEFAULT_GENERATED_CARD_COUNT = 4;
+type CurriculumNode = NonNullable<ICurriculum['activeVersion']>['nodes'][number];
+interface ImportGeneratedContentBatchInput {
+  job: Record<string, unknown>;
+  cards: Array<Record<string, unknown>>;
+  activityVariants?: Array<Record<string, unknown>>;
+  rejectedDrafts?: Array<Record<string, unknown>>;
+  agentRunId?: string | null;
+  resultPayload?: Record<string, unknown>;
+}
+const ACTIVITY_TYPE_OPTIONS: ReadonlyArray<{
+  value: TransformationType;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'recall',
+    label: 'Recall',
+    description: 'Direct retrieval practice for the chosen frontier node.',
+  },
+  {
+    value: 'explanation',
+    label: 'Explanation',
+    description: 'Ask the learner to explain the idea in their own words.',
+  },
+  {
+    value: 'comparison',
+    label: 'Comparison',
+    description: 'Contrast the node against nearby or confusable ideas.',
+  },
+  {
+    value: 'application',
+    label: 'Application',
+    description: 'Apply the idea in a concrete scenario or transfer context.',
+  },
+];
 
 function supportsStudyMode(
   card: { supportedStudyModes?: string[] | undefined },
@@ -51,6 +109,7 @@ function supportsStudyMode(
 
 export default function SessionNewPage(): React.JSX.Element {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated, isInitialized } = useAuth();
   const activeStudyMode = useActiveStudyMode();
   const isReadyForAuthenticatedQueries = isInitialized && isAuthenticated && user?.id !== undefined;
@@ -63,6 +122,15 @@ export default function SessionNewPage(): React.JSX.Element {
   const [customQuery, setCustomQuery] = React.useState<IDeckQueryInput>({});
   const [showCandidates, setShowCandidates] = React.useState(false);
   const [selectedCurriculumId, setSelectedCurriculumId] = React.useState<CurriculumId | ''>('');
+  const [selectedFrontierNodeId, setSelectedFrontierNodeId] = React.useState<CurriculumNodeId | ''>(
+    ''
+  );
+  const [autoGenerateMissingPractice, setAutoGenerateMissingPractice] = React.useState(true);
+  const [generatedCardCount, setGeneratedCardCount] = React.useState(DEFAULT_GENERATED_CARD_COUNT);
+  const [desiredActivityTypes, setDesiredActivityTypes] = React.useState<TransformationType[]>([
+    'explanation',
+    'application',
+  ]);
 
   // ── Section 3: Settings ──────────────────────────────────────────────────
   const [retentionPct, setRetentionPct] = React.useState(80);
@@ -84,12 +152,24 @@ export default function SessionNewPage(): React.JSX.Element {
     { enabled: !useQuickStart && showCandidates && isReadyForAuthenticatedQueries }
   );
   const curricula = useCurricula();
+  const selectedCurriculum = useCurriculum(selectedCurriculumId as CurriculumId);
+  const selectedCurriculumFrontier = useCurriculumFrontier(selectedCurriculumId as CurriculumId);
 
   const startSession = useStartSession();
 
   // ── Derived values ───────────────────────────────────────────────────────
   const dueConceptList = dueConcepts.data?.data.concepts ?? [];
   const curriculumItems = curricula.data?.data ?? [];
+  const selectedCurriculumData = selectedCurriculum.data?.data;
+  const frontierNodes = (selectedCurriculumFrontier.data?.data ?? []) as CurriculumNode[];
+  const selectedFrontierNode =
+    selectedFrontierNodeId === ''
+      ? undefined
+      : (frontierNodes.find((node) => node.id === selectedFrontierNodeId) ??
+        selectedCurriculumData?.activeVersion?.nodes.find(
+          (node) => node.id === selectedFrontierNodeId
+        ));
+  const selectedConceptId = selectedFrontierNode?.ckgConceptId;
   const retentionCount = dueConceptList.filter((concept) => concept.algorithm === 'fsrs').length;
   const calibrationCount = dueConceptList.filter((concept) => concept.algorithm === 'hlr').length;
   const compatibleCandidateItems = React.useMemo(
@@ -123,6 +203,33 @@ export default function SessionNewPage(): React.JSX.Element {
     const remaining = presentationSideOptions.filter((side) => side.key !== presentationPromptSide);
     return remaining[0]?.key;
   }, [presentationPromptSide, presentationSideOptions]);
+
+  React.useEffect(() => {
+    const requestedCurriculumId = searchParams.get('curriculumId');
+    const requestedNodeId = searchParams.get('nodeId');
+    if (requestedCurriculumId !== null && requestedCurriculumId !== '') {
+      setSelectedCurriculumId(requestedCurriculumId as CurriculumId);
+    }
+    if (requestedNodeId !== null && requestedNodeId !== '') {
+      setSelectedFrontierNodeId(requestedNodeId as CurriculumNodeId);
+    }
+  }, [searchParams]);
+
+  React.useEffect(() => {
+    if (selectedCurriculumId === '') {
+      setSelectedFrontierNodeId('');
+      return;
+    }
+
+    const frontierContainsSelected = frontierNodes.some(
+      (node) => node.id === selectedFrontierNodeId
+    );
+    if (selectedFrontierNodeId !== '' && frontierContainsSelected) {
+      return;
+    }
+
+    setSelectedFrontierNodeId('');
+  }, [frontierNodes, selectedCurriculumId, selectedFrontierNodeId]);
 
   React.useEffect(() => {
     setPreviewIndex(0);
@@ -177,8 +284,17 @@ export default function SessionNewPage(): React.JSX.Element {
   async function handleStart(): Promise<void> {
     setStartError(null);
     const resolvedSessionSize = commitSessionSizeInput();
+    let customBuildHasCandidates = false;
     if (selectedCurriculumId === '') {
-      setStartError('Choose a curriculum before starting. Normal sessions are now bound to a curriculum path.');
+      setStartError(
+        'Choose a curriculum before starting. Normal sessions are now bound to a curriculum path.'
+      );
+      return;
+    }
+    if (selectedFrontierNodeId === '') {
+      setStartError(
+        'Choose the exact frontier node you want to work on before starting this session.'
+      );
       return;
     }
     if (useQuickStart) {
@@ -202,26 +318,52 @@ export default function SessionNewPage(): React.JSX.Element {
       const candidateItems = (candidateResponse?.data.items ?? []).filter((candidate) =>
         supportsStudyMode(candidate, activeStudyMode)
       );
+      customBuildHasCandidates = candidateItems.length > 0;
 
       if (candidateItems.length === 0) {
-        setStartError(
-          'This custom build has no matching concept payloads yet. Adjust the filters or widen the session size, then try again.'
-        );
-        return;
+        if (!autoGenerateMissingPractice) {
+          setStartError(
+            'This custom build has no matching concept payloads yet. Adjust the filters, or turn on automatic generation for missing practice.'
+          );
+          return;
+        }
+        if (selectedConceptId === undefined || selectedConceptId === '') {
+          setStartError(
+            'This frontier node is not anchored to a canonical concept yet, so Noema cannot auto-generate practice for it.'
+          );
+          return;
+        }
       }
 
       const selectedCandidates = candidateItems.slice(0, resolvedSessionSize);
       if (selectedCandidates.length === 0) {
-        setStartError(
-          'This custom build has no matching concept payloads yet. Adjust the filters or widen the session size, then try again.'
-        );
-        return;
+        if (!autoGenerateMissingPractice) {
+          setStartError(
+            'This custom build has no matching concept payloads yet. Adjust the filters, or turn on automatic generation for missing practice.'
+          );
+          return;
+        }
+        if (selectedConceptId === undefined || selectedConceptId === '') {
+          setStartError(
+            'This frontier node is not anchored to a canonical concept yet, so Noema cannot auto-generate practice for it.'
+          );
+          return;
+        }
       }
+    }
+    if (selectedConceptId === undefined || selectedConceptId === '') {
+      setStartError(
+        'The selected frontier node is missing its concept anchor, so Noema cannot build a valid lesson plan for it yet.'
+      );
+      return;
     }
 
     try {
       const response = await startSession.mutateAsync({
         curriculumId: selectedCurriculumId,
+        ...(selectedCurriculumData?.activeVersion?.id !== undefined
+          ? { curriculumVersionId: selectedCurriculumData.activeVersion.id }
+          : {}),
         learningMode: mode,
         studyMode: activeStudyMode,
         config: {
@@ -242,7 +384,49 @@ export default function SessionNewPage(): React.JSX.Element {
         ...(customQuery.tags !== undefined ? { sourceCategories: customQuery.tags } : {}),
       });
 
-      const sessionId = response.data.id as string;
+      const sessionId = response.data.id;
+
+      const shouldGenerateMissingPractice =
+        !useQuickStart &&
+        autoGenerateMissingPractice &&
+        selectedConceptId !== undefined &&
+        !customBuildHasCandidates;
+
+      if (shouldGenerateMissingPractice) {
+        await generateMissingPractice({
+          userId: user?.id ?? '',
+          curriculumId: selectedCurriculumId,
+          sessionId,
+          conceptId: selectedConceptId,
+          selectedNodeId: selectedFrontierNodeId,
+          studyMode: activeStudyMode,
+          desiredCardTypes: customQuery.cardTypes ?? [],
+          desiredActivityTypes,
+          generatedCardCount,
+        });
+      }
+
+      await sessionsApi.createLessonPlan(sessionId, {
+        curriculumId: selectedCurriculumId,
+        ...(selectedCurriculumData?.activeVersion?.id !== undefined
+          ? { curriculumVersionId: selectedCurriculumData.activeVersion.id }
+          : {}),
+        selectedNodeIds: [selectedFrontierNodeId],
+        rigorLevel: mode === 'goal_driven' ? 'full' : 'minimal',
+        topic:
+          selectedFrontierNode?.label ??
+          customQuery.search ??
+          response.data.config.topic ??
+          'Curriculum session',
+        steps: [
+          {
+            objective: `Work through the selected frontier node: ${selectedFrontierNode?.label ?? 'curriculum target'}`,
+            expectedOutcome:
+              'Learner can explain and apply the selected frontier concept with traceable reasoning.',
+            conceptRefs: [selectedConceptId],
+          },
+        ],
+      });
       router.push(`/session/${sessionId}`);
     } catch (err) {
       setStartError(formatStartSessionError(err));
@@ -281,6 +465,95 @@ export default function SessionNewPage(): React.JSX.Element {
               ))}
             </select>
           </label>
+          <div className="mt-4 rounded-lg border border-border/70 bg-background/70 p-3">
+            <p className="text-sm font-medium text-foreground">Before you start</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Pick the exact frontier node for this session. Noema now builds the lesson plan from
+              that explicit node choice instead of silently inferring the slice.
+            </p>
+            {selectedCurriculumId !== '' && (
+              <div className="mt-3">
+                <Link
+                  href={`/curricula/${encodeURIComponent(selectedCurriculumId)}${
+                    selectedFrontierNodeId !== ''
+                      ? `?nodeId=${encodeURIComponent(selectedFrontierNodeId)}`
+                      : ''
+                  }`}
+                  className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Review the curriculum frontier before starting
+                </Link>
+              </div>
+            )}
+          </div>
+          {selectedCurriculumId !== '' && (
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Frontier nodes
+                </p>
+                <span className="text-xs text-muted-foreground">Choose one target</span>
+              </div>
+              {selectedCurriculumFrontier.isLoading ? (
+                <div className="h-24 animate-pulse rounded-xl border border-border bg-card" />
+              ) : frontierNodes.length === 0 ? (
+                <p className="rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                  This curriculum does not have any open frontier nodes right now.
+                </p>
+              ) : (
+                <div className="grid gap-2">
+                  {frontierNodes.map((node) => {
+                    const isSelected = node.id === selectedFrontierNodeId;
+                    return (
+                      <button
+                        key={node.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedFrontierNodeId(node.id);
+                        }}
+                        className={[
+                          'rounded-xl border px-4 py-3 text-left transition-colors',
+                          isSelected
+                            ? 'border-cyan-400/50 bg-cyan-400/10'
+                            : 'border-border bg-background hover:bg-muted/40',
+                        ].join(' ')}
+                      >
+                        <span className="block text-sm font-medium text-foreground">
+                          {node.label}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {node.learningObjective ?? node.stableNodeKey}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {selectedCurriculumId !== '' && (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Selected path DAG
+                </p>
+                <span className="text-xs text-muted-foreground">Static preview</span>
+              </div>
+              {selectedCurriculum.isLoading ? (
+                <div className="h-40 animate-pulse rounded-xl border border-border bg-card" />
+              ) : (
+                <CurriculumDag
+                  nodes={selectedCurriculumData?.activeVersion?.nodes ?? []}
+                  edges={selectedCurriculumData?.activeVersion?.edges ?? []}
+                  variant="compact"
+                  onNodeClick={() => {
+                    router.push(`/curricula/${encodeURIComponent(selectedCurriculumId)}`);
+                  }}
+                  emptyMessage="This curriculum does not have an active DAG yet."
+                />
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -448,7 +721,8 @@ export default function SessionNewPage(): React.JSX.Element {
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">
-                            We found candidates, but this payload preview could not be loaded just now.
+                            We found candidates, but this payload preview could not be loaded just
+                            now.
                           </p>
                         )}
 
@@ -473,6 +747,87 @@ export default function SessionNewPage(): React.JSX.Element {
                     ))}
                 </div>
               )}
+
+              <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Missing-practice generation
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      If this custom build has no usable payloads for the selected frontier node,
+                      Noema can generate and persist a fresh set before the session begins.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={autoGenerateMissingPractice}
+                      onChange={(event) => {
+                        setAutoGenerateMissingPractice(event.target.checked);
+                      }}
+                    />
+                    Auto-generate
+                  </label>
+                </div>
+
+                <div className="mt-4 grid gap-4 md:grid-cols-[120px_minmax(0,1fr)]">
+                  <label className="grid gap-2 text-sm font-medium text-foreground">
+                    Cards
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={generatedCardCount}
+                      onChange={(event) => {
+                        setGeneratedCardCount(
+                          Math.min(12, Math.max(1, Number(event.target.value) || 1))
+                        );
+                      }}
+                      className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    />
+                  </label>
+
+                  <div className="grid gap-2">
+                    <p className="text-sm font-medium text-foreground">Activity types</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {ACTIVITY_TYPE_OPTIONS.map((option) => {
+                        const checked = desiredActivityTypes.includes(option.value);
+                        return (
+                          <label
+                            key={option.value}
+                            className="flex gap-3 rounded-lg border border-border px-3 py-3 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setDesiredActivityTypes((current) => {
+                                  if (checked) {
+                                    const remaining = current.filter(
+                                      (value) => value !== option.value
+                                    );
+                                    return remaining.length === 0 ? current : remaining;
+                                  }
+                                  return [...current, option.value];
+                                });
+                              }}
+                            />
+                            <span>
+                              <span className="block font-medium text-foreground">
+                                {option.label}
+                              </span>
+                              <span className="mt-1 block text-xs text-muted-foreground">
+                                {option.description}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
@@ -686,6 +1041,234 @@ function formatDifficultyLabel(difficulty: unknown): string {
 
 function clampSessionSize(value: number): number {
   return Math.min(SESSION_SIZE_MAX, Math.max(SESSION_SIZE_MIN, Math.round(value)));
+}
+
+async function generateMissingPractice(input: {
+  userId: string;
+  curriculumId: CurriculumId;
+  sessionId: string;
+  conceptId: string;
+  selectedNodeId: CurriculumNodeId;
+  studyMode: StudyMode;
+  desiredCardTypes: string[];
+  desiredActivityTypes: TransformationType[];
+  generatedCardCount: number;
+}): Promise<void> {
+  const runResponse = await agentsApi.runAgent('content-creation-orchestrator', {
+    userId: input.userId,
+    curriculumId: input.curriculumId,
+    sessionId: input.sessionId,
+    conceptIds: [input.conceptId],
+    selectedNodeIds: [input.selectedNodeId],
+    desiredCardTypes: input.desiredCardTypes,
+    studyMode: input.studyMode,
+    executionPreference: 'realtime',
+    requestTimeoutMs: 90_000,
+    payload: {
+      mode: 'agent_autonomous',
+      operationName: 'session_preparation',
+      purpose: 'Generate missing practice before a curriculum-bound build-mode session starts.',
+      trigger: 'curriculum_gap',
+      desiredActivityTypes: input.desiredActivityTypes,
+      budget: {
+        maxCards: input.generatedCardCount,
+        timeoutMs: 90_000,
+      },
+      varietyMandate: {
+        minDistinctTypesPerConcept: Math.min(
+          input.desiredActivityTypes.length,
+          input.generatedCardCount
+        ),
+      },
+    },
+  });
+
+  const executionRecord = asRecord(runResponse.data.execution);
+  const executionResult = asRecord(executionRecord['result']);
+  const agentRunId =
+    typeof executionResult['agentRunId'] === 'string'
+      ? executionResult['agentRunId']
+      : runResponse.data.runId;
+  const cards = readRecordArray(executionResult['cards']).slice(0, input.generatedCardCount);
+  const activityVariants = readRecordArray(executionResult['activityVariants']);
+
+  if (cards.length === 0 && activityVariants.length === 0) {
+    throw new Error(
+      'Noema could not generate any usable practice artifacts for this frontier node.'
+    );
+  }
+
+  const importPayload: ImportGeneratedContentBatchInput = {
+    job: {
+      mode: 'agent_autonomous',
+      conceptIds: [input.conceptId],
+      curriculumContext: {
+        curriculumId: input.curriculumId,
+        selectedNodeIds: [input.selectedNodeId],
+      },
+      studentContext: {
+        sessionId: input.sessionId,
+      },
+      desiredCardTypes: input.desiredCardTypes,
+      varietyMandate: {
+        minDistinctTypesPerConcept: Math.min(
+          input.desiredActivityTypes.length,
+          input.generatedCardCount
+        ),
+      },
+      budget: {
+        maxCards: input.generatedCardCount,
+        timeoutMs: 90_000,
+      },
+    },
+    cards: cards.map((card) => toGeneratedCardImport(card, agentRunId, input.studyMode)),
+    activityVariants: activityVariants.map((variant) =>
+      toGeneratedActivityVariantImport(variant, agentRunId)
+    ),
+    rejectedDrafts: readRecordArray(executionResult['rejectedDrafts']),
+    agentRunId,
+    resultPayload: {
+      generatedDuring: 'session_start',
+      sessionId: input.sessionId,
+      cardCount: cards.length,
+      activityVariantCount: activityVariants.length,
+    },
+  };
+
+  await http.post('/v1/content/generation-jobs/import-result', importPayload);
+}
+
+function toGeneratedCardImport(
+  card: Record<string, unknown>,
+  agentRunId: string,
+  studyMode: StudyMode
+): {
+  cardType: string;
+  content: Record<string, unknown>;
+  primaryConceptId: string;
+  relatedConceptIds?: string[];
+  tags?: string[];
+  knowledgeNodeIds?: string[];
+  anchoredCkgNodeIds?: string[];
+  anchoredPkgNodeIds?: string[];
+  source?: string;
+  difficulty?: DifficultyLevel;
+  supportedStudyModes?: StudyMode[];
+  metadata?: Record<string, unknown>;
+} {
+  const conceptIds = readStringArray(card['conceptIds']);
+  const anchoredCkgNodeIds = readStringArray(card['anchoredCkgNodeIds']);
+  const anchoredPkgNodeIds = readStringArray(card['anchoredPkgNodeIds']);
+  const primaryConceptId = conceptIds[0] ?? anchoredCkgNodeIds[0];
+
+  if (primaryConceptId === undefined) {
+    throw new Error('Generated card is missing a canonical concept anchor.');
+  }
+
+  return {
+    cardType: readString(card['cardType']) ?? 'definition',
+    content: asRecord(card['content']),
+    primaryConceptId,
+    relatedConceptIds: conceptIds.slice(1),
+    tags: readStringArray(card['tags']),
+    knowledgeNodeIds: anchoredPkgNodeIds,
+    anchoredCkgNodeIds,
+    anchoredPkgNodeIds,
+    source: 'agent',
+    difficulty: (readString(card['difficulty']) ?? 'intermediate') as DifficultyLevel,
+    supportedStudyModes: readStudyModes(card['supportedStudyModes'], studyMode),
+    metadata: {
+      generationRationale: readString(card['rationale']) ?? '',
+      originMode: readString(card['originMode']) ?? 'agent_autonomous',
+      originAgentRunId: agentRunId,
+      sourceDocumentIds: readStringArray(card['sourceDocumentIds']),
+      sources: card['sources'],
+      factualityScore: card['factualityScore'],
+      guardianValidationId: readString(card['guardianValidationId']),
+    },
+  };
+}
+
+function toGeneratedActivityVariantImport(
+  variant: Record<string, unknown>,
+  agentRunId: string
+): {
+  conceptId: string;
+  studyMode: StudyMode;
+  transformationType: TransformationType;
+  epistemicMode: EpistemicMode;
+  difficultyBucket: number;
+  sourceCardIds?: string[];
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+  responseSchema: Record<string, unknown>;
+  variantSeed: string;
+  generatorMetadata?: Record<string, unknown>;
+  ttlAt: string;
+} {
+  const conceptId = readString(variant['conceptId']);
+  if (conceptId === undefined) {
+    throw new Error('Generated activity variant is missing its concept id.');
+  }
+
+  return {
+    conceptId,
+    studyMode: (readString(variant['studyMode']) ?? 'knowledge_gaining') as StudyMode,
+    transformationType: (readString(variant['transformationType']) ??
+      'explanation') as TransformationType,
+    epistemicMode: (readString(variant['epistemicMode']) ??
+      'generative_retrieval') as EpistemicMode,
+    difficultyBucket: readNumber(variant['difficultyBucket']) ?? 2,
+    sourceCardIds: readStringArray(variant['sourceCardIds']),
+    prompt: readString(variant['prompt']) ?? 'Practice this concept.',
+    renderPayload: asRecord(variant['renderPayload']),
+    expectedResponseType: readString(variant['expectedResponseType']) ?? 'short_text',
+    responseSchema: asRecord(variant['responseSchema']),
+    variantSeed: readString(variant['variantSeed']) ?? `${conceptId}:generated`,
+    generatorMetadata: {
+      ...asRecord(variant['generatorMetadata']),
+      agentRunId,
+      guardianValidationId: readString(variant['guardianValidationId']),
+      rationale: readString(variant['rationale']),
+    },
+    ttlAt:
+      readString(variant['ttlAt']) ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === 'object' && item !== null && !Array.isArray(item)
+      )
+    : [];
+}
+
+function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function readStudyModes(value: unknown, fallback: StudyMode): StudyMode[] {
+  const modes = readStringArray(value) as StudyMode[];
+  return modes.length > 0 ? modes : [fallback];
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function formatStartSessionError(error: unknown): string {

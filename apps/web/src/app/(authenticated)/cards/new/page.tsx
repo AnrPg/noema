@@ -26,6 +26,7 @@ import * as React from 'react';
 import { FieldLabel } from '@noema/ui';
 import { PkgNodeAuthoringPanel } from '@/components/cards/pkg-node-authoring-panel';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
+import { validateKnowledgeNodeIds } from '@/lib/cards/knowledge-node-ids';
 import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
 
 // ============================================================================
@@ -67,7 +68,7 @@ interface IContentFormData {
 
 interface ISettingsFormData {
   tags: string;
-  knowledgeNodeIds: string;
+  conceptNodeIds: string;
   difficulty: string;
   state: 'ACTIVE' | 'DRAFT';
 }
@@ -488,8 +489,6 @@ function parseCommaSeparated(raw: string): string[] {
     .filter((s) => s !== '');
 }
 
-const KNOWLEDGE_NODE_ID_PATTERN = /^node_[a-zA-Z0-9]{21}$/;
-
 function normalizeKnowledgeNodeIds(raw: string): string[] {
   const seen = new Set<string>();
   const ids: string[] = [];
@@ -501,22 +500,12 @@ function normalizeKnowledgeNodeIds(raw: string): string[] {
   }
   return ids;
 }
-
-function validateKnowledgeNodeIds(ids: string[]): string | null {
+function validateCardKnowledgeNodeIds(ids: string[]): string | null {
   if (ids.length > 50) {
-    return 'You can link up to 50 knowledge nodes per payload.';
+    return 'You can attach up to 50 concept nodes per card.';
   }
 
-  const invalid = ids.find((id) => !KNOWLEDGE_NODE_ID_PATTERN.test(id));
-  if (invalid !== undefined) {
-    return [
-      'Invalid knowledge node ID: ',
-      invalid,
-      '. Expected format is node_ followed by 21 alphanumeric characters.',
-    ].join('');
-  }
-
-  return null;
+  return validateKnowledgeNodeIds(ids);
 }
 
 function parseDifficulty(raw: string): DifficultyLevel | undefined {
@@ -983,10 +972,12 @@ function Step3Settings({
       <PkgNodeAuthoringPanel
         userId={userId}
         studyMode={studyMode}
-        value={settings.knowledgeNodeIds}
+        value={settings.conceptNodeIds}
         onChange={(nextValue) => {
-          onChange({ knowledgeNodeIds: nextValue });
+          onChange({ conceptNodeIds: nextValue });
         }}
+        title="Concept anchors"
+        description="Attach the primary concept node this card is about. If you attach more than one node, the first becomes the primary concept and the rest become related concepts."
       />
 
       {/* Difficulty */}
@@ -1282,7 +1273,7 @@ function defaultContent(): IContentFormData {
 function defaultSettings(): ISettingsFormData {
   return {
     tags: '',
-    knowledgeNodeIds: '',
+    conceptNodeIds: '',
     difficulty: '',
     state: 'ACTIVE',
   };
@@ -1408,10 +1399,15 @@ export default function NewCardPage(): React.JSX.Element {
     setSubmitError(null);
 
     const tags = parseCommaSeparated(settings.tags);
-    const knowledgeNodeIds = normalizeKnowledgeNodeIds(settings.knowledgeNodeIds);
-    const nodeIdsError = validateKnowledgeNodeIds(knowledgeNodeIds);
+    const conceptNodeIds = normalizeKnowledgeNodeIds(settings.conceptNodeIds);
+    const nodeIdsError = validateCardKnowledgeNodeIds(conceptNodeIds);
     if (nodeIdsError !== null) {
       setSubmitError(nodeIdsError);
+      return;
+    }
+    const [primaryConceptId, ...relatedConceptIds] = conceptNodeIds;
+    if (primaryConceptId === undefined) {
+      setSubmitError('Attach at least one concept node before creating the card.');
       return;
     }
     const difficulty = parseDifficulty(settings.difficulty);
@@ -1437,12 +1433,14 @@ export default function NewCardPage(): React.JSX.Element {
     const input: ICreateCardInput = {
       cardType: selectedType,
       content,
+      primaryConceptId,
+      relatedConceptIds,
       supportedStudyModes: [activeStudyMode],
       ...(difficulty !== undefined ? { difficulty } : {}),
       metadata: { state },
     };
     if (tags.length > 0) input.tags = tags;
-    if (knowledgeNodeIds.length > 0) input.knowledgeNodeIds = knowledgeNodeIds;
+    input.knowledgeNodeIds = conceptNodeIds;
 
     try {
       const response = await createCard.mutateAsync(input);
@@ -1451,7 +1449,7 @@ export default function NewCardPage(): React.JSX.Element {
           ? (
               await transitionCardState.mutateAsync({
                 id: response.data.id,
-                data: { state: 'active' },
+                data: { state: 'active', version: response.data.version },
               })
             ).data
           : response.data;

@@ -4,13 +4,23 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, test, vi } from 'vitest';
 import BatchOperationsPage from './page.js';
 
-const previewImportMock = vi.fn();
-const executeImportMock = vi.fn();
-const createNodeMock = vi.fn();
-const createEdgeMock = vi.fn();
-const updateNodeMock = vi.fn();
-const refreshAnalyticsMock = vi.fn();
-const deleteEdgeMock = vi.fn();
+const {
+  previewImportMock,
+  executeImportMock,
+  createNodeMock,
+  createEdgeMock,
+  updateNodeMock,
+  refreshAnalyticsMock,
+  deleteEdgeMock,
+} = vi.hoisted(() => ({
+  previewImportMock: vi.fn(),
+  executeImportMock: vi.fn(),
+  createNodeMock: vi.fn(),
+  createEdgeMock: vi.fn(),
+  updateNodeMock: vi.fn(),
+  refreshAnalyticsMock: vi.fn(),
+  deleteEdgeMock: vi.fn(),
+}));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
@@ -203,7 +213,7 @@ test('batch metadata step carries values forward payload by payload', async () =
   createNodeMock.mockResolvedValue({
     data: {
       id: 'node_abcdefghijklmnopqrstu',
-      type: 'concept',
+      type: 'notion',
       label: 'Biology foundations',
       description: null,
       domain: 'general',
@@ -226,17 +236,22 @@ test('batch metadata step carries values forward payload by payload', async () =
 
   const { container } = renderPage();
 
-  fireEvent.click(screen.getByRole('button', { name: /^csv$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /front \/ back csv/i }));
+  fireEvent.click(screen.getByRole('button', { name: /csv .*\.csv/i }));
+  fireEvent.click(screen.getByRole('button', { name: /front \/ back csv.*two columns/i }));
 
   const fileInput = container.querySelector('input[type="file"]');
   expect(fileInput).not.toBeNull();
 
-  fireEvent.change(fileInput as HTMLInputElement, {
-    target: {
-      files: [new File(['Front,Back\nQ1,A1\nQ2,A2'], 'cards.csv', { type: 'text/csv' })],
-    },
+  const file = new File(['Front,Back\nQ1,A1\nQ2,A2'], 'cards.csv', { type: 'text/csv' });
+  Object.defineProperty(file, 'text', {
+    value: () => Promise.resolve('Front,Back\nQ1,A1\nQ2,A2'),
+    configurable: true,
   });
+  Object.defineProperty(fileInput, 'files', {
+    value: [file],
+    configurable: true,
+  });
+  fireEvent.change(fileInput as HTMLInputElement);
 
   await waitFor(() => {
     expect(previewImportMock).toHaveBeenCalled();
@@ -266,7 +281,7 @@ test('batch metadata step carries values forward payload by payload', async () =
     expect(createNodeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         label: 'Biology foundations',
-        type: 'concept',
+        type: 'notion',
         domain: 'general',
         supportedStudyModes: ['knowledge_gaining'],
       })
@@ -288,10 +303,10 @@ test('batch metadata step carries values forward payload by payload', async () =
     expect(screen.getByText(/^a2$/i)).not.toBeNull();
   });
 
-  expect((screen.getByLabelText(/^tags$/i) as HTMLInputElement).value).toBe('biology, imported');
+  expect(screen.getByLabelText(/^tags$/i)).toHaveValue('biology, imported');
   expect(screen.getAllByText(/biology foundations/i).length).toBeGreaterThan(0);
-  expect((screen.getByLabelText(/^difficulty$/i) as HTMLSelectElement).value).toBe('advanced');
-  expect((screen.getByLabelText(/initial state/i) as HTMLSelectElement).value).toBe('active');
+  expect(screen.getByLabelText(/^difficulty$/i)).toHaveValue('advanced');
+  expect(screen.getByLabelText(/initial state/i)).toHaveValue('active');
 
   fireEvent.click(screen.getByRole('button', { name: /import payloads/i }));
 

@@ -1,8 +1,8 @@
 'use client';
 /**
- * @noema/web — Copilot / CopilotToggle
+ * @noema/web - Copilot / CopilotToggle
  *
- * Floating circular button — bottom-right corner (z-50).
+ * Floating circular button - bottom-right corner (z-50).
  * Shows PulseIndicator when unread high-priority actions exist.
  * Hidden during active sessions (/session/* routes).
  * Shows badge count for unread critical/high actions.

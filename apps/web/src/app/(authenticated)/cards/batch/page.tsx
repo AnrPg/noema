@@ -39,6 +39,7 @@ import {
   getBatchImportFileTypeDefinition,
   type BatchImportFileType,
 } from '@/lib/cards/batch-import';
+import { validateKnowledgeNodeIds as validateSharedKnowledgeNodeIds } from '@/lib/cards/knowledge-node-ids';
 import { formatApiErrorMessage } from '@/lib/api-errors';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 import { getStudyModeDescription, getStudyModeLabel } from '@/lib/study-mode';
@@ -62,7 +63,6 @@ interface ICardImportRecordMetadataPayload {
   state: SharedState;
 }
 
-const KNOWLEDGE_NODE_ID_PATTERN = /^node_[a-zA-Z0-9]{21}$/;
 const TARGET_OPTIONS: { value: ICardImportFieldMapping['targetFieldId']; label: string }[] = [
   { value: 'front', label: 'Front side' },
   { value: 'back', label: 'Back side' },
@@ -138,11 +138,8 @@ function normalizeKnowledgeNodeIds(raw: string): string[] {
   return Array.from(deduped);
 }
 
-function validateKnowledgeNodeIds(ids: string[]): string | null {
-  const invalid = ids.find((id) => !KNOWLEDGE_NODE_ID_PATTERN.test(id));
-  return invalid === undefined
-    ? null
-    : `Invalid knowledge node ID: ${invalid}. Expected node_ followed by 21 alphanumeric characters.`;
+function validateBatchKnowledgeNodeIds(ids: string[]): string | null {
+  return validateSharedKnowledgeNodeIds(ids);
 }
 
 async function fileToPayload(
@@ -702,11 +699,15 @@ export default function BatchOperationsPage(): React.JSX.Element {
       return false;
     }
 
-    const nodeError = validateKnowledgeNodeIds(
+    const nodeError = validateBatchKnowledgeNodeIds(
       normalizeKnowledgeNodeIds(metadata.knowledgeNodeIds)
     );
     if (nodeError !== null) {
       setError(nodeError);
+      return false;
+    }
+    if (normalizeKnowledgeNodeIds(metadata.knowledgeNodeIds).length === 0) {
+      setError('Attach at least one concept node for each imported card.');
       return false;
     }
 
@@ -1354,8 +1355,8 @@ export default function BatchOperationsPage(): React.JSX.Element {
                       onChange={(nextValue) => {
                         updateCurrentRecordMetadata({ knowledgeNodeIds: nextValue });
                       }}
-                      title="PKG node focus"
-                      description="Attach or create the local PKG node for this imported payload, then add local relations around that selected node."
+                      title="Concept anchors"
+                      description="Attach the primary concept node for this imported card. If you attach more than one, the first becomes primary and the rest stay related."
                     />
                     <label className="flex flex-col gap-1.5">
                       <span className="text-sm font-medium">Difficulty</span>

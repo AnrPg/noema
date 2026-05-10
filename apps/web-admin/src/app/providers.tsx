@@ -5,7 +5,7 @@
 'use client';
 
 import type { JSX, ReactNode } from 'react';
-import { ApiRequestError, configureApiClient } from '@noema/api-client';
+import { ApiRequestError, configureAgentsClient, configureApiClient } from '@noema/api-client';
 import { AuthProvider, useAuthStore } from '@noema/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -28,9 +28,13 @@ configureApiClient({
   baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
   getAccessToken: () => useAuthStore.getState().accessToken,
   onUnauthorized: () => {
+    if (process.env.NODE_ENV === 'development') return;
+
     useAuthStore.getState().reset();
   },
 });
+
+configureAgentsClient(process.env['NEXT_PUBLIC_AGENTS_URL'] ?? 'http://localhost:8011');
 
 export function Providers({ children }: { children: ReactNode }): JSX.Element {
   const [queryClient] = useState(

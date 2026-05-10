@@ -46,6 +46,7 @@ import {
   Settings,
   Target,
   User,
+  Vault,
 } from 'lucide-react';
 import type { Route } from 'next';
 import { usePathname, useRouter } from 'next/navigation';
@@ -80,6 +81,7 @@ const navItems = [
       { href: '/knowledge/misconceptions', label: 'Misconceptions', icon: AlertTriangle },
       { href: '/knowledge/comparison', label: 'KG Comparison', icon: GitCompare },
       { href: '/goals', label: 'Goals', icon: Target },
+      { href: '/curricula', label: 'Curriculum Vault', icon: Vault },
       { href: '/sessions', label: 'Sessions', icon: ClipboardList },
       { href: '/cards', label: 'Concept Payloads', icon: LibraryBig },
     ],

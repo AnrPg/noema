@@ -5,7 +5,7 @@
  * metadata (type, state, difficulty, tags, nodes, dates) and action buttons
  * (Edit, Delete, state transitions).
  *
- * Edit mode: raw JSON content editor plus fields for tags, knowledgeNodeIds,
+ * Edit mode: raw JSON content editor plus fields for tags and concept anchors,
  * and difficulty. Saves via useUpdateCard with optimistic locking (version).
  * Phase 10 will replace the raw JSON editor with rich type-specific editors.
  *
@@ -20,13 +20,15 @@ import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   useCard,
+  usePKGNode,
   useUpdateCard,
   useDeleteCard,
   useCardStateTransition,
   contentKeys,
 } from '@noema/api-client';
 import type { IUpdateCardInput } from '@noema/api-client';
-import type { CardId, CardState } from '@noema/types';
+import { useAuth } from '@noema/auth';
+import type { CardId, CardState, NodeId, UserId } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Button,
@@ -64,6 +66,26 @@ const STATE_COLORS: Record<CardState, string> = {
   suspended: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
   archived: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
 };
+
+function KnowledgeNodeChip({ nodeId }: { nodeId: NodeId }): React.JSX.Element {
+  const { user } = useAuth();
+  const userId = (user?.id ?? '') as UserId;
+  const { data: node } = usePKGNode(userId, nodeId, {
+    enabled: userId !== '' && nodeId !== '',
+  });
+
+  const label = node?.label ?? nodeId;
+
+  return (
+    <a
+      href={`/knowledge?nodeId=${nodeId}`}
+      title={label === nodeId ? nodeId : `${label} (${nodeId})`}
+      className="rounded-full border px-3 py-1 text-xs text-foreground hover:bg-muted transition-colors"
+    >
+      {label}
+    </a>
+  );
+}
 
 // ============================================================================
 // Page
@@ -114,7 +136,7 @@ export default function CardDetailPage(): React.JSX.Element {
   function handleEnterEdit(): void {
     if (card === undefined) return;
     setEditTags(card.tags.join(', '));
-    setEditNodeIds(card.knowledgeNodeIds.join(', '));
+    setEditNodeIds([card.primaryConceptId, ...card.relatedConceptIds].join(', '));
     setEditDifficulty(String(card.difficulty));
     setEditContentJson(JSON.stringify(card.content, null, 2));
     setEditJsonError(null);
@@ -153,15 +175,22 @@ export default function CardDetailPage(): React.JSX.Element {
       .map((t) => t.trim())
       .filter(Boolean);
 
-    const knowledgeNodeIds = editNodeIds
+    const conceptNodeIds = editNodeIds
       .split(',')
       .map((n) => n.trim())
       .filter(Boolean);
+    const [primaryConceptId, ...relatedConceptIds] = conceptNodeIds;
+    if (primaryConceptId === undefined) {
+      toast.error('A card must stay anchored to a primary concept.');
+      return;
+    }
 
     const data: IUpdateCardInput = {
       content: parsedContent,
       tags,
-      knowledgeNodeIds,
+      primaryConceptId,
+      relatedConceptIds,
+      knowledgeNodeIds: conceptNodeIds,
       version: card.version,
     };
 
@@ -203,9 +232,9 @@ export default function CardDetailPage(): React.JSX.Element {
   // --------------------------------------------------------------------------
 
   function handleStateTransition(state: CardState): void {
-    if (isMutating) return;
+    if (isMutating || !card) return;
     cardStateTransition.mutate(
-      { id: cardId, data: { state } },
+      { id: cardId, data: { state, version: card.version } },
       {
         onSuccess: () => {
           void queryClient.invalidateQueries({ queryKey: contentKeys.cards() });
@@ -610,25 +639,16 @@ export default function CardDetailPage(): React.JSX.Element {
         </Card>
       )}
 
-      {/* Knowledge nodes */}
+      {/* Concept anchors */}
       {card.knowledgeNodeIds.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Knowledge Nodes</CardTitle>
+            <CardTitle className="text-base">Concept Anchors</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {card.knowledgeNodeIds.map((nodeId) => (
-                // Links to knowledge graph with nodeId query param — the graph page
-                // will auto-select this node. A dedicated /knowledge/[nodeId] detail
-                // page is planned for a future phase.
-                <a
-                  key={nodeId}
-                  href={`/knowledge?nodeId=${nodeId}`}
-                  className="rounded-full border px-3 py-1 text-xs font-mono text-foreground hover:bg-muted transition-colors"
-                >
-                  {nodeId}
-                </a>
+              {[card.primaryConceptId, ...card.relatedConceptIds].map((nodeId) => (
+                <KnowledgeNodeChip key={nodeId} nodeId={nodeId as NodeId} />
               ))}
             </div>
           </CardContent>

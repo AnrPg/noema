@@ -25,10 +25,6 @@ import { useRouter } from 'next/navigation';
 
 type UserId = UserDto['id'];
 
-function ensureSessions(value: unknown): ISessionDto[] {
-  return Array.isArray(value) ? (value as ISessionDto[]) : [];
-}
-
 // ============================================================================
 // Constants
 // ============================================================================
@@ -186,8 +182,7 @@ export function RecentSessions({
 }: IRecentSessionsProps): React.JSX.Element {
   const router = useRouter();
   const { data, isLoading } = useSessions({ limit: 5, studyMode });
-
-  const sessions: ISessionDto[] = [...ensureSessions(data?.data)]
+  const sessions: ISessionDto[] = [...(data?.data.sessions ?? [])]
     .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
     .slice(0, 5);
 

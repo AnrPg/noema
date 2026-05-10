@@ -1,7 +1,7 @@
 /**
  * Sessions List Page
  *
- * Admin view of all learning sessions: ID, user, status, mode, created date,
+ * Admin view of all learning sessions: ID, user, lifecycle state, study mode, created date,
  * and a "View" link to the session detail page.
  */
 
@@ -70,21 +70,21 @@ function SessionRow({ session }: { session: ISessionDto }): React.JSX.Element {
 
       {/* State badge */}
       <span
-        className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${stateBadgeClass(session.state)}`}
+        className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${stateBadgeClass(session.lifecycleState)}`}
       >
-        {session.state}
+        {session.lifecycleState}
       </span>
 
       {/* Mode badge */}
       <span
-        className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${modeBadgeClass(session.mode)}`}
+        className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${modeBadgeClass(session.studyMode)}`}
       >
-        {session.mode}
+        {session.studyMode}
       </span>
 
       {/* Card count */}
       <span className="text-xs text-muted-foreground shrink-0 hidden lg:block w-20 text-right">
-        {String(session.cardIds.length)} cards
+        {String(session.stats.stepsPlanned)} steps
       </span>
 
       {/* Created date */}
@@ -112,7 +112,7 @@ function SessionRow({ session }: { session: ISessionDto }): React.JSX.Element {
 export default function SessionsPage(): JSX.Element {
   const { data, isLoading, isError } = useSessions();
 
-  const sessions = data?.data ?? [];
+  const sessions = data?.data.sessions ?? [];
 
   return (
     <div className="space-y-6">

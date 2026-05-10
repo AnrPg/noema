@@ -167,7 +167,7 @@ export default function SessionsPage(): React.JSX.Element {
       : { studyMode: activeStudyMode, limit: 50 }
   );
 
-  const sessions: ISessionDto[] = data?.data ?? [];
+  const sessions: ISessionDto[] = data?.data.sessions ?? [];
 
   return (
     <div className="flex flex-col gap-6">

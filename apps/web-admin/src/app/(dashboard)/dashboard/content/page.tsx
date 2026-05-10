@@ -29,7 +29,7 @@ export default function ContentOversightPage(): JSX.Element {
   const totalTemplates = templates?.length ?? 0;
   // Uses the single-record fetch; not a true total — replace with meta.total
   // once the session-service pagination envelope exposes it.
-  const totalSessions = sessionsData?.data.length ?? 0;
+  const totalSessions = sessionsData?.data.total ?? 0;
 
   return (
     <div className="space-y-6">

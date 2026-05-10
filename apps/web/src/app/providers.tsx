@@ -2,7 +2,12 @@
 
 import { ToastProvider } from '@/components/toast-provider';
 import { useAgentHintsInterceptor } from '@/hooks/use-agent-hints-interceptor';
-import { ApiRequestError, configureApiClient, configureHlrClient } from '@noema/api-client';
+import {
+  ApiRequestError,
+  configureAgentsClient,
+  configureApiClient,
+  configureHlrClient,
+} from '@noema/api-client';
 import { AuthProvider, useAuthStore } from '@noema/auth';
 import { ThemeProvider } from '@noema/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -12,6 +17,8 @@ configureApiClient({
   baseUrl: process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:8080/api',
   getAccessToken: () => useAuthStore.getState().accessToken,
   onUnauthorized: () => {
+    if (process.env.NODE_ENV === 'development') return;
+
     const state = useAuthStore.getState();
     if (state.isInitialized && state.isAuthenticated) {
       state.setSessionExpired(true);
@@ -20,6 +27,7 @@ configureApiClient({
 });
 
 configureHlrClient(process.env['NEXT_PUBLIC_HLR_URL'] ?? 'http://localhost:8020');
+configureAgentsClient(process.env['NEXT_PUBLIC_AGENTS_URL'] ?? 'http://localhost:8011');
 
 // Inner component so it has access to QueryClientProvider context
 function QueryCacheWatcher(): null {

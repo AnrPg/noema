@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }): React
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+        <div id="mapify-window" />
         <Providers>{children}</Providers>
       </body>
     </html>

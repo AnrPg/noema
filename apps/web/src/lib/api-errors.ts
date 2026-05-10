@@ -200,6 +200,13 @@ export function formatApiErrorMessage(error: unknown, options: IFormatApiErrorOp
     return `We couldn't ${options.action} because the app could not reach the server. Check your connection or make sure the local services are still running, then try again.`;
   }
 
+  if (candidate.code === 'BAD_RESPONSE' || candidate.code === 'UPSTREAM_SERVICE_PROTOCOL_ERROR') {
+    return appendRequestId(
+      `We couldn't ${options.action} because a backend service returned an invalid response. Please try again in a moment.`,
+      candidate.requestId
+    );
+  }
+
   if (candidate.status === 401) {
     return `We couldn't ${options.action} because your session is no longer valid. Sign in again, then retry.`;
   }
@@ -218,6 +225,24 @@ export function formatApiErrorMessage(error: unknown, options: IFormatApiErrorOp
 
   if (candidate.status === 429) {
     return `We couldn't ${options.action} because too many requests hit the server at once. Wait a moment, then try again.`;
+  }
+
+  if (
+    candidate.code === 'UPSTREAM_SERVICE_UNAVAILABLE' ||
+    candidate.status === 502 ||
+    candidate.status === 503
+  ) {
+    return appendRequestId(
+      `We couldn't ${options.action} because a backend service is temporarily unavailable. Please try again in a moment.`,
+      candidate.requestId
+    );
+  }
+
+  if (candidate.code === 'UPSTREAM_SERVICE_TIMEOUT' || candidate.status === 504) {
+    return appendRequestId(
+      `We couldn't ${options.action} because a backend service took too long to respond. Please try again in a moment.`,
+      candidate.requestId
+    );
   }
 
   if (candidate.status !== undefined && candidate.status >= 500) {

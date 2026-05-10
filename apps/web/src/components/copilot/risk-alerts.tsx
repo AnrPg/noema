@@ -1,6 +1,6 @@
 'use client';
 /**
- * @noema/web — Copilot / RiskAlerts
+ * @noema/web - Copilot / RiskAlerts
  *
  * Surfaces riskFactors from agentHints (severity >= medium only).
  * critical/high: prominent cortex treatment.
@@ -12,7 +12,7 @@ import { AlertTriangle, Info, ShieldAlert } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useCopilotStore } from '@/stores/copilot-store';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// Constants
 
 const SEVERITY_ORDER: Record<RiskSeverity, number> = {
   critical: 0,
@@ -39,7 +39,7 @@ function probabilityLabel(p: number): string {
   return 'Unlikely';
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Component
 
 export function RiskAlerts(): React.JSX.Element {
   const hintsByPage = useCopilotStore((s) => s.hintsByPage);

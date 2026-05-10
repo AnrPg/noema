@@ -86,7 +86,7 @@ export function CommandPalette({ extraCommands = [] }: ICommandPaletteProps): Re
       {
         id: 'nav-concept-payloads',
         label: 'Go to Concept Payloads',
-        keywords: ['payload', 'concept', 'activity source'],
+        keywords: ['payload', 'notion', 'activity source'],
         category: 'Navigation',
         action: () => {
           router.push('/cards');

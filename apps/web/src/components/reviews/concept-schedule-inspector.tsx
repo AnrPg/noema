@@ -11,6 +11,7 @@ import { useConceptSchedule, useTransformationHistory } from '@noema/api-client'
 import type { ConceptId } from '@noema/types';
 import { NeuralGauge } from '@noema/ui';
 import { Loader2, X } from 'lucide-react';
+import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 
 export interface IConceptScheduleInspectorProps {
   conceptId: string;
@@ -38,9 +39,10 @@ export function ConceptScheduleInspector({
   onClose,
 }: IConceptScheduleInspectorProps): React.JSX.Element {
   const typedConceptId = conceptId as ConceptId;
+  const activeStudyMode = useActiveStudyMode();
   const { data: scheduleData, isLoading: scheduleLoading } = useConceptSchedule(
     typedConceptId,
-    undefined,
+    { studyMode: activeStudyMode },
     {
       enabled: conceptId !== '',
     }

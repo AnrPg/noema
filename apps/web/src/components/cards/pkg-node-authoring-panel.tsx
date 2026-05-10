@@ -6,27 +6,28 @@ import type {
   IGraphNodeDto,
   IUpdateNodeInput,
   NodeType,
-} from '@noema/api-client';
+} from '@noema/api-client/knowledge-graph';
 import {
   kgKeys,
   pkgEdgesApi,
   useCKGNodes,
   useCreatePKGEdge,
   useCreatePKGNode,
+  useDomainSuggestions,
   usePKGEdges,
   usePKGNodes,
   useRefreshKnowledgeGraphAnalytics,
   useUpdatePKGNode,
-} from '@noema/api-client';
+} from '@noema/api-client/knowledge-graph';
 import type { EdgeId, NodeId, StudyMode, UserId } from '@noema/types';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, GitBranch, Link2, PencilLine, Search } from 'lucide-react';
 import * as React from 'react';
-import { FieldLabel } from '@noema/ui';
+import { DomainSuggestionField, FieldLabel } from '@noema/ui/forms';
 import { toast } from '@/hooks/use-toast';
 
 const NODE_TYPES: { value: NodeType; label: string }[] = [
-  { value: 'concept', label: 'Concept' },
+  { value: 'notion', label: 'Notion' },
   { value: 'occupation', label: 'Occupation' },
   { value: 'skill', label: 'Skill' },
   { value: 'fact', label: 'Fact' },
@@ -96,18 +97,61 @@ function defaultDomainForStudyMode(studyMode: StudyMode): string {
   return studyMode === 'language_learning' ? 'language' : 'general';
 }
 
+function resolveAuthoringDomain(
+  typedValue: string,
+  fallbackDomain: string,
+  resolution: { resolvedDomain: string | null; needsDecision: boolean }
+): string | null {
+  const nextValue = typedValue.trim();
+  if (resolution.needsDecision) {
+    return null;
+  }
+  if (resolution.resolvedDomain !== null) {
+    return resolution.resolvedDomain;
+  }
+  return nextValue === '' ? fallbackDomain : nextValue;
+}
+
 function canonicalRefKey(ref: { sourceId: string; externalId: string }): string {
   return `${ref.sourceId}:${ref.externalId}`.toLowerCase();
+}
+
+function ensureNodeArray<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function ensureNodeMetadata(value: unknown): Record<string, unknown> {
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function normalizeNodeForAuthoringPanel(node: IGraphNodeDto): IGraphNodeDto {
+  return {
+    ...node,
+    aliases: ensureNodeArray(node.aliases),
+    languages: ensureNodeArray(node.languages),
+    tags: ensureNodeArray(node.tags),
+    semanticHints: ensureNodeArray(node.semanticHints),
+    supportedStudyModes: ensureNodeArray(node.supportedStudyModes),
+    canonicalExternalRefs: ensureNodeArray(node.canonicalExternalRefs),
+    ontologyMappings: ensureNodeArray(node.ontologyMappings),
+    provenance: ensureNodeArray(node.provenance),
+    metadata: ensureNodeMetadata(node.metadata),
+  };
 }
 
 function findCopiedPkgNode(
   ckgNode: IGraphNodeDto,
   pkgNodes: readonly IGraphNodeDto[]
 ): IGraphNodeDto | null {
-  const ckgId = String(ckgNode.id);
-  const ckgRefKeys = new Set(ckgNode.canonicalExternalRefs.map(canonicalRefKey));
+  const normalizedCkgNode = normalizeNodeForAuthoringPanel(ckgNode);
+  const ckgId = String(normalizedCkgNode.id);
+  const ckgRefKeys = new Set(normalizedCkgNode.canonicalExternalRefs.map(canonicalRefKey));
 
-  for (const node of pkgNodes) {
+  for (const rawNode of pkgNodes) {
+    const node = normalizeNodeForAuthoringPanel(rawNode);
     const copiedFromCkgNodeId = node.metadata['copiedFromCkgNodeId'];
     if (
       (typeof copiedFromCkgNodeId === 'string' || typeof copiedFromCkgNodeId === 'number') &&
@@ -177,16 +221,17 @@ export function PkgNodeAuthoringPanel({
   const [activeNodeId, setActiveNodeId] = React.useState('');
   const [panelError, setPanelError] = React.useState<string | null>(null);
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false);
-  const [createType, setCreateType] = React.useState<NodeType>('concept');
+  const [createType, setCreateType] = React.useState<NodeType>('notion');
   const [createDomain, setCreateDomain] = React.useState(defaultDomainForStudyMode(studyMode));
   const [createDescription, setCreateDescription] = React.useState('');
   const [editLabel, setEditLabel] = React.useState('');
-  const [editType, setEditType] = React.useState<NodeType>('concept');
+  const [editType, setEditType] = React.useState<NodeType>('notion');
   const [editDomain, setEditDomain] = React.useState(defaultDomainForStudyMode(studyMode));
   const [editDescription, setEditDescription] = React.useState('');
   const [edgeTargetSearch, setEdgeTargetSearch] = React.useState('');
   const [edgeTargetId, setEdgeTargetId] = React.useState('');
   const [edgeType, setEdgeType] = React.useState<EdgeType>('related_to');
+  const [edgeDomain, setEdgeDomain] = React.useState('');
   const [edgeWeight, setEdgeWeight] = React.useState('1');
   const [transientNodes, setTransientNodes] = React.useState<Record<string, IGraphNodeDto>>({});
 
@@ -215,11 +260,27 @@ export function PkgNodeAuthoringPanel({
   const updateNode = useUpdatePKGNode(userId, activeNodeId as NodeId);
   const createEdge = useCreatePKGEdge(userId);
   const refreshAnalytics = useRefreshKnowledgeGraphAnalytics(userId);
+  const createDomainSuggestions = useDomainSuggestions({
+    userId,
+    label: createDomain,
+    nodeType: createType,
+    studyMode,
+    limit: 5,
+  });
+  const editDomainSuggestions = useDomainSuggestions({
+    userId,
+    label: editDomain,
+    nodeType: editType,
+    studyMode,
+    limit: 5,
+  });
 
   const pkgNodes = React.useMemo(() => {
     const map = new Map<string, IGraphNodeDto>();
-    Object.values(transientNodes).forEach((node) => map.set(String(node.id), node));
-    basePkgNodes.forEach((node) => map.set(String(node.id), node));
+    Object.values(transientNodes).forEach((node) =>
+      map.set(String(node.id), normalizeNodeForAuthoringPanel(node))
+    );
+    basePkgNodes.forEach((node) => map.set(String(node.id), normalizeNodeForAuthoringPanel(node)));
     return Array.from(map.values());
   }, [basePkgNodes, transientNodes]);
 
@@ -239,6 +300,13 @@ export function PkgNodeAuthoringPanel({
 
   const activeNode =
     attachedNodes.find((node) => String(node.id) === activeNodeId) ?? attachedNodes[0] ?? null;
+  const edgeDomainSuggestions = useDomainSuggestions({
+    userId,
+    label: edgeDomain,
+    nodeType: activeNode?.type ?? 'notion',
+    studyMode,
+    limit: 5,
+  });
 
   const connectedEdges = React.useMemo(
     () =>
@@ -282,15 +350,17 @@ export function PkgNodeAuthoringPanel({
   React.useEffect(() => {
     if (activeNode === null) {
       setEditLabel('');
-      setEditType('concept');
+      setEditType('notion');
       setEditDomain(defaultDomainForStudyMode(studyMode));
       setEditDescription('');
+      setEdgeDomain('');
       return;
     }
     setEditLabel(activeNode.label);
     setEditType(activeNode.type);
     setEditDomain(activeNode.domain ?? defaultDomainForStudyMode(studyMode));
     setEditDescription(activeNode.description ?? '');
+    setEdgeDomain(activeNode.domain ?? '');
   }, [activeNode?.id, activeNode?.updatedAt, studyMode]);
 
   function setAttachedNodeIds(nextIds: string[]): void {
@@ -298,7 +368,8 @@ export function PkgNodeAuthoringPanel({
   }
 
   function syncTransientNode(node: IGraphNodeDto): void {
-    setTransientNodes((current) => ({ ...current, [String(node.id)]: node }));
+    const normalizedNode = normalizeNodeForAuthoringPanel(node);
+    setTransientNodes((current) => ({ ...current, [String(normalizedNode.id)]: normalizedNode }));
   }
 
   function attachNode(nodeId: string): void {
@@ -321,6 +392,19 @@ export function PkgNodeAuthoringPanel({
       return;
     }
 
+    const resolvedCreateDomain = resolveAuthoringDomain(
+      createDomain,
+      defaultDomainForStudyMode(studyMode),
+      {
+        resolvedDomain: createDomainSuggestions.data?.resolvedDomain ?? null,
+        needsDecision: createDomainSuggestions.data?.needsDecision ?? false,
+      }
+    );
+    if (resolvedCreateDomain === null) {
+      setPanelError('Pick one of the suggested domains before creating this local node.');
+      return;
+    }
+
     setPanelError(null);
     toast.warning(
       'You are creating a brand-new PKG node. Prefer a canonical copy when one of the suggestions already fits.'
@@ -330,8 +414,7 @@ export function PkgNodeAuthoringPanel({
       const response = await createNode.mutateAsync({
         label,
         type: createType,
-        domain:
-          createDomain.trim() === '' ? defaultDomainForStudyMode(studyMode) : createDomain.trim(),
+        domain: resolvedCreateDomain,
         ...(createDescription.trim() !== '' ? { description: createDescription.trim() } : {}),
         supportedStudyModes: [studyMode],
         metadata: {
@@ -344,7 +427,7 @@ export function PkgNodeAuthoringPanel({
       attachNode(String(response.data.id));
       setSearchValue('');
       setCreateDescription('');
-      setCreateType('concept');
+      setCreateType('notion');
       setCreateDomain(defaultDomainForStudyMode(studyMode));
       toast.success('New PKG node created and attached.');
       triggerAnalyticsRefresh('The local node');
@@ -393,11 +476,22 @@ export function PkgNodeAuthoringPanel({
 
     const updates: IUpdateNodeInput = {};
     const nextLabel = editLabel.trim();
-    const nextDomain = editDomain.trim();
+    const nextDomain = resolveAuthoringDomain(
+      editDomain,
+      activeNode.domain ?? defaultDomainForStudyMode(studyMode),
+      {
+        resolvedDomain: editDomainSuggestions.data?.resolvedDomain ?? null,
+        needsDecision: editDomainSuggestions.data?.needsDecision ?? false,
+      }
+    );
     const nextDescription = editDescription.trim();
 
     if (nextLabel === '') {
       setPanelError('The selected node needs a label.');
+      return;
+    }
+    if (nextDomain === null) {
+      setPanelError('Pick one of the suggested domains before saving this node.');
       return;
     }
 
@@ -407,10 +501,7 @@ export function PkgNodeAuthoringPanel({
     if (editType !== activeNode.type) {
       updates.nodeType = editType;
     }
-    if (
-      nextDomain !== '' &&
-      nextDomain !== (activeNode.domain ?? defaultDomainForStudyMode(studyMode))
-    ) {
+    if (nextDomain !== (activeNode.domain ?? defaultDomainForStudyMode(studyMode))) {
       updates.domain = nextDomain;
     }
     if (nextDescription !== (activeNode.description ?? '')) {
@@ -459,6 +550,19 @@ export function PkgNodeAuthoringPanel({
       return;
     }
 
+    const sourceDomain = activeNode.domain ?? '';
+    const targetDomain = selectedEdgeTarget?.domain ?? '';
+    const fallbackEdgeDomain =
+      sourceDomain !== '' && sourceDomain === targetDomain ? sourceDomain : edgeDomain.trim();
+    const resolvedEdgeDomain = resolveAuthoringDomain(edgeDomain, fallbackEdgeDomain, {
+      resolvedDomain: edgeDomainSuggestions.data?.resolvedDomain ?? null,
+      needsDecision: edgeDomainSuggestions.data?.needsDecision ?? false,
+    });
+    if (resolvedEdgeDomain === null) {
+      setPanelError('Pick one suggested relation domain before creating this edge.');
+      return;
+    }
+
     setPanelError(null);
     toast.warning(
       'You are changing your local PKG structure. This relation can influence structural and metacognitive analytics.'
@@ -474,6 +578,15 @@ export function PkgNodeAuthoringPanel({
           authoringSource: 'card-node-authoring-panel',
           authoringWorkflow: 'create-local-edge',
           activeCardNodeId: String(activeNode.id),
+          ...(resolvedEdgeDomain.trim() !== ''
+            ? {
+                domainContext: {
+                  domain: resolvedEdgeDomain,
+                  sourceDomain,
+                  targetDomain,
+                },
+              }
+            : {}),
         },
       });
 
@@ -481,6 +594,7 @@ export function PkgNodeAuthoringPanel({
       setEdgeTargetId('');
       setEdgeTargetSearch('');
       setEdgeType('related_to');
+      setEdgeDomain(activeNode.domain ?? '');
       setEdgeWeight('1');
       toast.success('Local relation created.');
       triggerAnalyticsRefresh('The edge creation');
@@ -663,16 +777,14 @@ export function PkgNodeAuthoringPanel({
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Domain</span>
-                <input
-                  value={createDomain}
-                  onChange={(event) => {
-                    setCreateDomain(event.target.value);
-                  }}
-                  className={inputClass}
-                />
-              </label>
+              <DomainSuggestionField
+                label="Domain"
+                value={createDomain}
+                onChange={setCreateDomain}
+                helperText="We quietly match this against existing PKG and CKG domains and only stop you when multiple meanings are plausible."
+                resolution={createDomainSuggestions.data}
+                isLoading={createDomainSuggestions.isFetching}
+              />
             </div>
 
             <label className="flex flex-col gap-1.5">
@@ -798,16 +910,14 @@ export function PkgNodeAuthoringPanel({
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium text-foreground">Domain</span>
-                <input
-                  value={editDomain}
-                  onChange={(event) => {
-                    setEditDomain(event.target.value);
-                  }}
-                  className={inputClass}
-                />
-              </label>
+              <DomainSuggestionField
+                label="Domain"
+                value={editDomain}
+                onChange={setEditDomain}
+                helperText="Suggestions stay inline so you can keep editing without leaving this panel."
+                resolution={editDomainSuggestions.data}
+                isLoading={editDomainSuggestions.isFetching}
+              />
             </div>
 
             <label className="flex flex-col gap-1.5">
@@ -944,6 +1054,15 @@ export function PkgNodeAuthoringPanel({
               </label>
             </div>
 
+            <DomainSuggestionField
+              label="Relation domain"
+              value={edgeDomain}
+              onChange={setEdgeDomain}
+              helperText="Use this when the relation only makes sense from a particular perspective. Matching node domains are prefilled quietly."
+              resolution={edgeDomainSuggestions.data}
+              isLoading={edgeDomainSuggestions.isFetching}
+            />
+
             <button
               type="button"
               onClick={() => {
@@ -983,6 +1102,19 @@ export function PkgNodeAuthoringPanel({
                       <p className="truncate text-xs text-muted-foreground">
                         {sourceLabel} -&gt; {targetLabel} · weight {edge.weight}
                       </p>
+                      {typeof edge.metadata['domainContext'] === 'object' &&
+                      edge.metadata['domainContext'] !== null &&
+                      typeof (edge.metadata['domainContext'] as Record<string, unknown>)['domain'] ===
+                        'string' ? (
+                        <p className="truncate text-xs text-muted-foreground">
+                          Domain:{' '}
+                          {
+                            (edge.metadata['domainContext'] as Record<string, unknown>)[
+                              'domain'
+                            ] as string
+                          }
+                        </p>
+                      ) : null}
                       {edge.type === 'prerequisite' && (
                         <p className="truncate text-xs text-muted-foreground">
                           {sourceLabel} is a prerequisite of {targetLabel}

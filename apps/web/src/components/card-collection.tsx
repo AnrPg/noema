@@ -427,17 +427,19 @@ export function CardCollection({
   className,
 }: ICardCollectionProps): React.JSX.Element {
   // --------------------------------------------------------------------------
-  // Selection state — reset when `cards` identity changes
+  // Selection state — reset when the actual card membership changes
   // --------------------------------------------------------------------------
 
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+  const cardMembershipKey = React.useMemo(() => cards.map((card) => card.id).join('|'), [cards]);
 
   React.useEffect(() => {
     setSelectedIds(new Set());
     onSelectionChange?.(new Set());
-    // Intentionally depend only on `cards` reference (identity change resets selection).
-    // `onSelectionChange` is excluded to avoid infinite loops from unstable callbacks.
-  }, [cards]);
+    // Reset only when the rendered membership changes, not when the parent
+    // passes a fresh array instance for the same set of cards.
+    // `onSelectionChange` is excluded to avoid loops from unstable callbacks.
+  }, [cardMembershipKey]);
 
   // --------------------------------------------------------------------------
   // Selection handlers

@@ -29,17 +29,17 @@ import { getRequestErrorDetails } from '@/lib/api-error';
 import { formatDate, truncateId } from '@/lib/format';
 
 type TemplateId = ITemplateDto['id'];
-type TemplateDraft = {
+interface ITemplateDraft {
   id: TemplateId;
   name: string;
   defaultContentJson: string;
-};
+}
 
 function formatTemplateContent(content: Record<string, unknown>): string {
   return JSON.stringify(content, null, 2);
 }
 
-function buildDraft(template: ITemplateDto): TemplateDraft {
+function buildDraft(template: ITemplateDto): ITemplateDraft {
   return {
     id: template.id,
     name: template.name,
@@ -200,7 +200,7 @@ export default function TemplatesPage(): JSX.Element {
   const updateTemplate = useUpdateTemplate();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<TemplateId | null>(null);
-  const [draft, setDraft] = React.useState<TemplateDraft | null>(null);
+  const [draft, setDraft] = React.useState<ITemplateDraft | null>(null);
   const [editorError, setEditorError] = React.useState<string | null>(null);
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
 
@@ -296,10 +296,14 @@ export default function TemplatesPage(): JSX.Element {
                   }
             );
           },
-          onError: (updateError) => {
-            setEditorError(updateError.message || 'Failed to update template.');
-          },
-        }
+            onError: (updateError) => {
+              setEditorError(
+                updateError.message.trim() === ''
+                  ? 'Failed to update template.'
+                  : updateError.message
+              );
+            },
+          }
       );
     } catch (parseError) {
       setEditorError(

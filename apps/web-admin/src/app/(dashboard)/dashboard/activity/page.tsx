@@ -41,37 +41,40 @@ interface IActivityEvent {
 }
 
 function sessionToEvent(s: ISessionDto): IActivityEvent {
-  const badgeMap: Record<ISessionDto['state'], { label: string; cls: string }> = {
-    ACTIVE: {
-      label: 'ACTIVE',
+  const badgeMap: Record<ISessionDto['lifecycleState'], { label: string; cls: string }> = {
+    planning: {
+      label: 'PLANNING',
       cls: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
     },
-    PAUSED: {
-      label: 'PAUSED',
+    execution: {
+      label: 'EXECUTION',
       cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300',
     },
-    COMPLETED: {
-      label: 'COMPLETED',
+    diagnosis: {
+      label: 'DIAGNOSIS',
       cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
     },
-    ABANDONED: {
-      label: 'ABANDONED',
+    adaptation: {
+      label: 'ADAPTATION',
       cls: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
     },
-    EXPIRED: {
-      label: 'EXPIRED',
+    evaluation: {
+      label: 'EVALUATION',
+      cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+    },
+    completion: {
+      label: 'COMPLETION',
       cls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
     },
   };
-  const { label, cls } = badgeMap[s.state];
   return {
     id: String(s.id),
     kind: 'session',
     timestamp: s.updatedAt,
-    title: `Session ${s.mode}`,
-    detail: `${String(s.cardIds.length)} card(s) · user ${String(s.userId)}`,
-    badge: label,
-    badgeClass: cls,
+    title: `Session ${s.studyMode}`,
+    detail: `${String(s.stats.stepsPlanned)} planned step(s) · user ${String(s.userId)}`,
+    badge: badgeMap[s.lifecycleState].label,
+    badgeClass: badgeMap[s.lifecycleState].cls,
   };
 }
 
@@ -112,7 +115,7 @@ export default function ActivityPage(): JSX.Element {
   const hasError = sessionsError || mutationsError;
 
   const events: IActivityEvent[] = [
-    ...(sessionsData?.data ?? []).map(sessionToEvent),
+    ...(sessionsData?.data.sessions ?? []).map(sessionToEvent),
     ...(mutationsData ?? []).map(mutationToEvent),
   ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 

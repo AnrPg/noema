@@ -1,22 +1,23 @@
 'use client';
 /**
- * @noema/web — Copilot / CopilotSidebar
+ * @noema/web - Copilot / CopilotSidebar
  *
  * Persistent, toggleable right-aligned panel. Surfaces agentHints from all
- * API calls on the current page. Does not push main content — overlays it.
+ * API calls on the current page. Does not push main content - overlays it.
  * Keyboard shortcut: Cmd+. / Ctrl+.
  */
 import * as React from 'react';
 import type { IAgentHints, SourceQuality } from '@noema/contracts';
 import { NeuralGauge } from '@noema/ui';
 import { X } from 'lucide-react';
+import Link from 'next/link';
 import { useCopilotStore } from '@/stores/copilot-store';
 import { SuggestedActions } from '@/components/copilot/suggested-actions';
 import { RiskAlerts } from '@/components/copilot/risk-alerts';
 import { TransparencySection } from '@/components/copilot/transparency-section';
 import { AlternativesWarnings } from '@/components/copilot/alternatives-warnings';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// Helpers
 
 const SOURCE_QUALITY_ORDER: Record<SourceQuality, number> = {
   high: 0,
@@ -53,7 +54,7 @@ const SOURCE_QUALITY_LABEL: Record<SourceQuality, string> = {
   unknown: 'Unknown Quality',
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Component
 
 export function CopilotSidebar(): React.JSX.Element {
   const isOpen = useCopilotStore((s) => s.isOpen);
@@ -69,7 +70,7 @@ export function CopilotSidebar(): React.JSX.Element {
   const confidence = avgConfidence(hints);
   const sourceQuality = bestSourceQuality(hints);
 
-  // "Last updated X ago" — updates every 10s
+  // "Last updated X ago" - updates every 10s
   const receivedAtMs = lastReceivedAt[activePageKey];
   const [lastUpdatedLabel, setLastUpdatedLabel] = React.useState<string>('');
   React.useEffect(() => {
@@ -108,7 +109,7 @@ export function CopilotSidebar(): React.JSX.Element {
 
   return (
     <>
-      {/* Backdrop — click to close */}
+      {/* Backdrop - click to close */}
       {isOpen && <div className="fixed inset-0 z-30" onClick={close} aria-hidden="true" />}
 
       {/* Sidebar panel */}
@@ -168,10 +169,18 @@ export function CopilotSidebar(): React.JSX.Element {
           )}
         </div>
 
-        {/* Footer — last updated */}
+        {/* Footer - last updated */}
         {lastUpdatedLabel !== '' && (
           <div className="border-t border-border px-4 py-2">
-            <p className="text-[10px] text-muted-foreground">Last updated {lastUpdatedLabel}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] text-muted-foreground">Last updated {lastUpdatedLabel}</p>
+              <Link
+                href="/agents?agent=cognitive-copilot"
+                className="text-[10px] font-medium text-primary transition-colors hover:text-primary/80"
+              >
+                Open workbench
+              </Link>
+            </div>
           </div>
         )}
       </aside>

@@ -14,6 +14,7 @@ import {
   useCKGNodes,
   useCKGEdges,
   useCKGMutations,
+  useDomainSuggestions,
   usePreviewCkgEdgeAuthoring,
   usePreviewCkgNodeBatchAuthoring,
   useProposeCkgMutation,
@@ -28,7 +29,7 @@ import type {
 } from '@noema/api-client/knowledge-graph';
 import { meApi } from '@noema/api-client/user';
 import { Network, Loader2, Trash2 } from 'lucide-react';
-import { Button } from '@noema/ui';
+import { Button, DomainSuggestionField } from '@noema/ui';
 import {
   GraphCanvas,
   GraphControls,
@@ -289,12 +290,13 @@ function createNodeMutationEditDraft(node: IGraphNodeDto): INodeMutationEditDraf
 
 function buildNodeMutationUpdates(
   node: IGraphNodeDto,
-  draft: INodeMutationEditDraft
+  draft: INodeMutationEditDraft,
+  resolvedDomain?: string | null
 ): Record<string, unknown> {
   const nextLabel = draft.label.trim();
   const nextDescription = draft.description.trim();
   const nextNodeType = draft.nodeType.trim();
-  const nextDomain = draft.domain.trim();
+  const nextDomain = resolvedDomain ?? draft.domain.trim();
   const nextTags = parseTagDraft(draft.tags);
   const nextAliases = parseTagDraft(draft.aliases);
   const currentNodeType = normalizeNodeType(node.type, node.metadata, node.semanticHints);
@@ -329,7 +331,8 @@ function buildNodeMutationUpdates(
 
 function getNodeMutationEditError(
   node: IGraphNodeDto,
-  draft: INodeMutationEditDraft
+  draft: INodeMutationEditDraft,
+  options?: { resolvedDomain?: string | null; needsDecision?: boolean }
 ): string | null {
   if (draft.label.trim() === '') {
     return 'Label is required.';
@@ -339,7 +342,15 @@ function getNodeMutationEditError(
     return 'Choose a valid canonical node type.';
   }
 
+  if (options?.needsDecision === true) {
+    return 'Choose one of the suggested canonical domains before submitting this mutation.';
+  }
+
   if (draft.domain.trim() === '' && (node.domain ?? '') !== '') {
+    return 'Domain cannot be cleared from this editor yet.';
+  }
+
+  if ((options?.resolvedDomain ?? draft.domain.trim()) === '' && (node.domain ?? '') !== '') {
     return 'Domain cannot be cleared from this editor yet.';
   }
 
@@ -601,19 +612,40 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
     () => (isNodeMutationEditing ? selectedNode : null),
     [isNodeMutationEditing, selectedNode]
   );
+  const nodeMutationDomainSuggestions = useDomainSuggestions({
+    label: nodeMutationEditDraft?.domain ?? '',
+    ...((nodeMutationEditDraft?.nodeType ?? '').trim() !== ''
+      ? { nodeType: (nodeMutationEditDraft?.nodeType ?? '').trim() as IGraphNodeDto['type'] }
+      : {}),
+    limit: 5,
+  });
+  const batchDomainSuggestions = useDomainSuggestions({
+    label: nodeBatchUpdateDraft.domain,
+    ...(nodeBatchUpdateDraft.nodeType.trim() !== ''
+      ? { nodeType: nodeBatchUpdateDraft.nodeType.trim() as IGraphNodeDto['type'] }
+      : {}),
+    limit: 5,
+  });
   const nodeMutationEditError = React.useMemo(
     () =>
       nodeMutationEditNode !== null && nodeMutationEditDraft !== null
-        ? getNodeMutationEditError(nodeMutationEditNode, nodeMutationEditDraft)
+        ? getNodeMutationEditError(nodeMutationEditNode, nodeMutationEditDraft, {
+            resolvedDomain: nodeMutationDomainSuggestions.data?.resolvedDomain ?? null,
+            needsDecision: nodeMutationDomainSuggestions.data?.needsDecision ?? false,
+          })
         : null,
-    [nodeMutationEditDraft, nodeMutationEditNode]
+    [nodeMutationDomainSuggestions.data, nodeMutationEditDraft, nodeMutationEditNode]
   );
   const nodeMutationPendingUpdates = React.useMemo(
     () =>
       nodeMutationEditNode !== null && nodeMutationEditDraft !== null
-        ? buildNodeMutationUpdates(nodeMutationEditNode, nodeMutationEditDraft)
+        ? buildNodeMutationUpdates(
+            nodeMutationEditNode,
+            nodeMutationEditDraft,
+            nodeMutationDomainSuggestions.data?.resolvedDomain ?? null
+          )
         : {},
-    [nodeMutationEditDraft, nodeMutationEditNode]
+    [nodeMutationDomainSuggestions.data, nodeMutationEditDraft, nodeMutationEditNode]
   );
   const edgeAuthoringSource = React.useMemo(
     () =>
@@ -900,12 +932,21 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
       return;
     }
 
+    if (batchDomainSuggestions.data?.needsDecision === true) {
+      setEdgeAuthoringMessage(
+        'Choose one of the suggested canonical domains before previewing this batch update.'
+      );
+      return;
+    }
+
     const updates = {
       ...(nodeBatchUpdateDraft.nodeType !== ''
         ? { nodeType: nodeBatchUpdateDraft.nodeType as IGraphNodeDto['type'] }
         : {}),
-      ...(nodeBatchUpdateDraft.domain.trim() !== ''
-        ? { domain: nodeBatchUpdateDraft.domain.trim() }
+      ...((batchDomainSuggestions.data?.resolvedDomain ?? nodeBatchUpdateDraft.domain.trim()) !== ''
+        ? {
+            domain: batchDomainSuggestions.data?.resolvedDomain ?? nodeBatchUpdateDraft.domain.trim(),
+          }
         : {}),
       ...(nodeBatchUpdateDraft.tags.trim() !== ''
         ? { tags: parseTagDraft(nodeBatchUpdateDraft.tags) }
@@ -928,7 +969,7 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
         error instanceof Error ? error.message : 'Failed to preview batch node changes.'
       );
     }
-  }, [nodeBatchUpdateDraft, previewNodeBatchAuthoring, selectedNodeIds]);
+  }, [batchDomainSuggestions.data, nodeBatchUpdateDraft, previewNodeBatchAuthoring, selectedNodeIds]);
 
   const handleSubmitNodeBatchProposal = React.useCallback(async () => {
     const preview = nodeBatchPreviewState?.preview;
@@ -1327,20 +1368,21 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
               ))}
             </select>
           </div>
-          <div className="min-w-[12rem]">
-            <p className="text-xs font-medium text-muted-foreground">Batch domain</p>
-            <input
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-              value={nodeBatchUpdateDraft.domain}
-              onChange={(event) => {
-                setNodeBatchUpdateDraft((current) => ({
-                  ...current,
-                  domain: event.target.value,
-                }));
-              }}
-              placeholder="Set domain"
-            />
-          </div>
+          <DomainSuggestionField
+            label="Batch domain"
+            value={nodeBatchUpdateDraft.domain}
+            onChange={(nextValue: string) => {
+              setNodeBatchUpdateDraft((current) => ({
+                ...current,
+                domain: nextValue,
+              }));
+            }}
+            helperText="We pre-match this against existing canonical domains and only ask for a decision when two categories are genuinely too close to auto-pick."
+            resolution={batchDomainSuggestions.data}
+            isLoading={batchDomainSuggestions.isFetching}
+            className="min-w-[12rem]"
+            inputClassName="mt-1"
+          />
           <div className="min-w-[16rem] flex-1">
             <p className="text-xs font-medium text-muted-foreground">Batch tags</p>
             <input
@@ -1860,6 +1902,23 @@ export default function CKGGraphBrowserPage(): React.JSX.Element {
                   editError={nodeMutationEditError}
                   pendingUpdateKeys={Object.keys(nodeMutationPendingUpdates)}
                   isSubmittingEdit={proposeCkgMutation.isPending}
+                  editDomainControl={
+                    nodeMutationEditDraft !== null ? (
+                      <DomainSuggestionField
+                        label="Domain"
+                        value={nodeMutationEditDraft.domain}
+                        onChange={(nextValue: string) => {
+                          setNodeMutationEditDraft((current) =>
+                            current === null ? null : { ...current, domain: nextValue }
+                          );
+                        }}
+                        helperText="Canonical domain suggestions stay inline while you edit this node."
+                        resolution={nodeMutationDomainSuggestions.data}
+                        isLoading={nodeMutationDomainSuggestions.isFetching}
+                        inputClassName="mt-1"
+                      />
+                    ) : null
+                  }
                   onStartEdit={() => {
                     handleOpenNodeMutationEditor(selectedNode);
                   }}

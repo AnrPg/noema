@@ -1,6 +1,6 @@
 'use client';
 /**
- * @noema/web — Copilot / SuggestedActions
+ * @noema/web - Copilot / SuggestedActions
  *
  * Groups and renders ISuggestedAction items from agentHints.
  * Sorted: critical > high > medium > low.
@@ -23,7 +23,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { useCopilotStore } from '@/stores/copilot-store';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// Constants
 
 const PRIORITY_ORDER: Record<ActionPriority, number> = {
   critical: 0,
@@ -78,7 +78,7 @@ const ACTION_ROUTES: Record<string, Route> = {
   'view-dashboard': '/dashboard',
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Component
 
 export function SuggestedActions(): React.JSX.Element {
   const router = useRouter();
@@ -88,7 +88,7 @@ export function SuggestedActions(): React.JSX.Element {
 
   const hints = hintsByPage[activePageKey] ?? [];
 
-  // Flatten → deduplicate (keep most recent occurrence) → sort
+  // Flatten -> deduplicate (keep most recent occurrence) -> sort
   const allActions = hints.flatMap((h) => h.suggestedNextActions);
   const seenIds = new Set<string>();
   const uniqueActions = [...allActions]

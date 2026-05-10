@@ -1,6 +1,6 @@
 'use client';
 /**
- * @noema/web — Copilot / AlternativesWarnings
+ * @noema/web - Copilot / AlternativesWarnings
  *
  * Alternatives: approach + confidence + expandable pros/cons.
  * Warnings: severity-styled cards with optional "Fix" button.
@@ -10,7 +10,7 @@ import type { IAlternative, IWarning, WarningSeverity } from '@noema/contracts';
 import { ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import { useCopilotStore } from '@/stores/copilot-store';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// Constants
 
 const WARNING_STYLE: Record<WarningSeverity, string> = {
   critical: 'border-cortex-400/40 bg-cortex-400/5 text-cortex-400',
@@ -19,7 +19,7 @@ const WARNING_STYLE: Record<WarningSeverity, string> = {
   low: 'border-border bg-muted/20 text-muted-foreground',
 };
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// Component
 
 export function AlternativesWarnings(): React.JSX.Element {
   const hintsByPage = useCopilotStore((s) => s.hintsByPage);
@@ -92,7 +92,7 @@ export function AlternativesWarnings(): React.JSX.Element {
                           <ul className="mt-0.5 space-y-0.5">
                             {alt.cons.map((c: string) => (
                               <li key={c} className="text-foreground/80">
-                                − {c}
+                                - {c}
                               </li>
                             ))}
                           </ul>

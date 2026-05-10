@@ -182,18 +182,31 @@ function StudyStreakTile({
   userId: UserId;
   studyMode: StudyMode;
 }): React.JSX.Element {
+  const stability = useStabilitySummary(userId, { studyMode });
+  const hasTrackedConcepts = (stability.data?.totalConcepts ?? 0) > 0;
   const summary = useGamificationSummary(
     userId,
     { studyMode },
-    { enabled: userId !== '', retry: false }
+    { enabled: userId !== '' && hasTrackedConcepts, retry: false }
   );
 
-  if (summary.isLoading) {
+  if (stability.isLoading || summary.isLoading) {
     return <Skeleton variant="metric-tile" className="h-32" />;
   }
 
   if (userId === '') {
     return <Skeleton variant="metric-tile" className="h-32" />;
+  }
+
+  if (!hasTrackedConcepts) {
+    return (
+      <MetricTile
+        label="Learning Streak"
+        value="0d"
+        colorFamily="myelin"
+        trend={{ direction: 'flat', delta: 'Projection pending' }}
+      />
+    );
   }
 
   if (summary.isError || !isGamificationSummary(summary.data)) {

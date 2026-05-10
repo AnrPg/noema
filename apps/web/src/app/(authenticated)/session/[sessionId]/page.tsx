@@ -6,11 +6,11 @@ import { AlertTriangle, CheckCircle2, Loader2, Send, SkipForward } from 'lucide-
 import { Button } from '@noema/ui';
 import type { ISevenFrameTraceDto } from '@noema/contracts';
 import { StepSelfRating, type SessionId, type StepId } from '@noema/types';
+import { useAuth } from '@noema/auth';
 import {
   useAnswerStep,
   useNextStep,
   usePresentStep,
-  useSession,
   useSkipStep,
   type IStepDto,
 } from '@noema/api-client/session';
@@ -18,6 +18,7 @@ import {
 import { SelfRatingControls } from '@/components/session/self-rating-controls';
 import { TraceBuilder } from '@/components/session/trace-builder';
 import { formatApiErrorMessage } from '@/lib/api-errors';
+import { AgentActionButton } from '@/features/agents';
 
 function getPrimaryPrompt(step: IStepDto): string {
   return step.activities?.[0]?.prompt ?? step.objective;
@@ -82,6 +83,7 @@ function buildSevenFrameTrace(
 export default function ActiveSessionPage(): React.JSX.Element {
   const params = useParams();
   const router = useRouter();
+  const { user } = useAuth();
   const raw = params['sessionId'];
   const sessionId = (typeof raw === 'string' ? raw : '') as SessionId;
 
@@ -91,9 +93,14 @@ export default function ActiveSessionPage(): React.JSX.Element {
   const [mutationError, setMutationError] = React.useState<string | null>(null);
   const stepStartedAtRef = React.useRef<number>(Date.now());
 
-  const sessionQuery = useSession(sessionId);
-  const nextStepQuery = useNextStep(sessionId);
-  const currentStep = nextStepQuery.data?.data.nextStep ?? null;
+  const nextStepQuery = useNextStep(sessionId, {
+    refetchInterval: (query) => {
+      const nextStep = query.state.data?.data.nextStep;
+      return nextStep?.status === 'answered' ? 1500 : false;
+    },
+  });
+  const snapshot = nextStepQuery.data?.data ?? null;
+  const currentStep = snapshot?.nextStep ?? null;
   const currentStepId = (currentStep?.id ?? '') as StepId;
   const presentStep = usePresentStep();
   const answerStep = useAnswerStep(currentStepId);
@@ -108,7 +115,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
   }, [currentStepId]);
 
   async function refreshSessionState(): Promise<void> {
-    await Promise.all([sessionQuery.refetch(), nextStepQuery.refetch()]);
+    await nextStepQuery.refetch();
   }
 
   async function handlePresent(): Promise<void> {
@@ -188,7 +195,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
     return <div className="px-4 py-8 text-sm text-destructive">Invalid session ID.</div>;
   }
 
-  if (sessionQuery.isLoading || nextStepQuery.isLoading) {
+  if (nextStepQuery.isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
@@ -196,7 +203,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
     );
   }
 
-  if (sessionQuery.isError || nextStepQuery.isError) {
+  if (nextStepQuery.isError) {
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center gap-4 px-4 text-center">
         <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
@@ -218,10 +225,24 @@ export default function ActiveSessionPage(): React.JSX.Element {
     );
   }
 
-  const session = sessionQuery.data?.data ?? nextStepQuery.data?.data.session ?? null;
+  const session = snapshot?.session ?? null;
   const stats = session?.stats;
+  const agentContext = {
+    userId: user?.id ?? '',
+    sessionId,
+    stepId: currentStep?.id ?? null,
+    studyMode: session?.learningMode ?? null,
+    payload: {
+      surface: 'active-session',
+      stepStatus: currentStep?.status ?? 'none',
+      objective: currentStep?.objective ?? null,
+    },
+  };
   const isSubmitting = presentStep.isPending || answerStep.isPending || skipStep.isPending;
   const hasStep = currentStep !== null;
+  const isAwaitingPresentation =
+    currentStep?.status === 'queued' || currentStep?.status === 'planned';
+  const isEvaluationPending = currentStep?.status === 'answered';
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-4xl flex-col gap-6 px-4 py-6">
@@ -277,7 +298,36 @@ export default function ActiveSessionPage(): React.JSX.Element {
         </section>
       ) : (
         <main className="flex flex-1 flex-col gap-5">
+          {isEvaluationPending && (
+            <section className="rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
+              We saved your answer and we are finishing its evaluation now. This view will refresh automatically when the next step is ready.
+            </section>
+          )}
           <section className="rounded-lg border border-border bg-background p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Step support
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Ask only when the current Step needs a nudge, explanation, or local replan.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <AgentActionButton
+                  agentName="mental-debugger"
+                  context={agentContext}
+                  label="Reasoning help"
+                  size="sm"
+                />
+                <AgentActionButton
+                  agentName="strategy-replanning-agent"
+                  context={agentContext}
+                  label="Replan next"
+                  size="sm"
+                />
+              </div>
+            </div>
             <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <span className="rounded-full border border-border px-2.5 py-1">
                 {currentStep.selectedMode.replace(/_/g, ' ')}
@@ -295,7 +345,7 @@ export default function ActiveSessionPage(): React.JSX.Element {
             <p className="mt-4 whitespace-pre-wrap rounded-lg border border-border/70 bg-background/70 px-4 py-3 text-sm leading-6 text-foreground">
               {getPrimaryPrompt(currentStep)}
             </p>
-            {currentStep.status === 'queued' && (
+            {isAwaitingPresentation && (
               <Button className="mt-4" disabled={isSubmitting} onClick={() => void handlePresent()}>
                 {presentStep.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -305,80 +355,82 @@ export default function ActiveSessionPage(): React.JSX.Element {
             )}
           </section>
 
-          <section className="rounded-lg border border-border bg-background p-5">
-            <label htmlFor="step-response" className="text-sm font-medium text-foreground">
-              Step response
-            </label>
-            <textarea
-              id="step-response"
-              value={response}
-              rows={7}
-              disabled={isSubmitting}
-              onChange={(event) => {
-                setResponse(event.target.value);
-              }}
-              className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Write your answer, reasoning, or notes here."
-            />
-
-            <div className="mt-4">
-              <SelfRatingControls
-                value={selfRating}
-                disabled={isSubmitting}
-                onChange={setSelfRating}
-              />
-            </div>
-
-            <label className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
-              <input
-                type="checkbox"
-                checked={metExpectedOutcome}
-                disabled={isSubmitting}
+          {!isAwaitingPresentation && (
+            <section className="rounded-lg border border-border bg-background p-5">
+              <label htmlFor="step-response" className="text-sm font-medium text-foreground">
+                Step response
+              </label>
+              <textarea
+                id="step-response"
+                value={response}
+                rows={7}
+                disabled={isSubmitting || isEvaluationPending}
                 onChange={(event) => {
-                  setMetExpectedOutcome(event.target.checked);
+                  setResponse(event.target.value);
                 }}
-                className="h-4 w-4 rounded border-input"
+                className="mt-2 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Write your answer, reasoning, or notes here."
               />
-              I met the expected outcome
-            </label>
 
-            {tracePreview !== null && (
-              <div className="mt-5">
-                <TraceBuilder
-                  trace={tracePreview}
-                  selfRating={selfRating}
-                  expectedOutcome={currentStep.expectedOutcome}
-                  metExpectedOutcome={metExpectedOutcome}
+              <div className="mt-4">
+                <SelfRatingControls
+                  value={selfRating}
+                  disabled={isSubmitting || isEvaluationPending}
+                  onChange={setSelfRating}
                 />
               </div>
-            )}
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button
-                disabled={isSubmitting}
-                onClick={() => {
-                  void handleAnswer(metExpectedOutcome);
-                }}
-              >
-                {answerStep.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                ) : (
-                  <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-                )}
-                Submit Step
-              </Button>
-              <Button
-                variant="outline"
-                disabled={isSubmitting}
-                onClick={() => {
-                  void handleSkip();
-                }}
-              >
-                <SkipForward className="mr-2 h-4 w-4" aria-hidden="true" />
-                Skip
-              </Button>
-            </div>
-          </section>
+              <label className="mt-4 flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={metExpectedOutcome}
+                  disabled={isSubmitting || isEvaluationPending}
+                  onChange={(event) => {
+                    setMetExpectedOutcome(event.target.checked);
+                  }}
+                  className="h-4 w-4 rounded border-input"
+                />
+                I met the expected outcome
+              </label>
+
+              {tracePreview !== null && (
+                <div className="mt-5">
+                  <TraceBuilder
+                    trace={tracePreview}
+                    selfRating={selfRating}
+                    expectedOutcome={currentStep.expectedOutcome}
+                    metExpectedOutcome={metExpectedOutcome}
+                  />
+                </div>
+              )}
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Button
+                  disabled={isSubmitting || isEvaluationPending}
+                  onClick={() => {
+                    void handleAnswer(metExpectedOutcome);
+                  }}
+                >
+                  {answerStep.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                  )}
+                  Submit Step
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={isSubmitting || isEvaluationPending}
+                  onClick={() => {
+                    void handleSkip();
+                  }}
+                >
+                  <SkipForward className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Skip
+                </Button>
+              </div>
+            </section>
+          )}
         </main>
       )}
     </div>

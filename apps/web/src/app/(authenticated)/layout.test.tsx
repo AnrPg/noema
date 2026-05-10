@@ -7,6 +7,11 @@ vi.mock('@noema/auth', () => ({
     user: { id: 'u1', displayName: 'Test', email: 't@t.com', avatarUrl: null },
     logout: vi.fn(),
   }),
+  useAuthStore: (selector: (state: { settings: null; setSettings: () => void }) => unknown) =>
+    selector({
+      settings: null,
+      setSettings: () => undefined,
+    }),
   AuthGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
@@ -21,6 +26,9 @@ vi.mock('@/components/pomodoro/pomodoro-nav', () => ({
 }));
 vi.mock('@/components/session-expiry-modal', () => ({ SessionExpiryModal: () => null }));
 vi.mock('@/components/shortcut-reference-panel', () => ({ ShortcutReferencePanel: () => null }));
+vi.mock('@/hooks/use-agent-hints-interceptor', () => ({
+  useAgentHintsInterceptor: () => undefined,
+}));
 
 test('Concept Payloads nav item is present', () => {
   render(
@@ -38,4 +46,13 @@ test('Concept Payloads nav item links to /cards', () => {
     </AuthenticatedLayout>
   );
   expect(screen.getByRole('link', { name: /concept payloads/i })).toHaveAttribute('href', '/cards');
+});
+
+test('Agent Workbench nav item is not a primary learner nav item', () => {
+  render(
+    <AuthenticatedLayout>
+      <div />
+    </AuthenticatedLayout>
+  );
+  expect(screen.queryByRole('link', { name: /agent workbench/i })).not.toBeInTheDocument();
 });

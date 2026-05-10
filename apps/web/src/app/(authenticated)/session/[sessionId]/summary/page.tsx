@@ -30,6 +30,7 @@ import { SessionSummaryVitals } from '@/components/session/session-summary-vital
 import { PostSessionReflection } from '@/components/session/post-session-reflection';
 import { useActiveStudyMode } from '@/hooks/use-active-study-mode';
 import { getStudyModeShortLabel } from '@/lib/study-mode';
+import { AgentActionButton } from '@/features/agents';
 
 // ============================================================================
 // Helpers
@@ -120,6 +121,17 @@ export default function SessionSummaryPage(): React.JSX.Element {
   const startedAt = session?.startedAt ?? '';
   const completedAt = session?.completedAt ?? null;
   const mode = session?.learningMode ?? 'exploration';
+  const summaryAgentContext = {
+    userId: currentUserId,
+    sessionId,
+    studyMode: activeStudyMode,
+    payload: {
+      surface: 'session-summary',
+      stepsEvaluated,
+      stepsSkipped,
+      sessionMode: mode,
+    },
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
@@ -234,6 +246,35 @@ export default function SessionSummaryPage(): React.JSX.Element {
           <PostSessionReflection sessionId={sessionId} />
         </section>
       )}
+
+      <section aria-label="Agent support">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          Contextual Help
+        </h2>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-sm text-muted-foreground">
+            These agents use the completed session context to explain reasoning, calibrate
+            confidence, or draft a small repair.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <AgentActionButton
+              agentName="mental-debugger"
+              context={summaryAgentContext}
+              label="Explain reasoning"
+            />
+            <AgentActionButton
+              agentName="calibration-coach"
+              context={summaryAgentContext}
+              label="Review calibration"
+            />
+            <AgentActionButton
+              agentName="patch-planner-remediation-agent"
+              context={summaryAgentContext}
+              label="Draft repair"
+            />
+          </div>
+        </div>
+      </section>
 
       {/* ── Section 6: Next Actions ──────────────────────────────────────── */}
       <section aria-label="Next actions">

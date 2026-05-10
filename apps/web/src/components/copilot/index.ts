@@ -1,5 +1,5 @@
 /**
- * @noema/web — Copilot components barrel export
+ * @noema/web - Copilot components barrel export
  */
 export { CopilotSidebar } from './copilot-sidebar';
 export { CopilotToggle } from './copilot-toggle';

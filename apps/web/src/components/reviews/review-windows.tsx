@@ -143,7 +143,7 @@ export function ReviewWindows({ userId, studyMode }: IReviewWindowsProps): React
 
               {/* Card count */}
               <span className="flex-1 text-sm text-muted-foreground">
-                {String(conceptsDue)} {conceptsDue === 1 ? 'concept' : 'concepts'}
+                {String(conceptsDue)} {conceptsDue === 1 ? 'notion' : 'concepts'}
               </span>
 
               {/* Load indicator */}

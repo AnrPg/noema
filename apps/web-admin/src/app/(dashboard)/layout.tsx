@@ -28,6 +28,7 @@ import {
 } from '@noema/ui';
 import {
   Activity,
+  Bot,
   BookOpen,
   Calendar,
   ChevronDown,
@@ -79,6 +80,15 @@ const navGroups: INavGroup[] = [
   {
     title: 'Users',
     items: [{ href: '/dashboard/users', label: 'User Management', icon: Users }],
+  },
+  {
+    title: 'Agents',
+    items: [
+      { href: '/dashboard/agents', label: 'Overview', icon: Bot, exact: true },
+      { href: '/dashboard/agents/runs', label: 'All Runs', icon: Activity },
+      { href: '/dashboard/agents/monitor', label: 'Monitor', icon: Activity },
+      { href: '/dashboard/agents/config', label: 'Configuration', icon: Settings },
+    ],
   },
   {
     title: 'System',
