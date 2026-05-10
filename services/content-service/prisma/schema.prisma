@@ -28,6 +28,10 @@ model Card {
     // Polymorphic content blob — schema validated at app layer by Zod
     content Json @default("{}")
 
+    // Canonical concept anchoring
+    primaryConceptId String? @map("primary_concept_id") @db.VarChar(50)
+    relatedConceptIds String[] @default([]) @map("related_concept_ids")
+
     // Knowledge graph linkage (card → PKG nodes)
     knowledgeNodeIds String[] @default([]) @map("knowledge_node_ids")
     anchoredCkgNodeIds String[] @default([]) @map("anchored_ckg_node_ids")
@@ -89,8 +93,10 @@ model Card {
     @@index([reviewState])
     @@index([parentCardId])
     @@index([generationJobId])
+    @@index([primaryConceptId])
     @@index([createdAt])
     @@index([deletedAt])
+    @@index([relatedConceptIds], type: Gin)
     @@index([knowledgeNodeIds], type: Gin)
     @@index([anchoredCkgNodeIds], type: Gin)
     @@index([anchoredPkgNodeIds], type: Gin)
@@ -199,6 +205,7 @@ model Template {
     content          Json            @default("{}")
     difficulty       DifficultyLevel @default(INTERMEDIATE)
     knowledgeNodeIds String[]        @default([]) @map("knowledge_node_ids")
+    anchoredCkgNodeIds String[]      @default([]) @map("anchored_ckg_node_ids")
     tags             String[]        @default([])
     metadata         Json            @default("{}")
 
@@ -224,6 +231,7 @@ model Template {
     @@index([visibility])
     @@index([deletedAt])
     @@index([tags], type: Gin)
+    @@index([anchoredCkgNodeIds], type: Gin)
     @@index([name])
     @@map("templates")
 }

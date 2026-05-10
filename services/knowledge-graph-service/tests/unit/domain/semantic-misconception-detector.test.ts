@@ -13,13 +13,13 @@ describe('SemanticMisconceptionDetector', () => {
           {
             nodeId: 'node_a',
             label: 'GraphQL',
-            nodeType: 'concept',
+            nodeType: 'notion',
             domain: 'computer-science',
           },
           {
             nodeId: 'node_b',
             label: 'Graph QL',
-            nodeType: 'concept',
+            nodeType: 'notion',
             domain: 'computer-science',
           },
         ],

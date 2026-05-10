@@ -20,9 +20,12 @@ import {
   KG_TOOL_DEFINITIONS,
   createAddConceptNodeHandler,
   createAddEdgeHandler,
+  createConfirmPkgWritePlanHandler,
   createComputeStructuralMetricsHandler,
   createDetectMisconceptionsHandler,
+  createEnsureContentReadinessSubgraphHandler,
   createFindPrerequisitesHandler,
+  createFindRelationPackHandler,
   createFindRelatedConceptsHandler,
   createGetCanonicalStructureHandler,
   createGetConceptNodeHandler,
@@ -34,6 +37,7 @@ import {
   createProposeMutationHandler,
   createRemoveEdgeHandler,
   createRemoveNodeHandler,
+  createResolveConceptReferenceHandler,
   createSuggestInterventionHandler,
 } from './kg.tools.js';
 import type {
@@ -412,11 +416,17 @@ export class ToolRegistry {
 const EXPECTED_KG_TOOL_NAMES = [
   // Task 1: PKG tools
   'get-concept-node',
+  'resolve-concept-reference',
   'get-subgraph',
   'find-prerequisites',
   'find-related-concepts',
+  'find-contrasts',
+  'find-confusables',
+  'find-misconception-links',
+  'ensure-content-readiness-subgraph',
   'add-concept-node',
   'add-edge',
+  'confirm-pkg-write-plan',
   'remove-node',
   'remove-edge',
   // Task 2: CKG tools
@@ -462,6 +472,10 @@ export function createToolRegistry(service: IKnowledgeGraphService): ToolRegistr
 
   // Task 1: PKG tools
   registry.register(requireDefinition('get-concept-node'), createGetConceptNodeHandler(service));
+  registry.register(
+    requireDefinition('resolve-concept-reference'),
+    createResolveConceptReferenceHandler(service)
+  );
   registry.register(requireDefinition('get-subgraph'), createGetSubgraphHandler(service));
   registry.register(
     requireDefinition('find-prerequisites'),
@@ -471,8 +485,16 @@ export function createToolRegistry(service: IKnowledgeGraphService): ToolRegistr
     requireDefinition('find-related-concepts'),
     createFindRelatedConceptsHandler(service)
   );
+  registry.register(requireDefinition('find-contrasts'), createFindRelationPackHandler(service, 'contrasts_with'));
+  registry.register(requireDefinition('find-confusables'), createFindRelationPackHandler(service, 'confusable_with'));
+  registry.register(requireDefinition('find-misconception-links'), createFindRelationPackHandler(service, 'misconception'));
+  registry.register(
+    requireDefinition('ensure-content-readiness-subgraph'),
+    createEnsureContentReadinessSubgraphHandler(service)
+  );
   registry.register(requireDefinition('add-concept-node'), createAddConceptNodeHandler(service));
   registry.register(requireDefinition('add-edge'), createAddEdgeHandler(service));
+  registry.register(requireDefinition('confirm-pkg-write-plan'), createConfirmPkgWritePlanHandler(service));
   registry.register(requireDefinition('remove-node'), createRemoveNodeHandler(service));
   registry.register(requireDefinition('remove-edge'), createRemoveEdgeHandler(service));
 

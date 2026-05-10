@@ -19,7 +19,7 @@ export function createNormalizedBatch(
 
   for (const record of batch.records) {
     switch (record.recordKind) {
-      case 'concept':
+      case 'notion':
         upsertConceptCandidate(conceptMap, record);
         break;
       case 'alias':
@@ -53,7 +53,7 @@ export function createNormalizedBatch(
 
 function upsertConceptCandidate(
   conceptMap: Map<string, INormalizedOntologyConceptCandidate>,
-  record: Extract<IOntologyGraphRecord, { recordKind: 'concept' }>
+  record: Extract<IOntologyGraphRecord, { recordKind: 'notion' }>
 ): void {
   const existing = conceptMap.get(record.externalId);
   if (existing === undefined) {
@@ -93,7 +93,7 @@ function appendAlias(
     conceptMap.set(conceptExternalId, {
       externalId: conceptExternalId,
       iri: null,
-      nodeKind: 'concept',
+      nodeKind: 'notion',
       preferredLabel: cleanLabel(conceptExternalId),
       aliases: [alias],
       description: null,
@@ -420,7 +420,7 @@ function pickNodeKind(
 ): INormalizedOntologyConceptCandidate['nodeKind'] {
   const priority: Record<INormalizedOntologyConceptCandidate['nodeKind'], number> = {
     literal: 3,
-    concept: 2,
+    notion: 2,
     entity: 1,
   };
 

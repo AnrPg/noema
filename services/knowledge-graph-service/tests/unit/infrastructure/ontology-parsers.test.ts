@@ -95,7 +95,7 @@ describe('ontology source parsers', () => {
     expect(parsed.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: 'https://yago-knowledge.org/resource/Leonhard_Euler',
           preferredLabel: 'Leonhard Euler',
           nodeKind: 'entity',
@@ -185,7 +185,7 @@ describe('ontology source parsers', () => {
     expect(parsed.records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: 'http://data.europa.eu/esco/skill/python',
           preferredLabel: 'Python programming',
         }),
@@ -269,7 +269,7 @@ describe('ontology source parsers', () => {
           externalId: '/a/2',
         }),
         expect.objectContaining({
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: '/c/en/python',
         }),
         expect.objectContaining({
@@ -319,7 +319,7 @@ describe('ontology source parsers', () => {
     expect(parsed.sourceId).toBe('esco');
     expect(parsed.records[0]).toEqual(
       expect.objectContaining({
-        recordKind: 'concept',
+        recordKind: 'notion',
         preferredLabel: 'Research',
       })
     );

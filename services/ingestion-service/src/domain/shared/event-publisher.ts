@@ -1,18 +1,13 @@
-export interface IEventPublisher {
-  publish(input: {
-    eventType: string;
-    aggregateType: string;
-    aggregateId: string;
-    payload: Record<string, unknown>;
-    metadata: {
-      correlationId?: string | undefined;
-      userId?: string | null | undefined;
-    };
-  }): Promise<void>;
-}
+import type { IEventPublisher } from '@noema/events/publisher';
+
+export type { IEventPublisher, IEventToPublish } from '@noema/events/publisher';
 
 export class NoopEventPublisher implements IEventPublisher {
   async publish(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async publishBatch(): Promise<void> {
     return Promise.resolve();
   }
 }

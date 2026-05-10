@@ -17,7 +17,7 @@ function createGraphNodeRecord(values?: Record<string, unknown>) {
       properties: {
         nodeId: 'node_test',
         graphType: 'pkg',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Family',
         domain: 'general',
         tags: ['family'],
@@ -57,7 +57,7 @@ describe('Neo4jGraphRepository.createNode', () => {
       'pkg',
       {
         label: 'Family',
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'general',
         tags: ['family'],
         supportedStudyModes: ['language_learning'],
@@ -110,7 +110,7 @@ describe('Neo4jGraphRepository.createNode', () => {
       'pkg',
       {
         label: 'Family',
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'general',
       },
       'user_test'

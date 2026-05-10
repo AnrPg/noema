@@ -80,7 +80,7 @@ describe('POST /ckg/mutations', () => {
         operations: [
           {
             type: 'add_node',
-            nodeType: 'concept',
+            nodeType: 'notion',
             label: 'Algebra',
             description: 'Fundamental branch of mathematics',
             domain: TEST_DOMAIN,
@@ -100,7 +100,7 @@ describe('POST /ckg/mutations', () => {
       url: BASE,
       payload: {
         operations: [
-          { type: 'add_node', nodeType: 'concept', label: 'Algebra', domain: TEST_DOMAIN },
+          { type: 'add_node', nodeType: 'notion', label: 'Algebra', domain: TEST_DOMAIN },
         ],
         rationale: 'Adding algebra concept',
       },
@@ -121,7 +121,7 @@ describe('POST /ckg/mutations', () => {
       url: BASE,
       payload: {
         operations: [
-          { type: 'add_node', nodeType: 'concept', label: 'Algebra', domain: TEST_DOMAIN },
+          { type: 'add_node', nodeType: 'notion', label: 'Algebra', domain: TEST_DOMAIN },
         ],
         rationale: 'Test',
       },

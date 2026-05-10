@@ -17,10 +17,10 @@ describe('OntologyImportNormalizationService', () => {
       generatedAt: '2026-03-24T12:00:00.000Z',
       records: [
         {
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: '/c/en/python',
           iri: null,
-          nodeKind: 'concept',
+          nodeKind: 'notion',
           preferredLabel: 'Python',
           altLabels: [],
           description: null,
@@ -139,7 +139,7 @@ describe('OntologyImportNormalizationService', () => {
           },
         },
         {
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: 'yago:Euler',
           iri: null,
           nodeKind: 'entity',

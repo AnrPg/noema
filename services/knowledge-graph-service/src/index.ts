@@ -25,6 +25,10 @@ import { createAuthMiddleware } from './api/middleware/auth.middleware.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { PkgAggregationApplicationService } from './application/knowledge-graph/aggregation/index.js';
 import {
+  HttpKnowledgeGraphExpansionAgentClient,
+  PkgExpansionApplicationService,
+} from './application/knowledge-graph/pkg-expansion/service.js';
+import {
   registerCkgEdgeRoutes,
   registerCkgMaintenanceRoutes,
   registerCkgMutationRoutes,
@@ -32,12 +36,14 @@ import {
   registerCkgTraversalRoutes,
   registerComparisonRoutes,
   registerConceptStateRoutes,
+  registerDomainSuggestionRoutes,
   registerGraphCrdtRoutes,
   registerGraphSnapshotRoutes,
   registerMetricsRoutes,
   registerMisconceptionRoutes,
   registerOntologyImportRoutes,
   registerPkgEdgeRoutes,
+  registerPkgExpansionRoutes,
   registerPkgMaintenanceRoutes,
   registerPkgNodeRoutes,
   registerPkgOperationLogRoutes,
@@ -566,6 +572,17 @@ async function bootstrap(): Promise<void> {
     eventPublisher,
     logger
   );
+  const pkgExpansionService = new PkgExpansionApplicationService(
+    service,
+    new HttpKnowledgeGraphExpansionAgentClient({
+      baseUrl: config.agents.serviceUrl,
+      ...(config.agents.serviceToken !== undefined
+        ? { serviceToken: config.agents.serviceToken }
+        : {}),
+      pollIntervalMs: config.agents.pollIntervalMs,
+      batchTimeoutMs: config.agents.batchTimeoutMs,
+    })
+  );
 
   // --------------------------------------------------------------------------
   // Auth middleware & route wiring
@@ -589,8 +606,10 @@ async function bootstrap(): Promise<void> {
   // PKG routes (user-scoped)
   registerPkgNodeRoutes(app, service, authMiddleware, routeOptions);
   registerPkgEdgeRoutes(app, service, authMiddleware, routeOptions);
+  registerPkgExpansionRoutes(app, pkgExpansionService, authMiddleware, routeOptions);
   registerPkgMaintenanceRoutes(app, pkgMaintenanceService, authMiddleware, routeOptions);
   registerConceptStateRoutes(app, conceptStateService, authMiddleware, routeOptions);
+  registerDomainSuggestionRoutes(app, service, authMiddleware, routeOptions);
   registerPkgTraversalRoutes(app, service, authMiddleware, routeOptions);
 
   // CKG routes (shared graph)

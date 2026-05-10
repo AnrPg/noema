@@ -7,7 +7,7 @@ function createNode(id: string, label: string) {
   return {
     nodeId: id,
     graphType: 'pkg',
-    nodeType: 'concept',
+    nodeType: 'notion',
     label,
     domain: 'biology',
     userId: 'user_123',

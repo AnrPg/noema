@@ -31,7 +31,7 @@ describe.runIf(hasDatabaseIntegration)('Prisma — Mutation Repository', () => {
         {
           type: 'add_node',
           label: 'Integration Concept',
-          nodeType: 'concept',
+          nodeType: 'notion',
           domain: 'integration',
           rationale: 'integration test',
         },

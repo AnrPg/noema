@@ -73,6 +73,13 @@ export interface IServiceConfig {
     /** Whether caching is enabled */
     enabled: boolean;
   };
+  agents: {
+    enabled: boolean;
+    serviceUrl: string;
+    serviceToken?: string;
+    pollIntervalMs: number;
+    batchTimeoutMs: number;
+  };
   consumers: {
     /** Whether event consumers are enabled */
     enabled: boolean;
@@ -308,6 +315,15 @@ export function loadConfig(): IServiceConfig {
       ttl: optionalEnvInt('CACHE_TTL_SECONDS', 300), // 5 minutes
       prefix: optionalEnv('CACHE_PREFIX', 'kgs'), // knowledge-graph-service
       enabled: optionalEnvBool('CACHE_ENABLED', true),
+    },
+    agents: {
+      enabled: optionalEnvBool('KNOWLEDGE_GRAPH_AGENT_ENABLED', true),
+      serviceUrl: optionalEnv('KNOWLEDGE_GRAPH_AGENT_URL', 'http://127.0.0.1:8011'),
+      ...(process.env['KNOWLEDGE_GRAPH_AGENT_SERVICE_TOKEN'] !== undefined
+        ? { serviceToken: process.env['KNOWLEDGE_GRAPH_AGENT_SERVICE_TOKEN'] }
+        : {}),
+      pollIntervalMs: optionalEnvInt('KNOWLEDGE_GRAPH_AGENT_POLL_INTERVAL_MS', 1000),
+      batchTimeoutMs: optionalEnvInt('KNOWLEDGE_GRAPH_AGENT_BATCH_TIMEOUT_MS', 60_000),
     },
     consumers: {
       enabled: optionalEnvBool('EVENT_CONSUMERS_ENABLED', true),

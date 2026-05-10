@@ -1,8 +1,14 @@
 -- Realignment Batch 7: binary concept stability projection owned by knowledge-graph-service.
 
-CREATE TYPE "concept_state" AS ENUM ('STABLE', 'UNSTABLE');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'concept_state') THEN
+    CREATE TYPE "concept_state" AS ENUM ('STABLE', 'UNSTABLE');
+  END IF;
+END
+$$;
 
-CREATE TABLE "concept_state_projections" (
+CREATE TABLE IF NOT EXISTS "concept_state_projections" (
     "user_id" VARCHAR(50) NOT NULL,
     "concept_id" VARCHAR(50) NOT NULL,
     "study_mode" "study_mode" NOT NULL,
@@ -19,7 +25,7 @@ CREATE TABLE "concept_state_projections" (
     CONSTRAINT "concept_state_projections_pkey" PRIMARY KEY ("user_id", "concept_id", "study_mode")
 );
 
-CREATE TABLE "concept_state_history" (
+CREATE TABLE IF NOT EXISTS "concept_state_history" (
     "id" VARCHAR(50) NOT NULL,
     "user_id" VARCHAR(50) NOT NULL,
     "concept_id" VARCHAR(50) NOT NULL,
@@ -35,7 +41,7 @@ CREATE TABLE "concept_state_history" (
     CONSTRAINT "concept_state_history_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "concept_reasoning_evidence" (
+CREATE TABLE IF NOT EXISTS "concept_reasoning_evidence" (
     "id" VARCHAR(50) NOT NULL,
     "user_id" VARCHAR(50) NOT NULL,
     "concept_id" VARCHAR(50) NOT NULL,
@@ -49,7 +55,7 @@ CREATE TABLE "concept_reasoning_evidence" (
     CONSTRAINT "concept_reasoning_evidence_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE "concept_state_event_inbox" (
+CREATE TABLE IF NOT EXISTS "concept_state_event_inbox" (
     "event_id" VARCHAR(100) NOT NULL,
     "event_type" VARCHAR(100) NOT NULL,
     "user_id" VARCHAR(50),
@@ -61,16 +67,16 @@ CREATE TABLE "concept_state_event_inbox" (
     CONSTRAINT "concept_state_event_inbox_pkey" PRIMARY KEY ("event_id")
 );
 
-CREATE INDEX "concept_state_projections_user_id_study_mode_state_idx" ON "concept_state_projections"("user_id", "study_mode", "state");
-CREATE INDEX "concept_state_projections_concept_id_idx" ON "concept_state_projections"("concept_id");
-CREATE INDEX "concept_state_projections_last_evaluation_id_idx" ON "concept_state_projections"("last_evaluation_id");
+CREATE INDEX IF NOT EXISTS "concept_state_projections_user_id_study_mode_state_idx" ON "concept_state_projections"("user_id", "study_mode", "state");
+CREATE INDEX IF NOT EXISTS "concept_state_projections_concept_id_idx" ON "concept_state_projections"("concept_id");
+CREATE INDEX IF NOT EXISTS "concept_state_projections_last_evaluation_id_idx" ON "concept_state_projections"("last_evaluation_id");
 
-CREATE INDEX "concept_state_history_user_id_concept_id_study_mode_changed_at_idx" ON "concept_state_history"("user_id", "concept_id", "study_mode", "changed_at");
-CREATE INDEX "concept_state_history_user_id_study_mode_new_state_idx" ON "concept_state_history"("user_id", "study_mode", "new_state");
-CREATE INDEX "concept_state_history_evaluation_id_idx" ON "concept_state_history"("evaluation_id");
+CREATE INDEX IF NOT EXISTS "concept_state_history_user_id_concept_id_study_mode_changed_at_idx" ON "concept_state_history"("user_id", "concept_id", "study_mode", "changed_at");
+CREATE INDEX IF NOT EXISTS "concept_state_history_user_id_study_mode_new_state_idx" ON "concept_state_history"("user_id", "study_mode", "new_state");
+CREATE INDEX IF NOT EXISTS "concept_state_history_evaluation_id_idx" ON "concept_state_history"("evaluation_id");
 
-CREATE UNIQUE INDEX "concept_reasoning_evidence_user_id_concept_id_study_mode_evaluation_id_key" ON "concept_reasoning_evidence"("user_id", "concept_id", "study_mode", "evaluation_id");
-CREATE INDEX "concept_reasoning_evidence_user_id_concept_id_study_mode_evaluated_at_idx" ON "concept_reasoning_evidence"("user_id", "concept_id", "study_mode", "evaluated_at");
+CREATE UNIQUE INDEX IF NOT EXISTS "concept_reasoning_evidence_user_id_concept_id_study_mode_evaluation_id_key" ON "concept_reasoning_evidence"("user_id", "concept_id", "study_mode", "evaluation_id");
+CREATE INDEX IF NOT EXISTS "concept_reasoning_evidence_user_id_concept_id_study_mode_evaluated_at_idx" ON "concept_reasoning_evidence"("user_id", "concept_id", "study_mode", "evaluated_at");
 
-CREATE INDEX "concept_state_event_inbox_event_type_processed_at_idx" ON "concept_state_event_inbox"("event_type", "processed_at");
-CREATE INDEX "concept_state_event_inbox_user_id_concept_id_study_mode_idx" ON "concept_state_event_inbox"("user_id", "concept_id", "study_mode");
+CREATE INDEX IF NOT EXISTS "concept_state_event_inbox_event_type_processed_at_idx" ON "concept_state_event_inbox"("event_type", "processed_at");
+CREATE INDEX IF NOT EXISTS "concept_state_event_inbox_user_id_concept_id_study_mode_idx" ON "concept_state_event_inbox"("user_id", "concept_id", "study_mode");

@@ -31,12 +31,14 @@ import type { IEventPublisher } from '../shared/event-publisher.js';
 import type { AgentHintsFactory } from './agent-hints.factory.js';
 import { UnauthorizedError, ValidationError } from './errors/base.errors.js';
 import {
+  CloseMatchNodeError,
   CyclicEdgeError,
   EdgeNotFoundError,
   GraphConsistencyError,
   InvalidEdgeTypeError,
   NodeNotFoundError,
   OrphanEdgeError,
+  DuplicateNodeError,
 } from './errors/graph.errors.js';
 import type { IExecutionContext, IServiceResult } from './execution-context.js';
 import type {
@@ -78,6 +80,91 @@ import type {
 import { PkgOperationType } from './value-objects/operation-log.js';
 
 const PKG_ADVISORY_TIMEOUT_MS = 1_500;
+const DUPLICATE_PROBE_PAGE_SIZE = 50;
+const MAX_DUPLICATE_PROBE_PAGES = 4;
+const MAX_DUPLICATE_PROBES = 6;
+const FALLBACK_DUPLICATE_DOMAIN_NODE_LIMIT = 1000;
+const CLOSE_MATCH_BLOCK_THRESHOLD = 0.88;
+
+function normalizeNodeTypeAlias(nodeType: string): string {
+  return nodeType === 'concept' ? 'notion' : nodeType;
+}
+
+function normalizeLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeKey(label: string): string {
+  return normalizeLabel(label).replace(/[^a-z0-9]+/g, '');
+}
+
+function tokenizeLabel(label: string): string[] {
+  return normalizeLabel(label)
+    .split(/[^a-z0-9]+/g)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 2);
+}
+
+function buildDuplicateSearchProbes(label: string): string[] {
+  const trimmed = label.trim();
+  const normalized = normalizeLabel(label);
+  const alphanumericWords = normalized
+    .split(/[^a-z0-9]+/g)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 3);
+  const joinedWords = alphanumericWords.join(' ');
+  const sortedDistinctWords = [...new Set(alphanumericWords)].sort(
+    (left, right) => right.length - left.length
+  );
+
+  const quotedPhrases = [trimmed, normalized, joinedWords]
+    .filter((probe) => probe.length >= 3)
+    .map((probe) => `"${probe}"`);
+
+  return [...new Set([trimmed, normalized, joinedWords, ...quotedPhrases, ...sortedDistinctWords])]
+    .filter((probe) => probe.length >= 3)
+    .slice(0, MAX_DUPLICATE_PROBES);
+}
+
+function closeMatchConfidence(label: string, candidateLabel: string): number {
+  const normalizedLabel = normalizeLabel(label);
+  const normalizedCandidate = normalizeLabel(candidateLabel);
+  if (normalizedLabel === '' || normalizedCandidate === '') {
+    return 0;
+  }
+  if (normalizedLabel === normalizedCandidate) {
+    return 1;
+  }
+
+  const compactLabel = normalizeKey(label);
+  const compactCandidate = normalizeKey(candidateLabel);
+  if (compactLabel !== '' && compactLabel === compactCandidate) {
+    return 0.97;
+  }
+
+  const labelTokens = tokenizeLabel(label);
+  const candidateTokens = tokenizeLabel(candidateLabel);
+  const labelTokenSet = new Set(labelTokens);
+  const candidateTokenSet = new Set(candidateTokens);
+  const sharedTokenCount = [...labelTokenSet].filter((token) => candidateTokenSet.has(token)).length;
+  const unionSize = new Set([...labelTokens, ...candidateTokens]).size;
+  const jaccard = unionSize === 0 ? 0 : sharedTokenCount / unionSize;
+  const startsWith =
+    normalizedCandidate.startsWith(normalizedLabel) || normalizedLabel.startsWith(normalizedCandidate);
+  const contains =
+    normalizedCandidate.includes(normalizedLabel) || normalizedLabel.includes(normalizedCandidate);
+
+  let confidence = 0;
+  if (sharedTokenCount > 0) {
+    confidence = Math.max(confidence, 0.45 + jaccard * 0.4);
+  }
+  if (startsWith) {
+    confidence = Math.max(confidence, 0.88);
+  } else if (contains) {
+    confidence = Math.max(confidence, 0.74);
+  }
+  return confidence;
+}
 
 function stabilityPropertyKey(studyMode: StudyMode): string {
   return `studyModeStability_${studyMode}`;
@@ -139,6 +226,7 @@ export class PkgWriteService {
 
     // Validate input
     const validated = validateInput(CreateNodeInputSchema, input, 'CreateNodeInput');
+    await this.assertNoConflictingNodeMatch(userId, validated as ICreateNodeInput);
 
     // Create node in Neo4j
     const node = await this.graphRepository.createNode(
@@ -196,6 +284,97 @@ export class PkgWriteService {
         advisoryWarnings
       ),
     };
+  }
+
+  private async assertNoConflictingNodeMatch(
+    userId: UserId,
+    input: ICreateNodeInput
+  ): Promise<void> {
+    const candidates = await this.findPotentialDuplicateNodes(userId, input);
+    const normalizedInputKey = normalizeKey(input.label);
+    const exact = candidates.find((candidate) => normalizeKey(candidate.label) === normalizedInputKey);
+    if (exact !== undefined) {
+      throw new DuplicateNodeError(input.label, input.domain, exact.nodeId as string);
+    }
+
+    const closest = candidates
+      .map((candidate) => ({
+        candidate,
+        confidence: closeMatchConfidence(input.label, candidate.label),
+      }))
+      .filter((entry) => entry.confidence >= CLOSE_MATCH_BLOCK_THRESHOLD)
+      .sort((left, right) => right.confidence - left.confidence)[0];
+
+    if (closest !== undefined) {
+      throw new CloseMatchNodeError(
+        input.label,
+        input.domain,
+        closest.candidate.nodeId as string,
+        closest.candidate.label,
+        closest.confidence
+      );
+    }
+  }
+
+  private async findPotentialDuplicateNodes(
+    userId: UserId,
+    input: ICreateNodeInput
+  ): Promise<IGraphNode[]> {
+    const probes = buildDuplicateSearchProbes(input.label);
+    const candidates = new Map<string, IGraphNode>();
+
+    for (const probe of probes) {
+      for (let page = 0; page < MAX_DUPLICATE_PROBE_PAGES; page++) {
+        const results = await this.graphRepository.findNodes(
+          {
+            graphType: GraphType.PKG,
+            userId,
+            domain: input.domain,
+            labelContains: probe,
+            searchMode: probe.startsWith('"') ? 'fulltext' : 'substring',
+            includeDeleted: false,
+          },
+          DUPLICATE_PROBE_PAGE_SIZE,
+          page * DUPLICATE_PROBE_PAGE_SIZE
+        );
+
+        for (const candidate of results) {
+          candidates.set(candidate.nodeId as string, candidate);
+        }
+
+        if (results.length < DUPLICATE_PROBE_PAGE_SIZE) {
+          break;
+        }
+      }
+    }
+
+    const domainNodeCount = await this.graphRepository.countNodes({
+      graphType: GraphType.PKG,
+      userId,
+      domain: input.domain,
+      includeDeleted: false,
+    });
+    if (candidates.size > 0 || domainNodeCount > FALLBACK_DUPLICATE_DOMAIN_NODE_LIMIT) {
+      return [...candidates.values()];
+    }
+
+    for (let offset = 0; offset < domainNodeCount; offset += DUPLICATE_PROBE_PAGE_SIZE) {
+      const results = await this.graphRepository.findNodes(
+        {
+          graphType: GraphType.PKG,
+          userId,
+          domain: input.domain,
+          includeDeleted: false,
+        },
+        DUPLICATE_PROBE_PAGE_SIZE,
+        offset
+      );
+      for (const candidate of results) {
+        candidates.set(candidate.nodeId as string, candidate);
+      }
+    }
+
+    return [...candidates.values()];
   }
 
   async getNode(
@@ -464,14 +643,20 @@ export class PkgWriteService {
 
     // Validate node types against policy (unless skipped)
     if (validationOptions?.validateNodeTypes !== false) {
-      const sourceAllowed = policy.allowedSourceTypes.includes(sourceNode.nodeType);
-      const targetAllowed = policy.allowedTargetTypes.includes(targetNode.nodeType);
+      const sourceNodeType = normalizeNodeTypeAlias(sourceNode.nodeType);
+      const targetNodeType = normalizeNodeTypeAlias(targetNode.nodeType);
+      const sourceAllowed = policy.allowedSourceTypes.includes(
+        sourceNodeType as (typeof policy.allowedSourceTypes)[number]
+      );
+      const targetAllowed = policy.allowedTargetTypes.includes(
+        targetNodeType as (typeof policy.allowedTargetTypes)[number]
+      );
 
       if (!sourceAllowed || !targetAllowed) {
         throw new InvalidEdgeTypeError(
           input.edgeType,
-          sourceNode.nodeType,
-          targetNode.nodeType,
+          sourceNodeType,
+          targetNodeType,
           policy.allowedSourceTypes as string[],
           policy.allowedTargetTypes as string[]
         );

@@ -247,7 +247,7 @@ function inferNodeType(
     return 'skill';
   }
 
-  return 'concept';
+  return 'notion';
 }
 
 function inferDomain(

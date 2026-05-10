@@ -43,6 +43,7 @@ export interface IIngestionRepository {
     intent: IIngestionJobDto['intent'];
   }): Promise<IIngestionJobDto>;
   getJob(userId: UserId, jobId: IngestionJobId): Promise<IIngestionJobDto | undefined>;
+  claimJobForRun(userId: UserId, jobId: IngestionJobId): Promise<IIngestionJobDto | undefined>;
   listJobs(
     userId: UserId,
     documentId?: DocumentId,

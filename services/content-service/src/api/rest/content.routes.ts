@@ -20,6 +20,7 @@ import type {
   ICreateCardInput,
   ICreateContentGenerationJobInput,
   ICreateGeneratedActivityVariantInput,
+  IImportGeneratedContentBatchInput,
   ICompleteCardMetadataInput,
   IPromoteCardFromReviewInput,
   ITransformCardInput,
@@ -492,7 +493,7 @@ export function registerContentRoutes(
             'difficultyBucket',
           ],
           properties: {
-            conceptId: { type: 'string' },
+            conceptId: { type: 'string', pattern: '^concept_[A-Za-z0-9_-]{21}$' },
             transformationType: {
               type: 'string',
               enum: [
@@ -569,7 +570,7 @@ export function registerContentRoutes(
             'ttlAt',
           ],
           properties: {
-            conceptId: { type: 'string' },
+            conceptId: { type: 'string', pattern: '^concept_[A-Za-z0-9_-]{21}$' },
             studyMode: { type: 'string', enum: ['language_learning', 'knowledge_gaining'] },
             transformationType: {
               type: 'string',
@@ -1470,7 +1471,11 @@ export function registerContentRoutes(
 
   fastify.patch<{ Params: IIdParams; Body: IUpdateBody<ICompleteCardMetadataInput> }>(
     '/v1/cards/:id/complete-metadata',
-    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Cards'], summary: 'Complete card metadata' } },
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: { tags: ['Cards'], summary: 'Complete card metadata' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1489,7 +1494,11 @@ export function registerContentRoutes(
 
   fastify.post<{ Params: IIdParams; Body: IUpdateBody<IPromoteCardFromReviewInput> }>(
     '/v1/cards/:id/promote-from-review',
-    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Cards'], summary: 'Promote reviewed card' } },
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: { tags: ['Cards'], summary: 'Promote reviewed card' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1508,7 +1517,11 @@ export function registerContentRoutes(
 
   fastify.post<{ Params: IIdParams; Body: ITransformCardInput }>(
     '/v1/cards/:id/transform',
-    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Cards'], summary: 'Create card variant' } },
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: { tags: ['Cards'], summary: 'Create card variant' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1540,7 +1553,11 @@ export function registerContentRoutes(
 
   fastify.post<{ Body: ICreateContentGenerationJobInput }>(
     '/v1/content/generation-jobs',
-    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Content Generation'], summary: 'Request content generation' } },
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: { tags: ['Content Generation'], summary: 'Request content generation' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1552,9 +1569,33 @@ export function registerContentRoutes(
     }
   );
 
+  fastify.post<{ Body: IImportGeneratedContentBatchInput }>(
+    '/v1/content/generation-jobs/import-result',
+    {
+      preHandler: authMiddleware,
+      config: batchRouteConfig,
+      schema: {
+        tags: ['Content Generation'],
+        summary: 'Import completed generated content',
+      },
+    },
+    async (request, reply) => {
+      try {
+        const context = buildContext(request);
+        const result = await contentService.importGeneratedContentBatch(request.body, context);
+        reply.status(201).send(wrapResponse(result.data, result.agentHints, request));
+      } catch (error) {
+        handleError(error, request, reply, fastify.log);
+      }
+    }
+  );
+
   fastify.get<{ Params: { id: string } }>(
     '/v1/content/generation-jobs/:id',
-    { preHandler: authMiddleware, schema: { tags: ['Content Generation'], summary: 'Get content generation job' } },
+    {
+      preHandler: authMiddleware,
+      schema: { tags: ['Content Generation'], summary: 'Get content generation job' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1568,7 +1609,11 @@ export function registerContentRoutes(
 
   fastify.post<{ Params: { id: string } }>(
     '/v1/content/generation-jobs/:id/run',
-    { preHandler: authMiddleware, config: writeRouteConfig, schema: { tags: ['Content Generation'], summary: 'Run content generation job' } },
+    {
+      preHandler: authMiddleware,
+      config: writeRouteConfig,
+      schema: { tags: ['Content Generation'], summary: 'Run content generation job' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1582,7 +1627,10 @@ export function registerContentRoutes(
 
   fastify.get<{ Querystring: { status?: string } }>(
     '/v1/content/generation-jobs',
-    { preHandler: authMiddleware, schema: { tags: ['Content Generation'], summary: 'List content generation jobs' } },
+    {
+      preHandler: authMiddleware,
+      schema: { tags: ['Content Generation'], summary: 'List content generation jobs' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);
@@ -1596,7 +1644,10 @@ export function registerContentRoutes(
 
   fastify.get<{ Params: { conceptId: string } }>(
     '/v1/coverage/concept/:conceptId',
-    { preHandler: authMiddleware, schema: { tags: ['Content Coverage'], summary: 'Get concept card coverage' } },
+    {
+      preHandler: authMiddleware,
+      schema: { tags: ['Content Coverage'], summary: 'Get concept card coverage' },
+    },
     async (request, reply) => {
       try {
         const context = buildContext(request);

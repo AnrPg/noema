@@ -2,7 +2,7 @@
  * @noema/knowledge-graph-service — MCP Tool Contract Tests
  *
  * Verifies that each tool definition conforms to the MCP tool contract standard:
- * 1. All 17 tools are registered with unique, kebab-case names
+ * 1. All 23 tools are registered with unique, kebab-case names
  * 2. Every tool has a valid inputSchema with `type: 'object'`
  * 3. Required fields are present: name, version, description, service, priority
  * 4. scopeRequirement and capabilities are populated by withContractDefaults
@@ -20,8 +20,8 @@ import type { IToolDefinition } from '../../src/agents/tools/tool.types.js';
 // ============================================================================
 
 describe('KG_TOOL_DEFINITIONS registry', () => {
-  it('exports exactly 17 tool definitions', () => {
-    expect(KG_TOOL_DEFINITIONS).toHaveLength(17);
+  it('exports exactly 23 tool definitions', () => {
+    expect(KG_TOOL_DEFINITIONS).toHaveLength(23);
   });
 
   it('all tool names are unique', () => {
@@ -35,11 +35,13 @@ describe('KG_TOOL_DEFINITIONS registry', () => {
 
     // PKG tools
     expect(names.has('get-concept-node')).toBe(true);
+    expect(names.has('resolve-concept-reference')).toBe(true);
     expect(names.has('get-subgraph')).toBe(true);
     expect(names.has('find-prerequisites')).toBe(true);
     expect(names.has('find-related-concepts')).toBe(true);
     expect(names.has('add-concept-node')).toBe(true);
     expect(names.has('add-edge')).toBe(true);
+    expect(names.has('confirm-pkg-write-plan')).toBe(true);
     expect(names.has('remove-node')).toBe(true);
     expect(names.has('remove-edge')).toBe(true);
 
@@ -162,7 +164,7 @@ describe('capabilities contract', () => {
 // ============================================================================
 
 describe('Side-effect classification', () => {
-  const MUTATION_PREFIXES = ['add-', 'update-', 'remove-', 'propose-'];
+  const MUTATION_PREFIXES = ['add-', 'update-', 'remove-', 'propose-', 'confirm-'];
 
   it('mutation tools have sideEffects: true', () => {
     for (const tool of KG_TOOL_DEFINITIONS) {

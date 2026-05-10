@@ -34,7 +34,7 @@ const OTHER_NODE_ID = 'node_uVwXyZ012345678901234';
 describe('CreateNodeInputSchema', () => {
   const validInput = {
     label: 'Photosynthesis',
-    nodeType: 'concept',
+    nodeType: 'notion',
     domain: 'biology',
   };
 

@@ -84,6 +84,38 @@ export class DuplicateNodeError extends DomainError {
 }
 
 /**
+ * Thrown when a new node label is too close to an existing node and requires
+ * explicit disambiguation before a write can proceed.
+ * Maps to HTTP 409.
+ */
+export class CloseMatchNodeError extends DomainError {
+  public readonly label: string;
+  public readonly domain: string;
+  public readonly existingNodeId: string;
+  public readonly existingLabel: string;
+  public readonly confidence: number;
+
+  constructor(
+    label: string,
+    domain: string,
+    existingNodeId: string,
+    existingLabel: string,
+    confidence: number
+  ) {
+    super(
+      'CLOSE_MATCH_NODE',
+      `Node label "${label}" is too close to existing node "${existingLabel}" in domain "${domain}"`,
+      { label, domain, existingNodeId, existingLabel, confidence }
+    );
+    this.label = label;
+    this.domain = domain;
+    this.existingNodeId = existingNodeId;
+    this.existingLabel = existingLabel;
+    this.confidence = confidence;
+  }
+}
+
+/**
  * Thrown when adding an edge would create a cycle in an edge type that requires acyclicity.
  * Maps to HTTP 409.
  *

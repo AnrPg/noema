@@ -87,7 +87,7 @@ describe.runIf(hasNeo4jIntegration)('Neo4j — Node Operations', () => {
       'pkg',
       {
         label: `Integration Node ${Date.now().toString(36)}`,
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'integration',
       },
       'user_integration' as never

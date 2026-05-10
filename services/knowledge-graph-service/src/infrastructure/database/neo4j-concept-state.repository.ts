@@ -1,4 +1,4 @@
-import type { ConceptId, ConceptState, UserId } from '@noema/types';
+import type { ConceptId, ConceptState, StudyMode, UserId } from '@noema/types';
 import type pino from 'pino';
 import type { ManagedTransaction } from 'neo4j-driver';
 import type { IConceptStateGraphPort } from '../../domain/knowledge-graph-service/concept-state.service.js';
@@ -21,6 +21,7 @@ export class Neo4jConceptStateRepository implements IConceptStateGraphPort {
   async setConceptState(input: {
     readonly userId: UserId;
     readonly conceptId: ConceptId;
+    readonly studyMode: StudyMode;
     readonly state: ConceptState;
   }): Promise<void> {
     const session = this.neo4j.getSession();
@@ -29,12 +30,20 @@ export class Neo4jConceptStateRepository implements IConceptStateGraphPort {
         tx.run(
           `MATCH (n:PkgNode {nodeId: $conceptId, userId: $userId})
            WHERE coalesce(n.isDeleted, false) = false
-           SET n.state = $state,
-               n.conceptState = $state,
+           MERGE (projection:ConceptStudyState {
+             userId: $userId,
+             conceptId: $conceptId,
+             studyMode: $studyMode
+           })
+           SET projection.state = $state,
+               projection.updatedAt = $updatedAt
+           MERGE (n)-[rel:HAS_STUDY_STATE {studyMode: $studyMode}]->(projection)
+           SET rel.updatedAt = $updatedAt,
                n.updatedAt = $updatedAt`,
           {
             userId: input.userId,
             conceptId: input.conceptId,
+            studyMode: input.studyMode,
             state: conceptStatePropertyValue(input.state),
             updatedAt: new Date().toISOString(),
           }

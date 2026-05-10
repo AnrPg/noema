@@ -96,6 +96,49 @@ export class RateLimitExceededError extends DomainError {
   }
 }
 
+/**
+ * Thrown when an upstream dependency cannot be reached or rejects the request.
+ * Maps to HTTP 502.
+ */
+export class UpstreamServiceUnavailableError extends DomainError {
+  public readonly service: string;
+
+  constructor(service: string, message = `${service} is unavailable`, details?: Record<string, unknown>) {
+    super('UPSTREAM_SERVICE_UNAVAILABLE', message, { service, ...details });
+    this.service = service;
+  }
+}
+
+/**
+ * Thrown when an upstream dependency times out.
+ * Maps to HTTP 504.
+ */
+export class UpstreamServiceTimeoutError extends DomainError {
+  public readonly service: string;
+
+  constructor(service: string, message = `${service} timed out`, details?: Record<string, unknown>) {
+    super('UPSTREAM_SERVICE_TIMEOUT', message, { service, ...details });
+    this.service = service;
+  }
+}
+
+/**
+ * Thrown when an upstream dependency returns a malformed or unexpected payload.
+ * Maps to HTTP 502.
+ */
+export class UpstreamServiceProtocolError extends DomainError {
+  public readonly service: string;
+
+  constructor(
+    service: string,
+    message = `${service} returned an invalid response`,
+    details?: Record<string, unknown>
+  ) {
+    super('UPSTREAM_SERVICE_PROTOCOL_ERROR', message, { service, ...details });
+    this.service = service;
+  }
+}
+
 // ============================================================================
 // Type Guards
 // ============================================================================

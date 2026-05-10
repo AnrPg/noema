@@ -2125,7 +2125,7 @@ export class Neo4jGraphRepository implements IGraphRepository, IGraphRestoration
           ({
             nodeId: id,
             graphType: 'pkg',
-            nodeType: 'concept',
+            nodeType: 'notion',
             label: '',
             domain: '',
             properties: {},

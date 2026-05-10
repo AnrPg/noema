@@ -212,13 +212,13 @@ describe('UnityInvariantStage', () => {
           newNodeA: {
             label: 'Node A',
             description: '',
-            nodeType: 'concept',
+            nodeType: 'notion',
             properties: {},
           },
           newNodeB: {
             label: 'Node B',
             description: '',
-            nodeType: 'concept',
+            nodeType: 'notion',
             properties: {},
           },
           edgeReassignmentRules: [],

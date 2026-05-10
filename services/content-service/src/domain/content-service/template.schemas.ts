@@ -36,10 +36,14 @@ const DifficultyLevelSchema = z.enum([
 
 const VisibilitySchema = z.enum(['private', 'public', 'shared']);
 
-const nodeIdPattern = /^node_[a-zA-Z0-9]{21}$/;
+const nodeIdPattern = /^node_[a-zA-Z0-9_-]{21}$/;
+const conceptIdPattern = /^concept_[a-zA-Z0-9_-]{21}$/;
 const NodeIdItemSchema = z
   .string()
   .regex(nodeIdPattern, 'Invalid NodeId format. Expected node_<21-char-nanoid>');
+const ConceptIdItemSchema = z
+  .string()
+  .regex(conceptIdPattern, 'Invalid ConceptId format. Expected concept_<21-char-nanoid>');
 
 const TemplateContentSchema = z
   .object({
@@ -66,6 +70,7 @@ export const CreateTemplateInputSchema = z.object({
   content: TemplateContentSchema,
   difficulty: DifficultyLevelSchema.default(DifficultyLevel.INTERMEDIATE),
   knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).default([]),
+  anchoredCkgNodeIds: z.array(ConceptIdItemSchema).max(50).default([]),
   tags: z.array(TagSchema).max(30).default([]),
   metadata: z.record(z.unknown()).default({}),
   visibility: VisibilitySchema.default('private'),
@@ -78,6 +83,7 @@ export const UpdateTemplateInputSchema = z
     content: TemplateContentSchema.optional(),
     difficulty: DifficultyLevelSchema.optional(),
     knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
+    anchoredCkgNodeIds: z.array(ConceptIdItemSchema).max(50).optional(),
     tags: z.array(TagSchema).max(30).optional(),
     metadata: z.record(z.unknown()).optional(),
     visibility: VisibilitySchema.optional(),

@@ -20,7 +20,29 @@ declare module 'fastify' {
 }
 
 export function createAuthMiddleware(tokenVerifier: JwtTokenVerifier) {
+  const authDisabled = process.env['AUTH_DISABLED'] === 'true';
+  const nodeEnv = process.env['NODE_ENV'] ?? 'development';
+  const isDevLikeEnvironment = nodeEnv === 'development' || nodeEnv === 'test';
+
+  if (authDisabled && !isDevLikeEnvironment) {
+    throw new Error('AUTH_DISABLED=true is only allowed in development or test environments');
+  }
+
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (authDisabled) {
+      const xUserId =
+        typeof request.headers['x-user-id'] === 'string'
+          ? request.headers['x-user-id']
+          : 'user_devuser00000000000000';
+      request.user = {
+        sub: xUserId,
+        roles: ['developer'],
+        scopes: [],
+        type: 'access',
+      };
+      return;
+    }
+
     const authHeader = request.headers.authorization;
 
     if (authHeader?.startsWith('Bearer ') !== true) {
@@ -38,7 +60,13 @@ export function createAuthMiddleware(tokenVerifier: JwtTokenVerifier) {
 
     try {
       const payload = await tokenVerifier.verifyAccessToken(token);
-      request.user = payload;
+      request.user = {
+        ...payload,
+        sub:
+          typeof payload['userId'] === 'string'
+            ? payload['userId']
+            : payload.sub,
+      };
     } catch {
       const metadata = buildErrorMetadata(request);
       return reply.status(401).send({

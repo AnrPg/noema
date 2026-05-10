@@ -133,7 +133,7 @@ function errorResult(error: unknown): IToolResult {
 
 /**
  * create-card — Create a single card with typed content.
- * P0 tool used by Content Generation Agent.
+ * P0 tool used by Content Creation Orchestrator.
  */
 export function createCreateCardHandler(contentService: ContentService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
@@ -152,7 +152,7 @@ export function createCreateCardHandler(contentService: ContentService) {
 
 /**
  * batch-create-cards — Create multiple cards atomically.
- * P0 tool used by Content Generation Agent for bulk imports.
+ * P0 tool used by Content Creation Orchestrator for bulk imports.
  */
 export function createBatchCreateCardsHandler(contentService: ContentService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
@@ -283,7 +283,7 @@ export function createGetCardByIdHandler(contentService: ContentService) {
 
 /**
  * update-card — Update card content, tags, metadata.
- * P1 tool used by Content Generation Agent.
+ * P1 tool used by Content Creation Orchestrator.
  */
 export function createUpdateCardHandler(contentService: ContentService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
@@ -527,6 +527,21 @@ export function createGetCoverageHandler(contentService: ContentService) {
       const context = buildContext(userId, correlationId);
       const body = input as { conceptId: string };
       const result = await contentService.getCoverageForConcept(body.conceptId as never, context);
+      return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createListGeneratedActivityVariantsHandler(contentService: ContentService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const result = await contentService.listGeneratedActivityVariants(
+        input as Parameters<typeof contentService.listGeneratedActivityVariants>[0],
+        context
+      );
       return { success: true, data: result.data, agentHints: result.agentHints };
     } catch (error) {
       return errorResult(error);
@@ -1129,7 +1144,18 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
     description: 'Create a durable transformed variant of an existing card.',
     service: 'content-service',
     priority: 'P0',
-    inputSchema: { type: 'object', required: ['cardId', 'transformationKind'], properties: { cardId: { type: 'string' }, transformationKind: { type: 'string' } } },
+    inputSchema: {
+      type: 'object',
+      required: ['cardId', 'transformationKind'],
+      properties: {
+        cardId: { type: 'string' },
+        transformationKind: { type: 'string' },
+        targetCardType: { type: 'string' },
+        targetCardTypes: { type: 'array', items: { type: 'string' } },
+        count: { type: 'integer', minimum: 1, maximum: 20 },
+        prompt: { type: 'string' },
+      },
+    },
   },
   {
     name: 'get-card-lineage',
@@ -1144,6 +1170,22 @@ const CONTENT_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
     service: 'content-service',
     priority: 'P1',
     inputSchema: { type: 'object', required: ['conceptId'], properties: { conceptId: { type: 'string' } } },
+  },
+  {
+    name: 'list-generated-activity-variants',
+    description: 'List generated activity variants for prompt coverage and duplicate-risk checks.',
+    service: 'content-service',
+    priority: 'P1',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        conceptId: { type: 'string' },
+        studyMode: { type: 'string' },
+        transformationType: { type: 'string' },
+        difficultyBucket: { type: 'number' },
+        limit: { type: 'number' },
+      },
+    },
   },
 ];
 

@@ -4,6 +4,7 @@ import type {
   IDocumentChunkDto,
   IDocumentDetailDto,
   IDocumentDto,
+  IDocumentIrDto,
   IDocumentUploadInputDto,
   IIngestionJobDto,
   IIngestionRunResultDto,
@@ -17,6 +18,7 @@ import type {
   CorrelationId,
   DocumentId,
   IngestionJobId,
+  NodeId,
   UserId,
 } from '@noema/types';
 import {
@@ -33,12 +35,14 @@ import type {
   IContentServicePort,
   ICurriculumServicePort,
   IDocumentParserPort,
+  IExtractionScanWindow,
   IKnowledgeGraphPort,
   IVectorServicePort,
 } from './external-ports.js';
 import type { IIngestionRepository } from './ingestion.repository.js';
-import { buildIr, chunkIr } from './pipeline.js';
+import { buildExtractionWindows, buildIr, chunkIr } from './pipeline.js';
 import type { IEventPublisher } from '../shared/event-publisher.js';
+import { resolveDocumentPayload } from '../../infrastructure/parsers/document-payload.js';
 
 export interface IExecutionContext {
   userId: UserId | null;
@@ -68,14 +72,26 @@ export class IngestionService {
       content: string;
       intent: IIngestionJobDto['intent'];
     };
+    const payload = resolveDocumentPayload(
+      {
+        mimeKind: parsed.mimeKind ?? 'text/plain',
+        metadata: parsed.metadata ?? {},
+      } as Pick<IDocumentDto, 'mimeKind' | 'metadata'>,
+      parsed.content
+    );
     const documentId = `${ID_PREFIXES.DocumentId}${nanoid(21)}` as DocumentId;
     const jobId = `${ID_PREFIXES.IngestionJobId}${nanoid(21)}` as IngestionJobId;
     const document = await this.repository.createDocument({
       ...parsed,
+      metadata: {
+        ...(parsed.metadata ?? {}),
+        contentEncoding: payload.encoding,
+        originalMimeKind: payload.mimeKind,
+      },
       id: documentId,
       userId,
-      checksum: checksum(parsed.content),
-      byteLength: Buffer.byteLength(parsed.content, 'utf8'),
+      checksum: checksum(payload.bytes),
+      byteLength: payload.bytes.byteLength,
     });
     const job = await this.repository.createJob({
       id: jobId,
@@ -110,6 +126,53 @@ export class IngestionService {
     return this.repository.getDocumentDetail(this.requireUserId(context), documentId);
   }
 
+  async getDocumentContext(
+    documentId: DocumentId,
+    context: IExecutionContext
+  ): Promise<Record<string, unknown> | undefined> {
+    const detail = await this.repository.getDocumentDetail(this.requireUserId(context), documentId);
+    if (detail === undefined) return undefined;
+    const latestJob = detail.jobs[0];
+    const irMetadata = detail.ir?.metadata ?? {};
+    const parseWarnings = Array.isArray(irMetadata['parseWarnings'])
+      ? irMetadata['parseWarnings']
+      : [];
+    return {
+      documentId: detail.document.id,
+      title: detail.document.title,
+      sourceKind: detail.document.sourceKind,
+      mimeKind: detail.document.mimeKind,
+      byteLength: detail.document.byteLength,
+      parserStatus: latestJob?.stage ?? 'uploaded',
+      parseWarnings,
+      ocrStatus: deriveOcrStatus(detail.document, irMetadata, parseWarnings),
+      irSchemaVersion:
+        typeof detail.ir?.metadata['schemaVersion'] === 'string'
+          ? detail.ir.metadata['schemaVersion']
+          : 'v1',
+      documentFormat:
+        typeof irMetadata['format'] === 'string'
+          ? irMetadata['format']
+          : detail.document.metadata['documentFormat'],
+    };
+  }
+
+  async getDocumentIr(
+    documentId: DocumentId,
+    context: IExecutionContext
+  ): Promise<IDocumentIrDto | undefined> {
+    const detail = await this.repository.getDocumentDetail(this.requireUserId(context), documentId);
+    return detail?.ir;
+  }
+
+  async getDocumentChunks(
+    documentId: DocumentId,
+    context: IExecutionContext
+  ): Promise<IDocumentChunkDto[]> {
+    const detail = await this.repository.getDocumentDetail(this.requireUserId(context), documentId);
+    return detail?.chunks ?? [];
+  }
+
   deleteDocument(documentId: DocumentId, context: IExecutionContext): Promise<void> {
     return this.repository.deleteDocument(this.requireUserId(context), documentId);
   }
@@ -139,8 +202,14 @@ export class IngestionService {
 
   async runJob(jobId: IngestionJobId, context: IExecutionContext): Promise<IIngestionRunResultDto> {
     const userId = this.requireUserId(context);
-    const job = await this.repository.getJob(userId, jobId);
-    if (job === undefined) throw new Error('Ingestion job not found.');
+    const job = await this.repository.claimJobForRun(userId, jobId);
+    if (job === undefined) {
+      const existing = await this.repository.getJob(userId, jobId);
+      if (existing === undefined) throw new Error('Ingestion job not found.');
+      throw new Error(
+        `Ingestion job is already ${existing.stage} and cannot be claimed for processing.`
+      );
+    }
     const document = await this.repository.getDocument(userId, job.documentId);
     if (document === undefined) throw new Error('Document not found.');
     const content = await this.repository.getDocumentContent(userId, document.id);
@@ -172,6 +241,37 @@ export class IngestionService {
         document.id,
         chunkIr(document.id, userId, ir)
       );
+      const extractionWindows = buildExtractionWindows(ir, chunks);
+
+      if (chunks.length === 0 || extractionWindows.length === 0) {
+        await this.repository.replaceConceptCandidates(document.id, []);
+        const completed = await this.repository.updateJob(job.id, {
+          stage: IngestionJobStage.COMPLETED,
+          finishedAt: new Date().toISOString(),
+          checkpoints: {
+            completedAt: new Date().toISOString(),
+            skippedExtraction: {
+              reason: 'NO_TEXT_CONTENT',
+              chunkCount: chunks.length,
+              extractionWindowCount: extractionWindows.length,
+            },
+          },
+        });
+        await this.eventPublisher.publish({
+          eventType: IngestionEventType.JOB_COMPLETED,
+          aggregateType: 'IngestionJob',
+          aggregateId: job.id,
+          payload: {
+            documentId: document.id,
+            ingestionJobId: job.id,
+            userId,
+            curriculumId: completed.curriculumId,
+            contentGenerationJobIds: completed.contentGenerationJobIds,
+          },
+          metadata: { correlationId: context.correlationId, userId },
+        });
+        return { job: completed, document, chunks, concepts: [] };
+      }
 
       await this.advance(job.id, IngestionJobStage.EMBEDDING, { chunkCount: chunks.length });
       const embeddedChunks = await this.repository.replaceChunks(
@@ -192,7 +292,16 @@ export class IngestionService {
       });
 
       await this.advance(job.id, IngestionJobStage.CONCEPT_EXTRACTION, {});
-      const candidates = await this.extractConceptCandidates(document, ir, embeddedChunks);
+      const extraction = await this.conceptExtractor.extract({
+        userId,
+        document,
+        ir,
+        chunks: embeddedChunks,
+        scanWindows: this.attachEmbeddedChunkIds(extractionWindows, embeddedChunks),
+        intent: this.toAgentIntent(job.intent),
+        curriculumId: job.curriculumId,
+      });
+      const candidates = await this.extractConceptCandidates(document, extraction.conceptCandidates);
       await this.eventPublisher.publish({
         eventType: IngestionEventType.CONCEPT_CANDIDATES_EXTRACTED,
         aggregateType: 'ConceptCandidate',
@@ -206,11 +315,18 @@ export class IngestionService {
         metadata: { correlationId: context.correlationId, userId },
       });
 
-      const mappedCandidates = await this.mapConcepts(document, job.id, candidates, context);
+      const mappedCandidates = await this.mapConcepts(
+        document,
+        job.id,
+        candidates,
+        extraction.mappingSuggestions,
+        context
+      );
       const curriculumResult = await this.maybeRequestCurriculum(
         document,
         job,
         mappedCandidates,
+        extraction.handoffRecommendations,
         context
       );
       const contentJobIds = await this.maybeRequestCards(
@@ -218,6 +334,7 @@ export class IngestionService {
         job,
         mappedCandidates,
         curriculumResult.curriculumId,
+        extraction.handoffRecommendations,
         context
       );
 
@@ -280,6 +397,14 @@ export class IngestionService {
     jobId: IngestionJobId,
     context: IExecutionContext
   ): Promise<IIngestionRunResultDto> {
+    const userId = this.requireUserId(context);
+    const job = await this.repository.getJob(userId, jobId);
+    if (job === undefined) throw new Error('Ingestion job not found.');
+    if (job.stage !== IngestionJobStage.FAILED && job.stage !== IngestionJobStage.CANCELLED) {
+      throw new Error(
+        `Only failed or cancelled ingestion jobs can be retried; current stage is ${job.stage}.`
+      );
+    }
     await this.repository.updateJob(jobId, {
       stage: IngestionJobStage.QUEUED,
       checkpoints: { retriedAt: new Date().toISOString() },
@@ -326,10 +451,8 @@ export class IngestionService {
 
   private async extractConceptCandidates(
     document: IDocumentDto,
-    ir: ReturnType<typeof buildIr>,
-    chunks: IDocumentChunkDto[]
+    extracted: Awaited<ReturnType<IConceptExtractorPort['extract']>>['conceptCandidates']
   ): Promise<IConceptCandidateDto[]> {
-    const extracted = await this.conceptExtractor.extract({ document, ir, chunks });
     return this.repository.replaceConceptCandidates(
       document.id,
       extracted
@@ -342,8 +465,11 @@ export class IngestionService {
           ...(candidate.definition !== undefined ? { definition: candidate.definition } : {}),
           salience: candidate.salience,
           evidenceChunkIds: candidate.evidenceChunkIds as IConceptCandidateDto['evidenceChunkIds'],
-          state: ConceptCandidateState.EXTRACTED,
-          metadata: {},
+          state: this.toCandidateState(candidate.state),
+          metadata: {
+            confidence: candidate.confidence,
+            rationale: candidate.rationale,
+          },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }))
@@ -354,6 +480,7 @@ export class IngestionService {
     document: IDocumentDto,
     jobId: IngestionJobId,
     candidates: IConceptCandidateDto[],
+    mappingSuggestions: Awaited<ReturnType<IConceptExtractorPort['extract']>>['mappingSuggestions'],
     context: IExecutionContext
   ): Promise<IConceptCandidateDto[]> {
     const userId = this.requireUserId(context);
@@ -361,23 +488,51 @@ export class IngestionService {
     const mapped: IConceptCandidateDto[] = [];
     const matchedNodeIds: string[] = [];
     const proposedNodeIds: string[] = [];
+    const suggestionsByLabel = new Map(mappingSuggestions.map((item) => [item.label.toLowerCase(), item]));
     for (const candidate of candidates) {
-      const match = await this.knowledgeGraph.mapConcept(candidate);
-      if (match.nodeId !== undefined && match.confidence >= 0.85) {
+      const suggestion = suggestionsByLabel.get(candidate.label.toLowerCase());
+      if (
+        suggestion?.decision === 'matched' &&
+        suggestion.candidateNodeIds[0] !== undefined &&
+        suggestion.confidence >= 0.85
+      ) {
+        const resolved = await this.knowledgeGraph.mapConcept(candidate);
+        const suggestedNodeId = suggestion.candidateNodeIds[0];
+        const resolvedNodeId = resolved.nodeId ?? suggestedNodeId;
+        const resolvedConfidence = Math.max(resolved.confidence, suggestion.confidence);
+        if (resolvedConfidence < 0.85) {
+          const updated = await this.repository.updateConceptCandidate({
+            id: candidate.id,
+            state: ConceptCandidateState.EXTRACTED,
+          });
+          mapped.push(updated);
+          continue;
+        }
         const updated = await this.repository.updateConceptCandidate({
           id: candidate.id,
           state: ConceptCandidateState.MATCHED_CKG,
-          ckgNodeId: match.nodeId,
+          ckgNodeId: resolvedNodeId as NodeId,
         });
         mapped.push(updated);
-        matchedNodeIds.push(match.nodeId);
+        matchedNodeIds.push(resolvedNodeId);
         continue;
       }
-      const proposal = await this.knowledgeGraph.proposeConcept(candidate);
+      if (suggestion?.decision === 'ambiguous') {
+        const updated = await this.repository.updateConceptCandidate({
+          id: candidate.id,
+          state: ConceptCandidateState.EXTRACTED,
+        });
+        mapped.push(updated);
+        continue;
+      }
+      const proposed = await this.knowledgeGraph.proposeConcept(candidate);
       const updated = await this.repository.updateConceptCandidate({
         id: candidate.id,
-        state: ConceptCandidateState.PROPOSED_CKG,
-        ...(proposal.nodeId !== undefined ? { proposedNodeId: proposal.nodeId } : {}),
+        state:
+          proposed.nodeId !== undefined
+            ? ConceptCandidateState.PROPOSED_CKG
+            : ConceptCandidateState.EXTRACTED,
+        proposedNodeId: proposed.nodeId,
       });
       mapped.push(updated);
       if (updated.proposedNodeId !== undefined) proposedNodeIds.push(updated.proposedNodeId);
@@ -402,17 +557,24 @@ export class IngestionService {
     document: IDocumentDto,
     job: IIngestionJobDto,
     candidates: IConceptCandidateDto[],
+    handoffRecommendations: Awaited<ReturnType<IConceptExtractorPort['extract']>>['handoffRecommendations'],
     context: IExecutionContext
   ): Promise<{ curriculumId?: IIngestionJobDto['curriculumId'] | undefined }> {
     if (job.intent !== IngestionIntent.DERIVE_CURRICULUM && job.intent !== IngestionIntent.BOTH) {
       return {};
     }
+    const mappedCandidates = candidates.filter((candidate) => this.canSeedDownstream(candidate));
+    if (mappedCandidates.length === 0) return {};
+    const curriculumHandoff = handoffRecommendations.find(
+      (recommendation) => recommendation.target === 'curriculum-planner'
+    );
+    if (curriculumHandoff?.allowed === false) return {};
     const userId = this.requireUserId(context);
     await this.advance(job.id, IngestionJobStage.CURRICULUM_HANDOFF, {});
     const result = await this.curriculumService.requestCurriculumSeed({
       userId,
       document,
-      concepts: candidates,
+      concepts: mappedCandidates,
     });
     await this.eventPublisher.publish({
       eventType: IngestionEventType.CURRICULUM_HANDOFF_REQUESTED,
@@ -422,7 +584,7 @@ export class IngestionService {
         documentId: document.id,
         ingestionJobId: job.id,
         userId,
-        candidateIds: candidates.map((candidate) => candidate.id),
+        candidateIds: mappedCandidates.map((candidate) => candidate.id),
         curriculumId: result.curriculumId,
       },
       metadata: { correlationId: context.correlationId, userId },
@@ -435,15 +597,22 @@ export class IngestionService {
     job: IIngestionJobDto,
     candidates: IConceptCandidateDto[],
     curriculumId: IIngestionJobDto['curriculumId'] | undefined,
+    handoffRecommendations: Awaited<ReturnType<IConceptExtractorPort['extract']>>['handoffRecommendations'],
     context: IExecutionContext
   ): Promise<string[]> {
     if (job.intent !== IngestionIntent.SEED_CARDS && job.intent !== IngestionIntent.BOTH) return [];
+    const mappedCandidates = candidates.filter((candidate) => this.canSeedDownstream(candidate));
+    if (mappedCandidates.length === 0) return [];
+    const contentHandoff = handoffRecommendations.find(
+      (recommendation) => recommendation.target === 'content-creator-agent'
+    );
+    if (contentHandoff?.allowed === false) return [];
     const userId = this.requireUserId(context);
     await this.advance(job.id, IngestionJobStage.CARD_HANDOFF, {});
     const result = await this.contentService.requestCardSeed({
       userId,
       document,
-      candidates,
+      candidates: mappedCandidates,
       curriculumId,
     });
     await this.eventPublisher.publish({
@@ -454,7 +623,7 @@ export class IngestionService {
         documentId: document.id,
         ingestionJobId: job.id,
         userId,
-        candidateIds: candidates.map((candidate) => candidate.id),
+        candidateIds: mappedCandidates.map((candidate) => candidate.id),
         contentGenerationJobIds: result.jobIds,
       },
       metadata: { correlationId: context.correlationId, userId },
@@ -477,8 +646,72 @@ export class IngestionService {
     if (context.userId === null) throw new Error('Authentication required.');
     return context.userId;
   }
+
+  private toAgentIntent(
+    intent: IIngestionJobDto['intent']
+  ): 'parse_only' | 'derive_curriculum' | 'seed_cards' | 'both' {
+    if (intent === IngestionIntent.PARSE_ONLY) return 'parse_only';
+    if (intent === IngestionIntent.DERIVE_CURRICULUM) return 'derive_curriculum';
+    if (intent === IngestionIntent.SEED_CARDS) return 'seed_cards';
+    return 'both';
+  }
+
+  private toCandidateState(state: string | undefined): IConceptCandidateDto['state'] {
+    if (state === 'weak_evidence') return ConceptCandidateState.REJECTED;
+    return ConceptCandidateState.EXTRACTED;
+  }
+
+  private attachEmbeddedChunkIds(
+    windows: IExtractionScanWindow[],
+    embeddedChunks: IDocumentChunkDto[]
+  ): IExtractionScanWindow[] {
+    const chunkIdsByBlock = new Map<string, IDocumentChunkDto['id'][]>();
+    for (const chunk of embeddedChunks) {
+      const sourceBlockId = chunk.metadata['sourceBlockId'];
+      if (typeof sourceBlockId !== 'string' || sourceBlockId.length === 0) continue;
+      const current = chunkIdsByBlock.get(sourceBlockId) ?? [];
+      current.push(chunk.id);
+      chunkIdsByBlock.set(sourceBlockId, current);
+    }
+    return windows.map((window) => ({
+      ...window,
+      chunkIds: [
+        ...new Set(window.blockIds.flatMap((blockId) => chunkIdsByBlock.get(blockId) ?? [])),
+      ],
+    }));
+  }
+
+  private canSeedDownstream(candidate: IConceptCandidateDto): boolean {
+    return candidate.ckgNodeId !== undefined || candidate.proposedNodeId !== undefined;
+  }
 }
 
-function checksum(content: string): string {
+function checksum(content: Buffer): string {
   return createHash('sha256').update(content).digest('hex');
+}
+
+function deriveOcrStatus(
+  document: IDocumentDto,
+  irMetadata: Record<string, unknown>,
+  parseWarnings: unknown[]
+): 'not_requested' | 'not_needed' | 'required' {
+  const parserReported = irMetadata['ocrStatus'];
+  if (
+    parserReported === 'not_requested' ||
+    parserReported === 'not_needed' ||
+    parserReported === 'required'
+  ) {
+    return parserReported;
+  }
+  const hasOcrWarning =
+    Array.isArray(parseWarnings) &&
+    parseWarnings.some(
+      (warning) =>
+        typeof warning === 'object' &&
+        warning !== null &&
+        ((warning as Record<string, unknown>)['code'] === 'OCR_REQUIRED' ||
+          (warning as Record<string, unknown>)['code'] === 'OCR_SUGGESTED')
+    );
+  if (hasOcrWarning) return 'required';
+  return document.mimeKind === 'application/pdf' ? 'not_requested' : 'not_needed';
 }

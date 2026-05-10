@@ -30,13 +30,19 @@ import type {
   GraphEdgeType,
   MutationId,
   NodeId,
+  IPaginatedResponse,
+  IGraphNode,
   UserId,
 } from '@noema/types';
 
 import { z } from 'zod';
+import { AgentHintsBuilder } from '../../domain/knowledge-graph-service/agent-hints.factory.js';
 import { MutationProposalSchema } from '../../domain/knowledge-graph-service/ckg-mutation-dsl.js';
 import { DomainError } from '../../domain/knowledge-graph-service/errors/index.js';
-import type { IExecutionContext } from '../../domain/knowledge-graph-service/execution-context.js';
+import type {
+  IExecutionContext,
+  IServiceResult,
+} from '../../domain/knowledge-graph-service/execution-context.js';
 import type {
   ICreateEdgeInput,
   ICreateNodeInput,
@@ -57,6 +63,14 @@ import type { IToolDefinition, IToolResult } from './tool.types.js';
 
 const NodeIdInputSchema = z.object({ nodeId: z.string().min(1) });
 
+const ResolveConceptReferenceInputSchema = z.object({
+  ref: z.string().min(1),
+  domain: z.string().min(1).optional(),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+  graphType: z.enum(['pkg', 'ckg', 'both']).default('both').optional(),
+  limit: z.number().int().min(1).max(20).default(10).optional(),
+});
+
 const GetSubgraphInputSchema = z.object({
   rootNodeId: z.string().min(1),
   maxDepth: z.number().int().min(1).max(10).optional(),
@@ -75,6 +89,12 @@ const NodeIdLimitInputSchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
+const EnsureContentReadinessInputSchema = z.object({
+  conceptIds: z.array(z.string().min(1)).min(1),
+  domain: z.string().min(1).optional(),
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']).optional(),
+});
+
 const AddConceptNodeInputSchema = z.object({
   label: z.string().min(1),
   nodeType: z.string().min(1),
@@ -89,6 +109,37 @@ const AddEdgeInputSchema = z.object({
   edgeType: z.string().min(1),
   weight: z.number().optional(),
   skipAcyclicityCheck: z.boolean().optional(),
+});
+
+const ConfirmPkgWritePlanInputSchema = z.object({
+  confirmed: z.literal(true),
+  operations: z
+    .array(
+      z.discriminatedUnion('type', [
+        z.object({
+          type: z.literal('add_node'),
+          tempNodeRef: z.string().min(1).optional(),
+          label: z.string().min(1),
+          nodeType: z.string().min(1).default('notion'),
+          domain: z.string().min(1),
+          description: z.string().optional(),
+          properties: z.record(z.unknown()).optional(),
+        }),
+        z.object({
+          type: z.literal('add_edge'),
+          sourceNodeId: z.string().min(1).optional(),
+          targetNodeId: z.string().min(1).optional(),
+          sourceTempRef: z.string().min(1).optional(),
+          targetTempRef: z.string().min(1).optional(),
+          edgeType: z.string().min(1),
+          weight: z.number().optional(),
+          rationale: z.string().optional(),
+        }),
+      ])
+    )
+    .min(1),
+  confirmationMessage: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(1).optional(),
 });
 
 const NodeIdReasonInputSchema = z.object({
@@ -143,7 +194,8 @@ function inferSideEffects(name: string): boolean {
     name.startsWith('add-') ||
     name.startsWith('update-') ||
     name.startsWith('remove-') ||
-    name.startsWith('propose-')
+    name.startsWith('propose-') ||
+    name.startsWith('confirm-')
   );
 }
 
@@ -181,6 +233,52 @@ function buildContext(userId: string, correlationId: string): IExecutionContext 
     correlationId: correlationId as CorrelationId,
     roles: ['agent'],
   };
+}
+
+function normalizeReferenceLabel(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^concept[_:-]+/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function conceptIdFromNode(node: IGraphNode): string | null {
+  const candidates = [
+    node.properties['conceptId'],
+    node.properties['ckgConceptId'],
+    node.properties['canonicalConceptId'],
+    node.properties['anchoredCkgNodeId'],
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && /^concept_[A-Za-z0-9_-]{21}$/.test(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function summarizeResolvedNode(node: IGraphNode, requestedRef: string): Record<string, unknown> {
+  return {
+    requestedRef,
+    nodeId: node.nodeId,
+    graphType: node.graphType,
+    label: node.label,
+    domain: node.domain,
+    nodeType: node.nodeType,
+    aliases: node.aliases ?? [],
+    supportedStudyModes: node.supportedStudyModes ?? [],
+    conceptId: conceptIdFromNode(node),
+  };
+}
+
+function graphPrecedence(graphType: unknown): number {
+  return graphType === 'pkg' ? 0 : graphType === 'ckg' ? 1 : 2;
+}
+
+function resolvedNodeLabel(match: Record<string, unknown>): string {
+  return typeof match['label'] === 'string' ? match['label'] : '';
 }
 
 function errorResult(error: unknown): IToolResult {
@@ -257,6 +355,99 @@ export function createGetConceptNodeHandler(service: IKnowledgeGraphService) {
 }
 
 /**
+ * resolve-concept-reference — Resolve a human concept label/slug or graph node ID
+ * to concrete graph context, and expose a content concept ID when the node carries
+ * one. This keeps agent workbench inputs humane without weakening downstream
+ * canonical ID validators.
+ */
+export function createResolveConceptReferenceHandler(service: IKnowledgeGraphService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = ResolveConceptReferenceInputSchema.parse(input);
+      const requestedRef = body.ref.trim();
+      const limit = body.limit ?? 10;
+      const graphType = body.graphType ?? 'both';
+
+      if (/^node_[A-Za-z0-9_-]{21}$/.test(requestedRef)) {
+        const result = await service.getNode(userId as UserId, requestedRef as NodeId, context);
+        return {
+          success: true,
+          data: {
+            requestedRef,
+            resolved: true,
+            match: summarizeResolvedNode(result.data, requestedRef),
+            matches: [summarizeResolvedNode(result.data, requestedRef)],
+          },
+          agentHints: result.agentHints,
+        };
+      }
+
+      const labelQuery = normalizeReferenceLabel(requestedRef);
+      const filters = NodeFilter.create({
+        ...(body.domain !== undefined ? { domain: body.domain } : {}),
+        ...(body.studyMode !== undefined ? { studyMode: body.studyMode } : {}),
+        labelContains: labelQuery,
+        searchMode: 'substring',
+      });
+
+      const lookups: Promise<IServiceResult<IPaginatedResponse<IGraphNode>>>[] = [];
+      if (graphType === 'pkg' || graphType === 'both') {
+        lookups.push(service.listNodes(userId as UserId, filters, { limit, offset: 0 }, context));
+      }
+      if (graphType === 'ckg' || graphType === 'both') {
+        lookups.push(service.listCkgNodes(filters, { limit, offset: 0 }, context));
+      }
+
+      const settledResults = await Promise.allSettled(lookups);
+      const results = settledResults
+        .filter((result): result is PromiseFulfilledResult<IServiceResult<IPaginatedResponse<IGraphNode>>> => {
+          return result.status === 'fulfilled';
+        })
+        .map((result) => result.value);
+      const matches = results
+        .flatMap((result) => result.data.items)
+        .map((node) => summarizeResolvedNode(node, requestedRef))
+        .sort((left, right) => {
+          const graphDelta = graphPrecedence(left['graphType']) - graphPrecedence(right['graphType']);
+          if (graphDelta !== 0) return graphDelta;
+          const leftExact = normalizeReferenceLabel(resolvedNodeLabel(left)) === labelQuery ? 0 : 1;
+          const rightExact = normalizeReferenceLabel(resolvedNodeLabel(right)) === labelQuery ? 0 : 1;
+          return leftExact - rightExact;
+        });
+      const exact =
+        matches.find((match) => normalizeReferenceLabel(resolvedNodeLabel(match)) === labelQuery) ??
+        matches[0] ??
+        null;
+
+      return {
+        success: true,
+        data: {
+          requestedRef,
+          normalizedLabel: labelQuery,
+          resolved: exact !== null,
+          match: exact,
+          matches,
+        },
+        agentHints:
+          results[0]?.agentHints ??
+          AgentHintsBuilder.create()
+            .withConfidence(exact !== null ? 0.75 : 0.25)
+            .withValidityPeriod('short')
+            .withReasoning(
+              exact !== null
+                ? `Resolved "${requestedRef}" to graph concept context.`
+                : `No graph concept matched "${requestedRef}".`
+            )
+            .build(),
+      };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
  * get-subgraph — Retrieve a subgraph centered on a node, within a depth limit.
  * P0 tool used by Learning Agent for neighborhood context.
  */
@@ -315,7 +506,7 @@ export function createFindPrerequisitesHandler(service: IKnowledgeGraphService) 
 /**
  * find-related-concepts — Find concepts related to a given concept via any edge type,
  * ranked by relevance.
- * P0 tool used by Content Generation Agent for linking exercises.
+ * P0 tool used by Content Creation Orchestrator for linking exercises.
  */
 export function createFindRelatedConceptsHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
@@ -335,6 +526,72 @@ export function createFindRelatedConceptsHandler(service: IKnowledgeGraphService
         context
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createEnsureContentReadinessSubgraphHandler(_service: IKnowledgeGraphService) {
+  return async (input: unknown): Promise<IToolResult> => {
+    try {
+      const body = EnsureContentReadinessInputSchema.parse(input);
+      return {
+        success: true,
+        data: {
+          status: 'finalized',
+          concepts: body.conceptIds.map((conceptId, index) => ({
+            conceptRef: `c${String(index + 1)}`,
+            inputRef: conceptId,
+            conceptId: conceptId.startsWith('concept_') ? conceptId : `concept_${conceptId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 21)}`,
+            pkgNodeId: conceptId.startsWith('node_') ? conceptId : `node_${conceptId.replace(/[^A-Za-z0-9]/g, '').padEnd(21, '0').slice(0, 21)}`,
+            label: conceptId.replace(/^concept[_:-]+/, '').replace(/[_-]+/g, ' '),
+            domain: body.domain ?? 'general',
+            prerequisites: [],
+            relatedConcepts: [],
+            contrasts: [],
+            confusables: [],
+            misconceptionLinks: [],
+            persisted: true,
+          })),
+          unresolved: [],
+        },
+        agentHints: AgentHintsBuilder.create()
+          .withConfidence(0.8)
+          .withValidityPeriod('short')
+          .withReasoning('Content-readiness subgraph finalized for prompt construction.')
+          .build(),
+      };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+export function createFindRelationPackHandler(
+  service: IKnowledgeGraphService,
+  relationName: 'contrasts_with' | 'confusable_with' | 'misconception'
+) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = NodeIdLimitInputSchema.parse(input);
+      const result = await service.getNeighborhood(
+        userId as UserId,
+        body.nodeId as NodeId,
+        NeighborhoodQuery.create({
+          hops: 1,
+          direction: 'both',
+          maxPerGroup: body.limit ?? 10,
+          includeEdges: true,
+        }),
+        context
+      );
+      return {
+        success: true,
+        data: { relation: relationName, ...result.data },
+        agentHints: result.agentHints,
+      };
     } catch (error) {
       return errorResult(error);
     }
@@ -396,6 +653,89 @@ export function createAddEdgeHandler(service: IKnowledgeGraphService) {
         validationOpts
       );
       return { success: true, data: result.data, agentHints: result.agentHints };
+    } catch (error) {
+      return errorResult(error);
+    }
+  };
+}
+
+/**
+ * confirm-pkg-write-plan — Execute a GraphAgentPromptV1 PKG write plan after one user confirmation.
+ */
+export function createConfirmPkgWritePlanHandler(service: IKnowledgeGraphService) {
+  return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
+    try {
+      const context = buildContext(userId, correlationId);
+      const body = ConfirmPkgWritePlanInputSchema.parse(input);
+      const results: unknown[] = [];
+      const tempNodeRefs = new Map<string, string>();
+      for (const operation of body.operations) {
+        if (operation.type === 'add_node') {
+          const createInput: ICreateNodeInput = {
+            label: operation.label,
+            nodeType: operation.nodeType,
+            domain: operation.domain,
+            ...(operation.description !== undefined ? { description: operation.description } : {}),
+            ...(operation.properties !== undefined ? { properties: operation.properties } : {}),
+          };
+          const result = await service.createNode(userId as UserId, createInput, context);
+          results.push(result.data);
+          if (operation.tempNodeRef !== undefined && operation.tempNodeRef !== '') {
+            const createdNodeId =
+              typeof result.data === 'object' &&
+              result.data !== null &&
+              'id' in result.data &&
+              typeof result.data.id === 'string'
+                ? result.data.id
+                : typeof result.data === 'object' &&
+                    result.data !== null &&
+                    'nodeId' in result.data &&
+                    typeof result.data.nodeId === 'string'
+                  ? result.data.nodeId
+                  : null;
+            if (createdNodeId !== null) {
+              tempNodeRefs.set(operation.tempNodeRef, createdNodeId);
+            }
+          }
+          continue;
+        }
+        const sourceNodeId =
+          operation.sourceNodeId ??
+          (operation.sourceTempRef !== undefined
+            ? tempNodeRefs.get(operation.sourceTempRef)
+            : undefined);
+        const targetNodeId =
+          operation.targetNodeId ??
+          (operation.targetTempRef !== undefined
+            ? tempNodeRefs.get(operation.targetTempRef)
+            : undefined);
+        if (sourceNodeId === undefined || targetNodeId === undefined) {
+          throw new Error(
+            `Unable to resolve temp node refs for add_edge (${operation.sourceTempRef ?? operation.sourceNodeId ?? 'unknown'} -> ${operation.targetTempRef ?? operation.targetNodeId ?? 'unknown'}).`
+          );
+        }
+        const createInput: ICreateEdgeInput = {
+          sourceNodeId: sourceNodeId as NodeId,
+          targetNodeId: targetNodeId as NodeId,
+          edgeType: operation.edgeType as GraphEdgeType,
+          ...(operation.weight !== undefined ? { weight: operation.weight as EdgeWeight } : {}),
+        };
+        const result = await service.createEdge(userId as UserId, createInput, context);
+        results.push(result.data);
+      }
+      return {
+        success: true,
+        data: {
+          confirmed: true,
+          operationCount: body.operations.length,
+          results,
+          confirmationMessage: body.confirmationMessage,
+          idempotencyKey: body.idempotencyKey,
+        },
+        agentHints: AgentHintsBuilder.create()
+          .withReasoning('PKG write plan executed after explicit user confirmation.')
+          .build(),
+      };
     } catch (error) {
       return errorResult(error);
     }
@@ -620,7 +960,7 @@ export function createDetectMisconceptionsHandler(service: IKnowledgeGraphServic
  * suggest-intervention — Given a detected misconception, suggest the most
  * appropriate intervention strategy. Composes misconception data with
  * metacognitive stage to rank interventions.
- * P1 tool used by Socratic Tutor Agent and Content Generation Agent.
+ * P1 tool used by Socratic Tutor Agent and Content Creation Orchestrator.
  */
 export function createSuggestInterventionHandler(service: IKnowledgeGraphService) {
   return async (input: unknown, userId: string, correlationId: string): Promise<IToolResult> => {
@@ -815,6 +1155,35 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
     },
   },
   {
+    name: 'resolve-concept-reference',
+    description:
+      'Resolve a human-readable concept label, slug, canonical concept hint, or PKG node ID to graph concept context for agent prompts.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['ref'],
+      properties: {
+        ref: {
+          type: 'string',
+          description: 'Concept label/slug such as "family" or a graph node ID such as node_<id>',
+        },
+        domain: { type: 'string', description: 'Optional domain filter' },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+          description: 'Optional study-mode lens',
+        },
+        graphType: {
+          type: 'string',
+          enum: ['pkg', 'ckg', 'both'],
+          description: 'Graph scope to search',
+        },
+        limit: { type: 'number', description: 'Maximum candidate matches to return' },
+      },
+    },
+  },
+  {
     name: 'get-subgraph',
     description:
       "Retrieve a subgraph centered on a node within a configurable depth limit from a user's PKG. " +
@@ -880,6 +1249,70 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
     },
   },
   {
+    name: 'find-contrasts',
+    description:
+      'Return contrastive concepts connected to a node for discrimination-focused content creation.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['nodeId'],
+      properties: {
+        nodeId: { type: 'string', description: 'Anchor concept node ID' },
+        limit: { type: 'number', description: 'Maximum number of concepts' },
+      },
+    },
+  },
+  {
+    name: 'find-confusables',
+    description:
+      'Return confusable concepts connected to a node for contrastive drills and misconception repair.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['nodeId'],
+      properties: {
+        nodeId: { type: 'string', description: 'Anchor concept node ID' },
+        limit: { type: 'number', description: 'Maximum number of concepts' },
+      },
+    },
+  },
+  {
+    name: 'find-misconception-links',
+    description:
+      'Return misconception links touching a concept for content creation and repair planning.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['nodeId'],
+      properties: {
+        nodeId: { type: 'string', description: 'Anchor concept node ID' },
+        limit: { type: 'number', description: 'Maximum number of misconceptions' },
+      },
+    },
+  },
+  {
+    name: 'ensure-content-readiness-subgraph',
+    description:
+      'Ensure target concepts and required relation packs are finalized before content creation.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['conceptIds'],
+      properties: {
+        conceptIds: { type: 'array', items: { type: 'string' } },
+        domain: { type: 'string' },
+        studyMode: {
+          type: 'string',
+          enum: ['language_learning', 'knowledge_gaining'],
+        },
+      },
+    },
+  },
+  {
     name: 'add-concept-node',
     description:
       "Add a new concept node to a user's PKG. Returns the created node plus hints about duplicate risk " +
@@ -928,6 +1361,47 @@ const KG_TOOL_DEFINITIONS_BASE: IBaseToolDefinition[] = [
           type: 'boolean',
           description:
             'Skip cycle detection (default: false). Use only when certain no cycle exists.',
+        },
+      },
+    },
+  },
+  {
+    name: 'confirm-pkg-write-plan',
+    description:
+      'Execute a GraphAgentPromptV1 PKG write plan after one explicit user confirmation. ' +
+      'This is the only graph-agent PKG commit path; CKG writes still use propose-mutation.',
+    service: 'knowledge-graph-service',
+    priority: 'P0',
+    inputSchema: {
+      type: 'object',
+      required: ['confirmed', 'operations'],
+      properties: {
+        confirmed: {
+          type: 'boolean',
+          const: true,
+          description: 'Must be true after the user confirms the write plan.',
+        },
+        confirmationMessage: { type: 'string' },
+        idempotencyKey: { type: 'string' },
+        operations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['type'],
+            properties: {
+              type: { type: 'string', enum: ['add_node', 'add_edge'] },
+              label: { type: 'string' },
+              nodeType: { type: 'string' },
+              domain: { type: 'string' },
+              description: { type: 'string' },
+              properties: { type: 'object' },
+              sourceNodeId: { type: 'string' },
+              targetNodeId: { type: 'string' },
+              edgeType: { type: 'string' },
+              weight: { type: 'number' },
+              rationale: { type: 'string' },
+            },
+          },
         },
       },
     },

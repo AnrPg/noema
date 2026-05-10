@@ -26,7 +26,7 @@ function toNodeType(nodeType: string): IComparisonGraphNodeDto['type'] {
     case 'example':
       return nodeType;
     default:
-      return 'concept';
+      return 'notion';
   }
 }
 

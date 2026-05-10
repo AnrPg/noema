@@ -45,7 +45,7 @@ describe('ontology import graph contracts', () => {
 
   it('accepts concept records that preserve source-native labels and provenance', () => {
     const parsed = OntologyGraphConceptRecordSchema.parse({
-      recordKind: 'concept',
+      recordKind: 'notion',
       externalId: 'yago:Euler',
       iri: 'https://yago-knowledge.org/resource/Leonhard_Euler',
       nodeKind: 'entity',
@@ -60,7 +60,7 @@ describe('ontology import graph contracts', () => {
       provenance,
     });
 
-    expect(parsed.recordKind).toBe('concept');
+    expect(parsed.recordKind).toBe('notion');
     expect(parsed.preferredLabel).toBe('Leonhard Euler');
     expect(parsed.provenance.sourceId).toBe('yago');
   });
@@ -107,10 +107,10 @@ describe('ontology import graph contracts', () => {
       generatedAt: '2026-03-24T12:00:00.000Z',
       records: [
         {
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: 'esco:skill:python',
           iri: 'http://data.europa.eu/esco/skill/python',
-          nodeKind: 'concept',
+          nodeKind: 'notion',
           preferredLabel: 'Python programming',
           altLabels: ['Python'],
           description: 'Programming with Python.',
@@ -146,7 +146,7 @@ describe('ontology import graph contracts', () => {
     });
 
     expect(parsed.records).toHaveLength(2);
-    expect(parsed.records[0]?.recordKind).toBe('concept');
+    expect(parsed.records[0]?.recordKind).toBe('notion');
     expect(parsed.records[1]?.recordKind).toBe('relation');
   });
 
@@ -164,7 +164,7 @@ describe('ontology import graph contracts', () => {
         {
           externalId: '/c/en/python',
           iri: null,
-          nodeKind: 'concept',
+          nodeKind: 'notion',
           preferredLabel: 'Python',
           aliases: ['Python programming'],
           description: null,
@@ -208,7 +208,7 @@ describe('ontology import graph contracts', () => {
       candidates: [
         {
           candidateId: 'concept:/c/en/python',
-          entityKind: 'concept',
+          entityKind: 'notion',
           status: 'ready',
           title: 'Add concept: Python',
           summary: 'Create a canonical concept node from ConceptNet.',
@@ -224,7 +224,7 @@ describe('ontology import graph contracts', () => {
             operations: [
               {
                 type: 'add_node',
-                nodeType: 'concept',
+                nodeType: 'notion',
                 label: 'Python',
                 description: '',
                 domain: 'commonsense',

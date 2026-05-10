@@ -72,6 +72,7 @@ import type {
   ICursorPaginatedResponse,
   IDeckQuery,
   IGeneratedActivityVariant,
+  IGeneratedActivityVariantQuery,
   IGeneratedVariantPayloadCandidate,
   ITemplatePayloadCandidate,
   IUpdateCardInput,
@@ -93,6 +94,8 @@ interface IRawCardRow {
   state: string;
   difficulty: string;
   content: unknown;
+  primary_concept_id: string | null;
+  related_concept_ids: string[];
   knowledge_node_ids: string[];
   anchored_ckg_node_ids: string[];
   anchored_pkg_node_ids: string[];
@@ -123,6 +126,41 @@ interface IRawCardRow {
 
 export class PrismaContentRepository implements IContentRepository {
   constructor(private readonly prisma: PrismaClient) {}
+
+  private normalizeConceptAnchors(input: {
+    primaryConceptId?: string | null;
+    relatedConceptIds?: string[];
+    anchoredCkgNodeIds?: string[];
+    anchoredPkgNodeIds?: string[];
+    knowledgeNodeIds?: string[];
+  }): {
+    primaryConceptId: ConceptId;
+    relatedConceptIds: ConceptId[];
+    knowledgeNodeIds: NodeId[];
+    anchoredCkgNodeIds: ConceptId[];
+    anchoredPkgNodeIds: NodeId[];
+  } {
+    const primaryConceptId = (input.primaryConceptId ??
+      input.anchoredCkgNodeIds?.[0] ??
+      input.anchoredPkgNodeIds?.[0] ??
+      input.knowledgeNodeIds?.[0]) as ConceptId;
+    const relatedConceptIds = Array.from(
+      new Set([
+        ...(input.relatedConceptIds ?? []),
+        ...(input.anchoredCkgNodeIds ?? []),
+        ...(input.anchoredPkgNodeIds ?? []),
+        ...(input.knowledgeNodeIds ?? []),
+      ])
+    ).filter((conceptId) => conceptId !== primaryConceptId) as ConceptId[];
+    const linkedNodeIds = [primaryConceptId, ...relatedConceptIds] as unknown as NodeId[];
+    return {
+      primaryConceptId,
+      relatedConceptIds,
+      knowledgeNodeIds: linkedNodeIds,
+      anchoredCkgNodeIds: [primaryConceptId, ...relatedConceptIds],
+      anchoredPkgNodeIds: linkedNodeIds,
+    };
+  }
 
   private toJsonObject(metadata: Record<string, JsonValue> | undefined): Prisma.JsonObject {
     return { ...(metadata ?? {}) } as unknown as Prisma.JsonObject;
@@ -278,7 +316,7 @@ export class PrismaContentRepository implements IContentRepository {
           state: 'ACTIVE',
           deletedAt: null,
           difficulty,
-          knowledgeNodeIds: { has: input.conceptId },
+          anchoredCkgNodeIds: { has: input.conceptId },
           compatibleTransformations: { has: dbTransformation },
           supportedStudyModes: { has: dbStudyMode },
           OR: [
@@ -295,7 +333,7 @@ export class PrismaContentRepository implements IContentRepository {
               userId,
               deletedAt: null,
               difficulty,
-              knowledgeNodeIds: { has: input.conceptId },
+              anchoredCkgNodeIds: { has: input.conceptId },
             },
             orderBy: [{ usageCount: 'desc' }, { updatedAt: 'desc' }],
             take: input.limit * 2,
@@ -360,6 +398,28 @@ export class PrismaContentRepository implements IContentRepository {
     });
 
     return this.toGeneratedActivityVariant(variant);
+  }
+
+  async listGeneratedActivityVariants(
+    query: IGeneratedActivityVariantQuery,
+    _userId: UserId
+  ): Promise<IGeneratedActivityVariant[]> {
+    const variants = await this.prisma.generatedActivityVariant.findMany({
+      where: {
+        ...(query.conceptId ? { conceptId: query.conceptId } : {}),
+        ...(query.studyMode ? { studyMode: this.toDbStudyMode(query.studyMode) } : {}),
+        ...(query.transformationType
+          ? { transformationType: this.toDbTransformation(query.transformationType) }
+          : {}),
+        ...(typeof query.difficultyBucket === 'number'
+          ? { difficultyBucket: query.difficultyBucket }
+          : {}),
+        ttlAt: { gt: new Date() },
+      },
+      orderBy: [{ hitCount: 'desc' }, { createdAt: 'desc' }],
+      take: query.limit ?? 20,
+    });
+    return variants.map((variant) => this.toGeneratedActivityVariant(variant));
   }
 
   async getLineage(id: CardId, userId: UserId): Promise<ICardLineage> {
@@ -546,6 +606,7 @@ export class PrismaContentRepository implements IContentRepository {
   async create(
     input: ICreateCardInput & { id: CardId; userId: UserId; contentHash?: string }
   ): Promise<ICard> {
+    const anchors = this.normalizeConceptAnchors(input);
     const card = await this.prisma.card.create({
       data: {
         id: input.id,
@@ -554,9 +615,11 @@ export class PrismaContentRepository implements IContentRepository {
         state: 'DRAFT',
         difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
         content: input.content as unknown as Prisma.JsonObject,
-        knowledgeNodeIds: input.knowledgeNodeIds as string[],
-        anchoredCkgNodeIds: (input.anchoredCkgNodeIds ?? []) as string[],
-        anchoredPkgNodeIds: (input.anchoredPkgNodeIds ?? input.knowledgeNodeIds ?? []) as string[],
+        primaryConceptId: anchors.primaryConceptId,
+        relatedConceptIds: anchors.relatedConceptIds as string[],
+        knowledgeNodeIds: anchors.knowledgeNodeIds as string[],
+        anchoredCkgNodeIds: anchors.anchoredCkgNodeIds as string[],
+        anchoredPkgNodeIds: anchors.anchoredPkgNodeIds as string[],
         compatibleTransformations: (input.compatibleTransformations ?? []).map((t) =>
           this.toDbTransformation(t)
         ),
@@ -606,6 +669,7 @@ export class PrismaContentRepository implements IContentRepository {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const input = inputs[i]!;
         try {
+          const anchors = this.normalizeConceptAnchors(input);
           const card = await tx.card.create({
             data: {
               id: input.id,
@@ -614,9 +678,11 @@ export class PrismaContentRepository implements IContentRepository {
               state: 'DRAFT',
               difficulty: this.toDbDifficulty(input.difficulty ?? 'intermediate'),
               content: input.content as unknown as Prisma.JsonObject,
-              knowledgeNodeIds: input.knowledgeNodeIds as string[],
-              anchoredCkgNodeIds: (input.anchoredCkgNodeIds ?? []) as string[],
-              anchoredPkgNodeIds: (input.anchoredPkgNodeIds ?? input.knowledgeNodeIds ?? []) as string[],
+              primaryConceptId: anchors.primaryConceptId,
+              relatedConceptIds: anchors.relatedConceptIds as string[],
+              knowledgeNodeIds: anchors.knowledgeNodeIds as string[],
+              anchoredCkgNodeIds: anchors.anchoredCkgNodeIds as string[],
+              anchoredPkgNodeIds: anchors.anchoredPkgNodeIds as string[],
               compatibleTransformations: (input.compatibleTransformations ?? []).map((t) =>
                 this.toDbTransformation(t)
               ),
@@ -694,6 +760,7 @@ export class PrismaContentRepository implements IContentRepository {
     const data: Prisma.CardUpdateInput = {
       version: { increment: 1 },
     };
+    const anchors = this.normalizeConceptAnchors(input);
 
     if (userId !== undefined) {
       data.updatedBy = userId;
@@ -709,13 +776,19 @@ export class PrismaContentRepository implements IContentRepository {
       data.difficulty = this.toDbDifficulty(input.difficulty);
     }
     if (input.knowledgeNodeIds !== undefined) {
-      data.knowledgeNodeIds = input.knowledgeNodeIds as string[];
+      data.knowledgeNodeIds = anchors.knowledgeNodeIds as string[];
     }
     if (input.anchoredCkgNodeIds !== undefined) {
-      data.anchoredCkgNodeIds = input.anchoredCkgNodeIds as string[];
+      data.anchoredCkgNodeIds = anchors.anchoredCkgNodeIds as string[];
     }
     if (input.anchoredPkgNodeIds !== undefined) {
-      data.anchoredPkgNodeIds = input.anchoredPkgNodeIds as string[];
+      data.anchoredPkgNodeIds = anchors.anchoredPkgNodeIds as string[];
+    }
+    if (input.primaryConceptId !== undefined) {
+      data.primaryConceptId = anchors.primaryConceptId;
+    }
+    if (input.relatedConceptIds !== undefined) {
+      data.relatedConceptIds = anchors.relatedConceptIds as string[];
     }
     if (input.compatibleTransformations !== undefined) {
       data.compatibleTransformations = input.compatibleTransformations.map((t) =>
@@ -1331,9 +1404,13 @@ export class PrismaContentRepository implements IContentRepository {
       state: row.state.toLowerCase() as CardState,
       difficulty: row.difficulty.toLowerCase() as DifficultyLevel,
       preview: generatePreview(front),
-      knowledgeNodeIds: row.knowledge_node_ids as NodeId[],
-      anchoredCkgNodeIds: row.anchored_ckg_node_ids as ConceptId[],
-      anchoredPkgNodeIds: row.anchored_pkg_node_ids as NodeId[],
+      ...this.normalizeConceptAnchors({
+        primaryConceptId: row.primary_concept_id,
+        relatedConceptIds: row.related_concept_ids,
+        anchoredCkgNodeIds: row.anchored_ckg_node_ids,
+        anchoredPkgNodeIds: row.anchored_pkg_node_ids,
+        knowledgeNodeIds: row.knowledge_node_ids,
+      }),
       compatibleTransformations: row.compatible_transformations.map((t) =>
         this.fromDbTransformation(t)
       ),
@@ -1477,6 +1554,12 @@ export class PrismaContentRepository implements IContentRepository {
         hasSome: query.supportedStudyModes.map((mode) => this.toDbStudyMode(mode)),
       };
     }
+    if (query.primaryConceptId !== undefined) {
+      where.primaryConceptId = query.primaryConceptId as string;
+    }
+    if (query.relatedConceptIds && query.relatedConceptIds.length > 0) {
+      where.relatedConceptIds = { hasSome: query.relatedConceptIds as string[] };
+    }
     if (query.knowledgeNodeIds && query.knowledgeNodeIds.length > 0) {
       const mode = query.knowledgeNodeIdMode ?? 'any';
       const ids = query.knowledgeNodeIds as string[];
@@ -1590,9 +1673,13 @@ export class PrismaContentRepository implements IContentRepository {
       state: card.state.toLowerCase() as CardState,
       difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
       content,
-      knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
-      anchoredCkgNodeIds: card.anchoredCkgNodeIds as ConceptId[],
-      anchoredPkgNodeIds: card.anchoredPkgNodeIds as NodeId[],
+      ...this.normalizeConceptAnchors({
+        primaryConceptId: card.primaryConceptId,
+        relatedConceptIds: card.relatedConceptIds as string[],
+        anchoredCkgNodeIds: card.anchoredCkgNodeIds as string[],
+        anchoredPkgNodeIds: card.anchoredPkgNodeIds as string[],
+        knowledgeNodeIds: card.knowledgeNodeIds as string[],
+      }),
       compatibleTransformations: card.compatibleTransformations.map((t) =>
         this.fromDbTransformation(t)
       ),
@@ -1636,9 +1723,13 @@ export class PrismaContentRepository implements IContentRepository {
       state: card.state.toLowerCase() as CardState,
       difficulty: card.difficulty.toLowerCase() as DifficultyLevel,
       preview: generatePreview(front),
-      knowledgeNodeIds: card.knowledgeNodeIds as NodeId[],
-      anchoredCkgNodeIds: card.anchoredCkgNodeIds as ConceptId[],
-      anchoredPkgNodeIds: card.anchoredPkgNodeIds as NodeId[],
+      ...this.normalizeConceptAnchors({
+        primaryConceptId: card.primaryConceptId,
+        relatedConceptIds: card.relatedConceptIds as string[],
+        anchoredCkgNodeIds: card.anchoredCkgNodeIds as string[],
+        anchoredPkgNodeIds: card.anchoredPkgNodeIds as string[],
+        knowledgeNodeIds: card.knowledgeNodeIds as string[],
+      }),
       compatibleTransformations: card.compatibleTransformations.map((t) =>
         this.fromDbTransformation(t)
       ),

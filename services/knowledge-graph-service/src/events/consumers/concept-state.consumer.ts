@@ -4,6 +4,7 @@ import {
   type IMetacognitionEvaluationRecordedPayload,
   type ISchedulerConceptStateUpdatedPayload,
 } from '@noema/events';
+import { MetacognitionEvaluationRecordedPayloadSchema } from '@noema/learning-kernel';
 import type { IEventConsumerConfig, IStreamEventEnvelope } from '@noema/events/consumer';
 import { BaseEventConsumer } from '@noema/events/consumer';
 import type { Redis } from 'ioredis';
@@ -47,14 +48,15 @@ export class ConceptStateConsumer extends BaseEventConsumer {
         : undefined;
 
     if (envelope.eventType === MetacognitionEventType.METACOGNITION_EVALUATION_RECORDED) {
-      const payload = envelope.payload as unknown as IMetacognitionEvaluationRecordedPayload;
-      const studyMode = payload.studyMode ?? 'knowledge_gaining';
+      const payload = MetacognitionEvaluationRecordedPayloadSchema.parse(
+        envelope.payload
+      ) as IMetacognitionEvaluationRecordedPayload;
       await Promise.all(
         payload.conceptRefs.map((conceptId) =>
           this.conceptStateService.recompute({
             userId: payload.userId,
             conceptId,
-            studyMode,
+            studyMode: payload.studyMode,
             evaluationId: payload.evaluationId,
             reasoningQuality: payload.reasoningQuality,
             stepId: payload.stepId,

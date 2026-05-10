@@ -5,12 +5,14 @@
  * Follows the SERVICE_CLASS_SPECIFICATION pattern.
  *
  * Design: ADR-0010 Decision 5 — pure card archive.
- * Cards link to PKG nodes via knowledgeNodeIds[]. No Category entity, no Deck entity.
+ * Cards link to a required primary concept anchor. Legacy node-link arrays remain
+ * populated for compatibility while downstream consumers migrate.
  * Dynamic queries (DeckQuery) replace static deck CRUD.
  */
 
 import type { IAgentHints } from '@noema/contracts';
 import { ContentEventType } from '@noema/events/content';
+import { createHash } from 'node:crypto';
 import type {
   CardId,
   CardState,
@@ -20,6 +22,7 @@ import type {
   GeneratedVariantId,
   IPaginatedResponse,
   JsonValue,
+  NodeId,
   StudyMode,
   UserId,
 } from '@noema/types';
@@ -60,6 +63,8 @@ import type {
   ICursorPaginatedResponse,
   IDeckQuery,
   IGeneratedActivityVariant,
+  IGeneratedActivityVariantQuery,
+  IImportGeneratedContentBatchInput,
   IPromoteCardFromReviewInput,
   ISessionSeed,
   ISessionSeedInput,
@@ -83,6 +88,7 @@ import {
   CreateGeneratedActivityVariantInputSchema,
   CreateCardInputSchema,
   DeckQuerySchema,
+  ImportGeneratedContentBatchInputSchema,
   PromoteCardFromReviewInputSchema,
   SessionSeedInputSchema,
   TransformCardInputSchema,
@@ -125,6 +131,8 @@ export interface IExecutionContext {
   userId: UserId | null;
   /** Request correlation ID */
   correlationId: CorrelationId;
+  /** Optional idempotency key for replay-safe writes */
+  idempotencyKey?: string;
   /** User roles for authorization */
   roles: string[];
   /** Client IP for audit */
@@ -149,6 +157,11 @@ export interface IServiceResult<T> {
 
 const MAX_BATCH_SIZE = 100;
 const FACTUALITY_REVIEW_THRESHOLD = 0.7;
+
+function externalGenerationJobId(idempotencyKey: string): ContentGenerationJobId {
+  const suffix = createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 21);
+  return `${ID_PREFIXES.ContentGenerationJobId}${suffix}` as ContentGenerationJobId;
+}
 
 /** Valid state transitions: from → [allowed targets] */
 const STATE_TRANSITIONS: Record<string, string[]> = {
@@ -256,7 +269,7 @@ export class ContentService {
 
   /**
    * Create multiple cards in a batch.
-   * Used by Content Generation Agent for bulk imports.
+   * Used by Content Creation Orchestrator for bulk imports.
    *
    * Each card gets tagged with a batchId in metadata._batchId for:
    * - Batch correlation tracking (easier to reason about state)
@@ -297,8 +310,34 @@ export class ContentService {
       )
     );
 
-    // Generate batch correlation ID
-    const batchId = `batch_${nanoid(21)}`;
+    // Reuse the caller idempotency key when present so retries are replay-safe.
+    const batchId =
+      context.idempotencyKey && context.idempotencyKey.trim().length > 0
+        ? context.idempotencyKey.trim()
+        : `batch_${nanoid(21)}`;
+
+    if (context.idempotencyKey && context.idempotencyKey.trim().length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const existingBatchCards = await this.repository.findByBatchId(batchId, context.userId!);
+      if (existingBatchCards.length > 0) {
+        const replayResult: IBatchCreateResult = {
+          batchId,
+          created: existingBatchCards,
+          failed: [],
+          total: existingBatchCards.length,
+          successCount: existingBatchCards.length,
+          failureCount: 0,
+        };
+        this.logger.info(
+          { batchId, count: existingBatchCards.length },
+          'Replaying idempotent batch create response'
+        );
+        return {
+          data: replayResult,
+          agentHints: this.createBatchAgentHints(replayResult),
+        };
+      }
+    }
 
     // Compute content hashes for deduplication
     const cardHashes = sanitizedCards.map((card) =>
@@ -389,7 +428,7 @@ export class ContentService {
           originMode: card.originMode,
           reviewState: card.reviewState,
           batchOperation: true,
-          batchId,
+          batchId: result.batchId,
         },
         metadata: {
           correlationId: context.correlationId,
@@ -402,7 +441,12 @@ export class ContentService {
     }
 
     this.logger.info(
-      { total: result.total, success: result.successCount, failed: result.failureCount, batchId },
+      {
+        total: result.total,
+        success: result.successCount,
+        failed: result.failureCount,
+        batchId: result.batchId,
+      },
       'Batch creation completed'
     );
 
@@ -645,6 +689,35 @@ export class ContentService {
           knowledgeNodeIds: [],
         } as unknown as ICard),
         reasoning: 'Generated activity variant stored after Guardian validation.',
+      },
+    };
+  }
+
+  /**
+   * List existing generated activity variants for content-creation prompt coverage.
+   */
+  async listGeneratedActivityVariants(
+    input: IGeneratedActivityVariantQuery,
+    context: IExecutionContext
+  ): Promise<IServiceResult<IGeneratedActivityVariant[]>> {
+    const userId = this.requireUserId(context);
+    const limit =
+      typeof input.limit === 'number' && input.limit > 0
+        ? Math.min(Math.trunc(input.limit), 100)
+        : 20;
+    const variants = await this.repository.listGeneratedActivityVariants(
+      { ...input, limit },
+      userId
+    );
+    return {
+      data: variants,
+      agentHints: {
+        ...this.createAgentHints('generated_variant_listed', {
+          id: variants[0]?.id ?? 'generated_variant_query',
+          cardType: 'generated_activity_variant',
+          knowledgeNodeIds: [],
+        } as unknown as ICard),
+        reasoning: `Found ${String(variants.length)} generated activity variant(s).`,
       },
     };
   }
@@ -2053,7 +2126,7 @@ export class ContentService {
     id: CardId,
     input: ITransformCardInput,
     context: IExecutionContext
-  ): Promise<IServiceResult<ICard>> {
+  ): Promise<IServiceResult<ICard[]>> {
     const userId = this.requireUserId(context);
     const parsed = TransformCardInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -2065,6 +2138,14 @@ export class ContentService {
     const parent = await this.repository.findByIdForUser(id, userId);
     if (!parent) throw new CardNotFoundError(id);
     const shouldReanchor = parsed.data.transformationKind === CardTransformKind.REANCHOR;
+    const primaryConceptId = shouldReanchor
+      ? ((parsed.data.primaryConceptId ?? parsed.data.anchoredCkgNodeIds?.[0] ?? parsed.data.anchoredPkgNodeIds?.[0]) as ICreateCardInput['primaryConceptId'])
+      : parent.primaryConceptId;
+    const relatedConceptIds = shouldReanchor
+      ? (parsed.data.relatedConceptIds ??
+          parsed.data.anchoredCkgNodeIds?.filter((conceptId) => conceptId !== primaryConceptId) ??
+          []) as NonNullable<ICreateCardInput['relatedConceptIds']>
+      : parent.relatedConceptIds;
     const anchoredCkgNodeIds = shouldReanchor
       ? ((parsed.data.anchoredCkgNodeIds ?? []) as NonNullable<
           ICreateCardInput['anchoredCkgNodeIds']
@@ -2075,37 +2156,112 @@ export class ContentService {
           ICreateCardInput['anchoredPkgNodeIds']
         >)
       : parent.anchoredPkgNodeIds;
-    const variant = await this.create(
+    const agentResult = await this.contentAgentClient.transformCard(
       {
-        cardType: (parsed.data.targetCardType ?? parent.cardType) as ICreateCardInput['cardType'],
-        content: { ...parent.content, front: parsed.data.prompt ?? parent.content.front },
-        difficulty: parent.difficulty,
-        tags: parent.tags,
-        supportedStudyModes: parent.supportedStudyModes,
-        compatibleTransformations: parent.compatibleTransformations,
-        defaultEligibilityGroups: parent.defaultEligibilityGroups,
-        originMode: CardOriginMode.AGENT_AUTONOMOUS,
-        factualityScore: 1,
-        anchoredCkgNodeIds,
-        anchoredPkgNodeIds,
         parentCardId: parent.id,
         transformationKind: parsed.data.transformationKind,
-        metadata: { ...parent.metadata, transformedFrom: parent.id },
+        count: parsed.data.count,
+        card: {
+          cardType: parent.cardType,
+          content: parent.content,
+          conceptIds: [parent.primaryConceptId, ...parent.relatedConceptIds],
+          relatedConceptIds: parent.relatedConceptIds,
+          anchoredCkgNodeIds: parent.anchoredCkgNodeIds,
+          anchoredPkgNodeIds: parent.anchoredPkgNodeIds,
+          sourceDocumentIds: parent.sourceDocumentIds,
+          sources: parent.sources,
+          factualityScore: parent.factualityScore ?? 1,
+          difficulty: parent.difficulty,
+          tags: parent.tags,
+          metadata: parent.metadata,
+        },
+        ...(parsed.data.targetCardType !== undefined
+          ? {
+              targetCardType:
+                parsed.data.targetCardType as NonNullable<
+                  Parameters<IContentAgentPort['transformCard']>[0]['targetCardType']
+                >,
+            }
+          : {}),
+        ...(parsed.data.targetCardTypes !== undefined
+          ? {
+              targetCardTypes: parsed.data.targetCardTypes as NonNullable<
+                Parameters<IContentAgentPort['transformCard']>[0]['targetCardTypes']
+              >,
+            }
+          : {}),
+        ...(parsed.data.prompt !== undefined ? { prompt: parsed.data.prompt } : {}),
       },
-      context
+      {
+        userId,
+        correlationId: context.correlationId,
+      }
     );
-    await this.eventPublisher.publish({
-      eventType: ContentEventType.CARD_TRANSFORMATION_CREATED,
-      aggregateType: 'Card',
-      aggregateId: variant.data.id,
-      payload: {
+
+    if (agentResult.drafts.length === 0) {
+      throw new BusinessRuleError('The content transform agent returned no usable transformed cards.', {
         parentCardId: parent.id,
-        variantCardId: variant.data.id,
-        transformationKind: parsed.data.transformationKind,
-      },
-      metadata: { correlationId: context.correlationId, userId: context.userId },
-    });
-    return variant;
+        rejectedDrafts: agentResult.rejectedDrafts,
+      });
+    }
+
+    const createdVariants: ICard[] = [];
+    for (const draft of agentResult.drafts) {
+      const draftConceptIds = draft.conceptIds.length > 0 ? draft.conceptIds : [parent.primaryConceptId];
+      const created = await this.create(
+        {
+          cardType: draft.cardType as ICreateCardInput['cardType'],
+          content: draft.content as ICreateCardInput['content'],
+          difficulty: draft.difficulty ?? parent.difficulty,
+          tags: draft.tags.length > 0 ? draft.tags : parent.tags,
+          supportedStudyModes: parent.supportedStudyModes,
+          defaultEligibilityGroups: parent.defaultEligibilityGroups,
+          originMode: CardOriginMode.AGENT_AUTONOMOUS,
+          factualityScore: draft.factualityScore,
+          primaryConceptId: (draft.primaryConceptId ?? draftConceptIds[0] ?? primaryConceptId) as ICreateCardInput['primaryConceptId'],
+          relatedConceptIds: (draft.relatedConceptIds ?? draftConceptIds.filter((conceptId) => conceptId !== (draft.primaryConceptId ?? draftConceptIds[0])) ?? relatedConceptIds) as NonNullable<ICreateCardInput['relatedConceptIds']>,
+          anchoredCkgNodeIds: (draft.anchoredCkgNodeIds ?? anchoredCkgNodeIds) as NonNullable<ICreateCardInput['anchoredCkgNodeIds']>,
+          anchoredPkgNodeIds: (draft.anchoredPkgNodeIds ?? anchoredPkgNodeIds) as NonNullable<ICreateCardInput['anchoredPkgNodeIds']>,
+          sourceDocumentIds: parent.sourceDocumentIds,
+          sources: parent.sources,
+          parentCardId: parent.id,
+          transformationKind: parsed.data.transformationKind,
+          transformationAgentRunId: agentResult.agentRunId,
+          metadata: {
+            ...parent.metadata,
+            transformedFrom: parent.id,
+            generationRationale: draft.rationale ?? null,
+          },
+          ...(parent.compatibleTransformations.length > 0
+            ? { compatibleTransformations: parent.compatibleTransformations }
+            : {}),
+        },
+        context
+      );
+      createdVariants.push(created.data);
+      await this.eventPublisher.publish({
+        eventType: ContentEventType.CARD_TRANSFORMATION_CREATED,
+        aggregateType: 'Card',
+        aggregateId: created.data.id,
+        payload: {
+          parentCardId: parent.id,
+          variantCardId: created.data.id,
+          transformationKind: parsed.data.transformationKind,
+        },
+        metadata: { correlationId: context.correlationId, userId: context.userId },
+      });
+    }
+    return {
+      data: createdVariants,
+      agentHints: this.createBatchAgentHints({
+        batchId: `transform_${parent.id}`,
+        created: createdVariants,
+        failed: [],
+        total: createdVariants.length,
+        successCount: createdVariants.length,
+        failureCount: 0,
+      }),
+    };
   }
 
   async createGenerationJob(
@@ -2162,6 +2318,159 @@ export class ContentService {
     return { data: job, agentHints: this.createAgentHints('created', { id } as unknown as ICard) };
   }
 
+  async importGeneratedContentBatch(
+    input: IImportGeneratedContentBatchInput,
+    context: IExecutionContext
+  ): Promise<
+    IServiceResult<{
+      job: IContentGenerationJob;
+      batch: IBatchCreateResult;
+      activityVariants: IGeneratedActivityVariant[];
+    }>
+  > {
+    const userId = this.requireUserId(context);
+    const parsed = ImportGeneratedContentBatchInputSchema.safeParse(input);
+    if (!parsed.success) {
+      const errors = parsed.error.flatten();
+      throw new ValidationError(
+        'Invalid generated content import input',
+        errors.fieldErrors as Record<string, string[]>
+      );
+    }
+    if (!context.idempotencyKey || context.idempotencyKey.trim().length === 0) {
+      throw new BusinessRuleError('Generated content import requires an idempotency key');
+    }
+
+    const idempotencyKey = context.idempotencyKey.trim();
+    const generationJobId = externalGenerationJobId(idempotencyKey);
+    const payload = parsed.data as unknown as IImportGeneratedContentBatchInput;
+    const parsedJob = payload.job;
+
+    let job = await this.repository.findGenerationJobById(generationJobId, userId);
+    if (job === null) {
+      job = await this.repository.createGenerationJob({
+        ...parsedJob,
+        conceptIds: parsedJob.conceptIds as ICreateContentGenerationJobInput['conceptIds'],
+        curriculumContext:
+          parsedJob.curriculumContext as NonNullable<
+            ICreateContentGenerationJobInput['curriculumContext']
+          >,
+        studentContext:
+          parsedJob.studentContext as NonNullable<
+            ICreateContentGenerationJobInput['studentContext']
+          >,
+        desiredCardTypes:
+          parsedJob.desiredCardTypes as NonNullable<
+            ICreateContentGenerationJobInput['desiredCardTypes']
+          >,
+        varietyMandate:
+          parsedJob.varietyMandate as NonNullable<
+            ICreateContentGenerationJobInput['varietyMandate']
+          >,
+        budget:
+          parsedJob.budget as NonNullable<ICreateContentGenerationJobInput['budget']>,
+        id: generationJobId,
+        userId,
+      });
+      await this.eventPublisher.publish({
+        eventType: ContentEventType.CONTENT_GENERATION_REQUESTED,
+        aggregateType: 'ContentGenerationJob',
+        aggregateId: generationJobId,
+        payload: {
+          jobId: generationJobId,
+          userId,
+          mode: job.mode,
+          status: ContentGenerationJobStatus.REQUESTED,
+          conceptIds: job.conceptIds,
+          documentIds: job.documentIds,
+          importedFromAgentBatch: true,
+        },
+        metadata: { correlationId: context.correlationId, userId: context.userId },
+      });
+    }
+
+    let createdVariants: IGeneratedActivityVariant[] = [];
+    if (job.status !== ContentGenerationJobStatus.COMPLETED) {
+      await this.repository.updateGenerationJob(generationJobId, {
+        status: ContentGenerationJobStatus.RUNNING,
+      });
+
+      const batchResult = await this.createBatch(
+        payload.cards.map((card) => ({
+          ...card,
+          generationJobId,
+          ...(payload.agentRunId ?? card.originAgentRunId
+            ? { originAgentRunId: payload.agentRunId ?? card.originAgentRunId }
+            : {}),
+        })),
+        context
+      );
+
+      for (const variant of payload.activityVariants ?? []) {
+        const created = await this.createGeneratedActivityVariant(variant, context);
+        createdVariants.push(created.data);
+      }
+
+      job = await this.repository.updateGenerationJob(generationJobId, {
+        status: ContentGenerationJobStatus.COMPLETED,
+        ...(payload.agentRunId ? { agentRunId: payload.agentRunId } : {}),
+        createdCardIds: batchResult.data.created.map((card) => card.id),
+        ...(payload.rejectedDrafts ? { rejectedDrafts: payload.rejectedDrafts } : {}),
+        resultPayload: {
+          ...payload.resultPayload,
+          batchId: batchResult.data.batchId,
+          createdCount: batchResult.data.created.length,
+          failedCount: batchResult.data.failed.length,
+          activityVariantCount: createdVariants.length,
+        },
+      });
+
+      await this.eventPublisher.publish({
+        eventType: ContentEventType.CONTENT_GENERATION_COMPLETED,
+        aggregateType: 'ContentGenerationJob',
+        aggregateId: generationJobId,
+        payload: {
+          jobId: generationJobId,
+          userId,
+          status: job.status,
+          createdCardIds: job.createdCardIds,
+          rejectedDrafts: job.rejectedDrafts,
+          importedFromAgentBatch: true,
+        },
+        metadata: { correlationId: context.correlationId, userId },
+      });
+
+      return {
+        data: { job, batch: batchResult.data, activityVariants: createdVariants },
+        agentHints: this.createBatchAgentHints(batchResult.data),
+      };
+    }
+
+    createdVariants = [];
+    return {
+      data: {
+        job,
+        batch: {
+          batchId: idempotencyKey,
+          created: await this.repository.findByBatchId(idempotencyKey, userId),
+          failed: [],
+          total: job.createdCardIds.length,
+          successCount: job.createdCardIds.length,
+          failureCount: 0,
+        },
+        activityVariants: createdVariants,
+      },
+      agentHints: this.createBatchAgentHints({
+        batchId: idempotencyKey,
+        created: await this.repository.findByBatchId(idempotencyKey, userId),
+        failed: [],
+        total: job.createdCardIds.length,
+        successCount: job.createdCardIds.length,
+        failureCount: 0,
+      }),
+    };
+  }
+
   async runGenerationJob(
     id: string,
     context: IExecutionContext
@@ -2190,7 +2499,16 @@ export class ContentService {
             tags: draft.tags,
             difficulty: draft.difficulty ?? 'intermediate',
             originMode: CardOriginMode.AGENT_AUTONOMOUS,
-            anchoredCkgNodeIds: draft.conceptIds,
+            primaryConceptId: (draft.primaryConceptId ??
+              draft.conceptIds[0] ??
+              draft.anchoredCkgNodeIds?.[0] ??
+              draft.anchoredPkgNodeIds?.[0]) as ICreateCardInput['primaryConceptId'],
+            relatedConceptIds:
+              draft.relatedConceptIds ??
+              draft.conceptIds.slice(1) ??
+              [],
+            anchoredCkgNodeIds: draft.anchoredCkgNodeIds ?? [],
+            anchoredPkgNodeIds: draft.anchoredPkgNodeIds ?? [],
             factualityScore: draft.factualityScore,
             generationJobId: job.id,
             originAgentRunId: generated.agentRunId,
@@ -2319,12 +2637,27 @@ export class ContentService {
     input: ICreateCardInput,
     context: IExecutionContext
   ): ICreateCardInput {
-    const anchoredPkgNodeIds = input.anchoredPkgNodeIds ?? input.knowledgeNodeIds ?? [];
+    const primaryConceptId = input.primaryConceptId;
+    const relatedConceptCandidates: string[] = [
+      ...(input.relatedConceptIds ?? []),
+      ...(input.anchoredCkgNodeIds ?? []),
+      ...((input.anchoredPkgNodeIds ?? []) as unknown as string[]),
+      ...((input.knowledgeNodeIds ?? []) as unknown as string[]),
+    ];
+    const relatedConceptIds = Array.from(new Set(relatedConceptCandidates)).filter(
+      (conceptId) => conceptId !== primaryConceptId
+    ) as ConceptId[];
+    const linkedNodeIds = Array.from(
+      new Set([primaryConceptId, ...relatedConceptIds] as unknown as NodeId[])
+    );
     const prepared: ICreateCardInput = {
       ...input,
       originMode: input.originMode ?? CardOriginMode.AUTHORED,
-      anchoredPkgNodeIds,
-      anchoredCkgNodeIds: input.anchoredCkgNodeIds ?? [],
+      primaryConceptId,
+      relatedConceptIds,
+      knowledgeNodeIds: linkedNodeIds,
+      anchoredPkgNodeIds: linkedNodeIds,
+      anchoredCkgNodeIds: [primaryConceptId, ...relatedConceptIds],
       sourceDocumentIds: input.sourceDocumentIds ?? [],
       sources: input.sources ?? [],
     };
@@ -2343,6 +2676,7 @@ export class ContentService {
     const hasMetadata =
       Boolean(input.cardType) &&
       Boolean(input.difficulty) &&
+      Boolean(input.primaryConceptId) &&
       (input.tags?.length ?? 0) > 0 &&
       ((input.anchoredCkgNodeIds?.length ?? 0) > 0 || (input.anchoredPkgNodeIds?.length ?? 0) > 0);
 
@@ -2407,7 +2741,14 @@ export class ContentService {
     context: IExecutionContext
   ): Promise<void> {
     const conceptIds = Array.from(
-      new Set(cards.flatMap((card) => [...card.anchoredPkgNodeIds, ...card.knowledgeNodeIds]))
+      new Set(
+        cards.flatMap((card) => [
+          card.primaryConceptId,
+          ...card.relatedConceptIds,
+          ...card.anchoredPkgNodeIds,
+          ...card.knowledgeNodeIds,
+        ])
+      )
     );
     if (conceptIds.length === 0) {
       return;

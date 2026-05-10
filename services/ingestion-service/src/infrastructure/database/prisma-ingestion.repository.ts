@@ -24,6 +24,7 @@ interface IPrismaModel {
   findMany(args: unknown): Promise<unknown[]>;
   findFirst(args: unknown): Promise<unknown>;
   update(args: unknown): Promise<unknown>;
+  updateMany?(args: unknown): Promise<{ count: number }>;
   upsert?(args: unknown): Promise<unknown>;
   delete(args: unknown): Promise<unknown>;
   deleteMany?(args: unknown): Promise<unknown>;
@@ -132,6 +133,21 @@ export class PrismaIngestionRepository implements IIngestionRepository {
   async getJob(userId: UserId, jobId: IngestionJobId): Promise<IIngestionJobDto | undefined> {
     const row = await this.prisma.ingestionJob.findFirst({ where: { id: jobId, userId } });
     return row === null ? undefined : mapJob(row);
+  }
+
+  async claimJobForRun(
+    userId: UserId,
+    jobId: IngestionJobId
+  ): Promise<IIngestionJobDto | undefined> {
+    if (this.prisma.ingestionJob.updateMany === undefined) {
+      throw new Error('Prisma updateMany unavailable for ingestion job claiming.');
+    }
+    const result = await this.prisma.ingestionJob.updateMany({
+      where: { id: jobId, userId, stage: 'queued' },
+      data: { stage: 'parsing', finishedAt: null, errorMessage: null },
+    });
+    if (result.count !== 1) return undefined;
+    return this.getJob(userId, jobId);
   }
 
   async listJobs(

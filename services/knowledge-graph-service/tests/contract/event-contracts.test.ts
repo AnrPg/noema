@@ -197,7 +197,7 @@ describe('IEventToPublish structural contract', () => {
       payload: {
         nodeId: 'node_abc123xyz789',
         userId: 'user_abc123xyz789',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Photosynthesis',
         domain: 'biology',
         metadata: {},

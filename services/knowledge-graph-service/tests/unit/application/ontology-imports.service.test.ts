@@ -372,7 +372,7 @@ class StubCanonicalNodeResolver implements ICanonicalNodeResolver {
         resolution: {
           nodeId: 'node_euler',
           label: 'Leonhard Euler',
-          nodeType: 'concept',
+          nodeType: 'notion',
           domain: 'world-knowledge',
           strategy: 'label',
           confidenceScore: 0.92,
@@ -445,7 +445,7 @@ class FlippingCanonicalNodeResolver implements ICanonicalNodeResolver {
       resolution: {
         nodeId: 'node_euler',
         label: 'Leonhard Euler',
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'world-knowledge',
         strategy: 'label',
         confidenceScore: 0.94,
@@ -482,7 +482,7 @@ class MapBasedResolver implements ICanonicalNodeResolver {
       resolution: {
         nodeId,
         label: concept.preferredLabel,
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'world-knowledge',
         strategy: 'label',
         confidenceScore: 0.93,
@@ -548,7 +548,7 @@ class StubSourceParser implements ISourceParser {
       generatedAt: '2026-03-24T12:01:00.000Z',
       records: [
         {
-          recordKind: 'concept',
+          recordKind: 'notion',
           externalId: 'https://yago-knowledge.org/resource/Leonhard_Euler',
           iri: 'https://yago-knowledge.org/resource/Leonhard_Euler',
           nodeKind: 'entity',
@@ -885,7 +885,7 @@ describe('OntologyImportsApplicationService.submitMutationPreview', () => {
             {
               externalId: 'https://yago-knowledge.org/resource/Mathematics',
               iri: 'https://yago-knowledge.org/resource/Mathematics',
-              nodeKind: 'concept',
+              nodeKind: 'notion',
               preferredLabel: 'Mathematics',
               aliases: [],
               description: null,

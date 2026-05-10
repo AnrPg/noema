@@ -9,6 +9,9 @@ import {
 
 import { AgentHintsFactory } from '../../../src/domain/knowledge-graph-service/agent-hints.factory.js';
 import type { IExecutionContext } from '../../../src/domain/knowledge-graph-service/execution-context.js';
+import {
+  DuplicateNodeError,
+} from '../../../src/domain/knowledge-graph-service/errors/graph.errors.js';
 import { PkgWriteService } from '../../../src/domain/knowledge-graph-service/pkg-write.service.js';
 import { MockGraphRepository } from '../../helpers/mock-graph-repository.js';
 
@@ -93,7 +96,7 @@ function createSeedEdge(overrides: Partial<IGraphEdge>): IGraphEdge {
 }
 
 describe('PkgWriteService advisory warnings', () => {
-  it('returns duplicate advisories for near-identical node labels and publishes them on pkg.node.created', async () => {
+  it('blocks exact duplicate node creation before the write is finalized', async () => {
     const graphRepository = new MockGraphRepository();
     const userId = 'user_pkg_advisory' as UserId;
     const existingNode = await graphRepository.createNode(
@@ -107,39 +110,32 @@ describe('PkgWriteService advisory warnings', () => {
     );
     const { service, eventPublisher } = createService(graphRepository);
 
-    const result = await service.createNode(
-      userId,
-      {
-        label: 'Derivative',
-        nodeType: GraphNodeType.CONCEPT,
-        domain: 'mathematics',
-      },
-      createContext(userId)
-    );
-
-    expect(result.agentHints.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'duplicate',
-          relatedIds: [existingNode.nodeId],
-        }),
-      ])
-    );
-    expect(eventPublisher.publish).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventType: 'pkg.node.created',
-        payload: expect.objectContaining({
-          advisories: expect.arrayContaining([
-            expect.objectContaining({
-              type: 'duplicate',
-            }),
-          ]),
-        }),
-      })
-    );
+    await expect(
+      service.createNode(
+        userId,
+        {
+          label: 'Derivative',
+          nodeType: GraphNodeType.CONCEPT,
+          domain: 'mathematics',
+        },
+        createContext(userId)
+      )
+    ).rejects.toEqual(expect.objectContaining({ existingNodeId: existingNode.nodeId }));
+    await expect(
+      service.createNode(
+        userId,
+        {
+          label: 'Derivative',
+          nodeType: GraphNodeType.CONCEPT,
+          domain: 'mathematics',
+        },
+        createContext(userId)
+      )
+    ).rejects.toBeInstanceOf(DuplicateNodeError);
+    expect(eventPublisher.publish).not.toHaveBeenCalled();
   });
 
-  it('falls back to a bounded domain sweep for duplicate labels when probe search misses formatting variants', async () => {
+  it('blocks normalized duplicate node creation when probe search only finds a formatting variant during the fallback sweep', async () => {
     const graphRepository = new MockGraphRepository();
     const userId = 'user_pkg_advisory_fallback' as UserId;
     const existingNode = await graphRepository.createNode(
@@ -153,24 +149,28 @@ describe('PkgWriteService advisory warnings', () => {
     );
     const { service } = createService(graphRepository);
 
-    const result = await service.createNode(
-      userId,
-      {
-        label: 'GraphQL',
-        nodeType: GraphNodeType.CONCEPT,
-        domain: 'computer-science',
-      },
-      createContext(userId)
-    );
-
-    expect(result.agentHints.warnings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'duplicate',
-          relatedIds: [existingNode.nodeId],
-        }),
-      ])
-    );
+    await expect(
+      service.createNode(
+        userId,
+        {
+          label: 'GraphQL',
+          nodeType: GraphNodeType.CONCEPT,
+          domain: 'computer-science',
+        },
+        createContext(userId)
+      )
+    ).rejects.toEqual(expect.objectContaining({ existingNodeId: existingNode.nodeId }));
+    await expect(
+      service.createNode(
+        userId,
+        {
+          label: 'GraphQL',
+          nodeType: GraphNodeType.CONCEPT,
+          domain: 'computer-science',
+        },
+        createContext(userId)
+      )
+    ).rejects.toBeInstanceOf(DuplicateNodeError);
   });
 
   it('returns ontological conflict advisories for PKG edges without blocking the write', async () => {

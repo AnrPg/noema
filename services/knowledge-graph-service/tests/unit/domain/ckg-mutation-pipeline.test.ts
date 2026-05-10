@@ -112,7 +112,7 @@ describe('CkgMutationPipeline applyOperations', () => {
       Promise.resolve({
         nodeId: 'node_euler',
         graphType: 'ckg',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Leonhard Euler',
         domain: 'world-knowledge',
         properties: {},
@@ -158,7 +158,7 @@ describe('CkgMutationPipeline applyOperations', () => {
       operations: [
         {
           type: 'add_node',
-          nodeType: 'concept',
+          nodeType: 'notion',
           label: 'Leonhard Euler',
           description: 'Swiss mathematician.',
           domain: 'world-knowledge',
@@ -239,7 +239,7 @@ describe('CkgMutationPipeline applyOperations', () => {
         Promise.resolve({
           nodeId: 'node_euler',
           graphType: 'ckg',
-          nodeType: 'concept',
+          nodeType: 'notion',
           label: 'Leonhard Euler',
           domain: 'world-knowledge',
           properties: {},
@@ -252,7 +252,7 @@ describe('CkgMutationPipeline applyOperations', () => {
         Promise.resolve({
           nodeId: 'node_euler',
           graphType: 'ckg',
-          nodeType: 'concept',
+          nodeType: 'notion',
           label: 'Leonhard Euler',
           domain: 'world-knowledge',
           properties: {},

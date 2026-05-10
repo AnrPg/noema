@@ -62,7 +62,7 @@ describe('POST /users/:userId/pkg/nodes', () => {
       url: BASE,
       payload: {
         label: 'Calculus',
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: TEST_DOMAIN,
       },
     });
@@ -93,7 +93,7 @@ describe('POST /users/:userId/pkg/nodes', () => {
       url: BASE,
       payload: {
         label: 'Abstract algebra',
-        type: 'concept',
+        type: 'notion',
         domain: TEST_DOMAIN,
         metadata: { copiedFromWorkflow: 'card-node-authoring-panel' },
       },
@@ -104,7 +104,7 @@ describe('POST /users/:userId/pkg/nodes', () => {
       TEST_USER_ID,
       expect.objectContaining({
         label: 'Abstract algebra',
-        nodeType: 'concept',
+        nodeType: 'notion',
         properties: { copiedFromWorkflow: 'card-node-authoring-panel' },
       }),
       expect.any(Object)
@@ -121,7 +121,7 @@ describe('POST /users/:userId/pkg/nodes', () => {
     const res = await unauthApp.inject({
       method: 'POST',
       url: BASE,
-      payload: { label: 'Calc', nodeType: 'concept', domain: TEST_DOMAIN },
+      payload: { label: 'Calc', nodeType: 'notion', domain: TEST_DOMAIN },
     });
 
     expect(res.statusCode).toBe(401);
@@ -134,7 +134,7 @@ describe('POST /users/:userId/pkg/nodes', () => {
     const res = await app.inject({
       method: 'POST',
       url: otherBase,
-      payload: { label: 'Calc', nodeType: 'concept', domain: TEST_DOMAIN },
+      payload: { label: 'Calc', nodeType: 'notion', domain: TEST_DOMAIN },
     });
 
     expect(res.statusCode).toBe(403);

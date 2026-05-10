@@ -39,6 +39,7 @@
     "@noema/config": "workspace:*",
     "@noema/contracts": "workspace:*",
     "@noema/events": "workspace:*",
+    "@noema/learning-kernel": "workspace:*",
     "@noema/types": "workspace:*",
     "@noema/validation": "workspace:*",
     "@opentelemetry/api": "^1.9.0",

@@ -8,6 +8,7 @@ import type {
   CardId,
   CardState,
   CardType,
+  ConceptId,
   CorrelationId,
   DifficultyLevel,
   EventSource,
@@ -56,6 +57,10 @@ export function mediaId(): MediaId {
 
 export function nodeId(): NodeId {
   return nextId('node_') as NodeId;
+}
+
+export function conceptId(): ConceptId {
+  return nodeId() as unknown as ConceptId;
 }
 
 export function correlationId(): CorrelationId {
@@ -118,11 +123,14 @@ export function trueFalseContent(overrides: Partial<ICardContent> = {}): ICardCo
 // ============================================================================
 
 export function createCardInput(overrides: Partial<ICreateCardInput> = {}): ICreateCardInput {
+  const primaryConceptId = (overrides.primaryConceptId ?? conceptId()) as ICreateCardInput['primaryConceptId'];
   return {
     cardType: 'atomic' as CardType,
     content: atomicContent(),
     difficulty: 'intermediate' as DifficultyLevel,
-    knowledgeNodeIds: [],
+    primaryConceptId,
+    relatedConceptIds: [],
+    knowledgeNodeIds: [primaryConceptId as unknown as NodeId],
     tags: [],
     source: 'user' as EventSource,
     metadata: {},
@@ -133,6 +141,8 @@ export function createCardInput(overrides: Partial<ICreateCardInput> = {}): ICre
 export function card(overrides: Partial<ICard> = {}): ICard {
   const id = overrides.id ?? cardId();
   const uid = overrides.userId ?? userId();
+  const primaryConceptId =
+    (overrides.primaryConceptId ?? conceptId()) as ICard['primaryConceptId'];
   return {
     id,
     userId: uid,
@@ -140,7 +150,18 @@ export function card(overrides: Partial<ICard> = {}): ICard {
     state: 'draft' as CardState,
     difficulty: 'intermediate' as DifficultyLevel,
     content: atomicContent(),
-    knowledgeNodeIds: [],
+    primaryConceptId,
+    relatedConceptIds: [],
+    knowledgeNodeIds: [primaryConceptId as unknown as NodeId],
+    anchoredCkgNodeIds: [primaryConceptId],
+    anchoredPkgNodeIds: [primaryConceptId as unknown as NodeId],
+    compatibleTransformations: [],
+    defaultEligibilityGroups: [],
+    supportedStudyModes: [],
+    originMode: 'authored',
+    sourceDocumentIds: [],
+    sources: [],
+    reviewState: 'metadata_incomplete',
     tags: [],
     source: 'user' as EventSource,
     metadata: {},
@@ -156,6 +177,8 @@ export function card(overrides: Partial<ICard> = {}): ICard {
 }
 
 export function cardSummary(overrides: Partial<ICardSummary> = {}): ICardSummary {
+  const primaryConceptId =
+    (overrides.primaryConceptId ?? conceptId()) as ICardSummary['primaryConceptId'];
   return {
     id: overrides.id ?? cardId(),
     userId: overrides.userId ?? userId(),
@@ -163,7 +186,16 @@ export function cardSummary(overrides: Partial<ICardSummary> = {}): ICardSummary
     state: 'draft' as CardState,
     difficulty: 'intermediate' as DifficultyLevel,
     preview: 'What is the capital of France?',
-    knowledgeNodeIds: [],
+    primaryConceptId,
+    relatedConceptIds: [],
+    knowledgeNodeIds: [primaryConceptId as unknown as NodeId],
+    compatibleTransformations: [],
+    defaultEligibilityGroups: [],
+    supportedStudyModes: [],
+    originMode: 'authored',
+    reviewState: 'active',
+    anchoredCkgNodeIds: [primaryConceptId],
+    anchoredPkgNodeIds: [primaryConceptId as unknown as NodeId],
     tags: [],
     source: 'user' as EventSource,
     createdAt: '2025-01-01T00:00:00.000Z',
@@ -195,7 +227,8 @@ export function template(overrides: Partial<ITemplate> = {}): ITemplate {
     cardType: 'atomic' as CardType,
     content: atomicContent(),
     difficulty: 'intermediate' as DifficultyLevel,
-    knowledgeNodeIds: [],
+    knowledgeNodeIds: [conceptId() as unknown as NodeId],
+    anchoredCkgNodeIds: [conceptId()],
     tags: [],
     metadata: {},
     visibility: 'private',
@@ -219,7 +252,8 @@ export function createTemplateInput(
     cardType: 'atomic' as CardType,
     content: atomicContent(),
     difficulty: 'intermediate' as DifficultyLevel,
-    knowledgeNodeIds: [],
+    knowledgeNodeIds: [conceptId() as unknown as NodeId],
+    anchoredCkgNodeIds: [conceptId()],
     tags: [],
     metadata: {},
     visibility: 'private',

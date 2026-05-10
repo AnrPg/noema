@@ -36,6 +36,7 @@ import type {
   ICursorPaginatedResponse,
   IDeckQuery,
   IGeneratedActivityVariant,
+  IGeneratedActivityVariantQuery,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 import type { RedisCacheProvider } from './redis-cache.provider.js';
@@ -200,6 +201,13 @@ export class CachedContentRepository implements IContentRepository {
     input: Omit<IGeneratedActivityVariant, 'createdAt' | 'hitCount'>
   ): Promise<IGeneratedActivityVariant> {
     return this.inner.createGeneratedActivityVariant(input);
+  }
+
+  async listGeneratedActivityVariants(
+    query: IGeneratedActivityVariantQuery,
+    userId: UserId
+  ): Promise<IGeneratedActivityVariant[]> {
+    return this.inner.listGeneratedActivityVariants(query, userId);
   }
 
   async update(

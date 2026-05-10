@@ -1,17 +1,18 @@
 import type {
   IConceptCandidateDto,
   IDocumentChunkDto,
+  IDocumentDto,
+  IDocumentIrDto,
   IVectorChunkEmbeddingInputDto,
   IVectorChunkEmbeddingResultDto,
   IVectorSearchResultDto,
 } from '@noema/contracts';
 import type { CurriculumId, NodeId, UserId } from '@noema/types';
-import { ID_PREFIXES } from '@noema/types';
-import { nanoid } from 'nanoid';
 import type {
   IConceptExtractorPort,
   IContentServicePort,
   ICurriculumServicePort,
+  IExtractionScanWindow,
   IKnowledgeGraphPort,
   IVectorServicePort,
 } from '../../domain/ingestion-service/external-ports.js';
@@ -66,44 +67,120 @@ export class HttpVectorServiceClient implements IVectorServicePort {
   }
 }
 
-export class HeuristicConceptExtractorClient implements IConceptExtractorPort {
-  extract(input: { chunks: IDocumentChunkDto[] }): Promise<
-    {
+export class HttpIngestionConceptExtractionAgentClient implements IConceptExtractorPort {
+  constructor(
+    private readonly baseUrl: string,
+    private readonly serviceToken: string | undefined
+  ) {}
+
+  async extract(input: {
+    userId: UserId;
+    document: IDocumentDto;
+    ir: IDocumentIrDto;
+    chunks: IDocumentChunkDto[];
+    scanWindows: IExtractionScanWindow[];
+    intent: 'parse_only' | 'derive_curriculum' | 'seed_cards' | 'both';
+    curriculumId?: CurriculumId | undefined;
+    studyMode?: string | undefined;
+  }): Promise<{
+    documentSummary: Record<string, unknown>;
+    sectionSummaries: { sectionPath: string[]; summary: string }[];
+    conceptCandidates: {
       label: string;
       definition?: string | undefined;
       evidenceChunkIds: string[];
       salience: number;
-    }[]
-  > {
-    const candidates = new Map<
-      string,
-      { label: string; evidenceChunkIds: string[]; salience: number }
-    >();
-    for (const chunk of input.chunks) {
-      const titleCase = chunk.text.match(/\b[A-Z][a-zA-Z]{3,}(?:\s+[A-Z][a-zA-Z]{3,})?\b/g) ?? [];
-      const repeatedTerms = importantTerms(chunk.text);
-      for (const raw of [...titleCase.slice(0, 8), ...repeatedTerms.slice(0, 8)]) {
-        const label = raw.trim();
-        if (label.length < 4) continue;
-        const current = candidates.get(label) ?? { label, evidenceChunkIds: [], salience: 0.45 };
-        current.evidenceChunkIds.push(chunk.id);
-        current.salience = Math.min(0.98, current.salience + 0.08);
-        candidates.set(label, current);
+      confidence: number;
+      state?: string | undefined;
+      rationale?: string | undefined;
+    }[];
+    mappingSuggestions: {
+      label: string;
+      candidateNodeIds: string[];
+      decision: string;
+      confidence: number;
+      reason: string;
+      requiresUserApproval: boolean;
+    }[];
+    handoffRecommendations: {
+      target: string;
+      allowed: boolean;
+      reason: string;
+      payload?: Record<string, unknown> | undefined;
+    }[];
+    parseWarnings?: { code: string; message: string }[];
+    groundingReport?: Record<string, unknown>;
+  }> {
+    const response = await fetch(
+      `${this.baseUrl.replace(/\/+$/, '')}/v1/agents/ingestion-concept-extraction-agent/run`,
+      {
+        method: 'POST',
+        headers: buildHeaders(this.serviceToken, input.userId),
+        body: JSON.stringify({
+          userId: input.userId,
+          curriculumId: input.curriculumId,
+          documentIds: [input.document.id],
+          studyMode: input.studyMode,
+          executionPreference: 'realtime',
+          payload: {
+            documentId: input.document.id,
+            intent: input.intent,
+            document: input.document,
+            ir: input.ir,
+            chunks: input.chunks,
+            scanWindows: input.scanWindows,
+          },
+        }),
       }
-    }
-    if (candidates.size === 0 && input.chunks[0] !== undefined) {
-      candidates.set('Document concept', {
-        label: 'Document concept',
-        evidenceChunkIds: [input.chunks[0].id],
-        salience: 0.5,
-      });
-    }
-    return Promise.resolve(
-      Array.from(candidates.values()).map((candidate) => ({
-        ...candidate,
-        evidenceChunkIds: Array.from(new Set(candidate.evidenceChunkIds)),
-      }))
     );
+    const body = (await response.json().catch(() => ({}))) as {
+      data?: { execution?: { result?: Record<string, unknown> } };
+      detail?: string;
+      error?: { message?: string };
+    };
+    if (!response.ok) {
+      throw new Error(body.detail ?? body.error?.message ?? 'Ingestion concept extraction failed.');
+    }
+    const result = body.data?.execution?.result;
+    if (result === undefined) {
+      throw new Error('Ingestion concept extraction agent returned no result payload.');
+    }
+    return {
+      documentSummary: (result['documentSummary'] as Record<string, unknown> | undefined) ?? {},
+      sectionSummaries:
+        (result['sectionSummaries'] as { sectionPath: string[]; summary: string }[] | undefined) ??
+        [],
+      conceptCandidates:
+        (result['conceptCandidates'] as {
+          label: string;
+          definition?: string | undefined;
+          evidenceChunkIds: string[];
+          salience: number;
+          confidence: number;
+          state?: string | undefined;
+          rationale?: string | undefined;
+        }[] | undefined) ?? [],
+      mappingSuggestions:
+        (result['mappingSuggestions'] as {
+          label: string;
+          candidateNodeIds: string[];
+          decision: string;
+          confidence: number;
+          reason: string;
+          requiresUserApproval: boolean;
+        }[] | undefined) ?? [],
+      handoffRecommendations:
+        (result['handoffRecommendations'] as {
+          target: string;
+          allowed: boolean;
+          reason: string;
+          payload?: Record<string, unknown> | undefined;
+        }[] | undefined) ?? [],
+      parseWarnings:
+        (result['parseWarnings'] as { code: string; message: string }[] | undefined) ?? [],
+      groundingReport:
+        (result['groundingReport'] as Record<string, unknown> | undefined) ?? {},
+    };
   }
 }
 
@@ -156,7 +233,6 @@ export class HttpKnowledgeGraphClient implements IKnowledgeGraphPort {
     }
     return {
       proposalId: `proposal_${candidate.id}`,
-      nodeId: `${ID_PREFIXES.NodeId}${nanoid(21)}` as NodeId,
     };
   }
 }
@@ -234,16 +310,4 @@ function buildHeaders(serviceToken: string | undefined, userId: string): Record<
     headers['authorization'] = `Bearer ${serviceToken}`;
   }
   return headers;
-}
-
-function importantTerms(text: string): string[] {
-  const counts = new Map<string, number>();
-  for (const word of text.toLowerCase().split(/[^\p{L}\p{N}-]+/gu)) {
-    if (word.length < 7) continue;
-    counts.set(word, (counts.get(word) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .filter(([, count]) => count > 1)
-    .sort((left, right) => right[1] - left[1])
-    .map(([word]) => word);
 }

@@ -37,6 +37,7 @@
     "@fastify/swagger-ui": "^5.2.5",
     "@noema/contracts": "workspace:*",
     "@noema/events": "workspace:*",
+    "@noema/learning-kernel": "workspace:*",
     "@noema/types": "workspace:*",
     "@noema/validation": "workspace:*",
     "@prisma/client": "^5.22.0",

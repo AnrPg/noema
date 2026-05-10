@@ -72,7 +72,7 @@ export class EscoSourceParser implements ISourceParser {
           languages,
           sourceTypes: collectSourceTypes(itemRecord),
           properties: itemRecord,
-          nodeKind: 'concept',
+          nodeKind: 'notion',
         });
 
         records.push(conceptRecord);

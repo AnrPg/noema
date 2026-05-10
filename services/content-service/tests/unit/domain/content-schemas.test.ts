@@ -42,10 +42,13 @@ describe('AnyCardTypeSchema', () => {
 // ============================================================================
 
 describe('CreateCardInputSchema', () => {
+  const primaryConceptId = 'node_aaaaaaaaaaaaaaaaaaaaa';
+
   it('validates a correct atomic card', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
     };
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(true);
@@ -55,6 +58,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
     };
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(true);
@@ -70,6 +74,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'cloze',
       content: clozeContent(),
+      primaryConceptId,
     };
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(true);
@@ -79,6 +84,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'cloze',
       content: atomicContent(), // missing template + clozes
+      primaryConceptId,
     };
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(false);
@@ -93,6 +99,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'multiple_choice',
       content: multipleChoiceContent(),
+      primaryConceptId,
     };
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(true);
@@ -102,6 +109,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'nonexistent',
       content: atomicContent(),
+      primaryConceptId,
     };
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(false);
@@ -111,8 +119,47 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
       knowledgeNodeIds: ['node_aaaaaaaaaaaaaaaaaaaaa'],
     };
+    const result = CreateCardInputSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts knowledgeNodeIds with underscores', () => {
+    const input = {
+      cardType: 'atomic',
+      content: atomicContent(),
+      primaryConceptId,
+      knowledgeNodeIds: ['node_xVIJQZGqM1oWwnu_vtQNP'],
+    };
+    const result = CreateCardInputSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts knowledgeNodeIds with hyphens', () => {
+    const input = {
+      cardType: 'atomic',
+      content: atomicContent(),
+      primaryConceptId,
+      knowledgeNodeIds: ['node_xVIJQZGqM1oWwnu-vtQNP'],
+    };
+    const result = CreateCardInputSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts autonomous generated cards without graph anchors', () => {
+    const input = {
+      cardType: 'atomic',
+      content: atomicContent(),
+      primaryConceptId,
+      source: 'agent',
+      originMode: 'agent_autonomous',
+      factualityScore: 0.82,
+      anchoredCkgNodeIds: [],
+      anchoredPkgNodeIds: [],
+    };
+
     const result = CreateCardInputSchema.safeParse(input);
     expect(result.success).toBe(true);
   });
@@ -121,6 +168,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
       knowledgeNodeIds: ['bad-id'],
     };
     const result = CreateCardInputSchema.safeParse(input);
@@ -131,6 +179,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
       knowledgeNodeIds: Array.from(
         { length: 51 },
         (_, i) => `node_${'a'.repeat(20)}${String(i).padStart(1, '0')}`
@@ -144,6 +193,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
       tags: ['math', 'algebra-101'],
     };
     const result = CreateCardInputSchema.safeParse(input);
@@ -154,6 +204,7 @@ describe('CreateCardInputSchema', () => {
     const input = {
       cardType: 'atomic',
       content: atomicContent(),
+      primaryConceptId,
       tags: ['INVALID'],
     };
     const result = CreateCardInputSchema.safeParse(input);

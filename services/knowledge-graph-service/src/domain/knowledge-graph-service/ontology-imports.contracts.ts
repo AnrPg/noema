@@ -82,10 +82,10 @@ export type OntologyArtifactKind = (typeof ONTOLOGY_ARTIFACT_KINDS)[number];
 export const ONTOLOGY_RUN_TRIGGERS = ['manual', 'scheduled', 'retry'] as const;
 export type OntologyRunTrigger = (typeof ONTOLOGY_RUN_TRIGGERS)[number];
 
-export const ONTOLOGY_GRAPH_RECORD_KINDS = ['concept', 'relation', 'alias', 'mapping'] as const;
+export const ONTOLOGY_GRAPH_RECORD_KINDS = ['notion', 'relation', 'alias', 'mapping'] as const;
 export type OntologyGraphRecordKind = (typeof ONTOLOGY_GRAPH_RECORD_KINDS)[number];
 
-export const ONTOLOGY_GRAPH_NODE_KINDS = ['concept', 'entity', 'literal'] as const;
+export const ONTOLOGY_GRAPH_NODE_KINDS = ['notion', 'entity', 'literal'] as const;
 export type OntologyGraphNodeKind = (typeof ONTOLOGY_GRAPH_NODE_KINDS)[number];
 
 export const ONTOLOGY_GRAPH_EDGE_DIRECTIONS = ['directed', 'undirected'] as const;
@@ -114,7 +114,7 @@ export type OntologyMergeConflictKind = (typeof ONTOLOGY_MERGE_CONFLICT_KINDS)[n
 export const ONTOLOGY_MUTATION_PREVIEW_STATUSES = ['ready', 'blocked'] as const;
 export type OntologyMutationPreviewStatus = (typeof ONTOLOGY_MUTATION_PREVIEW_STATUSES)[number];
 
-export const ONTOLOGY_MUTATION_PREVIEW_ENTITY_KINDS = ['concept', 'relation'] as const;
+export const ONTOLOGY_MUTATION_PREVIEW_ENTITY_KINDS = ['notion', 'relation'] as const;
 export type OntologyMutationPreviewEntityKind =
   (typeof ONTOLOGY_MUTATION_PREVIEW_ENTITY_KINDS)[number];
 
@@ -220,7 +220,7 @@ export interface IOntologyGraphRecordProvenance {
 }
 
 export interface IOntologyGraphConceptRecord {
-  recordKind: 'concept';
+  recordKind: 'notion';
   externalId: string;
   iri: string | null;
   nodeKind: OntologyGraphNodeKind;
@@ -723,7 +723,7 @@ export const OntologyGraphRecordProvenanceSchema = z.object({
 });
 
 export const OntologyGraphConceptRecordSchema = z.object({
-  recordKind: z.literal('concept'),
+  recordKind: z.literal('notion'),
   externalId: z.string().min(1, 'External id is required'),
   iri: z.string().url().nullable(),
   nodeKind: OntologyGraphNodeKindSchema,

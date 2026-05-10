@@ -11,7 +11,7 @@ function createConcept(): INormalizedOntologyConceptCandidate {
   return {
     externalId: 'https://example.org/concept/graph-theory',
     iri: 'https://example.org/concept/graph-theory',
-    nodeKind: 'concept',
+    nodeKind: 'notion',
     preferredLabel: 'Graph Theory',
     aliases: ['graph_theory', 'Theory of Graphs'],
     description: 'Study of graphs.',
@@ -123,7 +123,7 @@ describe('GraphCanonicalNodeResolver', () => {
       {
         nodeId: 'node_graph_theory',
         graphType: 'ckg',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Graph-Theory',
         domain: 'world-knowledge',
         properties: {
@@ -155,7 +155,7 @@ describe('GraphCanonicalNodeResolver', () => {
       {
         nodeId: 'node_graph_theory',
         graphType: 'ckg',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Graph Theory',
         domain: 'world-knowledge',
         properties: {
@@ -185,7 +185,7 @@ describe('GraphCanonicalNodeResolver', () => {
       {
         nodeId: 'node_other_graph_theory',
         graphType: 'ckg',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Graph Theory',
         domain: 'world-knowledge',
         properties: {
@@ -200,7 +200,7 @@ describe('GraphCanonicalNodeResolver', () => {
       {
         nodeId: 'node_preferred_graph_theory',
         graphType: 'ckg',
-        nodeType: 'concept',
+        nodeType: 'notion',
         label: 'Graph Theory',
         domain: 'world-knowledge',
         properties: {

@@ -30,7 +30,7 @@ function createConcept(
   return {
     externalId,
     iri: externalId,
-    nodeKind: 'concept',
+    nodeKind: 'notion',
     preferredLabel,
     aliases: [],
     description: null,
@@ -197,7 +197,7 @@ function getReadyConceptCandidate(
 ) {
   const candidate = preview.candidates.find(
     (entry) =>
-      entry.entityKind === 'concept' &&
+      entry.entityKind === 'notion' &&
       entry.status === 'ready' &&
       entry.title.endsWith(preferredLabel)
   );
@@ -221,7 +221,7 @@ describe('OntologyImportMutationGenerationService', () => {
     expect(preview.candidates).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entityKind: 'concept',
+          entityKind: 'notion',
           status: 'ready',
           proposal: expect.objectContaining({
             operations: [expect.objectContaining({ type: 'update_node', nodeId: 'node_euler' })],
@@ -327,7 +327,7 @@ describe('OntologyImportMutationGenerationService', () => {
           properties: { yagoResourceKind: 'instance' },
         }),
         createConcept('yago:Mathematician', 'Mathematician', {
-          nodeKind: 'concept',
+          nodeKind: 'notion',
           sourceTypes: ['yago_class'],
           properties: { yagoResourceKind: 'class' },
         }),

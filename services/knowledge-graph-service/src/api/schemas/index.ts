@@ -13,6 +13,7 @@ export * from './metrics.schemas.js';
 export * from './misconception.schemas.js';
 export * from './ontology-import.schemas.js';
 export * from './pkg-edge.schemas.js';
+export * from './pkg-expansion.schemas.js';
 export * from './pkg-node.schemas.js';
 export * from './pkg-operation-log.schemas.js';
 export * from './pkg-traversal.schemas.js';

@@ -279,8 +279,17 @@ export class TemplateService {
       cardType: overrides.cardType ?? template.cardType,
       content: overrides.content ?? template.content,
       difficulty: overrides.difficulty ?? template.difficulty,
-      knowledgeNodeIds: overrides.knowledgeNodeIds ?? [...template.knowledgeNodeIds],
-      tags: overrides.tags ?? [...template.tags],
+      primaryConceptId:
+        overrides.primaryConceptId ??
+        template.anchoredCkgNodeIds[0] ??
+        (template.knowledgeNodeIds[0] as unknown as ICreateCardInput['primaryConceptId']),
+      relatedConceptIds:
+        overrides.relatedConceptIds ??
+        template.anchoredCkgNodeIds.slice(1) ??
+        [],
+      knowledgeNodeIds: overrides.knowledgeNodeIds ?? [...(template.knowledgeNodeIds ?? [])],
+      anchoredCkgNodeIds: overrides.anchoredCkgNodeIds ?? [...(template.anchoredCkgNodeIds ?? [])],
+      tags: overrides.tags ?? [...(template.tags ?? [])],
       source: overrides.source ?? 'user',
       metadata: {
         ...template.metadata,

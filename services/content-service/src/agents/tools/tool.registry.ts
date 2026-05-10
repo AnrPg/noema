@@ -25,6 +25,7 @@ import {
   createGetCardLineageHandler,
   createGetCardStatsHandler,
   createGetCoverageHandler,
+  createListGeneratedActivityVariantsHandler,
   createPreviewCardImportHandler,
   createQueryCardsHandler,
   createRecoverBatchHandler,
@@ -430,6 +431,7 @@ const EXPECTED_CONTENT_TOOL_NAMES = [
   'transform-card',
   'get-card-lineage',
   'get-coverage',
+  'list-generated-activity-variants',
 ] as const;
 
 /**
@@ -539,6 +541,10 @@ export function createToolRegistry(contentService: ContentService): ToolRegistry
     createGetCardLineageHandler(contentService)
   );
   registry.register(requireDefinition('get-coverage'), createGetCoverageHandler(contentService));
+  registry.register(
+    requireDefinition('list-generated-activity-variants'),
+    createListGeneratedActivityVariantsHandler(contentService)
+  );
 
   return registry;
 }

@@ -272,11 +272,21 @@ export function prepareImportedCards(
       metadata['dump'] = dump;
     }
 
+    const conceptNodeIds = Array.from(recordNodeIds) as NodeId[];
+    const [primaryConceptId, ...relatedConceptIds] = conceptNodeIds;
+    if (primaryConceptId === undefined) {
+      throw new Error(`Row ${String(index + 1)} must include at least one concept node.`);
+    }
+
     cards.push({
       cardType: 'atomic',
       content: content as unknown as ICreateCardInput['content'],
       difficulty,
-      knowledgeNodeIds: Array.from(recordNodeIds) as NodeId[],
+      primaryConceptId: primaryConceptId as unknown as ICreateCardInput['primaryConceptId'],
+      relatedConceptIds: relatedConceptIds as unknown as NonNullable<
+        ICreateCardInput['relatedConceptIds']
+      >,
+      knowledgeNodeIds: conceptNodeIds,
       tags: Array.from(recordTags),
       ...(input.supportedStudyModes !== undefined
         ? { supportedStudyModes: input.supportedStudyModes }

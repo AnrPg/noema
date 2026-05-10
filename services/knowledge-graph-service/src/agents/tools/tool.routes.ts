@@ -21,6 +21,26 @@ interface IScopeUser {
   scopes?: string[];
 }
 
+function headerString(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export function resolveToolExecutionUserId(
+  user: IScopeUser | undefined,
+  xUserIdHeader: string | string[] | undefined
+): string {
+  const delegatedUserId = headerString(xUserIdHeader)?.trim();
+  const roles = new Set(user?.roles ?? []);
+  const canDelegate =
+    roles.has('service') || roles.has('admin') || roles.has('super_admin') || roles.has('developer');
+
+  if (canDelegate && delegatedUserId !== undefined && delegatedUserId.length > 0) {
+    return delegatedUserId;
+  }
+
+  return user?.sub ?? '';
+}
+
 function hasRequiredScopes(
   user: IScopeUser | undefined,
   requirement: { match: 'all' | 'any'; requiredScopes: string[] }
@@ -131,8 +151,8 @@ export function registerToolRoutes(
         return;
       }
 
-      const user = request.user as { sub?: string } | undefined;
-      const userId = user?.sub ?? '';
+      const user = request.user as IScopeUser | undefined;
+      const userId = resolveToolExecutionUserId(user, request.headers['x-user-id']);
       const correlationId = request.id;
 
       const definition = toolRegistry.getDefinition(body.tool);

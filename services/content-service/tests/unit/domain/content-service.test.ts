@@ -4,7 +4,9 @@
  * Tests all business logic in ContentService with mocked dependencies.
  */
 
+import { ContentEventType } from '@noema/events/content';
 import {
+  CardTransformKind,
   EpistemicMode,
   StudyMode,
   TransformationType,
@@ -204,6 +206,20 @@ describe('ContentService', () => {
       expect(events.publishBatch).toHaveBeenCalledOnce();
     });
 
+    it('replays an idempotent batch instead of recreating cards', async () => {
+      const inputs = [createCardInput({ content: atomicContent({ front: 'Replay Q', back: 'Replay A' }) })];
+      const existing = [card({ metadata: { _batchId: 'agentjob_replay_1' } as any })];
+      const ctx = executionContext({ idempotencyKey: 'agentjob_replay_1' });
+      repo.findByBatchId.mockResolvedValue(existing);
+
+      const result = await service.createBatch(inputs, ctx);
+
+      expect(result.data.batchId).toBe('agentjob_replay_1');
+      expect(result.data.created).toEqual(existing);
+      expect(repo.createBatch).not.toHaveBeenCalled();
+      expect(events.publishBatch).not.toHaveBeenCalled();
+    });
+
     it('rejects batch exceeding 100 cards', async () => {
       const inputs = Array.from({ length: 101 }, () => createCardInput());
       const ctx = executionContext();
@@ -268,6 +284,280 @@ describe('ContentService', () => {
 
       // Second card should be rejected as intra-batch duplicate
       expect(result.data.failureCount).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('transformCard()', () => {
+    it('uses the content transform agent and returns multiple persisted variants', async () => {
+      const ctx = executionContext();
+      const parent = card({
+        id: cardId('parent'),
+        userId: ctx.userId!,
+        cardType: 'atomic' as any,
+        primaryConceptId: 'concept_123456789012345678901' as any,
+        relatedConceptIds: [],
+        anchoredCkgNodeIds: ['concept_123456789012345678901'] as any,
+        anchoredPkgNodeIds: ['node_123456789012345678901'] as any,
+        content: atomicContent(),
+      });
+      const transformAgent = {
+        generateContent: vi.fn(),
+        transformCard: vi.fn().mockResolvedValue({
+          agentRunId: 'run_transform_1',
+          drafts: [
+            {
+              parentCardId: parent.id,
+              cardType: 'atomic',
+              conceptIds: [parent.primaryConceptId],
+              anchoredCkgNodeIds: parent.anchoredCkgNodeIds,
+              anchoredPkgNodeIds: parent.anchoredPkgNodeIds,
+              content: {
+                front: 'Variant one front',
+                back: 'Variant one back',
+              },
+              tags: ['variant-one'],
+              difficulty: parent.difficulty,
+              factualityScore: 0.9,
+              rationale: 'first variant',
+            },
+            {
+              parentCardId: parent.id,
+              cardType: 'definition',
+              conceptIds: [parent.primaryConceptId],
+              anchoredCkgNodeIds: parent.anchoredCkgNodeIds,
+              anchoredPkgNodeIds: parent.anchoredPkgNodeIds,
+              content: {
+                front: 'Variant two front',
+                back: 'Variant two back',
+              },
+              tags: ['variant-two'],
+              difficulty: parent.difficulty,
+              factualityScore: 0.9,
+              rationale: 'second variant',
+            },
+          ],
+          rejectedDrafts: [],
+        }),
+      };
+      repo.findByIdForUser.mockResolvedValue(parent);
+      service = new ContentService(repo, events, logger, undefined, undefined, transformAgent as any);
+      vi.spyOn(service, 'create')
+        .mockResolvedValueOnce({
+          data: card({ ...parent, id: cardId(), cardType: 'atomic' as any }),
+          agentHints: {} as any,
+        })
+        .mockResolvedValueOnce({
+          data: card({ ...parent, id: cardId(), cardType: 'definition' as any }),
+          agentHints: {} as any,
+        });
+
+      const result = await service.transformCard(
+        parent.id,
+        {
+          transformationKind: CardTransformKind.CHANGE_CARD_TYPE,
+          targetCardTypes: ['comparison' as any, 'cloze' as any],
+          count: 2,
+          prompt: 'Transform this into different study formats.',
+        },
+        ctx
+      );
+
+      expect(transformAgent.transformCard).toHaveBeenCalledOnce();
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]?.cardType).toBe('atomic');
+      expect(result.data[1]?.cardType).toBe('definition');
+      expect(events.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: ContentEventType.CARD_TRANSFORMATION_CREATED })
+      );
+    });
+  });
+
+  describe('importGeneratedContentBatch()', () => {
+    it('creates or reuses a generation job and persists imported cards idempotently', async () => {
+      const ctx = executionContext({
+        idempotencyKey: 'agentjob_import_1',
+        userId: 'user_import' as any,
+      });
+      const conceptId = 'concept_aaaaaaaaaaaaaaaaaaaa1';
+      repo.findGenerationJobById.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        id: 'cgenjob_existing' as any,
+        userId: ctx.userId!,
+        status: 'completed',
+        mode: 'agent_autonomous',
+        conceptIds: [conceptId],
+        documentIds: [],
+        requestedCardTypes: ['atomic'],
+        requestPayload: {},
+        resultPayload: { batchId: 'agentjob_import_1' },
+        createdCardIds: ['card_existing' as any],
+        rejectedDrafts: [],
+        agentRunId: 'run_1',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      repo.createGenerationJob.mockResolvedValue({
+        id: 'cgenjob_existing' as any,
+        userId: ctx.userId!,
+        status: 'requested',
+        mode: 'agent_autonomous',
+        conceptIds: [conceptId],
+        documentIds: [],
+        requestedCardTypes: ['atomic'],
+        requestPayload: {},
+        resultPayload: {},
+        createdCardIds: [],
+        rejectedDrafts: [],
+        agentRunId: null,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      repo.updateGenerationJob.mockResolvedValue({
+        id: 'cgenjob_existing' as any,
+        userId: ctx.userId!,
+        status: 'completed',
+        mode: 'agent_autonomous',
+        conceptIds: [conceptId],
+        documentIds: [],
+        requestedCardTypes: ['atomic'],
+        requestPayload: {},
+        resultPayload: { batchId: 'agentjob_import_1', createdCount: 1 },
+        createdCardIds: ['card_generated' as any],
+        rejectedDrafts: [],
+        agentRunId: 'run_1',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      repo.createBatch.mockResolvedValue({
+        batchId: 'agentjob_import_1',
+        created: [card({ id: 'card_generated' as any, userId: ctx.userId! })],
+        failed: [],
+        total: 1,
+        successCount: 1,
+        failureCount: 0,
+      });
+      repo.findByBatchId.mockResolvedValueOnce([]);
+
+      const result = await service.importGeneratedContentBatch(
+        {
+          job: {
+            mode: 'agent_autonomous',
+            conceptIds: [conceptId] as any,
+            desiredCardTypes: ['atomic'] as any,
+          },
+          cards: [createCardInput()],
+          rejectedDrafts: [],
+          agentRunId: 'run_1',
+          resultPayload: {},
+        },
+        ctx
+      );
+
+      expect(result.data.batch.batchId).toBe('agentjob_import_1');
+      expect(repo.createGenerationJob).toHaveBeenCalledOnce();
+      expect(repo.updateGenerationJob).toHaveBeenCalled();
+      expect(events.publish).toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: 'content.generation.requested' })
+      );
+    });
+
+    it('imports generated activity variants through the Guardian-gated variant path', async () => {
+      const ctx = executionContext({
+        idempotencyKey: 'agentjob_import_variants',
+        userId: 'user_import' as any,
+      });
+      const conceptId = 'concept_ABCDEFGHIJKLMNOPQRSTU';
+      const guardian = {
+        validateGeneratedVariant: vi.fn().mockResolvedValue({
+          result: 'accepted',
+          reasonCodes: [],
+          blocking: false,
+          validationId: 'guard_variant',
+        }),
+      };
+      service = new ContentService(repo, events, logger, undefined, guardian);
+      repo.findGenerationJobById.mockResolvedValueOnce(null);
+      repo.createGenerationJob.mockResolvedValue({
+        id: 'cgenjob_variants' as any,
+        userId: ctx.userId!,
+        status: 'requested',
+        mode: 'agent_autonomous',
+        conceptIds: [conceptId],
+        documentIds: [],
+        requestedCardTypes: ['atomic'],
+        requestPayload: {},
+        resultPayload: {},
+        createdCardIds: [],
+        rejectedDrafts: [],
+        agentRunId: null,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      repo.updateGenerationJob.mockResolvedValue({
+        id: 'cgenjob_variants' as any,
+        userId: ctx.userId!,
+        status: 'completed',
+        mode: 'agent_autonomous',
+        conceptIds: [conceptId],
+        documentIds: [],
+        requestedCardTypes: ['atomic'],
+        requestPayload: {},
+        resultPayload: { activityVariantCount: 1 },
+        createdCardIds: ['card_generated' as any],
+        rejectedDrafts: [],
+        agentRunId: 'run_1',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      repo.createBatch.mockResolvedValue({
+        batchId: 'agentjob_import_variants',
+        created: [card({ id: 'card_generated' as any, userId: ctx.userId! })],
+        failed: [],
+        total: 1,
+        successCount: 1,
+        failureCount: 0,
+      });
+      repo.findByBatchId.mockResolvedValueOnce([]);
+      repo.createGeneratedActivityVariant.mockImplementation((input) =>
+        Promise.resolve({ ...input, createdAt: '2026-05-02T00:00:00.000Z', hitCount: 0 })
+      );
+
+      const result = await service.importGeneratedContentBatch(
+        {
+          job: {
+            mode: 'agent_autonomous',
+            conceptIds: [conceptId] as any,
+            desiredCardTypes: ['atomic'] as any,
+          },
+          cards: [createCardInput()],
+          activityVariants: [
+            {
+              conceptId: conceptId as any,
+              studyMode: StudyMode.KNOWLEDGE_GAINING,
+              transformationType: TransformationType.EXPLANATION,
+              epistemicMode: EpistemicMode.GENERATIVE_RETRIEVAL,
+              difficultyBucket: 2,
+              sourceCardIds: [],
+              prompt: 'Explain the concept in your own words.',
+              renderPayload: {},
+              expectedResponseType: 'free_text',
+              responseSchema: { type: 'string' },
+              variantSeed: 'seed-import-1',
+              generatorMetadata: { agentRunId: 'run_1' },
+              ttlAt: '2026-05-03T00:00:00.000Z',
+            },
+          ],
+          agentRunId: 'run_1',
+          rejectedDrafts: [],
+          resultPayload: {},
+        },
+        ctx
+      );
+
+      expect(guardian.validateGeneratedVariant).toHaveBeenCalledOnce();
+      expect(result.data.activityVariants).toHaveLength(1);
+      expect(repo.createGeneratedActivityVariant).toHaveBeenCalledWith(
+        expect.objectContaining({ guardianValidationId: 'guard_variant' })
+      );
     });
   });
 

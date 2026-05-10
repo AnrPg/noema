@@ -86,12 +86,21 @@ interface IErrorLogger {
 export function buildContext(request: FastifyRequest): IExecutionContext {
   const user = request.user as { sub?: string; roles?: string[] } | undefined;
   const userAgent = request.headers['user-agent'];
+  const correlationHeader = request.headers['x-correlation-id'];
+  const idempotencyHeader = request.headers['x-idempotency-key'];
   const context: IExecutionContext = {
     userId: (user?.sub ?? null) as UserId | null,
-    correlationId: request.id as CorrelationId,
+    correlationId: ((
+      typeof correlationHeader === 'string' && correlationHeader.trim().length > 0
+        ? correlationHeader
+        : request.id
+    ) as CorrelationId),
     roles: user?.roles ?? [],
     clientIp: request.ip,
   };
+  if (typeof idempotencyHeader === 'string' && idempotencyHeader.trim().length > 0) {
+    context.idempotencyKey = idempotencyHeader.trim();
+  }
   if (userAgent !== undefined) {
     context.userAgent = userAgent;
   }

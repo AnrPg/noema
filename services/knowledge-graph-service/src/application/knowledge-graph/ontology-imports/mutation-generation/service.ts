@@ -163,7 +163,7 @@ function buildConceptCandidate(
     const review = buildReviewSummary(unresolved(), resolutionResult.conflictFlags);
     return {
       candidateId: `concept:${concept.externalId}`,
-      entityKind: 'concept',
+      entityKind: 'notion',
       status: 'blocked',
       title: `Review concept: ${concept.preferredLabel}`,
       summary: `Resolve conflicting canonical matches before importing ${sourceLabel} concept data.`,
@@ -185,7 +185,7 @@ function buildConceptCandidate(
 
   return {
     candidateId: `concept:${concept.externalId}`,
-    entityKind: 'concept',
+    entityKind: 'notion',
     status: 'ready',
     title:
       resolution === null
@@ -688,7 +688,7 @@ function buildNodeProvenance(
     harvestedAt: entry.harvestedAt,
     license: entry.license,
     requestUrl: entry.requestUrl,
-    recordKind: 'concept',
+    recordKind: 'notion',
   }));
 }
 

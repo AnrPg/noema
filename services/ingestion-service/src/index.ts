@@ -1,23 +1,25 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { Redis } from 'ioredis';
 import pino from 'pino';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../generated/prisma/index.js';
+import { createToolRegistry } from './agents/tools/tool.registry.js';
+import { registerToolRoutes } from './agents/tools/tool.routes.js';
 import { registerHealthRoutes } from './api/rest/health.routes.js';
 import { registerIngestionRoutes } from './api/rest/ingestion.routes.js';
-import { loadConfig } from './config/index.js';
+import { getEventPublisherConfig, loadConfig } from './config/index.js';
 import { IngestionService } from './domain/ingestion-service/ingestion.service.js';
 import { PrismaIngestionRepository } from './infrastructure/database/prisma-ingestion.repository.js';
 import { RedisIngestionEventPublisher } from './infrastructure/events/redis-event-publisher.js';
 import {
-  HeuristicConceptExtractorClient,
   HttpContentServiceClient,
   HttpCurriculumServiceClient,
+  HttpIngestionConceptExtractionAgentClient,
   HttpKnowledgeGraphClient,
   HttpVectorServiceClient,
 } from './infrastructure/external/local-clients.js';
-import { PlainDocumentParser } from './infrastructure/parsers/plain-document.parser.js';
+import { DocumentParser } from './infrastructure/parsers/document.parser.js';
+import { createAuthMiddleware } from './middleware/auth.middleware.js';
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -36,9 +38,12 @@ async function bootstrap(): Promise<void> {
 
   const service = new IngestionService(
     new PrismaIngestionRepository(prisma as never),
-    new PlainDocumentParser(),
+    new DocumentParser(),
     new HttpVectorServiceClient(config.external.vectorServiceUrl),
-    new HeuristicConceptExtractorClient(),
+    new HttpIngestionConceptExtractionAgentClient(
+      config.external.agentsServiceUrl,
+      config.external.serviceToken
+    ),
     new HttpKnowledgeGraphClient(
       config.external.knowledgeGraphServiceUrl,
       config.external.serviceToken
@@ -48,12 +53,17 @@ async function bootstrap(): Promise<void> {
       config.external.curriculumServiceUrl,
       config.external.serviceToken
     ),
-    new RedisIngestionEventPublisher(redis, 'ingestion-service', logger),
+    new RedisIngestionEventPublisher(redis, getEventPublisherConfig(config), logger),
     logger
   );
 
   registerHealthRoutes(app as unknown as FastifyInstance, prisma, redis);
   registerIngestionRoutes(app as unknown as FastifyInstance, service);
+  registerToolRoutes(
+    app as unknown as FastifyInstance,
+    createToolRegistry(service),
+    createAuthMiddleware('ingestion:agent')
+  );
 
   const shutdown = async (): Promise<void> => {
     await app.close();

@@ -175,9 +175,9 @@ describe('DeterministicProofRunner', () => {
       operations,
       buildProofModel(mutation, operations, {
         nodes: [
-          { nodeId: 'node_a', nodeType: 'concept', domain: 'math' },
-          { nodeId: 'node_b', nodeType: 'concept', domain: 'math' },
-          { nodeId: 'node_c', nodeType: 'concept', domain: 'math' },
+          { nodeId: 'node_a', nodeType: 'notion', domain: 'math' },
+          { nodeId: 'node_b', nodeType: 'notion', domain: 'math' },
+          { nodeId: 'node_c', nodeType: 'notion', domain: 'math' },
         ],
         edges: [
           {
@@ -230,7 +230,7 @@ describe('DeterministicProofRunner', () => {
       buildProofModel(mutation, operations, {
         nodes: [
           { nodeId: 'node_fact', nodeType: 'fact', domain: 'math' },
-          { nodeId: 'node_concept', nodeType: 'concept', domain: 'math' },
+          { nodeId: 'node_concept', nodeType: 'notion', domain: 'math' },
         ],
         edges: [],
       }),
@@ -297,7 +297,7 @@ describe('DeterministicProofRunner', () => {
         {
           nodes: [
             { nodeId: 'node_fact', nodeType: 'fact', domain: 'math' },
-            { nodeId: 'node_concept', nodeType: 'concept', domain: 'math' },
+            { nodeId: 'node_concept', nodeType: 'notion', domain: 'math' },
           ],
           edges: [],
         },

@@ -26,6 +26,7 @@ export interface IConceptStateGraphPort {
   setConceptState(input: {
     readonly userId: UserId;
     readonly conceptId: ConceptId;
+    readonly studyMode: StudyMode;
     readonly state: ConceptState;
   }): Promise<void>;
 
@@ -170,6 +171,7 @@ export class ConceptStateService {
     await this.graphPort.setConceptState({
       userId: input.userId,
       conceptId: input.conceptId,
+      studyMode,
       state,
     });
 

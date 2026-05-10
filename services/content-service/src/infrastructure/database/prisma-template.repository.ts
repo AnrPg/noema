@@ -78,6 +78,7 @@ function toDomain(row: PrismaTemplate): ITemplate {
     content: (row.content ?? { front: '', back: '' }) as ITemplate['content'],
     difficulty: fromDbDifficulty(row.difficulty),
     knowledgeNodeIds: row.knowledgeNodeIds as NodeId[],
+    anchoredCkgNodeIds: row.anchoredCkgNodeIds as ITemplate['anchoredCkgNodeIds'],
     tags: row.tags,
     metadata: row.metadata as Record<string, JsonValue>,
     visibility: fromDbVisibility(row.visibility),
@@ -167,7 +168,8 @@ export class PrismaTemplateRepository implements ITemplateRepository {
         cardType: toDbCardType(input.cardType),
         content: input.content as unknown as Prisma.JsonObject,
         difficulty: toDbDifficulty(input.difficulty ?? 'intermediate'),
-        knowledgeNodeIds: input.knowledgeNodeIds as string[],
+        knowledgeNodeIds: input.knowledgeNodeIds ?? [],
+        anchoredCkgNodeIds: input.anchoredCkgNodeIds ?? [],
         tags: input.tags ?? [],
         metadata: (input.metadata ?? {}) as unknown as Prisma.JsonObject,
         visibility: toDbVisibility(input.visibility ?? 'private'),
@@ -192,6 +194,8 @@ export class PrismaTemplateRepository implements ITemplateRepository {
     if (input.difficulty !== undefined) data.difficulty = toDbDifficulty(input.difficulty);
     if (input.knowledgeNodeIds !== undefined)
       data.knowledgeNodeIds = input.knowledgeNodeIds as string[];
+    if (input.anchoredCkgNodeIds !== undefined)
+      data.anchoredCkgNodeIds = input.anchoredCkgNodeIds as string[];
     if (input.tags !== undefined) data.tags = input.tags;
     if (input.metadata !== undefined)
       data.metadata = input.metadata as unknown as Prisma.JsonObject;

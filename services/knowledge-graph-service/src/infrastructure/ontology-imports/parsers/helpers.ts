@@ -98,10 +98,10 @@ export function buildConceptRecord(input: {
   nodeKind?: IOntologyGraphConceptRecord['nodeKind'];
 }): IOntologyGraphConceptRecord {
   return {
-    recordKind: 'concept',
+    recordKind: 'notion',
     externalId: input.externalId,
     iri: input.iri ?? null,
-    nodeKind: input.nodeKind ?? 'concept',
+    nodeKind: input.nodeKind ?? 'notion',
     preferredLabel: input.preferredLabel,
     altLabels: input.altLabels ?? [],
     description: input.description ?? null,

@@ -10,7 +10,7 @@ describe('buildNodeProperties', () => {
     const properties = buildNodeProperties(
       {
         label: 'ESCO concept',
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'skills-and-occupations',
         properties: {
           codes: [
@@ -45,7 +45,7 @@ describe('buildNodeProperties', () => {
     const properties = buildNodeProperties(
       {
         label: 'Leonhard Euler',
-        nodeType: 'concept',
+        nodeType: 'notion',
         domain: 'world-knowledge',
         canonicalExternalRefs: [
           {
@@ -66,7 +66,7 @@ describe('buildNodeProperties', () => {
           {
             sourceId: 'yago',
             sourceVersion: '4.5',
-            recordKind: 'concept',
+            recordKind: 'notion',
           },
         ],
         reviewMetadata: {
@@ -108,7 +108,7 @@ describe('buildNodeProperties', () => {
         {
           sourceId: 'yago',
           sourceVersion: '4.5',
-          recordKind: 'concept',
+          recordKind: 'notion',
         },
       ])
     );

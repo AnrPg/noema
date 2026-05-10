@@ -52,7 +52,7 @@ function makeNode(nodeId: NodeId, label: string, overrides?: Partial<IGraphNode>
   return {
     nodeId,
     graphType: 'pkg',
-    nodeType: 'concept',
+    nodeType: 'notion',
     label,
     domain: TEST_DOMAIN,
     properties: {},

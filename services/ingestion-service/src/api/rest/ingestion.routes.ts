@@ -141,9 +141,14 @@ function contextFromRequest(request: FastifyRequest): {
   correlationId: never;
   roles: string[];
 } {
+  const headerCorrelationId = request.headers['x-correlation-id'];
+  const requestCorrelationId =
+    typeof headerCorrelationId === 'string' && headerCorrelationId.trim().length > 0
+      ? headerCorrelationId.trim()
+      : request.id;
   return {
     userId: (request.user?.sub ?? null) as UserId | null,
-    correlationId: `cor_${'0'.repeat(21)}` as never,
+    correlationId: requestCorrelationId as never,
     roles: request.user?.scopes ?? [],
   };
 }

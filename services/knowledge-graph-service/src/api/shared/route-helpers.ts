@@ -17,6 +17,9 @@ import {
   DomainError,
   RateLimitExceededError,
   UnauthorizedError,
+  UpstreamServiceProtocolError,
+  UpstreamServiceTimeoutError,
+  UpstreamServiceUnavailableError,
   ValidationError,
 } from '../../domain/knowledge-graph-service/errors/base.errors.js';
 import {
@@ -526,6 +529,45 @@ export function handleError(
         code: error.code,
         message: error.message,
         details: { limit: error.limit, windowMs: error.windowMs },
+      },
+      metadata,
+    });
+    return;
+  }
+
+  // 502 — Upstream service unavailable
+  if (error instanceof UpstreamServiceUnavailableError) {
+    reply.status(502).send({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      },
+      metadata,
+    });
+    return;
+  }
+
+  // 502 — Upstream service returned an invalid payload
+  if (error instanceof UpstreamServiceProtocolError) {
+    reply.status(502).send({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+      },
+      metadata,
+    });
+    return;
+  }
+
+  // 504 — Upstream service timeout
+  if (error instanceof UpstreamServiceTimeoutError) {
+    reply.status(504).send({
+      error: {
+        code: error.code,
+        message: error.message,
+        details: error.details,
       },
       metadata,
     });

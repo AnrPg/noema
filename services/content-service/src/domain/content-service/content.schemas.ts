@@ -4,6 +4,7 @@
  * Zod schemas for validating content service inputs.
  */
 
+import { ConceptIdSchema } from '@noema/learning-kernel';
 import {
   CardState,
   CardType,
@@ -132,15 +133,15 @@ export const CardContentSchema = z
 // Node ID Schema
 // ============================================================================
 
-const nodeIdPattern = /^node_[a-zA-Z0-9]{21}$/;
+const nodeIdPattern = /^node_[a-zA-Z0-9_-]{21}$/;
 const NodeIdItemSchema = z
   .string()
   .regex(nodeIdPattern, 'Invalid NodeId format. Expected node_<21-char-nanoid>');
 
-const conceptIdPattern = /^concept_[a-zA-Z0-9_-]{21}$/;
+const conceptIdPattern = /^(?:concept_|node_)[a-zA-Z0-9_-]{21}$/;
 const ConceptIdItemSchema = z
   .string()
-  .regex(conceptIdPattern, 'Invalid ConceptId format. Expected concept_<21-char-nanoid>');
+  .regex(conceptIdPattern, 'Invalid ConceptId format. Expected concept_ or node_<21-char-nanoid>');
 
 const ContentSourceCitationSchema = z
   .object({
@@ -165,6 +166,8 @@ export const CreateCardInputSchema = z
     cardType: AnyCardTypeSchema,
     content: CardContentSchema,
     difficulty: DifficultyLevelSchema.default(DifficultyLevel.INTERMEDIATE),
+    primaryConceptId: ConceptIdItemSchema,
+    relatedConceptIds: z.array(ConceptIdItemSchema).max(50).default([]),
     knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).default([]),
     compatibleTransformations: z.array(TransformationTypeSchema).min(1).max(6).optional(),
     defaultEligibilityGroups: z.array(EligibilityGroupSchema).max(7).optional(),
@@ -188,6 +191,13 @@ export const CreateCardInputSchema = z
     metadata: z.record(z.unknown()).default({}),
   })
   .superRefine((data, ctx) => {
+    if (data.relatedConceptIds.includes(data.primaryConceptId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['relatedConceptIds'],
+        message: 'relatedConceptIds must not include the primaryConceptId.',
+      });
+    }
     const typeSchema = CardContentSchemaRegistry[data.cardType];
     if (!typeSchema) {
       ctx.addIssue({
@@ -221,13 +231,6 @@ export const CreateCardInputSchema = z
           message: 'RAG-grounded cards require at least one citation.',
         });
       }
-    }
-    if (data.originMode !== CardOriginMode.AUTHORED && data.anchoredCkgNodeIds.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['anchoredCkgNodeIds'],
-        message: 'Generated cards require at least one CKG anchor.',
-      });
     }
     if (
       data.originMode === CardOriginMode.AGENT_AUTONOMOUS &&
@@ -327,6 +330,8 @@ export const UpdateCardInputSchema = z
   .object({
     content: CardContentSchema.optional(),
     difficulty: DifficultyLevelSchema.optional(),
+    primaryConceptId: ConceptIdItemSchema.optional(),
+    relatedConceptIds: z.array(ConceptIdItemSchema).max(50).optional(),
     knowledgeNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
     anchoredCkgNodeIds: z.array(ConceptIdItemSchema).max(50).optional(),
     anchoredPkgNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
@@ -358,6 +363,8 @@ export const DeckQuerySchema = z.object({
   compatibleTransformations: z.array(TransformationTypeSchema).optional(),
   defaultEligibilityGroups: z.array(EligibilityGroupSchema).optional(),
   supportedStudyModes: z.array(StudyModeSchema).max(2).optional(),
+  primaryConceptId: ConceptIdItemSchema.optional(),
+  relatedConceptIds: z.array(ConceptIdItemSchema).optional(),
   knowledgeNodeIds: z.array(NodeIdItemSchema).optional(),
   knowledgeNodeIdMode: z
     .enum(['any', 'all', 'exact', 'subtree', 'prerequisites', 'related'])
@@ -386,6 +393,8 @@ export const CompleteCardMetadataInputSchema = z.object({
   cardType: AnyCardTypeSchema.optional(),
   difficulty: DifficultyLevelSchema.optional(),
   tags: z.array(TagSchema).max(30).optional(),
+  primaryConceptId: ConceptIdItemSchema.optional(),
+  relatedConceptIds: z.array(ConceptIdItemSchema).max(50).optional(),
   anchoredCkgNodeIds: z.array(ConceptIdItemSchema).max(50).optional(),
   anchoredPkgNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
   metadata: z.record(z.unknown()).optional(),
@@ -399,6 +408,10 @@ export const TransformCardInputSchema = z.object({
   transformationKind: CardTransformKindSchema,
   prompt: z.string().max(4000).optional(),
   targetCardType: AnyCardTypeSchema.optional(),
+  targetCardTypes: z.array(AnyCardTypeSchema).max(20).optional(),
+  count: z.number().int().min(1).max(20).default(1),
+  primaryConceptId: ConceptIdItemSchema.optional(),
+  relatedConceptIds: z.array(ConceptIdItemSchema).max(50).optional(),
   anchoredCkgNodeIds: z.array(ConceptIdItemSchema).max(50).optional(),
   anchoredPkgNodeIds: z.array(NodeIdItemSchema).max(50).optional(),
 });
@@ -423,8 +436,17 @@ export const CreateContentGenerationJobInputSchema = z.object({
     .default({ maxCards: 12, timeoutMs: 5000 }),
 });
 
+export const ImportGeneratedContentBatchInputSchema = z.object({
+  job: CreateContentGenerationJobInputSchema,
+  cards: z.array(z.record(z.unknown())).max(100),
+  activityVariants: z.array(z.record(z.unknown())).max(100).default([]),
+  rejectedDrafts: z.array(z.record(z.unknown())).default([]),
+  agentRunId: z.string().min(1).max(100).nullable().optional(),
+  resultPayload: z.record(z.unknown()).default({}),
+});
+
 export const ActivityPayloadCandidatesInputSchema = z.object({
-  conceptId: z.string().min(1).max(100),
+  conceptId: ConceptIdSchema,
   transformationType: TransformationTypeSchema,
   eligibilityGroup: EligibilityGroupSchema,
   epistemicMode: EpistemicModeSchema,
@@ -436,7 +458,7 @@ export const ActivityPayloadCandidatesInputSchema = z.object({
 });
 
 export const CreateGeneratedActivityVariantInputSchema = z.object({
-  conceptId: z.string().min(1).max(100),
+  conceptId: ConceptIdSchema,
   studyMode: StudyModeSchema,
   transformationType: TransformationTypeSchema,
   epistemicMode: EpistemicModeSchema,
@@ -520,6 +542,9 @@ export type PromoteCardFromReviewInputSchemaType = z.infer<
 export type TransformCardInputSchemaType = z.infer<typeof TransformCardInputSchema>;
 export type CreateContentGenerationJobInputSchemaType = z.infer<
   typeof CreateContentGenerationJobInputSchema
+>;
+export type ImportGeneratedContentBatchInputSchemaType = z.infer<
+  typeof ImportGeneratedContentBatchInputSchema
 >;
 export type SessionSeedInputSchemaType = z.infer<typeof SessionSeedInputSchema>;
 export type ActivityPayloadCandidatesInputSchemaType = z.infer<

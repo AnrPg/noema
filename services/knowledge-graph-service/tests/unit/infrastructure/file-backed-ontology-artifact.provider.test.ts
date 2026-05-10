@@ -54,6 +54,57 @@ describe('FileBackedOntologyArtifactProvider', () => {
     expect(provider.getArtifact().version).toBe('dual-graph-ontology-v2-test');
   });
 
+  it('migrates legacy concept aliases in persisted ontology artifacts', async () => {
+    const artifactPath = await createArtifactPath();
+    await writeFile(
+      artifactPath,
+      JSON.stringify(
+        {
+          ...DEFAULT_ONTOLOGY_ARTIFACT,
+          nodeClassHierarchy: {
+            concept: ['knowledge_entity', 'concept_bearing', 'abstraction'],
+            skill: ['knowledge_entity', 'concept_bearing', 'skill_like'],
+            occupation: ['knowledge_entity', 'role_like'],
+            fact: ['knowledge_entity', 'concept_bearing', 'fact_like'],
+            procedure: ['knowledge_entity', 'concept_bearing', 'process_like'],
+            principle: ['knowledge_entity', 'concept_bearing', 'rule_like'],
+            example: ['knowledge_entity', 'instance_like', 'example_like'],
+            counterexample: [
+              'knowledge_entity',
+              'instance_like',
+              'example_like',
+              'counterexample_like',
+            ],
+            misconception: ['knowledge_entity', 'diagnostic_like'],
+          },
+          illegalRetypings: [
+            {
+              from: 'example',
+              to: 'concept',
+              reason: 'legacy alias',
+            },
+          ],
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    const provider = new FileBackedOntologyArtifactProvider(artifactPath);
+    await provider.initialize();
+
+    const raw = await readFile(artifactPath, 'utf8');
+    expect(raw).not.toContain('"concept"');
+    expect(raw).toContain('"notion"');
+    expect(provider.getArtifact().nodeClassHierarchy.notion).toEqual([
+      'knowledge_entity',
+      'concept_bearing',
+      'abstraction',
+    ]);
+    expect(provider.getArtifact().illegalRetypings[0]?.to).toBe('notion');
+  });
+
   it('rejects malformed ontology artifacts during initialization', async () => {
     const artifactPath = await createArtifactPath();
     await writeFile(

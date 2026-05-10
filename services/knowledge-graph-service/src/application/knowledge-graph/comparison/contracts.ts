@@ -28,7 +28,7 @@ export interface IComparisonScopeDto {
 
 export interface IComparisonGraphNodeDto {
   id: string;
-  type: 'concept' | 'skill' | 'fact' | 'procedure' | 'principle' | 'example';
+  type: 'notion' | 'skill' | 'fact' | 'procedure' | 'principle' | 'example';
   label: string;
   description: string | null;
   tags: string[];

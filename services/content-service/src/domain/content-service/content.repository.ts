@@ -22,6 +22,7 @@ import type {
   ICursorPaginatedResponse,
   IDeckQuery,
   IGeneratedActivityVariant,
+  IGeneratedActivityVariantQuery,
   IUpdateCardInput,
 } from '../../types/content.types.js';
 
@@ -120,6 +121,14 @@ export interface IContentRepository {
   createGeneratedActivityVariant(
     input: Omit<IGeneratedActivityVariant, 'createdAt' | 'hitCount'>
   ): Promise<IGeneratedActivityVariant>;
+
+  /**
+   * List generated activity variants for prompt coverage/readiness.
+   */
+  listGeneratedActivityVariants(
+    query: IGeneratedActivityVariantQuery,
+    userId: UserId
+  ): Promise<IGeneratedActivityVariant[]>;
 
   /**
    * Return parent/variant lineage for a card.

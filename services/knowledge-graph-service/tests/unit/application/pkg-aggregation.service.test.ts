@@ -282,7 +282,7 @@ function createPkgNode(overrides: Partial<IGraphNode> = {}): IGraphNode {
   return {
     nodeId: 'pkg_node' as NodeId,
     graphType: 'pkg',
-    nodeType: 'concept',
+    nodeType: 'notion',
     label: 'Graph Theory',
     domain: 'mathematics',
     properties: {},
@@ -296,7 +296,7 @@ function createCanonicalNode(overrides: Partial<IGraphNode> = {}): IGraphNode {
   return {
     nodeId: 'ckg_node' as NodeId,
     graphType: 'ckg',
-    nodeType: 'concept',
+    nodeType: 'notion',
     label: 'Graph Theory',
     domain: 'mathematics',
     properties: {},
@@ -342,7 +342,7 @@ describe('PkgAggregationApplicationService', () => {
         {
           nodeId: `node_${userId}` as NodeId,
           userId,
-          nodeType: 'concept' as GraphNodeType,
+          nodeType: 'notion' as GraphNodeType,
           label: 'Graph Theory',
           domain: 'mathematics',
           metadata: {},
@@ -402,7 +402,7 @@ describe('PkgAggregationApplicationService', () => {
       {
         nodeId: 'node_1' as NodeId,
         userId: 'user_1' as UserId,
-        nodeType: 'concept' as GraphNodeType,
+        nodeType: 'notion' as GraphNodeType,
         label: 'Graph Theory',
         domain: 'mathematics',
         metadata: {},
@@ -601,7 +601,7 @@ describe('PkgAggregationApplicationService', () => {
         nodeId: 'node_removed' as NodeId,
         userId: 'user_1' as UserId,
         snapshot: {
-          nodeType: 'concept' as GraphNodeType,
+          nodeType: 'notion' as GraphNodeType,
           label: 'Graph Theory',
           domain: 'mathematics',
           metadata: {},
@@ -760,7 +760,7 @@ describe('PkgAggregationApplicationService', () => {
         {
           nodeId: `node_${userId}` as NodeId,
           userId,
-          nodeType: 'concept' as GraphNodeType,
+          nodeType: 'notion' as GraphNodeType,
           label: 'Graph Theory',
           domain: 'mathematics',
           metadata: {},
@@ -779,7 +779,7 @@ describe('PkgAggregationApplicationService', () => {
           nodeId: `node_remove_${userId}` as NodeId,
           userId,
           snapshot: {
-            nodeType: 'concept' as GraphNodeType,
+            nodeType: 'notion' as GraphNodeType,
             label: 'Graph Theory',
             domain: 'mathematics',
             metadata: {},
@@ -797,7 +797,7 @@ describe('PkgAggregationApplicationService', () => {
       {
         nodeId: 'node_user_3' as NodeId,
         userId: 'user_3' as UserId,
-        nodeType: 'concept' as GraphNodeType,
+        nodeType: 'notion' as GraphNodeType,
         label: 'Graph Theory',
         domain: 'mathematics',
         metadata: {},
@@ -881,7 +881,7 @@ describe('PkgAggregationApplicationService', () => {
         {
           nodeId: `node_${userId}` as NodeId,
           userId,
-          nodeType: 'concept' as GraphNodeType,
+          nodeType: 'notion' as GraphNodeType,
           label: 'Graph Theory',
           domain: 'mathematics',
           metadata: {},
@@ -900,7 +900,7 @@ describe('PkgAggregationApplicationService', () => {
           nodeId: `node_remove_${userId}` as NodeId,
           userId,
           snapshot: {
-            nodeType: 'concept' as GraphNodeType,
+            nodeType: 'notion' as GraphNodeType,
             label: 'Graph Theory',
             domain: 'mathematics',
             metadata: {},
@@ -967,7 +967,7 @@ describe('PkgAggregationApplicationService', () => {
       {
         nodeId: 'node_1' as NodeId,
         userId: 'user_1' as UserId,
-        nodeType: 'concept' as GraphNodeType,
+        nodeType: 'notion' as GraphNodeType,
         label: 'Graph  Theory',
         domain: 'mathematics',
         metadata: {},
@@ -1038,7 +1038,7 @@ describe('PkgAggregationApplicationService', () => {
       {
         nodeId: 'node_1' as NodeId,
         userId: 'user_1' as UserId,
-        nodeType: 'concept' as GraphNodeType,
+        nodeType: 'notion' as GraphNodeType,
         label: 'Graph  Theory',
         domain: 'mathematics',
         metadata: {},
@@ -1088,7 +1088,7 @@ describe('PkgAggregationApplicationService', () => {
       {
         nodeId: 'node_1' as NodeId,
         userId: 'user_1' as UserId,
-        nodeType: 'concept' as GraphNodeType,
+        nodeType: 'notion' as GraphNodeType,
         label: 'Graph Theory',
         domain: 'mathematics',
         metadata: {},
@@ -1105,7 +1105,7 @@ describe('PkgAggregationApplicationService', () => {
         nodeId: 'node_1' as NodeId,
         userId: 'user_1' as UserId,
         snapshot: {
-          nodeType: 'concept' as GraphNodeType,
+          nodeType: 'notion' as GraphNodeType,
           label: 'Graph Theory',
           domain: 'mathematics',
           metadata: {},
@@ -1122,7 +1122,7 @@ describe('PkgAggregationApplicationService', () => {
       {
         nodeId: 'node_1' as NodeId,
         userId: 'user_1' as UserId,
-        nodeType: 'concept' as GraphNodeType,
+        nodeType: 'notion' as GraphNodeType,
         label: 'Graph Theory',
         domain: 'mathematics',
         metadata: {},

@@ -20,7 +20,7 @@ const MAX_DUPLICATE_PROBES = 6;
 const FALLBACK_DUPLICATE_DOMAIN_NODE_LIMIT = 1000;
 const GENERIC_RELATION_EDGE_TYPES = new Set(['related_to']);
 const VAGUE_LABELS = new Set([
-  'concept',
+  'notion',
   'concepts',
   'item',
   'items',

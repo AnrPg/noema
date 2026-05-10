@@ -6,7 +6,8 @@
  * stores polymorphic JSONB blobs discriminated by cardType.
  *
  * Design: ADR-0010 Decision 5 — content service is a pure card archive.
- * Cards link to the Personal Knowledge Graph via knowledgeNodeIds: NodeId[].
+ * Cards link to the Personal Knowledge Graph via a required primaryConceptId.
+ * Legacy node-link arrays remain for compatibility during the migration.
  */
 
 import type {
@@ -95,6 +96,12 @@ export interface ICard extends IAuditedEntity {
 
   /** Polymorphic content blob — structure depends on cardType */
   content: ICardContent;
+
+  /** Required canonical concept anchor for this card */
+  primaryConceptId: ConceptId;
+
+  /** Optional secondary concept anchors */
+  relatedConceptIds: ConceptId[];
 
   /** PKG node IDs this card is linked to */
   knowledgeNodeIds: NodeId[];
@@ -194,6 +201,8 @@ export interface ICardSummary {
   difficulty: DifficultyLevel;
   /** First N chars of front content for preview */
   preview: string;
+  primaryConceptId: ConceptId;
+  relatedConceptIds: ConceptId[];
   knowledgeNodeIds: NodeId[];
   compatibleTransformations: TransformationType[];
   defaultEligibilityGroups: EligibilityGroup[];
@@ -220,6 +229,8 @@ export interface ICreateCardInput {
   cardType: CardType | RemediationCardType;
   content: ICardContent;
   difficulty?: DifficultyLevel;
+  primaryConceptId: ConceptId;
+  relatedConceptIds?: ConceptId[];
   knowledgeNodeIds?: NodeId[];
   compatibleTransformations?: TransformationType[];
   defaultEligibilityGroups?: EligibilityGroup[];
@@ -256,6 +267,8 @@ export interface IBatchCreateCardInput {
 export interface IUpdateCardInput {
   content?: ICardContent;
   difficulty?: DifficultyLevel;
+  primaryConceptId?: ConceptId;
+  relatedConceptIds?: ConceptId[];
   knowledgeNodeIds?: NodeId[];
   anchoredCkgNodeIds?: ConceptId[];
   anchoredPkgNodeIds?: NodeId[];
@@ -330,6 +343,10 @@ export interface IDeckQuery {
   supportedStudyModes?: StudyMode[];
   /** Filter by PKG node IDs (cards linked to ANY of these nodes) */
   knowledgeNodeIds?: NodeId[];
+  /** Filter by primary semantic anchor */
+  primaryConceptId?: ConceptId;
+  /** Filter by secondary semantic anchors */
+  relatedConceptIds?: ConceptId[];
   /**
    * How to match knowledgeNodeIds.
    * - 'any'           — card linked to ANY of the given nodes (default)
@@ -546,6 +563,8 @@ export interface ICompleteCardMetadataInput {
   cardType?: CardType | RemediationCardType;
   difficulty?: DifficultyLevel;
   tags?: string[];
+  primaryConceptId?: ConceptId;
+  relatedConceptIds?: ConceptId[];
   anchoredCkgNodeIds?: ConceptId[];
   anchoredPkgNodeIds?: NodeId[];
   metadata?: Record<string, JsonValue>;
@@ -559,6 +578,10 @@ export interface ITransformCardInput {
   transformationKind: CardTransformKind;
   prompt?: string;
   targetCardType?: CardType | RemediationCardType;
+  targetCardTypes?: (CardType | RemediationCardType)[];
+  count?: number;
+  primaryConceptId?: ConceptId;
+  relatedConceptIds?: ConceptId[];
   anchoredCkgNodeIds?: ConceptId[];
   anchoredPkgNodeIds?: NodeId[];
 }
@@ -595,6 +618,23 @@ export interface ICreateContentGenerationJobInput {
     maxCards?: number;
     timeoutMs?: number;
   };
+}
+
+export interface IGeneratedActivityVariantQuery {
+  conceptId?: ConceptId;
+  studyMode?: StudyMode;
+  transformationType?: TransformationType;
+  difficultyBucket?: number;
+  limit?: number;
+}
+
+export interface IImportGeneratedContentBatchInput {
+  job: ICreateContentGenerationJobInput;
+  cards: ICreateCardInput[];
+  activityVariants?: ICreateGeneratedActivityVariantInput[];
+  rejectedDrafts?: Record<string, JsonValue>[];
+  agentRunId?: string | null;
+  resultPayload?: Record<string, JsonValue>;
 }
 
 export interface IConceptCardCoverage {
@@ -812,6 +852,7 @@ export interface ITemplate extends IAuditedEntity {
   content: ICardContent;
   difficulty: DifficultyLevel;
   knowledgeNodeIds: NodeId[];
+  anchoredCkgNodeIds: ConceptId[];
   tags: string[];
   metadata: Record<string, JsonValue>;
   visibility: TemplateVisibility;
@@ -846,6 +887,7 @@ export interface ICreateTemplateInput {
   content: ICardContent;
   difficulty?: DifficultyLevel;
   knowledgeNodeIds?: NodeId[];
+  anchoredCkgNodeIds?: ConceptId[];
   tags?: string[];
   metadata?: Record<string, JsonValue>;
   visibility?: TemplateVisibility;
@@ -860,6 +902,7 @@ export interface IUpdateTemplateInput {
   content?: ICardContent;
   difficulty?: DifficultyLevel;
   knowledgeNodeIds?: NodeId[];
+  anchoredCkgNodeIds?: ConceptId[];
   tags?: string[];
   metadata?: Record<string, JsonValue>;
   visibility?: TemplateVisibility;

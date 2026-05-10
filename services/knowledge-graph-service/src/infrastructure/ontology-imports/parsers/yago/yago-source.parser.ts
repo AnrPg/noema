@@ -292,7 +292,7 @@ function buildConceptSeed(externalId: string, role: YagoConceptRole): IMutableCo
     properties: {
       yagoResourceKind: role,
     },
-    nodeKind: role === 'class' ? 'concept' : 'entity',
+    nodeKind: role === 'class' ? 'notion' : 'entity',
   };
 }
 
@@ -426,7 +426,7 @@ function mergeNodeKind(
 ): IOntologyGraphConceptRecord['nodeKind'] {
   const priority: Record<IOntologyGraphConceptRecord['nodeKind'], number> = {
     literal: 3,
-    concept: 2,
+    notion: 2,
     entity: 1,
   };
 

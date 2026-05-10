@@ -110,6 +110,52 @@ const OntologyArtifactSchema = z.object({
   ),
 });
 
+type RawOntologyArtifact = Record<string, unknown>;
+
+function normalizeLegacyConceptAliases(rawArtifact: RawOntologyArtifact): {
+  artifact: RawOntologyArtifact;
+  changed: boolean;
+} {
+  let changed = false;
+  const normalized: RawOntologyArtifact = { ...rawArtifact };
+
+  const rawNodeClassHierarchy = rawArtifact['nodeClassHierarchy'];
+  if (rawNodeClassHierarchy !== null && typeof rawNodeClassHierarchy === 'object') {
+    const nodeClassHierarchy = { ...(rawNodeClassHierarchy as Record<string, unknown>) };
+    if (
+      Object.prototype.hasOwnProperty.call(nodeClassHierarchy, 'concept') &&
+      !Object.prototype.hasOwnProperty.call(nodeClassHierarchy, GraphNodeType.CONCEPT)
+    ) {
+      nodeClassHierarchy[GraphNodeType.CONCEPT] = nodeClassHierarchy['concept'];
+      delete nodeClassHierarchy['concept'];
+      changed = true;
+    }
+    normalized['nodeClassHierarchy'] = nodeClassHierarchy;
+  }
+
+  const rawIllegalRetypings = rawArtifact['illegalRetypings'];
+  if (Array.isArray(rawIllegalRetypings)) {
+    normalized['illegalRetypings'] = rawIllegalRetypings.map((entry) => {
+      if (entry === null || typeof entry !== 'object') {
+        return entry;
+      }
+
+      const normalizedEntry = { ...(entry as Record<string, unknown>) };
+      if (normalizedEntry['from'] === 'concept') {
+        normalizedEntry['from'] = GraphNodeType.CONCEPT;
+        changed = true;
+      }
+      if (normalizedEntry['to'] === 'concept') {
+        normalizedEntry['to'] = GraphNodeType.CONCEPT;
+        changed = true;
+      }
+      return normalizedEntry;
+    });
+  }
+
+  return { artifact: normalized, changed };
+}
+
 export class FileBackedOntologyArtifactProvider implements IOntologyArtifactProvider {
   private cachedArtifact: IOntologyArtifact | null = null;
 
@@ -137,7 +183,12 @@ export class FileBackedOntologyArtifactProvider implements IOntologyArtifactProv
 
   private async loadArtifact(resolvedPath: string): Promise<IOntologyArtifact> {
     const raw = await readFile(resolvedPath, 'utf8');
-    const parsed = OntologyArtifactSchema.parse(JSON.parse(raw));
+    const parsedJson = JSON.parse(raw) as RawOntologyArtifact;
+    const { artifact: normalizedArtifact, changed } = normalizeLegacyConceptAliases(parsedJson);
+    if (changed) {
+      await writeFile(resolvedPath, JSON.stringify(normalizedArtifact, null, 2), 'utf8');
+    }
+    const parsed = OntologyArtifactSchema.parse(normalizedArtifact);
     const nodeClassHierarchy = { ...DEFAULT_ONTOLOGY_ARTIFACT.nodeClassHierarchy };
     for (const nodeType of Object.keys(
       DEFAULT_ONTOLOGY_ARTIFACT.nodeClassHierarchy

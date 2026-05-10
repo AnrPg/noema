@@ -77,7 +77,7 @@ export class ConceptNetSourceParser implements ISourceParser {
                 languages:
                   typeof node.language === 'string' && node.language !== '' ? [node.language] : [],
                 sourceTypes: ['conceptnet_node'],
-                nodeKind: 'concept',
+                nodeKind: 'notion',
               })
             );
           }
@@ -165,7 +165,7 @@ export class ConceptNetSourceParser implements ISourceParser {
               iri: nodeId,
               preferredLabel: decodeGraphIdentifier(nodeId),
               sourceTypes: ['conceptnet_node'],
-              nodeKind: 'concept',
+              nodeKind: 'notion',
             })
           );
         }

@@ -167,11 +167,11 @@ export function inferNodeType(labels: string[]): GraphNodeType {
   const graphLabels = new Set(['PkgNode', 'CkgNode']);
   const nodeTypeLabel = labels.find((l) => !graphLabels.has(l));
   // Convert PascalCase label to lowercase enum value
-  return (nodeTypeLabel?.toLowerCase() ?? 'concept') as GraphNodeType;
+  return (nodeTypeLabel?.toLowerCase() ?? 'notion') as GraphNodeType;
 }
 
 const VALID_NODE_TYPES = new Set<GraphNodeType>([
-  'concept',
+  'notion',
   'occupation',
   'skill',
   'fact',
@@ -208,7 +208,7 @@ const SAFE_LABEL_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * Convert a nodeType string to a PascalCase Neo4j label.
- * e.g., 'concept' → 'Concept', 'counterexample' → 'Counterexample'
+ * e.g., 'notion' → 'Concept', 'counterexample' → 'Counterexample'
  *
  * Validates the result against a safe-label pattern to prevent Cypher injection.
  */
