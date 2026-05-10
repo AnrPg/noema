@@ -55,6 +55,7 @@
       "@noema/config": ["packages/config/src"],
       "@noema/contracts": ["packages/contracts/src"],
       "@noema/events": ["packages/events/src"],
+      "@noema/learning-kernel": ["packages/learning-kernel/src"],
       "@noema/types": ["packages/types/src"],
       "@noema/utils": ["packages/utils/src"],
       "@noema/validation": ["packages/validation/src"]

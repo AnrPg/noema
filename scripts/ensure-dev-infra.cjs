@@ -23,14 +23,25 @@ const dependencyProbes = {
     description: 'Neo4j Bolt on 127.0.0.1:7687',
     check: () => probeTcpPort(7687),
   },
+  qdrant: {
+    description: 'Qdrant on http://127.0.0.1:6335/healthz',
+    check: () => probeHttp('127.0.0.1', 6335, '/healthz'),
+  },
 };
 
 const serviceDependencies = {
   'content-service': ['postgres', 'redis', 'minio'],
+  'curriculum-service': ['postgres', 'redis'],
+  'gamification-service': ['postgres', 'redis'],
+  'ingestion-service': ['postgres', 'redis'],
   'knowledge-graph-service': ['postgres', 'redis', 'neo4j'],
+  'metacognition-service': ['postgres', 'redis'],
+  'pedagogy-guardian-service': ['postgres', 'redis'],
   'scheduler-service': ['postgres', 'redis'],
   'session-service': ['postgres', 'redis'],
   'user-service': ['postgres', 'redis'],
+  'vector-service': ['qdrant'],
+  'web+api': ['postgres', 'redis', 'minio', 'neo4j', 'qdrant'],
 };
 
 if (!serviceName || !(serviceName in serviceDependencies)) {
@@ -156,7 +167,7 @@ function runDockerComposeUp() {
       cwd: repoRoot,
       encoding: 'utf8',
       shell: process.platform === 'win32',
-      timeout: 30000,
+      timeout: Number(process.env.NOEMA_DOCKER_COMPOSE_TIMEOUT_MS ?? 120000),
     }
   );
 

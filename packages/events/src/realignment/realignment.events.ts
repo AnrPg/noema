@@ -5,6 +5,7 @@
 import type {
   ConceptId,
   ConceptState,
+  CurriculumNodeId,
   EpistemicMode,
   EvaluationId,
   LearningInterventionType,
@@ -13,6 +14,7 @@ import type {
   SchedulerQueue,
   SessionId,
   StepId,
+  StepSelfRating,
   StudyMode,
   TransformationType,
   TriggerId,
@@ -106,17 +108,41 @@ export interface IStepEventPayload {
   userId: UserId;
 }
 
+export interface IStepAnsweredEventPayload extends IStepEventPayload {
+  evaluationId: EvaluationId;
+  conceptRefs: ConceptId[];
+  selectedNodeIds: CurriculumNodeId[];
+  correct: boolean;
+  selfRating: StepSelfRating;
+  trace: {
+    frames: {
+      f0: { score: number; notes: string };
+      f1: { score: number; notes: string };
+      f2: { score: number; notes: string };
+      f3: { score: number; notes: string };
+      f4: { score: number; notes: string };
+      f5: { score: number; notes: string };
+      f6: { score: number; notes: string };
+    };
+  };
+  responseTimeMs?: number;
+  studyMode: StudyMode;
+  epistemicMode: EpistemicMode;
+  transformation?: TransformationType;
+}
+
 export interface IMetacognitionEvaluationRecordedPayload {
   evaluationId: EvaluationId;
   stepId: StepId;
   sessionId: SessionId;
   userId: UserId;
   conceptRefs: ConceptId[];
+  selectedNodeIds: CurriculumNodeId[];
   reasoningQuality: number;
   confidenceSignal: number;
   combinedScore: number;
   correct: boolean;
-  studyMode?: StudyMode;
+  studyMode: StudyMode;
   epistemicMode: EpistemicMode;
   transformation?: TransformationType;
 }
@@ -127,8 +153,10 @@ export interface IMetacognitionTriggerFiredPayload {
   type: TriggerType;
   severity: number;
   conceptRefs: ConceptId[];
+  selectedNodeIds: CurriculumNodeId[];
   stepId: StepId;
   sessionId: SessionId;
+  studyMode: StudyMode;
   recommendedIntervention: LearningInterventionType;
 }
 
@@ -212,7 +240,7 @@ export type LessonPlanCompletedEvent = ITypedEvent<
 >;
 export type StepPlannedEvent = ITypedEvent<'step.planned', 'Step', IStepEventPayload>;
 export type StepPresentedEvent = ITypedEvent<'step.presented', 'Step', IStepEventPayload>;
-export type StepAnsweredEvent = ITypedEvent<'step.answered', 'Step', IStepEventPayload>;
+export type StepAnsweredEvent = ITypedEvent<'step.answered', 'Step', IStepAnsweredEventPayload>;
 export type StepEvaluatedEvent = ITypedEvent<'step.evaluated', 'Step', IStepEventPayload>;
 export type MetacognitionEvaluationRecordedEvent = ITypedEvent<
   'metacognition.evaluation.recorded',

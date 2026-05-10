@@ -17,8 +17,11 @@ import {
   CognitiveLoadLevel,
   ConceptCandidateState,
   CurriculumEdgeType,
+  CurriculumBranchDriftState,
+  CurriculumBranchEntryStrategy,
   CurriculumNodeRuntimeState,
   CurriculumOriginMode,
+  CurriculumPathRole,
   CurriculumRevisionReason,
   CurriculumState,
   CurriculumVersionState,
@@ -146,6 +149,18 @@ export const CurriculumNodeRuntimeStateSchema = createEnumSchema(
 export const CurriculumEdgeTypeSchema = createEnumSchema(
   CurriculumEdgeType,
   'Curriculum edge type'
+);
+export const CurriculumPathRoleSchema = createEnumSchema(
+  CurriculumPathRole,
+  'Curriculum path role'
+);
+export const CurriculumBranchEntryStrategySchema = createEnumSchema(
+  CurriculumBranchEntryStrategy,
+  'Curriculum branch entry strategy'
+);
+export const CurriculumBranchDriftStateSchema = createEnumSchema(
+  CurriculumBranchDriftState,
+  'Curriculum branch drift state'
 );
 export const CurriculumOriginModeSchema = createEnumSchema(
   CurriculumOriginMode,

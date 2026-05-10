@@ -21,11 +21,32 @@ describe('session Step-loop api', () => {
   });
 
   it('fetches the next Step-loop snapshot from the Batch 4 endpoint', async () => {
-    httpGet.mockResolvedValue({ data: { nextStep: null } });
+    const response = {
+      data: {
+        session: { id: 'session_123' },
+        lessonPlan: { id: 'lplan_123' },
+        nextStep: null,
+      },
+    };
+    httpGet.mockResolvedValue(response);
 
-    await sessionsApi.getNextStep('session_123' as never);
+    await expect(sessionsApi.getNextStep('session_123' as never)).resolves.toEqual(response);
 
     expect(httpGet).toHaveBeenCalledWith('/v1/sessions/session_123/next-step');
+  });
+
+  it('lists sessions through the paginated sessions envelope', async () => {
+    const response = {
+      data: {
+        sessions: [{ id: 'session_123' }],
+        total: 1,
+      },
+    };
+    httpGet.mockResolvedValue(response);
+
+    await expect(sessionsApi.listSessions({ limit: 5 })).resolves.toEqual(response);
+
+    expect(httpGet).toHaveBeenCalledWith('/v1/sessions', { params: { limit: 5 } });
   });
 
   it('answers Steps through the canonical Step endpoint', async () => {

@@ -38,3 +38,9 @@ export type * from './knowledge-graph/index.js';
 // Eligibility and Transformation Rules
 // ============================================================================
 export * from './eligibility/index.js';
+
+// ============================================================================
+// Agent Kernel and Capability Contracts
+// ============================================================================
+export type * from './agents/index.js';
+export * from './agents/index.js';

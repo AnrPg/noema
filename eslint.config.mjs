@@ -30,9 +30,7 @@ export default tseslint.config(
       'eslint.config.mjs',
       // Vitest test setup files (not part of src build, not linted)
       'packages/ui/src/test/**',
-      // Web app test files — no vitest/testing-library configured yet in apps/web
-      'apps/web/src/**/*.test.ts',
-      'apps/web/src/**/*.test.tsx',
+      // Web app test files are linted selectively through allowDefaultProject below.
       // Stale compiled artifacts that tsc may emit into src/ instead of dist/
       'packages/*/src/**/*.js',
       'packages/*/src/**/*.d.ts',
@@ -56,6 +54,8 @@ export default tseslint.config(
             '*.config.cjs',
             '*.config.mjs',
             'services/*/vitest.config.ts',
+            'apps/web/src/components/agents/curriculum-helpers.test.ts',
+            'apps/web/src/next-config.test.ts',
             'packages/*/tailwind.config.cjs',
             'packages/ui/src/lib/*.test.ts',
             'packages/ui/src/lib/*.test.tsx',

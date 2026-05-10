@@ -261,10 +261,9 @@ export abstract class BaseEventConsumer {
         const typedEntries = rawEntries as [string, [string, string[]][]][];
 
         for (const [, streamEntries] of typedEntries) {
-          const tasks = streamEntries.map(([messageId, fields]) =>
-            this.trackInFlight(this.handleStreamMessage(messageId, fields))
-          );
-          await Promise.all(tasks);
+          for (const [messageId, fields] of streamEntries) {
+            await this.trackInFlight(this.handleStreamMessage(messageId, fields));
+          }
         }
       } catch (error: unknown) {
         this.logger.error({ error }, 'Error in event consumer poll loop');
@@ -373,17 +372,16 @@ export abstract class BaseEventConsumer {
       return;
     }
 
-    const attempts = this.readAttempts(parsedEnvelope.metadata);
-    const nextAttempt = attempts + 1;
+    const attempts = await this.readDeliveryAttempts(messageId, parsedEnvelope.metadata);
     const errorMessage = error instanceof Error ? error.message : 'Unknown processing error';
 
-    if (nextAttempt >= this.config.maxProcessAttempts) {
+    if (attempts >= this.config.maxProcessAttempts) {
       // Max retries exhausted — dead-letter
       const deadLetterEnvelope: IStreamEventEnvelope = {
         ...parsedEnvelope,
         metadata: {
           ...parsedEnvelope.metadata,
-          noemaProcessingAttempts: nextAttempt,
+          noemaProcessingAttempts: attempts,
           noemaLastError: errorMessage,
           noemaDeadLetteredAt: new Date().toISOString(),
         },
@@ -400,33 +398,30 @@ export abstract class BaseEventConsumer {
       );
       await this.acknowledge(messageId);
       this.logger.warn(
-        { messageId, attempts: nextAttempt, deadLetterStream: this.config.deadLetterStreamKey },
+        { messageId, attempts, deadLetterStream: this.config.deadLetterStreamKey },
         'Moved stream message to dead-letter after max retry attempts'
       );
       return;
     }
 
     // Exponential backoff, capped at 30 s
-    const backoffMs = Math.min(this.config.retryBaseDelayMs * 2 ** (nextAttempt - 1), 30_000);
+    const backoffMs = Math.min(this.config.retryBaseDelayMs * 2 ** (attempts - 1), 30_000);
     await new Promise((resolve) => setTimeout(resolve, backoffMs));
 
-    // Re-enqueue with updated attempt metadata
-    const metadata: IStreamEventEnvelope['metadata'] & IProcessingMetadata = {
-      ...parsedEnvelope.metadata,
-      noemaProcessingAttempts: nextAttempt,
-      noemaLastError: errorMessage,
-    };
-
-    await this.redis.xadd(
+    const claimed = (await this.redis.xclaim(
       this.config.sourceStreamKey,
-      '*',
-      'event',
-      JSON.stringify({ ...parsedEnvelope, metadata })
-    );
-    await this.acknowledge(messageId);
+      this.config.consumerGroup,
+      this.config.consumerName,
+      '0',
+      messageId
+    )) as [string, string[]][];
+    const [, fields] = claimed[0] ?? [];
+    if (fields !== undefined) {
+      await this.handleStreamMessage(messageId, fields);
+    }
     this.logger.warn(
-      { messageId, nextAttempt, backoffMs },
-      'Requeued failed stream message with retry metadata'
+      { messageId, attempts, backoffMs },
+      'Retried failed stream message from its pending entry'
     );
   }
 
@@ -486,5 +481,28 @@ export abstract class BaseEventConsumer {
       }
     }
     return 0;
+  }
+
+  private async readDeliveryAttempts(
+    messageId: string,
+    metadata: IStreamEventEnvelope['metadata']
+  ): Promise<number> {
+    const metadataAttempts = this.readAttempts(metadata);
+    try {
+      const pending = (await this.redis.xpending(
+        this.config.sourceStreamKey,
+        this.config.consumerGroup,
+        messageId,
+        messageId,
+        1
+      )) as [string, string, number, number][];
+      const deliveryAttempts = pending[0]?.[3];
+      if (typeof deliveryAttempts === 'number' && Number.isFinite(deliveryAttempts)) {
+        return Math.max(metadataAttempts + 1, deliveryAttempts);
+      }
+    } catch (error) {
+      this.logger.warn({ error, messageId }, 'Could not read Redis delivery attempts');
+    }
+    return metadataAttempts + 1;
   }
 }

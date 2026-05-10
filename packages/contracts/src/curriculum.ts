@@ -1,4 +1,6 @@
 import type {
+  CurriculumBranchDriftState,
+  CurriculumBranchEntryStrategy,
   ConceptId,
   CurriculumEdgeId,
   CurriculumEdgeType,
@@ -6,9 +8,12 @@ import type {
   CurriculumNodeId,
   CurriculumNodeRuntimeState,
   CurriculumOriginMode,
+  CurriculumPathRole,
   CurriculumRevisionReason,
   CurriculumState,
   CurriculumVersionId,
+  EvaluationId,
+  EventId,
   CurriculumVersionState,
   RevisionChangeId,
   RevisionChangeKind,
@@ -18,6 +23,25 @@ import type {
   StudyMode,
   UserId,
 } from '@noema/types';
+
+export interface ICurriculumBranchInfo {
+  pathRole?: CurriculumPathRole | undefined;
+  branchGroupKey?: string | undefined;
+  branchEntryStrategy?: CurriculumBranchEntryStrategy | undefined;
+  branchExitTargets?: string[] | undefined;
+  focusTags?: string[] | undefined;
+  isMainPath?: boolean | undefined;
+}
+
+export interface ICurriculumBranchState {
+  branchGroupKey: string;
+  selectedPathRole?: CurriculumPathRole | undefined;
+  selectedNodeKey?: string | undefined;
+  selectionSource?: string | undefined;
+  selectedAt?: string | undefined;
+  lastConfirmedAt?: string | undefined;
+  driftState: CurriculumBranchDriftState;
+}
 
 export interface ICurriculumNode {
   id: CurriculumNodeId;
@@ -30,6 +54,7 @@ export interface ICurriculumNode {
   stabilityThreshold: number;
   estimatedSessions: number;
   traversalWeight: number;
+  branchInfo?: ICurriculumBranchInfo | undefined;
   metadata?: Record<string, unknown> | undefined;
 }
 
@@ -71,6 +96,7 @@ export interface ICurriculum {
   metadata: {
     frozenStableNodeKeys?: string[] | undefined;
     hiddenFromVault?: boolean | undefined;
+    branchStates?: ICurriculumBranchState[] | undefined;
     [key: string]: unknown;
   };
   createdAt: string;
@@ -149,14 +175,21 @@ export interface IGenerateCurriculumInput {
 }
 
 export interface ISessionSliceRequest {
+  sessionId: SessionId;
   maxNewNodes?: number | undefined;
   maxNodes?: number | undefined;
+  preferredBranchGroupKeys?: string[] | undefined;
 }
 
 export interface ISessionSlice {
   curriculumVersionId: CurriculumVersionId;
   selectedNodeIds: CurriculumNodeId[];
   conceptIds: ConceptId[];
+  selectedBranchGroupKeys: string[];
+  selectionReason: string;
+  branchDecisionState: CurriculumBranchDriftState;
+  blockedMainPathNodeKeys: string[];
+  rejoinPlan: string[];
   rationale: string;
 }
 
@@ -169,6 +202,8 @@ export interface IRecordCurriculumEvaluationInput {
   correct: boolean;
   stabilitySnapshot?: number | undefined;
   sessionId: SessionId;
+  evaluationId?: EvaluationId | undefined;
+  sourceEventId?: EventId | undefined;
   minExposureSessions?: number | undefined;
   minCorrectStreak?: number | undefined;
 }

@@ -22,13 +22,16 @@ import {
   ckgMutationsApi,
   ckgNodesApi,
   comparisonApi,
+  domainSuggestionsApi,
   healthApi,
   conceptStateApi,
   stabilityApi,
   metricsApi,
   misconceptionsApi,
   ontologyImportsApi,
+  graphAgentProposalsApi,
   pkgEdgesApi,
+  pkgExpansionApi,
   pkgMaintenanceApi,
   pkgNodesApi,
   pkgOperationsApi,
@@ -48,8 +51,12 @@ import type {
   ICommonAncestorsInput,
   IComparisonQueryParams,
   ICreateOntologyImportRunInput,
+  IDomainResolutionDto,
+  IDomainSuggestionQueryParams,
   IRegisterOntologyImportSourceInput,
   ISubmitOntologyImportRunPreviewInput,
+  IApplyPkgExpansionSelectionRequest,
+  IApplyGraphAgentProposalSelectionRequest,
   ICreateEdgeInput,
   ICreateNodeInput,
   IGraphEdgeDto,
@@ -67,6 +74,8 @@ import type {
   IOntologyImportArtifactContentDto,
   IStructuralMetricsDto,
   IUpdateOntologyImportSourceInput,
+  IPkgExpansionProposalBundleDto,
+  IPkgExpansionRequest,
   IPkgCkgComparisonDto,
   IGraphNodeQueryParams,
   ISubgraphParams,
@@ -98,7 +107,10 @@ import type {
   NodeResponse,
   NodesListResponse,
   OperationsResponse,
+  ApplyPkgExpansionSelectionResponse,
+  ApplyGraphAgentProposalSelectionResponse,
   PkgBulkDeleteResponse,
+  PkgExpansionProposalBundleResponse,
   PkgResetResponse,
   IPkgBulkDeleteInput,
   IPkgResetInput,
@@ -261,7 +273,7 @@ function inferNormalizedGraphNodeType(
 ): IGraphNodeDto['type'] {
   const explicitType = stringValue(entry['type'], stringValue(entry['nodeType'], ''));
   if (
-    explicitType === 'concept' ||
+    explicitType === 'notion' ||
     explicitType === 'occupation' ||
     explicitType === 'skill' ||
     explicitType === 'fact' ||
@@ -300,7 +312,7 @@ function inferNormalizedGraphNodeType(
     return 'fact';
   }
 
-  return 'concept';
+  return 'notion';
 }
 
 function extractLocalizedText(value: unknown): string | null {
@@ -918,6 +930,8 @@ export const kgKeys = {
   pkgCentrality: (userId: UserId) => [...kgKeys.pkg(userId), 'centrality'] as const,
   pkgTopology: (userId: UserId) => [...kgKeys.pkg(userId), 'topology'] as const,
   pkgOps: (userId: UserId) => [...kgKeys.pkg(userId), 'operations'] as const,
+  pkgExpansion: (userId: UserId, input: IPkgExpansionRequest) =>
+    [...kgKeys.pkg(userId), 'expansion', input] as const,
   ckg: () => [...kgKeys.all, 'ckg'] as const,
   ckgNodes: (params?: IGraphNodeQueryParams) =>
     [...kgKeys.ckg(), 'nodes', ...(params !== undefined ? [params] : [])] as const,
@@ -954,6 +968,8 @@ export const kgKeys = {
   comparisonRoot: (userId: UserId) => [...kgKeys.all, 'comparison', userId] as const,
   comparison: (userId: UserId, params?: IComparisonQueryParams) =>
     [...kgKeys.all, 'comparison', userId, params] as const,
+  domainSuggestions: (params: IDomainSuggestionQueryParams) =>
+    [...kgKeys.all, 'domain-suggestions', params] as const,
 };
 
 async function invalidateCkgGraphQueries(
@@ -1052,7 +1068,7 @@ export function useCreatePKGNode(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data) => pkgNodesApi.create(userId, data),
+    mutationFn: async (data) => normalizeNodeResponse(await pkgNodesApi.create(userId, data)),
     onSuccess: () => {
       void invalidatePkgGraphQueries(queryClient, userId);
     },
@@ -1067,7 +1083,7 @@ export function useUpdatePKGNode(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data) => pkgNodesApi.update(userId, nodeId, data),
+    mutationFn: async (data) => normalizeNodeResponse(await pkgNodesApi.update(userId, nodeId, data)),
     onSuccess: (response) => {
       queryClient.setQueryData(kgKeys.pkgNode(userId, nodeId), normalizeNodeResponse(response));
       void invalidatePkgGraphQueries(queryClient, userId);
@@ -2222,5 +2238,104 @@ export function usePKGCKGComparison(
     enabled: userId !== '',
     staleTime: 5 * 60 * 1000,
     ...options,
+  });
+}
+
+export function useDomainSuggestions(
+  params: IDomainSuggestionQueryParams,
+  options?: Omit<
+    UseQueryOptions<{ data: IDomainResolutionDto }, Error, IDomainResolutionDto>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: kgKeys.domainSuggestions(params),
+    queryFn: () => domainSuggestionsApi.list(params),
+    select: (response) => response.data,
+    staleTime: 30 * 1000,
+    ...options,
+  });
+}
+
+export function usePkgExpansionPreview(
+  userId: UserId,
+  input: IPkgExpansionRequest | null,
+  options?: Omit<
+    UseQueryOptions<PkgExpansionProposalBundleResponse, Error, IPkgExpansionProposalBundleDto>,
+    'queryKey' | 'queryFn'
+  >
+) {
+  return useQuery({
+    queryKey: input === null ? [...kgKeys.pkg(userId), 'expansion', 'disabled'] : kgKeys.pkgExpansion(userId, input),
+    queryFn: () => {
+      if (input === null) {
+        throw new Error('Expansion preview input is required.');
+      }
+      return pkgExpansionApi.preview(userId, input);
+    },
+    select: (response) => response.data,
+    enabled: userId !== '' && input !== null,
+    staleTime: 60_000,
+    ...options,
+  });
+}
+
+export function useGeneratePkgExpansion(
+  userId: UserId,
+  options?: UseMutationOptions<PkgExpansionProposalBundleResponse, Error, IPkgExpansionRequest>
+) {
+  return useMutation({
+    mutationFn: (input) => pkgExpansionApi.preview(userId, input),
+    ...options,
+  });
+}
+
+export function useApplyPkgExpansion(
+  userId: UserId,
+  options?: UseMutationOptions<
+    ApplyPkgExpansionSelectionResponse,
+    Error,
+    IApplyPkgExpansionSelectionRequest
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => pkgExpansionApi.apply(userId, input),
+    ...options,
+    onSuccess: async (...args) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.pkg(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.comparisonRoot(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.metrics(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.health(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.misconceptions(userId) }),
+      ]);
+      await options?.onSuccess?.(...args);
+    },
+  });
+}
+
+export function useApplyGraphAgentProposals(
+  userId: UserId,
+  options?: UseMutationOptions<
+    ApplyGraphAgentProposalSelectionResponse,
+    Error,
+    IApplyGraphAgentProposalSelectionRequest
+  >
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input) => graphAgentProposalsApi.apply(userId, input),
+    ...options,
+    onSuccess: async (...args) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: kgKeys.pkg(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.comparisonRoot(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.metrics(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.health(userId) }),
+        queryClient.invalidateQueries({ queryKey: kgKeys.misconceptions(userId) }),
+      ]);
+      await options?.onSuccess?.(...args);
+    },
   });
 }

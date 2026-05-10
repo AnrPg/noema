@@ -30,14 +30,21 @@ import type {
   CkgMutationRecoveryCheckResponse,
   CkgMutationResponse,
   CkgMutationsResponse,
+  ApplyPkgExpansionSelectionResponse,
+  ApplyGraphAgentProposalSelectionResponse,
   ICommonAncestorsInput,
   ComparisonResponse,
   IComparisonQueryParams,
   ICreateEdgeInput,
   ICreateOntologyImportRunInput,
   ICreateNodeInput,
+  IDomainResolutionDto,
+  IDomainSuggestionQueryParams,
+  IApplyPkgExpansionSelectionRequest,
+  IApplyGraphAgentProposalSelectionRequest,
   ICancelOntologyImportRunInput,
   IGraphNodeQueryParams,
+  IPkgExpansionRequest,
   IRegisterOntologyImportSourceInput,
   ISubmitOntologyImportRunPreviewInput,
   IUpdateOntologyImportSourceInput,
@@ -54,6 +61,7 @@ import type {
   NodeResponse,
   NodesListResponse,
   OperationsResponse,
+  PkgExpansionProposalBundleResponse,
   PkgBulkDeleteResponse,
   PkgResetResponse,
   IPkgBulkDeleteInput,
@@ -83,6 +91,7 @@ const ontologyImportsBase = '/api/v1/ckg/imports';
 const metricsBase = (userId: UserId): string => `/api/v1/users/${userId}/metrics`;
 const miscBase = (userId: UserId): string => `/api/v1/users/${userId}/misconceptions`;
 const DEFAULT_DOMAIN = 'general';
+const PKG_EXPANSION_PREVIEW_TIMEOUT_MS = 90_000;
 
 function normalizeCreateNodeInput(data: ICreateNodeInput): ICreateNodeInput {
   return {
@@ -161,6 +170,37 @@ export const pkgMaintenanceApi = {
 
   reset: (userId: UserId, input: IPkgResetInput): Promise<PkgResetResponse> =>
     http.post(`${pkgBase(userId)}/maintenance/reset`, input),
+};
+
+export const domainSuggestionsApi = {
+  list: (params: IDomainSuggestionQueryParams): Promise<{ data: IDomainResolutionDto }> =>
+    http.get('/api/v1/domain-suggestions', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    }),
+};
+
+export const pkgExpansionApi = {
+  preview: (
+    userId: UserId,
+    input: IPkgExpansionRequest
+  ): Promise<PkgExpansionProposalBundleResponse> =>
+    http.post(`${pkgBase(userId)}/expansion/proposals`, input, {
+      timeout: PKG_EXPANSION_PREVIEW_TIMEOUT_MS,
+    }),
+
+  apply: (
+    userId: UserId,
+    input: IApplyPkgExpansionSelectionRequest
+  ): Promise<ApplyPkgExpansionSelectionResponse> =>
+    http.post(`${pkgBase(userId)}/expansion/apply`, input),
+};
+
+export const graphAgentProposalsApi = {
+  apply: (
+    userId: UserId,
+    input: IApplyGraphAgentProposalSelectionRequest
+  ): Promise<ApplyGraphAgentProposalSelectionResponse> =>
+    http.post(`${pkgBase(userId)}/agent-proposals/apply`, input),
 };
 
 // ============================================================================

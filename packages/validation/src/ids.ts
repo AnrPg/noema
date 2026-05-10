@@ -6,6 +6,7 @@
  */
 
 import { ID_PREFIXES } from '@noema/types';
+import { IdSchemas as KernelIdSchemas } from '@noema/learning-kernel';
 import { z } from 'zod';
 
 // ============================================================================
@@ -28,26 +29,20 @@ function createIdSchema(prefix: string, description: string) {
 // Individual ID Schemas
 // ============================================================================
 
-export const UserIdSchema = createIdSchema(ID_PREFIXES.UserId, 'User ID');
+export const UserIdSchema = KernelIdSchemas[ID_PREFIXES.UserId];
 export const CardIdSchema = createIdSchema(ID_PREFIXES.CardId, 'Card ID');
 export const DeckQueryLogIdSchema = createIdSchema(ID_PREFIXES.DeckQueryLogId, 'Deck Query Log ID');
 export const CategoryIdSchema = createIdSchema(ID_PREFIXES.CategoryId, 'Category ID');
-export const SessionIdSchema = createIdSchema(ID_PREFIXES.SessionId, 'Session ID');
-export const LessonPlanIdSchema = createIdSchema(ID_PREFIXES.LessonPlanId, 'Lesson Plan ID');
-export const GoalIdSchema = createIdSchema(ID_PREFIXES.GoalId, 'Goal ID');
-export const StepIdSchema = createIdSchema(ID_PREFIXES.StepId, 'Step ID');
-export const ActivityIdSchema = createIdSchema(ID_PREFIXES.ActivityId, 'Activity ID');
-export const EvaluationIdSchema = createIdSchema(ID_PREFIXES.EvaluationId, 'Evaluation ID');
-export const TriggerIdSchema = createIdSchema(ID_PREFIXES.TriggerId, 'Trigger ID');
-export const ConceptIdSchema = createIdSchema(ID_PREFIXES.ConceptId, 'Concept ID');
-export const GeneratedVariantIdSchema = createIdSchema(
-  ID_PREFIXES.GeneratedVariantId,
-  'Generated Variant ID'
-);
-export const ContentGenerationJobIdSchema = createIdSchema(
-  ID_PREFIXES.ContentGenerationJobId,
-  'Content Generation Job ID'
-);
+export const SessionIdSchema = KernelIdSchemas[ID_PREFIXES.SessionId];
+export const LessonPlanIdSchema = KernelIdSchemas[ID_PREFIXES.LessonPlanId];
+export const GoalIdSchema = KernelIdSchemas[ID_PREFIXES.GoalId];
+export const StepIdSchema = KernelIdSchemas[ID_PREFIXES.StepId];
+export const ActivityIdSchema = KernelIdSchemas[ID_PREFIXES.ActivityId];
+export const EvaluationIdSchema = KernelIdSchemas[ID_PREFIXES.EvaluationId];
+export const TriggerIdSchema = KernelIdSchemas[ID_PREFIXES.TriggerId];
+export const ConceptIdSchema = KernelIdSchemas[ID_PREFIXES.ConceptId];
+export const GeneratedVariantIdSchema = KernelIdSchemas[ID_PREFIXES.GeneratedVariantId];
+export const ContentGenerationJobIdSchema = KernelIdSchemas[ID_PREFIXES.ContentGenerationJobId];
 export const TraceIdSchema = createIdSchema(ID_PREFIXES.TraceId, 'Trace ID');
 export const DiagnosisIdSchema = createIdSchema(ID_PREFIXES.DiagnosisId, 'Diagnosis ID');
 export const PatchIdSchema = createIdSchema(ID_PREFIXES.PatchId, 'Patch ID');
@@ -57,9 +52,9 @@ export const EdgeIdSchema = createIdSchema(ID_PREFIXES.EdgeId, 'Edge ID');
 export const AchievementIdSchema = createIdSchema(ID_PREFIXES.AchievementId, 'Achievement ID');
 export const StreakIdSchema = createIdSchema(ID_PREFIXES.StreakId, 'Streak ID');
 export const JobIdSchema = createIdSchema(ID_PREFIXES.JobId, 'Job ID');
-export const EventIdSchema = createIdSchema(ID_PREFIXES.EventId, 'Event ID');
-export const CorrelationIdSchema = createIdSchema(ID_PREFIXES.CorrelationId, 'Correlation ID');
-export const CausationIdSchema = createIdSchema(ID_PREFIXES.CausationId, 'Causation ID');
+export const EventIdSchema = KernelIdSchemas[ID_PREFIXES.EventId];
+export const CorrelationIdSchema = KernelIdSchemas[ID_PREFIXES.CorrelationId];
+export const CausationIdSchema = KernelIdSchemas[ID_PREFIXES.CausationId];
 export const ToolIdSchema = createIdSchema(ID_PREFIXES.ToolId, 'Tool ID');
 export const AgentIdSchema = createIdSchema(ID_PREFIXES.AgentId, 'Agent ID');
 export const TemplateIdSchema = createIdSchema(ID_PREFIXES.TemplateId, 'Template ID');
@@ -78,27 +73,12 @@ export const MisconceptionPatternIdSchema = createIdSchema(
   'Misconception Pattern ID'
 );
 export const InterventionIdSchema = createIdSchema(ID_PREFIXES.InterventionId, 'Intervention ID');
-export const CurriculumIdSchema = createIdSchema(ID_PREFIXES.CurriculumId, 'Curriculum ID');
-export const CurriculumVersionIdSchema = createIdSchema(
-  ID_PREFIXES.CurriculumVersionId,
-  'Curriculum Version ID'
-);
-export const CurriculumNodeIdSchema = createIdSchema(
-  ID_PREFIXES.CurriculumNodeId,
-  'Curriculum Node ID'
-);
-export const CurriculumEdgeIdSchema = createIdSchema(
-  ID_PREFIXES.CurriculumEdgeId,
-  'Curriculum Edge ID'
-);
-export const RevisionProposalIdSchema = createIdSchema(
-  ID_PREFIXES.RevisionProposalId,
-  'Revision Proposal ID'
-);
-export const RevisionChangeIdSchema = createIdSchema(
-  ID_PREFIXES.RevisionChangeId,
-  'Revision Change ID'
-);
+export const CurriculumIdSchema = KernelIdSchemas[ID_PREFIXES.CurriculumId];
+export const CurriculumVersionIdSchema = KernelIdSchemas[ID_PREFIXES.CurriculumVersionId];
+export const CurriculumNodeIdSchema = KernelIdSchemas[ID_PREFIXES.CurriculumNodeId];
+export const CurriculumEdgeIdSchema = KernelIdSchemas[ID_PREFIXES.CurriculumEdgeId];
+export const RevisionProposalIdSchema = KernelIdSchemas[ID_PREFIXES.RevisionProposalId];
+export const RevisionChangeIdSchema = KernelIdSchemas[ID_PREFIXES.RevisionChangeId];
 export const DocumentIdSchema = createIdSchema(ID_PREFIXES.DocumentId, 'Document ID');
 export const IngestionJobIdSchema = createIdSchema(ID_PREFIXES.IngestionJobId, 'Ingestion Job ID');
 export const DocumentChunkIdSchema = createIdSchema(

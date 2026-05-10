@@ -36,7 +36,7 @@ export function useDueConcepts(
 
 export function useConceptSchedule(
   conceptId: ConceptId,
-  query?: ConceptScheduleQuery,
+  query: ConceptScheduleQuery,
   options?: Omit<UseQueryOptions<ConceptScheduleResponse>, 'queryKey' | 'queryFn'>
 ) {
   return useQuery({

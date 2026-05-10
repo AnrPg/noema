@@ -1,2 +1,2 @@
 export * from './curriculum-event.schemas.js';
-export * from './curriculum.events.js';
+export type * from './curriculum.events.js';

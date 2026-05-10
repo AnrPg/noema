@@ -22,7 +22,7 @@ export const schedulerApi = {
 
   getConceptSchedule: (
     conceptId: ConceptId,
-    query?: ConceptScheduleQuery
+    query: ConceptScheduleQuery
   ): Promise<ConceptScheduleResponse> =>
     http.get(`/v1/concepts/${conceptId}/schedule`, withParams(query)),
 

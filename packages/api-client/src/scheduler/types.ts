@@ -43,7 +43,7 @@ export interface IDueConceptsQuery {
 }
 
 export interface IConceptScheduleQuery {
-  studyMode?: StudyMode;
+  studyMode: StudyMode;
 }
 
 export interface ITransformationHistoryQuery {

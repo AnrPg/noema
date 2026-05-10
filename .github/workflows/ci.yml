@@ -249,6 +249,59 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
+  closed-loop:
+    name: Closed-Loop Deterministic
+    runs-on: ubuntu-latest
+    needs: build
+    if: vars.CLOSED_LOOP_CI_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run deterministic closed-loop proof
+        run: pnpm test:closed-loop
+
+  closed-loop-web:
+    name: Closed-Loop Browser Proof
+    runs-on: ubuntu-latest
+    needs: build
+    if: vars.CLOSED_LOOP_CI_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @noema/web exec playwright install --with-deps chromium
+
+      - name: Run browser closed-loop proof
+        run: pnpm test:closed-loop:web
+
   # ===========================================================================
   # Python Agents - Lint and test Python code
   # ===========================================================================

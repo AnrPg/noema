@@ -47,6 +47,11 @@ export interface IGraphControlsProps {
   onClose?: () => void;
   primaryActionLabel?: string;
   onPrimaryAction?: () => void;
+  selectedNodeCount?: number;
+  deleteActionLabel?: string;
+  deleteActionHint?: string;
+  isDeleteActionPending?: boolean;
+  onDeleteSelection?: () => void;
 }
 
 export function GraphControls({
@@ -66,6 +71,11 @@ export function GraphControls({
   onClose,
   primaryActionLabel,
   onPrimaryAction,
+  selectedNodeCount = selectedNodeId !== null && selectedNodeId !== undefined ? 1 : 0,
+  deleteActionLabel,
+  deleteActionHint,
+  isDeleteActionPending = false,
+  onDeleteSelection,
 }: IGraphControlsProps): React.JSX.Element {
   const getNodeKey = React.useCallback((node: IGraphNodeDto, index: number): string => {
     const nodeId =
@@ -123,6 +133,32 @@ export function GraphControls({
             {primaryActionLabel}
           </button>
         )}
+
+        {onDeleteSelection !== undefined &&
+          deleteActionLabel !== undefined &&
+          selectedNodeCount > 0 && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-destructive">
+                Selection
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {selectedNodeCount === 1
+                  ? '1 node selected.'
+                  : `${String(selectedNodeCount)} nodes selected.`}
+                {deleteActionHint !== undefined && deleteActionHint !== ''
+                  ? ` ${deleteActionHint}`
+                  : ''}
+              </p>
+              <button
+                type="button"
+                onClick={onDeleteSelection}
+                disabled={isDeleteActionPending}
+                className="mt-3 w-full rounded-md border border-destructive/40 bg-background px-3 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-50"
+              >
+                {isDeleteActionPending ? 'Deleting…' : deleteActionLabel}
+              </button>
+            </div>
+          )}
 
         {/* Layout toggle */}
         <div className="flex flex-col gap-1.5">

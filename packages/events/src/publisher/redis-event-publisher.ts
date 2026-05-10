@@ -121,7 +121,24 @@ export class RedisEventPublisher implements IEventPublisher {
     }
 
     try {
-      await pipeline.exec();
+      const results = await pipeline.exec();
+      if (results === null) {
+        throw new Error('Redis pipeline did not return batch publish results');
+      }
+      const failures = results
+        .map(([error], index) => ({ error, event: events[index] }))
+        .filter((result) => result.error !== null);
+      if (failures.length > 0) {
+        throw new Error(
+          `Failed to publish ${failures.length.toString()} batch event(s): ${failures
+            .map((failure) => {
+              const eventType = failure.event?.eventType ?? 'unknown';
+              const message = failure.error?.message ?? 'unknown error';
+              return `${eventType}:${message}`;
+            })
+            .join(', ')}`
+        );
+      }
       this.logger.debug({ count: events.length }, 'Batch events published');
     } catch (error) {
       this.logger.error({ error, count: events.length }, 'Failed to publish batch events');

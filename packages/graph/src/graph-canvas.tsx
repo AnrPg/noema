@@ -98,11 +98,10 @@ interface IForceGraph2DProps extends IForceGraph2DInnerProps {
 }
 
 // SSR-safe import — ForceGraph2D uses browser canvas APIs.
-// react-force-graph's package entrypoint also wires VR helpers that expect a
-// global AFRAME object, so preload aframe in the client before importing it.
+// The host app aliases the unused 3D/VR/AR entrypoints so this import stays
+// focused on the 2D canvas implementation.
 const ForceGraph2D = dynamic<IForceGraph2DProps>(
   async () => {
-    await import('aframe');
     const forceGraphModule = await import('react-force-graph');
     const ForceGraph2DRaw = forceGraphModule.ForceGraph2D as unknown as React.ElementType;
 

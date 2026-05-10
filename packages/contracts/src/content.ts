@@ -28,6 +28,8 @@ export interface ICardProvenanceDto {
   authorUserId?: UserId | null;
   sourceDocumentIds: string[];
   sources: IContentSourceCitationDto[];
+  primaryConceptId: ConceptId;
+  relatedConceptIds: ConceptId[];
   anchoredCkgNodeIds: ConceptId[];
   anchoredPkgNodeIds: NodeId[];
   factualityScore?: number | null;
@@ -46,6 +48,8 @@ export interface ICompleteCardMetadataInputDto {
   cardType?: CardType | RemediationCardType;
   difficulty?: DifficultyLevel;
   tags?: string[];
+  primaryConceptId?: ConceptId;
+  relatedConceptIds?: ConceptId[];
   anchoredCkgNodeIds?: ConceptId[];
   anchoredPkgNodeIds?: NodeId[];
   metadata?: Record<string, JsonValue>;
@@ -59,6 +63,10 @@ export interface ITransformCardInputDto {
   transformationKind: CardTransformKind;
   prompt?: string;
   targetCardType?: CardType | RemediationCardType;
+  targetCardTypes?: (CardType | RemediationCardType)[];
+  count?: number;
+  primaryConceptId?: ConceptId;
+  relatedConceptIds?: ConceptId[];
   anchoredCkgNodeIds?: ConceptId[];
   anchoredPkgNodeIds?: NodeId[];
 }

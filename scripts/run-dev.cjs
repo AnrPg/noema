@@ -2,6 +2,8 @@ const { spawnSync } = require('node:child_process');
 
 const mode = process.argv[2] ?? 'dev';
 const isWindows = process.platform === 'win32';
+const repoRoot = process.cwd();
+const normalizedRepoRoot = repoRoot.toLowerCase();
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -31,6 +33,186 @@ function runPnpm(args) {
   return result.status ?? 0;
 }
 
+function prepareSharedInfra(selectedMode) {
+  if (selectedMode !== 'dev:web+api') {
+    return;
+  }
+
+  const result = spawnSync(process.execPath, ['./scripts/ensure-dev-infra.cjs', 'web+api'], {
+    cwd: process.cwd(),
+    stdio: 'inherit',
+    shell: false,
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if ((result.status ?? 0) !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+function requiredPortsFor(selectedMode) {
+  switch (selectedMode) {
+    case 'dev:web':
+      return [3000];
+    case 'dev:web-admin':
+      return [3100];
+    case 'dev:web+api':
+      return [3000, 3001, 3002, 3003, 3004, 3006, 3007, 3009, 3012, 3016, 3017];
+    case 'dev:admin-stack':
+      return [3001, 3002, 3006, 3100];
+    default:
+      return [];
+  }
+}
+
+function prepareWindowsDevPorts(selectedMode) {
+  const ports = requiredPortsFor(selectedMode);
+  if (ports.length === 0) {
+    return;
+  }
+
+  const script = `
+$ErrorActionPreference = 'Stop'
+$repoRoot = '${normalizedRepoRoot}'
+$ports = @(${ports.join(', ')})
+
+function Get-ProcessTable {
+  $table = @{}
+  foreach ($process in Get-CimInstance Win32_Process) {
+    $table[[int]$process.ProcessId] = $process
+  }
+
+  return $table
+}
+
+function Test-IsRepoOwnedProcess([int]$processId, $processTable) {
+  $visited = New-Object 'System.Collections.Generic.HashSet[int]'
+  $currentId = $processId
+
+  while ($currentId -gt 0 -and $visited.Add($currentId)) {
+    $process = $processTable[$currentId]
+    if ($null -eq $process) {
+      return $false
+    }
+
+    $commandLine = [string]$process.CommandLine
+    if (-not [string]::IsNullOrWhiteSpace($commandLine) -and $commandLine.ToLower().Contains($repoRoot)) {
+      return $true
+    }
+
+    $currentId = [int]$process.ParentProcessId
+  }
+
+  return $false
+}
+
+function Test-IsLikelyStaleDevListener([int]$processId, $processTable) {
+  if (Test-IsRepoOwnedProcess $processId $processTable) {
+    return $true
+  }
+
+  $process = $processTable[$processId]
+  if ($null -eq $process) {
+    return $false
+  }
+
+  $name = [string]$process.Name
+  $commandLine = [string]$process.CommandLine
+  return [string]::IsNullOrWhiteSpace($commandLine) -and ($name -eq 'node.exe' -or $name -eq 'cmd.exe')
+}
+
+function Get-PortListeners([int[]]$requestedPorts) {
+  $listeners = @()
+  foreach ($port in $requestedPorts) {
+    $listeners += Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
+  }
+
+  return $listeners | Sort-Object -Property LocalPort, OwningProcess -Unique
+}
+
+function Stop-ProcessTree([int]$processId, $processTable) {
+  $toVisit = New-Object 'System.Collections.Generic.Queue[int]'
+  $collected = New-Object 'System.Collections.Generic.List[int]'
+  $visited = New-Object 'System.Collections.Generic.HashSet[int]'
+  $toVisit.Enqueue($processId)
+
+  while ($toVisit.Count -gt 0) {
+    $currentId = $toVisit.Dequeue()
+    if (-not $visited.Add($currentId)) {
+      continue
+    }
+
+    $collected.Add($currentId)
+
+    foreach ($candidate in $processTable.Values) {
+      if ([int]$candidate.ParentProcessId -eq $currentId) {
+        $toVisit.Enqueue([int]$candidate.ProcessId)
+      }
+    }
+  }
+
+  for ($index = $collected.Count - 1; $index -ge 0; $index--) {
+    Stop-Process -Id $collected[$index] -Force -ErrorAction SilentlyContinue
+  }
+}
+
+$processTable = Get-ProcessTable
+$listeners = Get-PortListeners $ports
+
+foreach ($listener in $listeners) {
+  $listenerPid = [int]$listener.OwningProcess
+  if (Test-IsLikelyStaleDevListener $listenerPid $processTable) {
+    Write-Host "[run-dev] Releasing stale Noema dev listener on port $($listener.LocalPort) (PID $listenerPid)"
+    Stop-ProcessTree $listenerPid $processTable
+  }
+}
+
+Start-Sleep -Seconds 2
+$processTable = Get-ProcessTable
+$remainingListeners = Get-PortListeners $ports
+$blockingListeners = @()
+
+foreach ($listener in $remainingListeners) {
+  $listenerPid = [int]$listener.OwningProcess
+  if (-not (Test-IsLikelyStaleDevListener $listenerPid $processTable)) {
+    $process = $processTable[$listenerPid]
+    $blockingListeners += [PSCustomObject]@{
+      Port = [int]$listener.LocalPort
+      ProcessId = $listenerPid
+      Name = if ($null -ne $process) { [string]$process.Name } else { '' }
+      CommandLine = if ($null -ne $process) { [string]$process.CommandLine } else { '' }
+    }
+  }
+}
+
+if ($blockingListeners.Count -gt 0) {
+  $message = $blockingListeners | ConvertTo-Json -Compress
+  Write-Error "Required dev ports are already in use by non-Noema processes: $message"
+}
+`;
+
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      shell: false,
+    }
+  );
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if ((result.status ?? 0) !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
 function turboArgsFor(selectedMode) {
   switch (selectedMode) {
     case 'dev':
@@ -57,12 +239,18 @@ function turboArgsFor(selectedMode) {
       return [
         'run',
         'dev',
+        '--concurrency=12',
         '--filter=@noema/web',
         '--filter=@noema/content-service',
         '--filter=@noema/knowledge-graph-service',
         '--filter=@noema/session-service',
         '--filter=@noema/user-service',
         '--filter=@noema/scheduler-service',
+        '--filter=@noema/metacognition-service',
+        '--filter=@noema/curriculum-service',
+        '--filter=@noema/pedagogy-guardian-service',
+        '--filter=@noema/ingestion-service',
+        '--filter=@noema/vector-service',
       ];
     case 'dev:admin-stack':
       return [
@@ -190,6 +378,8 @@ function modeToPackage(selectedMode) {
 }
 
 if (isWindows) {
+  prepareWindowsDevPorts(mode);
+  prepareSharedInfra(mode);
   const windowsConfig = windowsArgsFor(mode);
   const [command, args, chained] = windowsConfig;
   if (command === 'pnpm') {
@@ -218,4 +408,5 @@ if (isWindows) {
   process.exit(0);
 }
 
+prepareSharedInfra(mode);
 process.exit(runPnpm(turboArgsFor(mode)));

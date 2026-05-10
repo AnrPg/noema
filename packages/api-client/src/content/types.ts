@@ -602,7 +602,11 @@ export interface ICardDto {
   state: CardState;
   difficulty: number;
   content: Record<string, unknown>;
+  primaryConceptId: string;
+  relatedConceptIds: string[];
   knowledgeNodeIds: string[];
+  anchoredCkgNodeIds: string[];
+  anchoredPkgNodeIds: string[];
   compatibleTransformations: TransformationType[];
   defaultEligibilityGroups: EligibilityGroup[];
   tags: string[];
@@ -630,7 +634,11 @@ export interface ICardSummaryDto {
   cardType: string;
   state: CardState;
   tags: string[];
+  primaryConceptId: string;
+  relatedConceptIds: string[];
   knowledgeNodeIds: string[];
+  anchoredCkgNodeIds: string[];
+  anchoredPkgNodeIds: string[];
   compatibleTransformations: TransformationType[];
   defaultEligibilityGroups: EligibilityGroup[];
   supportedStudyModes: StudyMode[];
@@ -656,7 +664,11 @@ export interface IDeckQueryInput {
   cardTypes?: string[];
   states?: CardState[];
   tags?: string[];
+  primaryConceptId?: string;
+  relatedConceptIds?: string[];
   knowledgeNodeIds?: string[];
+  anchoredCkgNodeIds?: string[];
+  anchoredPkgNodeIds?: string[];
   supportedStudyModes?: StudyMode[];
   compatibleTransformations?: TransformationType[];
   defaultEligibilityGroups?: EligibilityGroup[];
@@ -679,8 +691,12 @@ export interface IDeckQueryInput {
 export interface ICreateCardInput {
   cardType: string;
   content: Record<string, unknown>;
+  primaryConceptId: string;
+  relatedConceptIds?: string[];
   tags?: string[];
   knowledgeNodeIds?: string[];
+  anchoredCkgNodeIds?: string[];
+  anchoredPkgNodeIds?: string[];
   compatibleTransformations?: TransformationType[];
   defaultEligibilityGroups?: EligibilityGroup[];
   source?: string;
@@ -691,8 +707,12 @@ export interface ICreateCardInput {
 
 export interface IUpdateCardInput {
   content?: Record<string, unknown>;
+  primaryConceptId?: string;
+  relatedConceptIds?: string[];
   tags?: string[];
   knowledgeNodeIds?: string[];
+  anchoredCkgNodeIds?: string[];
+  anchoredPkgNodeIds?: string[];
   compatibleTransformations?: TransformationType[];
   defaultEligibilityGroups?: EligibilityGroup[];
   source?: string;
@@ -703,6 +723,8 @@ export interface IUpdateCardInput {
 
 export interface IUpdateCardStateInput {
   state: CardState;
+  version: number;
+  reason?: string;
 }
 
 export interface IBatchStateUpdateInput {
@@ -727,6 +749,8 @@ export interface IUpdateCardTagsInput {
 
 export interface IUpdateCardNodeLinksInput {
   knowledgeNodeIds: string[];
+  anchoredCkgNodeIds?: string[];
+  anchoredPkgNodeIds?: string[];
 }
 
 // ============================================================================
@@ -886,6 +910,31 @@ export interface ISessionSeedQuery {
   supportedStudyModes?: StudyMode[];
 }
 
+export interface ICreateGeneratedActivityVariantInput {
+  conceptId: string;
+  studyMode: StudyMode;
+  transformationType: TransformationType;
+  epistemicMode: EpistemicMode;
+  difficultyBucket: number;
+  sourceCardIds?: CardId[];
+  prompt: string;
+  renderPayload: Record<string, unknown>;
+  expectedResponseType: string;
+  responseSchema: Record<string, unknown>;
+  variantSeed: string;
+  generatorMetadata?: Record<string, unknown>;
+  ttlAt: string;
+}
+
+export interface IImportGeneratedContentBatchInput {
+  job: ICreateContentGenerationJobInputDto;
+  cards: ICreateCardInput[];
+  activityVariants?: ICreateGeneratedActivityVariantInput[];
+  rejectedDrafts?: Record<string, unknown>[];
+  agentRunId?: string | null;
+  resultPayload?: Record<string, unknown>;
+}
+
 // ============================================================================
 // Activity Payload Candidates
 // ============================================================================
@@ -923,6 +972,7 @@ export interface ITemplatePayloadCandidateDto {
   prompt: string;
   renderPayload: Record<string, unknown>;
   expectedResponseType: string;
+  anchoredCkgNodeIds: string[];
 }
 
 export interface IGeneratedVariantPayloadCandidateDto {
@@ -961,6 +1011,8 @@ export interface ITemplateDto {
   name: string;
   cardType: string;
   defaultContent: Record<string, unknown>;
+  knowledgeNodeIds: string[];
+  anchoredCkgNodeIds: string[];
   createdAt: string;
 }
 
@@ -971,6 +1023,8 @@ export interface ICreateTemplateInput {
   name: string;
   cardType: string;
   defaultContent: Record<string, unknown>;
+  knowledgeNodeIds?: string[];
+  anchoredCkgNodeIds?: string[];
 }
 
 /** Alias for backward compatibility with api.ts and hooks.ts. */
@@ -979,6 +1033,8 @@ export type CreateTemplateInput = ICreateTemplateInput;
 export interface IUpdateTemplateInput {
   name?: string;
   defaultContent?: Record<string, unknown>;
+  knowledgeNodeIds?: string[];
+  anchoredCkgNodeIds?: string[];
 }
 
 // ============================================================================
@@ -1040,9 +1096,11 @@ export type CompleteCardMetadataInput = ICompleteCardMetadataInputDto;
 export type PromoteCardFromReviewInput = IPromoteCardFromReviewInputDto;
 export type TransformCardInput = ITransformCardInputDto;
 export type CreateContentGenerationJobInput = ICreateContentGenerationJobInputDto;
+export type ImportGeneratedContentBatchInput = IImportGeneratedContentBatchInput;
 export type CardLineageResponse = IApiResponse<ICardLineageDto>;
 export type CardVariantsResponse = IApiResponse<CardId[]>;
 export type CardSourcesResponse = IApiResponse<unknown[]>;
 export type ContentGenerationJobResponse = IApiResponse<IContentGenerationJobDto>;
 export type ContentGenerationJobsResponse = IApiResponse<IContentGenerationJobDto[]>;
 export type ConceptCardCoverageResponse = IApiResponse<IConceptCardCoverageDto>;
+export type ImportGeneratedContentBatchResponse = IApiResponse<Record<string, unknown>>;

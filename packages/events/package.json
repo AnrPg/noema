@@ -66,6 +66,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@noema/learning-kernel": "workspace:*",
     "@noema/types": "workspace:*",
     "@noema/validation": "workspace:*",
     "ioredis": "^5.4.2",

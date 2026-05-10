@@ -11,9 +11,12 @@ import {
   UserIdSchema,
 } from './ids.js';
 import {
+  CurriculumBranchDriftStateSchema,
+  CurriculumBranchEntryStrategySchema,
   CurriculumEdgeTypeSchema,
   CurriculumNodeRuntimeStateSchema,
   CurriculumOriginModeSchema,
+  CurriculumPathRoleSchema,
   CurriculumRevisionReasonSchema,
   CurriculumStateSchema,
   CurriculumVersionStateSchema,
@@ -31,6 +34,25 @@ export const CurriculumProposedConceptSchema = z
   })
   .catchall(z.unknown());
 
+export const CurriculumBranchInfoSchema = z.object({
+  pathRole: CurriculumPathRoleSchema.optional(),
+  branchGroupKey: z.string().min(1).max(200).optional(),
+  branchEntryStrategy: CurriculumBranchEntryStrategySchema.optional(),
+  branchExitTargets: z.array(z.string().min(1).max(200)).default([]),
+  focusTags: z.array(z.string().min(1).max(100)).default([]),
+  isMainPath: z.boolean().optional(),
+});
+
+export const CurriculumBranchStateSchema = z.object({
+  branchGroupKey: z.string().min(1).max(200),
+  selectedPathRole: CurriculumPathRoleSchema.optional(),
+  selectedNodeKey: z.string().min(1).max(200).optional(),
+  selectionSource: z.string().min(1).max(100).optional(),
+  selectedAt: z.string().datetime().optional(),
+  lastConfirmedAt: z.string().datetime().optional(),
+  driftState: CurriculumBranchDriftStateSchema,
+});
+
 export const CurriculumNodeSchema = z.object({
   id: CurriculumNodeIdSchema,
   curriculumVersionId: CurriculumVersionIdSchema,
@@ -42,6 +64,7 @@ export const CurriculumNodeSchema = z.object({
   stabilityThreshold: z.number().gt(0).lte(1),
   estimatedSessions: z.number().int().positive(),
   traversalWeight: z.number().positive().default(1),
+  branchInfo: CurriculumBranchInfoSchema.optional(),
   metadata: z.record(z.unknown()).default({}),
 });
 
@@ -84,6 +107,7 @@ export const CurriculumSchema = z.object({
     .object({
       frozenStableNodeKeys: z.array(z.string().min(1)).optional(),
       hiddenFromVault: z.boolean().optional(),
+      branchStates: z.array(CurriculumBranchStateSchema).optional(),
     })
     .catchall(z.unknown())
     .default({}),
@@ -150,14 +174,21 @@ export const GenerateCurriculumInputSchema = z.object({
 });
 
 export const SessionSliceRequestSchema = z.object({
+  sessionId: SessionIdSchema,
   maxNewNodes: z.number().int().positive().max(20).optional(),
   maxNodes: z.number().int().positive().max(50).optional(),
+  preferredBranchGroupKeys: z.array(z.string().min(1).max(200)).default([]),
 });
 
 export const SessionSliceSchema = z.object({
   curriculumVersionId: CurriculumVersionIdSchema,
-  selectedNodeIds: z.array(CurriculumNodeIdSchema),
+  selectedNodeIds: z.array(CurriculumNodeIdSchema).min(1),
   conceptIds: z.array(ConceptIdSchema),
+  selectedBranchGroupKeys: z.array(z.string().min(1).max(200)).default([]),
+  selectionReason: z.string(),
+  branchDecisionState: CurriculumBranchDriftStateSchema,
+  blockedMainPathNodeKeys: z.array(z.string().min(1).max(200)).default([]),
+  rejoinPlan: z.array(z.string().min(1).max(200)).default([]),
   rationale: z.string(),
 });
 

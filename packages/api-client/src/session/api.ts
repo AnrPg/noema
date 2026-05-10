@@ -3,14 +3,22 @@ import type { LessonPlanId, SessionId, StepId } from '@noema/types';
 import { http } from '../client.js';
 import type {
   AnswerStepInput,
+  AgentSurfaceExposureResponse,
+  ExposureBudgetStateResponse,
   CreateGoalInput,
   CreateGoalResponse,
   CreateLessonPlanInput,
   CreateLessonPlanResponse,
+  LearnerFeedbackActionResponse,
+  LearnerFeedbackHistoryQuery,
+  LearnerFeedbackHistoryResponse,
+  LearnerLoadStateResponse,
   OfflineIntentTokenInput,
   OfflineIntentVerifyInput,
   OfflineTokenResponse,
   OfflineVerifyResponse,
+  RecordAgentSurfaceExposureInput,
+  RecordLearnerFeedbackActionInput,
   SessionFilters,
   SessionResponse,
   SessionsListResponse,
@@ -46,6 +54,12 @@ export const sessionsApi = {
 
   getNextStep: (sessionId: SessionId): Promise<StepLoopSnapshotResponse> =>
     http.get(`/v1/sessions/${sessionId}/next-step`),
+
+  getLearnerLoadState: (sessionId: SessionId): Promise<LearnerLoadStateResponse> =>
+    http.get(`/v1/sessions/${sessionId}/learner-load-state`),
+
+  getExposureBudgetState: (sessionId: SessionId): Promise<ExposureBudgetStateResponse> =>
+    http.get(`/v1/sessions/${sessionId}/exposure-budget-state`),
 };
 
 export const stepsApi = {
@@ -57,6 +71,23 @@ export const stepsApi = {
 
   skipStep: (stepId: StepId, data?: SkipStepInput): Promise<StepResponse> =>
     http.post(`/v1/steps/${stepId}/skip`, data ?? {}),
+};
+
+export const learnerFeedbackApi = {
+  recordAction: (
+    data: RecordLearnerFeedbackActionInput
+  ): Promise<LearnerFeedbackActionResponse> =>
+    http.post('/v1/learner-feedback-actions', data),
+
+  getHistory: (query?: LearnerFeedbackHistoryQuery): Promise<LearnerFeedbackHistoryResponse> =>
+    http.get('/v1/learner-feedback-history', withParams(query)),
+};
+
+export const agentSurfaceApi = {
+  recordExposure: (
+    data: RecordAgentSurfaceExposureInput
+  ): Promise<AgentSurfaceExposureResponse> =>
+    http.post('/v1/agent-surface-exposures', data),
 };
 
 export const offlineApi = {

@@ -1,4 +1,16 @@
-import type { IApiResponse, ISevenFrameTraceDto } from '@noema/contracts';
+import type {
+  IApiResponse,
+  IAgentSurfaceExposureDto,
+  IExposureBudgetStateDto,
+  ILearnerFeedbackActionDto,
+  ILearnerFeedbackHistoryDto,
+  ILearnerLoadStateDto,
+  IRubricSummaryRecordDto,
+  ISevenFrameTraceDto,
+  IStepActivityContextDto,
+  IStepCurriculumAnchorDto,
+  IStepEvidenceRecordDto,
+} from '@noema/contracts';
 import type {
   ConceptId,
   CurriculumId,
@@ -156,6 +168,11 @@ export interface IStepLoopSnapshotDto {
   nextStep: IStepDto | null;
 }
 
+export interface ISessionsListDto {
+  sessions: ISessionDto[];
+  total: number;
+}
+
 export interface IStartSessionInput {
   curriculumId: CurriculumId;
   curriculumVersionId?: CurriculumVersionId;
@@ -183,7 +200,8 @@ export interface ISessionFilters {
 export interface ICreateLessonPlanInput {
   curriculumId?: CurriculumId;
   curriculumVersionId?: CurriculumVersionId;
-  selectedNodeIds?: CurriculumNodeId[];
+  selectedNodeIds: CurriculumNodeId[];
+  conceptRefs?: ConceptId[];
   rigorLevel?: RigorLevel;
   topic?: string;
   prerequisites?: ConceptId[];
@@ -191,6 +209,7 @@ export interface ICreateLessonPlanInput {
   sourceCategories?: string[];
   assessmentStrategy?: string;
   adaptationRules?: string;
+  goals?: ICreateGoalInput[];
   steps?: IPlannedStepInput[];
 }
 
@@ -224,6 +243,7 @@ export interface IPlannedActivityInput {
 
 export interface ICreateLessonPlanResultDto {
   lessonPlan: ILessonPlanDto;
+  goals: ILessonPlanGoalDto[];
   steps: IStepDto[];
 }
 
@@ -278,12 +298,39 @@ export type AnswerStepInput = IAnswerStepInput;
 export type SkipStepInput = ISkipStepInput;
 export type OfflineIntentTokenInput = IOfflineIntentTokenInput;
 export type OfflineIntentVerifyInput = IOfflineIntentVerifyInput;
+export type RecordLearnerFeedbackActionInput = Pick<
+  ILearnerFeedbackActionDto,
+  'surface' | 'actionType' | 'conceptIds'
+> & {
+  sessionId?: SessionId;
+  stepId?: StepId;
+  noteText?: string;
+  reasonText?: string;
+  metadata?: Record<string, unknown>;
+};
+export interface LearnerFeedbackHistoryQuery {
+  surface?: ILearnerFeedbackActionDto['surface'];
+  windowDays?: number;
+}
+export type RecordAgentSurfaceExposureInput = Pick<IAgentSurfaceExposureDto, 'sessionId' | 'surface'> & {
+  stepId?: StepId;
+  metadata?: Record<string, unknown>;
+};
 
 export type SessionResponse = IApiResponse<ISessionDto>;
-export type SessionsListResponse = IApiResponse<ISessionDto[]>;
+export type SessionsListResponse = IApiResponse<ISessionsListDto>;
 export type CreateLessonPlanResponse = IApiResponse<ICreateLessonPlanResultDto>;
 export type CreateGoalResponse = IApiResponse<ILessonPlanGoalDto>;
 export type StepResponse = IApiResponse<IStepDto>;
 export type StepLoopSnapshotResponse = IApiResponse<IStepLoopSnapshotDto>;
+export type StepEvidenceRecordResponse = IApiResponse<IStepEvidenceRecordDto>;
+export type RubricSummaryRecordResponse = IApiResponse<IRubricSummaryRecordDto>;
+export type StepActivityContextResponse = IApiResponse<IStepActivityContextDto>;
+export type StepCurriculumAnchorResponse = IApiResponse<IStepCurriculumAnchorDto>;
+export type LearnerFeedbackActionResponse = IApiResponse<ILearnerFeedbackActionDto>;
+export type LearnerFeedbackHistoryResponse = IApiResponse<ILearnerFeedbackHistoryDto>;
+export type LearnerLoadStateResponse = IApiResponse<ILearnerLoadStateDto>;
+export type ExposureBudgetStateResponse = IApiResponse<IExposureBudgetStateDto>;
+export type AgentSurfaceExposureResponse = IApiResponse<IAgentSurfaceExposureDto>;
 export type OfflineTokenResponse = IApiResponse<IOfflineIntentTokenDto>;
 export type OfflineVerifyResponse = IApiResponse<unknown>;

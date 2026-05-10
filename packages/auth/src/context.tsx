@@ -83,6 +83,14 @@ function getTokenExpiryTimestamp(token: string): number | null {
 
 function shouldResetPersistedSession(accessToken: string | null): boolean {
   if (accessToken === null) return true;
+  if (process.env['NODE_ENV'] === 'development') return false;
+
+  const expiryTimestamp = getTokenExpiryTimestamp(accessToken);
+  return expiryTimestamp !== null && expiryTimestamp <= Date.now();
+}
+
+function shouldRefreshPersistedSession(accessToken: string | null): boolean {
+  if (accessToken === null) return false;
 
   const expiryTimestamp = getTokenExpiryTimestamp(accessToken);
   return expiryTimestamp !== null && expiryTimestamp <= Date.now();
@@ -159,6 +167,15 @@ export function AuthProvider({ children, onLogin, onLogout }: IAuthProviderProps
       }
 
       try {
+        if (
+          process.env['NODE_ENV'] === 'development' &&
+          shouldRefreshPersistedSession(initialAccessToken) &&
+          initialRefreshToken !== null
+        ) {
+          const refreshResponse = await authApi.refresh(initialRefreshToken);
+          setTokens(refreshResponse.data.accessToken, refreshResponse.data.refreshToken);
+        }
+
         // Try to get current user
         const response = await meApi.get();
         setUser(response.data);

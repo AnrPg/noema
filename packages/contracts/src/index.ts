@@ -33,3 +33,6 @@ export type * from './vector.js';
 // Content generation and provenance contracts
 export type * from './content.js';
 export * from './gamification.js';
+
+// Agent kernel discovery, execution, and custom run contracts
+export type * from './agent-kernel.js';

@@ -38,7 +38,7 @@ export const curriculumApi = {
     http.post(`/v1/curricula/${id}/progress/evaluations`, data),
   getSessionSlice: (
     id: CurriculumId,
-    data: ISessionSliceRequest = {}
+    data: ISessionSliceRequest
   ): Promise<CurriculumSessionSliceResponse> =>
     http.post(`/v1/curricula/${id}/session-slice`, data),
   listRevisionProposals: (id: CurriculumId): Promise<RevisionProposalsResponse> =>

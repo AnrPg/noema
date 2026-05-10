@@ -31,6 +31,8 @@ import type {
   ContentGenerationJobResponse,
   ContentGenerationJobsResponse,
   CreateContentGenerationJobInput,
+  ImportGeneratedContentBatchInput,
+  ImportGeneratedContentBatchResponse,
   CreateTemplateInput,
   IBatchCreateInput,
   IBatchDeleteCardsInput,
@@ -81,6 +83,12 @@ function normalizeDeckQuery(query: IDeckQueryInput): Record<string, unknown> {
   if (query.tags !== undefined && query.tags.length > 0) normalized['tags'] = query.tags;
   if (query.knowledgeNodeIds !== undefined && query.knowledgeNodeIds.length > 0) {
     normalized['knowledgeNodeIds'] = query.knowledgeNodeIds;
+  }
+  if (query.anchoredCkgNodeIds !== undefined && query.anchoredCkgNodeIds.length > 0) {
+    normalized['anchoredCkgNodeIds'] = query.anchoredCkgNodeIds;
+  }
+  if (query.anchoredPkgNodeIds !== undefined && query.anchoredPkgNodeIds.length > 0) {
+    normalized['anchoredPkgNodeIds'] = query.anchoredPkgNodeIds;
   }
 
   const sources =
@@ -170,12 +178,10 @@ export const cardsApi = {
   getCardHistory: (id: CardId): Promise<CardHistoryResponse> => http.get(`/v1/cards/${id}/history`),
 
   /** Get card lineage and variants. */
-  getCardLineage: (id: CardId): Promise<CardLineageResponse> =>
-    http.get(`/v1/cards/${id}/lineage`),
+  getCardLineage: (id: CardId): Promise<CardLineageResponse> => http.get(`/v1/cards/${id}/lineage`),
 
   /** Get card source citations. */
-  getCardSources: (id: CardId): Promise<CardSourcesResponse> =>
-    http.get(`/v1/cards/${id}/sources`),
+  getCardSources: (id: CardId): Promise<CardSourcesResponse> => http.get(`/v1/cards/${id}/sources`),
 
   /** Complete metadata and lift metadata-incomplete review state when eligible. */
   completeMetadata: (
@@ -189,8 +195,8 @@ export const cardsApi = {
     data: { data: PromoteCardFromReviewInput; version: number }
   ): Promise<CardResponse> => http.post(`/v1/cards/${id}/promote-from-review`, data),
 
-  /** Create a transformed variant. */
-  transformCard: (id: CardId, data: TransformCardInput): Promise<CardResponse> =>
+  /** Create one or more transformed variants. */
+  transformCard: (id: CardId, data: TransformCardInput): Promise<BatchCardsResponse> =>
     http.post(`/v1/cards/${id}/transform`, data),
 
   /** List card variants. */
@@ -237,6 +243,10 @@ export const cardsApi = {
 export const contentGenerationApi = {
   createJob: (data: CreateContentGenerationJobInput): Promise<ContentGenerationJobResponse> =>
     http.post('/v1/content/generation-jobs', data),
+  importGeneratedResult: (
+    data: ImportGeneratedContentBatchInput
+  ): Promise<ImportGeneratedContentBatchResponse> =>
+    http.post('/v1/content/generation-jobs/import-result', data),
   getJob: (id: string): Promise<ContentGenerationJobResponse> =>
     http.get(`/v1/content/generation-jobs/${id}`),
   runJob: (id: string): Promise<ContentGenerationJobResponse> =>

@@ -5,12 +5,18 @@ $logDir = Join-Path $root ".dev-services"
 $pidDir = Join-Path $logDir "pids"
 $services = @(
   @{ Name = "content-service"; Path = "services/content-service"; Package = "@noema/content-service"; Port = 3002 },
+  @{ Name = "curriculum-service"; Path = "services/curriculum-service"; Package = "@noema/curriculum-service"; Port = 3017 },
+  @{ Name = "gamification-service"; Path = "services/gamification-service"; Package = "@noema/gamification-service"; Port = 3005 },
+  @{ Name = "ingestion-service"; Path = "services/ingestion-service"; Package = "@noema/ingestion-service"; Port = 3009 },
   @{ Name = "knowledge-graph-service"; Path = "services/knowledge-graph-service"; Package = "@noema/knowledge-graph-service"; Port = 3006 },
+  @{ Name = "metacognition-service"; Path = "services/metacognition-service"; Package = "@noema/metacognition-service"; Port = 3007 },
+  @{ Name = "pedagogy-guardian-service"; Path = "services/pedagogy-guardian-service"; Package = "@noema/pedagogy-guardian-service"; Port = 3010 },
   @{ Name = "scheduler-service"; Path = "services/scheduler-service"; Package = "@noema/scheduler-service"; Port = 3003 },
   @{ Name = "session-service"; Path = "services/session-service"; Package = "@noema/session-service"; Port = 3004 },
-  @{ Name = "user-service"; Path = "services/user-service"; Package = "@noema/user-service"; Port = 3001 }
+  @{ Name = "user-service"; Path = "services/user-service"; Package = "@noema/user-service"; Port = 3001 },
+  @{ Name = "vector-service"; Path = "services/vector-service"; Package = "@noema/vector-service"; Port = 3012 }
 )
-$requiredInfraPorts = @(5434, 6380, 7687, 9002)
+$requiredInfraPorts = @(5434, 6380, 7687, 9002, 6335)
 $dockerExe = (Get-Command docker -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1)
 if (-not $dockerExe) {
   $fallbackDocker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
@@ -134,7 +140,8 @@ try {
     $outLog = Join-Path $logDir ($service.Name + ".out.log")
     $errLog = Join-Path $logDir ($service.Name + ".err.log")
     $servicePath = Join-Path $root $service.Path
-    $process = Start-Process -FilePath "node.exe" -ArgumentList @("--env-file=.env", "dist/index.js") -WorkingDirectory $servicePath -RedirectStandardOutput $outLog -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
+    $envFile = Join-Path $root ".env"
+    $process = Start-Process -FilePath "node.exe" -ArgumentList @("--env-file=$envFile", "dist/index.js") -WorkingDirectory $servicePath -RedirectStandardOutput $outLog -RedirectStandardError $errLog -WindowStyle Hidden -PassThru
 
     if (-not $process -or -not $process.Id) {
       throw "Failed to start $($service.Name)"

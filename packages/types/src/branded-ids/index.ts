@@ -275,13 +275,13 @@ export type IdPrefix = (typeof ID_PREFIXES)[keyof typeof ID_PREFIXES];
 // ============================================================================
 
 /**
- * Validates an ID string has the correct prefix and exactly 21 alphanumeric suffix chars.
- * Matches the Zod schema: ^{prefix}[a-zA-Z0-9]{21}$
+ * Validates an ID string has the correct prefix and exactly 21 URL-safe NanoID suffix chars.
+ * Matches the shared Zod schema: ^{prefix}[a-zA-Z0-9_-]{21}$
  */
 function validateIdFormat(value: string, prefix: string): boolean {
   if (!value.startsWith(prefix)) return false;
   const suffix = value.slice(prefix.length);
-  return suffix.length === 21 && /^[a-zA-Z0-9]{21}$/.test(suffix);
+  return suffix.length === 21 && /^[a-zA-Z0-9_-]{21}$/.test(suffix);
 }
 
 /**
@@ -295,7 +295,7 @@ function createId<T extends string>(
 ): Brand<string, T> {
   if (!validateIdFormat(value, prefix)) {
     throw new Error(
-      `Invalid ${typeName}: must start with "${prefix}" followed by exactly 21 alphanumeric characters. Got: "${value}"`
+      `Invalid ${typeName}: must start with "${prefix}" followed by exactly 21 URL-safe NanoID characters. Got: "${value}"`
     );
   }
   return value as Brand<string, T>;

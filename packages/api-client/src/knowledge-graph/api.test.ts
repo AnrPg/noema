@@ -12,7 +12,15 @@ vi.mock('../client.js', () => ({
   },
 }));
 
-import { conceptStateApi, pkgEdgesApi, pkgNodesApi, stabilityApi } from './api.js';
+import {
+  conceptStateApi,
+  domainSuggestionsApi,
+  graphAgentProposalsApi,
+  pkgEdgesApi,
+  pkgExpansionApi,
+  pkgNodesApi,
+  stabilityApi,
+} from './api.js';
 
 describe('pkgNodesApi.create', () => {
   beforeEach(() => {
@@ -23,13 +31,13 @@ describe('pkgNodesApi.create', () => {
   it('trims the provided domain before sending the request', async () => {
     await pkgNodesApi.create('user_123' as never, {
       label: 'Family',
-      type: 'concept',
+      type: 'notion',
       domain: '  linguistics  ',
     });
 
     expect(httpPost).toHaveBeenCalledWith('/api/v1/users/user_123/pkg/nodes', {
       label: 'Family',
-      type: 'concept',
+      type: 'notion',
       domain: 'linguistics',
     });
   });
@@ -37,13 +45,13 @@ describe('pkgNodesApi.create', () => {
   it('falls back to the general domain when the provided domain is blank', async () => {
     await pkgNodesApi.create('user_123' as never, {
       label: 'Family',
-      type: 'concept',
+      type: 'notion',
       domain: '   ',
     });
 
     expect(httpPost).toHaveBeenCalledWith('/api/v1/users/user_123/pkg/nodes', {
       label: 'Family',
-      type: 'concept',
+      type: 'notion',
       domain: 'general',
     });
   });
@@ -132,6 +140,129 @@ describe('pkgEdgesApi.create', () => {
       sourceNodeId: 'node_source',
       targetNodeId: 'node_target',
       skipAcyclicityCheck: true,
+    });
+  });
+});
+
+describe('domainSuggestionsApi.list', () => {
+  beforeEach(() => {
+    httpGet.mockReset();
+    httpGet.mockResolvedValue({ success: true, data: {} });
+  });
+
+  it('queries the shared domain canonicalization endpoint', async () => {
+    await domainSuggestionsApi.list({
+      userId: 'user_123' as never,
+      label: 'cognitive science',
+      studyMode: 'knowledge_gaining',
+      nodeType: 'notion',
+      limit: 5,
+    });
+
+    expect(httpGet).toHaveBeenCalledWith('/api/v1/domain-suggestions', {
+      params: {
+        userId: 'user_123',
+        label: 'cognitive science',
+        studyMode: 'knowledge_gaining',
+        nodeType: 'notion',
+        limit: 5,
+      },
+    });
+  });
+});
+
+describe('pkgExpansionApi.preview', () => {
+  beforeEach(() => {
+    httpPost.mockReset();
+    httpPost.mockResolvedValue({ success: true, data: {} });
+  });
+
+  it('uses a long-lived timeout so queued agent expansions do not get aborted by the browser client', async () => {
+    await pkgExpansionApi.preview('user_123' as never, {
+      scope: {
+        scopeType: 'whole_pkg',
+        nodeIds: [],
+      },
+      studyMode: 'knowledge_gaining',
+      limit: 24,
+    });
+
+    expect(httpPost).toHaveBeenCalledWith(
+      '/api/v1/users/user_123/pkg/expansion/proposals',
+      {
+        scope: {
+          scopeType: 'whole_pkg',
+          nodeIds: [],
+        },
+        studyMode: 'knowledge_gaining',
+        limit: 24,
+      },
+      {
+        timeout: 90_000,
+      }
+    );
+  });
+});
+
+describe('graphAgentProposalsApi.apply', () => {
+  beforeEach(() => {
+    httpPost.mockReset();
+    httpPost.mockResolvedValue({ success: true, data: {} });
+  });
+
+  it('posts approved graph-review suggestions to the auto-apply endpoint', async () => {
+    await graphAgentProposalsApi.apply('user_123' as never, {
+      selectedProposalIds: ['proposal_node_1'],
+      proposals: [
+        {
+          proposalId: 'proposal_node_1',
+          conceptId: 'Bayes theorem',
+          proposalType: 'add_node',
+          operation: {
+            type: 'add_node',
+            label: 'Bayes theorem',
+            nodeType: 'notion',
+            domain: 'probability',
+          },
+          rationale: 'Add the missing prerequisite notion.',
+          confidenceScore: 0.92,
+          reviewState: 'draft',
+          sourceDocumentIds: ['doc_1'],
+          candidateLabel: 'Bayes theorem',
+          metadata: {
+            source: 'knowledge-graph-agent',
+          },
+          ckgOperations: [],
+        },
+      ],
+      forwardCanonical: true,
+    });
+
+    expect(httpPost).toHaveBeenCalledWith('/api/v1/users/user_123/pkg/agent-proposals/apply', {
+      selectedProposalIds: ['proposal_node_1'],
+      proposals: [
+        {
+          proposalId: 'proposal_node_1',
+          conceptId: 'Bayes theorem',
+          proposalType: 'add_node',
+          operation: {
+            type: 'add_node',
+            label: 'Bayes theorem',
+            nodeType: 'notion',
+            domain: 'probability',
+          },
+          rationale: 'Add the missing prerequisite notion.',
+          confidenceScore: 0.92,
+          reviewState: 'draft',
+          sourceDocumentIds: ['doc_1'],
+          candidateLabel: 'Bayes theorem',
+          metadata: {
+            source: 'knowledge-graph-agent',
+          },
+          ckgOperations: [],
+        },
+      ],
+      forwardCanonical: true,
     });
   });
 });

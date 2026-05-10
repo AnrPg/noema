@@ -530,9 +530,45 @@ export const CurriculumEdgeType = {
   PREREQUISITE: 'prerequisite',
   RECOMMENDED_BEFORE: 'recommended_before',
   REINFORCES: 'reinforces',
+  DIVERSION_TO: 'diversion_to',
+  BRANCH_OPTION: 'branch_option',
 } as const;
 
 export type CurriculumEdgeType = (typeof CurriculumEdgeType)[keyof typeof CurriculumEdgeType];
+
+/** Learner-visible role of a node within a branch-aware curriculum path. */
+export const CurriculumPathRole = {
+  FOUNDATION: 'foundation',
+  CORE: 'core',
+  FOCUS_AREA: 'focus_area',
+  REMEDIATION: 'remediation',
+  DIVERSION: 'diversion',
+  CAPSTONE: 'capstone',
+} as const;
+
+export type CurriculumPathRole = (typeof CurriculumPathRole)[keyof typeof CurriculumPathRole];
+
+/** How a learner or planner entered a curriculum branch. */
+export const CurriculumBranchEntryStrategy = {
+  LEARNER_CHOICE: 'learner_choice',
+  PLANNER_RECOMMENDED: 'planner_recommended',
+  EVIDENCE_TRIGGERED: 'evidence_triggered',
+} as const;
+
+export type CurriculumBranchEntryStrategy =
+  (typeof CurriculumBranchEntryStrategy)[keyof typeof CurriculumBranchEntryStrategy];
+
+/** Runtime interpretation of the learner's current branch trajectory. */
+export const CurriculumBranchDriftState = {
+  ON_PATH: 'on_path',
+  EXPLORING_DIVERSION: 'exploring_diversion',
+  STALLED_ON_PREREQ: 'stalled_on_prereq',
+  REMEDIATION_LOOP: 'remediation_loop',
+  REJOINED: 'rejoined',
+} as const;
+
+export type CurriculumBranchDriftState =
+  (typeof CurriculumBranchDriftState)[keyof typeof CurriculumBranchDriftState];
 
 /** How a curriculum originated. */
 export const CurriculumOriginMode = {
@@ -568,6 +604,12 @@ export const RevisionChangeKind = {
   ADD_REMEDIATION_PATH: 'add_remediation_path',
   SPLIT_NODE: 'split_node',
   FLAG_FOR_SKIP: 'flag_for_skip',
+  ADD_BRANCH_OPTION: 'add_branch_option',
+  CLOSE_BRANCH_OPTION: 'close_branch_option',
+  INSERT_DIVERSION_PATH: 'insert_diversion_path',
+  REJOIN_BRANCH: 'rejoin_branch',
+  PROMOTE_FOCUS_BRANCH: 'promote_focus_branch',
+  DEMOTE_FOCUS_BRANCH: 'demote_focus_branch',
 } as const;
 
 export type RevisionChangeKind = (typeof RevisionChangeKind)[keyof typeof RevisionChangeKind];
@@ -628,8 +670,10 @@ export type SchedulingAlgorithm = (typeof SchedulingAlgorithm)[keyof typeof Sche
  * Knowledge graph node types.
  */
 export const GraphNodeType = {
-  /** Abstract concept */
-  CONCEPT: 'concept',
+  /** Abstract notion representing a first-class concept in the graph */
+  CONCEPT: 'notion',
+  /** Preferred alias for concept-bearing graph nodes */
+  NOTION: 'notion',
   /** Skill or competency */
   SKILL: 'skill',
   /** Role or job family */
@@ -940,14 +984,18 @@ export const DocumentFormat = {
   PDF: 'pdf',
   DOCX: 'docx',
   PPTX: 'pptx',
+  XLSX: 'xlsx',
   MARKDOWN: 'markdown',
   HTML: 'html',
   PLAIN_TEXT: 'plain_text',
+  TXT: 'txt',
+  TSV: 'tsv',
   EPUB: 'epub',
   LATEX: 'latex',
   CSV: 'csv',
   JSON: 'json',
   YAML: 'yaml',
+  TYPST: 'typst',
   IMAGE: 'image',
   AUDIO: 'audio',
 } as const;
@@ -990,8 +1038,12 @@ export type DocumentSourceKind = (typeof DocumentSourceKind)[keyof typeof Docume
 export const DocumentMimeKind = {
   TEXT: 'text/plain',
   MARKDOWN: 'text/markdown',
+  CSV: 'text/csv',
+  TSV: 'text/tab-separated-values',
   PDF: 'application/pdf',
   DOCX: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  EPUB: 'application/epub+zip',
   HTML: 'text/html',
 } as const;
 

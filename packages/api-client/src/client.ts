@@ -162,6 +162,7 @@ function buildUrl(
 async function parseErrorResponse(response: Response): Promise<ApiRequestError> {
   try {
     const body = (await response.json()) as {
+      detail?: unknown;
       error?: {
         code?: string;
         message?: string;
@@ -176,9 +177,18 @@ async function parseErrorResponse(response: Response): Promise<ApiRequestError> 
         executionTime?: number;
       };
     };
+    const detailMessage =
+      typeof body.detail === 'string'
+        ? body.detail
+        : typeof body.detail === 'object' &&
+            body.detail !== null &&
+            'message' in body.detail &&
+            typeof body.detail.message === 'string'
+          ? body.detail.message
+          : undefined;
 
     return new ApiRequestError(
-      body.error?.message ?? response.statusText,
+      body.error?.message ?? detailMessage ?? response.statusText,
       response.status,
       body.error?.code ?? 'UNKNOWN_ERROR',
       body.error?.fieldErrors,
@@ -258,7 +268,17 @@ export async function request<T>(
       return undefined as T;
     }
 
-    return await (response.json() as Promise<T>);
+    try {
+      return await (response.json() as Promise<T>);
+    } catch (error) {
+      throw new ApiRequestError(
+        error instanceof Error && error.message.trim() !== ''
+          ? `The server returned an invalid JSON response: ${error.message}`
+          : 'The server returned an invalid JSON response.',
+        response.status,
+        'BAD_RESPONSE'
+      );
+    }
   } catch (error) {
     clearTimeout(timeoutId);
 

@@ -41,6 +41,14 @@ export type * from './gamification/types.js';
 export * from './curriculum/index.js';
 export type * from './curriculum/types.js';
 
+// Ingestion Service
+export * from './ingestion/index.js';
+export type * from './ingestion/types.js';
+
+// Agents Runtime
+export * from './agents/index.js';
+export type * from './agents/types.js';
+
 // HLR Sidecar
 export * from './hlr/index.js';
 

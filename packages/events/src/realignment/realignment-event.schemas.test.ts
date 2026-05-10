@@ -18,6 +18,7 @@ const ids = {
   evaluationId: 'eval_ABCDEFGHIJKLMNOPQRSTU',
   triggerId: 'trigger_ABCDEFGHIJKLMNOPQRSTU',
   conceptId: 'concept_ABCDEFGHIJKLMNOPQRSTU',
+  curriculumNodeId: 'cnode_ABCDEFGHIJKLMNOPQRSTU',
 };
 
 const metadata = {
@@ -45,10 +46,12 @@ describe('realignment event schemas', () => {
         sessionId: ids.sessionId,
         userId: ids.userId,
         conceptRefs: [ids.conceptId],
+        selectedNodeIds: [ids.curriculumNodeId],
         reasoningQuality: 0.75,
         confidenceSignal: 0.5,
         combinedScore: 0.71,
         correct: true,
+        studyMode: 'knowledge_gaining',
         epistemicMode: 'generative_retrieval',
       },
     });

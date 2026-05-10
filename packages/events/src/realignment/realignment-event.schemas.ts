@@ -1,83 +1,45 @@
 /**
- * Zod schemas for Step-first realignment domain events.
+ * Closed-loop learning event schemas.
+ *
+ * The Step, metacognition, scheduler, KG, and strategy contracts are owned by
+ * @noema/learning-kernel. This package re-exports those canonical schemas for
+ * Redis publisher/consumer code that still imports @noema/events.
  */
 
 import {
+  ConceptStateChangedPayloadSchema,
+  LessonPlanEventPayloadSchema,
+  MetacognitionEvaluationRecordedPayloadSchema,
+  MetacognitionTriggerFiredPayloadSchema,
+  SchedulerConceptStateUpdatedPayloadSchema,
+  StepAnsweredEventPayloadSchema,
+  StepEventPayloadSchema,
+  StrategyReplanPayloadSchema,
+} from '@noema/learning-kernel';
+import {
   ConceptIdSchema,
-  ConceptStateSchema,
-  EpistemicModeSchema,
-  EvaluationIdSchema,
-  LearningInterventionTypeSchema,
-  LessonPlanIdSchema,
-  ReplanScopeSchema,
-  SchedulerQueueSchema,
-  SessionIdSchema,
-  StepIdSchema,
-  StudyModeSchema,
-  TransformationTypeSchema,
-  TriggerIdSchema,
-  TriggerTypeSchema,
   UserIdSchema,
 } from '@noema/validation';
 import { z } from 'zod';
 import { createEventSchema } from '../schemas.js';
 
-export const LessonPlanEventPayloadSchema = z.object({
-  lessonPlanId: LessonPlanIdSchema,
-  sessionId: SessionIdSchema,
-  userId: UserIdSchema,
-});
-
-export const StepEventPayloadSchema = z.object({
-  stepId: StepIdSchema,
-  lessonPlanId: LessonPlanIdSchema,
-  sessionId: SessionIdSchema,
-  userId: UserIdSchema,
-});
-
-export const MetacognitionEvaluationRecordedPayloadSchema = z.object({
-  evaluationId: EvaluationIdSchema,
-  stepId: StepIdSchema,
-  sessionId: SessionIdSchema,
-  userId: UserIdSchema,
-  conceptRefs: z.array(ConceptIdSchema),
-  reasoningQuality: z.number().min(0).max(1),
-  confidenceSignal: z.number().min(0).max(1),
-  combinedScore: z.number().min(0).max(1),
-  correct: z.boolean(),
-  studyMode: StudyModeSchema.optional(),
-  epistemicMode: EpistemicModeSchema,
-  transformation: TransformationTypeSchema.optional(),
-});
-
-export const MetacognitionTriggerFiredPayloadSchema = z.object({
-  triggerId: TriggerIdSchema,
-  userId: UserIdSchema,
-  type: TriggerTypeSchema,
-  severity: z.number().min(0).max(1),
-  conceptRefs: z.array(ConceptIdSchema),
-  stepId: StepIdSchema,
-  sessionId: SessionIdSchema,
-  recommendedIntervention: LearningInterventionTypeSchema,
-});
+export {
+  ConceptStateChangedPayloadSchema,
+  LessonPlanEventPayloadSchema,
+  MetacognitionEvaluationRecordedPayloadSchema,
+  MetacognitionTriggerFiredPayloadSchema,
+  SchedulerConceptStateUpdatedPayloadSchema,
+  StepAnsweredEventPayloadSchema,
+  StepEventPayloadSchema,
+  StrategyReplanPayloadSchema,
+};
 
 export const ReasoningAverageUpdatedPayloadSchema = z.object({
   userId: UserIdSchema,
   conceptId: ConceptIdSchema,
-  studyMode: StudyModeSchema,
+  studyMode: z.enum(['language_learning', 'knowledge_gaining']),
   newAverage: z.number().min(0).max(1),
   windowSize: z.number().int().positive(),
-});
-
-export const StrategyReplanPayloadSchema = z.object({
-  lessonPlanId: LessonPlanIdSchema,
-  sessionId: SessionIdSchema,
-  userId: UserIdSchema,
-  triggerIds: z.array(TriggerIdSchema),
-  scope: ReplanScopeSchema,
-  interventionType: LearningInterventionTypeSchema,
-  supersededStepIds: z.array(StepIdSchema),
-  insertedStepIds: z.array(StepIdSchema),
 });
 
 export const PedagogyValidationRejectedPayloadSchema = z.object({
@@ -85,31 +47,6 @@ export const PedagogyValidationRejectedPayloadSchema = z.object({
   targetType: z.enum(['lesson_plan', 'step', 'activity', 'replan', 'generated_variant']),
   targetId: z.string().min(1),
   reasonCodes: z.array(z.string().min(1)),
-});
-
-export const ConceptStateChangedPayloadSchema = z.object({
-  userId: UserIdSchema,
-  conceptId: ConceptIdSchema,
-  studyMode: StudyModeSchema,
-  fromState: ConceptStateSchema,
-  toState: ConceptStateSchema,
-  triggeredBy: z.enum(['evaluation', 'recompute', 'manual']),
-  changedAt: z.string().datetime(),
-});
-
-export const SchedulerConceptStateUpdatedPayloadSchema = z.object({
-  userId: UserIdSchema,
-  conceptId: ConceptIdSchema,
-  studyMode: StudyModeSchema,
-  previousQueue: SchedulerQueueSchema,
-  queue: SchedulerQueueSchema,
-  dueAt: z.string().datetime(),
-  evaluationId: EvaluationIdSchema,
-  stepId: StepIdSchema,
-  reviewCount: z.number().int().nonnegative(),
-  intervalDays: z.number().nonnegative(),
-  stability: z.number().positive().optional(),
-  halfLife: z.number().positive().optional(),
 });
 
 export const GamificationBadgePayloadSchema = z.object({
@@ -152,7 +89,7 @@ export const StepPresentedEventSchema = createEventSchema(
 export const StepAnsweredEventSchema = createEventSchema(
   'step.answered',
   'Step',
-  StepEventPayloadSchema
+  StepAnsweredEventPayloadSchema
 );
 export const StepEvaluatedEventSchema = createEventSchema(
   'step.evaluated',

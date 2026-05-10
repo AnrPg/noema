@@ -1,9 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query';
 import type { CurriculumId, RevisionChangeId, RevisionProposalId } from '@noema/types';
 import { curriculumApi } from './api.js';
 import type {
   IApplyRevisionProposalInput,
   ICreateCurriculumInput,
+  CurriculaResponse,
   IFreezeNodeInput,
   IRecordCurriculumEvaluationInput,
   IRecordRealignmentEvidenceInput,
@@ -21,8 +22,10 @@ export const curriculumKeys = {
   evidence: (id: CurriculumId) => [...curriculumKeys.detail(id), 'realignment-evidence'] as const,
 };
 
-export function useCurricula() {
-  return useQuery({ queryKey: curriculumKeys.list(), queryFn: curriculumApi.listCurricula });
+export function useCurricula(
+  options?: Omit<UseQueryOptions<CurriculaResponse>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({ queryKey: curriculumKeys.list(), queryFn: curriculumApi.listCurricula, ...options });
 }
 
 export function useCurriculum(id: CurriculumId) {

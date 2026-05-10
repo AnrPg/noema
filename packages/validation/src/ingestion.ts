@@ -80,6 +80,17 @@ export const DocumentChunkSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
+export const DocumentExtractionWindowSchema = z.object({
+  windowId: z.string().min(1),
+  ordinal: z.number().int().nonnegative(),
+  text: z.string(),
+  tokenEstimate: z.number().int().positive(),
+  headingPath: z.array(z.string()),
+  blockIds: z.array(z.string()),
+  chunkIds: z.array(DocumentChunkIdSchema),
+  metadata: z.record(JsonValueSchema).default({}),
+});
+
 export const ConceptCandidateSchema = z.object({
   id: ConceptCandidateIdSchema,
   documentId: DocumentIdSchema,

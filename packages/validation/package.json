@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@noema/learning-kernel": "workspace:*",
     "@noema/types": "workspace:*",
     "zod": "^3.23.8"
   },

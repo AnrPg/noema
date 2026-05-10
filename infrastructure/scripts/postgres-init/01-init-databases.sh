@@ -26,6 +26,8 @@ create_database "noema_session"
 create_database "noema_gamification"
 create_database "noema_knowledge_graph"
 create_database "noema_metacognition"
+create_database "noema_curriculum"
+create_database "noema_pedagogy_guardian"
 create_database "noema_strategy"
 create_database "noema_ingestion"
 create_database "noema_analytics"
@@ -34,7 +36,7 @@ create_database "noema_notification"
 create_database "noema_media"
 create_database "noema_collaboration"
 
-for db in noema_user noema_content noema_scheduler noema_session noema_gamification noema_knowledge_graph noema_metacognition noema_strategy noema_ingestion noema_analytics noema_sync noema_notification noema_media noema_collaboration; do
+for db in noema_user noema_content noema_scheduler noema_session noema_gamification noema_knowledge_graph noema_metacognition noema_curriculum noema_pedagogy_guardian noema_strategy noema_ingestion noema_analytics noema_sync noema_notification noema_media noema_collaboration; do
     echo "Enabling extensions in $db..."
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db" <<-EOSQL
         CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

@@ -57,6 +57,17 @@ export interface IDocumentIrDto {
   createdAt: string;
 }
 
+export interface IDocumentExtractionWindowDto {
+  windowId: string;
+  ordinal: number;
+  text: string;
+  tokenEstimate: number;
+  headingPath: string[];
+  blockIds: string[];
+  chunkIds: DocumentChunkId[];
+  metadata: Record<string, unknown>;
+}
+
 export interface IDocumentChunkDto {
   id: DocumentChunkId;
   documentId: DocumentId;

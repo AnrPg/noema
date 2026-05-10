@@ -39,6 +39,7 @@ export interface INodeDetailPanelProps {
   pendingUpdateKeys?: string[];
   isSubmittingEdit?: boolean;
   headerActions?: React.ReactNode;
+  editDomainControl?: React.ReactNode;
   onStartEdit?: () => void;
   onCancelEdit?: () => void;
   onEditDraftChange?: (draft: INodeDetailPanelEditDraft) => void;
@@ -48,7 +49,7 @@ export interface INodeDetailPanelProps {
 }
 
 const NODE_TYPE_OPTIONS: IGraphNodeDto['type'][] = [
-  'concept',
+  'notion',
   'occupation',
   'skill',
   'fact',
@@ -211,6 +212,7 @@ export function NodeDetailPanel({
   pendingUpdateKeys = [],
   isSubmittingEdit = false,
   headerActions,
+  editDomainControl,
   onStartEdit,
   onCancelEdit,
   onEditDraftChange,
@@ -366,17 +368,19 @@ export function NodeDetailPanel({
               </label>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <label className="block text-xs font-medium text-muted-foreground">
-                  Domain
-                  <input
-                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
-                    value={editController.draft.domain}
-                    onChange={(event) => {
-                      updateEditDraft('domain', event.target.value);
-                    }}
-                    placeholder="knowledge-domain"
-                  />
-                </label>
+                {editDomainControl ?? (
+                  <label className="block text-xs font-medium text-muted-foreground">
+                    Domain
+                    <input
+                      className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+                      value={editController.draft.domain}
+                      onChange={(event) => {
+                        updateEditDraft('domain', event.target.value);
+                      }}
+                      placeholder="knowledge-domain"
+                    />
+                  </label>
+                )}
                 <label className="block text-xs font-medium text-muted-foreground">
                   Tags
                   <input

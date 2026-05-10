@@ -90,6 +90,14 @@ export type OntologyMergeConflictKind =
 export type StabilityBand = 'untracked' | 'emerging' | 'developing' | 'stable';
 export type NodeSearchMode = 'substring' | 'fulltext';
 export type NodeSortBy = 'label' | 'createdAt' | 'updatedAt' | 'stabilityLevel' | 'relevance';
+export type PkgExpansionScopeType = 'whole_pkg' | 'node' | 'domain';
+export type PkgExpansionCategory =
+  | 'expand_nodes'
+  | 'expand_edges'
+  | 'structural_optimization'
+  | 'semantic_optimization'
+  | 'label_improvement'
+  | 'description_improvement';
 
 export interface IOntologyImportRunConfigurationDto {
   mode: string | null;
@@ -107,6 +115,136 @@ export interface IGraphNodeQueryParams {
   sortBy?: NodeSortBy;
   sortOrder?: 'asc' | 'desc';
   studyMode?: StudyMode;
+}
+
+export interface IDomainSuggestionQueryParams {
+  userId?: UserId;
+  label?: string;
+  nodeType?: NodeType;
+  studyMode?: StudyMode;
+  limit?: number;
+}
+
+export interface IDomainSuggestionDto {
+  label: string;
+  normalizedLabel: string;
+  confidence: number;
+  matchType: 'exact' | 'alias' | 'fuzzy' | 'related';
+  source: 'pkg' | 'ckg' | 'mixed';
+  nodeCount: number;
+}
+
+export interface IDomainResolutionDto {
+  input: string;
+  normalizedInput: string;
+  resolvedDomain: string | null;
+  needsDecision: boolean;
+  suggestions: IDomainSuggestionDto[];
+  proposedDomains: string[];
+}
+
+export interface IPkgExpansionScope {
+  scopeType: PkgExpansionScopeType;
+  nodeIds: string[];
+  domain?: string | null;
+}
+
+export interface IPkgExpansionRequest {
+  scope: IPkgExpansionScope;
+  studyMode?: StudyMode | null;
+  limit?: number;
+}
+
+export interface IPkgExpansionCanonicalSuggestionDto {
+  queued: boolean;
+  rationale?: string | null;
+  operations: Record<string, unknown>[];
+}
+
+export interface IPkgExpansionProposalPreviewDto {
+  beforeLabel?: string | null;
+  afterLabel?: string | null;
+  beforeDescription?: string | null;
+  afterDescription?: string | null;
+}
+
+export interface IPkgExpansionProposalItemDto {
+  proposalId: string;
+  category: PkgExpansionCategory;
+  title: string;
+  summary: string;
+  whyThisHelps: string;
+  whatWillChange: string;
+  confidenceLabel: 'high' | 'medium' | 'low';
+  evidenceSummary: string;
+  scope: IPkgExpansionScope;
+  affectedNodeIds: string[];
+  affectedNodeLabels: string[];
+  preview?: IPkgExpansionProposalPreviewDto;
+  pkgOperations: Record<string, unknown>[];
+  ckgOperations: Record<string, unknown>[];
+  canonicalSuggestion?: IPkgExpansionCanonicalSuggestionDto;
+}
+
+export interface IPkgExpansionProposalBundleDto {
+  artifactKind: 'pkg_expansion_proposal_bundle';
+  scope: IPkgExpansionScope;
+  generatedAt: string;
+  summary: {
+    proposalCount: number;
+    nodeProposalCount: number;
+    edgeProposalCount: number;
+    wordingProposalCount: number;
+    canonicalCandidateCount: number;
+  };
+  proposals: IPkgExpansionProposalItemDto[];
+}
+
+export interface IApplyPkgExpansionSelectionRequest {
+  scope: IPkgExpansionScope;
+  selectedProposalIds: string[];
+  proposals: IPkgExpansionProposalItemDto[];
+  forwardCanonical?: boolean;
+}
+
+export interface IApplyPkgExpansionSelectionResult {
+  appliedProposalIds: string[];
+  createdNodeIds: string[];
+  createdEdgeIds: string[];
+  updatedNodeIds: string[];
+  canonicalMutationIds: string[];
+  skippedProposalIds: string[];
+  message: string;
+}
+
+export interface IGraphAgentReviewProposalDto {
+  proposalId: string;
+  conceptId?: string | null | undefined;
+  proposalType?: string | null | undefined;
+  operation: Record<string, unknown>;
+  rationale?: string | null | undefined;
+  confidenceScore?: number | null | undefined;
+  reviewState?: string | null | undefined;
+  sourceDocumentIds?: string[] | undefined;
+  candidateLabel?: string | null | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  ckgOperations?: Record<string, unknown>[] | undefined;
+}
+
+export interface IApplyGraphAgentProposalSelectionRequest {
+  selectedProposalIds: string[];
+  proposals: IGraphAgentReviewProposalDto[];
+  forwardCanonical?: boolean;
+}
+
+export interface IApplyGraphAgentProposalSelectionResult {
+  appliedProposalIds: string[];
+  createdNodeIds: string[];
+  createdEdgeIds: string[];
+  updatedNodeIds: string[];
+  canonicalMutationIds: string[];
+  skippedProposalIds: string[];
+  message: string;
 }
 
 // ============================================================================
@@ -812,7 +950,7 @@ export interface IOntologyNormalizedBatchDto {
 
 export interface IOntologyMutationPreviewCandidateDto {
   candidateId: string;
-  entityKind: 'concept' | 'relation';
+  entityKind: 'notion' | 'relation';
   status: 'ready' | 'blocked';
   title: string;
   summary: string;
@@ -1004,6 +1142,10 @@ export interface IPkgCkgComparisonDto {
 }
 
 // ============================================================================
+// PKG Expansion
+// ============================================================================
+
+// ============================================================================
 // Backward-compat aliases (non-I names)
 // ============================================================================
 
@@ -1050,6 +1192,14 @@ export type PkgBulkDeleteResultDto = IPkgBulkDeleteResultDto;
 export type PkgResetInput = IPkgResetInput;
 export type PkgResetResultDto = IPkgResetResultDto;
 export type PkgCkgComparisonDto = IPkgCkgComparisonDto;
+export type PkgExpansionScope = IPkgExpansionScope;
+export type PkgExpansionRequest = IPkgExpansionRequest;
+export type PkgExpansionProposalItemDto = IPkgExpansionProposalItemDto;
+export type PkgExpansionProposalBundleDto = IPkgExpansionProposalBundleDto;
+export type ApplyPkgExpansionSelectionRequest = IApplyPkgExpansionSelectionRequest;
+export type ApplyPkgExpansionSelectionResult = IApplyPkgExpansionSelectionResult;
+export type ApplyGraphAgentProposalSelectionRequest = IApplyGraphAgentProposalSelectionRequest;
+export type ApplyGraphAgentProposalSelectionResult = IApplyGraphAgentProposalSelectionResult;
 export type CkgMutationAuditEntry = ICkgMutationAuditEntry;
 export type CkgMutationAuditLogDto = ICkgMutationAuditLogDto;
 export type OntologyImportSourceDto = IOntologyImportSourceDto;
@@ -1107,6 +1257,10 @@ export type CkgSourcePurgeResponse = IApiResponse<ICkgSourcePurgeResultDto>;
 export type PkgBulkDeleteResponse = IApiResponse<IPkgBulkDeleteResultDto>;
 export type PkgResetResponse = IApiResponse<IPkgResetResultDto>;
 export type ComparisonResponse = IApiResponse<IPkgCkgComparisonDto>;
+export type PkgExpansionProposalBundleResponse = IApiResponse<IPkgExpansionProposalBundleDto>;
+export type ApplyPkgExpansionSelectionResponse = IApiResponse<IApplyPkgExpansionSelectionResult>;
+export type ApplyGraphAgentProposalSelectionResponse =
+  IApiResponse<IApplyGraphAgentProposalSelectionResult>;
 export type OntologyImportSourcesResponse = IApiResponse<IOntologyImportSourceDto[]>;
 export type OntologyImportSourceResponse = IApiResponse<IOntologyImportSourceDto>;
 export type OntologyImportRunsResponse = IApiResponse<IOntologyImportRunDto[]>;
